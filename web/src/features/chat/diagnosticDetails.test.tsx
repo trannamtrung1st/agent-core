@@ -45,6 +45,28 @@ describe("diagnostic copy", () => {
     );
   });
 
+  it("appends structured failure lines after the diagnostic block", () => {
+    expect(diagnosticCopyText(
+      {
+        diagnosticId: "diag-1",
+        category: "Provider",
+        code: "InvalidResponse"
+      },
+      [
+        { label: "Class", value: "Provider or model" },
+        { label: "Severity", value: "Recoverable" }
+      ]
+    )).toBe(
+      [
+        "Agent Core diagnostic",
+        "Diagnostic ID: diag-1",
+        "Error: Provider / InvalidResponse",
+        "Class: Provider or model",
+        "Severity: Recoverable"
+      ].join("\n")
+    );
+  });
+
   it("includes work ids only when the projection has them", () => {
     expect(diagnosticCopyText({
       diagnosticId: "diag-1",
@@ -98,9 +120,51 @@ describe("failed assistant details", () => {
     expect(details).toHaveTextContent("Error");
     expect(details).toHaveTextContent("Provider / Unavailable");
     expect(details).not.toHaveTextContent("Could not speak.");
-    fireEvent.click(screen.getByRole("button", { name: "Copy diagnostic" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy details" }));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Diagnostic ID: diag-row"));
     expect(await screen.findByRole("status")).toHaveTextContent("Copied");
+  });
+
+  it("copies allowlisted reason and channel and omits them when absent", async () => {
+    const { rerender } = render(
+      <ChatMessage
+        agentName="Alex"
+        sessionId="session-1"
+        entry={failedEntry({
+          diagnosticId: "diag-trunc",
+          correlationId: null,
+          category: "provider",
+          code: "InvalidResponse",
+          failureReason: "toolCallTruncated",
+          providerResponseChannel: "toolCall"
+        })}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Failed — show error details" }));
+    expect(await screen.findByTestId("diagnostic-reason")).toHaveTextContent("toolCallTruncated");
+    expect(screen.getByTestId("diagnostic-channel")).toHaveTextContent("toolCall");
+    fireEvent.click(screen.getByRole("button", { name: "Copy details" }));
+    const copied = String(writeText.mock.calls.at(-1)?.[0]);
+    expect(copied).toContain("Reason: toolCallTruncated");
+    expect(copied).toContain("Channel: toolCall");
+    expect(copied).not.toContain("arguments");
+    expect(copied).not.toContain("{");
+
+    rerender(
+      <ChatMessage
+        agentName="Alex"
+        sessionId="session-1"
+        entry={failedEntry({
+          diagnosticId: "diag-plain",
+          correlationId: null,
+          category: "provider",
+          code: "InvalidResponse"
+        })}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Failed — show error details" }));
+    expect(screen.queryByTestId("diagnostic-reason")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("diagnostic-channel")).not.toBeInTheDocument();
   });
 
   it("does not invent details for a legacy failed row", () => {

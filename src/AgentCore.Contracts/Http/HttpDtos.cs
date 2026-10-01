@@ -169,7 +169,11 @@ public sealed record HistoryFailureResponse(
     string DiagnosticId,
     string? CorrelationId,
     string Category,
-    string Code);
+    string Code,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? FailureReason = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? ProviderResponseChannel = null);
 
 public sealed record HistoryPageResponse(
     IReadOnlyList<HistoryItemResponse> Items,

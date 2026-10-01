@@ -1,3 +1,5 @@
+import { allowlistedFailureReason, allowlistedResponseChannel } from "./diagnosticCopy";
+
 export const SESSION_ERROR_CLASSES = [
   "validation/protocol",
   "provider/model",
@@ -22,6 +24,8 @@ export type SessionErrorView = {
   diagnosticId?: string;
   correlationId?: string | null;
   responseId?: string | null;
+  failureReason?: string | null;
+  providerResponseChannel?: string | null;
   extensions?: Record<string, string | number | boolean>;
 };
 
@@ -34,6 +38,8 @@ export type WireError = {
   diagnosticId?: unknown;
   correlationId?: unknown;
   responseId?: unknown;
+  failureReason?: unknown;
+  providerResponseChannel?: unknown;
   extensions?: Record<string, unknown> | null;
 };
 
@@ -160,6 +166,8 @@ export function sessionErrorFromMessage(
     diagnosticId: presentId(extras.diagnosticId),
     correlationId: presentId(extras.correlationId) ?? null,
     responseId: presentId(extras.responseId) ?? null,
+    failureReason: allowlistedFailureReason(extras.failureReason),
+    providerResponseChannel: allowlistedResponseChannel(extras.providerResponseChannel),
     extensions: extras.extensions
   };
 }
@@ -184,6 +192,8 @@ export function sessionErrorFromWire(error: WireError | null | undefined, fallba
     diagnosticId: presentId(error?.diagnosticId),
     correlationId: presentId(error?.correlationId) ?? null,
     responseId: presentId(error?.responseId) ?? null,
+    failureReason: allowlistedFailureReason(error?.failureReason),
+    providerResponseChannel: allowlistedResponseChannel(error?.providerResponseChannel),
     extensions: sanitizeExtensions(error?.extensions ?? undefined)
   };
 }

@@ -62,6 +62,58 @@ public sealed class SemanticResponseLanguageModelTests
     }
 
     [Fact]
+    public async Task Native_length_limit_without_an_envelope_is_output_limit()
+    {
+        var inner = new ScriptedInner(
+            [new ModelCompleted(ModelStopReason.LengthLimit)],
+            structured: true);
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
+        var failed = Assert.Single(events.OfType<ModelFailed>());
+        Assert.Equal(ProviderFailureReason.OutputLimit, failed.Failure.FailureReason);
+        Assert.Equal(ProviderResponseChannel.StructuredOutput, failed.Failure.ResponseChannel);
+        Assert.Equal("The model output was cut off before a complete response.", failed.Failure.SafeMessage);
+        Assert.DoesNotContain("Malformed", failed.Failure.SafeMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Native_length_limit_with_broken_json_is_output_limit()
+    {
+        var inner = new ScriptedInner(
+            [new ModelTextDelta("{\"displayText\":"), new ModelCompleted(ModelStopReason.LengthLimit)],
+            structured: true);
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
+        var failed = Assert.Single(events.OfType<ModelFailed>());
+        Assert.Equal(ProviderFailureReason.OutputLimit, failed.Failure.FailureReason);
+        Assert.DoesNotContain("displayText", failed.Failure.SafeMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Native_length_limit_keeps_a_parsed_malformed_envelope()
+    {
+        var json = """{"speech":{"mode":"same"}}""";
+        var inner = new ScriptedInner(
+            [new ModelTextDelta(json), new ModelCompleted(ModelStopReason.LengthLimit)],
+            structured: true);
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
+        var failed = Assert.Single(events.OfType<ModelFailed>());
+        Assert.Equal(ProviderFailureReason.MissingDisplayText, failed.Failure.FailureReason);
+        Assert.Equal("Malformed assistant envelope.", failed.Failure.SafeMessage);
+        Assert.DoesNotContain(json, failed.Failure.SafeMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Marker_length_limit_without_display_is_output_limit()
+    {
+        var inner = new ScriptedInner(
+            [new ModelCompleted(ModelStopReason.LengthLimit)],
+            tools: false);
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
+        var failed = Assert.Single(events.OfType<ModelFailed>());
+        Assert.Equal(ProviderFailureReason.OutputLimit, failed.Failure.FailureReason);
+        Assert.Equal(ProviderResponseChannel.MarkerCompatibility, failed.Failure.ResponseChannel);
+    }
+
+    [Fact]
     public async Task Native_oversized_display_is_invalid_response()
     {
         var json = "{\"displayText\":\"" + new string('a', AssistantResponseSchema.MaxDisplayCharacters + 1)
@@ -80,6 +132,43 @@ public sealed class SemanticResponseLanguageModelTests
         var inner = new ScriptedInner([new ModelTextDelta(json), new ModelCompleted(ModelStopReason.Completed)], structured: true);
         var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
         Assert.Equal(ProviderErrorCode.InvalidResponse, Assert.Single(events.OfType<ModelFailed>()).Failure.Code);
+    }
+
+    [Fact]
+    public async Task Length_limit_without_a_semantic_payload_is_output_limit()
+    {
+        var native = new ScriptedInner(
+            [new ModelCompleted(ModelStopReason.LengthLimit)],
+            structured: true);
+        var nativeFailed = Assert.Single(
+            (await CollectAsync(new SemanticResponseLanguageModel(native), Contracted)).OfType<ModelFailed>());
+        Assert.Equal(ProviderFailureReason.OutputLimit, nativeFailed.Failure.FailureReason);
+        Assert.Equal(ProviderResponseChannel.StructuredOutput, nativeFailed.Failure.ResponseChannel);
+        Assert.DoesNotContain("Malformed assistant envelope.", nativeFailed.Failure.SafeMessage, StringComparison.Ordinal);
+        Assert.NotEqual(ProviderFailureReason.MissingDisplayText, nativeFailed.Failure.FailureReason);
+
+        var marker = new ScriptedInner(
+            [new ModelCompleted(ModelStopReason.LengthLimit)],
+            tools: false);
+        var markerFailed = Assert.Single(
+            (await CollectAsync(new SemanticResponseLanguageModel(marker), Contracted)).OfType<ModelFailed>());
+        Assert.Equal(ProviderFailureReason.OutputLimit, markerFailed.Failure.FailureReason);
+        Assert.Equal(ProviderResponseChannel.MarkerCompatibility, markerFailed.Failure.ResponseChannel);
+        Assert.DoesNotContain("Malformed assistant envelope.", markerFailed.Failure.SafeMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Length_limit_keeps_a_parsed_malformed_envelope()
+    {
+        var json = """{"speech":{"mode":"same"}}""";
+        var inner = new ScriptedInner(
+            [new ModelTextDelta(json), new ModelCompleted(ModelStopReason.LengthLimit)],
+            structured: true);
+        var failed = Assert.Single(
+            (await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted)).OfType<ModelFailed>());
+        Assert.Equal(ProviderFailureReason.MissingDisplayText, failed.Failure.FailureReason);
+        Assert.Contains("Malformed assistant envelope.", failed.Failure.SafeMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain(json, failed.Failure.SafeMessage, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -224,9 +224,37 @@ body,
   min-width: 0;
 }
 
+.session-failure.ant-alert {
+  padding: var(--ac-space-compact) var(--ac-space-default);
+  align-items: flex-start;
+}
+
+.session-failure .ant-alert-icon {
+  margin-block-start: 2px;
+}
+
+.session-failure .ant-alert-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.session-failure .ant-alert-action {
+  align-self: flex-start;
+  margin-inline-start: var(--ac-space-default);
+  padding-block-start: 0;
+}
+
 .session-failure .ant-alert-title,
 .session-failure .ant-alert-description {
   overflow-wrap: anywhere;
+}
+
+.session-failure .ant-alert-description {
+  margin-block-start: 2px;
+}
+
+.session-failure-meta {
+  font-size: var(--ant-font-size-sm);
 }
 
 .session-failure-actions {

@@ -75,6 +75,29 @@ public sealed class ToolWorkflowRuntimeTests
         await runtime.Runtime.WaitUntilIdleAsync();
         var assistant = runtime.Runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
         Assert.Equal(EntryStatus.Failed, assistant.Status);
+        var error = Assert.IsType<ErrorOutput>(Assert.Single(runtime.Output.Items, item => item.Payload is ErrorOutput).Payload);
+        Assert.Equal("Tool step limit reached.", error.SafeMessage);
+    }
+
+    [Fact]
+    public async Task Ten_workspace_writes_fit_inside_the_tool_step_budget()
+    {
+        var definition = await Load("customer-support");
+        var artifacts = new InMemoryArtifactStore(TimeProvider.System);
+        var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
+        var workspace = new CountingWorkspace();
+        var tools = new SessionToolExecutor(knowledge, workspace: workspace, artifacts: artifacts);
+        var model = new MultiFileLanguageModel();
+        var output = new CapturingSessionOutput();
+        await using var runtime = CreateRuntime(output, definition, model, tools, artifacts);
+        await runtime.AttachAsync();
+        Assert.True(await runtime.SubmitUserTextAsync("Write ten files."));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(10, workspace.Writes.Count);
+        Assert.Equal(ModelOutputBudgets.ToolCapable, model.RequestedOutputTokens);
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Completed, assistant.Status);
+        Assert.Contains("Ten files are ready.", assistant.Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -179,6 +202,86 @@ public sealed class ToolWorkflowRuntimeTests
         : IAsyncDisposable
     {
         public ValueTask DisposeAsync() => Runtime.DisposeAsync();
+    }
+
+    private sealed class CountingWorkspace : ISessionWorkspace
+    {
+        public List<string> Writes { get; } = [];
+
+        public ValueTask EnsureAsync(Guid sessionId, AgentDefinition definition, CancellationToken cancellationToken = default) =>
+            ValueTask.CompletedTask;
+
+        public ValueTask<IReadOnlyList<WorkspaceNode>> ListAsync(
+            Guid sessionId,
+            AgentDefinition definition,
+            string prefix,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<IReadOnlyList<WorkspaceNode>>([]);
+
+        public ValueTask<WorkspaceContent> ReadAsync(
+            Guid sessionId,
+            AgentDefinition definition,
+            string logicalPath,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask WriteAsync(
+            Guid sessionId,
+            string logicalPath,
+            ReadOnlyMemory<byte> bytes,
+            CancellationToken cancellationToken = default)
+        {
+            Writes.Add(logicalPath);
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask MoveAsync(
+            Guid sessionId,
+            string sourceLogicalPath,
+            string destinationLogicalPath,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.CompletedTask;
+
+        public ValueTask<WorkspacePatchResult> PatchTextAsync(
+            Guid sessionId,
+            AgentDefinition definition,
+            string logicalPath,
+            string expectedSha256Hex,
+            IReadOnlyList<WorkspaceTextEdit> edits,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+            ValueTask.CompletedTask;
+    }
+
+    private sealed class MultiFileLanguageModel : ILanguageModel
+    {
+        public int RequestedOutputTokens { get; private set; }
+
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            RequestedOutputTokens = request.MaxOutputTokens;
+            await Task.Yield();
+            cancellationToken.ThrowIfCancellationRequested();
+            var rounds = request.Messages.Count(message => message.Role == ModelRole.Tool);
+            if (rounds < 10)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall(
+                    $"call-{rounds + 1}",
+                    ToolCatalog.WorkspaceWrite,
+                    $$"""{"path":"/workspace/working/file-{{rounds + 1}}.txt","content":"n"}"""));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            yield return new ModelTextDelta("Ten files are ready.");
+            yield return new ModelCompleted(ModelStopReason.Completed);
+        }
     }
 
     private sealed class GatedWorkspace : ISessionWorkspace

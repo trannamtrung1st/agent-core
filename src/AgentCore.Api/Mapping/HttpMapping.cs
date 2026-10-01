@@ -153,7 +153,9 @@ public static partial class HttpMapping
                     failure.DiagnosticId.ToString("D"),
                     failure.CorrelationId?.ToString("D"),
                     failure.Category,
-                    failure.Code)
+                    failure.Code,
+                    failure.FailureReason,
+                    failure.ProviderResponseChannel)
                 : null,
             projected.MemoryReceipts?.Select(item => new HistoryMemoryReceiptResponse(
                 item.Outcome,

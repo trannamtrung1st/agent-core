@@ -19,7 +19,13 @@ public static class FailureReferenceJson
         }
 
         return JsonSerializer.Serialize(
-            new FailureReferenceDto(reference.DiagnosticId, reference.CorrelationId, reference.Category, reference.Code),
+            new FailureReferenceDto(
+                reference.DiagnosticId,
+                reference.CorrelationId,
+                reference.Category,
+                reference.Code,
+                reference.FailureReason,
+                reference.ProviderResponseChannel),
             Json);
     }
 
@@ -40,6 +46,8 @@ public static class FailureReferenceJson
         Guid? correlationId = null;
         string? category = null;
         string? code = null;
+        string? failureReason = null;
+        string? providerResponseChannel = null;
         foreach (var property in document.RootElement.EnumerateObject())
         {
             switch (property.Name)
@@ -58,6 +66,16 @@ public static class FailureReferenceJson
                 case "code":
                     code = property.Value.GetString();
                     break;
+                case "failureReason" when property.Value.ValueKind == JsonValueKind.Null:
+                    break;
+                case "failureReason":
+                    failureReason = property.Value.GetString();
+                    break;
+                case "providerResponseChannel" when property.Value.ValueKind == JsonValueKind.Null:
+                    break;
+                case "providerResponseChannel":
+                    providerResponseChannel = property.Value.GetString();
+                    break;
                 default:
                     throw new ArgumentException("Failure reference JSON contains an unknown field.");
             }
@@ -72,7 +90,9 @@ public static class FailureReferenceJson
             id,
             category ?? throw new ArgumentException("Failure reference JSON requires category."),
             code ?? throw new ArgumentException("Failure reference JSON requires code."),
-            correlationId);
+            correlationId,
+            failureReason,
+            providerResponseChannel);
     }
 
     private static Guid ReadGuid(JsonElement value, string name)
@@ -85,5 +105,11 @@ public static class FailureReferenceJson
         return id;
     }
 
-    private sealed record FailureReferenceDto(Guid DiagnosticId, Guid? CorrelationId, string Category, string Code);
+    private sealed record FailureReferenceDto(
+        Guid DiagnosticId,
+        Guid? CorrelationId,
+        string Category,
+        string Code,
+        string? FailureReason,
+        string? ProviderResponseChannel);
 }

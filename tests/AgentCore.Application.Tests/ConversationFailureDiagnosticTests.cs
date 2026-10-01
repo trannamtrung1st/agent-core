@@ -4,6 +4,7 @@ using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Testing;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
@@ -76,6 +77,8 @@ public sealed class ConversationFailureDiagnosticTests
         var failed = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
         Assert.Equal(DiagnosticId, failed.Failure!.DiagnosticId);
         Assert.Equal("InvalidResponse", failed.Failure.Code);
+        Assert.Equal(ProviderFailureReason.InvalidMemoryProposal, failed.Failure.FailureReason);
+        Assert.Equal(ProviderResponseChannel.ResponseFunction, failed.Failure.ProviderResponseChannel);
         var logged = Assert.Single(logs.Entries, entry => entry.Level == LogLevel.Error);
         Assert.Equal(DiagnosticId, logged.Properties["DiagnosticId"]);
         Assert.Equal(ProviderFailureReason.InvalidMemoryProposal, logged.Properties["FailureReason"]);
@@ -133,6 +136,67 @@ public sealed class ConversationFailureDiagnosticTests
         {
             SemanticTestHook.Bypass.Value = false;
         }
+    }
+
+    [Fact]
+    public async Task Length_limit_before_a_semantic_envelope_is_output_limit()
+    {
+        var logs = new DiagnosticLogCapture<SessionRuntime>();
+        var diagnostics = new QueueDiagnosticIdSource([DiagnosticId]);
+        await using var runtime = CreateRuntime(
+            new ScriptedEventsModel([new ModelCompleted(ModelStopReason.LengthLimit)]),
+            logs,
+            diagnostics);
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "long",
+            Guid.Parse("019944af-00d7-7000-8000-000000000061")));
+        await runtime.WaitUntilIdleAsync();
+
+        var failed = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal("InvalidResponse", failed.Failure!.Code);
+        Assert.Equal(ProviderFailureReason.OutputLimit, failed.Failure.FailureReason);
+        Assert.Equal(ProviderResponseChannel.MarkerCompatibility, failed.Failure.ProviderResponseChannel);
+        Assert.NotEqual(ProviderFailureReason.MissingDisplayText, failed.Failure.FailureReason);
+        var error = Assert.IsType<ErrorOutput>(Assert.Single(Items(runtime), item => item.Payload is ErrorOutput).Payload);
+        Assert.Equal("The model output was cut off before a complete response.", error.SafeMessage);
+        Assert.DoesNotContain("Malformed assistant envelope.", error.SafeMessage, StringComparison.Ordinal);
+        var projected = PublicHistory.FromEntry(failed);
+        Assert.Equal(ProviderFailureReason.OutputLimit, projected.Failure!.FailureReason);
+        Assert.DoesNotContain("{", projected.Failure.FailureReason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Truncated_tool_call_failure_is_not_executed()
+    {
+        var logs = new DiagnosticLogCapture<SessionRuntime>();
+        var diagnostics = new QueueDiagnosticIdSource([DiagnosticId]);
+        await using var runtime = CreateRuntime(
+            new ScriptedEventsModel(
+            [
+                new ModelToolCallEvent(new ModelToolCall(
+                    "call-cut",
+                    ToolCatalog.KnowledgeRetrieve,
+                    """{"identity":"support-order-policy","raw":"SECRET_ARGUMENT"}""")),
+                new ModelFailed(new ProviderFailure(
+                    ProviderErrorCode.InvalidResponse,
+                    "The model's tool call was cut off before it finished.",
+                    FailureReason: ProviderFailureReason.ToolCallTruncated,
+                    ResponseChannel: ProviderResponseChannel.ToolCall))
+            ]),
+            logs,
+            diagnostics);
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "cut",
+            Guid.Parse("019944af-00d7-7000-8000-000000000071")));
+        await runtime.WaitUntilIdleAsync();
+
+        var failed = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(ProviderFailureReason.ToolCallTruncated, failed.Failure!.FailureReason);
+        Assert.Equal(ProviderResponseChannel.ToolCall, failed.Failure.ProviderResponseChannel);
+        var error = Assert.IsType<ErrorOutput>(Assert.Single(Items(runtime), item => item.Payload is ErrorOutput).Payload);
+        Assert.DoesNotContain("SECRET_ARGUMENT", error.SafeMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("SECRET_ARGUMENT", failed.Text, StringComparison.Ordinal);
+        Assert.Equal(EntryStatus.Failed, failed.Status);
     }
 
     [Fact]

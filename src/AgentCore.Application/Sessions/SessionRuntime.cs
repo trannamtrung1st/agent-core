@@ -3438,7 +3438,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                         string.IsNullOrWhiteSpace(safeMessage) ? "The response failed." : safeMessage,
                                         false,
                                         null,
-                                        storedFailure.DiagnosticId)),
+                                        storedFailure.DiagnosticId,
+                                        storedFailure.FailureReason,
+                                        storedFailure.ProviderResponseChannel)),
                                 ct)
                             .ConfigureAwait(false);
                     }
@@ -3613,6 +3615,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             or ProviderErrorCode.Unknown
             or ProviderErrorCode.Timeout
             or ProviderErrorCode.InvalidResponse
+            or ProviderErrorCode.InvalidRequest
             or ProviderErrorCode.Authentication
             or ProviderErrorCode.RateLimited;
 
@@ -3629,7 +3632,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         if (existingId is { } supplied && supplied != Guid.Empty)
         {
-            return new FailureReference(supplied, "provider", failure.Code.ToString(), CorrelationOrNull(context));
+            return new FailureReference(
+                supplied,
+                "provider",
+                failure.Code.ToString(),
+                CorrelationOrNull(context),
+                failure.FailureReason,
+                failure.ResponseChannel);
         }
 
         var diagnosticId = _diagnostics.NewId();
@@ -3643,7 +3652,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             null,
             failure.FailureReason,
             failure.ResponseChannel);
-        return new FailureReference(diagnosticId, "provider", failure.Code.ToString(), CorrelationOrNull(context));
+        return new FailureReference(
+            diagnosticId,
+            "provider",
+            failure.Code.ToString(),
+            CorrelationOrNull(context),
+            failure.FailureReason,
+            failure.ResponseChannel);
     }
 
     private FailureReference ReferenceForResponse(

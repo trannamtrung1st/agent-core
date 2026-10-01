@@ -107,7 +107,9 @@ export function ChatMessage({
                 sessionId,
                 responseId: entry.responseId,
                 category: entry.failure.category,
-                code: entry.failure.code
+                code: entry.failure.code,
+                failureReason: entry.failure.failureReason,
+                providerResponseChannel: entry.failure.providerResponseChannel
               }}
               trigger={
                 <Button

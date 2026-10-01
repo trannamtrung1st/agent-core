@@ -988,6 +988,45 @@ public sealed class OpenAICompatibleLanguageModelTests
     }
 
     [Fact]
+    public async Task Length_limit_with_a_partial_tool_call_is_truncated_and_not_executed()
+    {
+        var handler = new ScriptedHandler(
+        [
+            Encoding.UTF8.GetBytes(
+                "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_cut\",\"type\":\"function\",\"function\":{\"name\":\"workspace_write\",\"arguments\":\"{\\\"path\\\":\\\"UNFINISHED_ARG\"}}]}}]}\n\n" +
+                "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"length\"}]}\n\n" +
+                "data: [DONE]\n\n")
+        ]);
+        var events = await CollectAsync(
+            Create(handler, tools: true),
+            new ModelRequest(
+                Guid.NewGuid(),
+                [new ModelMessage(ModelRole.User, "write files")],
+                Tools: [new ModelToolDefinition("workspace.write", "Write.", """{"type":"object"}""")]));
+        var failed = Assert.Single(events.OfType<ModelFailed>());
+        Assert.Equal(ProviderErrorCode.InvalidResponse, failed.Failure.Code);
+        Assert.Equal(ProviderFailureReason.ToolCallTruncated, failed.Failure.FailureReason);
+        Assert.Equal(ProviderResponseChannel.ToolCall, failed.Failure.ResponseChannel);
+        Assert.Equal("The model's tool call was cut off before it finished.", failed.Failure.SafeMessage);
+        Assert.DoesNotContain(events, item => item is ModelToolCallEvent or ModelCompleted);
+        Assert.DoesNotContain("UNFINISHED_ARG", failed.Failure.SafeMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Requested_output_token_budget_is_sent_as_max_tokens()
+    {
+        var handler = StopStream();
+        await CollectAsync(
+            Create(handler, tools: true),
+            new ModelRequest(
+                Guid.NewGuid(),
+                [new ModelMessage(ModelRole.User, "Hi")],
+                MaxOutputTokens: ModelOutputBudgets.ToolCapable,
+                Tools: [new ModelToolDefinition("workspace.write", "Write.", """{"type":"object"}""")]));
+        Assert.Contains("\"max_tokens\":8192", handler.LastBody.Replace(" ", string.Empty), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Image_bearing_tool_result_maps_tool_text_then_wire_only_user_multipart()
     {
         var handler = StopStream();

@@ -255,9 +255,9 @@ Unless a later item records a tested change:
 | Extraction output | 256 KiB |
 | Parser timeout | 10 s |
 | Parser memory | 256 MiB |
-| Tool steps | 12 max |
+| Tool steps | 24 max |
 | Per-tool timeout | 30 s |
-| Overall tool deadline | 120 s |
+| Overall tool deadline | 180 s |
 | Tool output | 8 MiB |
 | Sandbox memory | 64 MiB |
 | Sandbox CPUs | 0.5 |

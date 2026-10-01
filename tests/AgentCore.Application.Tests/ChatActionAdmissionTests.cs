@@ -72,9 +72,9 @@ public sealed class ChatActionAdmissionTests
     [Fact]
     public void Tool_limits_stay_at_the_current_bounds()
     {
-        Assert.Equal(12, ToolLimits.MaxSteps);
+        Assert.Equal(24, ToolLimits.MaxSteps);
         Assert.Equal(TimeSpan.FromSeconds(30), ToolLimits.PerTool);
-        Assert.Equal(TimeSpan.FromSeconds(120), ToolLimits.Overall);
+        Assert.Equal(TimeSpan.FromSeconds(180), ToolLimits.Overall);
         Assert.Equal(8 * 1024 * 1024, ToolLimits.MaxOutputBytes);
     }
 

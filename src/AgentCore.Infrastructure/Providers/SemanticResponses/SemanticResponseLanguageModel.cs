@@ -155,7 +155,9 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILangu
                         yield break;
                     }
 
-                    yield return Fail(failureReason, ProviderResponseChannel.StructuredOutput);
+                    yield return Fail(
+                        ClassifyLength(completed.Reason, failureReason, native: true),
+                        ProviderResponseChannel.StructuredOutput);
                     yield break;
                 default:
                     yield return item;
@@ -222,10 +224,11 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILangu
 
                     if (!parser.TryFinish(out var response, out var failureReason))
                     {
+                        var reason = string.IsNullOrEmpty(failureReason)
+                            ? ProviderFailureReason.InvalidMarkerEnvelope
+                            : failureReason;
                         yield return Fail(
-                            string.IsNullOrEmpty(failureReason)
-                                ? ProviderFailureReason.InvalidMarkerEnvelope
-                                : failureReason,
+                            ClassifyLength(completed.Reason, reason, native: false),
                             ProviderResponseChannel.MarkerCompatibility);
                         yield break;
                     }
@@ -306,10 +309,32 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILangu
         return true;
     }
 
+    private static string ClassifyLength(ModelStopReason reason, string failureReason, bool native)
+    {
+        if (reason != ModelStopReason.LengthLimit)
+        {
+            return failureReason;
+        }
+
+        var truncated = native
+            ? failureReason is ProviderFailureReason.InvalidJson
+                or ProviderFailureReason.ResponseFunctionArgumentsInvalid
+            : failureReason is ProviderFailureReason.MissingDisplayText
+                or ProviderFailureReason.InvalidMarkerEnvelope;
+        return truncated ? ProviderFailureReason.OutputLimit : failureReason;
+    }
+
     private static ModelFailed Fail(string failureReason, string responseChannel) =>
         new(new ProviderFailure(
             ProviderErrorCode.InvalidResponse,
-            "Malformed assistant envelope.",
+            failureReason switch
+            {
+                ProviderFailureReason.OutputLimit =>
+                    "The model output was cut off before a complete response.",
+                ProviderFailureReason.ToolCallTruncated =>
+                    "The model's tool call was cut off before it finished.",
+                _ => "Malformed assistant envelope."
+            },
             FailureReason: failureReason,
             ResponseChannel: responseChannel));
 }

@@ -56,6 +56,30 @@ public sealed class FailureReferenceTests
     }
 
     [Fact]
+    public void Json_round_trips_allowlisted_provider_detail()
+    {
+        var reference = new FailureReference(
+            DiagnosticId,
+            "provider",
+            "InvalidResponse",
+            CorrelationId,
+            "toolCallTruncated",
+            "toolCall");
+        var restored = FailureReferenceJson.Deserialize(FailureReferenceJson.Serialize(reference));
+        Assert.Equal(reference, restored);
+        Assert.DoesNotContain("arguments", FailureReferenceJson.Serialize(reference), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Provider_detail_rejects_raw_payload_tokens()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new FailureReference(DiagnosticId, "provider", "InvalidResponse", failureReason: "{\"path\":\"secret\"}"));
+        Assert.Throws<ArgumentException>(() =>
+            new FailureReference(DiagnosticId, "provider", "InvalidResponse", providerResponseChannel: "prompt"));
+    }
+
+    [Fact]
     public void Json_rejects_unknown_fields()
     {
         var json = $$"""{"diagnosticId":"{{DiagnosticId}}","category":"provider","code":"Unavailable","stack":"secret"}""";
@@ -103,5 +127,25 @@ public sealed class FailureReferenceTests
         var reference = new FailureReference(DiagnosticId, category, code);
         Assert.Equal(category, reference.Category);
         Assert.Equal(code, reference.Code);
+    }
+
+    [Fact]
+    public void Allowlisted_provider_detail_round_trips_and_rejects_raw_text()
+    {
+        var reference = new FailureReference(
+            DiagnosticId,
+            "provider",
+            "InvalidResponse",
+            CorrelationId,
+            "toolCallTruncated",
+            "toolCall");
+        var restored = FailureReferenceJson.Deserialize(FailureReferenceJson.Serialize(reference));
+        Assert.Equal(reference, restored);
+        Assert.DoesNotContain("arguments", FailureReferenceJson.Serialize(reference), StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(() => new FailureReference(
+            DiagnosticId,
+            "provider",
+            "InvalidResponse",
+            failureReason: "{\"path\":\"secret\"}"));
     }
 }

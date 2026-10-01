@@ -17,6 +17,8 @@ public static class ProviderFailureReason
     public const string ModelSuppliedDestination = "modelSuppliedDestination";
     public const string UnknownAction = "unknownAction";
     public const string UnknownDisposition = "unknownDisposition";
+    public const string OutputLimit = "outputLimit";
+    public const string ToolCallTruncated = "toolCallTruncated";
 }
 
 public static class ProviderResponseChannel
@@ -24,4 +26,5 @@ public static class ProviderResponseChannel
     public const string ResponseFunction = "responseFunction";
     public const string StructuredOutput = "structuredOutput";
     public const string MarkerCompatibility = "markerCompatibility";
+    public const string ToolCall = "toolCall";
 }

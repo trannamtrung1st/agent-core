@@ -7,6 +7,7 @@ import type {
   SessionModelSelection
 } from "../services/api";
 import type { PendingAttachment } from "../services/attachments";
+import { allowlistedFailureReason, allowlistedResponseChannel } from "../features/chat/diagnosticCopy";
 import { sessionErrorFromMessage, sessionErrorFromWire, type SessionErrorView } from "../features/chat/sessionError";
 
 export type ConnectionStatus = "idle" | "connecting" | "ready" | "reconnecting" | "failed";
@@ -59,6 +60,8 @@ export type HistoryFailure = {
   correlationId: string | null;
   category: string;
   code: string;
+  failureReason?: string | null;
+  providerResponseChannel?: string | null;
 };
 
 export type HistoryEntry = {
@@ -484,11 +487,15 @@ function asHistoryFailure(raw: unknown): HistoryFailure | null {
   }
 
   const correlationId = asString(row.correlationId).trim();
+  const failureReason = allowlistedFailureReason(row.failureReason);
+  const providerResponseChannel = allowlistedResponseChannel(row.providerResponseChannel);
   return {
     diagnosticId,
     correlationId: correlationId || null,
     category: asString(row.category),
-    code: asString(row.code)
+    code: asString(row.code),
+    ...(failureReason ? { failureReason } : {}),
+    ...(providerResponseChannel ? { providerResponseChannel } : {})
   };
 }
 
@@ -501,7 +508,9 @@ function failureForResponse(error: SessionErrorView | null, responseId: string |
     diagnosticId: error.diagnosticId,
     correlationId: error.correlationId ?? null,
     category: error.category,
-    code: error.code
+    code: error.code,
+    ...(error.failureReason ? { failureReason: error.failureReason } : {}),
+    ...(error.providerResponseChannel ? { providerResponseChannel: error.providerResponseChannel } : {})
   };
 }
 
@@ -1034,6 +1043,8 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
           fatal: payload.fatal === true,
           retryAfterMs: typeof payload.retryAfterMs === "number" ? payload.retryAfterMs : null,
           diagnosticId: typeof payload.diagnosticId === "string" ? payload.diagnosticId : undefined,
+          failureReason: payload.failureReason,
+          providerResponseChannel: payload.providerResponseChannel,
           correlationId: event.correlationId || (typeof payload.correlationId === "string" ? payload.correlationId : undefined),
           responseId: event.responseId ?? (typeof payload.responseId === "string" ? payload.responseId : undefined),
           extensions: payload.extensions && typeof payload.extensions === "object" && !Array.isArray(payload.extensions)

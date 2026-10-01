@@ -4,7 +4,13 @@ public sealed record FailureReference
 {
     public const int MaxTokenLength = 64;
 
-    public FailureReference(Guid diagnosticId, string category, string code, Guid? correlationId = null)
+    public FailureReference(
+        Guid diagnosticId,
+        string category,
+        string code,
+        Guid? correlationId = null,
+        string? failureReason = null,
+        string? providerResponseChannel = null)
     {
         if (diagnosticId == Guid.Empty)
         {
@@ -20,6 +26,11 @@ public sealed record FailureReference
         Category = RequireToken(category, nameof(category));
         Code = RequireToken(code, nameof(code));
         CorrelationId = correlationId;
+        FailureReason = RequireAllowlisted(failureReason, DiagnosticDetailAllowlist.FailureReasons, nameof(failureReason));
+        ProviderResponseChannel = RequireAllowlisted(
+            providerResponseChannel,
+            DiagnosticDetailAllowlist.ResponseChannels,
+            nameof(providerResponseChannel));
     }
 
     public Guid DiagnosticId { get; }
@@ -29,6 +40,10 @@ public sealed record FailureReference
     public string Category { get; }
 
     public string Code { get; }
+
+    public string? FailureReason { get; }
+
+    public string? ProviderResponseChannel { get; }
 
     public static bool IsSafeToken(string? value)
     {
@@ -65,5 +80,20 @@ public sealed record FailureReference
         }
 
         return value!;
+    }
+
+    private static string? RequireAllowlisted(string? value, IReadOnlySet<string> allowlist, string name)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return null;
+        }
+
+        if (!IsSafeToken(value) || !allowlist.Contains(value))
+        {
+            throw new ArgumentException($"{name} is not an allowlisted diagnostic token.", name);
+        }
+
+        return value;
     }
 }

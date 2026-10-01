@@ -1066,7 +1066,13 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder, IInitiativeE
     private static ModelRequest WithTools(AgentContext context, ModelRequest request, PromptContextBuilder builder)
     {
         var tools = builder.OfferTools(context.Definition, context);
-        return tools.Count == 0 ? request : request with { Tools = tools };
+        return tools.Count == 0
+            ? request
+            : request with
+            {
+                Tools = tools,
+                MaxOutputTokens = ModelOutputBudgets.ForTurn(request.MaxOutputTokens, toolsOffered: true)
+            };
     }
 
     private static bool TriggerEnabled(AgentContext context, string trigger) =>

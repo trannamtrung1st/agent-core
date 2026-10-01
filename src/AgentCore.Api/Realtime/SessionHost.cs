@@ -2615,7 +2615,9 @@ public static class SessionEventMapper
                 ["message"] = error.SafeMessage,
                 ["fatal"] = error.Fatal,
                 ["retryAfterMs"] = error.RetryAfter is { } retry ? (int)retry.TotalMilliseconds : null,
-                ["diagnosticId"] = error.DiagnosticId?.ToString("D")
+                ["diagnosticId"] = error.DiagnosticId?.ToString("D"),
+                ["failureReason"] = error.FailureReason,
+                ["providerResponseChannel"] = error.ProviderResponseChannel
             }),
             SpeechOutputSegmentOutput segment => ("speech.output.segment", new Dictionary<string, object?>
             {
@@ -2788,7 +2790,9 @@ public static class SessionEventMapper
                     ["diagnosticId"] = failure.DiagnosticId.ToString("D"),
                     ["correlationId"] = failure.CorrelationId?.ToString("D"),
                     ["category"] = failure.Category,
-                    ["code"] = failure.Code
+                    ["code"] = failure.Code,
+                    ["failureReason"] = failure.FailureReason,
+                    ["providerResponseChannel"] = failure.ProviderResponseChannel
                 }
                 : null
         };

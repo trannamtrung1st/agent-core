@@ -1,4 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, vi } from "vitest";
+
+const writeText = vi.fn().mockResolvedValue(undefined);
 import { describe, expect, it } from "vitest";
 import { SessionFailureAlert } from "./SessionFailureAlert";
 import {
@@ -76,6 +79,11 @@ describe("sessionError", () => {
 });
 
 describe("SessionFailureAlert", () => {
+  beforeEach(() => {
+    writeText.mockClear();
+    Object.assign(navigator, { clipboard: { writeText } });
+  });
+
   it("shows recoverable structured details without leaking vendor payloads", async () => {
     render(
       <SessionFailureAlert
@@ -106,6 +114,37 @@ describe("SessionFailureAlert", () => {
     expect(screen.getByText("shorten")).toBeInTheDocument();
     expect(screen.queryByText("sk-live")).not.toBeInTheDocument();
     expect(screen.queryByText("OPENAI_ERROR")).not.toBeInTheDocument();
+  });
+
+  it("merges failure metadata into error details when a diagnostic id exists", async () => {
+    render(
+      <SessionFailureAlert
+        error={sessionErrorFromWire(
+          {
+            category: "Provider",
+            code: "InvalidResponse",
+            message: "Malformed assistant envelope.",
+            fatal: false,
+            diagnosticId: "019944af-0008-7000-8000-0000000000d5"
+          },
+          "failed"
+        )}
+        sessionId="session-1"
+      />
+    );
+    expect(screen.queryByRole("button", { name: "Failure details" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Error details" }));
+    const details = await screen.findByTestId("diagnostic-details");
+    expect(details).toContainElement(screen.getByTestId("session-failure-details"));
+    expect(details).toHaveTextContent("Recoverable");
+    expect(screen.getByTestId("diagnostic-id")).toHaveTextContent("019944af-0008-7000-8000-0000000000d5");
+    fireEvent.click(screen.getByRole("button", { name: "Copy details" }));
+    const copied = writeText.mock.calls.at(-1)?.[0] as string;
+    expect(copied).toContain("Diagnostic ID: 019944af-0008-7000-8000-0000000000d5");
+    expect(copied).toContain("Error: Provider / InvalidResponse");
+    expect(copied).toContain("Class: Provider or model");
+    expect(copied).toContain("Severity: Recoverable");
+    expect(copied).not.toContain("Category: Provider");
   });
 
   it("marks fatal protocol failures as not retryable", async () => {

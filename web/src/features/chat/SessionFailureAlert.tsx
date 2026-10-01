@@ -1,11 +1,72 @@
 import type { ReactNode } from "react";
-import { Alert, Button, Descriptions, Flex, Popover, Typography } from "antd";
+import { Alert, Button, Flex, Popover, Typography } from "antd";
+import { DetailFieldList, type DetailLine } from "./detailFields";
+import { DetailPopoverBody } from "./detailPopover";
 import { DiagnosticDetails } from "./DiagnosticDetails";
+import { detailLinesCopyText } from "./diagnosticCopy";
 import {
   classLabel,
   resolveSessionError,
   type SessionErrorView
 } from "./sessionError";
+
+function sessionFailureDetailLines(
+  view: SessionErrorView,
+  options?: { includeCategoryCode?: boolean }
+): DetailLine[] {
+  const includeCategoryCode = options?.includeCategoryCode ?? true;
+  const retryHint = view.fatal
+    ? "Not retryable from this alert."
+    : view.retryAfterMs != null
+      ? `Retry possible after ${view.retryAfterMs} ms.`
+      : "Retry possible.";
+  const lines: DetailLine[] = [
+    { label: "Class", value: classLabel(view.classId) },
+    ...(includeCategoryCode
+      ? [
+          { label: "Category", value: view.category },
+          { label: "Code", value: view.code }
+        ]
+      : []),
+    { label: "Severity", value: view.fatal ? "Fatal" : "Recoverable" },
+    { label: "Retry", value: retryHint }
+  ];
+  if (view.extensions) {
+    for (const [key, value] of Object.entries(view.extensions)) {
+      lines.push({ label: key, value: String(value) });
+    }
+  }
+  return lines;
+}
+
+function FailureDetailsPopover({
+  lines,
+  title,
+  ariaLabel
+}: {
+  lines: DetailLine[];
+  title: string;
+  ariaLabel: string;
+}) {
+  const copyText = detailLinesCopyText("Agent Core failure details", lines);
+
+  return (
+    <Popover
+      trigger="click"
+      title={title}
+      getPopupContainer={() => document.body}
+      content={
+        <DetailPopoverBody copyText={copyText}>
+          <DetailFieldList items={lines} dataTestId="session-failure-details" />
+        </DetailPopoverBody>
+      }
+    >
+      <Button size="small" aria-label={ariaLabel}>
+        Details
+      </Button>
+    </Popover>
+  );
+}
 
 export function SessionFailureAlert({
   error,
@@ -25,39 +86,34 @@ export function SessionFailureAlert({
     return null;
   }
 
-  const retryHint = view.fatal
-    ? "Not retryable from this alert."
-    : view.retryAfterMs != null
-      ? `Retry possible after ${view.retryAfterMs} ms.`
-      : "Retry possible.";
-  const items = [
-    { key: "class", label: "Class", children: classLabel(view.classId) },
-    { key: "category", label: "Category", children: view.category },
-    { key: "code", label: "Code", children: view.code },
-    { key: "severity", label: "Severity", children: view.fatal ? "Fatal" : "Recoverable" },
-    { key: "retry", label: "Retry", children: retryHint }
-  ];
-  if (view.extensions) {
-    for (const [key, value] of Object.entries(view.extensions)) {
-      items.push({ key, label: key, children: String(value) });
-    }
-  }
-
-  const details = (
-    <Popover
-      trigger="click"
-      title="Failure details"
-      getPopupContainer={() => document.body}
-      content={
-        <div data-testid="session-failure-details">
-          <Descriptions size="small" column={1} items={items} />
-        </div>
+  const hasDiagnostic = Boolean(view.diagnosticId?.trim());
+  const failureLines = sessionFailureDetailLines(view, { includeCategoryCode: !hasDiagnostic });
+  const detailsControl = hasDiagnostic ? (
+    <DiagnosticDetails
+      fields={{
+        diagnosticId: view.diagnosticId,
+        correlationId: view.correlationId,
+        sessionId,
+        responseId: view.responseId,
+        category: view.category,
+        code: view.code,
+        failureReason: view.failureReason,
+        providerResponseChannel: view.providerResponseChannel
+      }}
+      extraLines={failureLines}
+      failureDetailsTestId="session-failure-details"
+      trigger={
+        <Button size="small" aria-label="Error details">
+          Details
+        </Button>
       }
-    >
-      <Button size="small" aria-label="Failure details">
-        Details
-      </Button>
-    </Popover>
+    />
+  ) : (
+    <FailureDetailsPopover
+      lines={failureLines}
+      title="Failure details"
+      ariaLabel="Failure details"
+    />
   );
 
   return (
@@ -71,23 +127,13 @@ export function SessionFailureAlert({
       data-error-fatal={String(view.fatal)}
       title={view.message}
       description={
-        <Typography.Text type="secondary">
+        <Typography.Text type="secondary" className="session-failure-meta">
           {classLabel(view.classId)} · {view.fatal ? "Fatal" : "Recoverable"}
         </Typography.Text>
       }
       action={
-        <Flex wrap gap={8} className="session-failure-actions">
-          <DiagnosticDetails
-            fields={{
-              diagnosticId: view.diagnosticId,
-              correlationId: view.correlationId,
-              sessionId,
-              responseId: view.responseId,
-              category: view.category,
-              code: view.code
-            }}
-          />
-          {details}
+        <Flex wrap gap={8} align="center" className="session-failure-actions">
+          {detailsControl}
           {action}
         </Flex>
       }

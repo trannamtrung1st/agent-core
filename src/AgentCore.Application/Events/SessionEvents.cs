@@ -345,7 +345,9 @@ public sealed record PublicFailureReference(
     Guid DiagnosticId,
     Guid? CorrelationId,
     string Category,
-    string Code);
+    string Code,
+    string? FailureReason = null,
+    string? ProviderResponseChannel = null);
 
 public sealed record PublicPendingApproval(
     Guid ApprovalId,
@@ -454,7 +456,9 @@ public sealed record ErrorOutput(
     string SafeMessage,
     bool Fatal,
     TimeSpan? RetryAfter,
-    Guid? DiagnosticId = null) : OutputPayload;
+    Guid? DiagnosticId = null,
+    string? FailureReason = null,
+    string? ProviderResponseChannel = null) : OutputPayload;
 
 public enum ResponseProgressKind
 {
@@ -576,7 +580,13 @@ public static class PublicHistory
             entry.InterruptReason,
             speechText,
             entry.Status == EntryStatus.Failed && entry.Failure is { } failure
-                ? new PublicFailureReference(failure.DiagnosticId, failure.CorrelationId, failure.Category, failure.Code)
+                ? new PublicFailureReference(
+                    failure.DiagnosticId,
+                    failure.CorrelationId,
+                    failure.Category,
+                    failure.Code,
+                    failure.FailureReason,
+                    failure.ProviderResponseChannel)
                 : null,
             memoryReceipts);
     }

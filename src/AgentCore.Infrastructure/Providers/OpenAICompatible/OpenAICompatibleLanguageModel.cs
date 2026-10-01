@@ -264,6 +264,17 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                 }
             }
 
+            if (stop == ModelStopReason.LengthLimit && drafts.Count > 0)
+            {
+                _breaker.RecordSuccess();
+                yield return Fail(
+                    ProviderErrorCode.InvalidResponse,
+                    "The model's tool call was cut off before it finished.",
+                    ProviderFailureReason.ToolCallTruncated,
+                    ProviderResponseChannel.ToolCall);
+                yield break;
+            }
+
             if (stop == ModelStopReason.ToolCalls)
             {
                 _breaker.RecordSuccess();
@@ -761,8 +772,12 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
     private static ITimer ScheduleCancel(TimeProvider time, CancellationTokenSource cts, TimeSpan delay) =>
         time.CreateTimer(static state => ((CancellationTokenSource)state!).Cancel(), cts, delay, Timeout.InfiniteTimeSpan);
 
-    private static ModelFailed Fail(ProviderErrorCode code, string message) =>
-        new(new ProviderFailure(code, message));
+    private static ModelFailed Fail(
+        ProviderErrorCode code,
+        string message,
+        string? failureReason = null,
+        string? responseChannel = null) =>
+        new(new ProviderFailure(code, message, FailureReason: failureReason, ResponseChannel: responseChannel));
 
     private async Task<ProviderFailure> MapStatusAsync(
         HttpResponseMessage response,

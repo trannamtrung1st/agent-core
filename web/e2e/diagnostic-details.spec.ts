@@ -14,7 +14,7 @@ test("failed assistant details copy and survive reload", async ({ page }) => {
   await expect(details).toContainText("Diagnostic ID");
   const diagnosticId = (await page.getByTestId("diagnostic-id").innerText()).trim();
   expect(diagnosticId).toMatch(/^[0-9a-f-]{36}$/i);
-  await page.getByRole("button", { name: "Copy diagnostic" }).click();
+  await page.getByRole("button", { name: "Copy details" }).click();
   await expect(page.getByRole("status")).toHaveText("Copied");
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toContain(`Diagnostic ID: ${diagnosticId}`);

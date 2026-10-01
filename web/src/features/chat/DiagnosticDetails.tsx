@@ -1,32 +1,29 @@
-import { CopyOutlined, InfoCircleOutlined } from "@ant-design/icons";
+import { InfoCircleOutlined } from "@ant-design/icons";
 import { type ReactNode, useState } from "react";
-import { Button, Flex, Popover, Typography, theme } from "antd";
+import { Button, Popover } from "antd";
+import { DetailField, DetailFieldList, type DetailLine } from "./detailFields";
+import { DetailPopoverBody } from "./detailPopover";
 import { diagnosticCopyText, type DiagnosticFields } from "./diagnosticCopy";
 
-export function DiagnosticDetails({ fields, trigger }: { fields: DiagnosticFields; trigger?: ReactNode }) {
-  const { token } = theme.useToken();
-  const copyText = diagnosticCopyText(fields);
-  const [copied, setCopied] = useState(false);
+export function DiagnosticDetails({
+  fields,
+  trigger,
+  extraLines = [],
+  failureDetailsTestId
+}: {
+  fields: DiagnosticFields;
+  trigger?: ReactNode;
+  /** Additional labeled rows in the same layout, included in copy text. */
+  extraLines?: DetailLine[];
+  failureDetailsTestId?: string;
+}) {
+  const copyText = diagnosticCopyText(fields, extraLines);
+  const [copyResetKey, setCopyResetKey] = useState(0);
   if (!copyText || !fields.diagnosticId?.trim()) {
     return null;
   }
 
   const diagnosticId = fields.diagnosticId.trim();
-  const idStyle = {
-    display: "block",
-    userSelect: "text" as const,
-    fontFamily: token.fontFamilyCode,
-    fontSize: token.fontSizeSM,
-    wordBreak: "break-all" as const
-  };
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(copyText ?? "");
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
-  }
 
   return (
     <Popover
@@ -36,54 +33,43 @@ export function DiagnosticDetails({ fields, trigger }: { fields: DiagnosticField
       getPopupContainer={() => document.body}
       onOpenChange={(open) => {
         if (!open) {
-          setCopied(false);
+          setCopyResetKey((value) => value + 1);
         }
       }}
       content={
-        <Flex
-          vertical
-          gap={token.paddingXS}
-          data-testid="diagnostic-details"
-          className="ac-scroll-pane"
-          style={{
-            width: "min(360px, calc(100vw - 32px))",
-            maxHeight: "calc(40vh - 8px)",
-            paddingInlineEnd: token.paddingXXS
-          }}
-        >
-          <DiagnosticField label="Diagnostic ID" value={diagnosticId} testId="diagnostic-id" />
+        <DetailPopoverBody copyText={copyText} dataTestId="diagnostic-details" copyResetKey={copyResetKey}>
+          <DetailField label="Diagnostic ID" value={diagnosticId} testId="diagnostic-id" />
           {fields.correlationId?.trim() ? (
-            <DiagnosticField label="Correlation ID" value={fields.correlationId.trim()} />
+            <DetailField label="Correlation ID" value={fields.correlationId.trim()} />
           ) : null}
           {fields.sessionId?.trim() ? (
-            <DiagnosticField label="Session ID" value={fields.sessionId.trim()} />
+            <DetailField label="Session ID" value={fields.sessionId.trim()} />
           ) : null}
           {fields.responseId?.trim() ? (
-            <DiagnosticField label="Response ID" value={fields.responseId.trim()} />
+            <DetailField label="Response ID" value={fields.responseId.trim()} />
           ) : null}
           {fields.workItemId?.trim() ? (
-            <DiagnosticField label="Work Item ID" value={fields.workItemId.trim()} />
+            <DetailField label="Work Item ID" value={fields.workItemId.trim()} />
           ) : null}
           {fields.triggerRegistrationId?.trim() ? (
-            <DiagnosticField label="Trigger ID" value={fields.triggerRegistrationId.trim()} />
+            <DetailField label="Trigger ID" value={fields.triggerRegistrationId.trim()} />
           ) : null}
           {fields.triggerOccurrenceId?.trim() ? (
-            <DiagnosticField label="Occurrence ID" value={fields.triggerOccurrenceId.trim()} />
+            <DetailField label="Occurrence ID" value={fields.triggerOccurrenceId.trim()} />
           ) : null}
           {fields.category?.trim() && fields.code?.trim() ? (
-            <DiagnosticField label="Error" value={`${fields.category.trim()} / ${fields.code.trim()}`} />
+            <DetailField label="Error" value={`${fields.category.trim()} / ${fields.code.trim()}`} />
           ) : fields.code?.trim() ? (
-            <DiagnosticField label="Error" value={fields.code.trim()} />
+            <DetailField label="Error" value={fields.code.trim()} />
           ) : null}
-          <Button
-            icon={<CopyOutlined />}
-            aria-label="Copy diagnostic"
-            onClick={() => void copy()}
-            style={{ alignSelf: "flex-start", flex: "0 0 auto" }}
-          >
-            <span role="status">{copied ? "Copied" : "Copy details"}</span>
-          </Button>
-        </Flex>
+          {fields.failureReason?.trim() ? (
+            <DetailField label="Reason" value={fields.failureReason.trim()} testId="diagnostic-reason" />
+          ) : null}
+          {fields.providerResponseChannel?.trim() ? (
+            <DetailField label="Channel" value={fields.providerResponseChannel.trim()} testId="diagnostic-channel" />
+          ) : null}
+          <DetailFieldList items={extraLines} dataTestId={failureDetailsTestId} />
+        </DetailPopoverBody>
       }
     >
       {trigger ?? (
@@ -91,17 +77,4 @@ export function DiagnosticDetails({ fields, trigger }: { fields: DiagnosticField
       )}
     </Popover>
   );
-
-  function DiagnosticField({ label, value, testId }: { label: string; value: string; testId?: string }) {
-    return (
-      <div style={{ flex: "0 0 auto" }}>
-        <Typography.Text type="secondary" style={{ display: "block", fontSize: token.fontSizeSM }}>
-          {label}
-        </Typography.Text>
-        <Typography.Text style={idStyle} data-testid={testId}>
-          {value}
-        </Typography.Text>
-      </div>
-    );
-  }
 }

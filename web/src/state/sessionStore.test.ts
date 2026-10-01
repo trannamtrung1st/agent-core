@@ -765,6 +765,46 @@ describe("applyServerEvent", () => {
     expect(next.sessionError?.extensions).toEqual({ retryable: true });
   });
 
+  it("stamps allowlisted provider diagnostics from the live error and drops raw arguments", () => {
+    const started = applyServerEvent(
+      { ...emptySession(), attachmentId: "a1" },
+      event({
+        type: "agent.response.started",
+        sequence: 1,
+        responseId: "r-cut",
+        payload: { entryId: "e-cut", entrySequence: 1, trigger: "userTurn" }
+      })
+    );
+    const diagnosed = applyServerEvent(
+      started,
+      event({
+        type: "error",
+        sequence: 2,
+        responseId: "r-cut",
+        payload: {
+          category: "provider",
+          code: "InvalidResponse",
+          message: "The model's tool call was cut off before it finished.",
+          diagnosticId: "diag-cut",
+          failureReason: "toolCallTruncated",
+          providerResponseChannel: "toolCall",
+          arguments: "{\"path\":\"secret.cs\"}"
+        }
+      })
+    );
+    expect(diagnosed.sessionError?.failureReason).toBe("toolCallTruncated");
+    expect(diagnosed.sessionError?.providerResponseChannel).toBe("toolCall");
+    expect(diagnosed.entries[0]?.failure).toEqual({
+      diagnosticId: "diag-cut",
+      correlationId: "c1",
+      category: "provider",
+      code: "InvalidResponse",
+      failureReason: "toolCallTruncated",
+      providerResponseChannel: "toolCall"
+    });
+    expect(JSON.stringify(diagnosed.entries[0]?.failure)).not.toContain("secret.cs");
+  });
+
   it("binds a diagnostic error to its response and ignores a superseded one", () => {
     const started = applyServerEvent(
       { ...emptySession(), attachmentId: "a1" },
@@ -794,6 +834,7 @@ describe("applyServerEvent", () => {
     expect(diagnosed.sessionError?.diagnosticId).toBe("diag-active");
     expect(diagnosed.sessionError?.responseId).toBe("r-active");
     expect(diagnosed.entries[0]?.failure?.diagnosticId).toBe("diag-active");
+    expect(diagnosed.entries[0]?.failure?.failureReason).toBeUndefined();
     const withOld = {
       ...diagnosed,
       entries: [
@@ -1328,6 +1369,41 @@ describe("historyFromPayload", () => {
       code: "Unavailable"
     });
     expect(entries[1]?.failure).toBeNull();
+  });
+
+  it("keeps allowlisted provider diagnostics and drops raw tool arguments", () => {
+    const entries = historyFromPayload([
+      {
+        entryId: "a1",
+        sequence: 1,
+        role: "assistant",
+        text: "",
+        responseId: "r1",
+        status: "failed",
+        deliveryMode: "text",
+        heardTextEndExclusive: 0,
+        receivedTextEndExclusive: 0,
+        createdAt: "2026-09-18T00:00:00.000Z",
+        failure: {
+          diagnosticId: "diag-trunc",
+          correlationId: null,
+          category: "provider",
+          code: "InvalidResponse",
+          failureReason: "toolCallTruncated",
+          providerResponseChannel: "toolCall",
+          arguments: "{\"path\":\"/workspace/working/secret.cs\"}"
+        }
+      }
+    ]);
+    expect(entries[0]?.failure).toEqual({
+      diagnosticId: "diag-trunc",
+      correlationId: null,
+      category: "provider",
+      code: "InvalidResponse",
+      failureReason: "toolCallTruncated",
+      providerResponseChannel: "toolCall"
+    });
+    expect(JSON.stringify(entries[0]?.failure)).not.toContain("secret.cs");
   });
 
   it("keeps display receipts independent of heard offsets and omits thinking rows", () => {
