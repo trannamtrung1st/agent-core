@@ -28,6 +28,8 @@ public sealed class ContinuationCapabilityProviderTests
         var model = Create(handler, tools: true);
         var executionId = Guid.Parse("019944af-00ee-7000-8000-0000000000e1");
         Assert.True(ApplicationMessageAdmission.TryCreateEffectKey(executionId, "m1", out var effectKey));
+        const string messageText = "Still checking the order";
+        var budgetAfter = ApplicationMessageBudget.Fresh().AfterAdmit(messageText.Length);
         var request = new ModelRequest(
             Guid.NewGuid(),
             [
@@ -37,10 +39,14 @@ public sealed class ContinuationCapabilityProviderTests
                     string.Empty,
                     ToolCalls:
                     [
-                        new ModelToolCall("m1", ToolCatalog.AppMessageSend, """{"text":"Still checking the order"}"""),
+                        new ModelToolCall("m1", ToolCatalog.AppMessageSend, $$"""{"text":"{{messageText}}"}"""),
                         new ModelToolCall("load-1", ToolCatalog.SkillsLoad, """{"ids":["order.lookup"]}""")
                     ]),
-                new ModelMessage(ModelRole.Tool, ApplicationMessageAdmission.Success(effectKey), ToolCallId: "m1", Name: ToolCatalog.AppMessageSend),
+                new ModelMessage(
+                    ModelRole.Tool,
+                    ApplicationMessageAdmission.Success(effectKey, budgetAfter),
+                    ToolCallId: "m1",
+                    Name: ToolCatalog.AppMessageSend),
                 new ModelMessage(
                     ModelRole.Tool,
                     """{"admitted":["order.lookup"],"alreadyActive":[],"rejected":[]}""",
@@ -68,10 +74,19 @@ public sealed class ContinuationCapabilityProviderTests
             .Select(message => message.GetProperty("content").GetString())
             .ToArray();
         Assert.Equal(2, results.Length);
-        Assert.Contains(effectKey, results[0], StringComparison.Ordinal);
+        using (var success = JsonDocument.Parse(results[0]!))
+        {
+            Assert.True(success.RootElement.GetProperty("ok").GetBoolean());
+            Assert.Equal(effectKey, success.RootElement.GetProperty("effectId").GetString());
+            Assert.Equal(11, success.RootElement.GetProperty("remainingMessages").GetInt32());
+            Assert.Equal(
+                ApplicationMessagePolicy.Default.MaxAggregateCharactersPerExecution - messageText.Length,
+                success.RootElement.GetProperty("remainingCharacters").GetInt32());
+        }
+
         Assert.All(results, result =>
         {
-            Assert.DoesNotContain("Still checking the order", result, StringComparison.Ordinal);
+            Assert.DoesNotContain(messageText, result, StringComparison.Ordinal);
             Assert.DoesNotContain("ORDER_PROCEDURE", result, StringComparison.Ordinal);
         });
     }
