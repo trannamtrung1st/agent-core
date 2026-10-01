@@ -963,7 +963,7 @@ Recorded P8 limits that P8.5 must address without treating them as already gener
 
 - `Continue` delivers Chat when that action is present and does not schedule another generation.
 - Skill activation applies to user turns only.
-- `Wait` on a direct user-turn chat request is rejected as `InvalidAgentStep`. Allowed no-chat returns remove the streaming placeholder instead of marking `Interrupted`; user-turn execution still commits as cancelled after persist.
+- Direct user-turn chat rejects any no-chat Agent Step as `InvalidAgentStep`. Allowed no-chat returns on non-user triggers remove the streaming placeholder instead of marking `Interrupted`.
 - `ChatActionAdmission` is the Chat seam. It is not yet a generic action-authorization framework.
 
 P10 and P11 remain requirement-triggered. Do not close P8.5 or begin P9 by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.

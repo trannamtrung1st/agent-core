@@ -1988,12 +1988,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         EventContext cause,
         CancellationToken cancellationToken)
     {
-        if (_suppressPendingUserBatchOnce)
-        {
-            _suppressPendingUserBatchOnce = false;
-            return false;
-        }
-
         if (!CanStartUserConversationBatch())
         {
             return false;
@@ -3887,15 +3881,18 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 return;
             }
 
-            if (decision.Effect == AgentStepEffect.WaitForExternalInput
-                && _activeResponseTriggerKind == TriggerKind.UserTurn)
+            if (_activeResponseTriggerKind == TriggerKind.UserTurn
+                && decision.Effect is AgentStepEffect.WaitForExternalInput or AgentStepEffect.ReturnWithoutChat)
             {
+                var message = decision.Effect == AgentStepEffect.WaitForExternalInput
+                    ? "The model returned Wait, which is not valid for a direct chat request."
+                    : "The model returned no chat action, which is not valid for a direct chat request.";
                 await FailSemanticReadyAsync(
                         context,
                         responseId,
                         finalizingOperationId,
                         ReferenceForResponse(context, responseId, "InvalidAgentStep", exception: null),
-                        "The model returned Wait, which is not valid for a direct chat request.",
+                        message,
                         cancellationToken)
                     .ConfigureAwait(false);
                 return;
@@ -4070,7 +4067,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (userTerminal)
         {
             MarkConversationExecutionPendingTerminal();
-            _suppressPendingUserBatchOnce = true;
         }
 
         RequestPersist(

@@ -235,18 +235,19 @@ public sealed class SemanticCutoverRuntimeTests
     }
 
     [Fact]
-    public async Task Complete_without_chat_removes_the_assistant_placeholder_without_interrupt()
+    public async Task Complete_without_chat_on_user_turn_fails_as_invalid_agent_step()
     {
         var output = new CapturingSessionOutput();
         await using var runtime = Create(output, new NoChatCompleteLanguageModel());
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("Hello");
         await runtime.WaitUntilIdleAsync();
-        Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
-        Assert.DoesNotContain(output.Items, item => item.Payload is ErrorOutput);
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Failed, assistant.Status);
+        Assert.Contains(output.Items, item => item.Payload is ErrorOutput);
         var completed = Assert.IsType<ResponseCompletedOutput>(
             Assert.Single(output.Items, item => item.Payload is ResponseCompletedOutput).Payload);
-        Assert.False(completed.Failed);
+        Assert.True(completed.Failed);
         Assert.Null(completed.InterruptReason);
     }
 

@@ -12,7 +12,6 @@ public sealed partial class SessionRuntime
     private Guid? _pendingTerminalExecutionId;
     private Guid? _pendingTerminalResponseId;
     private bool _pendingNoChatTerminal;
-    private bool _suppressPendingUserBatchOnce;
 
     public async Task<bool> DispatchConversationExecutionAsync(
         Guid executionId,
