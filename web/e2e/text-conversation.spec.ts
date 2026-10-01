@@ -75,7 +75,19 @@ async function expectSupportOrder91Response(page: Page): Promise<void> {
     )
     .toBe(true);
   await waitForResponseSettled(page);
-  await expect(page.locator(".markdown-message strong")).toHaveText("Delayed", { timeout: 30_000 });
+  await expect
+    .poll(
+      async () => {
+        const strong = page.locator(".markdown-message strong");
+        if ((await strong.count()) === 0) {
+          return false;
+        }
+
+        return (await strong.first().innerText()).trim() === "Delayed";
+      },
+      { timeout: 30_000, intervals: [250, 500, 1_000] }
+    )
+    .toBe(true);
 }
 
 // Runs first in this file so the W02 combined gate exercises support progress before other chat scenarios warm the host.
