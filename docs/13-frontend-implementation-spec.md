@@ -46,6 +46,10 @@ The voice-call control is a **mode transition on the same session**, not a new c
 
 The composer toolbar groups **Model** (catalog picker; reasoning effort inside that control when the descriptor supports it) then session input on the left (Attach, Voice, microphone) and message actions on the right. Catalog options show compact capability icons beside the display name for each enabled descriptor flag (`vision`, `reasoning`, `tools`, `structuredOutput`), with tooltips and accessible names (covered by unit tests). The primary right control is context-sensitive: Stop when an assistant response is active and the draft is empty; Send when there is no live response and the user has content; Queue when a response is active and the user has content, with a compact secondary Stop beside Queue. An empty draft with no live response keeps Send disabled unless a queued send batch is eligible (see [Attachment picker](#attachment-picker-observed)).
 
+## P9 visible browser (observed, not closed)
+
+Chat does not add a browser panel, iframe, screenshot, or click log. While a `browser.*` tool is active, `agent.progress` kind `runningTool` carries the trusted message `Using browser…`, and the existing activity row prefers that message. When that progress ends, the row returns to the ordinary tool or idle label. The journey is `e2e/p9-browser-journey.spec.ts`.
+
 ## Voice preflight
 
 User activation may expire before a queued `pendingMode=voice` wait finishes. When a session already exists, the Voice click prepares audio locally first. When Voice is the first action, create/attach first so preflight can use `session.ready` transports and skip getUserMedia for Browser/Browser; then ask the server to change mode, and only then send PCM.

@@ -2677,7 +2677,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             ResponseProgressKind.RunningTool,
                             ResponseProgressState.Started,
                             operationId,
-                            ResponseProgressMessages.RunningTools,
+                            ToolProgressMessage(call.Name),
                             CancellationToken.None)
                         .ConfigureAwait(false);
 
@@ -2894,7 +2894,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 ResponseProgressKind.RunningTool,
                                 ResponseProgressState.Failed,
                                 operationId,
-                                ResponseProgressMessages.RunningTools,
+                                ToolProgressMessage(call.Name),
                                 CancellationToken.None)
                             .ConfigureAwait(false);
                         var toolTimedOut = overallCts.IsCancellationRequested;
@@ -2921,7 +2921,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 ResponseProgressKind.RunningTool,
                                 ResponseProgressState.Failed,
                                 operationId,
-                                ResponseProgressMessages.RunningTools,
+                                ToolProgressMessage(call.Name),
                                 CancellationToken.None)
                             .ConfigureAwait(false);
                         await MailboxModelAsync(
@@ -2941,7 +2941,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             ResponseProgressKind.RunningTool,
                             ResponseProgressState.Completed,
                             operationId,
-                            ResponseProgressMessages.RunningTools,
+                            ToolProgressMessage(call.Name),
                             CancellationToken.None)
                         .ConfigureAwait(false);
                     messages.Add(new ModelMessage(
@@ -5654,6 +5654,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         await _output.PublishAsync(output, cancellationToken).ConfigureAwait(false);
     }
+
+    private static string ToolProgressMessage(string toolName) =>
+        toolName.StartsWith("browser.", StringComparison.Ordinal)
+            ? ResponseProgressMessages.UsingBrowser
+            : ResponseProgressMessages.RunningTools;
 
     private async Task PublishProgressAsync(
         EventContext context,

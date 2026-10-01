@@ -86,6 +86,8 @@ Stack (existing codebase, not a greenfield choice): React SPA, Vite, pnpm, stric
 4. Restrained proactivity and honest Synthetic labeling.
 5. Accessibility and keyboard use are part of the product, not polish-later.
 
+Observed P9 Chat behavior, not a new visual system: while a browser tool runs, the existing activity row shows the server progress message `Using browser…`. There is no page panel, screenshot, or click log. `/docs` remains the product specification.
+
 ## Accessibility & Inclusion
 
 Labeled controls, keyboard access, visible focus, and actionable errors are required ([docs/13-frontend-implementation-spec.md](../../docs/13-frontend-implementation-spec.md)). Status must not rely on color or animation alone. Honor `prefers-reduced-motion`. Contrast follows Ant Design defaults and DESIGN.md. Primary supported demo browser is Chromium desktop; do not depend on Chromium-only APIs when standard APIs suffice.

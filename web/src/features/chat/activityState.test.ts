@@ -82,6 +82,15 @@ describe("agent activity mapping", () => {
       })
     ).toBe("Running tools…");
     expect(
+      conversationStatus({
+        ...ready,
+        liveResponseId: "r1",
+        outputState: "runningTools",
+        activeProgress: { kind: "runningTool", message: "Using browser…" }
+      })
+    ).toBe("Using browser…");
+    expect(conversationStatus({ ...ready, outputState: "runningTools" })).toBe("Running tools…");
+    expect(
       mapAgentActivity({
         ...ready,
         liveResponseId: "r1",

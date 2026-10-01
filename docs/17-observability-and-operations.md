@@ -202,6 +202,10 @@ Specific local projects are examples, not mandatory dependencies. Inference proc
 
 [Configuration](15-persistence-and-configuration.md#hosted-and-on-prem-provider-configurations) owns concrete endpoint overrides. Native speech-to-speech is not required to achieve hosted, hybrid or fully on-prem deployment.
 
+## P9 visible browser (observed, not closed)
+
+CI sets `Browser__Headless=true` and does not set one shared `FixturePort` on the job. It builds the Infrastructure test project and runs `pwsh tests/AgentCore.Infrastructure.Tests/bin/Debug/net10.0/playwright.ps1 install --with-deps chromium` before infrastructure tests that launch Chromium. The JavaScript Playwright install does not satisfy the .NET driver. The Compose image does not install Chromium. Diagnostics do not log argument values, page text, cookies, storage, or raw Playwright errors. A missing browser binary logs the static line `Browser provider is unavailable.`
+
 ## Security and public-service boundary
 
 Authentication is deferred. Session IDs are high-entropy local/demo bearer references; possession allows viewing/ending that session. Keep them out of public links and frontend analytics. Provider secrets exist only on the backend. Same-origin production serving is preferred; development uses a Vite proxy or narrowly allowed origins.

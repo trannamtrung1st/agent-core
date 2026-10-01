@@ -278,3 +278,4 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 - **Don't** wrap every operational List row in a card or generalize drawer actions to rows that do not expose an operation.
 - **Don't** present schedule occurrence timestamps as raw transport strings when they parse as dates.
 - **Don't** use transient `Popconfirm` overlays for lifecycle, deletion, approval, cancellation, reset, or revoke actions when `confirmAction` is available; reserve Popconfirm for low-risk inline affordances only.
+- **Don't** add a browser panel, iframe, screenshot, or click log. Browser progress stays on the existing activity row as `Using browser…`.

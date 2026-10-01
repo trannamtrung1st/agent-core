@@ -498,6 +498,7 @@ public static class ResponseProgressMessages
 {
     public const string ReadingAttachments = "Reading attachments…";
     public const string RunningTools = "Running tools…";
+    public const string UsingBrowser = "Using browser…";
     public const string WaitingForApproval = "Waiting for your approval…";
     public const string Finalizing = "Finalizing response…";
     public const int MaxLength = 80;

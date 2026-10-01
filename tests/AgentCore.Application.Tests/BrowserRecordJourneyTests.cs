@@ -70,6 +70,11 @@ public sealed class BrowserRecordJourneyTests
         Assert.DoesNotContain("expand the allowlist", assistant.Text, StringComparison.Ordinal);
         Assert.Equal(assistant.ResponseId, application.ResponseId);
         Assert.DoesNotContain(output.Items, item => item.Payload is ErrorOutput);
+        Assert.Contains(
+            output.Items,
+            item => item.Payload is ResponseProgressOutput progress
+                && progress.Kind == ResponseProgressKind.RunningTool
+                && progress.Message == ResponseProgressMessages.UsingBrowser);
     }
 
     private static AgentDefinition Definition() =>
