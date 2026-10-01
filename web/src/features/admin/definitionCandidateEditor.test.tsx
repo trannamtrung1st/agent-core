@@ -284,7 +284,8 @@ describe("definition candidate editor", () => {
     expect(saved.skills.map((skill) => skill.id)).toEqual(["order.lookup", "refund.handle"]);
     expect(saved.skills[1]?.procedure).toBe("REFUND_PROCEDURE_EDITED");
     expect(saved.skills[1]?.requiredCapabilities).toEqual(["workspace.read", "chat.respond"]);
-  });
+    // The full suite under local load exceeded the 15s default.
+  }, 60_000);
 
   it("edits every supported candidate area through the form and saves that candidate", async () => {
     mockDraft();
