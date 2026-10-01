@@ -56,7 +56,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly IStructuredMemoryService? _structuredMemory;
     private readonly IArtifactReferenceAuthorizer _artifacts;
     private readonly SessionToolExecutor _tools;
-    private readonly PromptContextBuilder _promptContextBuilder;
     private bool _intermediateMessagingAllowed;
     private readonly InteractionPolicy _policy;
     private readonly VoiceAvailability _voice;
@@ -225,7 +224,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _turnExecutions = turnExecutions;
         _artifacts = artifacts ?? new FixtureArtifactReferenceAuthorizer();
         _tools = tools ?? new SessionToolExecutor();
-        _promptContextBuilder = new PromptContextBuilder(_tools.ConfigurationGate);
         _voice = voice ?? new VoiceAvailability { SpeechAdaptersResolved = true };
         _recognition = recognition
             ?? _voice.EffectivePlan.RecognitionCapabilities
@@ -2471,25 +2469,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }, CancellationToken.None);
     }
 
-    private AgentContext CreateToolOfferContext(
-        AgentTrigger trigger,
-        IReadOnlyList<string> activeSkillIds,
-        ILanguageModel model) =>
-        new(
-            _snapshot.Definition,
-            _snapshot.Entries,
-            _snapshot.Summary,
-            _profile,
-            _snapshot.Mode,
-            _snapshot.PendingTopic,
-            _helpOfferedDuringSilence,
-            LastInterruptedHeardText(),
-            trigger,
-            SessionAttachments: SessionAttachmentManifestFromSnapshot(),
-            ModelSupportsTools: model.Capabilities.Tools,
-            ActiveSkillIds: activeSkillIds,
-            IntermediateMessagingAllowed: _intermediateMessagingAllowed);
-
     private IReadOnlyList<SessionAttachmentManifestItem> SessionAttachmentManifestFromSnapshot()
     {
         var items = new List<SessionAttachmentManifestItem>();
@@ -2526,12 +2505,18 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private ModelRequest WithOfferedTools(
         ModelRequest request,
+        IReadOnlyList<ModelToolDefinition>? authorizedTools,
         AgentTrigger trigger,
-        IReadOnlyList<string> activeSkillIds,
         ILanguageModel model)
     {
-        var tools = _promptContextBuilder.OfferTools(_snapshot.Definition, CreateToolOfferContext(trigger, activeSkillIds, model));
-        if (tools.Count == 0)
+        var tools = ApplicationMessageToolOffer.Apply(
+            authorizedTools,
+            _intermediateMessagingAllowed,
+            _snapshot.Definition,
+            trigger,
+            _tools.ConfigurationGate,
+            model.Capabilities.Tools);
+        if (tools is not { Count: > 0 })
         {
             return request with
             {
@@ -2559,6 +2544,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var started = Stopwatch.GetTimestamp();
         using var activity = RuntimeTelemetry.Activity.StartActivity("model");
         var messages = request.Messages.ToList();
+        var authorizedTools = request.Tools;
         var pinnedSkills = activeSkillIds.ToArray();
         var steps = 0;
         var outputBytes = 0;
@@ -2576,8 +2562,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 messages = PromptContextBuilder.WithActiveSkillSystem(messages, _snapshot.Definition, pinnedSkills).ToList();
                 var working = WithOfferedTools(
                     request with { Messages = messages },
+                    authorizedTools,
                     trigger,
-                    pinnedSkills,
                     model);
                 await foreach (var evt in model.GenerateAsync(working, generateToken).ConfigureAwait(false))
                 {
@@ -2640,6 +2626,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
 
                 messages.Add(new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: pending));
+                var allowedIntermediate = _intermediateMessagingAllowed;
+                var substantiveWorkInBatch = false;
                 foreach (var call in pending)
                 {
                     if (!await AdmitToolActivityAsync(
@@ -2717,7 +2705,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 admission: new ToolExecutionAdmission(
                                     Detached: false,
                                     trigger.Kind,
-                                    _intermediateMessagingAllowed));
+                                    allowedIntermediate));
                             if (policy == ToolPolicyDecision.Deny || string.IsNullOrWhiteSpace(call.Name))
                             {
                                 if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal))
@@ -2844,7 +2832,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             new ToolExecutionAdmission(
                                                 Detached: false,
                                                 trigger.Kind,
-                                                _intermediateMessagingAllowed))
+                                                allowedIntermediate))
                                         .ConfigureAwait(false);
                                     if (executionResult.ReplaceTriggerProposal)
                                     {
@@ -2852,9 +2840,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     }
 
                                     ApplyScheduleConversationFromTool(call.Name, executionResult.Text);
-                                    if (ApplicationMessageToolPolicy.UnlocksIntermediateMessaging(call.Name))
+                                    if (policy != ToolPolicyDecision.Deny
+                                        && !preparedFailed
+                                        && ApplicationMessageToolPolicy.UnlocksIntermediateMessaging(call.Name))
                                     {
-                                        _intermediateMessagingAllowed = true;
+                                        substantiveWorkInBatch = true;
                                     }
                                 }
                             }
@@ -2932,6 +2922,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         ToolCallId: call.Id,
                         Name: call.Name));
                     steps++;
+                }
+
+                if (substantiveWorkInBatch)
+                {
+                    _intermediateMessagingAllowed = true;
                 }
 
                 if (!await AdmitToolActivityAsync(

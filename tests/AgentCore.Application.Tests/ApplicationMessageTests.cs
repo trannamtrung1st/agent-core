@@ -22,6 +22,7 @@ public sealed class ApplicationMessageTests
     private const string ThirdText = "Third notice";
     private const string FourthText = "Fourth notice";
     private const string ChangedText = "Changed text";
+    private const string HallucinatedBatchText = "I'm working on it";
 
     [Fact]
     public void Payload_rules_reject_routing_empty_and_oversize_text()
@@ -180,6 +181,24 @@ public sealed class ApplicationMessageTests
         var evaluation = string.Join('\n', CompletionEvaluator.CreateEvaluationRequest(snapshot, now).Messages.Select(item => item.Text));
         Assert.DoesNotContain(FirstText, evaluation, StringComparison.Ordinal);
         Assert.Contains("Shown", evaluation, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Same_generation_batch_denies_app_message_until_the_next_generation()
+    {
+        var model = new BatchedHallucinatedMessageLanguageModel();
+        var turns = new InMemoryConversationTurnExecutionStore();
+        await using var runtime = Create(model, turns, Definition());
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("hello");
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.DoesNotContain(
+            runtime.Snapshot.Entries,
+            entry => entry.Role == ConversationRole.ApplicationMessage
+                && entry.Text == HallucinatedBatchText);
+        Assert.Contains(ToolCatalog.AppMessageSend, model.Requests[1].Tools!.Select(tool => tool.Name));
+        Assert.Contains(FirstText, runtime.Snapshot.Entries.Single(entry => entry.Role == ConversationRole.ApplicationMessage).Text);
     }
 
     [Fact]
@@ -404,6 +423,51 @@ public sealed class ApplicationMessageTests
             NullLogger<SessionRuntime>.Instance,
             new FakeInterruptionClassifier(),
             turnExecutions: turns);
+    }
+
+    private sealed class BatchedHallucinatedMessageLanguageModel : ILanguageModel
+    {
+        private int _generation;
+
+        public List<ModelRequest> Requests { get; } = [];
+
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            var generation = Interlocked.Increment(ref _generation);
+            await Task.Yield();
+            cancellationToken.ThrowIfCancellationRequested();
+            switch (generation)
+            {
+                case 1:
+                    yield return new ModelToolCallEvent(new ModelToolCall("wk-1", ToolCatalog.WorkspaceList, "{}"));
+                    yield return new ModelToolCallEvent(new ModelToolCall(
+                        "m-hallucinated",
+                        ToolCatalog.AppMessageSend,
+                        JsonSerializer.Serialize(new { text = HallucinatedBatchText })));
+                    yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                    yield break;
+                case 2:
+                    yield return Call("m1", JsonSerializer.Serialize(new { text = FirstText }));
+                    yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                    yield break;
+                default:
+                    yield return new ModelSemanticResponseReady(
+                        new ModelSemanticResponse(
+                            "Done",
+                            new ModelSpeechProjection(ModelSpeechMode.Same, null),
+                            []));
+                    yield return new ModelCompleted(ModelStopReason.Completed);
+                    yield break;
+            }
+        }
+
+        private static ModelToolCallEvent Call(string id, string arguments) =>
+            new(new ModelToolCall(id, ToolCatalog.AppMessageSend, arguments));
     }
 
     private sealed class GreetingLanguageModel : ILanguageModel
