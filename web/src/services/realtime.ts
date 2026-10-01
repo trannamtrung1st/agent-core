@@ -62,6 +62,8 @@ import {
 let connection: HubConnection | null = null;
 let connectionEpoch = 0;
 let conversationConvergenceEpoch = 0;
+const DURABLE_CONVERSATION_POLL_MS = 250;
+const DURABLE_CONVERSATION_MAX_POLLS = 120;
 let commandSequence = 0;
 let clientSpeechPlayer: ClientSpeechPlayer | null = null;
 let transcriptLife: ClientTranscriptLifecycle | null = null;
@@ -896,8 +898,8 @@ async function convergeDurableConversation(
   responseId: string
 ): Promise<void> {
   const epoch = ++conversationConvergenceEpoch;
-  while (epoch === conversationConvergenceEpoch) {
-    await new Promise<void>((resolve) => window.setTimeout(resolve, 250));
+  for (let poll = 0; poll < DURABLE_CONVERSATION_MAX_POLLS && epoch === conversationConvergenceEpoch; poll += 1) {
+    await new Promise<void>((resolve) => window.setTimeout(resolve, DURABLE_CONVERSATION_POLL_MS));
     const current = useSessionStore.getState();
     if (!sameSessionId(current.sessionId, sessionId)
         || current.attachmentId !== attachmentId

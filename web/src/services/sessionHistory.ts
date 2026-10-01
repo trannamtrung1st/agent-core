@@ -101,6 +101,10 @@ function maxSequence(entries: HistoryEntry[]): number {
   return entries.reduce((max, entry) => Math.max(max, entry.sequence), 0);
 }
 
+function hasAssistantForResponse(entries: HistoryEntry[], responseId: string): boolean {
+  return entries.some((entry) => entry.role === "assistant" && entry.responseId === responseId);
+}
+
 function cursorFromPage(page: HistoryPage, items: HistoryEntry[]): number | null {
   if (page.nextBefore != null) {
     return page.nextBefore;
@@ -151,17 +155,21 @@ export async function loadNewestHistoryPage(
       ? mergeHistoryEntries(merged, latest.entries.filter((entry) => entry.sequence > pageMax))
       : merged;
 
-    const durableTerminal = latest.liveResponseId == null
+    const liveResponseId = latest.liveResponseId;
+    const durableTerminal = liveResponseId == null
       ? null
       : incoming.find((entry) =>
           entry.role === "assistant"
-          && entry.responseId === latest.liveResponseId
+          && entry.responseId === liveResponseId
           && (entry.status === "completed"
             || entry.status === "failed"
             || entry.status === "interrupted"));
-    const clearLiveConversation =
-      durableTerminal != null
-      && !isInFlightOutput(latest.outputState);
+    const outputIdle = !isInFlightOutput(latest.outputState);
+    const clearFromTerminal = durableTerminal != null && outputIdle;
+    const clearOrphanedLive = liveResponseId != null
+      && outputIdle
+      && !hasAssistantForResponse(withLive, liveResponseId);
+    const clearLiveConversation = clearFromTerminal || clearOrphanedLive;
     useSessionStore.setState({
       entries: withLive,
       ...(clearLiveConversation

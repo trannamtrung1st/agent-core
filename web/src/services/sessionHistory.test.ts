@@ -215,6 +215,31 @@ describe("session history controller", () => {
     expect(state.entries.find((entry) => entry.role === "assistant")?.status).toBe("streaming");
   });
 
+  it("clears orphaned liveResponseId when durable history has no assistant for that response", async () => {
+    useSessionStore.setState({
+      ...emptySession(),
+      sessionId: "s1",
+      liveResponseId: "r-ghost",
+      conversationExecutionId: "exec-1",
+      outputState: "idle",
+      entries: []
+    });
+    vi.mocked(listSessionMessages).mockResolvedValue({
+      items: [payload(row(1, { role: "user", responseId: null }))],
+      nextAfter: 1,
+      hasMore: false,
+      hasOlder: false,
+      nextBefore: null
+    });
+
+    await loadNewestHistoryPage("s1", { replaceWindow: true });
+
+    const state = useSessionStore.getState();
+    expect(state.liveResponseId).toBeNull();
+    expect(state.conversationExecutionId).toBeNull();
+    expect(state.outputState).toBe("idle");
+  });
+
   it("opens a 500-entry transcript with one newest-page request", async () => {
     const newest = Array.from({ length: 50 }, (_, index) => payload(row(index + 451)));
     vi.mocked(listSessionMessages).mockResolvedValue({

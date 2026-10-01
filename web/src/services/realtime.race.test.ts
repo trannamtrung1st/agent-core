@@ -1706,6 +1706,57 @@ describe("realtime race handling", () => {
     expect(useSessionStore.getState().historyHasOlder).toBe(true);
   });
 
+  it("stops durable convergence polling when live response has no assistant row", async () => {
+    vi.useFakeTimers();
+    vi.mocked(listSessionMessages).mockResolvedValue({
+      items: [],
+      nextAfter: 0,
+      hasMore: false,
+      hasOlder: false,
+      nextBefore: null
+    });
+    hooks.setConnection({ invoke: vi.fn(), send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "connecting",
+      sessionId: "s-active",
+      attachmentId: "a1",
+      lastServerSequence: 0,
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s-active",
+      attachmentId: "a1",
+      eventId: "ready",
+      sequence: 1,
+      timestamp: "2026-09-15T00:00:00.000Z",
+      correlationId: "c1",
+      causationId: null,
+      responseId: null,
+      type: "session.ready",
+      payload: {
+        mode: "text",
+        pendingMode: null,
+        status: "attached",
+        outputState: "idle",
+        activeResponseId: "r-ghost",
+        agent: { name: "Alex", role: "Examiner", voiceAvailable: true },
+        history: []
+      }
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    const callsAfterReady = vi.mocked(listSessionMessages).mock.calls.length;
+    expect(callsAfterReady).toBeGreaterThan(0);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(vi.mocked(listSessionMessages).mock.calls.length).toBeLessThanOrEqual(callsAfterReady + 1);
+    expect(useSessionStore.getState().liveResponseId).toBeNull();
+  });
+
   it("does not fetch additional pages when bootstrap starts above sequence fifty", async () => {
     const makeHistoryRow = (sequence: number) => ({
       entryId: `e${sequence}`,
