@@ -118,6 +118,28 @@ describe("SessionRail", () => {
     expect(screen.getByText("No chats yet.")).toBeInTheDocument();
   });
 
+  it("shows the pinned persona instead of the definition name", () => {
+    renderRail({
+      items: [{
+        ...live,
+        agentId: "general-assistant",
+        agentName: "Tommy",
+        agentRole: "Assistant"
+      }],
+      agents: [{ id: "general-assistant", version: 1, name: "Riley", role: "General assistant", description: "", voiceAvailable: true }],
+      activeSessionId: live.sessionId,
+      includeArchived: false,
+      hasMore: false,
+      capabilityLost: false,
+      error: null,
+      mutation: null,
+      onNewChat: vi.fn(),
+      onOpen: vi.fn()
+    });
+    expect(screen.getByText("Tommy · Assistant · Paused")).toBeInTheDocument();
+    expect(screen.queryByText(/Riley/)).not.toBeInTheDocument();
+  });
+
   it("shows agent identity and delete-only actions for ended sessions", async () => {
     const onOpen = vi.fn();
     renderRail({

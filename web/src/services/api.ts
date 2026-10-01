@@ -57,6 +57,8 @@ export type SessionResponse = {
   lifecycleStatus?: string | null;
   speechLocale?: { effective?: string; source?: string; override?: string | null } | null;
   model?: SessionModelSelection | null;
+  agentName?: string | null;
+  agentRole?: string | null;
 };
 
 export type WorkItem = {
@@ -129,6 +131,8 @@ export type CatalogItem = {
   updatedAt: string;
   pauseReason?: string | null;
   lifecycleStatus?: string | null;
+  agentName?: string | null;
+  agentRole?: string | null;
 };
 
 export type CatalogPage = {

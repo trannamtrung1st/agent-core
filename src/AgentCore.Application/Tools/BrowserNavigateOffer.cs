@@ -38,18 +38,19 @@ internal static class BrowserNavigateOffer
             return null;
         }
 
-        foreach (var origin in browser.HostPolicy.TargetOrigins)
+        string? home = null;
+        foreach (var origin in browser.HostPolicy.NavigationOrigins)
         {
             if (!BrowserTargetPolicy.IsLoopback(origin)
                 || !Uri.TryCreate(origin, UriKind.Absolute, out var uri)
                 || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
             {
-                continue;
+                return null;
             }
 
-            return new UriBuilder(uri) { Path = "/", Query = "", Fragment = "" }.Uri.AbsoluteUri;
+            home ??= new UriBuilder(uri) { Path = "/", Query = "", Fragment = "" }.Uri.AbsoluteUri;
         }
 
-        return null;
+        return home;
     }
 }

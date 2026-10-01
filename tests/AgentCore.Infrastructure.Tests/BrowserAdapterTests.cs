@@ -1,6 +1,10 @@
 using System.Net;
+using System.Net.Sockets;
+using System.Text;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
 using AgentCore.Infrastructure.Browser;
+using AgentCore.Infrastructure.Tools;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Playwright;
@@ -192,12 +196,127 @@ public sealed class BrowserHostFixture : IAsyncLifetime
 public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : IClassFixture<BrowserHostFixture>
 {
     [Fact]
+    public async Task Missing_chromium_closes_the_configuration_gate_and_does_not_navigate()
+    {
+        var session = new PlaywrightBrowserSession(
+            new BrowserOptions
+            {
+                Enabled = true,
+                Headless = true,
+                InteractionMode = nameof(BrowserInteractionMode.InteractiveDemo),
+                FixturePort = 0,
+                TargetOrigins = ["http://127.0.0.1:5091"]
+            },
+            loggerFactory: null,
+            _ => Task.FromResult(false));
+        await session.StartAsync(CancellationToken.None);
+        try
+        {
+            Assert.False(session.IsRuntimeReady);
+            Assert.False(session.IsAvailable);
+            var gate = new ToolConfigurationGate(null, null, null, session, browserEnabled: true);
+            Assert.False(gate.IsConfigured(ToolCatalog.BrowserNavigate));
+            Assert.False(gate.IsConfigured(ToolCatalog.BrowserObserve));
+            Assert.False(gate.IsConfigured(ToolCatalog.BrowserAct));
+            var navigated = await session.NavigateAsync(new BrowserNavigateRequest(Guid.NewGuid(), new Uri("http://127.0.0.1/")));
+            Assert.Equal("provider_unavailable", navigated.ErrorCode);
+            Assert.Null(session.LaunchedHeadless);
+        }
+        finally
+        {
+            await session.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task Trusted_origin_opens_without_the_fixture_and_resource_origins_do_not_navigate()
+    {
+        var port = BindEphemeralPort();
+        using var listener = new HttpListener();
+        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+        listener.Start();
+        var origin = $"http://127.0.0.1:{port}";
+        using var stop = new CancellationTokenSource();
+        var serving = ServeDocsAsync(listener, stop.Token);
+        var session = new PlaywrightBrowserSession(
+            new BrowserOptions
+            {
+                Enabled = true,
+                Headless = true,
+                FixtureEnabled = false,
+                NavigationOrigins = [origin],
+                InteractionOrigins = [],
+                ResourceOrigins = ["https://cdn.example"]
+            },
+            loggerFactory: null);
+        await session.StartAsync(CancellationToken.None);
+        try
+        {
+            Assert.False(session.Fixture.IsAvailable);
+            Assert.True(session.IsAvailable);
+            Assert.Equal([origin], session.HostPolicy.NavigationOrigins);
+            Assert.Empty(session.HostPolicy.EffectiveInteractionOrigins);
+            var denied = await session.NavigateAsync(
+                new BrowserNavigateRequest(Guid.NewGuid(), new Uri("https://example.invalid/escape")));
+            Assert.Equal("target_denied", denied.ErrorCode);
+            var cdn = await session.NavigateAsync(
+                new BrowserNavigateRequest(Guid.NewGuid(), new Uri("https://cdn.example/app.js")));
+            Assert.Equal("target_denied", cdn.ErrorCode);
+            var home = await session.NavigateAsync(
+                new BrowserNavigateRequest(Guid.NewGuid(), new Uri(origin + "/")));
+            Assert.Null(home.ErrorCode);
+            Assert.Equal("Docs home", home.Observation!.Title);
+            Assert.Contains("Application structure", home.Observation.VisibleText, StringComparison.Ordinal);
+            Assert.DoesNotContain("Record lookup", home.Observation.Title, StringComparison.Ordinal);
+        }
+        finally
+        {
+            await session.StopAsync(CancellationToken.None);
+            await stop.CancelAsync();
+            listener.Stop();
+            await serving;
+        }
+    }
+
+    private static int BindEphemeralPort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
+    }
+
+    private static async Task ServeDocsAsync(HttpListener listener, CancellationToken cancellationToken)
+    {
+        var html = Encoding.UTF8.GetBytes("<!DOCTYPE html><html><head><title>Docs home</title></head><body>Application structure</body></html>");
+        while (!cancellationToken.IsCancellationRequested && listener.IsListening)
+        {
+            HttpListenerContext context;
+            try
+            {
+                context = await listener.GetContextAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or HttpListenerException or ObjectDisposedException)
+            {
+                break;
+            }
+
+            context.Response.ContentType = "text/html; charset=utf-8";
+            context.Response.ContentLength64 = html.Length;
+            await context.Response.OutputStream.WriteAsync(html, cancellationToken).ConfigureAwait(false);
+            context.Response.Close();
+        }
+    }
+
+    [Fact]
     public async Task Headless_journey_reaches_the_record_and_redacts_isolate_secrets()
     {
         var session = fixture.Session;
         var id = Guid.NewGuid();
         var home = await Navigate(session, id, "/");
         Assert.Null(home.ErrorCode);
+        Assert.True(session.IsRuntimeReady);
         Assert.True(session.LaunchedHeadless);
         Assert.Equal("Record lookup", home.Observation!.Title);
         Assert.Contains("Ignore previous instructions", home.Observation.VisibleText, StringComparison.Ordinal);
@@ -230,6 +349,10 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         Assert.DoesNotContain("p9_local_value", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("p9_session_storage_value", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("p9-password-secret", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("q7", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("w2", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("m", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("v", rendered, StringComparison.Ordinal);
         Assert.Contains("[redacted]", rendered, StringComparison.Ordinal);
     }
 
@@ -410,6 +533,8 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         Assert.DoesNotContain("p9_local_value", written, StringComparison.Ordinal);
         Assert.DoesNotContain("p9-password-secret", written, StringComparison.Ordinal);
         Assert.DoesNotContain("alpha", written, StringComparison.Ordinal);
+        Assert.DoesNotContain("q7", written, StringComparison.Ordinal);
+        Assert.DoesNotContain("w2", written, StringComparison.Ordinal);
     }
 
     private static async Task<PlaywrightBrowserSession> StartDemoSession()

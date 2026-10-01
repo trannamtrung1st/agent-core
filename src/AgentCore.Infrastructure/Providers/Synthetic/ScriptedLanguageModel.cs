@@ -143,6 +143,17 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
 
+        if (TryScriptBrowserTargetDenied(request, out var denialEvents))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var denialEvent in denialEvents)
+            {
+                yield return denialEvent;
+            }
+
+            yield break;
+        }
+
         if (TryScriptBrowserRecordLookup(request, out var browserEvents))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1072,6 +1083,10 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         return true;
     }
 
+    public const string BrowserDenialMarker = "https://example.invalid";
+
+    public const string BrowserDenialAnswer = "That site is outside the trusted browser scope.";
+
     public const string BrowserRecordMarker = "record AC-1042";
 
     public const string BrowserRecordMessage = "I found the record. I'm checking the details now.";
@@ -1079,6 +1094,35 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     public const string BrowserRecordAnswer = "AC-1042 is In review.";
 
     public const string BrowserRecordSkillId = "browser.record.lookup";
+
+    private static bool TryScriptBrowserTargetDenied(
+        ModelRequest request,
+        out IReadOnlyList<ModelGenerationEvent> events)
+    {
+        events = [];
+        var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        if (!lastUser.Contains(BrowserDenialMarker, StringComparison.Ordinal)
+            || !Offers(request, ToolCatalog.BrowserNavigate))
+        {
+            return false;
+        }
+
+        if (ToolRoundsSinceLastUser(request.Messages) == 0)
+        {
+            events = ToolTurn(
+                "p9-denied",
+                ToolCatalog.BrowserNavigate,
+                JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = "https://example.invalid/escape" }));
+            return true;
+        }
+
+        events =
+        [
+            new ModelTextDelta(BrowserDenialAnswer),
+            new ModelCompleted(ModelStopReason.Completed)
+        ];
+        return true;
+    }
 
     private static bool TryScriptBrowserRecordLookup(
         ModelRequest request,

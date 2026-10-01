@@ -10,7 +10,16 @@ public sealed record BrowserHostPolicy(
     bool Enabled,
     bool Headless,
     BrowserInteractionMode InteractionMode,
-    IReadOnlyList<string> TargetOrigins);
+    IReadOnlyList<string> NavigationOrigins,
+    IReadOnlyList<string>? InteractionOrigins = null,
+    IReadOnlyList<string>? ResourceOrigins = null)
+{
+    public IReadOnlyList<string> TargetOrigins => NavigationOrigins;
+
+    public IReadOnlyList<string> EffectiveInteractionOrigins => InteractionOrigins ?? NavigationOrigins;
+
+    public IReadOnlyList<string> EffectiveResourceOrigins => ResourceOrigins ?? [];
+}
 
 public sealed record BrowserElement(string Ref, string Role, string Name);
 

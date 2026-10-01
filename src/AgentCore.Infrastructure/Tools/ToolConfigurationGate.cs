@@ -1,5 +1,6 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
+using AgentCore.Infrastructure.Browser;
 
 namespace AgentCore.Infrastructure.Tools;
 
@@ -17,7 +18,10 @@ public sealed class ToolConfigurationGate(
             ToolCatalog.WebFetch => publicWebFetcher is not null,
             ToolCatalog.EmailSearch or ToolCatalog.EmailRead or ToolCatalog.EmailCreateDraft or ToolCatalog.EmailSend
                 => emailProvider?.IsAvailable == true,
-            _ when ToolCatalog.IsBrowserTool(toolName) => browserEnabled && browserSession is not null,
+            _ when ToolCatalog.IsBrowserTool(toolName) =>
+                browserEnabled
+                && browserSession is { IsAvailable: true }
+                && browserSession is IBrowserRuntimeReadiness { IsRuntimeReady: true },
             _ => true
         };
 }

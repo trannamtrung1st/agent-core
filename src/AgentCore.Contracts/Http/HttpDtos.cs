@@ -112,7 +112,9 @@ public sealed record SessionViewResponse(
     SpeechLocaleResponse? SpeechLocale = null,
     SessionModelSelectionResponse? Model = null,
     string? AgentInstanceId = null,
-    long? PinnedPersonaRevision = null);
+    long? PinnedPersonaRevision = null,
+    string? AgentName = null,
+    string? AgentRole = null);
 
 public sealed record AgentDescriptorResponse(
     string Id,
@@ -207,7 +209,9 @@ public sealed record SessionCatalogItemResponse(
     string CreatedAt,
     string UpdatedAt,
     string? PauseReason = null,
-    string? LifecycleStatus = null);
+    string? LifecycleStatus = null,
+    string? AgentName = null,
+    string? AgentRole = null);
 
 public sealed record SessionCatalogPageResponse(
     IReadOnlyList<SessionCatalogItemResponse> Items,

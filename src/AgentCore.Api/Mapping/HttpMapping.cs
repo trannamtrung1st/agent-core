@@ -8,6 +8,7 @@ using AgentCore.Application.Sessions;
 using AgentCore.Application.Speech;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Api.Mapping;
 
@@ -27,8 +28,10 @@ public static partial class HttpMapping
     public static SessionViewResponse ToView(
         SessionSnapshot snapshot,
         Guid? activeResponseId,
-        IModelCatalog? catalog = null) =>
-        new(
+        IModelCatalog? catalog = null)
+    {
+        var identity = PublicIdentity(snapshot);
+        return new(
             snapshot.SessionId.ToString(),
             snapshot.Definition.Id,
             snapshot.Definition.Version,
@@ -45,10 +48,15 @@ public static partial class HttpMapping
             ToSpeechLocale(snapshot),
             ToModel(snapshot, catalog),
             snapshot.AgentInstanceId?.ToString("D"),
-            snapshot.PinnedPersonaRevision);
+            snapshot.PinnedPersonaRevision,
+            identity.Name,
+            identity.Role);
+    }
 
-    public static SessionCatalogItemResponse ToCatalogItem(SessionSnapshot snapshot) =>
-        new(
+    public static SessionCatalogItemResponse ToCatalogItem(SessionSnapshot snapshot)
+    {
+        var identity = PublicIdentity(snapshot);
+        return new(
             snapshot.SessionId.ToString(),
             snapshot.Title,
             snapshot.Definition.Id,
@@ -62,7 +70,10 @@ public static partial class HttpMapping
             Format(snapshot.CreatedAt),
             Format(snapshot.UpdatedAt),
             snapshot.PauseReason,
-            LifecycleTransition.ToWire(snapshot.LifecycleStatus));
+            LifecycleTransition.ToWire(snapshot.LifecycleStatus),
+            identity.Name,
+            identity.Role);
+    }
 
     public static AttachmentResponse ToAttachment(AgentCore.Application.Ports.AttachmentRecord record) =>
         new(
@@ -165,6 +176,9 @@ public static partial class HttpMapping
                 item.Presentation,
                 item.Label)).ToArray());
     }
+
+    private static AgentIdentity PublicIdentity(SessionSnapshot snapshot) =>
+        snapshot.PinnedPersona ?? snapshot.Definition.Identity;
 
     public static string ToMode(SessionMode mode) => mode == SessionMode.Voice ? "voice" : "text";
 

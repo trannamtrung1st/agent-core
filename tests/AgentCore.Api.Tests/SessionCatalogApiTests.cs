@@ -19,6 +19,36 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
     }
 
     [Fact]
+    public async Task Catalog_row_uses_pinned_persona_instead_of_the_definition_name()
+    {
+        var client = OwnerClient();
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/agent-instances",
+            new AdminCreateAgentInstanceRequest(
+                "general-assistant",
+                1,
+                new AdminPersonaResponse("Tommy", "Assistant", "A named assistant.", "Direct")));
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var instance = await create.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        Assert.NotNull(instance);
+
+        var session = await client.PostAsJsonAsync(
+            "/api/v2/sessions",
+            new CreateSessionRequest(null, null, "text", AgentInstanceId: Guid.Parse(instance!.InstanceId)));
+        Assert.Equal(HttpStatusCode.Created, session.StatusCode);
+        var view = await session.Content.ReadFromJsonAsync<SessionViewResponse>();
+        Assert.Equal("general-assistant", view!.AgentId);
+        Assert.Equal("Tommy", view.AgentName);
+        Assert.Equal("Assistant", view.AgentRole);
+
+        var listed = await client.GetFromJsonAsync<SessionCatalogPageResponse>("/api/v2/sessions");
+        var row = Assert.Single(listed!.Items, item => item.SessionId == view.SessionId);
+        Assert.Equal("general-assistant", row.AgentId);
+        Assert.Equal("Tommy", row.AgentName);
+        Assert.Equal("Assistant", row.AgentRole);
+    }
+
+    [Fact]
     public async Task Owner_capability_is_required_for_catalog_and_survives_as_hashed_grant()
     {
         var client = _factory.CreateClient();
@@ -54,7 +84,12 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
         Assert.True(item.WorkspaceOwned);
 
         var listed = await client.GetFromJsonAsync<SessionCatalogPageResponse>("/api/v2/sessions");
-        Assert.Contains(listed!.Items, row => row.SessionId == view.SessionId && row.Title == "Planning notes");
+        Assert.Contains(
+            listed!.Items,
+            row => row.SessionId == view.SessionId
+                && row.Title == "Planning notes"
+                && row.AgentName == "Alex"
+                && row.AgentRole == "Speaking examiner");
 
         var archived = await client.PostAsync($"/api/v2/sessions/{view.SessionId}/archive", null);
         archived.EnsureSuccessStatusCode();

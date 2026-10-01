@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
@@ -10,7 +11,7 @@ using Microsoft.Playwright;
 
 namespace AgentCore.Infrastructure.Browser;
 
-public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionLease, IHostedService
+public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionLease, IBrowserRuntimeReadiness, IHostedService
 {
     private const string DescribeElement = """
         el => {
@@ -48,20 +49,26 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
     private readonly BrowserOptions _options;
     private readonly ILogger _logger;
     private readonly LoopbackBrowserFixtureHost _fixture;
+    private readonly Func<CancellationToken, Task<bool>>? _chromiumProbe;
     private readonly SemaphoreSlim _launch = new(1, 1);
     private readonly ConcurrentDictionary<Guid, SessionBrowser> _sessions = new();
     private readonly ConcurrentDictionary<string, LiveElement> _refs = new();
     private IPlaywright? _playwright;
     private IBrowser? _browser;
     private BrowserHostPolicy _policy;
+    private int _runtimeReady;
     private int _stopped;
 
-    public PlaywrightBrowserSession(BrowserOptions options, ILoggerFactory? loggerFactory)
+    public PlaywrightBrowserSession(
+        BrowserOptions options,
+        ILoggerFactory? loggerFactory,
+        Func<CancellationToken, Task<bool>>? chromiumProbe = null)
     {
         _options = options;
         _logger = loggerFactory?.CreateLogger<PlaywrightBrowserSession>()
             ?? NullLogger<PlaywrightBrowserSession>.Instance;
         _fixture = new LoopbackBrowserFixtureHost(_logger);
+        _chromiumProbe = chromiumProbe;
         _policy = options.ToHostPolicy();
     }
 
@@ -71,7 +78,10 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
     internal TimeSpan OperationTimeout { get; set; } = TimeSpan.FromSeconds(25);
 
-    public bool IsAvailable => _options.Enabled && _fixture.IsAvailable && Volatile.Read(ref _stopped) == 0;
+    public bool IsRuntimeReady => Volatile.Read(ref _runtimeReady) == 1;
+
+    public bool IsAvailable =>
+        _options.Enabled && IsRuntimeReady && Volatile.Read(ref _stopped) == 0;
 
     public BrowserHostPolicy HostPolicy => _policy;
 
@@ -83,17 +93,41 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             return;
         }
 
-        await _fixture.StartAsync(_options.FixturePort, cancellationToken).ConfigureAwait(false);
-        if (!_fixture.IsAvailable || _fixture.Origin is null || _fixture.Port is null)
+        string? liveOrigin = null;
+        int? livePort = null;
+        if (_options.FixtureEnabled)
         {
-            _policy = _options.ToHostPolicy() with { TargetOrigins = [] };
+            await _fixture.StartAsync(_options.FixturePort, cancellationToken).ConfigureAwait(false);
+            if (_fixture.IsAvailable && _fixture.Origin is not null && _fixture.Port is not null)
+            {
+                liveOrigin = _fixture.Origin;
+                livePort = _fixture.Port;
+            }
+        }
+
+        var navigation = Retarget(_options.ResolveNavigation(), liveOrigin, livePort);
+        if (liveOrigin is not null && navigation.Length == 0)
+        {
+            navigation = [liveOrigin];
+        }
+
+        var interaction = Retarget(_options.ResolveInteraction(navigation), liveOrigin, livePort);
+        _policy = _options.ToHostPolicy() with
+        {
+            NavigationOrigins = navigation,
+            InteractionOrigins = interaction,
+            ResourceOrigins = _options.ResourceOrigins ?? []
+        };
+        var ready = _chromiumProbe is null
+            ? await PlaywrightChromiumReadiness.InstalledAsync(cancellationToken).ConfigureAwait(false)
+            : await _chromiumProbe(cancellationToken).ConfigureAwait(false);
+        if (!ready)
+        {
+            _logger.LogWarning("Browser provider is unavailable.");
             return;
         }
 
-        var origins = _options.FixturePort == 0
-            ? new[] { _fixture.Origin }
-            : MatchingOrigins(_options, _fixture.Port.Value);
-        _policy = _options.ToHostPolicy() with { TargetOrigins = origins };
+        Volatile.Write(ref _runtimeReady, 1);
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
@@ -147,7 +181,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             return Unavailable();
         }
 
-        var decision = BrowserTargetPolicy.EvaluateDestination(request.Url.AbsoluteUri, _policy.TargetOrigins);
+        var decision = BrowserTargetPolicy.EvaluateDestination(request.Url.AbsoluteUri, _policy.NavigationOrigins);
         if (!decision.Allowed)
         {
             return Result(decision.Code ?? "target_denied");
@@ -322,7 +356,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         var decision = BrowserTargetPolicy.EvaluateAct(
             _policy.InteractionMode,
             current.AbsoluteUri,
-            _policy.TargetOrigins);
+            _policy.EffectiveInteractionOrigins);
         if (!decision.Allowed)
         {
             return Result(decision.Code ?? "forbidden");
@@ -510,7 +544,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
                     || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                 {
-                    var popup = BrowserTargetPolicy.EvaluatePopup(url, _policy.TargetOrigins);
+                    var popup = BrowserTargetPolicy.EvaluatePopup(url, _policy.NavigationOrigins);
                     session.PopupCode ??= popup.Code ?? "unsupported_operation";
                 }
 
@@ -535,14 +569,15 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 return;
             }
 
-            if (!IsAllowed(url))
+            var documentNavigation = string.Equals(route.Request.ResourceType, "document", StringComparison.OrdinalIgnoreCase);
+            if (!Allows(url, documentNavigation))
             {
                 session.DeniedNavigation = true;
                 await route.AbortAsync().ConfigureAwait(false);
                 return;
             }
 
-            await FulfillWithoutLeavingPolicyAsync(session, route, url).ConfigureAwait(false);
+            await FulfillWithoutLeavingPolicyAsync(session, route, url, documentNavigation).ConfigureAwait(false);
         }
         catch (PlaywrightException)
         {
@@ -550,7 +585,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         }
     }
 
-    private async Task FulfillWithoutLeavingPolicyAsync(SessionBrowser session, IRoute route, string url)
+    private async Task FulfillWithoutLeavingPolicyAsync(SessionBrowser session, IRoute route, string url, bool documentNavigation)
     {
         var call = session.OperationCall;
         session.InFlightRoute = route;
@@ -593,7 +628,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             }
         }
 
-        if (IsRedirect(response.Status) && !RedirectStaysAllowed(url, response.Headers))
+        if (IsRedirect(response.Status) && !RedirectStaysAllowed(url, response.Headers, documentNavigation))
         {
             session.DeniedNavigation = true;
             await AbortQuietlyAsync(route).ConfigureAwait(false);
@@ -609,7 +644,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         await route.FulfillAsync(new RouteFulfillOptions { Response = response }).ConfigureAwait(false);
     }
 
-    private bool RedirectStaysAllowed(string requestUrl, IDictionary<string, string> headers)
+    private bool RedirectStaysAllowed(string requestUrl, IDictionary<string, string> headers, bool documentNavigation)
     {
         string? location = null;
         foreach (var header in headers)
@@ -624,7 +659,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         return !string.IsNullOrWhiteSpace(location)
             && Uri.TryCreate(requestUrl, UriKind.Absolute, out var baseUri)
             && Uri.TryCreate(baseUri, location, out var resolved)
-            && IsAllowed(resolved.AbsoluteUri);
+            && Allows(resolved.AbsoluteUri, documentNavigation);
     }
 
     private static bool IsRedirect(int status) => status is 301 or 302 or 303 or 307 or 308;
@@ -938,8 +973,13 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         }
     }
 
+    private bool Allows(string url, bool documentNavigation) =>
+        documentNavigation
+            ? BrowserTargetPolicy.EvaluateDestination(url, _policy.NavigationOrigins).Allowed
+            : BrowserTargetPolicy.EvaluateResource(url, _policy.NavigationOrigins, _policy.EffectiveResourceOrigins).Allowed;
+
     private bool IsAllowed(string url) =>
-        BrowserTargetPolicy.EvaluateDestination(url, _policy.TargetOrigins).Allowed;
+        BrowserTargetPolicy.EvaluateDestination(url, _policy.NavigationOrigins).Allowed;
 
     private void RemoveRefs(Guid sessionId)
     {
@@ -954,25 +994,42 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
     private float TimeoutMs() => (float)OperationTimeout.TotalMilliseconds;
 
-    private static IReadOnlyList<string> MatchingOrigins(BrowserOptions options, int port)
+    private static string[] Retarget(IReadOnlyList<string> configured, string? liveOrigin, int? livePort)
     {
-        var matched = new List<string>();
-        foreach (var entry in options.TargetOrigins ?? [])
+        var results = new List<string>();
+        foreach (var entry in configured)
         {
-            if (Uri.TryCreate(entry, UriKind.Absolute, out var uri)
-                && uri.Port == port
-                && BrowserTargetPolicy.IsLoopback(entry))
+            if (!Uri.TryCreate(entry, UriKind.Absolute, out var uri))
             {
-                matched.Add(entry);
+                continue;
             }
+
+            if (liveOrigin is not null
+                && livePort is not null
+                && BrowserTargetPolicy.IsLoopback(entry)
+                && uri.Port != livePort.Value)
+            {
+                AddOrigin(results, liveOrigin);
+                continue;
+            }
+
+            AddOrigin(results, entry);
         }
 
-        return matched;
+        return results.ToArray();
+    }
+
+    private static void AddOrigin(List<string> results, string origin)
+    {
+        if (!results.Contains(origin, StringComparer.Ordinal))
+        {
+            results.Add(origin);
+        }
     }
 
     private static void AddSecret(List<string> secrets, string? value)
     {
-        if (string.IsNullOrEmpty(value) || value.Length < 4 || secrets.Contains(value, StringComparer.Ordinal))
+        if (string.IsNullOrWhiteSpace(value) || secrets.Contains(value, StringComparer.Ordinal))
         {
             return;
         }
@@ -985,10 +1042,36 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         var current = text ?? string.Empty;
         foreach (var secret in secrets)
         {
-            current = current.Replace(secret, "[redacted]", StringComparison.Ordinal);
+            current = secret.Length >= 4
+                ? current.Replace(secret, "[redacted]", StringComparison.Ordinal)
+                : RedactBounded(current, secret);
         }
 
         return current;
+    }
+
+    private static string RedactBounded(string text, string secret)
+    {
+        var builder = new StringBuilder(text.Length);
+        var index = 0;
+        while (index < text.Length)
+        {
+            var found = text.IndexOf(secret, index, StringComparison.Ordinal);
+            if (found < 0)
+            {
+                builder.Append(text, index, text.Length - index);
+                break;
+            }
+
+            var beforeOk = found == 0 || !char.IsLetterOrDigit(text[found - 1]);
+            var after = found + secret.Length;
+            var afterOk = after >= text.Length || !char.IsLetterOrDigit(text[after]);
+            builder.Append(text, index, found - index);
+            builder.Append(beforeOk && afterOk ? "[redacted]" : secret);
+            index = after;
+        }
+
+        return builder.ToString();
     }
 
     private static string Clip(string text, int max) =>

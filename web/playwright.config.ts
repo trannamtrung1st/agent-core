@@ -91,7 +91,8 @@ export default defineConfig({
         Browser__Enabled: "true",
         Browser__Headless: "true",
         Browser__FixturePort: "5091",
-        Browser__TargetOrigins__0: "http://127.0.0.1:5091"
+        Browser__NavigationOrigins__0: "http://127.0.0.1:5091",
+        Browser__InteractionOrigins__0: "http://127.0.0.1:5091"
       },
       url: `${apiUrl}/health`,
       reuseExistingServer: !process.env.CI,
@@ -125,7 +126,8 @@ export default defineConfig({
         Browser__Enabled: "true",
         Browser__Headless: "true",
         Browser__FixturePort: "5092",
-        Browser__TargetOrigins__0: "http://127.0.0.1:5092"
+        Browser__NavigationOrigins__0: "http://127.0.0.1:5092",
+        Browser__InteractionOrigins__0: "http://127.0.0.1:5092"
       },
       url: `${browserSttApiUrl}/health`,
       reuseExistingServer: false,
@@ -157,7 +159,8 @@ export default defineConfig({
         Browser__Enabled: "true",
         Browser__Headless: "true",
         Browser__FixturePort: "5093",
-        Browser__TargetOrigins__0: "http://127.0.0.1:5093"
+        Browser__NavigationOrigins__0: "http://127.0.0.1:5093",
+        Browser__InteractionOrigins__0: "http://127.0.0.1:5093"
       },
       url: `${browserBrowserApiUrl}/health`,
       reuseExistingServer: false,

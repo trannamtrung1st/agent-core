@@ -33,5 +33,7 @@ ENV Persistence__Provider=Sqlite
 ENV Persistence__ConnectionString=Data Source=/data/agent-core.db
 ENV Persistence__DefinitionResourceRoot=/data/definition-resources
 ENV Providers__LanguageModels__primary-llm__Adapter=Scripted
+# The image does not install Playwright Chromium. Keep browser tools off until that runtime is packaged.
+ENV Browser__Enabled=false
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "AgentCore.Api.dll"]

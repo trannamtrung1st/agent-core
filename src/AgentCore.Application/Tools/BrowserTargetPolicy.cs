@@ -58,20 +58,37 @@ public static class BrowserTargetPolicy
         return BrowserTargetDecision.Deny("unsupported_operation", "Popups are not a browser result surface.");
     }
 
+    public static BrowserTargetDecision EvaluateResource(
+        string? url,
+        IReadOnlyList<string>? navigationOrigins,
+        IReadOnlyList<string>? resourceOrigins)
+    {
+        var navigation = EvaluateDestination(url, navigationOrigins);
+        if (navigation.Allowed)
+        {
+            return navigation;
+        }
+
+        var resource = EvaluateDestination(url, resourceOrigins);
+        return resource.Allowed
+            ? BrowserTargetDecision.Allow
+            : BrowserTargetDecision.Deny("target_denied", "Browser target is not allowed.");
+    }
+
     public static BrowserTargetDecision EvaluateAct(
         BrowserInteractionMode interactionMode,
         string? currentPageUrl,
-        IReadOnlyList<string>? targetOrigins)
+        IReadOnlyList<string>? interactionOrigins)
     {
         if (interactionMode != BrowserInteractionMode.InteractiveDemo)
         {
             return BrowserTargetDecision.Deny("forbidden", "Browser actions are not allowed in this interaction mode.");
         }
 
-        var page = EvaluateDestination(currentPageUrl, targetOrigins);
-        if (!page.Allowed || !IsLoopback(currentPageUrl))
+        var page = EvaluateDestination(currentPageUrl, interactionOrigins);
+        if (!page.Allowed)
         {
-            return BrowserTargetDecision.Deny("forbidden", "Browser actions are limited to a trusted loopback page.");
+            return BrowserTargetDecision.Deny("forbidden", "Browser actions are limited to a trusted interaction origin.");
         }
 
         return BrowserTargetDecision.Allow;

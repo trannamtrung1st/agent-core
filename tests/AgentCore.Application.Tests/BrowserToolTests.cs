@@ -89,7 +89,7 @@ public sealed class BrowserToolTests
     }
 
     [Fact]
-    public void Act_stays_on_interactive_loopback_pages()
+    public void Act_stays_on_configured_interaction_origins()
     {
         var readNavigation = BrowserTargetPolicy.EvaluateAct(
             BrowserInteractionMode.ReadNavigation,
@@ -99,10 +99,21 @@ public sealed class BrowserToolTests
             BrowserInteractionMode.InteractiveDemo,
             "http://127.0.0.1:5091/records/AC-1042",
             FixtureOrigin);
-        var publicOrigin = BrowserTargetPolicy.EvaluateAct(
+        var configuredPublic = BrowserTargetPolicy.EvaluateAct(
             BrowserInteractionMode.InteractiveDemo,
-            "https://example.invalid/page",
-            ["https://example.invalid"]);
+            "https://docs.example/page",
+            ["https://docs.example"]);
+        var navigationDoesNotGrantAct = BrowserTargetPolicy.EvaluateAct(
+            BrowserInteractionMode.InteractiveDemo,
+            "https://docs.example/page",
+            FixtureOrigin);
+        var resourceDoesNotGrantNavigation = BrowserTargetPolicy.EvaluateDestination(
+            "https://cdn.example/app.js",
+            ["https://docs.example"]);
+        var resourceLoad = BrowserTargetPolicy.EvaluateResource(
+            "https://cdn.example/app.js",
+            ["https://docs.example"],
+            ["https://cdn.example"]);
         var unlistedLoopback = BrowserTargetPolicy.EvaluateAct(
             BrowserInteractionMode.InteractiveDemo,
             "http://127.0.0.1:5099/",
@@ -110,7 +121,10 @@ public sealed class BrowserToolTests
 
         Assert.Equal("forbidden", readNavigation.Code);
         Assert.True(loopback.Allowed);
-        Assert.Equal("forbidden", publicOrigin.Code);
+        Assert.True(configuredPublic.Allowed);
+        Assert.Equal("forbidden", navigationDoesNotGrantAct.Code);
+        Assert.Equal("target_denied", resourceDoesNotGrantNavigation.Code);
+        Assert.True(resourceLoad.Allowed);
         Assert.Equal("forbidden", unlistedLoopback.Code);
         Assert.True(BrowserTargetPolicy.IsLoopback("http://[::1]:5091/"));
         Assert.False(BrowserTargetPolicy.IsLoopback("http://169.254.169.254/"));
@@ -466,10 +480,21 @@ public sealed class BrowserToolTests
     {
         var options = new BrowserOptions { Enabled = true, InteractionMode = "HeadedPlease", TargetOrigins = FixtureOrigin };
         Assert.Equal(BrowserInteractionMode.ReadNavigation, options.ToHostPolicy().InteractionMode);
-        var disabled = new ToolConfigurationGate(null, null, null, new FakeBrowser(), browserEnabled: false);
+        var disabled = new ToolConfigurationGate(null, null, null, new ReadyBrowser(), browserEnabled: false);
         Assert.False(disabled.IsConfigured(ToolCatalog.BrowserNavigate));
-        var enabled = new ToolConfigurationGate(null, null, null, new FakeBrowser(), browserEnabled: true);
+        var enabled = new ToolConfigurationGate(null, null, null, new ReadyBrowser(), browserEnabled: true);
         Assert.True(enabled.IsConfigured(ToolCatalog.BrowserAct));
+        var unready = new ToolConfigurationGate(null, null, null, new ReadyBrowser { IsRuntimeReady = false }, browserEnabled: true);
+        Assert.False(unready.IsConfigured(ToolCatalog.BrowserObserve));
+        var unavailable = new ToolConfigurationGate(
+            null,
+            null,
+            null,
+            new ReadyBrowser { IsAvailable = false },
+            browserEnabled: true);
+        Assert.False(unavailable.IsConfigured(ToolCatalog.BrowserNavigate));
+        var objectOnly = new ToolConfigurationGate(null, null, null, new FakeBrowser(), browserEnabled: true);
+        Assert.False(objectOnly.IsConfigured(ToolCatalog.BrowserAct));
     }
 
     [Fact]
@@ -479,7 +504,10 @@ public sealed class BrowserToolTests
         var v10 = (await store.GetAsync("general-assistant", 10))!;
         var v11 = (await store.GetAsync("general-assistant"))!;
         Assert.Equal(11, v11.Version);
-        Assert.DoesNotContain("Trusted browser start:", ToolRegistry.Get(ToolCatalog.BrowserNavigate).ModelDefinition.Description, StringComparison.Ordinal);
+        var browserDescription = ToolRegistry.Get(ToolCatalog.BrowserNavigate).ModelDefinition.Description;
+        Assert.Contains("target_denied", browserDescription, StringComparison.Ordinal);
+        Assert.Contains("chat.respond", browserDescription, StringComparison.Ordinal);
+        Assert.DoesNotContain("Trusted browser start:", browserDescription, StringComparison.Ordinal);
 
         var fake = new FakeBrowser();
         var userTurn = Context(v11, TriggerKind.UserTurn, detached: false);
@@ -487,6 +515,23 @@ public sealed class BrowserToolTests
             .OfferTools(v11, userTurn);
         var navigate = Assert.Single(offered, tool => tool.Name == ToolCatalog.BrowserNavigate);
         Assert.EndsWith("Trusted browser start: http://127.0.0.1:5091/.", navigate.Description, StringComparison.Ordinal);
+        var external = new FakeBrowser
+        {
+            HostPolicy = new BrowserHostPolicy(
+                true,
+                true,
+                BrowserInteractionMode.InteractiveDemo,
+                ["http://127.0.0.1:5091", "https://docs.nopcommerce.com"],
+                ["http://127.0.0.1:5091"],
+                [])
+        };
+        Assert.DoesNotContain(
+            "Trusted browser start:",
+            new PromptContextBuilder(ToolConfigurationGates.AllowAll, external)
+                .OfferTools(v11, userTurn)
+                .Single(tool => tool.Name == ToolCatalog.BrowserNavigate)
+                .Description,
+            StringComparison.Ordinal);
         Assert.Contains(ToolCatalog.SkillsLoad, offered.Select(tool => tool.Name));
         Assert.DoesNotContain(
             ToolCatalog.BrowserNavigate,
@@ -607,7 +652,12 @@ public sealed class BrowserToolTests
         return "el_" + tail;
     }
 
-    private sealed class FakeBrowser : IBrowserSession
+    private sealed class ReadyBrowser : FakeBrowser, IBrowserRuntimeReadiness
+    {
+        public bool IsRuntimeReady { get; set; } = true;
+    }
+
+    private class FakeBrowser : IBrowserSession
     {
         public bool IsAvailable { get; set; } = true;
 

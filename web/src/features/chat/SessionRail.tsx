@@ -19,6 +19,12 @@ import { formatChatTime } from "./chatTime";
 import { lifecycleOutcomeLabel } from "./sessionLifecycle";
 
 function agentLabel(agents: AgentDescriptor[], item: CatalogItem): string {
+  const pinnedName = item.agentName?.trim();
+  if (pinnedName) {
+    const pinnedRole = item.agentRole?.trim();
+    return pinnedRole ? `${pinnedName} · ${pinnedRole}` : pinnedName;
+  }
+
   const agent = agents.find((row) => row.id === item.agentId && row.version === item.agentVersion)
     ?? agents.find((row) => row.id === item.agentId);
   if (!agent) {

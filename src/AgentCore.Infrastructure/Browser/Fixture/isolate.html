@@ -3,17 +3,38 @@
 <head>
   <meta charset="utf-8">
   <title>Isolate</title>
+  <style>
+    body { margin: 0; background: #f3f4f6; color: #111827; font-family: "Segoe UI", sans-serif; }
+    main { max-width: 40rem; margin: 0 auto; padding: 32px 16px; }
+    section { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; }
+    label { display: block; margin-top: 12px; }
+    input { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; }
+    input:focus-visible { outline: 2px solid #1f2937; outline-offset: 2px; }
+  </style>
 </head>
 <body>
-  <p id="cookie-value">alpha</p>
-  <p id="local-value">p9_local_value</p>
-  <p id="session-value">p9_session_storage_value</p>
-  <label for="secret">Password</label>
-  <input id="secret" type="password" value="p9-password-secret">
+  <main>
+    <section>
+      <p id="cookie-value">alpha</p>
+      <p id="local-value">p9_local_value</p>
+      <p id="session-value">p9_session_storage_value</p>
+      <p id="short-cookie">q7</p>
+      <p id="local-short">m</p>
+      <p id="session-short">w2</p>
+      <p id="password-short">v</p>
+      <label for="secret">Password</label>
+      <input id="secret" type="password" value="p9-password-secret">
+      <label for="short-secret">Pin</label>
+      <input id="short-secret" type="password" value="v" aria-label="v">
+    </section>
+  </main>
   <script>
     document.cookie = "p9_session=alpha; path=/";
+    document.cookie = "p9_short=q7; path=/";
     localStorage.setItem("p9_local", "p9_local_value");
+    localStorage.setItem("p9_short_local", "m");
     sessionStorage.setItem("p9_session_storage", "p9_session_storage_value");
+    sessionStorage.setItem("p9_short_session", "w2");
   </script>
 </body>
 </html>

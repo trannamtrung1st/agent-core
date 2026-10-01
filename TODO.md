@@ -4,7 +4,7 @@ Living roadmap: current status, active requirements, future dependency order, an
 
 Detailed architecture and behavior live in `/docs`. Historical implementation and freeze evidence live in `docs/reports/`. This file does not duplicate either.
 
-Reviewed against `main` through **`aedea70`** on **2026-10-01**. Pre-P8 bounded follow-up after P7.7 is **closed** (hosted Synthetic [**`36667172857`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green on **`1cadf46`**). **P8** remains **frozen** on **`ca3eb23`** (hosted Synthetic [**`36696902928`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). **Post-freeze P8 follow-up is closed** on **`c9aec29`** (provider-contract **`6fda4c5`**, CI stabilization **`c9aec29`**, hosted Synthetic [**`36745126226`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green). That closure does not move or reopen the P8 freeze. **P8.5** is **closed** on **`1461567`** (hosted Synthetic [**`36770385588`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green). Bounded post-closure corrections through **`0d1cfdd`** (assistant routing, truncation budgets, Playwright sync) are **closed** on hosted Synthetic [**`36807383922`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36807383922) green. A second bounded post-closure chain through **`fff7761`** (SSE idle at `ReadAsync`, Skill editor comma draft, no-chat Agent Step admission and execution state, response-function `displayText`) is **closed** on hosted Synthetic [**`36818061198`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36818061198) green. A third bounded post-closure stabilization chain through **`aedea70`** (realtime and history convergence, durable `session.ready` paging with live streaming overlay, direct-user response contract and inspectable failures, gated and budgeted `app.message.send`, test and CI synchronization) is **closed** on hosted Synthetic [**`36851267423`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36851267423) green; [appendix](docs/reports/p8.5-freeze-candidate.md). Real probes on DeepSeek V4.1 Flash and GPT-4o mini showed substantive work, intermediate application messages, and terminal `chat.respond`. None of these chains moves the P8 or P8.5 freeze SHAs. **P9 — Visible browser** is **closed** on `bba1de4` ([closure report](docs/reports/p9-freeze-candidate.md); hosted Synthetic [`36890525463`](https://github.com/trannamtrung1st/agent-core/actions/runs/36890525463) green).
+Reviewed against `main` through **`10af0a9`** on **2026-10-02**. Pre-P8 bounded follow-up after P7.7 is **closed** (hosted Synthetic [**`36667172857`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green on **`1cadf46`**). **P8** remains **frozen** on **`ca3eb23`** (hosted Synthetic [**`36696902928`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). **Post-freeze P8 follow-up is closed** on **`c9aec29`** (provider-contract **`6fda4c5`**, CI stabilization **`c9aec29`**, hosted Synthetic [**`36745126226`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green). That closure does not move or reopen the P8 freeze. **P8.5** is **closed** on **`1461567`** (hosted Synthetic [**`36770385588`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green). Bounded post-closure corrections through **`0d1cfdd`** (assistant routing, truncation budgets, Playwright sync) are **closed** on hosted Synthetic [**`36807383922`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36807383922) green. A second bounded post-closure chain through **`fff7761`** (SSE idle at `ReadAsync`, Skill editor comma draft, no-chat Agent Step admission and execution state, response-function `displayText`) is **closed** on hosted Synthetic [**`36818061198`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36818061198) green. A third bounded post-closure stabilization chain through **`aedea70`** (realtime and history convergence, durable `session.ready` paging with live streaming overlay, direct-user response contract and inspectable failures, gated and budgeted `app.message.send`, test and CI synchronization) is **closed** on hosted Synthetic [**`36851267423`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36851267423) green; [appendix](docs/reports/p8.5-freeze-candidate.md). Real probes on DeepSeek V4.1 Flash and GPT-4o mini showed substantive work, intermediate application messages, and terminal `chat.respond`. None of these chains moves the P8 or P8.5 freeze SHAs. **P9 — Visible browser** is **closed** on `bba1de4` ([closure report](docs/reports/p9-freeze-candidate.md); hosted Synthetic [`36890525463`](https://github.com/trannamtrung1st/agent-core/actions/runs/36890525463) green). Bounded post-closure hardening on this tree does not move that SHA.
 
 Closure reports through P7.7 still say the next phase was P8. That sentence records the handoff at freeze time, when P8 meant harness/platform extensibility. Those reports were not rewritten. In this TODO that work is P9.
 
@@ -59,7 +59,7 @@ Clients cannot supply trusted diagnostic, correlation, or causation identity. JS
 
 **P8 — Agent Execution Contract, Application Actions & Skills** is **frozen** on `ca3eb23` (workflow [`36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). Post-freeze bounded follow-up (provider contract **`6fda4c5`**, CI stabilization **`c9aec29`**) is **closed** on hosted Synthetic [**`36745126226`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green. See `docs/reports/p8-freeze-candidate.md` (freeze narrative + appendix).
 
-**P8.5 — Application Messaging & Dynamic Skill Activation** is **closed** on `1461567` ([closure report](docs/reports/p8.5-freeze-candidate.md); hosted Synthetic [`36770385588`](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green). `app.message.send` and `skills.load` continue the same bounded user-turn execution. They do not change the P8 freeze. Post-closure corrections through **`aedea70`** are recorded in that report's appendix (truncation **`36807383922`** on **`0d1cfdd`**, SSE/no-chat/editor **`36818061198`** on **`fff7761`**, stabilization **`36851267423`** on **`aedea70`**); they do not move the P8.5 closure SHA. **P9 — Visible browser** is **closed** on `bba1de4` ([closure report](docs/reports/p9-freeze-candidate.md); hosted Synthetic [`36890525463`](https://github.com/trannamtrung1st/agent-core/actions/runs/36890525463) green). P10 and P11 stay requirement-triggered.
+**P8.5 — Application Messaging & Dynamic Skill Activation** is **closed** on `1461567` ([closure report](docs/reports/p8.5-freeze-candidate.md); hosted Synthetic [`36770385588`](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green). `app.message.send` and `skills.load` continue the same bounded user-turn execution. They do not change the P8 freeze. Post-closure corrections through **`aedea70`** are recorded in that report's appendix (truncation **`36807383922`** on **`0d1cfdd`**, SSE/no-chat/editor **`36818061198`** on **`fff7761`**, stabilization **`36851267423`** on **`aedea70`**); they do not move the P8.5 closure SHA. **P9 — Visible browser** is **closed** on `bba1de4` ([closure report](docs/reports/p9-freeze-candidate.md); hosted Synthetic [`36890525463`](https://github.com/trannamtrung1st/agent-core/actions/runs/36890525463) green). Bounded post-closure hardening on this tree does not move that SHA. Browser navigation, interaction, and subresource origins are separate host lists. The Record Lookup site is an optional fixture. `target_denied` stays a normal tool result. P10 and P11 stay requirement-triggered.
 
 ---
 
@@ -67,7 +67,7 @@ Clients cannot supply trusted diagnostic, correlation, or causation identity. JS
 
 1. **P0–P8 — frozen.** P7.5 is frozen on `70a5720`; P7.6 on `17d89ae`; P7.7 on `40a1d92`; and P8 on `ca3eb23`. Post-P7.7 / pre-P8 bounded follow-up is closed on `1cadf46`. Post-freeze P8 follow-up is **closed** on `c9aec29` (hosted Synthetic **`36745126226`** green).
 2. **P8.5 — Application Messaging & Dynamic Skill Activation — closed** on `1461567` (post-closure corrections **closed** on **`aedea70`**, hosted Synthetic [**`36851267423`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36851267423) green).
-3. **P9 — Visible browser — closed** on `bba1de4`.
+3. **P9 — Visible browser — closed** on `bba1de4`. Post-closure hardening does not move that SHA.
 4. **P10 — Sandbox Evolution — when the current sandbox is insufficient.**
 5. **P11 — Multi-user + Production Infrastructure — when a real hosting or pilot requirement appears.**
 
@@ -244,7 +244,7 @@ Properties that already belong in the current stack: durable source of truth whe
 
 **Status: long-term direction. P8 is the frozen bounded slice on `ca3eb23`. P8.5 is closed on `1461567`. P9 visible browser is closed on `bba1de4`. The rest is future guidance.**
 
-This section says why later phases exist. P8, P8.5, and P9 say what to implement and verify. It does not reopen frozen phases, widen P8 past its stop condition, or pull P9, P10, or P11 forward.
+This section says why later phases exist. P8, P8.5, and P9 record what those phases implemented and verified. It does not reopen closed phases, widen P8 past its stop condition, or pull P10 or P11 forward.
 
 > Agent Core hosts durable AI identities that can participate in applications, conversations, tasks, and events with scoped memory, capabilities, authority, and working context.
 
@@ -335,15 +335,15 @@ P8 makes Chat one authorized application action on this path. That proof is froz
 
 A bounded browser capability can reach many existing web applications before a dedicated integration exists for each one. Where a capability becomes important and repeatable, a native provider is the better constraint. Equivalent work should not change identity or task meaning just because the provider is a browser.
 
-Browser use is access to logged-in applications. Availability is not authority. Do not share one authenticated browser profile across identities or applications. Do not persist every click, selector, or DOM observation as product history. Durable receipts are for meaningful observations, approvals, and side effects. Profile ownership, application and session scope, allowlists, cookie retention, and tenant isolation are unresolved until a real browser workflow forces the design.
+Browser use is access to logged-in applications. Availability is not authority. Do not share one authenticated browser profile across identities or applications. Do not persist every click, selector, or DOM observation as product history. Durable receipts are for meaningful observations, approvals, and side effects.
 
-P9 is where that first concrete browser provider is evaluated. Its execution path builds on the frozen P8 contract and the P8.5 messaging and Skill-activation semantics. Browser capability must not define either of those semantics.
+P9 closed the first concrete provider on `bba1de4`. It is a direct Playwright adapter on the frozen P8 tool path, with P8.5 messaging and Skill activation unchanged. One browser context belongs to one Session. The visible proof is the loopback AC-1042 journey, not navigation to arbitrary public sites. Authenticated profiles, cookie retention across sessions, and tenant isolation stay unresolved until a later browser workflow requires them.
 
 ---
 
 # Infrastructure stance before production
 
-The development stack in the architectural baseline stays the default. Add a production dependency only when it solves a real hosting or pilot problem. P11 is that phase. P8.5 and P9 must not start it early.
+The development stack in the architectural baseline stays the default. Add a production dependency only when it solves a real hosting or pilot problem. P11 is that phase. Closed P8.5 and P9 work must not start it early.
 
 Each of these waits for its own trigger: PostgreSQL, Redis, a broker, Kubernetes, a service mesh, a distributed cache or scheduler, remote object storage, a cloud secret manager, multi-node SignalR, and microservice splits.
 
@@ -382,7 +382,7 @@ Conversation / Task / Event / Application input
 
 `AgentStep` is the conceptual name, not a required class name. Choose the domain name from the existing lifecycle during implementation.
 
-Chat is the first application that must prove the path. Browser and other providers are P9. Sandbox and production infrastructure are P10 and P11.
+Chat is the first application that must prove the path. Browser was deferred to P9 and is closed there. Sandbox and production infrastructure are P10 and P11.
 
 ## P8A — Provider-neutral Agent Step
 
@@ -685,7 +685,7 @@ It also does not include the deferred infrastructure in the section below. Chat 
 
 P8 is complete when Agent Core owns a provider-neutral structured execution contract; provider-native structured output and tool calls are normalized at the edge; controller disposition is distinct from requested external actions; the model does not own runtime transitions; application interaction goes through authorized capabilities; Chat is the first application proving that model; streaming stays a delivery concern; existing text, voice, realtime, and durable conversation behavior remains intact; Definitions can contain multiple typed skills frozen with the published version; skills represent procedure rather than permission and can require capabilities or resources without granting them; relevant skills can be activated without injecting every skill into every request; persona, standing instructions, skills, knowledge, capabilities, authority, memory, application context, and task context stay distinct; deterministic and Synthetic gates are green; and documentation matches observed Admin and Chat behavior.
 
-P8.5 consumes this frozen contract. It does not move P8 evidence. P9 waits for P8.5 so browser/platform work can reuse current-application messaging and dynamic Skill activation instead of defining them.
+P8.5 consumes this frozen contract. It does not move P8 evidence. P9 waited for P8.5 and reused current-application messaging and dynamic Skill activation. It did not define them. P9 is closed on `bba1de4`.
 
 ---
 
@@ -814,21 +814,21 @@ P8.5 does not include browser implementation, MCP implementation, full Applicati
 
 ## P8.5 stop condition
 
-P8.5 closes when an agent can send a bounded intermediate message to the trusted current application context and continue; intermediate messaging is distinct from terminal `chat.respond` and system operational progress; the model cannot choose an unauthorized destination; Skill activation is no longer semantically dependent only on keyword matching; the agent can request Skills as work unfolds; Core validates, budgets, and pins active Skill IDs; Skill loading never grants capability or authority; deterministic matching is only an optional optimization; existing P8 execution and security behavior remains intact; and P9 can start without inventing messaging or Skill-selection semantics.
+P8.5 closes when an agent can send a bounded intermediate message to the trusted current application context and continue; intermediate messaging is distinct from terminal `chat.respond` and system operational progress; the model cannot choose an unauthorized destination; Skill activation is no longer semantically dependent only on keyword matching; the agent can request Skills as work unfolds; Core validates, budgets, and pins active Skill IDs; Skill loading never grants capability or authority; deterministic matching is only an optional optimization; existing P8 execution and security behavior remains intact; and P9 could start without inventing messaging or Skill-selection semantics. That stop condition is met. P9 is closed on `bba1de4`.
 
 ---
 
 # P9 — Harness / platform extensibility
 
-**Status: closed** on `bba1de4`. Hosted Synthetic [`36890525463`](https://github.com/trannamtrung1st/agent-core/actions/runs/36890525463) is green. Evidence: [p9-freeze-candidate.md](docs/reports/p9-freeze-candidate.md).
+**Status: closed** on `bba1de4`. Hosted Synthetic [`36890525463`](https://github.com/trannamtrung1st/agent-core/actions/runs/36890525463) is green. Evidence: [p9-freeze-candidate.md](docs/reports/p9-freeze-candidate.md). Post-closure hardening does not move that SHA.
 
-`general-assistant` v11 allowlists `browser.navigate`, `browser.observe`, and `browser.act` and publishes skill `browser.record.lookup`. Application owns the provider-neutral browser port and target policy. Infrastructure owns a direct Playwright adapter and an isolated loopback fixture. Chat progress for a `browser.*` tool reuses `agent.progress` kind `runningTool` with message `Using browser…`. The scripted Synthetic journey for a user message containing `record AC-1042` sends one application message and one answer, `AC-1042 is In review.` P8 and P8.5 freeze SHAs are unchanged. P10 and P11 stay requirement-triggered.
+`general-assistant` v11 allowlists `browser.navigate`, `browser.observe`, and `browser.act` and publishes skill `browser.record.lookup`. Application owns the provider-neutral browser port and target policy. Infrastructure owns a direct Playwright adapter and an isolated loopback fixture. Chat progress for a `browser.*` tool reuses `agent.progress` kind `runningTool` with message `Using browser…`. The scripted Synthetic journey for a user message containing `record AC-1042` sends one application message and one answer, `AC-1042 is In review.` Host configuration separates `NavigationOrigins`, `InteractionOrigins`, and `ResourceOrigins`. The Record Lookup fixture is optional and is not the browser home page when another trusted origin is configured. `target_denied` is a normal tool result. `browser.*` is offered only when Browser is enabled and the Playwright Chromium executable is present. The Docker image leaves Browser disabled because it does not install Chromium. P8 and P8.5 freeze SHAs are unchanged. P10 and P11 stay requirement-triggered.
 
-P9 starts only after P8.5 closes. Its prerequisites are the frozen P8 Agent Step, controller/action boundary, and Chat proof, plus P8.5 bounded current-application messaging and Core-admitted dynamic Skill activation. P9 consumes those contracts. It does not define them.
+P9 started after P8.5 closed. It consumed the frozen P8 Agent Step, controller/action boundary, and Chat proof, plus P8.5 bounded current-application messaging and Core-admitted dynamic Skill activation. It did not define those contracts.
 
-Start from one concrete provider need. Do not add a universal provider interface. The North Star is not a P9 backlog. A second real implementation is what proves which extension seams are needed.
+The closed provider is direct Playwright, not MCP and not a second tool host. The North Star is not a backlog of extra providers. A second real implementation is what proves which extension seams are needed.
 
-Browser automation is the broad compatibility path. Native integrations are the optimized path. The first concrete exercise should look like:
+Browser automation is the broad compatibility path. Native integrations are the optimized path. The closed path looks like:
 
 ```text
 Agent
@@ -843,16 +843,16 @@ Controller
    ↓
 authorized browser capability action
    ↓
-browser provider
+Playwright browser provider
    ↓
-external web application
+host-configured navigation origin
 ```
 
-**First candidate to evaluate:** Playwright, Playwright MCP, or a narrow adapter around Playwright. Choose the narrowest shape that fits the P8 architecture. Do not decide that shape before the concrete need is in hand.
+The Record Lookup fixture is the deterministic proof when it is the only navigation origin. Extra exact origins are host configuration, not model authority, and are not general public-site navigation.
 
-MCP is an optional edge adapter. It is not Agent Core’s semantic center and it is not an authority source. Native Agent Core tools stay first-class. External tools still pass through Agent Core policy. Provider credentials stay outside model context. Provider DTOs stay out of Domain and Application. An extension failure must not corrupt durable agent, session, or WorkItem state. Browser/platform adapters do not choose message destinations, define Skill activation authority, or turn Skill requirements into permissions.
+MCP remains an optional edge adapter. It is not Agent Core’s semantic center and it is not an authority source. Native Agent Core tools stay first-class. External tools still pass through Agent Core policy. Provider credentials stay outside model context. Provider DTOs stay out of Domain and Application. An extension failure must not corrupt durable agent, session, or WorkItem state. Browser/platform adapters do not choose message destinations, define Skill activation authority, or turn Skill requirements into permissions.
 
-Repository evidence today: Playwright and Playwright MCP exist for frontend tests and development. Neither is a runtime capability. Tool registration and dispatch are still static and in-process, so a real browser provider would exercise the second tool-host seam noted in P7.5. Browser profile ownership, authentication isolation, application and domain scope, durable receipts, and live versus detached execution are still unresolved. Resolve them from the concrete workflow, using the North Star constraints: no shared authenticated profile, no unrestricted authority, and no click-level product history.
+Observed runtime: one isolated context per Session, exact-origin policy, no arbitrary selectors or page JavaScript from the model, opaque element refs, and no browser tools on detached, background, or occurrence execution. Frontend Playwright and Playwright MCP stay test and development tools. Logged-in profile ownership, authentication isolation across identities, and durable browser receipts beyond the session stay future. The closed provider already refuses a shared authenticated profile, unrestricted authority, and click-level product history.
 
 - [ ] Add an external tool or integration provider only when that second implementation justifies the seam.
 - [ ] Define extension identity and versioning only to the degree that extension requires.
@@ -933,13 +933,13 @@ Always keep this section.
 
 # Implemented baseline
 
-Orientation for what P8.5 can build on. Detail and gate history are in `/docs` and `docs/reports/`.
+Orientation for what later work can build on. Detail and gate history are in `/docs` and `docs/reports/`.
 
 **Conversation and runtime.** Session-owned conversation, purpose and lifecycle, queue versus steer, Stop, interruption, detach and reconnect, durable accepted turns, observer reattachment, history and restore, semantic compaction, and display/speech response semantics with transient progress.
 
 **Identity and memory.** Reusable Definition versus durable Agent Instance, persona separate from learned memory, trusted owner profile, Identity and User memory scopes, and layered prompt composition. Provider reasoning stays out of assistant output.
 
-**Tools and capabilities.** Typed tools for workspace, knowledge, attachments, artifacts, sandbox, web, HTTP, and email. Execution-time policy, exact-action approval, and detached-execution restrictions. Trusted model catalog with per-session model and reasoning selection.
+**Tools and capabilities.** Typed tools for workspace, knowledge, attachments, artifacts, sandbox, web, HTTP, email, and the closed loopback browser provider. Execution-time policy, exact-action approval, and detached-execution restrictions. Trusted model catalog with per-session model and reasoning selection.
 
 **Voice and realtime.** SignalR with MessagePack as the default transport, optional JSON diagnostic mode with the same contract, independently replaceable STT and TTS, voice interruption, and heard versus received tracking. Synthetic speech requires no provider credentials.
 
@@ -957,4 +957,4 @@ Orientation for what P8.5 can build on. Detail and gate history are in `/docs` a
 
 # Next implementation item
 
-P9 — Harness / Platform Extensibility.
+No phase is open. P9 remains closed on `bba1de4`. P10 and P11 stay requirement-triggered.

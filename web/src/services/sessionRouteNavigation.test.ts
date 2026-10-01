@@ -115,6 +115,33 @@ describe("session route navigation", () => {
     });
   });
 
+  it("uses the session view persona instead of the definition name", async () => {
+    vi.mocked(getSession).mockResolvedValue({
+      sessionId: endedId,
+      agentId: "examiner",
+      agentVersion: 1,
+      mode: "text",
+      pendingMode: null,
+      status: "ended",
+      lastEntrySequence: 1,
+      agentName: "Tommy",
+      agentRole: "Assistant"
+    });
+
+    await openCatalogSession(
+      {
+        sessionId: endedId,
+        status: "ended",
+        archived: false,
+        ended: true
+      },
+      { syncUrl: false }
+    );
+
+    expect(useSessionStore.getState().agentName).toBe("Tommy");
+    expect(useSessionStore.getState().agentRole).toBe("Assistant");
+  });
+
   it("opens ended catalog sessions as read-only history without reopen", async () => {
     const result = await openCatalogSession(
       {

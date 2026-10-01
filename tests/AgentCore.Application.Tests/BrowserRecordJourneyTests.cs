@@ -77,6 +77,36 @@ public sealed class BrowserRecordJourneyTests
                 && progress.Message == ResponseProgressMessages.UsingBrowser);
     }
 
+    [Fact]
+    public async Task Denied_browser_target_continues_to_chat_respond()
+    {
+        var browser = new FixtureBrowser();
+        var recording = new RecordingModel(new ScriptedLanguageModel());
+        var output = new CapturingSessionOutput();
+        var turns = new InMemoryConversationTurnExecutionStore();
+        await using var runtime = Create(
+            new SemanticResponseLanguageModel(recording),
+            output,
+            Definition(),
+            browser,
+            turns);
+        await runtime.AttachAsync();
+        Assert.True(await runtime.SubmitUserTextAsync("Please open https://example.invalid/escape for me."));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Empty(browser.NavigatedUrls);
+        Assert.Contains(
+            recording.Requests[1].Messages,
+            message => message.Role == ModelRole.Tool
+                && message.Text.Contains("target_denied", StringComparison.Ordinal));
+        var assistant = Assert.Single(
+            runtime.Snapshot.Entries,
+            entry => entry.Role == ConversationRole.Assistant && entry.Status == EntryStatus.Completed);
+        Assert.Equal(ScriptedLanguageModel.BrowserDenialAnswer, assistant.Text);
+        Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Status == EntryStatus.Failed);
+        Assert.DoesNotContain(output.Items, item => item.Payload is ErrorOutput);
+    }
+
     private static AgentDefinition Definition() =>
         new(
             1,

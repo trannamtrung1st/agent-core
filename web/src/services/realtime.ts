@@ -2348,6 +2348,16 @@ export async function loadOlderHistory(): Promise<void> {
   await loadOlderHistoryPage();
 }
 
+function pinnedIdentity(
+  view: { agentName?: string | null; agentRole?: string | null },
+  agent: { name?: string; role?: string } | undefined
+): { name: string; role: string } {
+  return {
+    name: view.agentName?.trim() || agent?.name || "",
+    role: view.agentRole?.trim() || agent?.role || ""
+  };
+}
+
 async function showPausedSession(
   sessionId: string,
   options?: { syncUrl?: boolean }
@@ -2394,6 +2404,7 @@ async function showPausedSession(
 
     const agent = agents.find((row) => row.id === view.agentId && row.version === view.agentVersion)
       ?? agents.find((row) => row.id === view.agentId);
+    const identity = pinnedIdentity(view, agent);
     const latest = useSessionStore.getState();
     if (!sameSessionId(latest.sessionId, sessionId)) {
       return "failed";
@@ -2401,8 +2412,8 @@ async function showPausedSession(
 
     useSessionStore.setState({
       sessionId: view.sessionId,
-      agentName: agent?.name ?? "",
-      agentRole: agent?.role ?? "",
+      agentName: identity.name,
+      agentRole: identity.role,
       voiceAvailable: Boolean(agent?.voiceAvailable),
       status: "paused",
       lifecycleStatus: view.lifecycleStatus ?? "paused",
@@ -2483,6 +2494,7 @@ async function showEndedSession(
 
     const agent = agents.find((row) => row.id === view.agentId && row.version === view.agentVersion)
       ?? agents.find((row) => row.id === view.agentId);
+    const identity = pinnedIdentity(view, agent);
     const latest = useSessionStore.getState();
     if (!sameSessionId(latest.sessionId, sessionId)) {
       return "failed";
@@ -2491,8 +2503,8 @@ async function showEndedSession(
     useSessionStore.setState({
       connection: "idle",
       sessionId: view.sessionId,
-      agentName: agent?.name ?? "",
-      agentRole: agent?.role ?? "",
+      agentName: identity.name,
+      agentRole: identity.role,
       voiceAvailable: false,
       status: "ended",
       lifecycleStatus: view.lifecycleStatus ?? "ended",

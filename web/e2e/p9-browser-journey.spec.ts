@@ -14,6 +14,13 @@ async function chooseScriptedAlpha(page: Page): Promise<void> {
 
 test("P9 looks up record AC-1042 with one application message and one answer", async ({ page }) => {
   test.setTimeout(180_000);
+  const consoleErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      consoleErrors.push(message.text());
+    }
+  });
+  page.on("pageerror", (error) => consoleErrors.push(error.message));
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
@@ -72,4 +79,32 @@ test("P9 looks up record AC-1042 with one application message and one answer", a
   for (let index = 0; index < count; index += 1) {
     await expect(history.nth(index)).not.toContainText("Using browser…");
   }
+
+  const overflow = async () =>
+    page.evaluate(() => {
+      const column = document.querySelector(".conversation-column");
+      const root = document.documentElement;
+      return {
+        document: root.scrollWidth > root.clientWidth + 1,
+        column: column ? column.scrollWidth > column.clientWidth + 1 : true
+      };
+    });
+  const desktop = await overflow();
+  expect(desktop.column).toBe(false);
+  expect(desktop.document).toBe(false);
+  const desktopMotion = await page.evaluate(() => {
+    const sample = document.querySelector(".conversation-column");
+    const style = sample ? getComputedStyle(sample) : null;
+    return {
+      animationName: style?.animationName ?? "missing",
+      transitionDuration: style?.transitionDuration ?? "missing"
+    };
+  });
+  expect(desktopMotion.animationName).toBe("none");
+  expect(desktopMotion.transitionDuration).toBe("0s");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobile = await overflow();
+  expect(mobile.column).toBe(false);
+  expect(consoleErrors.filter((entry) => !/favicon/i.test(entry))).toEqual([]);
 });

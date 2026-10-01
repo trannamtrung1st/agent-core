@@ -96,3 +96,28 @@ The headed window is the browser view. Chat stays primary and shows one useful i
 ## Hosted conclusion
 
 Workflow [`36890525463`](https://github.com/trannamtrung1st/agent-core/actions/runs/36890525463) is **green** on `bba1de437b8410b2226b846adc8a0418af0c69cb`. Synthetic offline gates succeeded in 31m 46s. Synthetic Compose smoke succeeded in 1m 19s. P9 is closed on that SHA. This report commit does not move it.
+
+## Appendix — post-closure Impeccable evidence
+
+This appendix does not move `bba1de4`. No Chat or Admin layout was redesigned. The activity row still renders trusted `Using browser…` and then clears.
+
+Audit date: 2026-10-02. Surface: Chat during the AC-1042 journey. Mode: Operate. Detector command: `.agents/skills/impeccable/scripts/impeccable detect --json web/src/features/chat/AgentActivity.tsx web/src/features/chat/activityState.ts web/src/app.css`. Result: `[]`.
+
+Journey command, on ports 5090/5193 because 5080 was not a disposable Synthetic host: `CI=1 PLAYWRIGHT_API_PORT=5090 PLAYWRIGHT_WEB_PORT=5193 PLAYWRIGHT_SQLITE_PATH=/tmp/agent-core-p9-hardening-3.db pnpm exec playwright test e2e/p9-browser-journey.spec.ts --project=synthetic` in `web/`. Result: 1 passed (18.3s). The test browser was headless. It sent `Please look up record AC-1042.` and did not click the product Chromium window. The 390 shell measurement below is from the immediately preceding run of the same journey.
+
+| Check | Expected | Observed |
+| --- | --- | --- |
+| Progress | `Using browser…` appears, then the activity row clears | Appeared during the turn. `.agent-activity` count was 0 after settle. History rows did not keep that text |
+| Copy | One application message, then one answer | `I found the record. I'm checking the details now.` then `AC-1042 is In review.` |
+| 1280×900 | Conversation column and document do not overflow | Neither overflowed |
+| Reduced motion | No animation on the conversation column | `animation-name: none`, `transition-duration: 0s` |
+| 390×844 | Conversation column does not overflow | Column did not overflow. The document did: `.app-shell` was 552px wide in a 390px viewport, and the header row was wider than its box. That is existing shell chrome. It was left unchanged |
+| Console | No new product errors | No console errors. No page errors |
+
+No polish edit. The progress row stays the existing activity line.
+
+## Appendix — post-closure browser hardening
+
+This appendix does not move `bba1de4`. Hosted Synthetic has not been re-run for this pass.
+
+The first `Failed` turn in the local nopCommerce attempt was not `target_denied` itself. `SessionToolExecutor` returns that code as ordinary tool JSON and the tool loop continues. A direct user turn becomes Failed when the model then stops without a valid `chat.respond` (`InvalidAgentStep` / rejected Agent Step). The fixture was also advertised as `Trusted browser start`, so a later turn opened Record Lookup before the denied public URL. The tool description now says a denial is recoverable, the user URL is the navigation target when it is in host scope, and the turn must still finish with `chat.respond`. The fixture start sentence is added only when every navigation origin is loopback. `Denied_browser_target_continues_to_chat_respond` covers denial followed by a completed answer.
