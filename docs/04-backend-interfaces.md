@@ -371,7 +371,7 @@ public interface IEnvironmentEventIngress
 
 Implementations allowlist kinds, validate data, scope the event to `sessionId`, reject executable/instruction-like payloads, and admit a normalized `EnvironmentReceived` into the session mailbox. Synthetic demo fixtures and future CRM/calendar adapters use this boundary. Unknown sessions or kinds fail without affecting other runtimes.
 
-## P9 visible browser (observed, not closed)
+## P9 visible browser (observed)
 
 `IBrowserSession` is the provider-neutral port for navigate, observe, and act. `IBrowserSessionLease.ReleaseAsync` drops that session's context. `BrowserTargetPolicy` admits only exact `http`/`https` origins from the host allowlist. `browser.act` is admitted only for `InteractiveDemo` on a loopback page that is already allowlisted. The executor checks the policy before the port call. Provider error codes stay the closed set `forbidden`, `invalid`, `target_denied`, `stale_reference`, `timeout`, `provider_unavailable`, and `unsupported_operation`.
 

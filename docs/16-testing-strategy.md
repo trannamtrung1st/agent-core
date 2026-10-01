@@ -145,9 +145,9 @@ Section 17.8 searches on this tree: docs do not call `SystemInstructions` the id
 
 Hosted Synthetic workflow [36696902928](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) is green on `ca3eb235a3b458e55002d2c8f610df868b2cd39d`. The public Actions page records Status Success, total 23m 59s, Synthetic offline gates 23m 55s, and Synthetic Compose smoke 1m 14s. Earlier workflow [36693649631](https://github.com/trannamtrung1st/agent-core/actions/runs/36693649631) failed on `af3b4cd`. P8 is frozen on `ca3eb23`. Post-freeze provider-contract correction `6fda4c5` and CI stabilization `c9aec29` are closed on hosted workflow [36745126226](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green on `c9aec29`; that closure does not move the freeze SHA. Closure report: [p8-freeze-candidate.md](reports/p8-freeze-candidate.md) (appendix).
 
-## P9 visible browser (observed, not closed)
+## P9 visible browser (observed)
 
-Policy and journey tests that do not launch Chromium: `BrowserToolTests`, `BrowserLifecycleTests`, and `BrowserRecordJourneyTests`. Chromium adapter tests live in `BrowserAdapterTests` (`browser-chromium`). The Chat journey is `web/e2e/p9-browser-journey.spec.ts` on the `synthetic` project with `CI=1` and a disposable `PLAYWRIGHT_SQLITE_PATH`. The frontend activity test expects the trusted message `Using browser…` to outrank the coarse `Running tools…` label. Full solution regression, Compose, and the hosted workflow are still outstanding.
+Policy and journey tests that do not launch Chromium: `BrowserToolTests`, `BrowserLifecycleTests`, and `BrowserRecordJourneyTests`. Chromium adapter tests live in `BrowserAdapterTests` (`browser-chromium`). The Chat journey is `web/e2e/p9-browser-journey.spec.ts` on the `synthetic` project with `CI=1` and a disposable `PLAYWRIGHT_SQLITE_PATH`. The frontend activity test expects the trusted message `Using browser…` to outrank the coarse `Running tools…` label. Full solution regression, Compose, and hosted workflow `36890525463` are recorded in [p9-freeze-candidate.md](reports/p9-freeze-candidate.md).
 
 ## Post-MVP planned until verified
 

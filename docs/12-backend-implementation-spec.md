@@ -236,7 +236,7 @@ Observed: owner-capability filter; catalog/lifecycle in the revision stream; `IA
 
 Observed container sandbox: `ISandboxExecutor` registered as `DockerSandboxExecutor` in Infrastructure DI. Commands are normalized (`echo`, `true`, `cat` of `/workspace/working`, `sleep` 1–5 s). Isolation and resource facts inspect Docker `HostConfig` (network none, 64 MiB, 0.5 CPU, 32 PIDs, read-only root, cap-drop ALL, no-new-privileges) and a single working-dir mount; cancellation kills and reaps; export uses session-scoped `IArtifactStore`. When attach is stopped because output reached the cap, inspect the container `State.ExitCode` (via `docker wait`/`inspect`) and set `SandboxResult.Truncated=true` without converting truncation into success. Docker sandbox facts skip when the CLI or `busybox:1.36` is missing. Provider image/tool DTOs stay in Infrastructure.
 
-## P9 visible browser (observed, not closed)
+## P9 visible browser (observed)
 
 `SessionToolExecutor` admits `browser.navigate`, `browser.observe`, and `browser.act` only on a user turn that is not detached. The Playwright adapter checks the same allowlist again for the initial URL, every redirect hop, and every popup. A denied redirect aborts without leaving the page on that URL. Popups are closed. Opaque `el_` refs are in-memory and die with the page generation. Cancellation throws `OperationCanceledException` and stops the in-flight navigation. Release failures are a static warning and do not fail session end.
 
