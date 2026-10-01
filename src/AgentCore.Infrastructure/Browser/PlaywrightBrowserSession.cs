@@ -163,6 +163,8 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IHostedService
             session.DeniedNavigation = false;
             session.PopupCode = null;
             session.TimedOut = false;
+            var call = BeginCall(session);
+            using var registration = cancellationToken.Register(() => CancelCall(session, call));
             try
             {
                 await session.Page.GotoAsync(
@@ -184,7 +186,6 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IHostedService
                 return Result("timeout");
             }
 
-            await ClosePopupsAsync(session).ConfigureAwait(false);
             if (session.PopupCode is not null)
             {
                 return Result(session.PopupCode);
@@ -202,10 +203,20 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IHostedService
         }
         catch (OperationCanceledException)
         {
+            if (session is not null)
+            {
+                await FinishCancellationAsync(session).ConfigureAwait(false);
+            }
+
             throw;
         }
         catch (Exception ex) when (IsCancel(ex, cancellationToken))
         {
+            if (session is not null)
+            {
+                await FinishCancellationAsync(session).ConfigureAwait(false);
+            }
+
             throw new OperationCanceledException(cancellationToken);
         }
         catch (Exception ex) when (IsTimeout(ex))
@@ -219,6 +230,11 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IHostedService
         }
         finally
         {
+            if (session is not null)
+            {
+                await SettlePopupsAsync(session).ConfigureAwait(false);
+            }
+
             if (entered)
             {
                 session?.Gate.Release();
@@ -336,6 +352,8 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IHostedService
             session.DeniedNavigation = false;
             session.PopupCode = null;
             session.TimedOut = false;
+            var call = BeginCall(session);
+            using var registration = cancellationToken.Register(() => CancelCall(session, call));
             try
             {
                 await PerformActAsync(live.Handle, request, cancellationToken).ConfigureAwait(false);
@@ -349,7 +367,6 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IHostedService
                 return Result("timeout");
             }
 
-            await ClosePopupsAsync(session).ConfigureAwait(false);
             if (session.PopupCode is not null)
             {
                 return Result(session.PopupCode);
@@ -371,10 +388,12 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IHostedService
         }
         catch (OperationCanceledException)
         {
+            await FinishCancellationAsync(session).ConfigureAwait(false);
             throw;
         }
         catch (Exception ex) when (IsCancel(ex, cancellationToken))
         {
+            await FinishCancellationAsync(session).ConfigureAwait(false);
             throw new OperationCanceledException(cancellationToken);
         }
         catch (Exception ex) when (IsTimeout(ex))
@@ -388,6 +407,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IHostedService
         }
         finally
         {
+            await SettlePopupsAsync(session).ConfigureAwait(false);
             if (entered)
             {
                 session.Gate.Release();
@@ -420,6 +440,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IHostedService
         page.SetDefaultTimeout(TimeoutMs());
         page.SetDefaultNavigationTimeout(TimeoutMs());
         var session = new SessionBrowser(context, page);
+        context.Page += (_, opened) => OnContextPage(session, opened);
         await context.RouteAsync("**/*", route => RouteAsync(session, route)).ConfigureAwait(false);
         if (!_sessions.TryAdd(sessionId, session))
         {
@@ -483,22 +504,33 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IHostedService
 
         try
         {
+            if (!ReferenceEquals(page, session.Page))
+            {
+                if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                    || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                {
+                    var popup = BrowserTargetPolicy.EvaluatePopup(url, _policy.TargetOrigins);
+                    session.PopupCode ??= popup.Code ?? "unsupported_operation";
+                }
+
+                await route.AbortAsync().ConfigureAwait(false);
+                if (page is not null)
+                {
+                    await CloseQuietlyAsync(page).ConfigureAwait(false);
+                }
+
+                return;
+            }
+
             if (url.StartsWith("about:", StringComparison.OrdinalIgnoreCase))
             {
                 await route.ContinueAsync().ConfigureAwait(false);
                 return;
             }
 
-            if (!ReferenceEquals(page, session.Page))
+            if (IsCancelled(session, session.OperationCall))
             {
-                var popup = BrowserTargetPolicy.EvaluatePopup(url, _policy.TargetOrigins);
-                session.PopupCode = popup.Code ?? "unsupported_operation";
                 await route.AbortAsync().ConfigureAwait(false);
-                if (page is not null)
-                {
-                    await page.CloseAsync().ConfigureAwait(false);
-                }
-
                 return;
             }
 
@@ -519,14 +551,27 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IHostedService
 
     private async Task FulfillWithoutLeavingPolicyAsync(SessionBrowser session, IRoute route, string url)
     {
+        var call = session.OperationCall;
+        session.InFlightRoute = route;
         IAPIResponse response;
         try
         {
+            if (IsCancelled(session, call))
+            {
+                await AbortQuietlyAsync(route).ConfigureAwait(false);
+                return;
+            }
+
             response = await route.FetchAsync(new RouteFetchOptions
             {
                 MaxRedirects = 0,
                 Timeout = TimeoutMs()
             }).ConfigureAwait(false);
+            if (IsCancelled(session, call))
+            {
+                await AbortQuietlyAsync(route).ConfigureAwait(false);
+                return;
+            }
         }
         catch (PlaywrightException ex) when (IsTimeout(ex))
         {
@@ -534,10 +579,28 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IHostedService
             await AbortQuietlyAsync(route).ConfigureAwait(false);
             return;
         }
+        catch (PlaywrightException) when (IsCancelled(session, call))
+        {
+            await AbortQuietlyAsync(route).ConfigureAwait(false);
+            return;
+        }
+        finally
+        {
+            if (ReferenceEquals(session.InFlightRoute, route))
+            {
+                session.InFlightRoute = null;
+            }
+        }
 
         if (IsRedirect(response.Status) && !RedirectStaysAllowed(url, response.Headers))
         {
             session.DeniedNavigation = true;
+            await AbortQuietlyAsync(route).ConfigureAwait(false);
+            return;
+        }
+
+        if (IsCancelled(session, call))
+        {
             await AbortQuietlyAsync(route).ConfigureAwait(false);
             return;
         }
@@ -734,9 +797,119 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IHostedService
         }
 
         await CloseQuietlyAsync(session.Page).ConfigureAwait(false);
-        session.Page = await session.Context.NewPageAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+        session.AcceptingMainPage = true;
+        try
+        {
+            session.Page = await session.Context.NewPageAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            session.AcceptingMainPage = false;
+        }
+
         session.Page.SetDefaultTimeout(TimeoutMs());
         session.Page.SetDefaultNavigationTimeout(TimeoutMs());
+    }
+
+    private static int BeginCall(SessionBrowser session)
+    {
+        var call = session.OperationCall + 1;
+        session.OperationCall = call;
+        return call;
+    }
+
+    private void CancelCall(SessionBrowser session, int call)
+    {
+        Volatile.Write(ref session.CancelledCall, call);
+        var route = session.InFlightRoute;
+        if (route is not null)
+        {
+            _ = AbortQuietlyAsync(route);
+        }
+
+        _ = StopPageLoadAsync(session);
+    }
+
+    private async Task FinishCancellationAsync(SessionBrowser session)
+    {
+        Volatile.Write(ref session.CancelledCall, session.OperationCall);
+        var route = session.InFlightRoute;
+        if (route is not null)
+        {
+            await AbortQuietlyAsync(route).ConfigureAwait(false);
+        }
+
+        await StopPageLoadAsync(session).ConfigureAwait(false);
+    }
+
+    private async Task StopPageLoadAsync(SessionBrowser session)
+    {
+        try
+        {
+            var client = await session.Context.NewCDPSessionAsync(session.Page).ConfigureAwait(false);
+            try
+            {
+                await client.SendAsync("Page.stopLoading").ConfigureAwait(false);
+            }
+            finally
+            {
+                await client.DetachAsync().ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex) when (ex is PlaywrightException or ObjectDisposedException)
+        {
+        }
+    }
+
+    private void OnContextPage(SessionBrowser session, IPage opened)
+    {
+        if (session.AcceptingMainPage || ReferenceEquals(opened, session.Page))
+        {
+            return;
+        }
+
+        var close = CloseQuietlyAsync(opened);
+        lock (session.PopupGate)
+        {
+            session.PopupCloses.Add(close);
+        }
+    }
+
+    private async Task SettlePopupsAsync(SessionBrowser session)
+    {
+        try
+        {
+            for (var attempt = 0; attempt < 8; attempt++)
+            {
+                await ClosePopupsAsync(session).ConfigureAwait(false);
+                Task[] pending;
+                lock (session.PopupGate)
+                {
+                    pending = session.PopupCloses.ToArray();
+                    session.PopupCloses.Clear();
+                }
+
+                if (pending.Length > 0)
+                {
+                    await Task.WhenAll(pending).ConfigureAwait(false);
+                }
+
+                var extras = session.Context.Pages.Count(page => !ReferenceEquals(page, session.Page));
+                var stillClosing = false;
+                lock (session.PopupGate)
+                {
+                    stillClosing = session.PopupCloses.Count > 0;
+                }
+
+                if (extras == 0 && !stillClosing)
+                {
+                    return;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is PlaywrightException or ObjectDisposedException)
+        {
+        }
     }
 
     private static async Task ClosePopupsAsync(SessionBrowser session)
@@ -837,6 +1010,9 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IHostedService
         exception is TimeoutException
         || (exception is PlaywrightException && exception.Message.Contains("Timeout", StringComparison.Ordinal));
 
+    private bool IsCancelled(SessionBrowser session, int call) =>
+        Volatile.Read(ref session.CancelledCall) == call;
+
     private static bool IsCancel(Exception exception, CancellationToken cancellationToken) =>
         cancellationToken.IsCancellationRequested
         && exception is PlaywrightException or TimeoutException;
@@ -880,6 +1056,18 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IHostedService
         public string? PopupCode { get; set; }
 
         public bool TimedOut { get; set; }
+
+        public bool AcceptingMainPage { get; set; }
+
+        public int OperationCall { get; set; }
+
+        public int CancelledCall = -1;
+
+        public IRoute? InFlightRoute { get; set; }
+
+        public object PopupGate { get; } = new();
+
+        public List<Task> PopupCloses { get; } = [];
 
         public SemaphoreSlim Gate { get; } = new(1, 1);
     }

@@ -323,10 +323,13 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         try
         {
             using var cancel = new CancellationTokenSource();
-            var navigating = Navigate(cancelledSession, Guid.NewGuid(), "/delay", cancel.Token);
+            var cancelledSessionId = Guid.NewGuid();
+            var navigating = Navigate(cancelledSession, cancelledSessionId, "/delay", cancel.Token);
             await cancelledSession.Fixture.DelayEntered.WaitAsync(TimeSpan.FromSeconds(5));
             await cancel.CancelAsync();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => navigating);
+            var cancelledUrl = await cancelledSession.GetCurrentUrlAsync(cancelledSessionId);
+            Assert.True(cancelledUrl is null || !cancelledUrl.AbsolutePath.Contains("/delay", StringComparison.Ordinal));
         }
         finally
         {
