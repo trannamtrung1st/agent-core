@@ -24,7 +24,7 @@ public static class BrowserTargetPolicy
 
         if (policyMode == BrowserPolicyMode.OpenWeb)
         {
-            return IsMetadataAddress(uri)
+            return IsMetadataTarget(uri)
                 ? BrowserTargetDecision.Deny("target_denied", "Browser target is not allowed.")
                 : BrowserTargetDecision.Allow;
         }
@@ -127,20 +127,31 @@ public static class BrowserTargetPolicy
         return true;
     }
 
-    private static bool IsMetadataAddress(Uri uri)
+    private static bool IsMetadataTarget(Uri uri)
     {
-        if (!IPAddress.TryParse(NormalizeHost(uri.Host), out var address))
+        var host = NormalizeHost(uri.Host);
+        if (host.Equals("metadata.google.internal", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!IPAddress.TryParse(host, out var address))
         {
             return false;
         }
 
-        if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+        if (address.IsIPv4MappedToIPv6)
         {
-            return false;
+            address = address.MapToIPv4();
         }
 
         var bytes = address.GetAddressBytes();
-        return bytes[0] == 169 && bytes[1] == 254;
+        if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+        {
+            return bytes[0] == 169 && bytes[1] == 254;
+        }
+
+        return bytes.Length == 16 && bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80;
     }
 
     public static bool IsLoopback(string? url)

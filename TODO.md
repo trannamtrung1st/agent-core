@@ -852,7 +852,7 @@ The Record Lookup fixture is the deterministic proof when it is the only navigat
 
 MCP remains an optional edge adapter. It is not Agent Core’s semantic center and it is not an authority source. Native Agent Core tools stay first-class. External tools still pass through Agent Core policy. Provider credentials stay outside model context. Provider DTOs stay out of Domain and Application. An extension failure must not corrupt durable agent, session, or WorkItem state. Browser/platform adapters do not choose message destinations, define Skill activation authority, or turn Skill requirements into permissions.
 
-Observed runtime: one isolated context per Session, exact-origin policy, no arbitrary selectors or page JavaScript from the model, opaque element refs, and no browser tools on detached, background, or occurrence execution. Frontend Playwright and Playwright MCP stay test and development tools. Logged-in profile ownership, authentication isolation across identities, and durable browser receipts beyond the session stay future. The closed provider already refuses a shared authenticated profile, unrestricted authority, and click-level product history.
+The frozen P9 proof is Restricted exact-origin browser behavior. The current local Real/demo launch profile is OpenWeb; Synthetic and CI stay Restricted. Observed runtime: one isolated context per Session, no arbitrary selectors or page JavaScript from the model, opaque element refs, and no browser tools on detached, background, or occurrence execution. Frontend Playwright and Playwright MCP stay test and development tools. Logged-in profile ownership, authentication isolation across identities, and durable browser receipts beyond the session stay future. The closed provider already refuses a shared authenticated profile and click-level product history.
 
 - [ ] Add an external tool or integration provider only when that second implementation justifies the seam.
 - [ ] Define extension identity and versioning only to the degree that extension requires.
@@ -860,7 +860,7 @@ Observed runtime: one isolated context per Session, exact-origin policy, no arbi
 - [ ] Revisit a durable Agent Instance workspace only for a concrete cross-session file workflow, with an explicit scope. Do not generalize `SessionWorkspace`.
 - [ ] Revisit richer reusable evaluation suites only when multiple provider implementations make them useful.
 
-P9 is not a plugin marketplace, a prepared-worker package system, a visual workflow builder, a multi-agent engine, an unrestricted browser agent, a distributed job platform, tenant RBAC, Kubernetes, or a microservice split.
+P9 is not a plugin marketplace, a prepared-worker package system, a visual workflow builder, a multi-agent engine, a distributed job platform, tenant RBAC, Kubernetes, or a microservice split. OpenWeb is a post-closure local/demo host policy. It is not part of the frozen `bba1de4` proof, and it is not a model-controlled unrestricted agent.
 
 ---
 

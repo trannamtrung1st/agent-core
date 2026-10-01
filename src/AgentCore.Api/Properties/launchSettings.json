@@ -60,7 +60,11 @@
         "Providers__ModelCatalog__Models__2__Reasoning": "false",
         "Providers__ModelCatalog__Models__2__CostCategory": "free",
         "Persistence__Provider": "Sqlite",
-        "Persistence__ConnectionString": "Data Source=data/agent-core.db"
+        "Persistence__ConnectionString": "Data Source=data/agent-core.db",
+        "Browser__PolicyMode": "OpenWeb",
+        "Browser__FixtureEnabled": "false",
+        "Browser__Headless": "false",
+        "Browser__InteractionMode": "InteractiveDemo"
       }
     }
   }

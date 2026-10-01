@@ -34,15 +34,22 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
     private const string ReadSecrets = """
         () => {
-          const values = [];
+          const items = [];
+          const push = (kind, key, value) => items.push({ kind, key: key || "", value: value || "" });
           try {
-            for (let i = 0; i < localStorage.length; i++) values.push(localStorage.getItem(localStorage.key(i)) || "");
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              push("storage", key, localStorage.getItem(key));
+            }
           } catch { }
           try {
-            for (let i = 0; i < sessionStorage.length; i++) values.push(sessionStorage.getItem(sessionStorage.key(i)) || "");
+            for (let i = 0; i < sessionStorage.length; i++) {
+              const key = sessionStorage.key(i);
+              push("storage", key, sessionStorage.getItem(key));
+            }
           } catch { }
-          document.querySelectorAll('input[type="password"]').forEach(el => values.push(el.value || ""));
-          return values;
+          document.querySelectorAll('input[type="password"]').forEach(el => push("password", "", el.value || ""));
+          return JSON.stringify(items);
         }
         """;
 
@@ -835,13 +842,17 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         var cookies = await session.Context.CookiesAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
         foreach (var cookie in cookies)
         {
-            AddSecret(secrets, cookie.Value);
+            ConsiderSecret(secrets, "cookie", cookie.Name, cookie.Value);
         }
 
-        var stored = await session.Page.EvaluateAsync<string[]>(ReadSecrets).WaitAsync(cancellationToken).ConfigureAwait(false);
-        foreach (var value in stored)
+        var storedJson = await session.Page.EvaluateAsync<string>(ReadSecrets).WaitAsync(cancellationToken).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(storedJson))
         {
-            AddSecret(secrets, value);
+            var stored = JsonSerializer.Deserialize<List<BrowserSecretItem>>(storedJson, SecretJson) ?? [];
+            foreach (var item in stored)
+            {
+                ConsiderSecret(secrets, item.Kind, item.Key, item.Value);
+            }
         }
 
         secrets.Sort(static (left, right) => right.Length.CompareTo(left.Length));
@@ -952,6 +963,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
         if (_policy.PolicyMode == BrowserPolicyMode.OpenWeb)
         {
+            session.PendingOpenedPage = opened;
             return;
         }
 
@@ -964,41 +976,81 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
     private async Task AdoptOpenWebPageAsync(SessionBrowser session, CancellationToken cancellationToken)
     {
-        if (_policy.PolicyMode != BrowserPolicyMode.OpenWeb || session.Context.Pages.Count < 2)
+        if (_policy.PolicyMode != BrowserPolicyMode.OpenWeb)
         {
             return;
         }
 
-        IPage? opened = null;
         for (var attempt = 0; attempt < 20; attempt++)
         {
-            opened = null;
-            foreach (var page in session.Context.Pages)
+            cancellationToken.ThrowIfCancellationRequested();
+            var pending = session.PendingOpenedPage;
+            if (pending is null)
             {
-                if (!ReferenceEquals(page, session.Page))
-                {
-                    opened = page;
-                }
+                RememberAllowedUrl(session);
+                return;
             }
 
-            if (opened is not null && IsAllowed(opened.Url))
+            if (pending.IsClosed)
             {
-                break;
+                ClearPending(session, pending);
+                RememberAllowedUrl(session);
+                return;
+            }
+
+            var url = pending.Url;
+            if (IsAllowed(url))
+            {
+                pending.SetDefaultTimeout(TimeoutMs());
+                pending.SetDefaultNavigationTimeout(TimeoutMs());
+                session.Page = pending;
+                ClearPending(session, pending);
+                session.Generation++;
+                session.LastAllowedUrl = url;
+                if (session.PendingOpenedPage is null)
+                {
+                    return;
+                }
+
+                continue;
+            }
+
+            if (IsConcreteDeniedUrl(url))
+            {
+                ClearPending(session, pending);
+                await CloseQuietlyAsync(pending).ConfigureAwait(false);
+                if (session.PendingOpenedPage is null)
+                {
+                    return;
+                }
+
+                continue;
             }
 
             await Task.Delay(50, cancellationToken).ConfigureAwait(false);
         }
-
-        if (opened is null || !IsAllowed(opened.Url))
-        {
-            return;
-        }
-
-        opened.SetDefaultTimeout(TimeoutMs());
-        opened.SetDefaultNavigationTimeout(TimeoutMs());
-        session.Page = opened;
-        session.Generation++;
     }
+
+    private static void ClearPending(SessionBrowser session, IPage pending)
+    {
+        if (ReferenceEquals(session.PendingOpenedPage, pending))
+        {
+            session.PendingOpenedPage = null;
+        }
+    }
+
+    private void RememberAllowedUrl(SessionBrowser session)
+    {
+        if (IsAllowed(session.Page.Url))
+        {
+            session.LastAllowedUrl = session.Page.Url;
+        }
+    }
+
+    private bool IsConcreteDeniedUrl(string url) =>
+        !string.IsNullOrWhiteSpace(url)
+        && !url.StartsWith("about:", StringComparison.OrdinalIgnoreCase)
+        && !IsAllowed(url);
 
     private async Task SettlePopupsAsync(SessionBrowser session)
     {
@@ -1125,6 +1177,44 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         }
     }
 
+    private static readonly JsonSerializerOptions SecretJson = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    private static void ConsiderSecret(List<string> secrets, string? kind, string? key, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        var credential = string.Equals(kind, "password", StringComparison.OrdinalIgnoreCase) || IsCredentialKey(key);
+        if (!credential && value.Trim().Length < 4)
+        {
+            return;
+        }
+
+        AddSecret(secrets, value);
+    }
+
+    private static bool IsCredentialKey(string? key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return false;
+        }
+
+        var name = key.ToLowerInvariant();
+        return name.Contains("token", StringComparison.Ordinal)
+            || name.Contains("auth", StringComparison.Ordinal)
+            || name.Contains("secret", StringComparison.Ordinal)
+            || name.Contains("password", StringComparison.Ordinal)
+            || name.Contains("session", StringComparison.Ordinal)
+            || name.Contains("jwt", StringComparison.Ordinal)
+            || name.Contains("credential", StringComparison.Ordinal);
+    }
+
     private static void AddSecret(List<string> secrets, string? value)
     {
         if (string.IsNullOrWhiteSpace(value) || secrets.Contains(value, StringComparer.Ordinal))
@@ -1237,6 +1327,8 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
         public string? PopupCode { get; set; }
 
+        public IPage? PendingOpenedPage { get; set; }
+
         public bool TimedOut { get; set; }
 
         public bool AcceptingMainPage { get; set; }
@@ -1255,4 +1347,6 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
     }
 
     private sealed record LiveElement(Guid SessionId, int Generation, IElementHandle Handle);
+
+    private sealed record BrowserSecretItem(string? Kind, string? Key, string? Value);
 }

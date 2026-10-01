@@ -21,6 +21,8 @@
       <p id="short-cookie">q7</p>
       <p id="local-short">m</p>
       <p id="session-short">w2</p>
+      <p id="locale">Locale en</p>
+      <p id="auth-echo">k9</p>
       <p id="password-short">v</p>
       <label for="secret">Password</label>
       <input id="secret" type="password" value="p9-password-secret">
@@ -33,8 +35,10 @@
     document.cookie = "p9_short=q7; path=/";
     localStorage.setItem("p9_local", "p9_local_value");
     localStorage.setItem("p9_short_local", "m");
+    localStorage.setItem("locale", "en");
     sessionStorage.setItem("p9_session_storage", "p9_session_storage_value");
     sessionStorage.setItem("p9_short_session", "w2");
+    document.cookie = "auth=k9; path=/";
   </script>
 </body>
 </html>

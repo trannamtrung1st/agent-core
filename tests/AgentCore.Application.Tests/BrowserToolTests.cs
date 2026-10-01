@@ -144,6 +144,16 @@ public sealed class BrowserToolTests
             BrowserTargetPolicy.EvaluateDestination("http://169.254.169.254/latest", [], openWeb).Code);
         Assert.Equal(
             "target_denied",
+            BrowserTargetPolicy.EvaluateDestination("http://[fe80::1]/", [], openWeb).Code);
+        Assert.Equal(
+            "target_denied",
+            BrowserTargetPolicy.EvaluateDestination("http://[::ffff:169.254.169.254]/", [], openWeb).Code);
+        Assert.Equal(
+            "target_denied",
+            BrowserTargetPolicy.EvaluateDestination("http://metadata.google.internal/", [], openWeb).Code);
+        Assert.True(BrowserTargetPolicy.EvaluateDestination("http://192.168.1.20/", [], openWeb).Allowed);
+        Assert.Equal(
+            "target_denied",
             BrowserTargetPolicy.EvaluateDestination("file:///tmp/secret", [], openWeb).Code);
         Assert.Equal(
             "target_denied",

@@ -317,6 +317,22 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
             var again = await session.ObserveAsync(id);
             Assert.Null(again.ErrorCode);
             Assert.Equal("Next page", again.Observation!.Title);
+            var stayed = await session.ObserveAsync(id);
+            Assert.Equal("Next page", stayed.Observation!.Title);
+            var oldRef = link.Ref;
+            var thirdButton = Assert.Single(stayed.Observation.Elements, element => element.Name == "Open third");
+            var openedThird = await session.ActAsync(new BrowserActRequest(id, "click", thirdButton.Ref, null));
+            Assert.Null(openedThird.ErrorCode);
+            var stale = await session.ActAsync(new BrowserActRequest(id, "click", oldRef, null));
+            Assert.Equal("stale_reference", stale.ErrorCode);
+            var third = await session.ObserveAsync(id);
+            Assert.Equal("Third page", third.Observation!.Title);
+            var thirdAgain = await session.ObserveAsync(id);
+            Assert.Equal("Third page", thirdAgain.Observation!.Title);
+            var active = session.ContextFor(id)!.Pages.Single(page => page.Url.Contains("/third", StringComparison.Ordinal));
+            await active.GotoAsync(origin + "/");
+            var human = await session.ObserveAsync(id);
+            Assert.Equal("Open page", human.Observation!.Title);
         }
         finally
         {
@@ -342,9 +358,12 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
             }
 
             var path = context.Request.Url?.AbsolutePath;
-            var html = path == "/next"
-                ? "<!DOCTYPE html><html><head><title>Next page</title></head><body>Next page</body></html>"
-                : "<!DOCTYPE html><html><head><title>Open page</title></head><body><button type=\"button\" onclick=\"window.open('/next')\">Open next</button></body></html>";
+            var html = path switch
+            {
+                "/next" => "<!DOCTYPE html><html><head><title>Next page</title></head><body><button type=\"button\" onclick=\"window.open('/third')\">Open third</button></body></html>",
+                "/third" => "<!DOCTYPE html><html><head><title>Third page</title></head><body>Third page</body></html>",
+                _ => "<!DOCTYPE html><html><head><title>Open page</title></head><body><button type=\"button\" onclick=\"window.open('/next')\">Open next</button></body></html>"
+            };
             var bytes = Encoding.UTF8.GetBytes(html);
             context.Response.ContentType = "text/html; charset=utf-8";
             context.Response.ContentLength64 = bytes.Length;
@@ -424,9 +443,11 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         Assert.DoesNotContain("p9_local_value", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("p9_session_storage_value", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("p9-password-secret", rendered, StringComparison.Ordinal);
-        Assert.DoesNotContain("q7", rendered, StringComparison.Ordinal);
+        Assert.Contains("q7", rendered, StringComparison.Ordinal);
+        Assert.Contains("Locale en", rendered, StringComparison.Ordinal);
+        Assert.Contains("m", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("w2", rendered, StringComparison.Ordinal);
-        Assert.DoesNotContain("m", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("k9", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("v", rendered, StringComparison.Ordinal);
         Assert.Contains("[redacted]", rendered, StringComparison.Ordinal);
     }
@@ -608,7 +629,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         Assert.DoesNotContain("p9_local_value", written, StringComparison.Ordinal);
         Assert.DoesNotContain("p9-password-secret", written, StringComparison.Ordinal);
         Assert.DoesNotContain("alpha", written, StringComparison.Ordinal);
-        Assert.DoesNotContain("q7", written, StringComparison.Ordinal);
+        Assert.DoesNotContain("k9", written, StringComparison.Ordinal);
         Assert.DoesNotContain("w2", written, StringComparison.Ordinal);
     }
 
