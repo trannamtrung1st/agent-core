@@ -56,6 +56,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly IStructuredMemoryService? _structuredMemory;
     private readonly IArtifactReferenceAuthorizer _artifacts;
     private readonly SessionToolExecutor _tools;
+    private readonly IBrowserSessionLease? _browserLease;
     private bool _intermediateMessagingAllowed;
     private readonly ApplicationMessagePolicy _applicationMessagePolicy = ApplicationMessagePolicy.Default;
     private readonly InteractionPolicy _policy;
@@ -202,7 +203,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IUserTurnCapabilityValidator? turnCapabilities = null,
         IStructuredMemoryService? structuredMemory = null,
         IConversationTurnExecutionStore? turnExecutions = null,
-        IDiagnosticIdSource? diagnostics = null)
+        IDiagnosticIdSource? diagnostics = null,
+        IBrowserSessionLease? browserLease = null)
     {
         _diagnostics = diagnostics ?? FallbackDiagnosticIdSource.Instance;
         _snapshot = snapshot;
@@ -225,6 +227,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _turnExecutions = turnExecutions;
         _artifacts = artifacts ?? new FixtureArtifactReferenceAuthorizer();
         _tools = tools ?? new SessionToolExecutor();
+        _browserLease = browserLease;
         _voice = voice ?? new VoiceAvailability { SpeechAdaptersResolved = true };
         _recognition = recognition
             ?? _voice.EffectivePlan.RecognitionCapabilities
@@ -895,9 +898,30 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _responseCts?.Cancel();
         _ttsCts?.Cancel();
         await StopRecognitionAsync().ConfigureAwait(false);
+        await ReleaseBrowserAsync().ConfigureAwait(false);
         _lifetime.Dispose();
         _responseCts?.Dispose();
         _wake.Dispose();
+    }
+
+    private async Task ReleaseBrowserAsync()
+    {
+        if (_browserLease is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _browserLease.ReleaseAsync(SessionId).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception)
+        {
+            _logger.LogWarning("Browser session release failed.");
+        }
     }
 
     private async Task RunAsync(CancellationToken cancellationToken)
@@ -4853,6 +4877,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 .ConfigureAwait(false);
         }
 
+        await ReleaseBrowserAsync().ConfigureAwait(false);
         Signal(ref _abandonPersist);
         RequestPersist(
             _snapshot with

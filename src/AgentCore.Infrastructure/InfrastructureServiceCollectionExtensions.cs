@@ -343,6 +343,7 @@ public static class InfrastructureServiceCollectionExtensions
             sp.GetRequiredService<BrowserOptions>(),
             sp.GetService<ILoggerFactory>()));
         services.TryAddSingleton<IBrowserSession>(sp => sp.GetRequiredService<PlaywrightBrowserSession>());
+        services.TryAddSingleton<IBrowserSessionLease>(sp => sp.GetRequiredService<PlaywrightBrowserSession>());
         services.AddHostedService(sp => sp.GetRequiredService<PlaywrightBrowserSession>());
         services.TryAddSingleton<SessionToolExecutor>(provider => new SessionToolExecutor(
             provider.GetService<RoleKnowledgeService>(),
@@ -390,7 +391,8 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IUserTurnCapabilityValidator>(),
                 provider.GetRequiredService<IStructuredMemoryService>(),
                 provider.GetRequiredService<IConversationTurnExecutionStore>(),
-                provider.GetRequiredService<IDiagnosticIdSource>());
+                provider.GetRequiredService<IDiagnosticIdSource>(),
+                provider.GetService<IBrowserSessionLease>());
         });
         services.TryAddSingleton<ConversationExecutionCoordinator>();
         return services;

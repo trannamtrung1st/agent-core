@@ -27,6 +27,11 @@ public sealed record BrowserNavigateRequest(Guid SessionId, Uri Url);
 
 public sealed record BrowserActRequest(Guid SessionId, string Operation, string Ref, string? Value);
 
+public interface IBrowserSessionLease
+{
+    ValueTask ReleaseAsync(Guid sessionId, CancellationToken cancellationToken = default);
+}
+
 public interface IBrowserSession
 {
     bool IsAvailable { get; }

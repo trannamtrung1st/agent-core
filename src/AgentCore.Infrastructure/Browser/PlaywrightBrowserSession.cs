@@ -10,7 +10,7 @@ using Microsoft.Playwright;
 
 namespace AgentCore.Infrastructure.Browser;
 
-public sealed class PlaywrightBrowserSession : IBrowserSession, IHostedService
+public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionLease, IHostedService
 {
     private const string DescribeElement = """
         el => {
@@ -418,8 +418,9 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IHostedService
     internal IBrowserContext? ContextFor(Guid sessionId) =>
         _sessions.TryGetValue(sessionId, out var session) ? session.Context : null;
 
-    internal async Task ReleaseAsync(Guid sessionId)
+    public async ValueTask ReleaseAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (_sessions.TryRemove(sessionId, out var session))
         {
             RemoveRefs(sessionId);

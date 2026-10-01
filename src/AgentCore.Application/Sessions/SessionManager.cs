@@ -31,6 +31,7 @@ public sealed class SessionManager
     private readonly IAgentInstanceService? _instances;
     private readonly ITriggerPolicyRecoveryService? _triggerPolicyRecovery;
     private readonly AdminLifecycleCoordinator? _lifecycleGate;
+    private readonly IBrowserSessionLease? _browserLease;
 
     public SessionManager(
         IAgentDefinitionStore definitions,
@@ -47,7 +48,8 @@ public sealed class SessionManager
         IStructuredMemoryStore? structuredMemory = null,
         IAgentInstanceService? instances = null,
         ITriggerPolicyRecoveryService? triggerPolicyRecovery = null,
-        AdminLifecycleCoordinator? lifecycleGate = null)
+        AdminLifecycleCoordinator? lifecycleGate = null,
+        IBrowserSessionLease? browserLease = null)
     {
         _definitions = definitions;
         _store = store;
@@ -64,6 +66,7 @@ public sealed class SessionManager
         _instances = instances;
         _triggerPolicyRecovery = triggerPolicyRecovery;
         _lifecycleGate = lifecycleGate;
+        _browserLease = browserLease;
     }
 
     public Task<SessionSnapshot> CreateAsync(
@@ -498,6 +501,11 @@ public sealed class SessionManager
         if (_structuredMemory is not null)
         {
             await _structuredMemory.DeleteSessionAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (_browserLease is not null)
+        {
+            await _browserLease.ReleaseAsync(sessionId, cancellationToken).ConfigureAwait(false);
         }
 
         RuntimeTelemetry.Record("cleanup", RuntimeTelemetry.ElapsedMs(started));
@@ -1028,7 +1036,8 @@ public sealed class SessionRuntimeFactory(
     IUserTurnCapabilityValidator? turnCapabilities = null,
     IStructuredMemoryService? structuredMemory = null,
     IConversationTurnExecutionStore? turnExecutions = null,
-    IDiagnosticIdSource? diagnostics = null)
+    IDiagnosticIdSource? diagnostics = null,
+    IBrowserSessionLease? browserLease = null)
 {
     public SessionRuntime Create(SessionSnapshot snapshot, ISessionOutput output) =>
         new(
@@ -1057,5 +1066,6 @@ public sealed class SessionRuntimeFactory(
             turnCapabilities: turnCapabilities,
             structuredMemory: structuredMemory,
             turnExecutions: turnExecutions,
-            diagnostics: diagnostics);
+            diagnostics: diagnostics,
+            browserLease: browserLease);
 }
