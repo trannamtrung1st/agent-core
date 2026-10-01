@@ -4,7 +4,7 @@ Living roadmap: current status, active requirements, future dependency order, an
 
 Detailed architecture and behavior live in `/docs`. Historical implementation and freeze evidence live in `docs/reports/`. This file does not duplicate either.
 
-Reviewed against `main` through **`0d1cfdd`** on **2026-10-01**. Pre-P8 bounded follow-up after P7.7 is **closed** (hosted Synthetic [**`36667172857`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green on **`1cadf46`**). **P8** remains **frozen** on **`ca3eb23`** (hosted Synthetic [**`36696902928`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). **Post-freeze P8 follow-up is closed** on **`c9aec29`** (provider-contract **`6fda4c5`**, CI stabilization **`c9aec29`**, hosted Synthetic [**`36745126226`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green). That closure does not move or reopen the P8 freeze. **P8.5** is **closed** on **`1461567`** (hosted Synthetic [**`36770385588`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green). Bounded post-closure corrections on **`05e9406`** (assistant entry routing and tool-less Skill catalog), **`a1e0f8e`** (truncation diagnostics and tool budgets), and **`0d1cfdd`** (Playwright synchronization only) are **closed** on hosted Synthetic [**`36807383922`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36807383922) green. An SSE stream-idle timeout follow-up (transport-level idle, dispose-safe cancellation, 60 s default idle) is in progress and does not move the P8.5 closure SHA. **P9** follows and is not started.
+Reviewed against `main` through **`fff7761`** on **2026-10-01**. Pre-P8 bounded follow-up after P7.7 is **closed** (hosted Synthetic [**`36667172857`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green on **`1cadf46`**). **P8** remains **frozen** on **`ca3eb23`** (hosted Synthetic [**`36696902928`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). **Post-freeze P8 follow-up is closed** on **`c9aec29`** (provider-contract **`6fda4c5`**, CI stabilization **`c9aec29`**, hosted Synthetic [**`36745126226`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green). That closure does not move or reopen the P8 freeze. **P8.5** is **closed** on **`1461567`** (hosted Synthetic [**`36770385588`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green). Bounded post-closure corrections through **`0d1cfdd`** (assistant routing, truncation budgets, Playwright sync) are **closed** on hosted Synthetic [**`36807383922`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36807383922) green. A second bounded post-closure chain through **`fff7761`** (SSE idle at `ReadAsync`, Skill editor comma draft, no-chat Agent Step admission and execution state, response-function `displayText`) is **closed** on hosted Synthetic [**`36818061198`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36818061198) green; [appendix](docs/reports/p8.5-freeze-candidate.md). Neither chain moves the P8 or P8.5 freeze SHAs. **P9** is next and not started.
 
 Closure reports through P7.7 still say the next phase was P8. That sentence records the handoff at freeze time, when P8 meant harness/platform extensibility. Those reports were not rewritten. In this TODO that work is P9.
 
@@ -59,15 +59,15 @@ Clients cannot supply trusted diagnostic, correlation, or causation identity. JS
 
 **P8 — Agent Execution Contract, Application Actions & Skills** is **frozen** on `ca3eb23` (workflow [`36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). Post-freeze bounded follow-up (provider contract **`6fda4c5`**, CI stabilization **`c9aec29`**) is **closed** on hosted Synthetic [**`36745126226`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green. See `docs/reports/p8-freeze-candidate.md` (freeze narrative + appendix).
 
-**P8.5 — Application Messaging & Dynamic Skill Activation** is **closed** on `1461567` ([closure report](docs/reports/p8.5-freeze-candidate.md); hosted Synthetic [`36770385588`](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green). `app.message.send` and `skills.load` continue the same bounded user-turn execution. They do not change the P8 freeze. Post-closure corrections through **`0d1cfdd`** are recorded in that report's appendix and closed on hosted Synthetic [**`36807383922`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36807383922) green; they do not move the P8.5 closure SHA. P9 follows and is not started. P10 and P11 stay requirement-triggered.
+**P8.5 — Application Messaging & Dynamic Skill Activation** is **closed** on `1461567` ([closure report](docs/reports/p8.5-freeze-candidate.md); hosted Synthetic [`36770385588`](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green). `app.message.send` and `skills.load` continue the same bounded user-turn execution. They do not change the P8 freeze. Post-closure corrections through **`fff7761`** are recorded in that report's appendix (truncation wave **`36807383922`** on **`0d1cfdd`**, SSE/no-chat/editor wave **`36818061198`** on **`fff7761`**); they do not move the P8.5 closure SHA. **P9 — Harness / Platform Extensibility** is next and not started. P10 and P11 stay requirement-triggered.
 
 ---
 
 # Current roadmap
 
 1. **P0–P8 — frozen.** P7.5 is frozen on `70a5720`; P7.6 on `17d89ae`; P7.7 on `40a1d92`; and P8 on `ca3eb23`. Post-P7.7 / pre-P8 bounded follow-up is closed on `1cadf46`. Post-freeze P8 follow-up is **closed** on `c9aec29` (hosted Synthetic **`36745126226`** green).
-2. **P8.5 — Application Messaging & Dynamic Skill Activation — closed** on `1461567`.
-3. **P9 — Harness / Platform Extensibility — after P8.5.**
+2. **P8.5 — Application Messaging & Dynamic Skill Activation — closed** on `1461567` (post-closure corrections **closed** on **`fff7761`**, hosted Synthetic [**`36818061198`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36818061198) green).
+3. **P9 — Harness / Platform Extensibility — next, not started.**
 4. **P10 — Sandbox Evolution — when the current sandbox is insufficient.**
 5. **P11 — Multi-user + Production Infrastructure — when a real hosting or pilot requirement appears.**
 
@@ -820,7 +820,7 @@ P8.5 closes when an agent can send a bounded intermediate message to the trusted
 
 # P9 — Harness / platform extensibility
 
-**Status: after P8.5. Not active.**
+**Status: next milestone. Not started.**
 
 P9 starts only after P8.5 closes. Its prerequisites are the frozen P8 Agent Step, controller/action boundary, and Chat proof, plus P8.5 bounded current-application messaging and Core-admitted dynamic Skill activation. P9 consumes those contracts. It does not define them.
 
@@ -957,7 +957,7 @@ Orientation for what P8.5 can build on. Detail and gate history are in `/docs` a
 
 **P8.5 — Application Messaging & Dynamic Skill Activation.**
 
-P8 is frozen on `ca3eb23` (workflow [`36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). Post-freeze P8 follow-up is **closed** on `c9aec29` (workflow [`36745126226`](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green). P8.5 does not move or reopen that SHA. P8.5 is **closed** on `1461567` (hosted Synthetic [`36770385588`](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green; [closure report](docs/reports/p8.5-freeze-candidate.md)). Post-closure corrections through **`0d1cfdd`** are closed on hosted Synthetic [**`36807383922`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36807383922) green; the appendix records them and does not move that SHA. P9 follows and is not started.
+P8 is frozen on `ca3eb23` (workflow [`36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). Post-freeze P8 follow-up is **closed** on `c9aec29` (workflow [`36745126226`](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green). P8.5 does not move or reopen that SHA. P8.5 is **closed** on `1461567` (hosted Synthetic [`36770385588`](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green; [closure report](docs/reports/p8.5-freeze-candidate.md)). Post-closure corrections through **`fff7761`** are closed on hosted Synthetic [**`36818061198`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36818061198) green; the appendix records them and does not move that SHA. P9 is next and not started.
 
 Recorded P8 limits that P8.5 must address without treating them as already general:
 
