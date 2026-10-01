@@ -54,7 +54,17 @@ export function sessionErrorClass(category: string, code: string): SessionErrorC
     return "validation/protocol";
   }
 
-  if (cat === "provider" || cat === "model" || id.includes("provider") || id.includes("model") || id === "brainfailed") {
+  if (
+    cat === "provider"
+    || cat === "model"
+    || cat === "response"
+    || id.includes("provider")
+    || id.includes("model")
+    || id === "brainfailed"
+    || id === "invalidagentstep"
+    || id === "incompleteresponse"
+    || id === "blocked"
+  ) {
     return "provider/model";
   }
 

@@ -581,9 +581,22 @@ public sealed class SemanticResponseLanguageModelTests
         Assert.Equal(
             "chat.respond",
             actionObject.GetProperty("properties").GetProperty("kind").GetProperty("enum")[0].GetString());
-        Assert.Contains("disposition", AssistantResponseSchema.ResponseFunction.ParametersJson, StringComparison.Ordinal);
-        Assert.Equal(AssistantResponseSchema.JsonSchemaJson, AssistantResponseSchema.ResponseFunction.ParametersJson);
+        Assert.Contains("disposition", AssistantResponseSchema.DefaultResponseFunction.ParametersJson, StringComparison.Ordinal);
+        Assert.Equal(AssistantResponseSchema.JsonSchemaJson, AssistantResponseSchema.DefaultResponseFunction.ParametersJson);
         Assert.DoesNotContain("sessionId", AssistantResponseSchema.JsonSchemaJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Direct_user_turn_schema_requires_chat_respond_and_disallows_wait()
+    {
+        var schemaJson = AssistantResponseSchema.JsonSchemaFor(new ModelResponseContract(SpeechWillBeUsed: false, RequireChatResponse: true));
+        using var schema = System.Text.Json.JsonDocument.Parse(schemaJson);
+        var root = schema.RootElement;
+        var disposition = root.GetProperty("properties").GetProperty("disposition").GetProperty("enum");
+        Assert.Equal(["Continue", "Complete"], disposition.EnumerateArray().Select(item => item.GetString()!).ToArray());
+        Assert.False(root.GetProperty("properties").GetProperty("action").TryGetProperty("anyOf", out _));
+        Assert.Equal(1, root.GetProperty("properties").GetProperty("displayText").GetProperty("minLength").GetInt32());
+        Assert.DoesNotContain("Wait", disposition.EnumerateArray().Select(item => item.GetString()!), StringComparer.Ordinal);
     }
 
     [Theory]

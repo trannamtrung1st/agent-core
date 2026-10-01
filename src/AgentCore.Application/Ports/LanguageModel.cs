@@ -48,7 +48,7 @@ public sealed record ModelCapabilities(
 /// Provider-neutral request that the assistant response should follow the semantic envelope.
 /// <see cref="SpeechWillBeUsed"/> is assigned by SessionRuntime at conversational cutover (P2B-5), not here.
 /// </summary>
-public sealed record ModelResponseContract(bool SpeechWillBeUsed);
+public sealed record ModelResponseContract(bool SpeechWillBeUsed, bool RequireChatResponse = false);
 
 public enum ModelToolChoice
 {

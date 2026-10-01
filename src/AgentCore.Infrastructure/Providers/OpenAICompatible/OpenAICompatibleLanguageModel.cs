@@ -374,7 +374,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
 
         if (request.ResponseContract is not null && Capabilities.StructuredOutput)
         {
-            body["response_format"] = AssistantResponseSchema.OpenAiCompatibleResponseFormat;
+            body["response_format"] = AssistantResponseSchema.OpenAiCompatibleResponseFormat(request.ResponseContract);
         }
 
         var json = JsonSerializer.Serialize(body);

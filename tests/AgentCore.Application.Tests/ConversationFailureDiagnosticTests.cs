@@ -230,26 +230,6 @@ public sealed class ConversationFailureDiagnosticTests
     }
 
     [Fact]
-    public async Task Cancelled_generation_has_no_diagnostic_id()
-    {
-        var logs = new DiagnosticLogCapture<SessionRuntime>();
-        var diagnostics = new QueueDiagnosticIdSource([DiagnosticId]);
-        await using var runtime = CreateRuntime(
-            new ScriptedEventsModel([new ModelFailed(new ProviderFailure(ProviderErrorCode.Cancelled, "Generation cancelled."))]),
-            logs,
-            diagnostics);
-        Assert.True(await runtime.SubmitPersistedUserTextAsync("stop", Guid.Parse("019944af-00d7-7000-8000-000000000051")));
-        await runtime.WaitUntilIdleAsync();
-
-        var failed = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal(EntryStatus.Failed, failed.Status);
-        Assert.Null(failed.Failure);
-        Assert.DoesNotContain(Items(runtime), item => item.Payload is ErrorOutput error && error.DiagnosticId is not null);
-        Assert.DoesNotContain(logs.Entries, entry => entry.Level == LogLevel.Error);
-        Assert.Equal(DiagnosticId, diagnostics.NewId());
-    }
-
-    [Fact]
     public async Task Superseded_response_does_not_publish_its_failure_on_the_active_response()
     {
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -277,6 +257,32 @@ public sealed class ConversationFailureDiagnosticTests
             assistants.Where(entry => entry.EntryId != active.EntryId),
             entry => Assert.Null(entry.Failure));
         Assert.Equal(DiagnosticId, diagnostics.NewId());
+    }
+
+    [Fact]
+    public async Task Cancelled_provider_failure_stores_a_failure_reference_and_error_event()
+    {
+        var diagnostics = new QueueDiagnosticIdSource([DiagnosticId, SecondDiagnosticId]);
+        await using var runtime = CreateRuntime(
+            new ScriptedEventsModel(
+            [
+                new ModelFailed(new ProviderFailure(ProviderErrorCode.Cancelled, "Generation cancelled."))
+            ]),
+            new DiagnosticLogCapture<SessionRuntime>(),
+            diagnostics);
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "cancelled",
+            Guid.Parse("019944af-00d7-7000-8000-000000000091")));
+        await runtime.WaitUntilIdleAsync();
+
+        var failed = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Failed, failed.Status);
+        Assert.Equal(DiagnosticId, failed.Failure!.DiagnosticId);
+        Assert.Equal("provider", failed.Failure.Category);
+        Assert.Equal("Cancelled", failed.Failure.Code);
+        var error = Assert.IsType<ErrorOutput>(Assert.Single(Items(runtime), item => item.Payload is ErrorOutput).Payload);
+        Assert.Equal(DiagnosticId, error.DiagnosticId);
+        Assert.Equal("Cancelled", error.Code);
     }
 
     [Fact]

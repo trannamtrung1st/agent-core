@@ -107,6 +107,7 @@ describe("failed assistant details", () => {
       />
     );
     expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Failed — show error details" })).toHaveClass("ant-tag-solid");
     expect(screen.getByText("Could not speak.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Failed — show error details" }));
     const details = await screen.findByTestId("diagnostic-details");

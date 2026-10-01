@@ -334,7 +334,9 @@ public sealed partial class SessionRuntime
         if (entryId is not null)
         {
             _activeEntryId = entryId;
-            UpdateAssistant(EntryStatus.Failed);
+            UpdateAssistant(
+                EntryStatus.Failed,
+                failure: ReferenceForResponse(brain.Context, brain.ResponseId, "ProactiveHandleFailed", exception: null));
             _activeEntryId = null;
         }
 

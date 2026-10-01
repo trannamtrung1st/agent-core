@@ -17,6 +17,8 @@ describe("sessionError", () => {
     expect(sessionErrorClass("Validation", "ValidationError")).toBe("validation/protocol");
     expect(sessionErrorClass("Protocol", "ProtocolError")).toBe("validation/protocol");
     expect(sessionErrorClass("Provider", "ModelError")).toBe("provider/model");
+    expect(sessionErrorClass("response", "InvalidAgentStep")).toBe("provider/model");
+    expect(sessionErrorClass("response", "IncompleteResponse")).toBe("provider/model");
     expect(sessionErrorClass("Speech", "RecognitionFailed")).toBe("speech/capture/playback");
     expect(sessionErrorClass("Session", "SessionPersistenceUnavailable")).toBe("persistence");
     expect(sessionErrorClass("Transport", "Backpressure")).toBe("transport/reconnect");

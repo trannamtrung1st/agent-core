@@ -462,6 +462,15 @@ body,
   font-weight: 600;
 }
 
+.chat-message-status-interactive.ant-tag {
+  cursor: pointer;
+}
+
+.chat-message-status-interactive.ant-tag:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: 2px;
+}
+
 .chat-message-user .chat-message-status.ant-tag {
   align-self: flex-end;
 }

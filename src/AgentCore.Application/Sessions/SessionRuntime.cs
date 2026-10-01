@@ -1788,7 +1788,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             ResponseId = input.ResponseId,
             ReasoningEffort = _snapshot.ModelSelection?.ReasoningEffort,
             ResponseContract = new ModelResponseContract(
-                SpeechWillBeUsed: _snapshot.Mode == SessionMode.Voice)
+                SpeechWillBeUsed: _snapshot.Mode == SessionMode.Voice,
+                RequireChatResponse: input.Trigger.Kind == TriggerKind.UserTurn)
         };
         var model = ResolveSessionModel(
             input.Trigger.Kind == TriggerKind.UserTurn ? ModelPurpose.Conversation : ModelPurpose.Initiative);
@@ -2768,6 +2769,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     {
                         RuntimeTelemetry.Record("tools", RuntimeTelemetry.ElapsedMs(toolStarted), call.Name);
                         RuntimeTelemetry.RecordDropped("tools");
+                        if (cancellationToken.IsCancellationRequested)
+                        {
+                            return;
+                        }
+
                         await PublishProgressAsync(
                                 cause,
                                 request.ResponseId,
@@ -2777,12 +2783,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 ResponseProgressMessages.RunningTools,
                                 CancellationToken.None)
                             .ConfigureAwait(false);
+                        var toolTimedOut = overallCts.IsCancellationRequested;
                         await MailboxModelAsync(
                                 cause,
                                 request.ResponseId,
                                 new ModelFailed(new ProviderFailure(
-                                    ProviderErrorCode.Cancelled,
-                                    "Tool execution cancelled.")),
+                                    toolTimedOut ? ProviderErrorCode.Timeout : ProviderErrorCode.Cancelled,
+                                    toolTimedOut ? "Tool deadline reached." : "Tool execution cancelled.")),
                                 CancellationToken.None)
                             .ConfigureAwait(false);
                         return;
@@ -2844,7 +2851,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
             }
 
-            if (toolDeadline)
+            if (toolDeadline
+                && generateToken.IsCancellationRequested
+                && !cancellationToken.IsCancellationRequested)
             {
                 await MailboxModelAsync(
                         cause,
@@ -2856,14 +2865,31 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
             await FinishOwnedProgressAsync(cause, ResponseProgressState.Failed, CancellationToken.None, request.ResponseId)
                 .ConfigureAwait(false);
-            await MailboxModelAsync(
-                    cause,
-                    request.ResponseId,
-                    new ModelFailed(new ProviderFailure(ProviderErrorCode.Cancelled, "Generation cancelled.")),
-                    CancellationToken.None)
-                .ConfigureAwait(false);
+            if (toolDeadline)
+            {
+                await MailboxModelAsync(
+                        cause,
+                        request.ResponseId,
+                        new ModelFailed(new ProviderFailure(ProviderErrorCode.Timeout, "Tool deadline reached.")),
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await MailboxModelAsync(
+                        cause,
+                        request.ResponseId,
+                        new ModelFailed(new ProviderFailure(ProviderErrorCode.Cancelled, "Generation cancelled.")),
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {
@@ -3387,7 +3413,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _responseLifecycle = failed ? ResponseLifecycle.Failed : ResponseLifecycle.Completed;
         _initiativeHeld = false;
         var status = failed ? EntryStatus.Failed : EntryStatus.Completed;
-        var storedFailure = failed ? failure : null;
+        var storedFailure = failed
+            ? failure ?? ReferenceForResponse(context, responseId, "ResponseFailed", exception: null)
+            : null;
         UpdateAssistant(status, failure: storedFailure);
         await FinishOwnedProgressAsync(
                 context,
@@ -3426,14 +3454,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 ct)
                             .ConfigureAwait(false);
                     }
-                    else if (storedFailure is not null)
+                    else
                     {
                         await PublishAsync(
                                 new SessionOutput(
                                     context,
                                     capturedResponseId,
                                     new ErrorOutput(
-                                        storedFailure.Category,
+                                        storedFailure!.Category,
                                         storedFailure.Code,
                                         string.IsNullOrWhiteSpace(safeMessage) ? "The response failed." : safeMessage,
                                         false,
@@ -3610,26 +3638,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _snapshot = _snapshot with { Entries = entries, UpdatedAt = _time.GetUtcNow() };
     }
 
-    private static bool RequiresDiagnosticId(ProviderErrorCode code) =>
-        code is ProviderErrorCode.Unavailable
-            or ProviderErrorCode.Unknown
-            or ProviderErrorCode.Timeout
-            or ProviderErrorCode.InvalidResponse
-            or ProviderErrorCode.InvalidRequest
-            or ProviderErrorCode.Authentication
-            or ProviderErrorCode.RateLimited;
-
-    private FailureReference? ReferenceForProvider(
+    private FailureReference ReferenceForProvider(
         EventContext context,
         Guid responseId,
         ProviderFailure failure,
         Guid? existingId)
     {
-        if (!RequiresDiagnosticId(failure.Code))
-        {
-            return null;
-        }
-
         if (existingId is { } supplied && supplied != Guid.Empty)
         {
             return new FailureReference(

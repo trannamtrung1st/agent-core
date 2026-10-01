@@ -32,6 +32,10 @@ public sealed class AgentStepUserTurnAdmissionTests
             runtime.Snapshot.Entries,
             entry => entry.Role == ConversationRole.Assistant);
         Assert.Equal(EntryStatus.Failed, firstAssistant.Status);
+        Assert.NotNull(firstAssistant.Failure);
+        Assert.Equal("response", firstAssistant.Failure!.Category);
+        Assert.Equal("InvalidAgentStep", firstAssistant.Failure.Code);
+        Assert.NotEqual(Guid.Empty, firstAssistant.Failure.DiagnosticId);
 
         var firstUser = runtime.Snapshot.Entries.Single(entry => entry is { Role: ConversationRole.User, Text: "first" });
         var firstSourceEventId = firstUser.SourceEventId ?? firstUser.EntryId;
@@ -59,6 +63,9 @@ public sealed class AgentStepUserTurnAdmissionTests
         Assert.NotEqual(firstExecution.ExecutionId, secondExecution.ExecutionId);
         Assert.NotEqual(firstExecution.ResponseId, secondExecution.ResponseId);
         Assert.Contains(output.Items, item => item.Payload is ErrorOutput);
+        var projected = PublicHistory.FromEntry(firstAssistant);
+        Assert.Equal(firstAssistant.Failure!.DiagnosticId, projected.Failure!.DiagnosticId);
+        Assert.Equal("InvalidAgentStep", projected.Failure.Code);
         Assert.Contains(
             output.Items,
             item => item.Payload is ResponseCompletedOutput completed

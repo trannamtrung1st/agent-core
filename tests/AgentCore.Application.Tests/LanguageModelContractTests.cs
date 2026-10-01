@@ -16,6 +16,8 @@ public sealed class LanguageModelContractTests
         Assert.Same(contract, request.ResponseContract);
         Assert.True(contract.SpeechWillBeUsed);
         Assert.False(new ModelResponseContract(SpeechWillBeUsed: false).SpeechWillBeUsed);
+        Assert.False(contract.RequireChatResponse);
+        Assert.True(new ModelResponseContract(SpeechWillBeUsed: false, RequireChatResponse: true).RequireChatResponse);
     }
 
     [Fact]

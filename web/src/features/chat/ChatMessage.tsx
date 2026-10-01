@@ -1,8 +1,8 @@
-import { Button, Flex, Tag, Typography, theme } from "antd";
+import { Button, Flex, Typography, theme } from "antd";
 import type { HistoryBlock, HistoryEntry, MemoryReceiptView } from "../../state/sessionStore";
 import { HistoryAttachmentView } from "./AttachmentPreview";
 import { formatChatTime, statusLabel } from "./chatTime";
-import { DiagnosticDetails } from "./DiagnosticDetails";
+import { ChatMessageStatus } from "./ChatMessageStatus";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { shouldShowSpeechText, SpokenText } from "./SpokenText";
 
@@ -99,40 +99,7 @@ export function ChatMessage({
       ) : null}
       {status ? (
         <Flex align="center" gap={token.paddingXS} className="chat-message-status-row">
-          {entry.status === "failed" && entry.failure?.diagnosticId ? (
-            <DiagnosticDetails
-              fields={{
-                diagnosticId: entry.failure.diagnosticId,
-                correlationId: entry.failure.correlationId,
-                sessionId,
-                responseId: entry.responseId,
-                category: entry.failure.category,
-                code: entry.failure.code,
-                failureReason: entry.failure.failureReason,
-                providerResponseChannel: entry.failure.providerResponseChannel
-              }}
-              trigger={
-                <Button
-                  danger
-                  type="primary"
-                  size="small"
-                  className="chat-message-status"
-                  aria-label="Failed — show error details"
-                >
-                  {status}
-                </Button>
-              }
-            />
-          ) : (
-            <Tag
-              color={entry.status === "failed" ? "red" : "gold"}
-              variant="solid"
-              className="chat-message-status"
-              title={entry.interruptReason ?? undefined}
-            >
-              {status}
-            </Tag>
-          )}
+          <ChatMessageStatus entry={entry} sessionId={sessionId} label={status} />
         </Flex>
       ) : null}
     </li>

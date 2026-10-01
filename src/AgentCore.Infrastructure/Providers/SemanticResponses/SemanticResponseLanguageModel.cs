@@ -259,7 +259,7 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILangu
         var tools = instructed.Tools?.ToList() ?? [];
         if (!tools.Any(tool => tool.Name == AssistantResponseSchema.ResponseFunctionName))
         {
-            tools.Add(AssistantResponseSchema.ResponseFunction);
+            tools.Add(AssistantResponseSchema.ResponseFunction(request.ResponseContract!));
         }
 
         var sessionTools = request.Tools is { Count: > 0 };
