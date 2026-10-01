@@ -11,7 +11,6 @@ public sealed partial class SessionRuntime
     private ConversationTurnExecution? _boundConversationExecution;
     private Guid? _pendingTerminalExecutionId;
     private Guid? _pendingTerminalResponseId;
-    private bool _pendingNoChatTerminal;
 
     public async Task<bool> DispatchConversationExecutionAsync(
         Guid executionId,
@@ -386,25 +385,6 @@ public sealed partial class SessionRuntime
 
             var now = _time.GetUtcNow();
             var open = await _turnExecutions.ListOpenForSessionAsync(SessionId, cancellationToken).ConfigureAwait(false);
-            if (_pendingNoChatTerminal)
-            {
-                foreach (var execution in open.Where(item => item.ResponseId == primary.ResponseId))
-                {
-                    var generation = execution.Claim?.Generation
-                        ?? throw new InvalidOperationException("Open conversational execution is missing its claim.");
-                    await _turnExecutions
-                        .CommitCancellationAsync(
-                            execution.ExecutionId,
-                            execution.Revision,
-                            generation,
-                            now,
-                            cancellationToken)
-                        .ConfigureAwait(false);
-                }
-
-                return;
-            }
-
             var assistant = saved.Entries.LastOrDefault(entry =>
                 entry.Role == ConversationRole.Assistant && entry.ResponseId == primary.ResponseId);
 
@@ -497,6 +477,5 @@ public sealed partial class SessionRuntime
     {
         _pendingTerminalExecutionId = null;
         _pendingTerminalResponseId = null;
-        _pendingNoChatTerminal = false;
     }
 }

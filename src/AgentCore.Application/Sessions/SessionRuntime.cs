@@ -4048,7 +4048,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _accumulator.Reset();
         _semanticReady = false;
         _chatAcceptedTimestamp = 0;
-        _pendingNoChatTerminal = true;
         _responseTerminal = true;
         _responseLifecycle = ResponseLifecycle.Superseded;
         RemoveActiveAssistantPlaceholder();
@@ -4063,22 +4062,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var capturedResponseId = responseId;
         var capturedEntryId = _activeEntryId;
         var heard = CurrentHeard();
-        var userTerminal = _activeResponseTriggerKind == TriggerKind.UserTurn;
-        if (userTerminal)
-        {
-            MarkConversationExecutionPendingTerminal();
-        }
 
         RequestPersist(
             _snapshot,
-            userConversationTerminal: userTerminal,
             then: async ct =>
             {
-                if (userTerminal)
-                {
-                    await FinalizeConversationExecutionAfterPersistAsync(_snapshot, ct).ConfigureAwait(false);
-                }
-
                 var stillOwns = _activeResponseId == capturedResponseId && _activeEntryId == capturedEntryId;
                 if (stillOwns)
                 {
