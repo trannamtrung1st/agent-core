@@ -155,24 +155,27 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
             var drafts = new Dictionary<int, ToolCallDraft>();
             var idle = TimeSpan.FromSeconds(Math.Max(1, _options.Timeouts.StreamIdleSeconds));
 
-            await using var enumerator = parser.ReadDataPayloadsAsync(stream, totalCts.Token)
+            await using var enumerator = parser
+                .ReadDataPayloadsAsync(stream, idle, _time, totalCts.Token, cancellationToken, totalCts.Token)
                 .GetAsyncEnumerator(totalCts.Token);
             while (true)
             {
-                using var idleCts = CancellationTokenSource.CreateLinkedTokenSource(totalCts.Token);
-                using var idleTimer = ScheduleCancel(_time, idleCts, idle);
-                bool moved;
                 ModelFailed? streamFailed = null;
+                string? payload = null;
                 try
                 {
-                    moved = await enumerator.MoveNextAsync().AsTask().WaitAsync(idleCts.Token).ConfigureAwait(false);
+                    if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
+                    {
+                        break;
+                    }
+
+                    payload = enumerator.Current;
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
                     streamFailed = Fail(ProviderErrorCode.Cancelled, "Generation cancelled.");
-                    moved = false;
                 }
-                catch (OperationCanceledException)
+                catch (SseStreamIdleTimeoutException)
                 {
                     if (emittedText)
                     {
@@ -184,13 +187,22 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                         emittedText
                             ? "Language model stream ended unexpectedly."
                             : "Language model stream idle timeout.");
-                    moved = false;
+                }
+                catch (SseStreamTotalTimeoutException)
+                {
+                    if (emittedText)
+                    {
+                        _breaker.RecordFailure();
+                    }
+
+                    streamFailed = Fail(
+                        ProviderErrorCode.Timeout,
+                        "Language model response timed out.");
                 }
                 catch (InvalidOperationException)
                 {
                     _breaker.RecordFailure();
                     streamFailed = Fail(ProviderErrorCode.Unavailable, "Language model stream exceeded the event size limit.");
-                    moved = false;
                 }
 
                 if (streamFailed is not null)
@@ -199,12 +211,11 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                     yield break;
                 }
 
-                if (!moved)
+                if (payload is null)
                 {
                     break;
                 }
 
-                var payload = enumerator.Current;
                 if (string.Equals(payload, "[DONE]", StringComparison.Ordinal))
                 {
                     sawDone = true;

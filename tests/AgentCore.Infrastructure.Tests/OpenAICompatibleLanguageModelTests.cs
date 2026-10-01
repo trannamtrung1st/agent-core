@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Events;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -189,6 +190,95 @@ public sealed class OpenAICompatibleLanguageModelTests
         var failed = Assert.IsType<ModelFailed>(events[^1]);
         Assert.Equal(ProviderErrorCode.Unavailable, failed.Failure.Code);
         Assert.Equal(1, handler.PostCount);
+    }
+
+    [Fact]
+    public async Task Open_stream_idle_timeout_emits_one_timeout_without_escaping_exception()
+    {
+        var handler = new ScriptedHandler([], holdOpen: true);
+        var model = Create(
+            handler,
+            timeouts: new ProviderTimeoutOptions { SetupSeconds = 10, StreamIdleSeconds = 1, TotalSeconds = 120 });
+        var events = new List<ModelGenerationEvent>();
+        await foreach (var item in model.GenerateAsync(Request()))
+        {
+            events.Add(item);
+        }
+
+        var failed = Assert.Single(events.OfType<ModelFailed>());
+        Assert.Equal(ProviderErrorCode.Timeout, failed.Failure.Code);
+        Assert.Equal("Language model stream idle timeout.", failed.Failure.SafeMessage);
+        Assert.Equal(1, handler.PostCount);
+    }
+
+    [Fact]
+    public async Task Total_response_deadline_maps_to_total_timeout_message()
+    {
+        var handler = new ScriptedHandler([], holdOpen: true);
+        var model = Create(
+            handler,
+            timeouts: new ProviderTimeoutOptions { SetupSeconds = 10, StreamIdleSeconds = 120, TotalSeconds = 1 });
+        var events = new List<ModelGenerationEvent>();
+        await foreach (var item in model.GenerateAsync(Request()))
+        {
+            events.Add(item);
+        }
+
+        var failed = Assert.Single(events.OfType<ModelFailed>());
+        Assert.Equal(ProviderErrorCode.Timeout, failed.Failure.Code);
+        Assert.Equal("Language model response timed out.", failed.Failure.SafeMessage);
+    }
+
+    [Fact]
+    public async Task Session_runtime_open_stream_idle_timeout_emits_one_terminal_failure()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero));
+        var handler = new ScriptedHandler([], holdOpen: true);
+        var output = new CapturingSessionOutput();
+        var ids = new DeterministicIdGenerator(
+            Enumerable.Range(1, 32).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
+            [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
+        var store = new InMemoryMemoryStore();
+        var definition = new AgentDefinition(
+            1,
+            "examiner",
+            1,
+            new AgentIdentity("Alex", "Speaking examiner", "desc", "tone"),
+            ["goal"],
+            "You are Alex.",
+            new BehaviorPolicy("acknowledgeThenContinue", true, true),
+            new ConversationPolicy("concise", true, "en", 256),
+            new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]),
+            new VoiceConfiguration(true, "default", 1.0),
+            new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
+            new Dictionary<string, string>());
+        var now = time.GetUtcNow();
+        var snapshot = new SessionSnapshot(
+            1, ids.NewSessionId(), 1, definition, SessionMode.Text, null,
+            SessionStatus.Created, [], string.Empty, 0, null, null, now, now);
+        await store.SaveAsync(snapshot, 0);
+        await using var runtime = new SessionRuntime(
+            snapshot,
+            Create(
+                handler,
+                timeouts: new ProviderTimeoutOptions { SetupSeconds = 10, StreamIdleSeconds = 1, TotalSeconds = 120 }),
+            new DefaultAgentBrain(new PromptContextBuilder()),
+            store,
+            output,
+            ids,
+            time,
+            NullLogger<SessionRuntime>.Instance);
+        await runtime.SubmitUserTextAsync("Hello");
+        using var idleWait = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await runtime.WaitUntilIdleAsync(idleWait.Token);
+        Assert.DoesNotContain(
+            output.Items,
+            item => item.Payload is ErrorOutput error
+                && error.Code == nameof(ProviderErrorCode.Unknown)
+                && error.SafeMessage.Contains("Generation failed.", StringComparison.Ordinal));
+        Assert.Contains(
+            output.Items,
+            item => item.Payload is ResponseCompletedOutput completed && completed.Failed);
     }
 
     [Fact]
@@ -1399,7 +1489,9 @@ public sealed class OpenAICompatibleLanguageModelTests
         bool structuredOutput = false,
         bool tools = false,
         bool vision = false,
-        bool reasoningObject = false) =>
+        bool reasoningObject = false,
+        FakeTimeProvider? time = null,
+        ProviderTimeoutOptions? timeouts = null) =>
         new(
             new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
             new LanguageModelProviderOptions
@@ -1412,8 +1504,10 @@ public sealed class OpenAICompatibleLanguageModelTests
                 Tools = tools,
                 Vision = vision,
                 ReasoningObjectWire = reasoningObject,
-                ExcludeVisibleReasoning = reasoningObject
-            });
+                ExcludeVisibleReasoning = reasoningObject,
+                Timeouts = timeouts ?? new ProviderTimeoutOptions()
+            },
+            time);
 
     private static ModelRequest Request() =>
         new(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Hi")]);

@@ -27,6 +27,8 @@
         "Providers__LanguageModels__primary-llm__ExcludeVisibleReasoning": "true",
         "Providers__LanguageModels__primary-llm__Vision": "false",
         "Providers__LanguageModels__primary-llm__Tools": "true",
+        "Providers__LanguageModels__primary-llm__Timeouts__StreamIdleSeconds": "60",
+        "Providers__LanguageModels__primary-llm__Timeouts__TotalSeconds": "120",
         "Providers__ModelCatalog__DefaultKey": "deepseek-v41-flash",
         "Providers__ModelCatalog__Models__0__Key": "deepseek-v41-flash",
         "Providers__ModelCatalog__Models__0__DisplayName": "DeepSeek V4.1 Flash",

@@ -162,7 +162,7 @@ Complete conceptual appsettings.json example, **Markdown only**:
         "ApiKey": "",
         "DefaultModel": "configured-model",
         "AdditionalHeaders": {},
-        "Timeouts": {"SetupSeconds": 10, "StreamIdleSeconds": 20, "TotalSeconds": 120}
+        "Timeouts": {"SetupSeconds": 10, "StreamIdleSeconds": 60, "TotalSeconds": 120}
       }
     },
     "ModelCatalog": {
@@ -189,7 +189,7 @@ Complete conceptual appsettings.json example, **Markdown only**:
         "ApiKey": "",
         "DefaultModel": "configured-stt-model",
         "AdditionalHeaders": {},
-        "Timeouts": {"SetupSeconds": 10, "StreamIdleSeconds": 20, "TotalSeconds": 120}
+        "Timeouts": {"SetupSeconds": 10, "StreamIdleSeconds": 60, "TotalSeconds": 120}
       },
       "Synthesis": {
         "Adapter": "Synthetic",
@@ -198,7 +198,7 @@ Complete conceptual appsettings.json example, **Markdown only**:
         "DefaultModel": "configured-tts-model",
         "AdditionalHeaders": {},
         "Voices": {"default": "configured-voice", "fr-FR": "nova"},
-        "Timeouts": {"SetupSeconds": 10, "StreamIdleSeconds": 20, "TotalSeconds": 120}
+        "Timeouts": {"SetupSeconds": 10, "StreamIdleSeconds": 60, "TotalSeconds": 120}
       }
     }
   },
@@ -287,7 +287,7 @@ Preferred hosted text override (merge into the synthetic example when Profile=Re
         "ApiKey": "<OPENROUTER_API_KEY>",
         "DefaultModel": "deepseek/deepseek-v4.1-flash",
         "AdditionalHeaders": {},
-        "Timeouts": {"SetupSeconds": 10, "StreamIdleSeconds": 20, "TotalSeconds": 120}
+        "Timeouts": {"SetupSeconds": 10, "StreamIdleSeconds": 60, "TotalSeconds": 120}
       }
     }
   }

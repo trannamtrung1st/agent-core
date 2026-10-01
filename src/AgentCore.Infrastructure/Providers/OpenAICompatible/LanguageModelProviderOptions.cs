@@ -41,7 +41,7 @@ public sealed class LanguageModelProviderOptions
 public sealed class ProviderTimeoutOptions
 {
     public int SetupSeconds { get; set; } = 10;
-    public int StreamIdleSeconds { get; set; } = 20;
+    public int StreamIdleSeconds { get; set; } = 60;
     public int TotalSeconds { get; set; } = 120;
 }
 

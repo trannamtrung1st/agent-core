@@ -8,7 +8,11 @@ internal sealed class SseStreamParser
 
     public async IAsyncEnumerable<string> ReadDataPayloadsAsync(
         Stream stream,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        TimeSpan streamIdle,
+        TimeProvider time,
+        CancellationToken totalCancellationToken,
+        CancellationToken userCancellationToken,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var decoder = Encoding.UTF8.GetDecoder();
         var byteBuffer = new byte[1024];
@@ -16,10 +20,19 @@ internal sealed class SseStreamParser
         var line = new StringBuilder();
         var data = new StringBuilder();
         var eventBytes = 0;
+        var idle = streamIdle <= TimeSpan.Zero ? TimeSpan.FromSeconds(1) : streamIdle;
 
         while (true)
         {
-            var read = await stream.ReadAsync(byteBuffer, cancellationToken).ConfigureAwait(false);
+            var read = await ReadWithIdleAsync(
+                    stream,
+                    byteBuffer,
+                    idle,
+                    time,
+                    totalCancellationToken,
+                    userCancellationToken,
+                    cancellationToken)
+                .ConfigureAwait(false);
             if (read == 0)
             {
                 var flushed = decoder.GetChars(byteBuffer, 0, 0, charBuffer, 0, flush: true);
@@ -45,6 +58,41 @@ internal sealed class SseStreamParser
             {
                 yield return payload;
             }
+        }
+    }
+
+    private static async ValueTask<int> ReadWithIdleAsync(
+        Stream stream,
+        Memory<byte> buffer,
+        TimeSpan streamIdle,
+        TimeProvider time,
+        CancellationToken totalCancellationToken,
+        CancellationToken userCancellationToken,
+        CancellationToken enumeratorCancellationToken)
+    {
+        using var readCts = CancellationTokenSource.CreateLinkedTokenSource(
+            totalCancellationToken,
+            enumeratorCancellationToken);
+        using var idleTimer = time.CreateTimer(
+            static state => ((CancellationTokenSource)state!).Cancel(),
+            readCts,
+            streamIdle,
+            Timeout.InfiniteTimeSpan);
+        try
+        {
+            return await stream.ReadAsync(buffer, readCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (userCancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException) when (totalCancellationToken.IsCancellationRequested)
+        {
+            throw new SseStreamTotalTimeoutException();
+        }
+        catch (OperationCanceledException)
+        {
+            throw new SseStreamIdleTimeoutException();
         }
     }
 
