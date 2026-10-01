@@ -152,9 +152,9 @@ public sealed class BargeInTests
         var harness = await LiveVoiceAsync();
         await harness.Output.WaitForAsync(item => item.Payload is AudioFrameOutput);
         var utterance = Guid.Parse("019944af-0000-7000-8000-0000000000c6");
+        await WaitForInputAsync(harness.Runtime, InputActivity.Listening, harness.Time);
         await harness.Runtime.SubmitSpeechAsync(new SpeechStarted(utterance), 0.95);
-        await harness.Runtime.WaitUntilMailboxDrainedAsync();
-        Assert.Equal(InputActivity.UserSpeaking, harness.Runtime.Input);
+        await WaitForInputAsync(harness.Runtime, InputActivity.UserSpeaking, harness.Time);
         var scheduled = harness.Runtime.TimerGeneration;
         Assert.True(harness.Runtime.TryAdmitAudio(Frame(1, 0)));
         Assert.False(harness.Runtime.TryAdmitAudio(Frame(3, 960)));
@@ -187,7 +187,28 @@ public sealed class BargeInTests
         await runtime.SubmitUserTextAsync("Hello");
         await output.WaitForAsync(item => item.Payload is AudioFrameOutput);
         await runtime.WaitUntilMailboxDrainedAsync();
+        await WaitForInputAsync(runtime, InputActivity.Listening, time);
         return new VoiceHarness(runtime, time, output);
+    }
+
+    private static async Task WaitForInputAsync(
+        SessionRuntime runtime,
+        InputActivity expected,
+        FakeTimeProvider time,
+        int maxSteps = 200)
+    {
+        for (var step = 0; step < maxSteps; step++)
+        {
+            await runtime.WaitUntilMailboxDrainedAsync();
+            if (runtime.Input == expected)
+            {
+                return;
+            }
+
+            time.Advance(TimeSpan.FromMilliseconds(10));
+        }
+
+        Assert.Equal(expected, runtime.Input);
     }
 
     private static FakeTimeProvider Clock() =>
