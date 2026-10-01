@@ -238,7 +238,7 @@ public sealed class ApplicationMessageTests
         Assert.Contains(ToolCatalog.AppMessageSend, model.Requests[1].Tools!.Select(tool => tool.Name));
         Assert.Contains("duplicate", Text(model.Requests[3]), StringComparison.Ordinal);
         Assert.Contains("only text", Text(model.Requests[4]), StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("limit reached", Text(model.Requests[8]), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("remainingMessages", Text(model.Requests[6]), StringComparison.Ordinal);
         foreach (var request in model.Requests)
         {
             var text = Text(request);
@@ -250,7 +250,7 @@ public sealed class ApplicationMessageTests
         }
 
         var admitted = runtime.Snapshot.Entries.Where(entry => entry.Role == ConversationRole.ApplicationMessage).ToArray();
-        Assert.Equal([FirstText, SecondText, ThirdText], admitted.Select(entry => entry.Text).ToArray());
+        Assert.Equal([FirstText, SecondText, ThirdText, FourthText], admitted.Select(entry => entry.Text).ToArray());
         var assistant = Assert.Single(runtime.Snapshot.Entries, entry =>
             entry.Role == ConversationRole.Assistant && entry.Status == EntryStatus.Completed);
         Assert.Equal("Shown", assistant.Text);
@@ -268,10 +268,10 @@ public sealed class ApplicationMessageTests
             Assert.True(entry.ApplicationMessageEffectKey!.Length <= ApplicationMessageLimits.MaxEffectKeyCharacters);
         }
 
-        Assert.Equal(3, admitted.Select(entry => entry.ApplicationMessageEffectKey).Distinct().Count());
+        Assert.Equal(4, admitted.Select(entry => entry.ApplicationMessageEffectKey).Distinct().Count());
         var published = output.Items.Where(item => item.Payload is HistoryEntryUpsertOutput).ToArray();
         var upserts = published.Select(item => (HistoryEntryUpsertOutput)item.Payload).ToArray();
-        Assert.Equal([FirstText, SecondText, ThirdText], upserts.Select(item => item.Entry.Text).ToArray());
+        Assert.Equal([FirstText, SecondText, ThirdText, FourthText], upserts.Select(item => item.Entry.Text).ToArray());
         Assert.Equal(upserts.Select(item => item.Entry.ResponseId).ToArray(), published.Select(item => item.ResponseId).ToArray());
         Assert.All(upserts, item =>
         {
@@ -346,6 +346,79 @@ public sealed class ApplicationMessageTests
         Assert.NotEqual(superseded, assistant.ResponseId);
         Assert.Contains(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.User && entry.Text == "take over");
         Assert.DoesNotContain(output.Items, item => item.Payload is SpeechOutputSegmentOutput or SpeechOutputCompletedOutput);
+    }
+
+    [Fact]
+    public async Task Ten_progress_messages_are_admitted_with_substantive_work_between_each()
+    {
+        var model = new TenProgressLanguageModel();
+        var turns = new InMemoryConversationTurnExecutionStore();
+        await using var runtime = Create(model, turns, Definition());
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("build files");
+        await runtime.WaitUntilIdleAsync();
+
+        var messages = runtime.Snapshot.Entries
+            .Where(entry => entry.Role == ConversationRole.ApplicationMessage)
+            .Select(entry => entry.Text)
+            .ToArray();
+        Assert.Equal(10, messages.Length);
+        Assert.Equal(Enumerable.Range(1, 10).Select(index => $"progress-{index}").ToArray(), messages);
+        var assistant = Assert.Single(
+            runtime.Snapshot.Entries,
+            entry => entry.Role == ConversationRole.Assistant && entry.Status == EntryStatus.Completed);
+        Assert.Equal("All files written.", assistant.Text);
+    }
+
+    [Fact]
+    public async Task Thirteenth_message_is_rejected_after_twelve_admissions()
+    {
+        var model = new TwelveMessageCapLanguageModel();
+        var turns = new InMemoryConversationTurnExecutionStore();
+        await using var runtime = Create(model, turns, Definition());
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("status");
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(12, runtime.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.ApplicationMessage));
+        Assert.Contains("over_budget", Text(model.Requests[^2]), StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            ToolCatalog.AppMessageSend,
+            model.Requests[^1].Tools?.Select(tool => tool.Name) ?? []);
+    }
+
+    [Fact]
+    public async Task Duplicate_send_returns_budget_without_consuming_count()
+    {
+        var model = new MessagingLanguageModel();
+        var turns = new InMemoryConversationTurnExecutionStore();
+        await using var runtime = Create(model, turns, Definition());
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("hello");
+        await runtime.WaitUntilIdleAsync();
+
+        var json = model.Requests[5].Messages
+            .Where(message => message.Role == ModelRole.Tool)
+            .Select(message => message.Text)
+            .First(text => text.Contains("\"duplicate\":true", StringComparison.Ordinal));
+        using var duplicate = JsonDocument.Parse(json);
+        Assert.Equal(11, duplicate.RootElement.GetProperty("remainingMessages").GetInt32());
+    }
+
+    [Fact]
+    public async Task Next_user_turn_receives_a_fresh_message_budget_in_tool_description()
+    {
+        var model = new TwoTurnBudgetLanguageModel();
+        var turns = new InMemoryConversationTurnExecutionStore();
+        await using var runtime = Create(model, turns, Definition());
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("hello");
+        await runtime.WaitUntilIdleAsync();
+        await runtime.SubmitUserTextAsync("again");
+        await runtime.WaitUntilIdleAsync();
+
+        var description = Assert.Single(model.Requests[2].Tools!, tool => tool.Name == ToolCatalog.AppMessageSend).Description;
+        Assert.Contains("12 intermediate messages remain", description, StringComparison.Ordinal);
     }
 
     private static string Text(ModelRequest request) =>
@@ -598,6 +671,136 @@ public sealed class ApplicationMessageTests
             await Release.Task;
             cancellationToken.ThrowIfCancellationRequested();
             yield return new ModelCompleted(ModelStopReason.ToolCalls);
+        }
+    }
+
+    private sealed class TenProgressLanguageModel : ILanguageModel
+    {
+        private int _generation;
+
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            _ = request;
+            var generation = Interlocked.Increment(ref _generation);
+            await Task.Yield();
+            cancellationToken.ThrowIfCancellationRequested();
+            if (generation % 2 == 1 && generation <= 19)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall($"wk-{generation}", ToolCatalog.WorkspaceList, "{}"));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            if (generation % 2 == 0 && generation <= 20)
+            {
+                var index = generation / 2;
+                yield return new ModelToolCallEvent(new ModelToolCall(
+                    $"m-{index}",
+                    ToolCatalog.AppMessageSend,
+                    JsonSerializer.Serialize(new { text = $"progress-{index}" })));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            yield return new ModelSemanticResponseReady(
+                new ModelSemanticResponse(
+                    "All files written.",
+                    new ModelSpeechProjection(ModelSpeechMode.Same, null),
+                    []));
+            yield return new ModelCompleted(ModelStopReason.Completed);
+        }
+    }
+
+    private sealed class TwelveMessageCapLanguageModel : ILanguageModel
+    {
+        private int _generation;
+
+        public List<ModelRequest> Requests { get; } = [];
+
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            var generation = Interlocked.Increment(ref _generation);
+            await Task.Yield();
+            cancellationToken.ThrowIfCancellationRequested();
+            if (generation == 1)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall("wk-1", ToolCatalog.WorkspaceList, "{}"));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            if (generation >= 2 && generation <= 13)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall(
+                    $"m-{generation}",
+                    ToolCatalog.AppMessageSend,
+                    JsonSerializer.Serialize(new { text = $"notice-{generation - 1}" })));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            if (generation == 14)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall(
+                    "m-over",
+                    ToolCatalog.AppMessageSend,
+                    JsonSerializer.Serialize(new { text = "one-too-many" })));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            yield return new ModelSemanticResponseReady(
+                new ModelSemanticResponse("Done", new ModelSpeechProjection(ModelSpeechMode.Same, null), []));
+            yield return new ModelCompleted(ModelStopReason.Completed);
+        }
+    }
+
+    private sealed class TwoTurnBudgetLanguageModel : ILanguageModel
+    {
+        private int _generation;
+
+        public List<ModelRequest> Requests { get; } = [];
+
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            var generation = Interlocked.Increment(ref _generation);
+            await Task.Yield();
+            cancellationToken.ThrowIfCancellationRequested();
+            if (generation == 1)
+            {
+                yield return new ModelSemanticResponseReady(
+                    new ModelSemanticResponse(
+                        "Hi",
+                        new ModelSpeechProjection(ModelSpeechMode.Same, null),
+                        []));
+                yield return new ModelCompleted(ModelStopReason.Completed);
+                yield break;
+            }
+
+            if (generation == 2)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall("wk-2", ToolCatalog.WorkspaceList, "{}"));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            yield return new ModelSemanticResponseReady(
+                new ModelSemanticResponse("Done", new ModelSpeechProjection(ModelSpeechMode.Same, null), []));
+            yield return new ModelCompleted(ModelStopReason.Completed);
         }
     }
 

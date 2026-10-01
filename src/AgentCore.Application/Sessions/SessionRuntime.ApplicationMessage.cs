@@ -119,17 +119,21 @@ public sealed partial class SessionRuntime
         var duplicate = existing.FirstOrDefault(entry =>
             string.Equals(entry.ApplicationMessageEffectKey, effectKey, StringComparison.Ordinal)
             || string.Equals(entry.Text, text, StringComparison.Ordinal));
+        var budget = ApplicationMessageBudget.FromSnapshot(
+            _snapshot.Entries,
+            input.ResponseId,
+            _applicationMessagePolicy);
         if (duplicate is not null)
         {
             return new ApplicationMessageMailboxResult(
-                ApplicationMessageAdmission.Duplicate(duplicate.ApplicationMessageEffectKey!),
+                ApplicationMessageAdmission.Duplicate(duplicate.ApplicationMessageEffectKey!, budget),
                 "duplicate");
         }
 
-        if (existing.Length >= ApplicationMessageLimits.MaxAdmittedPerExecution)
+        if (!budget.CanAdmit(text.Length))
         {
             return ApplicationMessageMailboxResult.Failed(
-                ApplicationMessageAdmission.Error("invalid", "Application message limit reached."),
+                ApplicationMessageAdmission.OverBudget(budget),
                 "over_budget");
         }
 
@@ -157,7 +161,13 @@ public sealed partial class SessionRuntime
                 cancellationToken)
             .ConfigureAwait(false);
         await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
-        return new ApplicationMessageMailboxResult(ApplicationMessageAdmission.Success(effectKey), "admitted");
+        var budgetAfter = ApplicationMessageBudget.FromSnapshot(
+            _snapshot.Entries,
+            input.ResponseId,
+            _applicationMessagePolicy);
+        return new ApplicationMessageMailboxResult(
+            ApplicationMessageAdmission.Success(effectKey, budgetAfter),
+            "admitted");
     }
 
     private ApplicationMessageMailboxResult? ApplicationMessageFence(ApplicationMessageRequested input)

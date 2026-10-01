@@ -5,9 +5,14 @@ namespace AgentCore.Application.Agents;
 
 public static class ApplicationMessageLimits
 {
-    public const int MaxCharacters = 2000;
-    public const int MaxAdmittedPerExecution = 3;
     public const int MaxEffectKeyCharacters = 200;
+
+    public static int MaxCharacters => ApplicationMessagePolicy.Default.MaxCharactersPerMessage;
+
+    public static int MaxAdmittedPerExecution => ApplicationMessagePolicy.Default.MaxAdmittedPerExecution;
+
+    public static int MaxAggregateCharactersPerExecution =>
+        ApplicationMessagePolicy.Default.MaxAggregateCharactersPerExecution;
 }
 
 public sealed record ApplicationMessageMailboxResult(string ToolResultJson, string Outcome)
@@ -81,11 +86,33 @@ public static class ApplicationMessageAdmission
         return true;
     }
 
-    public static string Success(string effectKey) =>
-        JsonSerializer.Serialize(new { ok = true, effectId = effectKey });
+    public static string Success(string effectKey, ApplicationMessageBudget budgetAfter) =>
+        JsonSerializer.Serialize(new
+        {
+            ok = true,
+            effectId = effectKey,
+            remainingMessages = budgetAfter.RemainingMessages,
+            remainingCharacters = budgetAfter.RemainingCharacters
+        });
 
-    public static string Duplicate(string effectKey) =>
-        JsonSerializer.Serialize(new { ok = true, duplicate = true, effectId = effectKey });
+    public static string Duplicate(string effectKey, ApplicationMessageBudget budget) =>
+        JsonSerializer.Serialize(new
+        {
+            ok = true,
+            duplicate = true,
+            effectId = effectKey,
+            remainingMessages = budget.RemainingMessages,
+            remainingCharacters = budget.RemainingCharacters
+        });
+
+    public static string OverBudget(ApplicationMessageBudget budget) =>
+        JsonSerializer.Serialize(new
+        {
+            error = "over_budget",
+            message = "Intermediate message budget exhausted.",
+            remainingMessages = budget.RemainingMessages,
+            remainingCharacters = budget.RemainingCharacters
+        });
 
     public static string Error(string code, string message) =>
         JsonSerializer.Serialize(new { error = code, message });

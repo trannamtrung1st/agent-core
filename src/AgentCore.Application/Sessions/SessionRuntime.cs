@@ -57,6 +57,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly IArtifactReferenceAuthorizer _artifacts;
     private readonly SessionToolExecutor _tools;
     private bool _intermediateMessagingAllowed;
+    private readonly ApplicationMessagePolicy _applicationMessagePolicy = ApplicationMessagePolicy.Default;
     private readonly InteractionPolicy _policy;
     private readonly VoiceAvailability _voice;
     private readonly object _audioGate = new();
@@ -2503,6 +2504,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 .ToArray();
     }
 
+    private ApplicationMessageBudget ApplicationMessageBudgetFor(Guid responseId) =>
+        ApplicationMessageBudget.FromSnapshot(_snapshot.Entries, responseId, _applicationMessagePolicy);
+
     private ModelRequest WithOfferedTools(
         ModelRequest request,
         IReadOnlyList<ModelToolDefinition>? authorizedTools,
@@ -2512,6 +2516,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var tools = ApplicationMessageToolOffer.Apply(
             authorizedTools,
             _intermediateMessagingAllowed,
+            ApplicationMessageBudgetFor(request.ResponseId),
             _snapshot.Definition,
             trigger,
             _tools.ConfigurationGate,

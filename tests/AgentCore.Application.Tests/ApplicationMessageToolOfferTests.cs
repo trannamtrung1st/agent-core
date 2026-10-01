@@ -1,3 +1,4 @@
+using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
@@ -20,6 +21,7 @@ public sealed class ApplicationMessageToolOfferTests
         var offered = ApplicationMessageToolOffer.Apply(
             authorized,
             intermediateMessagingAllowed: true,
+            ApplicationMessageBudget.Fresh(),
             definition,
             trigger,
             ToolConfigurationGates.AllowAll,
@@ -43,12 +45,54 @@ public sealed class ApplicationMessageToolOfferTests
         var gated = ApplicationMessageToolOffer.Apply(
             authorized,
             intermediateMessagingAllowed: false,
+            ApplicationMessageBudget.Fresh(),
             definition,
             trigger,
             ToolConfigurationGates.AllowAll,
             modelSupportsTools: true)!;
 
         Assert.Equal([ToolCatalog.WorkspaceList], gated.Select(tool => tool.Name));
+    }
+
+    [Fact]
+    public void Apply_omits_app_message_when_budget_is_exhausted()
+    {
+        var definition = Definition([ToolCatalog.WorkspaceList]);
+        var trigger = new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, "hi");
+        var authorized = new[] { ToolRegistry.Get(ToolCatalog.WorkspaceList).ModelDefinition };
+        var exhausted = new ApplicationMessageBudget(12, 0, ApplicationMessagePolicy.Default);
+
+        var offered = ApplicationMessageToolOffer.Apply(
+            authorized,
+            intermediateMessagingAllowed: true,
+            exhausted,
+            definition,
+            trigger,
+            ToolConfigurationGates.AllowAll,
+            modelSupportsTools: true)!;
+
+        Assert.Equal([ToolCatalog.WorkspaceList], offered.Select(tool => tool.Name));
+    }
+
+    [Fact]
+    public void Apply_description_includes_remaining_message_count()
+    {
+        var definition = Definition([ToolCatalog.WorkspaceList]);
+        var trigger = new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, "hi");
+        var authorized = new[] { ToolRegistry.Get(ToolCatalog.WorkspaceList).ModelDefinition };
+        var budget = new ApplicationMessageBudget(3, 100, ApplicationMessagePolicy.Default);
+
+        var offered = ApplicationMessageToolOffer.Apply(
+            authorized,
+            intermediateMessagingAllowed: true,
+            budget,
+            definition,
+            trigger,
+            ToolConfigurationGates.AllowAll,
+            modelSupportsTools: true)!;
+
+        var description = Assert.Single(offered, tool => tool.Name == ToolCatalog.AppMessageSend).Description;
+        Assert.Contains("9 intermediate messages remain", description, StringComparison.Ordinal);
     }
 
     private static AgentDefinition Definition(IReadOnlyList<string> tools) =>
