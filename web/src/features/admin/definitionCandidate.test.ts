@@ -6,6 +6,7 @@ import {
   candidateToJson,
   candidatesEqual,
   patchRecord,
+  readSkills,
   writeModelDefault,
   writePath,
   writeSkills
@@ -149,6 +150,23 @@ describe("definitionCandidate", () => {
     expect(cleared.modelDefaults).toBeNull();
   });
 
+  it("keeps a trailing comma in skill list fields while editing", () => {
+    const edited = writeSkills(sample, [
+      {
+        id: "demo.skill",
+        name: "Demo",
+        description: "",
+        procedure: "PROC",
+        activationKeywords: "silly joke,",
+        requiredCapabilities: "workspace.read,",
+        resourcePaths: ""
+      }
+    ]);
+    const skill = readSkills(edited)[0];
+    expect(skill.activationKeywords).toBe("silly joke,");
+    expect(skill.requiredCapabilities).toBe("workspace.read,");
+  });
+
   it("round-trips skills and omits an empty list", () => {
     const withExtra = writeSkills(sample, [
       {
@@ -180,11 +198,23 @@ describe("definitionCandidate", () => {
       id: "refund.handle",
       name: "Refund",
       procedure: "REFUND_PROCEDURE",
-      activationKeywords: ["refund", "return"],
-      requiredCapabilities: ["workspace.read", "chat.respond"],
-      resourcePaths: ["notes/refund.md"],
+      activationKeywords: "refund, return",
+      requiredCapabilities: "workspace.read, chat.respond",
+      resourcePaths: "notes/refund.md",
       marker: "keep"
     });
+    expect(candidateForPersistence(preserved).skills).toEqual([
+      {
+        id: "refund.handle",
+        name: "Refund",
+        description: "Handle a refund",
+        procedure: "REFUND_PROCEDURE",
+        activationKeywords: ["refund", "return"],
+        requiredCapabilities: ["workspace.read", "chat.respond"],
+        resourcePaths: ["notes/refund.md"],
+        marker: "keep"
+      }
+    ]);
     expect(candidateToJson(preserved)).toContain("REFUND_PROCEDURE");
     const applied = applyCandidateJson(candidateToJson(preserved));
     expect(applied.ok).toBe(true);

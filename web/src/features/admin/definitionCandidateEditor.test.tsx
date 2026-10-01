@@ -255,6 +255,8 @@ describe("definition candidate editor", () => {
     setText("Skill 2 id", "refund.handle");
     setText("Skill 2 name", "Refund");
     setText("Skill 2 procedure", "REFUND_PROCEDURE");
+    setText("Skill 2 activation keywords", "refund,");
+    expect(screen.getByLabelText("Skill 2 activation keywords")).toHaveValue("refund,");
     setText("Skill 2 activation keywords", "refund, return");
     setText("Skill 2 required capabilities", "workspace.read, chat.respond");
     setText("Skill 2 resource paths", "notes/refund.md");

@@ -33,9 +33,9 @@ export function readSkills(candidate: DefinitionCandidate): SkillDraft[] {
       name: readSkillString(row.name),
       description: readSkillString(row.description),
       procedure: readSkillString(row.procedure),
-      activationKeywords: joinSkillList(row.activationKeywords),
-      requiredCapabilities: joinSkillList(row.requiredCapabilities),
-      resourcePaths: joinSkillList(row.resourcePaths)
+      activationKeywords: readSkillListField(row.activationKeywords),
+      requiredCapabilities: readSkillListField(row.requiredCapabilities),
+      resourcePaths: readSkillListField(row.resourcePaths)
     };
   });
 }
@@ -60,9 +60,9 @@ export function writeSkills(candidate: DefinitionCandidate, skills: SkillDraft[]
         name: skill.name,
         description: skill.description,
         procedure: skill.procedure,
-        activationKeywords: splitSkillList(skill.activationKeywords),
-        requiredCapabilities: splitSkillList(skill.requiredCapabilities),
-        resourcePaths: splitSkillList(skill.resourcePaths)
+        activationKeywords: skill.activationKeywords,
+        requiredCapabilities: skill.requiredCapabilities,
+        resourcePaths: skill.resourcePaths
       };
     })
   };
@@ -70,6 +70,14 @@ export function writeSkills(candidate: DefinitionCandidate, skills: SkillDraft[]
 
 function readSkillString(value: unknown) {
   return typeof value === "string" ? value : "";
+}
+
+function readSkillListField(value: unknown) {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return joinSkillList(value);
 }
 
 function joinSkillList(value: unknown) {
@@ -84,8 +92,44 @@ function splitSkillList(value: string) {
   return value.split(",").map((item) => item.trim()).filter((item) => item.length > 0);
 }
 
+function normalizeSkillLists(candidate: DefinitionCandidate): DefinitionCandidate {
+  const raw = candidate.skills;
+  if (!Array.isArray(raw)) {
+    return candidate;
+  }
+
+  return {
+    ...candidate,
+    skills: raw.map((item) => {
+      if (item === null || typeof item !== "object" || Array.isArray(item)) {
+        return item;
+      }
+
+      const row = item as Record<string, unknown>;
+      return {
+        ...row,
+        activationKeywords: normalizeSkillListValue(row.activationKeywords),
+        requiredCapabilities: normalizeSkillListValue(row.requiredCapabilities),
+        resourcePaths: normalizeSkillListValue(row.resourcePaths)
+      };
+    })
+  };
+}
+
+function normalizeSkillListValue(value: unknown): string[] {
+  if (typeof value === "string") {
+    return splitSkillList(value);
+  }
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter((item) => item.length > 0);
+}
+
 export function candidateForPersistence(candidate: DefinitionCandidate): DefinitionCandidate {
-  return clearSpeechAliasesWhenVoiceOff(omitBlankKnowledgeSources(candidate));
+  return clearSpeechAliasesWhenVoiceOff(omitBlankKnowledgeSources(normalizeSkillLists(candidate)));
 }
 
 function clearSpeechAliasesWhenVoiceOff(candidate: DefinitionCandidate): DefinitionCandidate {
