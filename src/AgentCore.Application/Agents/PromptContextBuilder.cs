@@ -72,7 +72,7 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
             new(ModelRole.System, sections.ModeSystem),
             new(ModelRole.System, sections.MemorySystem)
         };
-        if (context.Trigger.Kind == TriggerKind.UserTurn)
+        if (context.Trigger.Kind == TriggerKind.UserTurn && context.ModelSupportsTools)
         {
             var catalog = BuildSkillCatalogSystem(context.Definition);
             if (catalog.Length > 0)

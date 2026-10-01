@@ -74,6 +74,18 @@ public sealed class DynamicSkillActivationTests
                 admission: new ToolExecutionAdmission(false, TriggerKind.ScheduledOccurrence)));
         Assert.Equal(3, DeterministicSkillSelector.MaxActiveSkills);
         Assert.Equal(4, ConversationTurnExecution.MaxPinnedActiveSkills);
+
+        var toolLess = Context(definition, ["refund.handle"]) with { ModelSupportsTools = false };
+        var omitted = new PromptContextBuilder().Build(toolLess, Guid.NewGuid());
+        Assert.DoesNotContain(
+            omitted.Messages,
+            message => message.Text.StartsWith(PromptContextBuilder.SkillCatalogPrefix, StringComparison.Ordinal)
+                || message.Text.Contains("Load a Skill with skills.load", StringComparison.Ordinal));
+        Assert.Contains(
+            "REFUND_PROCEDURE",
+            Assert.Single(omitted.Messages, PromptContextBuilder.IsActiveSkillSystem).Text,
+            StringComparison.Ordinal);
+        Assert.Empty(new PromptContextBuilder().OfferTools(definition, toolLess));
     }
 
     [Fact]
@@ -266,9 +278,14 @@ public sealed class DynamicSkillActivationTests
 
         var request = Assert.Single(model.Requests);
         Assert.True(request.Tools is null || request.Tools.Count == 0);
+        Assert.DoesNotContain(
+            request.Tools ?? [],
+            tool => tool.Name == ToolCatalog.SkillsLoad);
         var text = Text(request);
         Assert.Contains("ORDER_PROCEDURE", text, StringComparison.Ordinal);
         Assert.DoesNotContain("REFUND_PROCEDURE", text, StringComparison.Ordinal);
+        Assert.DoesNotContain(PromptContextBuilder.SkillCatalogPrefix, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Load a Skill with skills.load", text, StringComparison.Ordinal);
         var user = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.User);
         var pinned = await turns.GetBySourceEventAsync(runtime.SessionId, user.SourceEventId ?? user.EntryId);
         Assert.Equal(["order.lookup"], pinned!.PinnedActiveSkillIds);

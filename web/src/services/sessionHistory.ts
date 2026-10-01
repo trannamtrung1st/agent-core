@@ -154,7 +154,8 @@ export async function loadNewestHistoryPage(
     const durableTerminal = latest.liveResponseId == null
       ? null
       : incoming.find((entry) =>
-          entry.responseId === latest.liveResponseId
+          entry.role === "assistant"
+          && entry.responseId === latest.liveResponseId
           && (entry.status === "completed"
             || entry.status === "failed"
             || entry.status === "interrupted"));

@@ -171,6 +171,50 @@ describe("session history controller", () => {
     expect(state.outputState).toBe("idle");
   });
 
+  it("keeps the live assistant response when only the shared application message is completed", async () => {
+    const streaming = row(2, {
+      entryId: "assistant",
+      text: "",
+      status: "streaming",
+      responseId: "r2",
+      receivedTextEndExclusive: 0
+    });
+    const application = row(3, {
+      entryId: "application",
+      role: "applicationMessage",
+      text: "Still checking the billing case.",
+      status: "completed",
+      responseId: "r2",
+      receivedTextEndExclusive: 32
+    });
+    useSessionStore.setState({
+      ...emptySession(),
+      sessionId: "s1",
+      attachmentId: "a1",
+      connection: "ready",
+      conversationExecutionId: "x1",
+      liveResponseId: "r2",
+      outputState: "idle",
+      entries: [streaming]
+    });
+    vi.mocked(listSessionMessages).mockResolvedValue({
+      items: [payload(streaming), payload(application)],
+      nextAfter: 3,
+      hasMore: false,
+      hasOlder: false,
+      nextBefore: null
+    });
+
+    await loadNewestHistoryPage("s1", { replaceWindow: true });
+
+    const state = useSessionStore.getState();
+    expect(state.liveResponseId).toBe("r2");
+    expect(state.conversationExecutionId).toBe("x1");
+    expect(state.outputState).toBe("idle");
+    expect(state.entries.find((entry) => entry.role === "applicationMessage")?.status).toBe("completed");
+    expect(state.entries.find((entry) => entry.role === "assistant")?.status).toBe("streaming");
+  });
+
   it("opens a 500-entry transcript with one newest-page request", async () => {
     const newest = Array.from({ length: 50 }, (_, index) => payload(row(index + 451)));
     vi.mocked(listSessionMessages).mockResolvedValue({

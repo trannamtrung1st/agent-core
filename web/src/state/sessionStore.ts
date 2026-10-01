@@ -505,13 +505,18 @@ function failureForResponse(error: SessionErrorView | null, responseId: string |
   };
 }
 
+function isAssistantForResponse(entry: HistoryEntry, responseId: string | null): boolean {
+  return Boolean(responseId) && entry.role === "assistant" && entry.responseId === responseId;
+}
+
 function stampEntryFailure(entries: HistoryEntry[], error: SessionErrorView): HistoryEntry[] {
   const failure = failureForResponse(error, error.responseId ?? null);
   if (!failure) {
     return entries;
   }
 
-  return entries.map((entry) => (entry.responseId === error.responseId ? { ...entry, failure } : entry));
+  return entries.map((entry) =>
+    isAssistantForResponse(entry, error.responseId ?? null) ? { ...entry, failure } : entry);
 }
 
 export function pendingApprovalFromPayload(raw: unknown, activeResponseId: string | null): PendingApproval | null {
@@ -609,7 +614,7 @@ export function hasTextOffsetGap(state: SessionView, event: ServerEvent): boolea
     return false;
   }
 
-  const live = state.entries.find((entry) => entry.responseId === event.responseId);
+  const live = state.entries.find((entry) => isAssistantForResponse(entry, event.responseId));
   return live != null && asNumber(event.payload.textStart) > live.text.length;
 }
 
@@ -817,7 +822,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         ...state,
         lastServerSequence: event.sequence,
         entries: state.entries.map((entry) =>
-          entry.responseId === event.responseId
+          isAssistantForResponse(entry, event.responseId)
             ? { ...entry, speechText }
             : entry)
       };
@@ -829,7 +834,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
 
       const text = asString(event.payload.text);
       const start = asNumber(event.payload.textStart);
-      const live = state.entries.find((entry) => entry.responseId === event.responseId);
+      const live = state.entries.find((entry) => isAssistantForResponse(entry, event.responseId));
       const overlap = live && start <= live.text.length
         ? Math.min(live.text.length - start, text.length)
         : 0;
@@ -842,7 +847,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         ...state,
         lastServerSequence: event.sequence,
         entries: state.entries.map((entry) => {
-          if (entry.responseId !== event.responseId) {
+          if (!isAssistantForResponse(entry, event.responseId)) {
             return entry;
           }
 
@@ -885,7 +890,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         ...state,
         lastServerSequence: event.sequence,
         entries: state.entries.map((entry) => {
-          if (entry.responseId !== event.responseId) {
+          if (!isAssistantForResponse(entry, event.responseId)) {
             return entry;
           }
 
@@ -929,7 +934,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         tombstones,
         lastServerSequence: event.sequence,
         entries: state.entries.map((entry) =>
-          entry.responseId === event.responseId
+          isAssistantForResponse(entry, event.responseId)
             ? {
                 ...entry,
                 status,

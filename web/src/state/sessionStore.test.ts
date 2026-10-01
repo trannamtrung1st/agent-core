@@ -1136,6 +1136,133 @@ describe("application message delivery", () => {
     expect(state.entries.filter((entry) => entry.entryId === "app-1")).toHaveLength(1);
     expect(state.entries.filter((entry) => entry.role === "assistant")).toHaveLength(1);
   });
+
+  it("keeps a shared responseId from copying assistant output onto the application message", () => {
+    const applicationText = "I found the issue and I'm checking the logs.";
+    const assistantText = "I found the issue and the root cause is a missing receipt.";
+    const application = {
+      ...message,
+      text: applicationText,
+      receivedTextEndExclusive: applicationText.length
+    };
+    let state = applyServerEvent(
+      { ...emptySession(), attachmentId: "a1" },
+      event({
+        type: "agent.response.started",
+        sequence: 1,
+        responseId: "r1",
+        payload: { entryId: "a1", entrySequence: 1, trigger: "userTurn" }
+      })
+    );
+    state = applyServerEvent(
+      state,
+      event({
+        type: "session.entry.upsert",
+        sequence: 2,
+        responseId: "r1",
+        payload: { ...application, sequence: 0 }
+      })
+    );
+    expect(hasTextOffsetGap(
+      state,
+      event({
+        type: "agent.text.delta",
+        sequence: 3,
+        responseId: "r1",
+        payload: { text: assistantText, textStart: applicationText.length }
+      })
+    )).toBe(true);
+    state = applyServerEvent(
+      state,
+      event({
+        type: "agent.text.delta",
+        sequence: 3,
+        responseId: "r1",
+        payload: { text: assistantText, textStart: 0 }
+      })
+    );
+    state = applyServerEvent(
+      state,
+      event({
+        type: "agent.block.upsert",
+        sequence: 4,
+        responseId: "r1",
+        payload: { blockId: "b1", kind: "markdown", text: "**Cause**", fallbackText: "Cause" }
+      })
+    );
+    state = applyServerEvent(
+      state,
+      event({
+        type: "agent.speech.projection",
+        sequence: 5,
+        responseId: "r1",
+        payload: { mode: "custom", text: "Spoken answer." }
+      })
+    );
+    const beforeTerminal = state;
+    const completed = applyServerEvent(
+      beforeTerminal,
+      event({
+        type: "agent.response.completed",
+        sequence: 6,
+        responseId: "r1",
+        payload: { status: "completed", finishReason: "stop", speechText: "Spoken answer." }
+      })
+    );
+    const interrupted = applyServerEvent(
+      beforeTerminal,
+      event({
+        type: "agent.response.interrupted",
+        sequence: 6,
+        responseId: "r1",
+        payload: { reason: "userStop", speechText: "Spoken answer." }
+      })
+    );
+    const failed = applyServerEvent(
+      beforeTerminal,
+      event({
+        type: "error",
+        sequence: 6,
+        responseId: "r1",
+        payload: {
+          message: "The model stopped.",
+          code: "Unavailable",
+          category: "Provider",
+          fatal: false,
+          diagnosticId: "diag-shared"
+        }
+      })
+    );
+
+    for (const next of [completed, interrupted, failed]) {
+      const admitted = next.entries.find((entry) => entry.role === "applicationMessage");
+      expect(admitted?.text).toBe(applicationText);
+      expect(admitted?.blocks).toBeUndefined();
+      expect(admitted?.speechText ?? null).toBeNull();
+      expect(admitted?.status).toBe("completed");
+      expect(admitted?.failure ?? null).toBeNull();
+    }
+
+    const assistant = completed.entries.find((entry) => entry.role === "assistant");
+    expect(assistant?.text).toBe(assistantText);
+    expect(assistant?.blocks).toEqual([
+      {
+        blockId: "b1",
+        kind: "markdown",
+        text: "**Cause**",
+        fallbackText: "Cause",
+        attachmentId: null,
+        artifactId: null
+      }
+    ]);
+    expect(assistant?.speechText).toBe("Spoken answer.");
+    expect(assistant?.status).toBe("completed");
+    expect(assistant?.finishReason).toBe("stop");
+    expect(interrupted.entries.find((entry) => entry.role === "assistant")?.status).toBe("interrupted");
+    expect(interrupted.entries.find((entry) => entry.role === "assistant")?.interruptReason).toBe("userStop");
+    expect(failed.entries.find((entry) => entry.role === "assistant")?.failure?.diagnosticId).toBe("diag-shared");
+    expect(failed.entries.find((entry) => entry.role === "applicationMessage")?.status).toBe("completed");
+  });
 });
 
 describe("historyFromPayload", () => {
