@@ -1554,6 +1554,66 @@ describe("realtime race handling", () => {
     });
   });
 
+  it("does not send SetMode text when a muted voice session receives another session.ready", async () => {
+    const preflight = vi.spyOn(capture, "preflight").mockResolvedValue(undefined);
+    vi.spyOn(capture, "isPrepared").mockReturnValue(false);
+    vi.spyOn(capture, "muteInput").mockResolvedValue(undefined);
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      voiceAvailable: true,
+      mode: "text",
+      sttTransport: "serverAudio",
+      ttsTransport: "serverAudio",
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    await requestVoice();
+    expect(preflight).toHaveBeenCalled();
+    expect(invoke).toHaveBeenCalledWith("SetMode", expect.objectContaining({ payload: { mode: "voice" } }));
+    invoke.mockClear();
+    useSessionStore.setState({ mode: "voice", muted: false });
+    await setMuted(true);
+    expect(invoke).toHaveBeenCalledWith("SetMuted", expect.objectContaining({ payload: { muted: true } }));
+    expect(invoke).not.toHaveBeenCalledWith("SetMode", expect.anything());
+    useSessionStore.setState({ muted: true, mode: "voice" });
+    invoke.mockClear();
+    const attached = await hooks.attachWithBusyRetry!(1);
+    expect(attached).toBe(true);
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s1",
+      attachmentId: "a1",
+      eventId: "ready-live",
+      sequence: 4,
+      timestamp: "2026-09-15T00:00:04.000Z",
+      correlationId: "c1",
+      causationId: null,
+      responseId: null,
+      type: "session.ready",
+      payload: {
+        mode: "voice",
+        pendingMode: null,
+        status: "attached",
+        streamId: "stream-live",
+        muted: true,
+        agent: { name: "Alex", role: "Examiner", voiceAvailable: true },
+        history: [],
+        capabilities: {
+          stt: { transport: "serverAudio" },
+          tts: { transport: "serverAudio" }
+        }
+      }
+    });
+    expect(invoke).not.toHaveBeenCalledWith("SetMode", expect.anything());
+    expect(useSessionStore.getState().mode).toBe("voice");
+    expect(useSessionStore.getState().muted).toBe(true);
+  });
+
   it("clears a restored draft when reconnect history already has the turn", async () => {
     const eventId = "evt-user-1";
     const invoke = vi.fn().mockRejectedValue(new Error("Hub disconnected."));

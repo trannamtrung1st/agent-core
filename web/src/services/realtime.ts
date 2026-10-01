@@ -103,6 +103,7 @@ const duckingEnabled = true;
 let captureStreamId: string | null = null;
 let voiceRequest: Promise<void> | null = null;
 let voiceModeRequested = false;
+let clientOwnsVoice = false;
 let voiceEpoch = 0;
 let sendRequest: Promise<void> | null = null;
 const pendingStops = new Map<string, Promise<void>>();
@@ -634,7 +635,7 @@ function isTransientAttachError(ack: { error?: { code?: string } } | null | unde
 
 async function attachWithBusyRetry(lastServerSequence: number | null): Promise<boolean> {
   const loop = attachLoop;
-  voiceReadyDowngradeOnNextReady = !voiceModeRequested;
+  voiceReadyDowngradeOnNextReady = !voiceModeRequested && !clientOwnsVoice;
   let delayIndex = 0;
   let retriedOwnerCapability = false;
   while (loop === attachLoop && connection) {
@@ -700,6 +701,7 @@ async function attachWithBusyRetry(lastServerSequence: number | null): Promise<b
 }
 
 function handleHubClosed(): void {
+  clientOwnsVoice = false;
   attachLoop += 1;
   if (disposed) {
     return;
@@ -844,7 +846,12 @@ function handleEvent(raw: ServerEvent): void {
       useSessionStore.setState(orphanPatch);
     }
     const serverVoice = String(raw.payload?.mode ?? "") === "voice";
-    if (serverVoice && !voiceModeRequested && (voiceReadyDowngradeOnNextReady || passiveVoiceSuppressed)) {
+    if (
+      serverVoice
+      && !clientOwnsVoice
+      && !voiceModeRequested
+      && (voiceReadyDowngradeOnNextReady || passiveVoiceSuppressed)
+    ) {
       downgradePassiveVoiceAttach();
       passiveVoiceSuppressed = true;
     }
@@ -856,6 +863,7 @@ function handleEvent(raw: ServerEvent): void {
   if (raw.type === "session.state.changed") {
     const status = String(raw.payload.status ?? "");
     if (status === "paused" || status === "ended") {
+      clientOwnsVoice = false;
       clearAwaitingAgentResponseStart();
       void stopConnection();
       stopReceipts();
@@ -1688,6 +1696,7 @@ export const realtimeTestHooks =
           voiceReadyDowngradeOnNextReady = false;
           passiveVoiceSuppressed = false;
           voiceModeRequested = false;
+          clientOwnsVoice = false;
           clearAwaitingAgentResponseStart();
           pendingUserText = null;
           sendRequest = null;
@@ -1765,6 +1774,7 @@ async function startConnection(
       return;
     }
 
+    clientOwnsVoice = false;
     beginReconnectBudget();
     dropLiveTransport("reconnecting");
   });
@@ -1829,6 +1839,9 @@ async function attachAfterReconnect(): Promise<void> {
 }
 
 async function stopConnection(options?: { keepPreparedCapture?: boolean }): Promise<void> {
+  if (!options?.keepPreparedCapture) {
+    clientOwnsVoice = false;
+  }
   attachLoop += 1;
   abortPlayback();
   if (!options?.keepPreparedCapture) {
@@ -2069,6 +2082,7 @@ export async function beginNewChat(options?: { syncUrl?: boolean; urlMode?: "pus
   disposed = true;
   voiceEpoch += 1;
   voiceModeRequested = false;
+  clientOwnsVoice = false;
   clientTranscriptHeldForAgent = false;
   beginSessionHistory();
   await stopConnection();
@@ -3623,7 +3637,9 @@ export async function requestVoice(): Promise<void> {
           return;
         }
 
-        if (!ack?.accepted) {
+        if (ack?.accepted) {
+          clientOwnsVoice = true;
+        } else {
           capture.release();
           useSessionStore.setState({
             preflightReady: false,
@@ -3664,6 +3680,8 @@ export async function requestVoice(): Promise<void> {
 
 export async function cancelVoice(): Promise<void> {
   voiceModeRequested = false;
+  clientOwnsVoice = false;
+  passiveVoiceSuppressed = false;
   voiceEpoch += 1;
   try {
     const ack = await dispatchHubCommand((sequence) =>

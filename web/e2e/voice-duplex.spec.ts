@@ -36,3 +36,20 @@ test("voice stays full-duplex; mute is input-only; disconnect releases capture",
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.capturePrepared() ?? true)).toBe(false);
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.captureStreaming() ?? true)).toBe(false);
 });
+
+test("muted voice keeps a typed message in voice without Mode changed", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: /^Voice$/ })).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: /^Voice$/ }).click();
+  await expect(page.getByTestId("connection")).toHaveText("Listening…", { timeout: 15_000 });
+  await page.getByRole("button", { name: "Mute" }).click();
+  await expect(page.getByRole("button", { name: "Unmute" })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("button", { name: "Voice" })).toHaveAttribute("aria-pressed", "true");
+
+  await page.getByLabel("Message").fill("Hello");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Mode changed")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Voice" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Unmute" })).toBeVisible();
+});
