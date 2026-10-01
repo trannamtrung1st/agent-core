@@ -468,6 +468,14 @@ file sealed class TerminalEndFailingStore(string secret) : IMemoryStore
         CancellationToken cancellationToken = default) =>
         Inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
 
+    public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+        Guid sessionId,
+        long? afterEntrySequence,
+        long? beforeEntrySequence,
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        Inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
+
     public ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default) =>
         Inner.LoadProfileAsync(profileId, cancellationToken);
 

@@ -78,7 +78,7 @@ public sealed partial class SessionRuntime
         {
             ResetForTransportResume(input.Snapshot);
             await PublishAsync(
-                    new SessionOutput(input.Context, null, new ReadyOutput(BuildReady())),
+                    new SessionOutput(input.Context, null, new ReadyOutput(await BuildReadyAsync(cancellationToken))),
                     cancellationToken)
                 .ConfigureAwait(false);
         }

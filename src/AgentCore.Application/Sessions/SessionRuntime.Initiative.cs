@@ -167,7 +167,7 @@ public sealed partial class SessionRuntime
             then: async ct =>
             {
                 input.Persisted.TrySetResult(true);
-                await PublishAsync(new SessionOutput(input.Context, null, new ReadyOutput(BuildReady())), ct)
+                await PublishAsync(new SessionOutput(input.Context, null, new ReadyOutput(await BuildReadyAsync(ct))), ct)
                     .ConfigureAwait(false);
             },
             ended: input.Persisted);
@@ -240,7 +240,7 @@ public sealed partial class SessionRuntime
             PersistKind.ModelSelection,
             then: async ct =>
             {
-                await PublishAsync(new SessionOutput(input.Context, null, new ReadyOutput(BuildReady())), ct)
+                await PublishAsync(new SessionOutput(input.Context, null, new ReadyOutput(await BuildReadyAsync(ct))), ct)
                     .ConfigureAwait(false);
                 input.Persisted.TrySetResult(true);
             },

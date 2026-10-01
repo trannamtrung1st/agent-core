@@ -73,7 +73,10 @@ test("long session opens on the newest page and load-older keeps the anchor", as
   await openSeededSession(page, sessionId);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await expect(page.getByText("History seed 500")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("History seed 451")).toBeVisible();
+  await expect(page.getByText("History seed 450")).toHaveCount(0);
   await expect(page.getByText("History seed 1")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Load earlier messages" })).toBeVisible();
   await expect
     .poll(async () =>
       page.locator(".conversation-scroll").evaluate((element) => {
@@ -89,8 +92,7 @@ test("long session opens on the newest page and load-older keeps the anchor", as
       && !parsed.searchParams.has("after")
       && !parsed.searchParams.has("before");
   });
-  expect(newest.length).toBeGreaterThan(0);
-  expect(newest.every((url) => new URL(url).searchParams.get("limit") === "50")).toBe(true);
+  expect(newest).toHaveLength(0);
   expect(historyUrls.some((url) => new URL(url).searchParams.has("after"))).toBe(false);
 
   const scroller = page.locator(".conversation-scroll");
@@ -98,7 +100,14 @@ test("long session opens on the newest page and load-older keeps the anchor", as
     top: element.scrollTop,
     height: element.scrollHeight
   }));
+  const firstOlder = page.waitForRequest((request) => {
+    const parsed = new URL(request.url());
+    return parsed.pathname === `/api/v1/sessions/${sessionId}/messages`
+      && parsed.searchParams.get("before") === "451"
+      && parsed.searchParams.get("limit") === "50";
+  });
   await page.getByRole("button", { name: "Load earlier messages" }).click();
+  await firstOlder;
   await expect(page.getByText("History seed 450")).toBeVisible({ timeout: 15_000 });
   const afterFirst = await scroller.evaluate((element) => ({
     top: element.scrollTop,

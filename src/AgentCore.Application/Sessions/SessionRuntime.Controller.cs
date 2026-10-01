@@ -131,7 +131,7 @@ public sealed partial class SessionRuntime
             _snapshot,
             then: async ct =>
             {
-                await PublishAsync(new SessionOutput(input.Context, null, new ReadyOutput(BuildReady())), ct)
+                await PublishAsync(new SessionOutput(input.Context, null, new ReadyOutput(await BuildReadyAsync(ct))), ct)
                     .ConfigureAwait(false);
                 var plan = _voice.EffectivePlan;
                 RuntimeTelemetry.RecordDiagnostic("speech.input.transport", 0, plan.InputTransport);
@@ -422,46 +422,6 @@ public sealed partial class SessionRuntime
         }
 
         return projected with { Text = display[..publishedLength] };
-    }
-
-    private SessionReadyProjection BuildReady()
-    {
-        var voice = _snapshot.Mode == SessionMode.Voice;
-        var historyWindow = _snapshot.Entries.TakeLast(50).ToArray();
-        var history = historyWindow.Select(ProjectHistoryEntry).ToArray();
-        var hasOlderHistory = _snapshot.Entries.Count > historyWindow.Length;
-        long? historyBeforeSequence = hasOlderHistory && historyWindow.Length > 0
-            ? historyWindow[0].Sequence
-            : null;
-        return new SessionReadyProjection(
-            _snapshot.Mode,
-            _snapshot.PendingMode,
-            _snapshot.Status,
-            PublicHistory.FromSnapshot(_snapshot, _voice.IsAvailable(_snapshot.Definition, SpeechLocale.Resolve(_snapshot).Effective)),
-            voice ? _streamId : null,
-            voice ? CanonicalAudio.Format : null,
-            voice
-                ? _recognition
-                : new RecognitionCapabilities(false, false, false, false),
-            voice
-                ? _synthesizer?.Capabilities
-                    ?? _voice.EffectivePlan.SynthesisCapabilities
-                    ?? new SynthesisCapabilities(false, false, false, false, false, [])
-                : new SynthesisCapabilities(false, false, false, false, false, []),
-            voice ? _policy.BargeInPolicy : "none",
-            _snapshot.DurableLastEntrySequence,
-            history,
-            _activeResponseId,
-            _voice.EffectivePlan.InputTransport,
-            _voice.EffectivePlan.OutputTransport,
-            _snapshot.LifecycleStatus,
-            SpeechLocale.Resolve(_snapshot),
-            _snapshot.ModelSelection,
-            BuildPublicPendingApproval(),
-            _boundConversationExecution?.ExecutionId,
-            _outputActivity.ToString(),
-            hasOlderHistory,
-            historyBeforeSequence);
     }
 
     private Task PublishStateAsync(EventContext context, CancellationToken cancellationToken) =>
