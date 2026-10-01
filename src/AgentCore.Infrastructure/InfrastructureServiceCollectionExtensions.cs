@@ -82,7 +82,9 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetService<IBrowserSession>(),
             provider.GetRequiredService<BrowserOptions>().Enabled));
         services.TryAddSingleton<PromptContextBuilder>(provider =>
-            new PromptContextBuilder(provider.GetRequiredService<IToolConfigurationGate>()));
+            new PromptContextBuilder(
+                provider.GetRequiredService<IToolConfigurationGate>(),
+                provider.GetService<IBrowserSession>()));
         services.TryAddSingleton<DefinitionDraftSyntheticOfflineLanguageModel>();
         services.TryAddSingleton<IDefinitionDraftSyntheticBehaviorEvaluator, SyntheticDefinitionDraftBehaviorEvaluator>();
         services.TryAddSingleton<AgentDefinitionDraftSyntheticEvaluationRunner>();

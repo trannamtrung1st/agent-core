@@ -6,6 +6,7 @@ using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Browser;
+using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Tools;
 
 namespace AgentCore.Application.Tests;
@@ -472,6 +473,52 @@ public sealed class BrowserToolTests
     }
 
     [Fact]
+    public async Task V11_offer_names_the_fixture_start_and_denied_callers_do_not_navigate()
+    {
+        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var v10 = (await store.GetAsync("general-assistant", 10))!;
+        var v11 = (await store.GetAsync("general-assistant"))!;
+        Assert.Equal(11, v11.Version);
+        Assert.DoesNotContain("Trusted browser start:", ToolRegistry.Get(ToolCatalog.BrowserNavigate).ModelDefinition.Description, StringComparison.Ordinal);
+
+        var fake = new FakeBrowser();
+        var userTurn = Context(v11, TriggerKind.UserTurn, detached: false);
+        var offered = new PromptContextBuilder(ToolConfigurationGates.AllowAll, fake)
+            .OfferTools(v11, userTurn);
+        var navigate = Assert.Single(offered, tool => tool.Name == ToolCatalog.BrowserNavigate);
+        Assert.EndsWith("Trusted browser start: http://127.0.0.1:5091/.", navigate.Description, StringComparison.Ordinal);
+        Assert.Contains(ToolCatalog.SkillsLoad, offered.Select(tool => tool.Name));
+        Assert.DoesNotContain(
+            ToolCatalog.BrowserNavigate,
+            new PromptContextBuilder(ToolConfigurationGates.AllowAll, fake).OfferTools(v10, Context(v10, TriggerKind.UserTurn, detached: false)).Select(tool => tool.Name));
+        Assert.DoesNotContain(
+            "Trusted browser start:",
+            new PromptContextBuilder(ToolConfigurationGates.AllowAll, new FakeBrowser { IsAvailable = false })
+                .OfferTools(v11, userTurn)
+                .Single(tool => tool.Name == ToolCatalog.BrowserNavigate)
+                .Description,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            ToolCatalog.BrowserNavigate,
+            new PromptContextBuilder(ToolConfigurationGates.Unconfigured, fake).OfferTools(v11, userTurn).Select(tool => tool.Name));
+
+        var call = Call(ToolCatalog.BrowserNavigate, """{"url":"http://127.0.0.1:5091/"}""");
+        var roleDenied = await Executor(fake).ExecuteAsync(v10, Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: UserTurn());
+        var disabled = await new SessionToolExecutor(browser: fake, configurationGate: ToolConfigurationGates.Unconfigured)
+            .ExecuteAsync(v11, Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: UserTurn());
+        var outside = await Executor(fake).ExecuteAsync(
+            v11,
+            Guid.NewGuid(),
+            Call(ToolCatalog.BrowserNavigate, """{"url":"https://example.invalid/escape"}"""),
+            ToolLimits.MaxOutputBytes,
+            admission: UserTurn());
+        Assert.Contains("forbidden", roleDenied.Text, StringComparison.Ordinal);
+        Assert.Contains("forbidden", disabled.Text, StringComparison.Ordinal);
+        Assert.Contains("target_denied", outside.Text, StringComparison.Ordinal);
+        Assert.Equal(0, fake.NavigateCalls);
+    }
+
+    [Fact]
     public void Publication_blocks_browser_tools_when_the_host_gate_is_closed()
     {
         var candidate = AgentDefinitionCandidate.FromDefinition(SampleDefinitions.Support) with
@@ -533,6 +580,23 @@ public sealed class BrowserToolTests
     private static ToolExecutionAdmission UserTurn() => new(false, TriggerKind.UserTurn);
 
     private static ModelToolCall Call(string name, string arguments) => new("c1", name, arguments);
+
+    private static string FindAgents()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(dir.FullName, "agents");
+            if (Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            dir = dir.Parent;
+        }
+
+        throw new InvalidOperationException("agents directory was not found.");
+    }
 
     private static string OpaqueRef(int seed = 1)
     {

@@ -18,13 +18,15 @@ public sealed record PromptSections(
     IReadOnlyList<ModelMessage> TurnMessages,
     string AttachmentManifestSystem);
 
-public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGate = null)
+public sealed class PromptContextBuilder(
+    IToolConfigurationGate? configurationGate = null,
+    IBrowserSession? browser = null)
 {
     private readonly IToolConfigurationGate _configurationGate =
         configurationGate ?? ToolConfigurationGates.Unconfigured;
 
     public IReadOnlyList<ModelToolDefinition> OfferTools(AgentDefinition definition, AgentContext? context) =>
-        ToolCatalog.For(definition, context, _configurationGate);
+        BrowserNavigateOffer.Apply(ToolCatalog.For(definition, context, _configurationGate), browser);
 
     public const string VoiceModeOutputGuidance = """
         Speak naturally: convey the point and, when useful, name the relevant on-screen detail so the listener can follow without hearing the whole document. For a long written answer with brief speech, keep the full answer on screen. Spoken wording may match the display or differ; omit a separate spoken form when the display itself is natural to say aloud.
