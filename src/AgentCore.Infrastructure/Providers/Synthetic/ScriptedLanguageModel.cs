@@ -143,6 +143,17 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
 
+        if (TryScriptBrowserRecordLookup(request, out var browserEvents))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var browserEvent in browserEvents)
+            {
+                yield return browserEvent;
+            }
+
+            yield break;
+        }
+
         if (HasSessionTools(request) && (_alwaysToolCall || ShouldScriptTools(request)))
         {
             await foreach (var item in GenerateToolScriptAsync(request, cancellationToken).ConfigureAwait(false))
@@ -1060,6 +1071,180 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         ];
         return true;
     }
+
+    public const string BrowserRecordMarker = "record AC-1042";
+
+    public const string BrowserRecordMessage = "I found the record. I'm checking the details now.";
+
+    public const string BrowserRecordAnswer = "AC-1042 is In review.";
+
+    public const string BrowserRecordSkillId = "browser.record.lookup";
+
+    private static bool TryScriptBrowserRecordLookup(
+        ModelRequest request,
+        out IReadOnlyList<ModelGenerationEvent> events)
+    {
+        events = [];
+        var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        if (!lastUser.Contains(BrowserRecordMarker, StringComparison.Ordinal)
+            || !Offers(request, ToolCatalog.BrowserNavigate)
+            || !TryReadTrustedBrowserStart(request, out var startUrl))
+        {
+            return false;
+        }
+
+        var rounds = ToolRoundsSinceLastUser(request.Messages);
+        switch (rounds)
+        {
+            case 0:
+                events = ToolTurn(
+                    "p9-navigate",
+                    ToolCatalog.BrowserNavigate,
+                    JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = startUrl }));
+                return true;
+            case 1:
+            case 6:
+            case 8:
+                events = ToolTurn($"p9-observe-{rounds}", ToolCatalog.BrowserObserve, "{}");
+                return true;
+            case 2:
+                events = ToolTurn(
+                    "p9-skill",
+                    ToolCatalog.SkillsLoad,
+                    JsonSerializer.Serialize(new { ids = new[] { BrowserRecordSkillId } }));
+                return true;
+            case 3 when Offers(request, ToolCatalog.AppMessageSend):
+                events = ToolTurn(
+                    "p9-message",
+                    ToolCatalog.AppMessageSend,
+                    JsonSerializer.Serialize(new { text = BrowserRecordMessage }));
+                return true;
+            case 4:
+                return TryAct("fill", "fill", ElementRef(request.Messages, "Record"), "AC-1042", out events);
+            case 5:
+                return TryAct("search", "click", ElementRef(request.Messages, "Search"), null, out events);
+            case 7:
+                return TryAct("open", "click", ElementRef(request.Messages, "AC-1042"), null, out events);
+            default:
+                events =
+                [
+                    new ModelTextDelta(BrowserRecordAnswer),
+                    new ModelCompleted(ModelStopReason.Completed)
+                ];
+                return true;
+        }
+    }
+
+    private static bool TryReadTrustedBrowserStart(ModelRequest request, out string url)
+    {
+        url = string.Empty;
+        var description = request.Tools?
+            .FirstOrDefault(tool => string.Equals(tool.Name, ToolCatalog.BrowserNavigate, StringComparison.Ordinal))
+            ?.Description;
+        const string prefix = "Trusted browser start: ";
+        if (string.IsNullOrEmpty(description))
+        {
+            return false;
+        }
+
+        var start = description.IndexOf(prefix, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return false;
+        }
+
+        var rest = description[(start + prefix.Length)..].Trim();
+        if (rest.EndsWith('.'))
+        {
+            rest = rest[..^1];
+        }
+
+        url = rest;
+        return Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            && uri.IsLoopback
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+    }
+
+    private static bool TryAct(
+        string callId,
+        string operation,
+        string? reference,
+        string? value,
+        out IReadOnlyList<ModelGenerationEvent> events)
+    {
+        if (string.IsNullOrEmpty(reference))
+        {
+            events =
+            [
+                new ModelFailed(new ProviderFailure(
+                    ProviderErrorCode.InvalidResponse,
+                    "Synthetic browser journey missed an element reference."))
+            ];
+            return true;
+        }
+
+        var arguments = new Dictionary<string, string>
+        {
+            ["operation"] = operation,
+            ["ref"] = reference
+        };
+        if (value is not null)
+        {
+            arguments["value"] = value;
+        }
+
+        events = ToolTurn("p9-" + callId, ToolCatalog.BrowserAct, JsonSerializer.Serialize(arguments));
+        return true;
+    }
+
+    private static string? ElementRef(IReadOnlyList<ModelMessage> messages, string name)
+    {
+        for (var index = messages.Count - 1; index >= 0; index--)
+        {
+            var message = messages[index];
+            if (message.Role == ModelRole.User)
+            {
+                return null;
+            }
+
+            if (message.Role != ModelRole.Tool || string.IsNullOrWhiteSpace(message.Text))
+            {
+                continue;
+            }
+
+            try
+            {
+                using var document = JsonDocument.Parse(message.Text);
+                if (!document.RootElement.TryGetProperty("elements", out var elements)
+                    || elements.ValueKind != JsonValueKind.Array)
+                {
+                    continue;
+                }
+
+                foreach (var element in elements.EnumerateArray())
+                {
+                    if (element.TryGetProperty("name", out var elementName)
+                        && string.Equals(elementName.GetString(), name, StringComparison.Ordinal)
+                        && element.TryGetProperty("ref", out var reference)
+                        && reference.GetString() is { Length: > 0 } token)
+                    {
+                        return token;
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+            }
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyList<ModelGenerationEvent> ToolTurn(string callId, string name, string arguments) =>
+    [
+        new ModelToolCallEvent(new ModelToolCall(callId, name, arguments)),
+        new ModelCompleted(ModelStopReason.ToolCalls)
+    ];
 
     public const string EmailHarnessMarker = "email harness";
 
