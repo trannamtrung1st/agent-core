@@ -1638,7 +1638,7 @@ describe("realtime race handling", () => {
     });
   });
 
-  it("replaces session.ready bootstrap with one newest history page", async () => {
+  it("uses session.ready history without fetching the newest REST page on attach", async () => {
     const makeHistoryRow = (sequence: number) => ({
       entryId: `e${sequence}`,
       sequence,
@@ -1652,15 +1652,7 @@ describe("realtime race handling", () => {
       receivedTextEndExclusive: 8,
       createdAt: "2026-01-01T00:00:00Z"
     });
-    const bootstrap = Array.from({ length: 20 }, (_, index) => makeHistoryRow(index + 431));
-    const newest = Array.from({ length: 50 }, (_, index) => makeHistoryRow(index + 451));
-    vi.mocked(listSessionMessages).mockResolvedValue({
-      items: newest,
-      nextAfter: 500,
-      hasMore: false,
-      hasOlder: true,
-      nextBefore: 451
-    });
+    const bootstrap = Array.from({ length: 50 }, (_, index) => makeHistoryRow(index + 451));
     hooks.setConnection({ invoke: vi.fn(), send: vi.fn() } as never);
     useSessionStore.setState({
       ...emptySession(),
@@ -1687,34 +1679,22 @@ describe("realtime race handling", () => {
         mode: "text",
         pendingMode: null,
         status: "attached",
+        outputState: "idle",
+        hasOlderHistory: true,
+        historyBeforeSequence: 451,
         agent: { name: "Alex", role: "Examiner", voiceAvailable: true },
         history: bootstrap
       }
     });
 
-    await vi.waitFor(() => {
-      expect(useSessionStore.getState().entries).toHaveLength(50);
-    });
-    expect(listSessionMessages).toHaveBeenCalledTimes(1);
-    expect(listSessionMessages).toHaveBeenCalledWith(
-      "s-active",
-      expect.objectContaining({ limit: 50 })
-    );
-    expect(vi.mocked(listSessionMessages).mock.calls[0]?.[1]).not.toHaveProperty("after");
+    expect(listSessionMessages).not.toHaveBeenCalled();
+    expect(useSessionStore.getState().entries).toHaveLength(50);
     expect(useSessionStore.getState().entries[0]?.text).toBe("Message 451");
     expect(useSessionStore.getState().entries[49]?.text).toBe("Message 500");
     expect(useSessionStore.getState().historyHasOlder).toBe(true);
   });
 
-  it("stops durable convergence polling when live response has no assistant row", async () => {
-    vi.useFakeTimers();
-    vi.mocked(listSessionMessages).mockResolvedValue({
-      items: [],
-      nextAfter: 0,
-      hasMore: false,
-      hasOlder: false,
-      nextBefore: null
-    });
+  it("clears ghost liveResponseId from session.ready without REST polling", async () => {
     hooks.setConnection({ invoke: vi.fn(), send: vi.fn() } as never);
     useSessionStore.setState({
       ...emptySession(),
@@ -1748,12 +1728,7 @@ describe("realtime race handling", () => {
       }
     });
 
-    await vi.advanceTimersByTimeAsync(0);
-    const callsAfterReady = vi.mocked(listSessionMessages).mock.calls.length;
-    expect(callsAfterReady).toBeGreaterThan(0);
-
-    await vi.advanceTimersByTimeAsync(5_000);
-    expect(vi.mocked(listSessionMessages).mock.calls.length).toBeLessThanOrEqual(callsAfterReady + 1);
+    expect(listSessionMessages).not.toHaveBeenCalled();
     expect(useSessionStore.getState().liveResponseId).toBeNull();
   });
 
@@ -1772,14 +1747,6 @@ describe("realtime race handling", () => {
       createdAt: "2026-01-01T00:00:00Z"
     });
     const bootstrap = Array.from({ length: 50 }, (_, index) => makeHistoryRow(index + 101));
-    const newest = Array.from({ length: 50 }, (_, index) => makeHistoryRow(index + 101));
-    vi.mocked(listSessionMessages).mockResolvedValue({
-      items: newest,
-      nextAfter: 150,
-      hasMore: false,
-      hasOlder: true,
-      nextBefore: 101
-    });
     hooks.setConnection({ invoke: vi.fn(), send: vi.fn() } as never);
     useSessionStore.setState({
       ...emptySession(),
@@ -1811,9 +1778,7 @@ describe("realtime race handling", () => {
       }
     });
 
-    await vi.waitFor(() => {
-      expect(listSessionMessages).toHaveBeenCalledTimes(1);
-    });
+    expect(listSessionMessages).not.toHaveBeenCalled();
     expect(useSessionStore.getState().entries).toHaveLength(50);
     expect(useSessionStore.getState().entries[0]?.text).toBe("Message 101");
     expect(useSessionStore.getState().entries[49]?.text).toBe("Message 150");

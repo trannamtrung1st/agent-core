@@ -105,6 +105,38 @@ function hasAssistantForResponse(entries: HistoryEntry[], responseId: string): b
   return entries.some((entry) => entry.role === "assistant" && entry.responseId === responseId);
 }
 
+export function applyReadyHistoryPaging(hasOlder: boolean, beforeSequence: number | null): void {
+  olderCursor = hasOlder && beforeSequence != null ? beforeSequence : null;
+}
+
+export function reconcileOrphanedLiveConversation(
+  entries: HistoryEntry[],
+  liveResponseId: string | null,
+  outputState: string
+): {
+  liveResponseId: null;
+  conversationExecutionId: null;
+  outputState: "idle";
+  activeProgress: null;
+  pendingApproval: null;
+} | null {
+  if (liveResponseId == null || isInFlightOutput(outputState)) {
+    return null;
+  }
+
+  if (hasAssistantForResponse(entries, liveResponseId)) {
+    return null;
+  }
+
+  return {
+    liveResponseId: null,
+    conversationExecutionId: null,
+    outputState: "idle",
+    activeProgress: null,
+    pendingApproval: null
+  };
+}
+
 function cursorFromPage(page: HistoryPage, items: HistoryEntry[]): number | null {
   if (page.nextBefore != null) {
     return page.nextBefore;
@@ -166,20 +198,18 @@ export async function loadNewestHistoryPage(
             || entry.status === "interrupted"));
     const outputIdle = !isInFlightOutput(latest.outputState);
     const clearFromTerminal = durableTerminal != null && outputIdle;
-    const clearOrphanedLive = liveResponseId != null
-      && outputIdle
-      && !hasAssistantForResponse(withLive, liveResponseId);
-    const clearLiveConversation = clearFromTerminal || clearOrphanedLive;
+    const orphaned = reconcileOrphanedLiveConversation(withLive, liveResponseId, latest.outputState);
+    const clearLiveConversation = clearFromTerminal || orphaned != null;
     useSessionStore.setState({
       entries: withLive,
       ...(clearLiveConversation
-        ? {
+        ? (orphaned ?? {
             liveResponseId: null,
             conversationExecutionId: null,
             outputState: "idle",
             activeProgress: null,
             pendingApproval: null
-          }
+          })
         : {})
     });
     applyOlderMeta(page, incoming, withLive);

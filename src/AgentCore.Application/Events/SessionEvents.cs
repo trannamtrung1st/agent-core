@@ -379,7 +379,9 @@ public sealed record SessionReadyProjection(
     SessionModelSelection? ModelSelection = null,
     PublicPendingApproval? PendingApproval = null,
     Guid? ConversationExecutionId = null,
-    string OutputActivity = "Idle");
+    string OutputActivity = "Idle",
+    bool HasOlderHistory = false,
+    long? HistoryBeforeSequence = null);
 
 public sealed record ReadyOutput(SessionReadyProjection Ready) : OutputPayload;
 

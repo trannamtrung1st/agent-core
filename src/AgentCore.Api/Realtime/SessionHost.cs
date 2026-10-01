@@ -2744,6 +2744,8 @@ public static class SessionEventMapper
                 },
             ["lastEntrySequence"] = ready.LastEntrySequence,
             ["history"] = history,
+            ["hasOlderHistory"] = ready.HasOlderHistory,
+            ["historyBeforeSequence"] = ready.HistoryBeforeSequence,
             ["activeResponseId"] = ready.ActiveResponseId?.ToString(),
             ["pendingApproval"] = ready.PendingApproval is { } pendingApproval
                 ? MapPendingApproval(pendingApproval)

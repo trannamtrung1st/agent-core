@@ -26,7 +26,13 @@ import {
   parseChatIdentityKey,
   resolveNewChatIdentityPresentation
 } from "../features/chat/chatIdentity";
-import { loadNewestHistoryPage, loadOlderHistoryPage, beginSessionHistory } from "./sessionHistory";
+import {
+  loadNewestHistoryPage,
+  loadOlderHistoryPage,
+  beginSessionHistory,
+  applyReadyHistoryPaging,
+  reconcileOrphanedLiveConversation
+} from "./sessionHistory";
 import {
   abortPendingAttachment,
   listAttachments,
@@ -61,9 +67,6 @@ import {
 
 let connection: HubConnection | null = null;
 let connectionEpoch = 0;
-let conversationConvergenceEpoch = 0;
-const DURABLE_CONVERSATION_POLL_MS = 250;
-const DURABLE_CONVERSATION_MAX_POLLS = 120;
 let commandSequence = 0;
 let clientSpeechPlayer: ClientSpeechPlayer | null = null;
 let transcriptLife: ClientTranscriptLifecycle | null = null;
@@ -820,17 +823,25 @@ function handleEvent(raw: ServerEvent): void {
     } else {
       stopReceipts();
     }
-    if (next.sessionId) {
-      void loadNewestHistoryPage(next.sessionId, { replaceWindow: true });
-    }
-    if (next.sessionId && next.attachmentId && next.liveResponseId) {
-      void convergeDurableConversation(
-        next.sessionId,
-        next.attachmentId,
-        next.liveResponseId
-      );
-    } else {
-      conversationConvergenceEpoch += 1;
+    const readyPayload = (raw.payload ?? {}) as Record<string, unknown>;
+    const hasOlderHistory = Boolean(readyPayload.hasOlderHistory);
+    const historyBeforeRaw = readyPayload.historyBeforeSequence;
+    const historyBeforeSequence = historyBeforeRaw == null ? null : Number(historyBeforeRaw);
+    applyReadyHistoryPaging(
+      hasOlderHistory,
+      hasOlderHistory && Number.isFinite(historyBeforeSequence) ? historyBeforeSequence : null
+    );
+    useSessionStore.setState({
+      historyHasOlder: hasOlderHistory && historyBeforeSequence != null && Number.isFinite(historyBeforeSequence),
+      historyOlderLoading: false
+    });
+    const orphanPatch = reconcileOrphanedLiveConversation(
+      next.entries,
+      next.liveResponseId,
+      next.outputState
+    );
+    if (orphanPatch) {
+      useSessionStore.setState(orphanPatch);
     }
     const serverVoice = String(raw.payload?.mode ?? "") === "voice";
     if (serverVoice && !voiceModeRequested && (voiceReadyDowngradeOnNextReady || passiveVoiceSuppressed)) {
@@ -890,29 +901,6 @@ function handleEvent(raw: ServerEvent): void {
   }
 
   syncCapture();
-}
-
-async function convergeDurableConversation(
-  sessionId: string,
-  attachmentId: string,
-  responseId: string
-): Promise<void> {
-  const epoch = ++conversationConvergenceEpoch;
-  for (let poll = 0; poll < DURABLE_CONVERSATION_MAX_POLLS && epoch === conversationConvergenceEpoch; poll += 1) {
-    await new Promise<void>((resolve) => window.setTimeout(resolve, DURABLE_CONVERSATION_POLL_MS));
-    const current = useSessionStore.getState();
-    if (!sameSessionId(current.sessionId, sessionId)
-        || current.attachmentId !== attachmentId
-        || current.liveResponseId !== responseId) {
-      return;
-    }
-
-    await loadNewestHistoryPage(sessionId, { replaceWindow: false });
-    const refreshed = useSessionStore.getState();
-    if (refreshed.liveResponseId !== responseId) {
-      return;
-    }
-  }
 }
 
 function asEventNumber(value: unknown): number {

@@ -427,7 +427,12 @@ public sealed partial class SessionRuntime
     private SessionReadyProjection BuildReady()
     {
         var voice = _snapshot.Mode == SessionMode.Voice;
-        var history = _snapshot.Entries.TakeLast(50).Select(ProjectHistoryEntry).ToArray();
+        var historyWindow = _snapshot.Entries.TakeLast(50).ToArray();
+        var history = historyWindow.Select(ProjectHistoryEntry).ToArray();
+        var hasOlderHistory = _snapshot.Entries.Count > historyWindow.Length;
+        long? historyBeforeSequence = hasOlderHistory && historyWindow.Length > 0
+            ? historyWindow[0].Sequence
+            : null;
         return new SessionReadyProjection(
             _snapshot.Mode,
             _snapshot.PendingMode,
@@ -454,7 +459,9 @@ public sealed partial class SessionRuntime
             _snapshot.ModelSelection,
             BuildPublicPendingApproval(),
             _boundConversationExecution?.ExecutionId,
-            _outputActivity.ToString());
+            _outputActivity.ToString(),
+            hasOlderHistory,
+            historyBeforeSequence);
     }
 
     private Task PublishStateAsync(EventContext context, CancellationToken cancellationToken) =>

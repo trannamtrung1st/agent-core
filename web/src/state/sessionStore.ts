@@ -667,6 +667,14 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       const activeResponseId = payload.activeResponseId == null
         ? streaming?.responseId ?? null
         : asString(payload.activeResponseId);
+      const outputState = asString(payload.outputState) || "idle";
+      const hasOlderHistory = Boolean(payload.hasOlderHistory);
+      const historyBeforeSequence = payload.historyBeforeSequence == null
+        ? null
+        : asNumber(payload.historyBeforeSequence);
+      const orphanLiveClear = activeResponseId != null
+        && !isInFlightOutput(outputState)
+        && !history.some((entry) => entry.role === "assistant" && entry.responseId === activeResponseId);
       return {
         ...state,
         connection: "ready",
@@ -684,11 +692,12 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         status: asString(payload.status),
         lifecycleStatus: asString(payload.lifecycleStatus) || null,
         inputState: asString(payload.inputState) || "idle",
-        outputState: asString(payload.outputState) || "idle",
+        outputState: orphanLiveClear ? "idle" : outputState,
         entries: history,
-        conversationExecutionId:
-          payload.conversationExecutionId == null ? null : asString(payload.conversationExecutionId),
-        liveResponseId: activeResponseId,
+        conversationExecutionId: orphanLiveClear
+          ? null
+          : payload.conversationExecutionId == null ? null : asString(payload.conversationExecutionId),
+        liveResponseId: orphanLiveClear ? null : activeResponseId,
         activeProgress: null,
         pendingApproval: pendingApprovalFromPayload(
           payload.pendingApproval,
@@ -705,7 +714,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         preflightReady: false,
         voicePlaybackResponseId: null,
         liveUserTranscript: null,
-        historyHasOlder: false,
+        historyHasOlder: hasOlderHistory && historyBeforeSequence != null,
         historyOlderLoading: false,
         modelMutationPending: false,
         modelMutationOwner: null
