@@ -134,6 +134,7 @@ describe("failed assistant details", () => {
         entry={{
           ...failedEntry({
             diagnosticId: "diag-effect",
+            correlationId: null,
             category: "Provider",
             code: "Unavailable"
           }),

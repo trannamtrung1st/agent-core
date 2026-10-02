@@ -2973,7 +2973,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     RuntimeTelemetry.Record("tools", RuntimeTelemetry.ElapsedMs(toolStarted), call.Name);
 
                     executionResult = ToolResultAdmission.AdmitForModel(model, executionResult);
-                    NoteBrowserTarget(call.Name, executionResult.Text, blockedBrowserOrigins, ref browserPageOrigin);
+                    NoteBrowserTarget(call.Name, call.ArgumentsJson, executionResult.Text, blockedBrowserOrigins, ref browserPageOrigin);
                     outputBytes += ToolOutputBudget.TextByteCount(executionResult);
                     if (outputBytes > ToolLimits.MaxOutputBytes)
                     {
@@ -5822,26 +5822,38 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private static void NoteBrowserTarget(
         string tool,
+        string? argumentsJson,
         string? json,
         HashSet<string> blockedOrigins,
         ref string? pageOrigin)
     {
-        if (!TryBrowserResultUrl(json, out var url, out var error) || !TryBrowserOrigin(url, out var origin))
+        string? finalOrigin = null;
+        string? error = null;
+        if (TryBrowserResultUrl(json, out var url, out error) && TryBrowserOrigin(url, out var parsedOrigin))
         {
+            finalOrigin = parsedOrigin;
+        }
+
+        var intervention = finalOrigin is not null
+            && string.Equals(error, "user_intervention_required", StringComparison.Ordinal);
+        if (intervention)
+        {
+            blockedOrigins.Add(finalOrigin!);
+            pageOrigin = finalOrigin;
+            if (string.Equals(tool, ToolCatalog.BrowserNavigate, StringComparison.Ordinal)
+                && TryNavigateOrigin(argumentsJson, out var requested))
+            {
+                blockedOrigins.Add(requested);
+            }
+
             return;
         }
 
-        if (string.Equals(error, "user_intervention_required", StringComparison.Ordinal))
-        {
-            blockedOrigins.Add(origin);
-            pageOrigin = origin;
-            return;
-        }
-
-        if (error is null
+        if (finalOrigin is not null
+            && error is null
             && tool is ToolCatalog.BrowserNavigate or ToolCatalog.BrowserObserve or ToolCatalog.BrowserAct)
         {
-            pageOrigin = origin;
+            pageOrigin = finalOrigin;
         }
     }
 

@@ -97,6 +97,52 @@ public sealed class BrowserOriginHandoffTests
         Assert.Equal(["https://a.test/"], browser.Navigated);
     }
 
+    [Fact]
+    public async Task Redirected_challenge_blocks_both_requested_and_final_origins()
+    {
+        var browser = new RedirectingBrowser();
+        var model = new SequencedModel(
+            Navigate("open", "https://cars.test/page"),
+            Navigate("retry-requested", "https://cars.test/page"),
+            Navigate("retry-final", "https://www.cars.test/page"),
+            Navigate("other", "https://b.test/specs"),
+            Answer("Zigwheels is open."));
+        await using var runtime = Create(model, browser);
+        await runtime.AttachAsync();
+
+        Assert.True(await runtime.SubmitUserTextAsync("compare cars and another site"));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(["https://cars.test/page", "https://b.test/specs"], browser.Navigated);
+        Assert.Equal(
+            EntryStatus.Completed,
+            Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
+    }
+
+    [Fact]
+    public async Task Close_after_intervention_still_closes_once()
+    {
+        var browser = new TwoSiteBrowser();
+        var model = new SequencedModel(
+            Navigate("a-1", "https://a.test/"),
+            [
+                new ModelToolCallEvent(new ModelToolCall("close-1", ToolCatalog.BrowserClose, "null")),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ],
+            Answer("The browser is closed."));
+        await using var runtime = Create(model, browser);
+        await runtime.AttachAsync();
+
+        Assert.True(await runtime.SubmitUserTextAsync("open the site and then close the browser"));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(["https://a.test/"], browser.Navigated);
+        Assert.Equal(1, browser.CloseCalls);
+        Assert.Equal(
+            EntryStatus.Completed,
+            Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
+    }
+
     private static ModelGenerationEvent[] Navigate(string id, string url) =>
     [
         new ModelToolCallEvent(new ModelToolCall(
@@ -115,7 +161,7 @@ public sealed class BrowserOriginHandoffTests
         new ModelCompleted(ModelStopReason.Completed)
     ];
 
-    private static SessionRuntime Create(ILanguageModel model, TwoSiteBrowser browser)
+    private static SessionRuntime Create(ILanguageModel model, IBrowserSession browser)
     {
         var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-02T12:00:00Z"));
         var ids = new DeterministicIdGenerator(
@@ -139,7 +185,8 @@ public sealed class BrowserOriginHandoffTests
             [
                 ToolCatalog.BrowserNavigate,
                 ToolCatalog.BrowserObserve,
-                ToolCatalog.BrowserAct
+                ToolCatalog.BrowserAct,
+                ToolCatalog.BrowserClose
             ]));
         var snapshot = new SessionSnapshot(
             1,
@@ -206,6 +253,8 @@ public sealed class BrowserOriginHandoffTests
 
         public int ActCalls { get; private set; }
 
+        public int CloseCalls { get; private set; }
+
         public bool IsAvailable => true;
 
         public BrowserHostPolicy HostPolicy { get; } = new(
@@ -239,6 +288,12 @@ public sealed class BrowserOriginHandoffTests
             return new(Page(new Uri(Navigated[^1])));
         }
 
+        public ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        {
+            CloseCalls++;
+            return new(new BrowserCloseResult("closed"));
+        }
+
         private static BrowserOperationResult Page(Uri url)
         {
             var challenged = string.Equals(url.Host, "a.test", StringComparison.OrdinalIgnoreCase);
@@ -252,5 +307,47 @@ public sealed class BrowserOriginHandoffTests
                     challenged ? [] : [new BrowserElement("el_bbbbbbbbbbbbbbbbbbbbbb", "link", "Specs")],
                     challenged ? BrowserInterventionKind.HumanVerificationRequired : BrowserInterventionKind.None));
         }
+    }
+
+    private sealed class RedirectingBrowser : IBrowserSession
+    {
+        public List<string> Navigated { get; } = [];
+
+        public bool IsAvailable => true;
+
+        public BrowserHostPolicy HostPolicy { get; } = new(
+            true,
+            true,
+            BrowserInteractionMode.InteractiveDemo,
+            ["https://cars.test", "https://www.cars.test", "https://b.test"]);
+
+        public ValueTask<Uri?> GetCurrentUrlAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+            new(Navigated.Count == 0 ? null : new Uri(Navigated[^1]));
+
+        public ValueTask<BrowserOperationResult> NavigateAsync(
+            BrowserNavigateRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Navigated.Add(request.Url.AbsoluteUri);
+            var challenged = request.Url.Host is "cars.test" or "www.cars.test";
+            var final = challenged
+                ? new Uri("https://www.cars.test/page")
+                : request.Url;
+            return new(new BrowserOperationResult(
+                null,
+                new BrowserObservation(
+                    final.AbsoluteUri,
+                    challenged ? "Verify" : "Specs",
+                    challenged ? "Human verification required" : "Listed price",
+                    false,
+                    [],
+                    challenged ? BrowserInterventionKind.HumanVerificationRequired : BrowserInterventionKind.None)));
+        }
+
+        public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<BrowserOperationResult> ActAsync(BrowserActRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 }
