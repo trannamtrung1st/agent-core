@@ -109,6 +109,11 @@ public sealed class SecretaryIdentityTests
         Assert.Contains("dashboard", product.Procedure, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("A Save or Publish click is not completion", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("read that element's state in the next observation", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("Before Save and Continue on a newly created product", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("Short Description containing the requested concise description", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("do not Save and Continue", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("pre-save state is established", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("observe evidence that the upload was accepted", product.Procedure, StringComparison.Ordinal);
         Assert.Contains(ToolCatalog.BrowserNavigate, product.RequiredCapabilities);
         var bare = SampleDefinitions.Examiner with
         {

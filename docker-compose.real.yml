@@ -54,4 +54,12 @@ services:
       Providers__ModelCatalog__Models__2__StructuredOutput: "false"
       Providers__ModelCatalog__Models__2__Reasoning: "false"
       Providers__ModelCatalog__Models__2__CostCategory: free
+      Providers__ModelCatalog__Models__3__Key: gpt-4.1
+      Providers__ModelCatalog__Models__3__DisplayName: GPT-4.1
+      Providers__ModelCatalog__Models__3__ProviderAlias: primary-llm
+      Providers__ModelCatalog__Models__3__ModelId: openai/gpt-4.1
+      Providers__ModelCatalog__Models__3__Tools: "true"
+      Providers__ModelCatalog__Models__3__Vision: "true"
+      Providers__ModelCatalog__Models__3__StructuredOutput: "true"
+      Providers__ModelCatalog__Models__3__Reasoning: "false"
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required for Real Compose}

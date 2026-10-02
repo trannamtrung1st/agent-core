@@ -59,7 +59,7 @@ public sealed class ModelCatalogFactoryTests
             configuration: null);
         Assert.Equal("deepseek-v41-flash", catalog.DefaultKey);
         Assert.Equal(
-            ["deepseek-v41-flash", "gpt-4o-mini-2024-07-18", "openrouter-free"],
+            ["deepseek-v41-flash", "gpt-4o-mini-2024-07-18", "openrouter-free", "gpt-4.1"],
             catalog.Models.Select(model => model.Key).ToArray());
         Assert.Equal("openai/gpt-4o-mini-2024-07-18", catalog.Get("gpt-4o-mini-2024-07-18")!.ModelId);
         Assert.False(catalog.Get("gpt-4o-mini-2024-07-18")!.Reasoning);
@@ -67,6 +67,11 @@ public sealed class ModelCatalogFactoryTests
         Assert.Equal("openrouter/free", catalog.Get("openrouter-free")!.ModelId);
         Assert.False(catalog.Get("openrouter-free")!.Reasoning);
         Assert.True(catalog.Get("openrouter-free")!.Tools);
+        var gpt41 = catalog.Get("gpt-4.1");
+        Assert.Equal("openai/gpt-4.1", gpt41!.ModelId);
+        Assert.True(gpt41.Tools);
+        Assert.True(gpt41.StructuredOutput);
+        Assert.False(gpt41.Reasoning);
     }
 
     [Fact]
@@ -118,6 +123,7 @@ public sealed class ModelCatalogFactoryTests
         Assert.DoesNotContain("Models__0__ModelId: ${AGENTCORE_LLM_MODEL", compose, StringComparison.Ordinal);
         Assert.DoesNotContain("Models__1__ModelId: ${AGENTCORE_LLM_MODEL", compose, StringComparison.Ordinal);
         Assert.DoesNotContain("Models__2__ModelId: ${AGENTCORE_LLM_MODEL", compose, StringComparison.Ordinal);
+        Assert.DoesNotContain("Models__3__ModelId: ${AGENTCORE_LLM_MODEL", compose, StringComparison.Ordinal);
     }
 
     [Fact]

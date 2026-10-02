@@ -12,6 +12,8 @@ internal static class ModelCatalogFactory
     public const string Gpt4oMini20240718ModelId = "openai/gpt-4o-mini-2024-07-18";
     public const string OpenRouterFreeKey = "openrouter-free";
     public const string OpenRouterFreeModelId = "openrouter/free";
+    public const string Gpt41Key = "gpt-4.1";
+    public const string Gpt41ModelId = "openai/gpt-4.1";
     public const string ScriptedAlphaKey = "scripted-alpha";
     public const string ScriptedBetaKey = "scripted-beta";
     public const string ScriptedVisionKey = "scripted-vision";
@@ -124,7 +126,18 @@ internal static class ModelCatalogFactory
                     reasoning: false,
                     [],
                     null,
-                    costCategory: "free")
+                    costCategory: "free"),
+                Descriptor(
+                    Gpt41Key,
+                    "GPT-4.1",
+                    "primary-llm",
+                    Gpt41ModelId,
+                    tools: true,
+                    vision: true,
+                    structuredOutput: true,
+                    reasoning: false,
+                    [],
+                    null)
             ]);
 
     public static IModelCatalog FromPrimary(LanguageModelProviderOptions languageModel)

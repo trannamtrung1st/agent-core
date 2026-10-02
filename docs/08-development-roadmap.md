@@ -43,7 +43,7 @@ Truthful sanitized image MIME (`attachment-processors/2`), layered Vision admiss
 
 ## P2D session model selection
 
-Trusted catalog, system default, persisted per-session resolved choice, session-aware resolver, reasoning effort, and Codex-like UI are **observed**. Existing sessions stay pinned when the operator default changes. The shipped Real catalog default is DeepSeek V4.1 Flash; GPT-4o mini 2024-07-18 and OpenRouter Free are additional allowed choices. Gate: [Implementation Plan](18-implementation-plan.md#p2d--session-model-selection-and-inference-controls-observed). Decision: [Technology Decisions](10-technology-decisions.md#decision-session-model-selection-and-inference-controls).
+Trusted catalog, system default, persisted per-session resolved choice, session-aware resolver, reasoning effort, and Codex-like UI are **observed**. Existing sessions stay pinned when the operator default changes. The shipped Real catalog default is DeepSeek V4.1 Flash; GPT-4o mini 2024-07-18, GPT-4.1, and OpenRouter Free are additional allowed choices. Gate: [Implementation Plan](18-implementation-plan.md#p2d--session-model-selection-and-inference-controls-observed). Decision: [Technology Decisions](10-technology-decisions.md#decision-session-model-selection-and-inference-controls).
 
 ## P6 durable background work
 
