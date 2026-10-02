@@ -270,6 +270,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
             if (session.TimedOut)
             {
+                LogBrowserFailure("navigate", "interaction", "timeout");
                 return Result("timeout");
             }
 
@@ -469,6 +470,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
             if (session.TimedOut)
             {
+                LogBrowserFailure("act", "interaction", "timeout");
                 return Result("timeout");
             }
 
