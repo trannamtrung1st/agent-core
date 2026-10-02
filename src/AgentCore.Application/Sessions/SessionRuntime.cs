@@ -2585,7 +2585,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var outputBytes = 0;
         var retryingGeneration = false;
         var repairingTerminal = false;
-        var terminalRepairUsed = false;
+        var protocolRepairAttempted = false;
+        string? repairReason = null;
+        var repairPhase = "initial";
+        var repairOpen = false;
         var blockedBrowserOrigins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string? browserPageOrigin = null;
         var toolDeadline = request.Tools is { Count: > 0 };
@@ -2601,13 +2604,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 var finished = false;
                 var publishedVisible = false;
                 var retryGeneration = false;
-                var generationRetries = retryingGeneration ? 1 : 0;
+                var transientGenerationRetryCount = retryingGeneration ? 1 : 0;
                 var inRepair = repairingTerminal;
                 string? repairOutcome = null;
                 repairingTerminal = false;
                 if (!inRepair && !retryingGeneration)
                 {
-                    terminalRepairUsed = false;
+                    protocolRepairAttempted = false;
                 }
 
                 retryingGeneration = false;
@@ -2616,7 +2619,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (inRepair)
                 {
                     prompt = messages.ToList();
-                    prompt.Add(new ModelMessage(ModelRole.System, TerminalDisplayRepairInstruction));
+                    prompt.Add(new ModelMessage(ModelRole.System, ProtocolFailures.RepairInstruction(repairReason)!));
                 }
 
                 var working = inRepair
@@ -2654,12 +2657,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         continue;
                     }
 
-                    if (!inRepair
-                        && evt is ModelFailed failed
-                        && TryRetryGeneration(failed, pending, publishedVisible, generationRetries, generateToken))
+                    if (evt is ModelFailed failed
+                        && TryRetryGeneration(failed, pending, publishedVisible, transientGenerationRetryCount, generateToken))
                     {
-                        generationRetries++;
+                        transientGenerationRetryCount++;
                         retryingGeneration = true;
+                        if (inRepair)
+                        {
+                            repairingTerminal = true;
+                        }
+
                         RuntimeTelemetry.RecordGenerationRetry(
                             steps == 0 ? "initial" : "follow-up",
                             failed.Failure.FailureReason!);
@@ -2669,12 +2676,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                     if (!inRepair
                         && evt is ModelFailed repairable
-                        && !terminalRepairUsed
-                        && TryRepairMissingDisplay(repairable, pending, publishedVisible, generateToken))
+                        && !protocolRepairAttempted
+                        && TryProtocolRepair(repairable, pending, publishedVisible, generateToken, overallDeadline))
                     {
-                        terminalRepairUsed = true;
+                        protocolRepairAttempted = true;
                         repairingTerminal = true;
-                        RuntimeTelemetry.RecordResponseRepair(ProviderFailureReason.MissingDisplayText, "started");
+                        repairReason = repairable.Failure.FailureReason;
+                        repairPhase = steps == 0 ? "initial" : "follow-up";
+                        repairOpen = true;
+                        RuntimeTelemetry.RecordResponseRepair(repairReason!, "started", repairPhase);
                         retryGeneration = true;
                         break;
                     }
@@ -2702,6 +2712,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     if (!await MailboxModelAsync(cause, request.ResponseId, evt, generateToken)
                             .ConfigureAwait(false))
                     {
+                        if (inRepair && cancellationToken.IsCancellationRequested)
+                        {
+                            repairOutcome = "cancelled";
+                        }
+
                         return;
                     }
 
@@ -2720,7 +2735,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             new ModelFailed(new ProviderFailure(
                                 ProviderErrorCode.InvalidResponse,
                                 "Malformed assistant envelope.",
-                                FailureReason: ProviderFailureReason.MissingDisplayText)),
+                                FailureReason: repairReason)),
                             generateToken)
                         .ConfigureAwait(false);
                     return;
@@ -2728,11 +2743,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
                 finally
                 {
-                    if (inRepair && !retryGeneration && repairOutcome is not null)
+                    if (inRepair && !retryGeneration && repairOutcome is not null && repairReason is not null)
                     {
-                        RuntimeTelemetry.RecordResponseRepair(
-                            ProviderFailureReason.MissingDisplayText,
-                            repairOutcome);
+                        RuntimeTelemetry.RecordResponseRepair(repairReason, repairOutcome, repairPhase);
+                        repairOpen = false;
                     }
                 }
 
@@ -3114,6 +3128,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
             }
 
+            if (repairOpen && repairReason is not null && cancellationToken.IsCancellationRequested)
+            {
+                RuntimeTelemetry.RecordResponseRepair(repairReason, "cancelled", repairPhase);
+                repairOpen = false;
+            }
+
             if (toolDeadline
                 && generateToken.IsCancellationRequested
                 && !cancellationToken.IsCancellationRequested)
@@ -3130,6 +3150,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             if (cancellationToken.IsCancellationRequested)
             {
+                if (repairOpen && repairReason is not null)
+                {
+                    RuntimeTelemetry.RecordResponseRepair(repairReason, "cancelled", repairPhase);
+                }
+
                 return;
             }
 
@@ -5858,19 +5883,19 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         return reason == ProviderFailureReason.IncompleteToolCall && pending.Count == 0;
     }
 
-    private const string TerminalDisplayRepairInstruction =
-        "The previous terminal response was rejected because chat.respond had no non-empty displayText. Produce the terminal response again using the existing tool results. Do not repeat completed work or request additional tools.";
-
-    private static bool TryRepairMissingDisplay(
+    private bool TryProtocolRepair(
         ModelFailed failed,
         List<ModelToolCall> pending,
         bool publishedVisible,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken,
+        DateTimeOffset? overallDeadline) =>
         !publishedVisible
         && pending.Count == 0
         && !cancellationToken.IsCancellationRequested
+        && (overallDeadline is null || _time.GetUtcNow() < overallDeadline)
         && failed.Failure.Code == ProviderErrorCode.InvalidResponse
-        && failed.Failure.FailureReason == ProviderFailureReason.MissingDisplayText;
+        && ProtocolFailures.Disposition(failed.Failure.FailureReason) == ProtocolFailureDisposition.Repairable
+        && ProtocolFailures.RepairInstruction(failed.Failure.FailureReason) is not null;
 
     private static bool IsMeaningfulVisible(ModelGenerationEvent evt) =>
         evt switch

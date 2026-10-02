@@ -24,11 +24,12 @@ public sealed class TerminalDisplayRepairTests
                     "nav-1",
                     ToolCatalog.BrowserNavigate,
                     """{"url":"https://zigwheels.test/"}""")),
+                new ModelToolCallEvent(new ModelToolCall("obs-1", ToolCatalog.BrowserObserve, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             [Invalid(ProviderFailureReason.MissingDisplayText)],
             Answer("Zigwheels lists the price."));
-        await using var runtime = Create(model, browser, ToolCatalog.BrowserNavigate);
+        await using var runtime = Create(model, browser, ToolCatalog.BrowserNavigate, ToolCatalog.BrowserObserve);
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("check zigwheels"));
@@ -36,20 +37,38 @@ public sealed class TerminalDisplayRepairTests
 
         Assert.Equal(3, model.Calls);
         Assert.Equal(["https://zigwheels.test/"], browser.Navigated);
+        Assert.Equal(1, browser.ObserveCalls);
         var repair = model.Requests[2];
+        AssertTerminalChannelOnly(repair);
         Assert.Contains(
             repair.Messages,
             message => message.Role == ModelRole.Tool
                 && message.Text.Contains("zigwheels.test", StringComparison.Ordinal));
-        Assert.Contains(
-            repair.Messages,
-            message => message.Role == ModelRole.System
-                && message.Text.Contains("non-empty displayText", StringComparison.Ordinal));
-        Assert.DoesNotContain(repair.Tools ?? [], tool => tool.Name.StartsWith("browser.", StringComparison.Ordinal));
         Assert.Equal(8192, repair.MaxOutputTokens);
         var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
         Assert.Equal(EntryStatus.Completed, assistant.Status);
         Assert.Equal("Zigwheels lists the price.", assistant.Text);
+        Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Text.Contains("application protocol", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_direct_chat_shows_only_the_repaired_answer()
+    {
+        var model = new RecordingModel(
+            [Invalid(ProviderFailureReason.MissingDisplayText)],
+            Answer("The repaired answer."));
+        await using var runtime = Create(model, browser: null);
+        await runtime.AttachAsync();
+
+        Assert.True(await runtime.SubmitUserTextAsync("hello"));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(2, model.Calls);
+        AssertTerminalChannelOnly(model.Requests[1]);
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Completed, assistant.Status);
+        Assert.Equal("The repaired answer.", assistant.Text);
+        Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Text.Contains("application protocol", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -74,6 +93,7 @@ public sealed class TerminalDisplayRepairTests
     [InlineData(ProviderFailureReason.UnknownAction)]
     [InlineData(ProviderFailureReason.ModelSuppliedDestination)]
     [InlineData(ProviderFailureReason.InvalidMemory)]
+    [InlineData(ProviderFailureReason.InvalidMemoryProposal)]
     public async Task Non_repairable_invalid_responses_fail_immediately(string reason)
     {
         var model = new RecordingModel([Invalid(reason)]);
@@ -175,11 +195,192 @@ public sealed class TerminalDisplayRepairTests
             Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
     }
 
+    [Fact]
+    public async Task Cancellation_before_repair_does_not_start_one()
+    {
+        var model = new CancelBeforeRepairModel();
+        await using var runtime = Create(model, browser: null);
+        await runtime.AttachAsync();
+
+        Assert.True(await runtime.SubmitUserTextAsync("hello"));
+        await model.Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await runtime.CancelActiveResponseAsync();
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(1, model.Calls);
+        Assert.Equal(
+            EntryStatus.Interrupted,
+            Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_committed_close_receipt_survives_protocol_repair(bool repairSucceeds)
+    {
+        var browser = new CountingBrowser();
+        var model = repairSucceeds
+            ? new RecordingModel(
+                [
+                    new ModelToolCallEvent(new ModelToolCall("close-1", ToolCatalog.BrowserClose, "{}")),
+                    new ModelCompleted(ModelStopReason.ToolCalls)
+                ],
+                [Invalid(ProviderFailureReason.MissingDisplayText)],
+                Answer("The browser is closed."))
+            : new RecordingModel(
+                [
+                    new ModelToolCallEvent(new ModelToolCall("close-1", ToolCatalog.BrowserClose, "{}")),
+                    new ModelCompleted(ModelStopReason.ToolCalls)
+                ],
+                [Invalid(ProviderFailureReason.MissingDisplayText)],
+                [Invalid(ProviderFailureReason.MissingDisplayText)]);
+        await using var runtime = Create(model, browser, ToolCatalog.BrowserClose);
+        await runtime.AttachAsync();
+
+        Assert.True(await runtime.SubmitUserTextAsync("close the browser"));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(1, browser.CloseCalls);
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(repairSucceeds ? EntryStatus.Completed : EntryStatus.Failed, assistant.Status);
+        Assert.Equal("Browser closed", Assert.Single(assistant.Envelope!.EffectReceipts!).Label);
+        if (repairSucceeds)
+        {
+            Assert.Equal("The browser is closed.", assistant.Text);
+        }
+    }
+
+    [Fact]
+    public async Task A_transient_failure_during_repair_retries_without_tools_or_a_second_effect()
+    {
+        var browser = new CountingBrowser();
+        var model = new RecordingModel(
+            [
+                new ModelToolCallEvent(new ModelToolCall("close-1", ToolCatalog.BrowserClose, "{}")),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ],
+            [Invalid(ProviderFailureReason.MissingDisplayText)],
+            [Unavailable(ProviderFailureReason.StreamIncomplete)],
+            Answer("The browser is closed."));
+        await using var runtime = Create(model, browser, ToolCatalog.BrowserClose);
+        await runtime.AttachAsync();
+
+        Assert.True(await runtime.SubmitUserTextAsync("close the browser"));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(4, model.Calls);
+        Assert.Equal(1, browser.CloseCalls);
+        AssertTerminalChannelOnly(model.Requests[2]);
+        AssertTerminalChannelOnly(model.Requests[3]);
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Completed, assistant.Status);
+        Assert.Equal("Browser closed", Assert.Single(assistant.Envelope!.EffectReceipts!).Label);
+    }
+
+    [Fact]
+    public async Task A_transient_retry_does_not_consume_protocol_repair()
+    {
+        var browser = new CountingBrowser();
+        var model = new RecordingModel(
+            [
+                new ModelToolCallEvent(new ModelToolCall(
+                    "nav-1",
+                    ToolCatalog.BrowserNavigate,
+                    """{"url":"https://zigwheels.test/"}""")),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ],
+            [Unavailable(ProviderFailureReason.StreamIncomplete)],
+            [Invalid(ProviderFailureReason.MissingDisplayText)],
+            Answer("Zigwheels lists the price."));
+        await using var runtime = Create(model, browser, ToolCatalog.BrowserNavigate);
+        await runtime.AttachAsync();
+
+        Assert.True(await runtime.SubmitUserTextAsync("check zigwheels"));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(4, model.Calls);
+        Assert.Equal(["https://zigwheels.test/"], browser.Navigated);
+        Assert.Contains(model.Requests[2].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserNavigate);
+        AssertTerminalChannelOnly(model.Requests[3]);
+        Assert.Equal(
+            EntryStatus.Completed,
+            Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
+    }
+
+    [Fact]
+    public async Task An_expired_execution_deadline_does_not_start_protocol_repair()
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-02T12:00:00Z"));
+        var browser = new CountingBrowser();
+        var model = new HoldThenFailModel();
+        await using var runtime = Create(model, browser, clock, ToolCatalog.BrowserNavigate);
+        await runtime.AttachAsync();
+
+        Assert.True(await runtime.SubmitUserTextAsync("check zigwheels"));
+        await model.Holding.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        clock.Advance(TimeSpan.FromSeconds(181));
+        model.Release.TrySetResult();
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(2, model.Calls);
+        Assert.Single(browser.Navigated);
+        Assert.NotEqual(
+            EntryStatus.Completed,
+            Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
+    }
+
+    [Theory]
+    [InlineData(ProviderFailureReason.SpeechOmitted, ProtocolFailureDisposition.Normalize)]
+    [InlineData(ProviderFailureReason.SpeechMalformed, ProtocolFailureDisposition.Normalize)]
+    [InlineData(ProviderFailureReason.MissingDisplayText, ProtocolFailureDisposition.Repairable)]
+    [InlineData(ProviderFailureReason.UnknownAction, ProtocolFailureDisposition.Terminal)]
+    [InlineData(ProviderFailureReason.ModelSuppliedDestination, ProtocolFailureDisposition.Terminal)]
+    [InlineData(ProviderFailureReason.InvalidMemory, ProtocolFailureDisposition.Terminal)]
+    [InlineData(ProviderFailureReason.InvalidMemoryProposal, ProtocolFailureDisposition.Terminal)]
+    [InlineData(ProviderFailureReason.ResponseTooLarge, ProtocolFailureDisposition.Terminal)]
+    public void Protocol_failure_disposition_is_an_explicit_allowlist(string reason, ProtocolFailureDisposition disposition)
+    {
+        Assert.Equal(disposition, ProtocolFailures.Disposition(reason));
+        if (disposition == ProtocolFailureDisposition.Repairable)
+        {
+            Assert.Contains("non-empty displayText", ProtocolFailures.RepairInstruction(reason), StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Null(ProtocolFailures.RepairInstruction(reason));
+        }
+    }
+
     private static ModelFailed Invalid(string reason) =>
         new(new ProviderFailure(
             ProviderErrorCode.InvalidResponse,
             "Malformed assistant envelope.",
             FailureReason: reason));
+
+    private static ModelFailed Unavailable(string reason) =>
+        new(new ProviderFailure(
+            ProviderErrorCode.Unavailable,
+            "Language model is unavailable.",
+            FailureReason: reason));
+
+    private static void AssertTerminalChannelOnly(ModelRequest request)
+    {
+        Assert.NotNull(request.ResponseContract);
+        Assert.Contains(
+            request.Messages,
+            message => message.Role == ModelRole.System
+                && message.Text.Contains("rejected by the application protocol", StringComparison.Ordinal)
+                && message.Text.Contains("non-empty displayText", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            request.Tools ?? [],
+            tool => tool.Name is ToolCatalog.BrowserNavigate
+                or ToolCatalog.BrowserObserve
+                or ToolCatalog.BrowserAct
+                or ToolCatalog.BrowserClose
+                or ToolCatalog.EmailSend
+                or ToolCatalog.AppMessageSend
+                or ToolCatalog.SkillsLoad);
+    }
 
     private static ModelGenerationEvent[] Answer(string text) =>
     [
@@ -190,9 +391,13 @@ public sealed class TerminalDisplayRepairTests
         new ModelCompleted(ModelStopReason.Completed)
     ];
 
-    private static SessionRuntime Create(ILanguageModel model, IBrowserSession? browser, params string[] tools)
+    private static SessionRuntime Create(
+        ILanguageModel model,
+        IBrowserSession? browser,
+        FakeTimeProvider? clock,
+        params string[] tools)
     {
-        var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-02T12:00:00Z"));
+        var time = clock ?? new FakeTimeProvider(DateTimeOffset.Parse("2026-10-02T12:00:00Z"));
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 80).Select(index => Guid.Parse($"019944af-00f3-7000-8000-{index:D12}")),
             [Guid.NewGuid()]);
@@ -245,6 +450,9 @@ public sealed class TerminalDisplayRepairTests
             NullLogger<SessionRuntime>.Instance,
             tools: new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll));
     }
+
+    private static SessionRuntime Create(ILanguageModel model, IBrowserSession? browser, params string[] tools) =>
+        Create(model, browser, clock: null, tools);
 
     private sealed class RecordingModel(params ModelGenerationEvent[][] steps) : ILanguageModel
     {
@@ -299,9 +507,71 @@ public sealed class TerminalDisplayRepairTests
         }
     }
 
+    private sealed class CancelBeforeRepairModel : ILanguageModel
+    {
+        private int _calls;
+
+        public int Calls => _calls;
+
+        public TaskCompletionSource Ready { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ModelCapabilities Capabilities { get; } = new(true, true, StructuredOutput: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _calls);
+            Ready.TrySetResult();
+            await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
+            yield break;
+        }
+    }
+
+    private sealed class HoldThenFailModel : ILanguageModel
+    {
+        private int _calls;
+
+        public int Calls => _calls;
+
+        public TaskCompletionSource Holding { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var call = Interlocked.Increment(ref _calls);
+            if (call == 1)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall(
+                    "nav-1",
+                    ToolCatalog.BrowserNavigate,
+                    """{"url":"https://zigwheels.test/"}"""));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            Holding.TrySetResult();
+            await Release.Task.ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return new ModelFailed(new ProviderFailure(
+                ProviderErrorCode.InvalidResponse,
+                "Malformed assistant envelope.",
+                FailureReason: ProviderFailureReason.MissingDisplayText));
+        }
+    }
+
     private sealed class CountingBrowser : IBrowserSession
     {
         public List<string> Navigated { get; } = [];
+
+        public int ObserveCalls { get; private set; }
+
+        public int CloseCalls { get; private set; }
 
         public bool IsAvailable => true;
 
@@ -324,8 +594,18 @@ public sealed class TerminalDisplayRepairTests
                 new BrowserObservation(request.Url.AbsoluteUri, "Zigwheels", "Open", false, [])));
         }
 
-        public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+        public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        {
+            ObserveCalls++;
+            var url = Navigated.Count == 0 ? "https://zigwheels.test/" : Navigated[^1];
+            return new(new BrowserOperationResult(null, new BrowserObservation(url, "Zigwheels", "Open", false, [])));
+        }
+
+        public ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        {
+            CloseCalls++;
+            return new(new BrowserCloseResult("closed"));
+        }
 
         public ValueTask<BrowserOperationResult> ActAsync(BrowserActRequest request, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();

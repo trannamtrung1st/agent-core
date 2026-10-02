@@ -108,10 +108,11 @@ public static class RuntimeTelemetry
             });
     }
 
-    public static void RecordResponseRepair(string reason, string outcome)
+    public static void RecordResponseRepair(string reason, string outcome, string phase)
     {
-        if (reason != ProviderFailureReason.MissingDisplayText
-            || outcome is not ("started" or "succeeded" or "failed"))
+        if (ProtocolFailures.Disposition(reason) != ProtocolFailureDisposition.Repairable
+            || outcome is not ("started" or "succeeded" or "failed" or "cancelled")
+            || phase is not ("initial" or "follow-up"))
         {
             return;
         }
@@ -121,7 +122,8 @@ public static class RuntimeTelemetry
             new TagList
             {
                 { "reason", reason },
-                { "outcome", outcome }
+                { "outcome", outcome },
+                { "phase", phase }
             });
     }
 
