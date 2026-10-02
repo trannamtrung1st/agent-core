@@ -1057,16 +1057,16 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder, IInitiativeE
             var messages = request.Messages.ToList();
             messages.Insert(1, new ModelMessage(ModelRole.System, PromptContextBuilder.BuildScheduledReminderDeliverySystem()));
             IReadOnlyList<ModelToolDefinition>? tools = null;
-            if (context.TrustedConnection)
+            var offered = builder.OfferTools(context.Definition, context);
+            if (offered.Count > 0)
             {
-                var offered = builder.OfferTools(context.Definition, context);
-                if (offered.Any(tool => ToolCatalog.IsBrowserTool(tool.Name)))
-                {
-                    tools = offered;
-                    messages.Add(new ModelMessage(
-                        ModelRole.System,
-                        "This connected occurrence may use the offered browser tools and work.complete. work.complete records the owner-facing result. Set attentionRequired only when the owner should be notified. Do not choose a recipient. A plain final answer stays quiet."));
-                }
+                tools = offered;
+                var browser = offered.Any(tool => ToolCatalog.IsBrowserTool(tool.Name));
+                messages.Add(new ModelMessage(
+                    ModelRole.System,
+                    browser
+                        ? "This connected occurrence may use the offered browser tools and work.complete. work.complete records the owner-facing result. Set attentionRequired only when the owner should be notified. Do not choose a recipient. A plain final answer stays quiet."
+                        : "This occurrence may call work.complete to record the owner-facing result. Set attentionRequired only when the owner should be notified. Do not choose a recipient. A plain final answer stays quiet."));
             }
 
             request = request with { Messages = messages, Tools = tools };

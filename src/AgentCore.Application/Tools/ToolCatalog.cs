@@ -56,7 +56,7 @@ public static class ToolCatalog
         {
             return context.TrustedConnection
                 ? OccurrenceTools(definition, context, configurationGate)
-                : [];
+                : CompletionOnly(definition, context, configurationGate);
         }
 
         var offered = new List<ModelToolDefinition>();
@@ -118,6 +118,16 @@ public static class ToolCatalog
         }
 
         AddWorkComplete(offered, seen, definition, context, configurationGate);
+        return offered;
+    }
+
+    private static List<ModelToolDefinition> CompletionOnly(
+        AgentDefinition definition,
+        AgentContext context,
+        IToolConfigurationGate configurationGate)
+    {
+        var offered = new List<ModelToolDefinition>();
+        AddWorkComplete(offered, new HashSet<string>(StringComparer.Ordinal), definition, context, configurationGate);
         return offered;
     }
 

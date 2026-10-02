@@ -99,7 +99,18 @@ public sealed class OwnerAttentionTests
                     true,
                     TriggerKind.ScheduledOccurrence,
                     AgentInstanceId: OwnerId,
-                    TrustedConnection: true)));
+                    TrustedConnection: false)));
+        Assert.Equal(
+            ToolPolicyDecision.Deny,
+            ToolPolicy.EvaluateExecution(
+                definition,
+                ToolCatalog.BrowserNavigate,
+                ToolConfigurationGates.AllowAll,
+                admission: new ToolExecutionAdmission(
+                    true,
+                    TriggerKind.ScheduledOccurrence,
+                    AgentInstanceId: OwnerId,
+                    TrustedConnection: false)));
         var messaging = await new SessionToolExecutor().ExecuteAsync(
             definition,
             Guid.Empty,
@@ -120,13 +131,31 @@ public sealed class OwnerAttentionTests
             "recipient",
             speak.Request.Tools!.Single(tool => tool.Name == ToolCatalog.WorkComplete).ParametersJson,
             StringComparison.OrdinalIgnoreCase);
-        var quiet = Assert.IsType<Speak>(await brain.DecideAsync(Context(trusted: false), Guid.NewGuid()));
-        Assert.Null(quiet.Request.Tools);
+        Assert.Contains(speak.Request.Tools!, tool => tool.Name == ToolCatalog.BrowserNavigate);
+        var unconnected = Assert.IsType<Speak>(await brain.DecideAsync(Context(trusted: false), Guid.NewGuid()));
+        Assert.Contains(unconnected.Request.Tools!, tool => tool.Name == ToolCatalog.WorkComplete);
+        Assert.DoesNotContain(unconnected.Request.Tools!, tool => ToolCatalog.IsBrowserTool(tool.Name));
+    }
+
+    [Fact]
+    public async Task Scheduled_occurrence_without_a_store_connection_can_require_attention()
+    {
+        var store = new InMemoryWorkItemStore();
+        var outcome = await RunAsync(
+            store,
+            ToolRound(Call(
+                ToolCatalog.WorkComplete,
+                """{"summary":"A payment failed.","attentionRequired":true}""")),
+            trustedConnection: false);
+        var completed = Assert.IsType<DurableOccurrenceCompleted>(outcome);
+        Assert.True(completed.AttentionRequired);
+        Assert.Equal("A payment failed.", completed.Text);
     }
 
     private static async Task<DurableOccurrenceOutcome> RunAsync(
         InMemoryWorkItemStore store,
-        IReadOnlyList<ModelGenerationEvent> round)
+        IReadOnlyList<ModelGenerationEvent> round,
+        bool trustedConnection = true)
     {
         await store.CreateAsync(WorkItem.Create(
             WorkId,
@@ -162,7 +191,7 @@ public sealed class OwnerAttentionTests
                 Enumerable.Range(1, 8).Select(index => Guid.Parse($"019944af-00f3-7000-8000-{index:D12}")),
                 [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940f301")]),
             CancellationToken.None,
-            trustedConnection: true);
+            trustedConnection);
     }
 
     private static AgentDefinition Definition() =>

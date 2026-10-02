@@ -180,12 +180,8 @@ public static class ToolPolicy
         context is { DetachedExecution: true, TrustedConnection: true, Trigger.Kind: TriggerKind.ScheduledOccurrence };
 
     private static bool OccurrenceCompletion(ToolExecutionAdmission? admission) =>
-        admission is { Detached: true }
-        && ToolResources.IsOccurrence(admission.TriggerKind)
-        && (admission.TriggerKind != TriggerKind.ScheduledOccurrence || admission.TrustedConnection);
+        admission is { Detached: true } && ToolResources.IsOccurrence(admission.TriggerKind);
 
     private static bool OccurrenceCompletion(AgentContext? context) =>
-        context is { DetachedExecution: true }
-        && ToolResources.IsOccurrence(context.Trigger.Kind)
-        && (context.Trigger.Kind != TriggerKind.ScheduledOccurrence || context.TrustedConnection);
+        context is { DetachedExecution: true } && ToolResources.IsOccurrence(context.Trigger.Kind);
 }
