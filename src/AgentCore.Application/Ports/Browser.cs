@@ -42,7 +42,16 @@ public sealed record BrowserObservation(
     string Title,
     string VisibleText,
     bool TextTruncated,
-    IReadOnlyList<BrowserElement> Elements);
+    IReadOnlyList<BrowserElement> Elements,
+    BrowserInterventionKind Intervention = BrowserInterventionKind.None);
+
+public enum BrowserInterventionKind
+{
+    None,
+    AuthenticationRequired,
+    AccountRegistrationRequired,
+    HumanVerificationRequired
+}
 
 public sealed record BrowserOperationResult(string? ErrorCode, BrowserObservation? Observation);
 
@@ -79,4 +88,9 @@ public interface IBrowserSession
     ValueTask<BrowserOperationResult> ActAsync(
         BrowserActRequest request,
         CancellationToken cancellationToken = default);
+
+    ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+        new(new BrowserCloseResult("provider_unavailable"));
 }
+
+public sealed record BrowserCloseResult(string Status);

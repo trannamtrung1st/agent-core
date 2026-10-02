@@ -2539,7 +2539,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         ModelRequest request,
         IReadOnlyList<ModelToolDefinition>? authorizedTools,
         AgentTrigger trigger,
-        ILanguageModel model)
+        ILanguageModel model,
+        bool suppressBrowserTools = false)
     {
         var tools = ApplicationMessageToolOffer.Apply(
             authorizedTools,
@@ -2549,6 +2550,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             trigger,
             _tools.ConfigurationGate,
             model.Capabilities.Tools);
+        if (suppressBrowserTools && tools is { Count: > 0 })
+        {
+            tools = tools
+                .Where(tool => !tool.Name.StartsWith("browser.", StringComparison.Ordinal))
+                .ToArray();
+        }
+
         if (tools is not { Count: > 0 })
         {
             return request with
@@ -2581,6 +2589,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var pinnedSkills = activeSkillIds.ToArray();
         var steps = 0;
         var outputBytes = 0;
+        var browserHandoff = false;
         var toolDeadline = request.Tools is { Count: > 0 };
         using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using ITimer? overallTimer = toolDeadline ? ScheduleCancel(_time, overallCts, ToolLimits.Overall) : null;
@@ -2597,7 +2606,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     request with { Messages = messages },
                     authorizedTools,
                     trigger,
-                    model);
+                    model,
+                    browserHandoff);
                 await foreach (var evt in model.GenerateAsync(working, generateToken).ConfigureAwait(false))
                 {
                     switch (evt)
@@ -2852,6 +2862,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                                 if (!preparedFailed)
                                 {
+                                    if (browserHandoff && call.Name.StartsWith("browser.", StringComparison.Ordinal))
+                                    {
+                                        executionResult = ToolExecutionResult.FromText(
+                                            """{"error":"user_intervention_required","message":"Browser tools are paused for this turn."}""");
+                                    }
+                                    else
+                                    {
                                     using var toolCts = CancellationTokenSource.CreateLinkedTokenSource(overallCts.Token);
                                     using var toolTimer = ScheduleCancel(_time, toolCts, ToolLimits.PerTool);
                                     executionResult = await _tools.ExecuteAsync(
@@ -2878,6 +2895,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                         && ApplicationMessageToolPolicy.UnlocksIntermediateMessaging(call.Name))
                                     {
                                         substantiveWorkInBatch = true;
+                                    }
                                     }
                                 }
                             }
@@ -2916,6 +2934,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     RuntimeTelemetry.Record("tools", RuntimeTelemetry.ElapsedMs(toolStarted), call.Name);
 
                     executionResult = ToolResultAdmission.AdmitForModel(model, executionResult);
+                    if (SignalsBrowserHandoff(executionResult.Text))
+                    {
+                        browserHandoff = true;
+                    }
                     outputBytes += ToolOutputBudget.TextByteCount(executionResult);
                     if (outputBytes > ToolLimits.MaxOutputBytes)
                     {
@@ -5663,6 +5685,26 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         toolName.StartsWith("browser.", StringComparison.Ordinal)
             ? ResponseProgressMessages.UsingBrowser
             : ResponseProgressMessages.RunningTools;
+
+    private static bool SignalsBrowserHandoff(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.TryGetProperty("error", out var error)
+                && error.ValueKind == JsonValueKind.String
+                && string.Equals(error.GetString(), "user_intervention_required", StringComparison.Ordinal);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 
     private async Task PublishProgressAsync(
         EventContext context,

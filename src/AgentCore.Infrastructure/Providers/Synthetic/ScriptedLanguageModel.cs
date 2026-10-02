@@ -143,6 +143,17 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
 
+        if (TryScriptBrowserSignup(request, out var signupEvents))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var signupEvent in signupEvents)
+            {
+                yield return signupEvent;
+            }
+
+            yield break;
+        }
+
         if (TryScriptBrowserChallenge(request, out var challengeEvents))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1096,6 +1107,13 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
     public const string BrowserChallengeMarker = "human verification";
 
+    public const string BrowserSignupMarker = "signup fixture";
+
+    public const string BrowserSignupAnswer =
+        "I've reached the registration page. Please complete it in the browser and tell me to continue.";
+
+    public const string BrowserSignupContinueAnswer = "The account page is ready.";
+
     public const string BrowserChallengeAnswer =
         "The page is asking for human verification. The browser is still open. Complete the check manually, then tell me to continue.";
 
@@ -1114,16 +1132,94 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
     public const string BrowserRecordSkillId = "browser.record.lookup";
 
+    private static bool TryScriptBrowserSignup(
+        ModelRequest request,
+        out IReadOnlyList<ModelGenerationEvent> events)
+    {
+        events = [];
+        var users = request.Messages
+            .Where(message => message.Role == ModelRole.User)
+            .Select(message => message.Text ?? string.Empty)
+            .ToArray();
+        if (users.Length == 0)
+        {
+            return false;
+        }
+
+        var continuing = users.Length > 1
+            && users[^1].Trim().Equals("continue", StringComparison.OrdinalIgnoreCase)
+            && users.Take(users.Length - 1).Any(text => text.Contains(BrowserSignupMarker, StringComparison.OrdinalIgnoreCase));
+        var opening = users[^1].Contains(BrowserSignupMarker, StringComparison.OrdinalIgnoreCase);
+        if (!continuing && !opening)
+        {
+            return false;
+        }
+
+        var offersBrowser = Offers(request, ToolCatalog.BrowserNavigate);
+        var startUrl = string.Empty;
+        if (offersBrowser && !TryReadTrustedBrowserStart(request, out startUrl))
+        {
+            return false;
+        }
+
+        var rounds = ToolRoundsSinceLastUser(request.Messages);
+        if (!offersBrowser)
+        {
+            if (rounds == 0)
+            {
+                return false;
+            }
+
+            events =
+            [
+                new ModelTextDelta(continuing ? BrowserSignupContinueAnswer : BrowserSignupAnswer),
+                new ModelCompleted(ModelStopReason.Completed)
+            ];
+            return true;
+        }
+
+        if (continuing)
+        {
+            if (rounds == 0)
+            {
+                events = ToolTurn(
+                    "signup-account",
+                    ToolCatalog.BrowserNavigate,
+                    JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = startUrl.TrimEnd('/') + "/account" }));
+                return true;
+            }
+
+            events =
+            [
+                new ModelTextDelta(BrowserSignupContinueAnswer),
+                new ModelCompleted(ModelStopReason.Completed)
+            ];
+            return true;
+        }
+
+        switch (rounds)
+        {
+            case 0:
+                events = ToolTurn(
+                    "signup-open",
+                    ToolCatalog.BrowserNavigate,
+                    JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = startUrl.TrimEnd('/') + "/signup" }));
+                return true;
+            default:
+                events =
+                [
+                    new ModelTextDelta(BrowserSignupAnswer),
+                    new ModelCompleted(ModelStopReason.Completed)
+                ];
+                return true;
+        }
+    }
+
     private static bool TryScriptBrowserChallenge(
         ModelRequest request,
         out IReadOnlyList<ModelGenerationEvent> events)
     {
         events = [];
-        if (!Offers(request, ToolCatalog.BrowserNavigate) || !TryReadTrustedBrowserStart(request, out var startUrl))
-        {
-            return false;
-        }
-
         var users = request.Messages
             .Where(message => message.Role == ModelRole.User)
             .Select(message => message.Text ?? string.Empty)
@@ -1142,7 +1238,29 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             return false;
         }
 
+        var offersBrowser = Offers(request, ToolCatalog.BrowserNavigate);
+        var startUrl = string.Empty;
+        if (offersBrowser && !TryReadTrustedBrowserStart(request, out startUrl))
+        {
+            return false;
+        }
+
         var rounds = ToolRoundsSinceLastUser(request.Messages);
+        if (!offersBrowser)
+        {
+            if (rounds == 0)
+            {
+                return false;
+            }
+
+            events =
+            [
+                new ModelTextDelta(continuing ? BrowserChallengeContinueAnswer : BrowserChallengeAnswer),
+                new ModelCompleted(ModelStopReason.Completed)
+            ];
+            return true;
+        }
+
         if (continuing)
         {
             if (rounds == 0)
@@ -1169,6 +1287,16 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                     JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = challengeUrl }));
                 return true;
             case 1:
+                if (!Offers(request, ToolCatalog.BrowserObserve))
+                {
+                    events =
+                    [
+                        new ModelTextDelta(BrowserChallengeAnswer),
+                        new ModelCompleted(ModelStopReason.Completed)
+                    ];
+                    return true;
+                }
+
                 events = ToolTurn("p9-challenge-observe", ToolCatalog.BrowserObserve, "{}");
                 return true;
             default:

@@ -277,7 +277,7 @@ Owners: [Protocol](14-api-and-realtime-protocol.md) (capability, leases vs Attac
 
 ## P9 visible browser (observed)
 
-**Decision:** The first browser provider is direct `Microsoft.Playwright` 1.63.0 inside Infrastructure. It is not Playwright MCP, a Node sidecar, or a second tool host. The shipped definition is `general-assistant` v11. Versions v1–v10 stay unchanged. At the P9 freeze, browser state was ephemeral and was not a SQLite snapshot. A later `ProfileMode` `PersistentAgent` stores an Agent Instance browser profile on disk under `ProfileRoot`. That profile is not memory, not a Skill, and not the human user's Chrome profile. Closure evidence: [p9-freeze-candidate.md](reports/p9-freeze-candidate.md).
+**Decision:** The first browser provider is direct `Microsoft.Playwright` 1.63.0 inside Infrastructure. It is not Playwright MCP, a Node sidecar, or a second tool host. The shipped definition for new general-assistant instances is v12, which adds `browser.close`. `general-assistant` v11 remains the P9 browser allowlist (`browser.navigate`, `browser.observe`, `browser.act`) and is unchanged. Versions v1–v10 stay unchanged. At the P9 freeze, browser state was ephemeral and was not a SQLite snapshot. A later `ProfileMode` `PersistentAgent` stores an Agent Instance browser profile on disk under `ProfileRoot`. That profile is not memory, not a Skill, and not the human user's Chrome profile. Closure evidence: [p9-freeze-candidate.md](reports/p9-freeze-candidate.md).
 
 ## What may still be measured
 

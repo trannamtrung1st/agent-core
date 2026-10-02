@@ -12,6 +12,9 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
     public const string RecordResource = "AgentCore.Infrastructure.Browser.Fixture.record.html";
     public const string IsolateResource = "AgentCore.Infrastructure.Browser.Fixture.isolate.html";
     public const string ChallengeResource = "AgentCore.Infrastructure.Browser.Fixture.challenge.html";
+    public const string LoginResource = "AgentCore.Infrastructure.Browser.Fixture.login.html";
+    public const string SignupResource = "AgentCore.Infrastructure.Browser.Fixture.signup.html";
+    public const string AccountResource = "AgentCore.Infrastructure.Browser.Fixture.account.html";
 
     private static readonly string[] RequiredResources =
     [
@@ -19,7 +22,10 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
         NoMatchResource,
         RecordResource,
         IsolateResource,
-        ChallengeResource
+        ChallengeResource,
+        LoginResource,
+        SignupResource,
+        AccountResource
     ];
 
     private readonly ILogger _logger;
@@ -216,6 +222,24 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
             if (string.Equals(path, "/challenge", StringComparison.Ordinal))
             {
                 await WriteResourceAsync(context, ChallengeResource, 200).ConfigureAwait(false);
+                return;
+            }
+
+            if (string.Equals(path, "/login", StringComparison.Ordinal))
+            {
+                await WriteResourceAsync(context, LoginResource, 200).ConfigureAwait(false);
+                return;
+            }
+
+            if (string.Equals(path, "/signup", StringComparison.Ordinal))
+            {
+                await WriteResourceAsync(context, SignupResource, 200).ConfigureAwait(false);
+                return;
+            }
+
+            if (string.Equals(path, "/account", StringComparison.Ordinal))
+            {
+                await WriteResourceAsync(context, AccountResource, 200).ConfigureAwait(false);
                 return;
             }
 

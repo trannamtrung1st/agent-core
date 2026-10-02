@@ -125,7 +125,7 @@ public sealed class BrowserRecordJourneyTests
         await runtime.WaitUntilIdleAsync();
 
         Assert.Equal(["http://127.0.0.1:5094/challenge"], browser.NavigatedUrls);
-        Assert.Equal(1, browser.ObserveCalls);
+        Assert.Equal(0, browser.ObserveCalls);
         Assert.Equal(0, browser.ActCalls);
         var first = Assert.Single(
             runtime.Snapshot.Entries,
@@ -135,13 +135,14 @@ public sealed class BrowserRecordJourneyTests
         Assert.Contains(
             recording.Requests.SelectMany(request => request.Messages),
             message => message.Role == ModelRole.Tool
+                && message.Text.Contains("user_intervention_required", StringComparison.Ordinal)
                 && message.Text.Contains("Human verification required", StringComparison.Ordinal));
 
         Assert.True(await runtime.SubmitUserTextAsync("continue"));
         await runtime.WaitUntilIdleAsync();
 
         Assert.Single(browser.NavigatedUrls);
-        Assert.Equal(2, browser.ObserveCalls);
+        Assert.Equal(1, browser.ObserveCalls);
         Assert.Equal(0, browser.ActCalls);
         var answers = runtime.Snapshot.Entries
             .Where(entry => entry.Role == ConversationRole.Assistant && entry.Status == EntryStatus.Completed)
@@ -149,6 +150,55 @@ public sealed class BrowserRecordJourneyTests
             .ToArray();
         Assert.Equal(
             [ScriptedLanguageModel.BrowserChallengeAnswer, ScriptedLanguageModel.BrowserChallengeContinueAnswer],
+            answers);
+        Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Status == EntryStatus.Failed);
+        Assert.DoesNotContain(output.Items, item => item.Payload is ErrorOutput);
+    }
+
+    [Fact]
+    public async Task Signup_fixture_hands_off_and_the_next_turn_can_use_the_browser_again()
+    {
+        var browser = new FixtureBrowser();
+        var recording = new RecordingModel(new ScriptedLanguageModel());
+        var output = new CapturingSessionOutput();
+        var turns = new InMemoryConversationTurnExecutionStore();
+        await using var runtime = Create(
+            new SemanticResponseLanguageModel(recording),
+            output,
+            Definition(),
+            browser,
+            turns);
+        await runtime.AttachAsync();
+        Assert.True(await runtime.SubmitUserTextAsync("Please try the signup fixture."));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(["http://127.0.0.1:5094/signup"], browser.NavigatedUrls);
+        Assert.Equal(0, browser.ObserveCalls);
+        var first = Assert.Single(
+            runtime.Snapshot.Entries,
+            entry => entry.Role == ConversationRole.Assistant && entry.Status == EntryStatus.Completed);
+        Assert.Equal(ScriptedLanguageModel.BrowserSignupAnswer, first.Text);
+        Assert.Contains(
+            recording.Requests,
+            request => request.Tools is not null
+                && !request.Tools.Any(tool => tool.Name.StartsWith("browser.", StringComparison.Ordinal))
+                && request.Messages.Any(message => message.Role == ModelRole.Tool
+                    && message.Text.Contains("user_intervention_required", StringComparison.Ordinal)
+                    && message.Text.Contains("registration", StringComparison.Ordinal)));
+        Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Status == EntryStatus.Failed);
+
+        Assert.True(await runtime.SubmitUserTextAsync("continue"));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(
+            ["http://127.0.0.1:5094/signup", "http://127.0.0.1:5094/account"],
+            browser.NavigatedUrls);
+        var answers = runtime.Snapshot.Entries
+            .Where(entry => entry.Role == ConversationRole.Assistant && entry.Status == EntryStatus.Completed)
+            .Select(entry => entry.Text)
+            .ToArray();
+        Assert.Equal(
+            [ScriptedLanguageModel.BrowserSignupAnswer, ScriptedLanguageModel.BrowserSignupContinueAnswer],
             answers);
         Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Status == EntryStatus.Failed);
         Assert.DoesNotContain(output.Items, item => item.Payload is ErrorOutput);
@@ -282,12 +332,18 @@ public sealed class BrowserRecordJourneyTests
         {
             NavigatedUrls.Add(request.Url.AbsoluteUri);
             if (!string.Equals(request.Url.GetLeftPart(UriPartial.Authority), Origin, StringComparison.Ordinal)
-                || request.Url.AbsolutePath is not ("/" or "" or "/challenge"))
+                || request.Url.AbsolutePath is not ("/" or "" or "/challenge" or "/signup" or "/account"))
             {
                 return new(new BrowserOperationResult("target_denied", null));
             }
 
-            _page = request.Url.AbsolutePath == "/challenge" ? "challenge" : "home";
+            _page = request.Url.AbsolutePath switch
+            {
+                "/challenge" => "challenge",
+                "/signup" => "signup",
+                "/account" => "account",
+                _ => "home"
+            };
             _filled = null;
             return new(Ok(Capture()));
         }
@@ -331,6 +387,8 @@ public sealed class BrowserRecordJourneyTests
             "record" => new Uri(Origin + "/records/AC-1042"),
             "nomatch" => new Uri(Origin + "/search"),
             "challenge" => new Uri(Origin + "/challenge"),
+            "signup" => new Uri(Origin + "/signup"),
+            "account" => new Uri(Origin + "/account"),
             _ => new Uri(Origin + "/")
         };
 
@@ -346,6 +404,18 @@ public sealed class BrowserRecordJourneyTests
                     Origin + "/challenge",
                     "Human verification required",
                     "Human verification required",
+                    [],
+                    BrowserInterventionKind.HumanVerificationRequired),
+                "signup" => Page(
+                    Origin + "/signup",
+                    "Create account",
+                    "Create account",
+                    [],
+                    BrowserInterventionKind.AccountRegistrationRequired),
+                "account" => Page(
+                    Origin + "/account",
+                    "Account ready",
+                    "The fixture account page is open.",
                     []),
                 "record" => Page(
                     Origin + "/records/AC-1042",
@@ -365,7 +435,8 @@ public sealed class BrowserRecordJourneyTests
             string url,
             string title,
             string visibleText,
-            (string Name, string Role)[] elements)
+            (string Name, string Role)[] elements,
+            BrowserInterventionKind intervention = BrowserInterventionKind.None)
         {
             var captured = elements.Select(element =>
             {
@@ -373,7 +444,7 @@ public sealed class BrowserRecordJourneyTests
                 _refs[reference] = element.Name;
                 return new BrowserElement(reference, element.Role, element.Name);
             }).ToArray();
-            return new BrowserObservation(url, title, visibleText, false, captured);
+            return new BrowserObservation(url, title, visibleText, false, captured, intervention);
         }
 
         private string Mint(string name)

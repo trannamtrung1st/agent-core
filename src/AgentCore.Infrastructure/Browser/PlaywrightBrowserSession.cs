@@ -62,6 +62,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
     private readonly ConcurrentDictionary<Guid, Guid?> _sessionOwners = new();
     private readonly ConcurrentDictionary<Guid, SessionBrowser> _persistent = new();
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _profileGates = new();
+    private readonly ConcurrentBag<IPlaywright> _retiredDrivers = [];
     private readonly ConcurrentDictionary<string, LiveElement> _refs = new();
     private IPlaywright? _playwright;
     private IBrowser? _browser;
@@ -157,6 +158,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
         foreach (var session in _persistent.Values)
         {
+            Interlocked.Exchange(ref session.RuntimeClosed, 1);
             await CloseQuietlyAsync(session.Context).ConfigureAwait(false);
             session.ProfileLease?.Dispose();
             DisposeQuietly(session.PlaywrightDriver);
@@ -180,6 +182,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         _playwright?.Dispose();
         _browser = null;
         _playwright = null;
+        DrainRetiredDrivers();
         await _fixture.DisposeAsync().ConfigureAwait(false);
     }
 
@@ -485,6 +488,145 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
     internal IBrowserContext? ContextFor(Guid sessionId) =>
         _sessions.TryGetValue(sessionId, out var session) ? session.Context : null;
 
+    public async ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (Volatile.Read(ref _stopped) == 1 || !IsRuntimeReady)
+        {
+            return new BrowserCloseResult("provider_unavailable");
+        }
+
+        if (_options.ResolveProfile() == BrowserProfileMode.PersistentAgent
+            && _sessionOwners.TryGetValue(sessionId, out var owner)
+            && owner is Guid agentInstanceId)
+        {
+            return await ClosePersistentAsync(agentInstanceId, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (!_sessions.TryGetValue(sessionId, out var session))
+        {
+            return new BrowserCloseResult("already_closed");
+        }
+
+        if (session.Persistent && session.AgentInstanceId is Guid persistentAgent)
+        {
+            return await ClosePersistentAsync(persistentAgent, cancellationToken).ConfigureAwait(false);
+        }
+
+        await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (Interlocked.Exchange(ref session.RuntimeClosed, 1) == 1)
+            {
+                return new BrowserCloseResult("already_closed");
+            }
+
+            await CloseQuietlyAsync(session.Context).ConfigureAwait(false);
+            DropClosed(session);
+            return new BrowserCloseResult("closed");
+        }
+        finally
+        {
+            session.Gate.Release();
+        }
+    }
+
+    private async Task<BrowserCloseResult> ClosePersistentAsync(Guid agentInstanceId, CancellationToken cancellationToken)
+    {
+        var gate = _profileGates.GetOrAdd(agentInstanceId, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!_persistent.TryGetValue(agentInstanceId, out var session))
+            {
+                return new BrowserCloseResult("already_closed");
+            }
+
+            await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (Interlocked.Exchange(ref session.RuntimeClosed, 1) == 1)
+                {
+                    return new BrowserCloseResult("already_closed");
+                }
+
+                await CloseQuietlyAsync(session.Context).ConfigureAwait(false);
+                DropClosed(session);
+                return new BrowserCloseResult("closed");
+            }
+            finally
+            {
+                session.Gate.Release();
+            }
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private void ForgetClosed(SessionBrowser session)
+    {
+        if (Interlocked.Exchange(ref session.RuntimeClosed, 1) == 1)
+        {
+            return;
+        }
+
+        if (session.Persistent && session.AgentInstanceId is Guid agentInstanceId)
+        {
+            _persistent.TryRemove(agentInstanceId, out _);
+            try
+            {
+                session.ProfileLease?.Dispose();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+
+            if (session.PlaywrightDriver is not null)
+            {
+                _retiredDrivers.Add(session.PlaywrightDriver);
+            }
+        }
+
+        foreach (var sessionId in _sessions.Where(pair => ReferenceEquals(pair.Value, session)).Select(pair => pair.Key).ToArray())
+        {
+            _sessions.TryRemove(sessionId, out _);
+            RemoveRefs(sessionId);
+        }
+    }
+
+    private void DropClosed(SessionBrowser session)
+    {
+        if (session.Persistent && session.AgentInstanceId is Guid agentInstanceId)
+        {
+            _persistent.TryRemove(agentInstanceId, out _);
+            try
+            {
+                session.ProfileLease?.Dispose();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+
+            DisposeQuietly(session.PlaywrightDriver);
+        }
+
+        foreach (var sessionId in _sessions.Where(pair => ReferenceEquals(pair.Value, session)).Select(pair => pair.Key).ToArray())
+        {
+            _sessions.TryRemove(sessionId, out _);
+            RemoveRefs(sessionId);
+        }
+    }
+
+    private void DrainRetiredDrivers()
+    {
+        while (_retiredDrivers.TryTake(out var driver))
+        {
+            DisposeQuietly(driver);
+        }
+    }
+
     public async ValueTask ReleaseAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -528,6 +670,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         page.SetDefaultTimeout(TimeoutMs());
         page.SetDefaultNavigationTimeout(TimeoutMs());
         var session = new SessionBrowser(context, page);
+        context.Close += (_, _) => ForgetClosed(session);
         context.Page += (_, opened) => OnContextPage(session, opened);
         await context.RouteAsync("**/*", route => RouteAsync(session, route)).ConfigureAwait(false);
         if (!_sessions.TryAdd(sessionId, session))
@@ -554,6 +697,8 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             {
                 return existing;
             }
+
+            DrainRetiredDrivers();
 
             string directory;
             try
@@ -620,8 +765,10 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 {
                     Persistent = true,
                     ProfileLease = lease,
-                    PlaywrightDriver = playwright
+                    PlaywrightDriver = playwright,
+                    AgentInstanceId = agentInstanceId
                 };
+                context.Close += (_, _) => ForgetClosed(session);
                 context.Page += (_, opened) => OnContextPage(session, opened);
                 await context.RouteAsync("**/*", route => RouteAsync(session, route)).ConfigureAwait(false);
                 _persistent[agentInstanceId] = session;
@@ -938,12 +1085,56 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         text = Redact(text, secrets);
         var truncated = text.Length > BrowserToolLimits.MaxVisibleTextLength;
         var elements = await CollectElementsAsync(session, sessionId, secrets, cancellationToken).ConfigureAwait(false);
+        var intervention = await ClassifyInterventionAsync(session.Page, cancellationToken).ConfigureAwait(false);
         return new BrowserObservation(
             session.Page.Url,
             Clip(title, BrowserToolLimits.MaxTitleLength),
             Clip(text, BrowserToolLimits.MaxVisibleTextLength),
             truncated,
-            elements);
+            elements,
+            intervention);
+    }
+
+    private const string ClassifyInterventionScript = """
+        () => {
+          const captcha = document.querySelector(
+            'iframe[src*="recaptcha"], iframe[src*="hcaptcha"], iframe[src*="challenges.cloudflare.com"], .g-recaptcha, .h-captcha, [data-sitekey], .cf-turnstile');
+          if (captcha) return "verification";
+          const otp = document.querySelector(
+            'input[autocomplete="one-time-code"], input[name*="otp" i], input[id*="otp" i], input[name*="mfa" i]');
+          if (otp) return "verification";
+          const password = document.querySelector('input[type="password"]');
+          if (!password) return "none";
+          const form = password.closest("form") || document.body;
+          const email = form.querySelector('input[type="email"], input[autocomplete="username"], input[autocomplete="email"]');
+          const registration = password.getAttribute("autocomplete") === "new-password"
+            || !!form.querySelector('input[autocomplete="new-password"]');
+          if (registration && email) return "registration";
+          return "authentication";
+        }
+        """;
+
+    private static async Task<BrowserInterventionKind> ClassifyInterventionAsync(
+        IPage page,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var kind = await page.EvaluateAsync<string>(ClassifyInterventionScript)
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return kind switch
+            {
+                "registration" => BrowserInterventionKind.AccountRegistrationRequired,
+                "authentication" => BrowserInterventionKind.AuthenticationRequired,
+                "verification" => BrowserInterventionKind.HumanVerificationRequired,
+                _ => BrowserInterventionKind.None
+            };
+        }
+        catch (Exception ex) when (ex is PlaywrightException or TimeoutException)
+        {
+            return BrowserInterventionKind.None;
+        }
     }
 
     private async Task<IReadOnlyList<BrowserElement>> CollectElementsAsync(
@@ -1501,6 +1692,10 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         public FileStream? ProfileLease { get; init; }
 
         public IPlaywright? PlaywrightDriver { get; init; }
+
+        public Guid? AgentInstanceId { get; init; }
+
+        public int RuntimeClosed;
 
         public int Generation { get; set; }
 

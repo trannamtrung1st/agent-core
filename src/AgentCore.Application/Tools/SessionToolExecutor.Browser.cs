@@ -17,7 +17,8 @@ public sealed partial class SessionToolExecutor
         "provider_unavailable",
         "unsupported_operation",
         "profile_busy",
-        "profile_unavailable"
+        "profile_unavailable",
+        "user_intervention_required"
     };
 
     private async Task<string> NavigateBrowserAsync(
@@ -183,13 +184,58 @@ public sealed partial class SessionToolExecutor
         }
     }
 
+    private async Task<string> CloseBrowserAsync(
+        Guid sessionId,
+        JsonElement args,
+        CancellationToken cancellationToken)
+    {
+        var started = Stopwatch.GetTimestamp();
+        if (!BrowserToolArguments.TryClose(args, out var errorJson))
+        {
+            return FinishBrowser(ToolCatalog.BrowserClose, started, errorJson);
+        }
+
+        if (browser is not { IsAvailable: true })
+        {
+            return FinishBrowser(
+                ToolCatalog.BrowserClose,
+                started,
+                Error("provider_unavailable", "Browser is unavailable."));
+        }
+
+        try
+        {
+            var result = await browser.CloseAsync(sessionId, cancellationToken).ConfigureAwait(false);
+            var status = result.Status is "closed" or "already_closed" or "busy" or "provider_unavailable"
+                ? result.Status
+                : "provider_unavailable";
+            var json = status == "provider_unavailable"
+                ? Error("provider_unavailable", "Browser is unavailable.")
+                : JsonSerializer.Serialize(new { status });
+            return FinishBrowser(ToolCatalog.BrowserClose, started, json);
+        }
+        catch (OperationCanceledException)
+        {
+            RecordBrowser(ToolCatalog.BrowserClose, started, "canceled");
+            throw;
+        }
+    }
+
     private static string FromBrowserProvider(BrowserOperationResult result)
     {
         if (string.IsNullOrEmpty(result.ErrorCode))
         {
-            return result.Observation is null
-                ? Error("provider_unavailable", "Browser is unavailable.")
-                : SerializeBrowserObservation(result.Observation);
+            if (result.Observation is null)
+            {
+                return Error("provider_unavailable", "Browser is unavailable.");
+            }
+
+            if (result.Observation.Intervention != BrowserInterventionKind.None)
+            {
+                return SerializeBrowserIntervention(result.Observation);
+            }
+
+            return SerializeBrowserObservation(result.Observation);
         }
 
         var code = BrowserErrorCodes.Contains(result.ErrorCode) ? result.ErrorCode : "provider_unavailable";
@@ -220,6 +266,24 @@ public sealed partial class SessionToolExecutor
         });
     }
 
+    private static string SerializeBrowserIntervention(BrowserObservation observation)
+    {
+        var kind = observation.Intervention switch
+        {
+            BrowserInterventionKind.AccountRegistrationRequired => "registration",
+            BrowserInterventionKind.HumanVerificationRequired => "verification",
+            _ => "authentication"
+        };
+        return JsonSerializer.Serialize(new
+        {
+            error = "user_intervention_required",
+            kind,
+            url = ClipBrowser(observation.Url, BrowserToolLimits.MaxUrlLength),
+            title = ClipBrowser(observation.Title, BrowserToolLimits.MaxTitleLength),
+            message = "Complete this step in the browser, then tell me to continue."
+        });
+    }
+
     private static string ClipBrowser(string? value, int max)
     {
         var text = value ?? string.Empty;
@@ -237,6 +301,7 @@ public sealed partial class SessionToolExecutor
             "unsupported_operation" => "Browser operation is not supported.",
             "profile_busy" => "The browser profile is already in use.",
             "profile_unavailable" => "The browser profile is unavailable.",
+            "user_intervention_required" => "Complete this step in the browser, then tell me to continue.",
             _ => "Browser is unavailable."
         };
 

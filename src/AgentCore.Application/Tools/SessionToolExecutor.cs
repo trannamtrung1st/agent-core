@@ -178,6 +178,9 @@ public sealed partial class SessionToolExecutor(
                 ToolCatalog.BrowserAct => FitResult(
                     remainingOutputBytes,
                     await ActBrowserAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.BrowserClose => FitResult(
+                    remainingOutputBytes,
+                    await CloseBrowserAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.DemoSensitiveAction => TextResult(
                     ExecuteDemoSensitiveAction(sessionId, args, approvalGrant)),
                 ToolCatalog.EmailSearch => FitResult(

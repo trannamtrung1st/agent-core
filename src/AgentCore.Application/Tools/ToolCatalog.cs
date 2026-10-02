@@ -36,9 +36,10 @@ public static class ToolCatalog
     public const string BrowserNavigate = "browser.navigate";
     public const string BrowserObserve = "browser.observe";
     public const string BrowserAct = "browser.act";
+    public const string BrowserClose = "browser.close";
 
     public static bool IsBrowserTool(string toolName) =>
-        toolName is BrowserNavigate or BrowserObserve or BrowserAct;
+        toolName is BrowserNavigate or BrowserObserve or BrowserAct or BrowserClose;
 
     public static IReadOnlyList<ModelToolDefinition> For(
         AgentDefinition definition,

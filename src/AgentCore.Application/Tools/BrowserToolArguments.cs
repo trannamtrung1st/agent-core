@@ -79,6 +79,22 @@ public static class BrowserToolArguments
         return true;
     }
 
+    public static bool TryClose(JsonElement args, out string errorJson)
+    {
+        if (!TryRejectProperties(args, out errorJson))
+        {
+            return false;
+        }
+
+        if (args.EnumerateObject().Any())
+        {
+            errorJson = Error("invalid", "close accepts an empty object.");
+            return false;
+        }
+
+        return true;
+    }
+
     public static bool TryAct(
         JsonElement args,
         out string operation,

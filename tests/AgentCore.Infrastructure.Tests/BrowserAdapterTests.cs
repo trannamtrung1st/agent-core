@@ -497,6 +497,95 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
     }
 
     [Fact]
+    public async Task Persistent_close_keeps_cookies_and_a_closed_window_can_relaunch()
+    {
+        var port = BindEphemeralPort();
+        using var listener = new HttpListener();
+        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+        listener.Start();
+        var origin = $"http://127.0.0.1:{port}";
+        using var stop = new CancellationTokenSource();
+        var serving = ServeButtonAsync(listener, stop.Token);
+        var root = Path.Combine(Path.GetTempPath(), "agent-core-profiles-" + Guid.NewGuid().ToString("N"));
+        var agent = Guid.NewGuid();
+        var session = NewPersistent(root);
+        await session.StartAsync(CancellationToken.None);
+        var sessionA = Guid.NewGuid();
+        var sessionB = Guid.NewGuid();
+        try
+        {
+            session.BindSession(sessionA, agent);
+            session.BindSession(sessionB, agent);
+            var home = await session.NavigateAsync(new BrowserNavigateRequest(sessionA, new Uri(origin + "/")));
+            Assert.Null(home.ErrorCode);
+            await session.ContextFor(sessionA)!.AddCookiesAsync(
+            [
+                new Microsoft.Playwright.Cookie
+                {
+                    Name = "persist",
+                    Value = "alpha",
+                    Url = origin + "/",
+                    Expires = DateTimeOffset.UtcNow.AddDays(1).ToUnixTimeSeconds()
+                }
+            ]);
+
+            var closed = await session.CloseAsync(sessionB);
+            Assert.Equal("closed", closed.Status);
+            Assert.Null(session.ContextFor(sessionA));
+            Assert.Null(session.ContextFor(sessionB));
+            Assert.Equal("already_closed", (await session.CloseAsync(sessionA)).Status);
+
+            var reopened = await session.NavigateAsync(new BrowserNavigateRequest(sessionA, new Uri(origin + "/")));
+            Assert.Null(reopened.ErrorCode);
+            Assert.Contains(
+                await session.ContextFor(sessionA)!.CookiesAsync(),
+                cookie => cookie.Name == "persist" && cookie.Value == "alpha");
+
+            await session.ContextFor(sessionA)!.CloseAsync();
+            Assert.Null(session.ContextFor(sessionA));
+            var afterWindowClose = await session.NavigateAsync(new BrowserNavigateRequest(sessionB, new Uri(origin + "/")));
+            Assert.Null(afterWindowClose.ErrorCode);
+            Assert.Contains(
+                await session.ContextFor(sessionB)!.CookiesAsync(),
+                cookie => cookie.Name == "persist" && cookie.Value == "alpha");
+        }
+        finally
+        {
+            await session.StopAsync(CancellationToken.None);
+            try
+            {
+                Directory.Delete(root, true);
+            }
+            catch (IOException)
+            {
+            }
+
+            await stop.CancelAsync();
+            listener.Stop();
+            await serving;
+        }
+    }
+
+    [Fact]
+    public async Task Ephemeral_close_drops_that_session_context_and_can_open_again()
+    {
+        var session = fixture.Session;
+        var id = Guid.NewGuid();
+        var home = await Navigate(session, id, "/");
+        Assert.Null(home.ErrorCode);
+        Assert.NotNull(session.ContextFor(id));
+
+        var closed = await session.CloseAsync(id);
+        Assert.Equal("closed", closed.Status);
+        Assert.Null(session.ContextFor(id));
+        Assert.Equal("already_closed", (await session.CloseAsync(id)).Status);
+
+        var again = await Navigate(session, id, "/");
+        Assert.Null(again.ErrorCode);
+        Assert.NotNull(session.ContextFor(id));
+    }
+
+    [Fact]
     public async Task Ephemeral_session_drops_site_state_when_released()
     {
         var port = BindEphemeralPort();
@@ -705,6 +794,29 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         Assert.DoesNotContain("k9", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("v", rendered, StringComparison.Ordinal);
         Assert.Contains("[redacted]", rendered, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Credential_and_verification_pages_report_intervention_and_a_public_page_does_not()
+    {
+        var session = fixture.Session;
+        var id = Guid.NewGuid();
+        var home = await Navigate(session, id, "/");
+        Assert.Null(home.ErrorCode);
+        Assert.Equal(BrowserInterventionKind.None, home.Observation!.Intervention);
+
+        var login = await Navigate(session, id, "/login");
+        Assert.Null(login.ErrorCode);
+        Assert.Equal(BrowserInterventionKind.AuthenticationRequired, login.Observation!.Intervention);
+
+        var signup = await Navigate(session, id, "/signup");
+        Assert.Null(signup.ErrorCode);
+        Assert.Equal(BrowserInterventionKind.AccountRegistrationRequired, signup.Observation!.Intervention);
+
+        var challenge = await Navigate(session, id, "/challenge");
+        Assert.Null(challenge.ErrorCode);
+        Assert.Equal(BrowserInterventionKind.HumanVerificationRequired, challenge.Observation!.Intervention);
+        Assert.DoesNotContain("password", challenge.Observation.VisibleText, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
