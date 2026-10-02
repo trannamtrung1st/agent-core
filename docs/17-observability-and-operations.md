@@ -158,6 +158,16 @@ OPENROUTER_API_KEY=<backend-secret>
 
 Speech adapter overrides remain in [Configuration](15-persistence-and-configuration.md#hosted-and-on-prem-provider-configurations); they do not change Real Compose until DI selects them.
 
+The nopCommerce demo is a second Compose project, not an overlay on `docker-compose.yml`. It does not mount `agent-core-data`, does not change Agent Core's SQLite file, and does not install Chromium in the Agent Core image. Synthetic CI does not start it. Copy the `NOPCOMMERCE_*` placeholders from `.env.example` into the gitignored root `.env`. `NOPCOMMERCE_DB_PASSWORD` is required. Leave `NOPCOMMERCE_ADMIN_PASSWORD` empty to generate it once; the script prints a new password on the operator terminal and does not write it into agent definitions, model context, or ordinary log files.
+
+```text
+scripts/nopcommerce-demo.sh start
+scripts/nopcommerce-demo.sh stop
+scripts/nopcommerce-demo.sh reset
+```
+
+`start` and `stop` use project name `nopcommerce-demo` only. `reset` runs `docker compose -p nopcommerce-demo -f docker-compose.nopcommerce.yml down -v`, starts again, installs sample data, and applies `deploy/nopcommerce/seed/demo-conditions.sql` (one low-stock product and one pending order). It must not delete Agent Core volumes. Pinned images, with RepoDigests recorded after pull on 2026-10-02, are `nopcommerceteam/nopcommerce:4.90.8` (`sha256:a4043d78041cdf4aa7c2a68dea613212ba5841cf3a05b23ac0240ae258906a79`) and `mcr.microsoft.com/mssql/server:2022-CU22-ubuntu-22.04` (`sha256:db9a8fe3098b7e8bbde41106bdc7caee942e97124e5fdb71b872ca208de3092d`). The SQL Server image is linux/amd64. The store is published only on `http://127.0.0.1:5088`. After start and after reset, the storefront and `/admin` responses, including every redirect, stay on that origin. `localhost`, another host, `https`, or another port fails the script. Admin sign-in uses `NOPCOMMERCE_ADMIN_EMAIL` (default `demo-owner@example.com`). The product image for a later publish journey is `deploy/nopcommerce/assets/ac-keyboard.png`.
+
 Default `docker compose` smoke stays Synthetic/scripted and key-free. Hybrid/on-prem keeps the same `agent-core` service and points STT/LLM/TTS BaseUrl values at local inference processes.
 
 ```text

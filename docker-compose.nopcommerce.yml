@@ -1,0 +1,52 @@
+# Separate nopCommerce demo project. Default `docker compose up` and
+# docker-compose.real.yml do not include this file. Agent Core SQLite and the
+# agent-core-data volume are not defined here. The Agent Core image does not
+# gain Chromium.
+#
+#   scripts/nopcommerce-demo.sh start|stop|reset
+#
+# Published only on 127.0.0.1:5088. Image tags are pinned to RepoDigests
+# recorded after the first successful pull (see comments on each image).
+
+name: nopcommerce-demo
+
+services:
+  nopcommerce-db:
+    # RepoDigest recorded 2026-10-02 after pull of 2022-CU22-ubuntu-22.04:
+    # mcr.microsoft.com/mssql/server@sha256:db9a8fe3098b7e8bbde41106bdc7caee942e97124e5fdb71b872ca208de3092d
+    image: mcr.microsoft.com/mssql/server:2022-CU22-ubuntu-22.04@sha256:db9a8fe3098b7e8bbde41106bdc7caee942e97124e5fdb71b872ca208de3092d
+    container_name: nopcommerce-demo-db
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Express
+      MSSQL_SA_PASSWORD: ${NOPCOMMERCE_DB_PASSWORD:?NOPCOMMERCE_DB_PASSWORD is required in .env}
+      SA_PASSWORD: ${NOPCOMMERCE_DB_PASSWORD:?NOPCOMMERCE_DB_PASSWORD is required in .env}
+    volumes:
+      - nopcommerce-db:/var/opt/mssql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q \"SELECT 1\" -b || exit 1",
+        ]
+      interval: 10s
+      timeout: 15s
+      retries: 30
+      start_period: 40s
+
+  nopcommerce-web:
+    # RepoDigest recorded 2026-10-02 after pull of 4.90.8:
+    # nopcommerceteam/nopcommerce@sha256:a4043d78041cdf4aa7c2a68dea613212ba5841cf3a05b23ac0240ae258906a79
+    image: nopcommerceteam/nopcommerce:4.90.8@sha256:a4043d78041cdf4aa7c2a68dea613212ba5841cf3a05b23ac0240ae258906a79
+    container_name: nopcommerce-demo-web
+    depends_on:
+      nopcommerce-db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:5088:80"
+    volumes:
+      - nopcommerce-web:/app/App_Data
+
+volumes:
+  nopcommerce-db:
+  nopcommerce-web:
