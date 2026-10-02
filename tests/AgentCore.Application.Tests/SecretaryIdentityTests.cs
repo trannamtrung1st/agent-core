@@ -86,6 +86,8 @@ public sealed class SecretaryIdentityTests
         Assert.Contains("AC-KBD-001", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("ac-keyboard.png", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("$99", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("concise product description", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("including when the owner asks for one", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("storefront", product.Procedure, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("A Save or Publish click is not completion", product.Procedure, StringComparison.Ordinal);
         Assert.Contains(ToolCatalog.BrowserNavigate, product.RequiredCapabilities);
