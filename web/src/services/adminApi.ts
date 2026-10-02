@@ -919,7 +919,8 @@ export async function getApplicationConnection(instanceId: string): Promise<Appl
   if (!response.ok) {
     throw await adminProblemMessage(response, `Application connection failed (${response.status})`);
   }
-  return (await response.json()) as ApplicationConnection;
+  const body = (await response.json()) as ApplicationConnection | null;
+  return body?.connectionId ? body : null;
 }
 
 async function postApplicationConnection(instanceId: string, action: string, body?: unknown): Promise<ApplicationConnection> {

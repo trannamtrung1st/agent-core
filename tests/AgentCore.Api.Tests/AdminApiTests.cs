@@ -1858,6 +1858,14 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         var client = OwnerClient();
         var response = await client.GetAsync($"/api/v2/admin/agent-instances/{missing:D}/connection");
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/agent-instances",
+            new AdminCreateAgentInstanceRequest("examiner", 1));
+        create.EnsureSuccessStatusCode();
+        var instance = await create.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        var empty = await client.GetAsync($"/api/v2/admin/agent-instances/{instance!.InstanceId}/connection");
+        Assert.Equal(HttpStatusCode.OK, empty.StatusCode);
+        Assert.Equal("null", (await empty.Content.ReadAsStringAsync()).Trim());
         var body = await response.Content.ReadAsStringAsync();
         Assert.DoesNotContain("browser-profiles", body, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("password", body, StringComparison.OrdinalIgnoreCase);

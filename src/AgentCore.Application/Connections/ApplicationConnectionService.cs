@@ -17,9 +17,16 @@ public sealed class ApplicationConnectionService(
         Guid agentInstanceId,
         CancellationToken cancellationToken = default)
     {
-        await RequireInstanceAsync(agentInstanceId, cancellationToken).ConfigureAwait(false);
-        return await store.GetByAgentAsync(agentInstanceId, cancellationToken).ConfigureAwait(false)
+        return await TryGetAsync(agentInstanceId, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound("Application connection was not found.");
+    }
+
+    public async ValueTask<ApplicationConnection?> TryGetAsync(
+        Guid agentInstanceId,
+        CancellationToken cancellationToken = default)
+    {
+        await RequireInstanceAsync(agentInstanceId, cancellationToken).ConfigureAwait(false);
+        return await store.GetByAgentAsync(agentInstanceId, cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask<ApplicationConnection> ConnectAsync(

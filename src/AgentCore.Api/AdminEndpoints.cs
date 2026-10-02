@@ -378,8 +378,10 @@ internal static class AdminEndpoints
         {
             try
             {
-                var connection = await connections.GetAsync(instanceId, cancellationToken).ConfigureAwait(false);
-                return Results.Json(AdminHttpMapping.ToApplicationConnection(connection));
+                var connection = await connections.TryGetAsync(instanceId, cancellationToken).ConfigureAwait(false);
+                return connection is null
+                    ? Results.Text("null", "application/json")
+                    : Results.Json(AdminHttpMapping.ToApplicationConnection(connection));
             }
             catch (AgentCoreException ex)
             {
