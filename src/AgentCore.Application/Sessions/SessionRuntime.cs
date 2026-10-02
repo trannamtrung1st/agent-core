@@ -113,6 +113,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private string _ttsFedPrefix = string.Empty;
     private bool _responseTerminal;
     private string? _modelFinishReason;
+    private string _traceResponseChannel = "unknown";
+    private string _traceDisposition = "none";
+    private string _traceActionKind = "none";
+    private bool _traceHasDisplayText;
     private CancellationTokenSource? _responseCts;
     private DateTimeOffset _lastCheckpoint = DateTimeOffset.MinValue;
     private int _inflight;
@@ -1835,6 +1839,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var model = ResolveSessionModel(
             input.Trigger.Kind == TriggerKind.UserTurn ? ModelPurpose.Conversation : ModelPurpose.Initiative);
         _structuredOutput = model.Capabilities.StructuredOutput;
+        _traceResponseChannel = _structuredOutput ? "structuredOutput" : "responseFunction";
+        _traceDisposition = "none";
+        _traceActionKind = "none";
+        _traceHasDisplayText = false;
         BeginWork();
         var responseToken = _responseCts.Token;
         var activeSkillIds = ResolveActiveSkillIds(input.Trigger, input.ResponseId);
@@ -3207,6 +3215,20 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         return;
                     }
 
+                    var toolOutcome = SafeExecutionTrace.NormalizeToolOutcome(executionResult.Text);
+                    var toolDetail = SafeExecutionTrace.BuildToolDetail(
+                        call.Name,
+                        call.ArgumentsJson,
+                        executionResult.Text);
+                    SafeExecutionTrace.RecordToolStep(
+                        _logger,
+                        SessionId,
+                        request.ResponseId,
+                        steps + 1,
+                        call.Name,
+                        RuntimeTelemetry.ElapsedMs(toolStarted),
+                        toolOutcome,
+                        toolDetail);
                     RuntimeTelemetry.Record("tools", RuntimeTelemetry.ElapsedMs(toolStarted), call.Name);
 
                     executionResult = ToolResultAdmission.AdmitForModel(model, executionResult);
@@ -3837,6 +3859,22 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         ClearPendingPostResponseIdleDelay();
     }
 
+    private void RecordGenerationTerminalTrace(Guid responseId, bool failed, FailureReference? failure = null)
+    {
+        SafeExecutionTrace.RecordGenerationTerminal(
+            _logger,
+            SessionId,
+            responseId,
+            failed,
+            _traceResponseChannel,
+            _modelFinishReason,
+            _traceDisposition,
+            _traceActionKind,
+            _traceHasDisplayText,
+            failure?.Category,
+            failure?.Code);
+    }
+
     private async Task CompleteAsync(
         EventContext context,
         Guid responseId,
@@ -3845,6 +3883,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         FailureReference? failure = null,
         string? safeMessage = null)
     {
+        RecordGenerationTerminalTrace(responseId, failed, failure);
         if (failed)
         {
             DiscardStagedMemory();
@@ -4301,6 +4340,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var normalization = AgentStepNormalizer.Normalize(AgentStepNormalizer.FromSemanticResponse(semantic));
         if (normalization is AgentStepRejected rejected)
         {
+            _traceDisposition = "rejected";
+            _traceActionKind = "none";
+            _traceHasDisplayText = false;
             RuntimeTelemetry.RecordAgentStep("rejected", "none", "none", rejected.Rejection.FailureReason, "none");
             _logger.LogInformation(
                 "Agent step rejected {SessionId} {ResponseId} rejection {Rejection}",
@@ -4326,6 +4368,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var accepted = (AgentStepAccepted)normalization;
         var decision = AgentStepController.Decide(accepted.Step);
         var actionKind = decision.Chat is null ? "none" : AgentStepNormalizer.ChatRespondKind;
+        _traceDisposition = accepted.Step.Disposition.ToString();
+        _traceActionKind = actionKind;
         if (!decision.ExecuteChat || decision.Chat is null)
         {
             RuntimeTelemetry.RecordAgentStep("accepted", accepted.Step.Disposition.ToString(), actionKind, "none", "none");
@@ -4434,6 +4478,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         _semanticReady = true;
         _envelope = mapped;
+        _traceHasDisplayText = !string.IsNullOrWhiteSpace(mapped.DisplayText);
         if (_chatAcceptedTimestamp == 0)
         {
             _chatAcceptedTimestamp = Stopwatch.GetTimestamp();
@@ -4493,6 +4538,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         AgentStepEffect effect,
         CancellationToken cancellationToken)
     {
+        _traceDisposition = effect.ToString();
+        _traceActionKind = "none";
+        _traceHasDisplayText = false;
+        RecordGenerationTerminalTrace(responseId, failed: false);
         _logger.LogInformation(
             "Agent step returned without chat {SessionId} {ResponseId} effect {Effect}",
             SessionId,
@@ -5016,6 +5065,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _activeResponseTriggerKind = null;
         _activeEntryId = null;
         _modelFinishReason = null;
+        _traceResponseChannel = "unknown";
+        _traceDisposition = "none";
+        _traceActionKind = "none";
+        _traceHasDisplayText = false;
         _progressOwnerResponseId = null;
         _progressLive = false;
         _progressOperationId = null;

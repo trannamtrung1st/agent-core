@@ -14,6 +14,9 @@ internal static class ModelCatalogFactory
     public const string OpenRouterFreeModelId = "openrouter/free";
     public const string Gpt41Key = "gpt-4.1";
     public const string Gpt41ModelId = "openai/gpt-4.1";
+    public const string Gpt56LunaKey = "gpt-5.6-luna";
+    public const string Gpt56LunaModelId = "openai/gpt-5.6-luna";
+    public static readonly string[] Gpt56LunaReasoningEfforts = ["max", "xhigh", "high", "medium", "low", "none"];
     public const string ScriptedAlphaKey = "scripted-alpha";
     public const string ScriptedBetaKey = "scripted-beta";
     public const string ScriptedVisionKey = "scripted-vision";
@@ -137,7 +140,18 @@ internal static class ModelCatalogFactory
                     structuredOutput: true,
                     reasoning: false,
                     [],
-                    null)
+                    null),
+                Descriptor(
+                    Gpt56LunaKey,
+                    "GPT-5.6 Luna",
+                    "primary-llm",
+                    Gpt56LunaModelId,
+                    tools: true,
+                    vision: true,
+                    structuredOutput: true,
+                    reasoning: true,
+                    Gpt56LunaReasoningEfforts,
+                    "low")
             ]);
 
     public static IModelCatalog FromPrimary(LanguageModelProviderOptions languageModel)
