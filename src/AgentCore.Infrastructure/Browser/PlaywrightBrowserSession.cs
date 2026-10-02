@@ -29,14 +29,29 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             else role = tag || "generic";
           }
           let name = "";
-          if (el.labels && el.labels.length > 0) name = (el.labels[0].innerText || "").trim();
+          const labelText = (label) => ((label && (label.innerText || label.textContent)) || "").trim();
+          if (el.labels && el.labels.length > 0) {
+            name = Array.from(el.labels).map(labelText).filter(Boolean).join(" ");
+          }
+          if (!name && el.id) {
+            const explicit = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+            name = labelText(explicit);
+          }
           if (!name) name = (el.getAttribute("aria-label") || "").trim();
-          if (!name && tag !== "input") name = (el.innerText || "").trim();
+          if (!name && tag !== "input") name = (el.innerText || el.textContent || "").trim();
+          const humanize = (value) => (value || "")
+            .replace(/[-_]+/g, " ")
+            .replace(/([a-z])([A-Z])/g, "$1 $2")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (!name && el.htmlFor) name = humanize(el.htmlFor);
+          if (!name && el.id) name = humanize(el.id);
+          if (tag === "input" && type === "hidden") return "null";
           let actions = ["click"];
           if (type === "file") actions = ["upload"];
           else if (tag === "select") actions = ["select"];
           else if (role === "checkbox" || role === "switch" || type === "checkbox") actions = ["check", "uncheck"];
-          else if (role === "textbox" || role === "searchbox" || tag === "textarea" || (tag === "input" && type !== "button" && type !== "submit" && type !== "checkbox" && type !== "radio" && type !== "file" && type !== "hidden")) actions = ["fill", "press"];
+          else if (role === "textbox" || role === "searchbox" || tag === "textarea" || (tag === "input" && type !== "button" && type !== "submit" && type !== "checkbox" && type !== "radio" && type !== "file")) actions = ["fill", "press"];
           else actions = ["click"];
           return JSON.stringify({ role, name: name.slice(0, 200), actions });
         }
@@ -45,14 +60,115 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
     private const string CollectInteractive = """
         max => {
           const selector = "a, button, input, select, textarea, [role='button'], [role='link'], [role='combobox'], [role='option'], [role='checkbox'], [role='radio'], [role='switch'], [role='textbox'], [role='searchbox'], [role='menuitem'], [role='tab']";
+          const isFile = (el) => el.tagName === "INPUT" && (el.getAttribute("type") || "").toLowerCase() === "file";
+          const connected = (el) => el instanceof Element && el.isConnected && !el.closest("template")
+            && !el.matches(":disabled") && el.getAttribute("aria-disabled") !== "true";
+          const visuallyUsable = (el) => {
+            if (!connected(el)) return false;
+            const type = (el.getAttribute("type") || "").toLowerCase();
+            if (el.tagName === "INPUT" && type === "hidden") return false;
+            for (let node = el; node instanceof Element; node = node.parentElement) {
+              if (node.hasAttribute("hidden") || node.hasAttribute("inert")) return false;
+              if (node.getAttribute("aria-hidden") === "true") return false;
+              const style = window.getComputedStyle(node);
+              if (style.display === "none" || style.opacity === "0") return false;
+              if (style.visibility === "hidden" || style.visibility === "collapse") return false;
+            }
+            const rect = el.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+          };
+          const usable = (el) => isFile(el) ? connected(el) : visuallyUsable(el);
+          const visibleTarget = (el) => {
+            if (!el) return null;
+            if (visuallyUsable(el)) return el;
+            for (const child of el.querySelectorAll("*")) {
+              if (visuallyUsable(child)) return child;
+            }
+            const text = (el.innerText || "").trim();
+            const parent = el.parentElement;
+            if (text && parent && visuallyUsable(parent) && (parent.innerText || "").trim().length <= 80) return parent;
+            return null;
+          };
+          const isChoice = (el) => {
+            const type = (el.getAttribute("type") || "").toLowerCase();
+            const role = el.getAttribute("role");
+            return type === "checkbox" || type === "radio" || role === "checkbox" || role === "radio" || role === "switch";
+          };
+          const inVisibleSection = (el) => {
+            for (let node = el.parentElement; node instanceof Element; node = node.parentElement) {
+              if (node.hasAttribute("hidden") || node.hasAttribute("inert")) return false;
+              if (node.getAttribute("aria-hidden") === "true") return false;
+              const style = window.getComputedStyle(node);
+              if (style.display === "none") return false;
+              if (style.visibility === "hidden" || style.visibility === "collapse") return false;
+            }
+            return true;
+          };
+          const choiceLabel = (el) => {
+            const type = (el.getAttribute("type") || "").toLowerCase();
+            const role = el.getAttribute("role");
+            const choice = type === "checkbox" || type === "radio" || role === "checkbox" || role === "radio" || role === "switch";
+            if (!choice || visuallyUsable(el) || !connected(el)) return null;
+            const label = el.labels && el.labels.length > 0 ? el.labels[0] : null;
+            return visibleTarget(label);
+          };
+          const choices = new WeakSet();
+          const rank = (el) => {
+            if (choices.has(el)) return 1;
+            if (isFile(el)) return 0;
+            const tag = el.tagName;
+            const type = (el.getAttribute("type") || "").toLowerCase();
+            if (tag === "LABEL" || tag === "TEXTAREA" || tag === "SELECT") return 1;
+            if (tag === "INPUT" && type !== "button" && type !== "submit" && type !== "reset" && type !== "image") return 1;
+            if (el.getAttribute("role") === "checkbox" || el.getAttribute("role") === "switch" || type === "checkbox" || type === "radio") return 1;
+            const label = ((el.innerText || el.getAttribute("aria-label") || "") + "").toLowerCase();
+            if (type === "submit" || label.includes("save")) return 1;
+            if (el.closest("nav, aside, [role='navigation']")) return 3;
+            return 2;
+          };
           const seen = new Set();
-          const found = [];
-          for (const el of document.querySelectorAll(selector)) {
-            if (!(el instanceof Element) || seen.has(el)) continue;
+          const buckets = [[], [], [], []];
+          const admit = (el, choice = false) => {
+            if (seen.has(el)) return;
             seen.add(el);
-            found.push(el);
-            if (found.length >= max) break;
+            if (choice) choices.add(el);
+            buckets[rank(el)].push(el);
+          };
+          for (const el of document.querySelectorAll(selector)) {
+            if (isChoice(el) && connected(el) && !visuallyUsable(el)) {
+              const caption = el.labels && el.labels.length > 0 ? el.labels[0] : null;
+              const target = visibleTarget(caption);
+              if (target) {
+                admit(target, true);
+                continue;
+              }
+
+              if (inVisibleSection(el)) {
+                admit(el, true);
+                continue;
+              }
+            }
+            const label = choiceLabel(el);
+            if (label) {
+              admit(label, true);
+              continue;
+            }
+            if (!usable(el)) continue;
+            admit(el);
           }
+          const files = buckets[0];
+          const fileBudget = Math.min(files.length, Math.min(4, max));
+          const found = [];
+          const pushUntil = (items, limit) => {
+            for (const el of items) {
+              if (found.length >= limit) break;
+              found.push(el);
+            }
+          };
+          pushUntil(buckets[1], max - fileBudget);
+          pushUntil(buckets[2], max - fileBudget);
+          pushUntil(buckets[3], max - fileBudget);
+          for (let i = 0; i < fileBudget; i++) found.push(files[i]);
           return found;
         }
         """;
@@ -478,8 +594,8 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             if (live.Actions.Count > 0
                 && !live.Actions.Contains(request.Operation, StringComparer.Ordinal))
             {
-                LogBrowserFailure("act", "interaction", "unsupportedOperation");
-                return Result("unsupported_operation");
+                LogBrowserFailure("act", "interaction", "actionNotOffered");
+                return Result("unsupported_operation", live.Actions);
             }
 
             var before = session.Page.Url;
@@ -1227,7 +1343,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
         if (operation == "check")
         {
-            await handle.CheckAsync(new ElementHandleCheckOptions { Timeout = timeout })
+            await handle.CheckAsync(new ElementHandleCheckOptions { Timeout = timeout, Force = true })
                 .WaitAsync(cancellationToken)
                 .ConfigureAwait(false);
             return;
@@ -1235,7 +1351,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
         if (operation == "uncheck")
         {
-            await handle.UncheckAsync(new ElementHandleUncheckOptions { Timeout = timeout })
+            await handle.UncheckAsync(new ElementHandleUncheckOptions { Timeout = timeout, Force = true })
                 .WaitAsync(cancellationToken)
                 .ConfigureAwait(false);
             return;
@@ -1423,6 +1539,11 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             }
 
             var described = await handle.EvaluateAsync<string>(DescribeElement).WaitAsync(cancellationToken).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(described) || described == "null")
+            {
+                continue;
+            }
+
             var role = "generic";
             var name = string.Empty;
             var actions = new List<string>();
@@ -1452,6 +1573,11 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                         }
                     }
                 }
+            }
+
+            if (actions.Count == 0)
+            {
+                continue;
             }
 
             var token = MintToken();
@@ -2005,7 +2131,8 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
     private static BrowserOperationResult Unavailable() => Result("provider_unavailable");
 
-    private static BrowserOperationResult Result(string code) => new(code, null);
+    private static BrowserOperationResult Result(string code, IReadOnlyList<string>? allowedActions = null) =>
+        new(code, null, allowedActions);
 
     private static bool IsTimeout(Exception exception) =>
         exception is TimeoutException

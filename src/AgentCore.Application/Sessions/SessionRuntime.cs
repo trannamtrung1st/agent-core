@@ -2643,6 +2643,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
 
                 retryingGeneration = false;
+                BrowserObservationCompaction.Compact(messages);
                 messages = PromptContextBuilder.WithActiveSkillSystem(messages, _snapshot.Definition, pinnedSkills).ToList();
                 var pageBlocked = browserPageOrigin is not null && blockedBrowserOrigins.Contains(browserPageOrigin);
                 var prompt = messages;

@@ -42,7 +42,7 @@ internal static class BrowserFailureClassifier
             || text.Contains("Element is not an <input>", StringComparison.Ordinal)
             || text.Contains("Element is not a <select>", StringComparison.Ordinal))
         {
-            return new Decision("unsupported_operation", "unsupportedOperation");
+            return new Decision("unsupported_operation", "providerUnsupportedOperation");
         }
 
         if (text.Contains("ERR_CONNECTION_REFUSED", StringComparison.Ordinal)

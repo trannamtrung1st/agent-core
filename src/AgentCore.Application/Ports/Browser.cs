@@ -59,7 +59,10 @@ public enum BrowserInterventionKind
     HumanVerificationRequired
 }
 
-public sealed record BrowserOperationResult(string? ErrorCode, BrowserObservation? Observation);
+public sealed record BrowserOperationResult(
+    string? ErrorCode,
+    BrowserObservation? Observation,
+    IReadOnlyList<string>? AllowedActions = null);
 
 public sealed record BrowserNavigateRequest(Guid SessionId, Uri Url);
 

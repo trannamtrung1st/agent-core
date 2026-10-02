@@ -14,7 +14,7 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed class BrowserFailureClassifierTests
 {
     [Theory]
-    [InlineData("Element is not a <select> element", "unsupported_operation", "unsupportedOperation")]
+    [InlineData("Element is not a <select> element", "unsupported_operation", "providerUnsupportedOperation")]
     [InlineData("Element is not attached to the DOM", "stale_reference", "staleElement")]
     [InlineData("Timeout 30000ms exceeded.", "timeout", "timeout")]
     [InlineData("net::ERR_CONNECTION_REFUSED at http://127.0.0.1:9/", "target_unreachable", "connectionRefused")]
@@ -1289,6 +1289,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
 
             var selected = await session.ActAsync(new BrowserActRequest(id, "select", identity.Ref, "Tom"));
             Assert.Equal("unsupported_operation", selected.ErrorCode);
+            Assert.Equal(["click"], selected.AllowedActions);
             Assert.NotEqual("provider_unavailable", selected.ErrorCode);
 
             var opened = await session.ActAsync(new BrowserActRequest(id, "click", identity.Ref, null));
@@ -1306,6 +1307,60 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
 
             var again = await Navigate(session, id, "/identity");
             Assert.Null(again.ErrorCode);
+        }
+        finally
+        {
+            await session.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task Observations_keep_usable_controls_and_a_hidden_file_input()
+    {
+        var logs = new SecretListLogger();
+        var logger = LoggerFactory.Create(builder => builder.AddProvider(logs));
+        var session = new PlaywrightBrowserSession(
+            new BrowserOptions
+            {
+                Enabled = true,
+                Headless = true,
+                InteractionMode = nameof(BrowserInteractionMode.InteractiveDemo),
+                FixturePort = 0,
+                TargetOrigins = ["http://127.0.0.1:5091"]
+            },
+            logger);
+        await session.StartAsync(CancellationToken.None);
+        try
+        {
+            var id = Guid.NewGuid();
+            var page = await Navigate(session, id, "/controls");
+            Assert.Null(page.ErrorCode);
+            var names = page.Observation!.Elements.Select(element => element.Name).ToArray();
+            Assert.Contains(names, name => name == "Product name");
+            Assert.Contains(names, name => name == "Category");
+            Assert.Contains(names, name => name == "Notes");
+            Assert.Contains(names, name => name == "Picture file");
+            Assert.DoesNotContain(names, name => name is "Collapsed note" or "Hidden button" or "Invisible button" or "Aria hidden button" or "Template action" or "Disabled note" or "Aria disabled" or "Zero size");
+            Assert.DoesNotContain("hidden-secret", page.Observation.VisibleText, StringComparison.Ordinal);
+            Assert.Equal(["fill", "press"], Assert.Single(page.Observation.Elements, element => element.Name == "Product name").Actions);
+            Assert.Equal(["click"], Assert.Single(page.Observation.Elements, element => element.Name == "Category").Actions);
+            Assert.Equal(["fill", "press"], Assert.Single(page.Observation.Elements, element => element.Name == "Notes").Actions);
+            var picture = Assert.Single(page.Observation.Elements, element => element.Name == "Picture file");
+            Assert.Equal(["upload"], picture.Actions);
+            Assert.True(page.Observation.Elements.Count <= BrowserToolLimits.MaxElements);
+
+            var name = Assert.Single(page.Observation.Elements, element => element.Name == "Product name");
+            var rejected = await session.ActAsync(new BrowserActRequest(id, "click", name.Ref, null));
+            Assert.Equal("unsupported_operation", rejected.ErrorCode);
+            Assert.Equal(["fill", "press"], rejected.AllowedActions);
+            Assert.Contains(logs.Messages, message => message.Contains("actionNotOffered", StringComparison.Ordinal));
+
+            var notes = Assert.Single(page.Observation.Elements, element => element.Name == "Notes");
+            var provider = await session.ActAsync(new BrowserActRequest(id, "fill", notes.Ref, "hello"));
+            Assert.Equal("unsupported_operation", provider.ErrorCode);
+            Assert.Null(provider.AllowedActions);
+            Assert.Contains(logs.Messages, message => message.Contains("providerUnsupportedOperation", StringComparison.Ordinal));
+            Assert.DoesNotContain(logs.Messages, message => message.Contains("selector", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

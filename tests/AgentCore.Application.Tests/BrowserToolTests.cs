@@ -1,4 +1,6 @@
 using System.Text.Json;
+using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Workspaces;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
@@ -745,6 +747,112 @@ public sealed class BrowserToolTests
                 && finding.Message.Contains(ToolCatalog.BrowserNavigate, StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task Unsupported_operation_returns_only_the_advertised_actions()
+    {
+        var fake = new FakeBrowser { CurrentUrl = new Uri("http://127.0.0.1:5091/") };
+        var reference = OpaqueRef();
+        fake.Refs[reference] = Guid.Empty;
+        fake.ForcedActError = "unsupported_operation";
+        fake.ForcedAllowedActions = ["fill", "press", "<selector>"];
+        var session = Guid.NewGuid();
+        fake.Refs[reference] = session;
+        var result = await Executor(fake).ExecuteAsync(
+            BrowserDefinition(),
+            session,
+            Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{reference}}"}"""),
+            ToolLimits.MaxOutputBytes,
+            admission: UserTurn());
+        using var document = JsonDocument.Parse(result.Text);
+        Assert.Equal("unsupported_operation", document.RootElement.GetProperty("error").GetString());
+        Assert.Equal("This element does not support that operation.", document.RootElement.GetProperty("message").GetString());
+        Assert.Equal(
+            ["fill", "press"],
+            document.RootElement.GetProperty("allowedActions").EnumerateArray().Select(item => item.GetString()!).ToArray());
+        Assert.DoesNotContain("selector", result.Text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Browser_upload_accepts_a_workspace_artifact_and_rejects_a_path()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "agent-core-browser-upload", Guid.NewGuid().ToString("N"));
+        var workspaceRoot = Path.Combine(root, "workspaces");
+        var templateRoot = Path.Combine(root, "templates");
+        Directory.CreateDirectory(workspaceRoot);
+        Directory.CreateDirectory(templateRoot);
+        try
+        {
+        var session = Guid.NewGuid();
+        var workspace = new FileSessionWorkspace(workspaceRoot, templateRoot);
+        var artifacts = new InMemoryArtifactStore(TimeProvider.System);
+        var definition = BrowserDefinition() with
+        {
+            Environment = new RoleEnvironment(ToolAllowlist:
+            [
+                ToolCatalog.WorkspaceWrite,
+                ToolCatalog.ArtifactsCreateFromWorkspace,
+                ToolCatalog.BrowserAct
+            ])
+        };
+        await workspace.EnsureAsync(session, definition);
+        var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3 };
+        await workspace.WriteAsync(session, "/workspace/working/ac-keyboard.png", png);
+        var browser = new FakeBrowser { CurrentUrl = new Uri("http://127.0.0.1:5091/") };
+        var executor = new SessionToolExecutor(
+            workspace: workspace,
+            artifacts: artifacts,
+            browser: browser,
+            configurationGate: ToolConfigurationGates.AllowAll);
+        var created = await executor.ExecuteAsync(
+            definition,
+            session,
+            new ModelToolCall(
+                "c1",
+                ToolCatalog.ArtifactsCreateFromWorkspace,
+                """{"path":"ac-keyboard.png","displayName":"ac-keyboard.png","contentType":"image/png"}"""),
+            ToolLimits.MaxOutputBytes,
+            admission: UserTurn());
+        using var createdDoc = JsonDocument.Parse(created.Text);
+        var artifactId = createdDoc.RootElement.GetProperty("artifactId").GetGuid();
+        var reference = OpaqueRef(9);
+        browser.Refs[reference] = session;
+        var uploaded = await executor.ExecuteAsync(
+            definition,
+            session,
+            new ModelToolCall(
+                "c2",
+                ToolCatalog.BrowserAct,
+                $$"""{"operation":"upload","ref":"{{reference}}","artifactId":"{{artifactId:D}}"}"""),
+            ToolLimits.MaxOutputBytes,
+            admission: UserTurn());
+        using var uploadedDoc = JsonDocument.Parse(uploaded.Text);
+        Assert.False(uploadedDoc.RootElement.TryGetProperty("error", out _));
+        Assert.NotNull(browser.LastUpload);
+        Assert.Equal(png, browser.LastUpload!.Content.ToArray());
+        Assert.Equal("ac-keyboard.png", browser.LastUpload.FileName);
+        Assert.Equal("image/png", browser.LastUpload.MediaType);
+
+        var rejected = await executor.ExecuteAsync(
+            definition,
+            session,
+            new ModelToolCall(
+                "c3",
+                ToolCatalog.BrowserAct,
+                $$"""{"operation":"upload","ref":"{{reference}}","artifactId":"ac-keyboard.png"}"""),
+            ToolLimits.MaxOutputBytes,
+            admission: UserTurn());
+        Assert.Contains("\"error\":\"invalid\"", rejected.Text, StringComparison.Ordinal);
+        Assert.Equal(1, browser.ActCalls);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
     private static SessionToolExecutor Executor(FakeBrowser browser) =>
         new(browser: browser, configurationGate: ToolConfigurationGates.AllowAll);
 
@@ -856,6 +964,10 @@ public sealed class BrowserToolTests
 
         public int ActCalls { get; private set; }
 
+        public BrowserUpload? LastUpload { get; private set; }
+
+        public IReadOnlyList<string>? ForcedAllowedActions { get; set; }
+
         public int ClickCalls { get; private set; }
 
         public Guid? LastSessionId { get; private set; }
@@ -907,9 +1019,10 @@ public sealed class BrowserToolTests
             cancellationToken.ThrowIfCancellationRequested();
             ActCalls++;
             LastActSession = request.SessionId;
+            LastUpload = request.Upload;
             if (ForcedActError is not null)
             {
-                return new(new BrowserOperationResult(ForcedActError, null));
+                return new(new BrowserOperationResult(ForcedActError, null, ForcedAllowedActions));
             }
 
             if (!Refs.TryGetValue(request.Ref, out var owner) || owner != request.SessionId)

@@ -92,6 +92,11 @@ public sealed class SecretaryIdentityTests
         Assert.Contains("/Admin/Product/List?GoDirectlyToSku=", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("/Admin/Product/Create", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("/search?q=", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("artifacts.create_from_workspace", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("Save and Continue", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("Multimedia", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("Never pass ac-keyboard.png as artifactId", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains(ToolCatalog.ArtifactsCreateFromWorkspace, product.RequiredCapabilities);
         Assert.Contains("dashboard", product.Procedure, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("A Save or Publish click is not completion", product.Procedure, StringComparison.Ordinal);
         Assert.Contains(ToolCatalog.BrowserNavigate, product.RequiredCapabilities);

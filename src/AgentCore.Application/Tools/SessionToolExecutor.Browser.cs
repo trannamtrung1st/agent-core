@@ -472,6 +472,24 @@ public sealed partial class SessionToolExecutor
         }
 
         var code = BrowserErrorCodes.Contains(result.ErrorCode) ? result.ErrorCode : "provider_unavailable";
+        if (code == "unsupported_operation" && result.AllowedActions is { Count: > 0 })
+        {
+            var allowed = result.AllowedActions
+                .Where(action => BrowserToolLimits.Operations.Contains(action, StringComparer.Ordinal))
+                .Distinct(StringComparer.Ordinal)
+                .Take(BrowserToolLimits.Operations.Length)
+                .ToArray();
+            if (allowed.Length > 0)
+            {
+                return JsonSerializer.Serialize(new
+                {
+                    error = "unsupported_operation",
+                    message = "This element does not support that operation.",
+                    allowedActions = allowed
+                });
+            }
+        }
+
         return Error(code, BrowserFailureMessage(code));
     }
 

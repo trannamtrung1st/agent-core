@@ -20,6 +20,7 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
     public const string LoginBelowFoldResource = "AgentCore.Infrastructure.Browser.Fixture.login-below-fold.html";
     public const string IdentityResource = "AgentCore.Infrastructure.Browser.Fixture.identity.html";
     public const string UploadResource = "AgentCore.Infrastructure.Browser.Fixture.upload.html";
+    public const string ControlsResource = "AgentCore.Infrastructure.Browser.Fixture.controls.html";
 
     private static readonly string[] RequiredResources =
     [
@@ -35,7 +36,8 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
         OfflineCaptchaShellResource,
         LoginBelowFoldResource,
         IdentityResource,
-        UploadResource
+        UploadResource,
+        ControlsResource
     ];
 
     private readonly ILogger _logger;
@@ -280,6 +282,12 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
             if (string.Equals(path, "/upload", StringComparison.Ordinal))
             {
                 await WriteResourceAsync(context, UploadResource, 200).ConfigureAwait(false);
+                return;
+            }
+
+            if (string.Equals(path, "/controls", StringComparison.Ordinal))
+            {
+                await WriteResourceAsync(context, ControlsResource, 200).ConfigureAwait(false);
                 return;
             }
 
