@@ -22,7 +22,8 @@ public sealed class SkillDefinitionRoundTripTests
         var skillVersions = new[] { 11, 12 };
         Assert.All(
             definitions.Where(definition =>
-                definition.Id != "general-assistant" || !skillVersions.Contains(definition.Version)),
+                (definition.Id != "general-assistant" || !skillVersions.Contains(definition.Version))
+                && definition.Id != "secretary"),
             definition => Assert.Empty(definition.SkillList));
         foreach (var version in skillVersions)
         {
@@ -33,6 +34,14 @@ public sealed class SkillDefinitionRoundTripTests
                     .SkillList);
             Assert.Equal("browser.record.lookup", skill.Id);
         }
+
+        var secretarySkills = Assert.Single(definitions, definition => definition.Id == "secretary" && definition.Version == 1)
+            .SkillList
+            .Select(skill => skill.Id)
+            .ToArray();
+        Assert.Equal(
+            ["store.product.manage", "store.order.review", "store.inventory.review", "store.promotion.manage", "store.daily.review"],
+            secretarySkills);
     }
 
     [Fact]
