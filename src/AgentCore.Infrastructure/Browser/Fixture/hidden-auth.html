@@ -11,7 +11,15 @@
     p { margin: 0; line-height: 1.5; }
     dialog { display: none; }
     .vault { display: none; visibility: hidden; }
-    .dormant { opacity: 0; position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+    .inactive-captcha { opacity: 0; }
+    .inactive-captcha .g-recaptcha { min-width: 304px; min-height: 78px; }
+    .offscreen-templates {
+      position: absolute;
+      left: -12000px;
+      top: 0;
+      width: 320px;
+    }
+    .offscreen-templates input { display: block; width: 240px; height: 32px; margin-bottom: 8px; }
   </style>
 </head>
 <body>
@@ -22,8 +30,8 @@
 
   <dialog id="login-modal" aria-hidden="true">
     <form>
-      <input type="email" autocomplete="username" value="hidden@example.test">
-      <input type="password" autocomplete="current-password" value="hidden-password">
+      <label>Email <input type="email" autocomplete="username" value="hidden@example.test"></label>
+      <label>Password <input type="password" autocomplete="current-password" value="hidden-password"></label>
     </form>
   </dialog>
 
@@ -31,7 +39,7 @@
     <input type="password" autocomplete="current-password">
     <input autocomplete="one-time-code" name="otp" value="000000">
     <div class="cf-turnstile" data-sitekey="hidden-fixture"></div>
-    <iframe src="https://challenges.cloudflare.com/turnstile/v0/api.js" title="hidden captcha"></iframe>
+    <iframe src="/offline-captcha-shell.html?ref=challenges.cloudflare.com" title="hidden captcha" width="1" height="1"></iframe>
   </div>
 
   <div class="vault" inert>
@@ -43,8 +51,14 @@
     <input type="password" autocomplete="current-password">
   </template>
 
-  <div class="dormant">
+  <div class="inactive-captcha" aria-hidden="true">
     <div class="g-recaptcha" data-sitekey="dormant"></div>
+  </div>
+
+  <div class="offscreen-templates" aria-hidden="true">
+    <input type="password" autocomplete="current-password">
+    <input autocomplete="one-time-code" name="otp-offscreen">
+    <div class="h-captcha" data-sitekey="offscreen"></div>
   </div>
 </body>
 </html>

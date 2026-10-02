@@ -22,7 +22,7 @@ public sealed class BrowserToolTests
         FixtureOrigin);
 
     [Fact]
-    public void Registry_marks_browser_tools_session_scoped_and_non_replayable()
+    public void Registry_marks_browser_tool_scope_and_replay_safety()
     {
         Assert.Equal(ToolEffect.ReadOnly, ToolCatalog.EffectOf(ToolCatalog.BrowserNavigate));
         Assert.Equal(ToolEffect.ReadOnly, ToolCatalog.EffectOf(ToolCatalog.BrowserObserve));
@@ -31,7 +31,11 @@ public sealed class BrowserToolTests
         Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.BrowserNavigate));
         Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.BrowserObserve));
         Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.BrowserAct));
+        Assert.Equal(ToolReplaySafety.IntegrationIdempotent, ToolCatalog.ReplaySafetyOf(ToolCatalog.BrowserClose));
         Assert.Equal(ToolResourceScope.Session, ToolRegistry.Get(ToolCatalog.BrowserNavigate).Scope);
+        Assert.Equal(ToolResourceScope.Session, ToolRegistry.Get(ToolCatalog.BrowserObserve).Scope);
+        Assert.Equal(ToolResourceScope.Session, ToolRegistry.Get(ToolCatalog.BrowserAct).Scope);
+        Assert.Equal(ToolResourceScope.Session, ToolRegistry.Get(ToolCatalog.BrowserClose).Scope);
         Assert.Equal(ToolOfferRule.ConfigurationWhenRoleAllows, ToolRegistry.Get(ToolCatalog.BrowserAct).OfferRule);
         Assert.Equal(
             ToolPolicyDecision.Allow,

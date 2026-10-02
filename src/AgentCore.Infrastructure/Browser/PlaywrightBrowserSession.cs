@@ -1099,17 +1099,23 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         () => {
           const isVisible = (el) => {
             if (!(el instanceof Element) || !el.isConnected) return false;
-            if (el.closest("[hidden], template")) return false;
-            if (el.closest("[inert]")) return false;
+            if (el.closest("template")) return false;
             if (el.hasAttribute("disabled")) return false;
             if (el.getAttribute("aria-disabled") === "true") return false;
-            for (let node = el; node; node = node.parentElement) {
-              if (node.getAttribute?.("aria-hidden") === "true") return false;
+            for (let node = el; node instanceof Element; node = node.parentElement) {
+              if (node.hasAttribute("hidden")) return false;
+              if (node.hasAttribute("inert")) return false;
+              if (node.getAttribute("aria-hidden") === "true") return false;
+              const style = window.getComputedStyle(node);
+              if (style.display === "none") return false;
+              if (style.visibility === "hidden" || style.visibility === "collapse") return false;
+              if (style.opacity === "0") return false;
             }
-            const style = window.getComputedStyle(el);
-            if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") return false;
             const rect = el.getBoundingClientRect();
             if (rect.width <= 0 || rect.height <= 0) return false;
+            const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+            const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+            if (rect.bottom <= 0 || rect.right <= 0 || rect.top >= vh || rect.left >= vw) return false;
             return true;
           };
           const firstVisible = (selector) => {
