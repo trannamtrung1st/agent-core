@@ -147,7 +147,7 @@ Hosted Synthetic workflow [36696902928](https://github.com/trannamtrung1st/agent
 
 ## P9 visible browser (observed)
 
-Policy and journey tests that do not launch Chromium: `BrowserToolTests`, `BrowserLifecycleTests`, and `BrowserRecordJourneyTests`. Chromium adapter tests live in `BrowserAdapterTests` (`browser-chromium`). The Chat journey is `web/e2e/p9-browser-journey.spec.ts` on the `synthetic` project with `CI=1` and a disposable `PLAYWRIGHT_SQLITE_PATH`. The frontend activity test expects the trusted message `Using browser…` to outrank the coarse `Running tools…` label. Full solution regression, Compose, and hosted workflow `36890525463` are recorded in [p9-freeze-candidate.md](reports/p9-freeze-candidate.md).
+Policy and journey tests that do not launch Chromium: `BrowserToolTests`, `BrowserLifecycleTests`, and `BrowserRecordJourneyTests`. Chromium adapter tests live in `BrowserAdapterTests` (`browser-chromium`). The Chat journey is `web/e2e/p9-browser-journey.spec.ts` on the `synthetic` project with `CI=1` and a disposable `PLAYWRIGHT_SQLITE_PATH`. The frontend activity test expects the trusted message `Using browser…` to outrank the coarse `Running tools…` label. Full solution regression, Compose, and hosted workflow `36890525463` are recorded in [p9-freeze-candidate.md](reports/p9-freeze-candidate.md). Post-closure browser runtime hardening is **closed** on **`3400d64`** with hosted Synthetic [**`36981513602`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36981513602) green; that closure does not move the P9 freeze SHA **`bba1de4`**.
 
 ## Post-MVP planned until verified
 
