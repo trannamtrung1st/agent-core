@@ -17,6 +17,7 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
     public const string AccountResource = "AgentCore.Infrastructure.Browser.Fixture.account.html";
     public const string HiddenAuthResource = "AgentCore.Infrastructure.Browser.Fixture.hidden-auth.html";
     public const string OfflineCaptchaShellResource = "AgentCore.Infrastructure.Browser.Fixture.offline-captcha-shell.html";
+    public const string LoginBelowFoldResource = "AgentCore.Infrastructure.Browser.Fixture.login-below-fold.html";
 
     private static readonly string[] RequiredResources =
     [
@@ -29,7 +30,8 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
         SignupResource,
         AccountResource,
         HiddenAuthResource,
-        OfflineCaptchaShellResource
+        OfflineCaptchaShellResource,
+        LoginBelowFoldResource
     ];
 
     private readonly ILogger _logger;
@@ -256,6 +258,12 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
             if (string.Equals(path, "/offline-captcha-shell.html", StringComparison.Ordinal))
             {
                 await WriteResourceAsync(context, OfflineCaptchaShellResource, 200).ConfigureAwait(false);
+                return;
+            }
+
+            if (string.Equals(path, "/login-below-fold", StringComparison.Ordinal))
+            {
+                await WriteResourceAsync(context, LoginBelowFoldResource, 200).ConfigureAwait(false);
                 return;
             }
 

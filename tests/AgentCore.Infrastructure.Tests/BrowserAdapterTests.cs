@@ -831,6 +831,16 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
     }
 
     [Fact]
+    public async Task Below_fold_login_still_reports_authentication_required()
+    {
+        var session = fixture.Session;
+        var id = Guid.NewGuid();
+        var login = await Navigate(session, id, "/login-below-fold");
+        Assert.Null(login.ErrorCode);
+        Assert.Equal(BrowserInterventionKind.AuthenticationRequired, login.Observation!.Intervention);
+    }
+
+    [Fact]
     public async Task Contexts_do_not_share_cookies_storage_or_element_refs()
     {
         var session = fixture.Session;
