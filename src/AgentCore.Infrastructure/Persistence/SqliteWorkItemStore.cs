@@ -232,15 +232,12 @@ public sealed class SqliteWorkItemStore(
             WorkItem updated;
             try
             {
-                var observationRequired = current.Checkpoint?.PayloadJson.Contains(
-                    "\"ObservationRequired\":true",
-                    StringComparison.Ordinal) == true;
                 updated = current.RecoverExpiredClaim(asOfUtc, _diagnostics.NewId);
                 if (updated.Status == WorkItemStatus.Failed)
                 {
                     terminal.Add(updated);
                 }
-                else if (observationRequired && updated.Status == WorkItemStatus.Running)
+                else if (updated.Status == WorkItemStatus.Running)
                 {
                     resumes.Add(updated);
                 }

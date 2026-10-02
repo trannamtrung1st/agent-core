@@ -244,16 +244,13 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
             {
                 try
                 {
-                    var observationRequired = item.Checkpoint?.PayloadJson.Contains(
-                        "\"ObservationRequired\":true",
-                        StringComparison.Ordinal) == true;
                     var updated = item.RecoverExpiredClaim(asOfUtc, _diagnostics.NewId);
                     _state.WorkItems[item.WorkItemId] = updated;
                     if (updated.Status == WorkItemStatus.Failed)
                     {
                         terminal.Add(updated);
                     }
-                    else if (observationRequired && updated.Status == WorkItemStatus.Running)
+                    else if (updated.Status == WorkItemStatus.Running)
                     {
                         resumes.Add(updated);
                     }

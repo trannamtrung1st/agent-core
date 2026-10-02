@@ -533,7 +533,10 @@ public sealed class WorkItem
 
         if (SideEffect.Disposition is WorkSideEffectDisposition.InFlight or WorkSideEffectDisposition.Indeterminate)
         {
-            if (IsObservationRequiredCheckpoint(Checkpoint))
+            var flagged = IsObservationRequiredCheckpoint(Checkpoint);
+            var uncertainBrowserAct = flagged
+                || WorkActionHash.MatchesBrowserAct(Checkpoint?.PayloadJson, SideEffect.ActionHash);
+            if (uncertainBrowserAct && Checkpoint is not null)
             {
                 var generation = allocateDiagnosticId?.Invoke() ?? Guid.Empty;
                 if (generation == Guid.Empty)
@@ -541,6 +544,13 @@ public sealed class WorkItem
                     throw new ArgumentException("A resumed browser observation requires a new execution claim.");
                 }
 
+                var checkpoint = flagged
+                    ? Checkpoint
+                    : new WorkCheckpoint(
+                        WorkActionHash.MarkObservationRequired(Checkpoint.PayloadJson, SideEffect.ActionHash!),
+                        Checkpoint.StepCount,
+                        Checkpoint.OutputBytes,
+                        Checkpoint.RemainingOverallBudgetMs);
                 return Copy(
                     WorkItemStatus.Running,
                     Revision + 1,
@@ -551,7 +561,7 @@ public sealed class WorkItem
                     CancellationRequestedAtUtc,
                     KnownEffectSummary,
                     Progress,
-                    Checkpoint,
+                    checkpoint,
                     Result,
                     Failure,
                     SideEffect,

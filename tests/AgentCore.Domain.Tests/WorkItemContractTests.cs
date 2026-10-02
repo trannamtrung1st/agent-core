@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgentCore.Domain.Work;
 
 namespace AgentCore.Domain.Tests;
@@ -191,6 +192,60 @@ public sealed class WorkItemContractTests
         Assert.Equal(checkpoint.AttemptCount, recovered.AttemptCount);
         Assert.Contains("\"ObservationRequired\":true", recovered.Checkpoint!.PayloadJson, StringComparison.Ordinal);
         Assert.Throws<WorkItemTransitionException>(() => recovered.TakeClaim(GenerationB, Now.AddMinutes(2), Now.AddMinutes(3)));
+    }
+
+    [Fact]
+    public void In_flight_browser_act_without_the_flag_resumes_for_observation()
+    {
+        const string arguments = """{"operation":"click","ref":"el_0123456789abcdefghijkl"}""";
+        var hash = WorkActionHash.Compute("browser.act", JsonDocument.Parse(arguments).RootElement);
+        var payload = JsonSerializer.Serialize(new
+        {
+            Phase = "model-turn",
+            Messages = new[]
+            {
+                new
+                {
+                    Role = "Assistant",
+                    Text = "",
+                    ToolCallId = (string?)null,
+                    Name = (string?)null,
+                    ToolCalls = new[]
+                    {
+                        new { Id = ToolCallId, Name = "browser.act", ArgumentsJson = arguments }
+                    }
+                }
+            },
+            ObservationRequired = false,
+            BlockedActionHash = (string?)null
+        });
+        var claimed = NewItem().TakeClaim(GenerationA, Now, Now.AddMinutes(1));
+        var prepared = claimed.MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ToolCallId, hash, Now.AddSeconds(1));
+        var inFlight = prepared.MarkSideEffect(3, GenerationA, WorkSideEffectDisposition.InFlight, ToolCallId, hash, Now.AddSeconds(2));
+        var checkpoint = inFlight.SaveCheckpoint(inFlight.Revision, GenerationA, Checkpoint(payload), null, Now.AddSeconds(3));
+        var resumeId = Guid.Parse("019944af-0008-7000-8000-0000000000d4");
+        var recovered = checkpoint.RecoverExpiredClaim(Now.AddMinutes(1), () => resumeId);
+        Assert.Equal(WorkItemStatus.Running, recovered.Status);
+        Assert.NotEqual(WorkItemStatus.WaitingToRetry, recovered.Status);
+        Assert.Null(recovered.Failure);
+        Assert.Equal(WorkSideEffectDisposition.InFlight, recovered.SideEffect.Disposition);
+        Assert.Contains("\"ObservationRequired\":true", recovered.Checkpoint!.PayloadJson, StringComparison.Ordinal);
+        Assert.Contains(hash, recovered.Checkpoint.PayloadJson, StringComparison.Ordinal);
+
+        var navigation = WorkActionHash.Compute("browser.navigate", JsonDocument.Parse("""{"url":"http://127.0.0.1:5088/"}""").RootElement);
+        var navigatePayload = payload.Replace("browser.act", "browser.navigate", StringComparison.Ordinal);
+        var navigateClaim = NewItem().TakeClaim(GenerationA, Now, Now.AddMinutes(1));
+        var navigatePrepared = navigateClaim.MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ToolCallId, navigation, Now.AddSeconds(1));
+        var navigateFlight = navigatePrepared.MarkSideEffect(3, GenerationA, WorkSideEffectDisposition.InFlight, ToolCallId, navigation, Now.AddSeconds(2));
+        var navigateCheckpoint = navigateFlight.SaveCheckpoint(
+            navigateFlight.Revision,
+            GenerationA,
+            Checkpoint(navigatePayload),
+            null,
+            Now.AddSeconds(3));
+        var failed = navigateCheckpoint.RecoverExpiredClaim(Now.AddMinutes(1), () => Guid.Parse("019944af-0008-7000-8000-0000000000d5"));
+        Assert.Equal(WorkItemStatus.Failed, failed.Status);
+        Assert.Equal("side-effect-indeterminate", failed.Failure!.Code);
     }
 
     [Fact]

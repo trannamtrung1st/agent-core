@@ -285,6 +285,73 @@ public sealed class UnattendedBrowserTests
         Assert.Equal(RepairRef, browser.LastActRef);
     }
 
+    [Fact]
+    public async Task In_flight_browser_act_without_a_saved_flag_is_observed_after_claim_expiry()
+    {
+        var browser = new RecordingBrowser();
+        var connections = await ConnectedStoreAsync(OwnerId);
+        var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
+        var generation = Guid.Parse("019944af-00e5-7000-8000-000000000001");
+        var act = Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""");
+        var payload = DurableToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [act])]);
+        Assert.DoesNotContain("\"ObservationRequired\":true", payload, StringComparison.Ordinal);
+        var store = new InMemoryWorkItemStore();
+        await store.CreateAsync(WorkItem.Create(
+            WorkId,
+            new WorkOwner(OwnerId, ProfileId),
+            Provenance(now),
+            new WorkModelPin("synthetic-default", "synthetic", "synthetic-small", "minimal"),
+            3,
+            now));
+        var claimed = (await store.TryClaimAsync(WorkId, generation, now, now.AddMinutes(1)))!;
+        var saved = await store.CheckpointAsync(
+            WorkId,
+            claimed.Revision,
+            generation,
+            new WorkCheckpoint(payload, 0, 0, (int)ToolLimits.Overall.TotalMilliseconds),
+            null,
+            now);
+        var hash = ToolActionHash.Compute(ToolCatalog.BrowserAct, JsonDocument.Parse(act.ArgumentsJson).RootElement);
+        var prepared = await store.MarkSideEffectAsync(
+            WorkId, saved.Revision, generation, WorkSideEffectDisposition.Prepared, act.Id, hash, now);
+        await store.MarkSideEffectAsync(
+            WorkId, prepared.Revision, generation, WorkSideEffectDisposition.InFlight, act.Id, hash, now);
+        var recovery = await store.RecoverExpiredClaimsAsync(now.AddMinutes(2));
+        var resumed = Assert.Single(recovery.ObservationResumes);
+        Assert.Empty(recovery.TerminalFailures);
+        Assert.Equal(WorkItemStatus.Running, resumed.Status);
+        Assert.NotEqual(WorkItemStatus.WaitingToRetry, resumed.Status);
+        Assert.Contains("\"ObservationRequired\":true", resumed.Checkpoint!.PayloadJson, StringComparison.Ordinal);
+        var resumeGeneration = resumed.Claim!.Generation;
+        var continued = await new DurableOccurrenceExecution(Executor(browser, connections), TimeProvider.System).RunAsync(
+            resumed,
+            new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "publish")]),
+            new ScriptModel(
+                () => ToolRound(act),
+                () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
+                () => ToolRound(Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{RepairRef}}"}""")),
+                () => TextRound("observed")),
+            Definition(),
+            TriggerKind.ScheduledOccurrence,
+            (current, body, token) => store.CheckpointAsync(
+                current.WorkItemId,
+                current.Revision,
+                resumeGeneration,
+                body,
+                null,
+                now.AddMinutes(2),
+                token),
+            store,
+            resumeGeneration,
+            now.AddMinutes(2),
+            Ids(),
+            CancellationToken.None,
+            trustedConnection: true);
+        Assert.IsType<DurableOccurrenceCompleted>(continued);
+        Assert.Equal(1, browser.ActCalls);
+        Assert.Equal(RepairRef, browser.LastActRef);
+    }
+
     private static async Task<DurableOccurrenceOutcome> RunAsync(
         RecordingBrowser browser,
         InMemoryApplicationConnectionStore connections,
