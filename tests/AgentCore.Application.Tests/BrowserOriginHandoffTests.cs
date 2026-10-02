@@ -138,6 +138,10 @@ public sealed class BrowserOriginHandoffTests
 
         Assert.Equal(["https://a.test/"], browser.Navigated);
         Assert.Equal(1, browser.CloseCalls);
+        Assert.Contains(
+            model.ToolTexts,
+            text => text.Contains("\"status\":\"closed\"", StringComparison.Ordinal)
+                && !text.Contains("user_intervention_required", StringComparison.Ordinal));
         Assert.Equal(
             EntryStatus.Completed,
             Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
