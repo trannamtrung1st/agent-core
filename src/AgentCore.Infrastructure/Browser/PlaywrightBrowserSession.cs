@@ -1113,9 +1113,6 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             }
             const rect = el.getBoundingClientRect();
             if (rect.width <= 0 || rect.height <= 0) return false;
-            const vw = window.innerWidth || document.documentElement.clientWidth || 0;
-            const vh = window.innerHeight || document.documentElement.clientHeight || 0;
-            if (rect.bottom <= 0 || rect.right <= 0 || rect.top >= vh || rect.left >= vw) return false;
             return true;
           };
           const firstVisible = (selector) => {

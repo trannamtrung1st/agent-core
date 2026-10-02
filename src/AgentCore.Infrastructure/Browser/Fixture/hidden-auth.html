@@ -13,13 +13,7 @@
     .vault { display: none; visibility: hidden; }
     .inactive-captcha { opacity: 0; }
     .inactive-captcha .g-recaptcha { min-width: 304px; min-height: 78px; }
-    .offscreen-templates {
-      position: absolute;
-      left: -12000px;
-      top: 0;
-      width: 320px;
-    }
-    .offscreen-templates input { display: block; width: 240px; height: 32px; margin-bottom: 8px; }
+    .dormant-auth input { display: block; width: 240px; height: 32px; margin-bottom: 8px; }
   </style>
 </head>
 <body>
@@ -55,7 +49,7 @@
     <div class="g-recaptcha" data-sitekey="dormant"></div>
   </div>
 
-  <div class="offscreen-templates">
+  <div class="dormant-auth" aria-hidden="true">
     <input type="password" autocomplete="current-password">
     <input autocomplete="one-time-code" name="otp-offscreen">
     <div class="h-captcha" data-sitekey="offscreen"></div>
