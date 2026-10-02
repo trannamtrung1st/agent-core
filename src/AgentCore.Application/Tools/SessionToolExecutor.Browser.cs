@@ -250,7 +250,12 @@ public sealed partial class SessionToolExecutor
             {
                 @ref = ClipBrowser(element.Ref, BrowserToolLimits.MaxRefLength),
                 role = ClipBrowser(element.Role, BrowserToolLimits.MaxRoleLength),
-                name = ClipBrowser(element.Name, BrowserToolLimits.MaxAccessibleNameLength)
+                name = ClipBrowser(element.Name, BrowserToolLimits.MaxAccessibleNameLength),
+                actions = (element.Actions ?? [])
+                    .Where(action => BrowserToolLimits.Operations.Contains(action, StringComparer.Ordinal))
+                    .Distinct(StringComparer.Ordinal)
+                    .Take(BrowserToolLimits.Operations.Length)
+                    .ToArray()
             })
             .ToArray();
         var text = observation.VisibleText ?? string.Empty;

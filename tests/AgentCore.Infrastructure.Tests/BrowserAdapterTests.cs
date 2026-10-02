@@ -11,6 +11,32 @@ using Microsoft.Playwright;
 
 namespace AgentCore.Infrastructure.Tests;
 
+public sealed class BrowserFailureClassifierTests
+{
+    [Theory]
+    [InlineData("Element is not a <select> element", "unsupported_operation", "unsupportedOperation")]
+    [InlineData("Element is not attached to the DOM", "stale_reference", "staleElement")]
+    [InlineData("Timeout 30000ms exceeded.", "timeout", "timeout")]
+    [InlineData("Execution context was destroyed, most likely because of a navigation.", "stale_reference", "pageChanged")]
+    [InlineData("Target page, context or browser has been closed", "stale_reference", "pageClosed")]
+    [InlineData("Browser closed", "provider_unavailable", "browserDisconnected")]
+    public void Playwright_messages_do_not_all_mean_the_browser_died(string message, string code, string reason)
+    {
+        var decision = BrowserFailureClassifier.Classify(message);
+        Assert.Equal(code, decision.Code);
+        Assert.Equal(reason, decision.Reason);
+    }
+
+    [Theory]
+    [InlineData("Element is not attached to the DOM", true)]
+    [InlineData("Execution context was destroyed, most likely because of a navigation.", true)]
+    [InlineData("Timeout 30000ms exceeded.", false)]
+    [InlineData("Browser closed", false)]
+    [InlineData("Element is not a <select> element", false)]
+    public void Capture_retries_only_transient_dom_churn(string message, bool retry) =>
+        Assert.Equal(retry, BrowserFailureClassifier.IsTransientCapture(message));
+}
+
 public sealed class LoopbackBrowserFixtureHostTests
 {
     [Fact]
@@ -777,8 +803,8 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
 
         var selected = await session.ActAsync(new BrowserActRequest(id, "select", Ref(opened.Observation, "Stage"), "closed"));
         Assert.Null(selected.ErrorCode);
-        var pressed = await session.ActAsync(new BrowserActRequest(id, "press", Ref(selected.Observation!, "Stage"), "Escape"));
-        Assert.Null(pressed.ErrorCode);
+        var stage = Assert.Single(selected.Observation!.Elements, element => element.Name == "Stage");
+        Assert.Equal(["select"], stage.Actions);
 
         var isolate = await Navigate(session, id, "/isolate");
         var rendered = isolate.Observation!.Title + isolate.Observation.VisibleText
@@ -1019,6 +1045,83 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         Assert.DoesNotContain("alpha", written, StringComparison.Ordinal);
         Assert.DoesNotContain("k9", written, StringComparison.Ordinal);
         Assert.DoesNotContain("w2", written, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Custom_combobox_click_survives_rerender_and_select_is_not_a_dead_browser()
+    {
+        var session = await StartDemoSession();
+        try
+        {
+            var id = Guid.NewGuid();
+            var page = await Navigate(session, id, "/identity");
+            Assert.Null(page.ErrorCode);
+            var identity = Assert.Single(page.Observation!.Elements, element => element.Name == "Identity");
+            Assert.Equal(["click"], identity.Actions);
+            Assert.Equal(["select"], Assert.Single(page.Observation.Elements, element => element.Name == "Stage").Actions);
+            Assert.Equal(
+                ["check", "uncheck"],
+                Assert.Single(page.Observation.Elements, element => element.Name == "Notify").Actions);
+
+            var selected = await session.ActAsync(new BrowserActRequest(id, "select", identity.Ref, "Tom"));
+            Assert.Equal("unsupported_operation", selected.ErrorCode);
+            Assert.NotEqual("provider_unavailable", selected.ErrorCode);
+
+            var opened = await session.ActAsync(new BrowserActRequest(id, "click", identity.Ref, null));
+            Assert.Null(opened.ErrorCode);
+            var tom = Assert.Single(opened.Observation!.Elements, element => element.Name == "Tom");
+            Assert.Equal(["click"], tom.Actions);
+
+            var chosen = await session.ActAsync(new BrowserActRequest(id, "click", tom.Ref, null));
+            Assert.Null(chosen.ErrorCode);
+            Assert.Contains("Selected Tom", chosen.Observation!.VisibleText, StringComparison.Ordinal);
+
+            var stale = await session.ActAsync(new BrowserActRequest(id, "click", tom.Ref, null));
+            Assert.Equal("stale_reference", stale.ErrorCode);
+            Assert.NotEqual("provider_unavailable", stale.ErrorCode);
+
+            var again = await Navigate(session, id, "/identity");
+            Assert.Null(again.ErrorCode);
+        }
+        finally
+        {
+            await session.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task Post_action_capture_retries_once_after_transient_dom_churn()
+    {
+        var session = await StartDemoSession();
+        try
+        {
+            var id = Guid.NewGuid();
+            var page = await Navigate(session, id, "/identity");
+            var thrown = false;
+            session.CaptureProbe = () =>
+            {
+                if (thrown)
+                {
+                    return null;
+                }
+
+                thrown = true;
+                return new PlaywrightException("Execution context was destroyed, most likely because of a navigation.");
+            };
+            var opened = await session.ActAsync(new BrowserActRequest(
+                id,
+                "click",
+                Ref(page.Observation!, "Identity"),
+                null));
+            Assert.Null(opened.ErrorCode);
+            Assert.Contains(opened.Observation!.Elements, element => element.Name == "Tom");
+            Assert.NotEqual("provider_unavailable", opened.ErrorCode);
+        }
+        finally
+        {
+            session.CaptureProbe = null;
+            await session.StopAsync(CancellationToken.None);
+        }
     }
 
     private static async Task<PlaywrightBrowserSession> StartDemoSession()

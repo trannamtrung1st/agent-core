@@ -16,11 +16,14 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
     private const string DescribeElement = """
         el => {
           const tag = (el.tagName || "").toLowerCase();
+          const type = (el.getAttribute("type") || "").toLowerCase();
           let role = el.getAttribute("role");
           if (!role) {
             if (tag === "a") role = "link";
-            else if (tag === "button") role = "button";
+            else if (tag === "button" || type === "button" || type === "submit") role = "button";
             else if (tag === "select") role = "combobox";
+            else if (type === "checkbox") role = "checkbox";
+            else if (type === "radio") role = "radio";
             else if (tag === "textarea" || tag === "input") role = "textbox";
             else role = tag || "generic";
           }
@@ -28,7 +31,27 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
           if (el.labels && el.labels.length > 0) name = (el.labels[0].innerText || "").trim();
           if (!name) name = (el.getAttribute("aria-label") || "").trim();
           if (!name && tag !== "input") name = (el.innerText || "").trim();
-          return JSON.stringify({ role, name: name.slice(0, 200) });
+          let actions = ["click"];
+          if (tag === "select") actions = ["select"];
+          else if (role === "checkbox" || role === "switch" || type === "checkbox") actions = ["check", "uncheck"];
+          else if (role === "textbox" || role === "searchbox" || tag === "textarea" || (tag === "input" && type !== "button" && type !== "submit" && type !== "checkbox" && type !== "radio" && type !== "file" && type !== "hidden")) actions = ["fill", "press"];
+          else actions = ["click"];
+          return JSON.stringify({ role, name: name.slice(0, 200), actions });
+        }
+        """;
+
+    private const string CollectInteractive = """
+        max => {
+          const selector = "a, button, input, select, textarea, [role='button'], [role='link'], [role='combobox'], [role='option'], [role='checkbox'], [role='radio'], [role='switch'], [role='textbox'], [role='searchbox'], [role='menuitem'], [role='tab']";
+          const seen = new Set();
+          const found = [];
+          for (const el of document.querySelectorAll(selector)) {
+            if (!(el instanceof Element) || seen.has(el)) continue;
+            seen.add(el);
+            found.push(el);
+            if (found.length >= max) break;
+          }
+          return found;
         }
         """;
 
@@ -69,6 +92,8 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
     private BrowserHostPolicy _policy;
     private int _runtimeReady;
     private int _stopped;
+
+    internal Func<Exception?>? CaptureProbe { get; set; }
 
     public PlaywrightBrowserSession(
         BrowserOptions options,
@@ -261,7 +286,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
             session.Generation++;
             session.LastAllowedUrl = session.Page.Url;
-            return new BrowserOperationResult(null, await CaptureAsync(session, request.SessionId, cancellationToken).ConfigureAwait(false));
+            return await CaptureWithRetryAsync(session, request.SessionId, "navigate", cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -283,16 +308,21 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         }
         catch (Exception ex) when (IsTimeout(ex))
         {
+            LogBrowserFailure("navigate", "interaction", "timeout");
             return Result("timeout");
         }
         catch (BrowserProfileException ex)
         {
             return Result(ex.Code);
         }
-        catch (Exception ex) when (ex is PlaywrightException or BrowserLaunchException)
+        catch (BrowserLaunchException)
         {
-            _logger.LogWarning("Browser provider is unavailable.");
+            LogBrowserFailure("navigate", "launch", "browserDisconnected");
             return Unavailable();
+        }
+        catch (PlaywrightException ex)
+        {
+            return await FailAsync(session, "navigate", "interaction", ex).ConfigureAwait(false);
         }
         finally
         {
@@ -328,7 +358,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 return Unavailable();
             }
 
-            return new BrowserOperationResult(null, await CaptureAsync(session, sessionId, cancellationToken).ConfigureAwait(false));
+            return await CaptureWithRetryAsync(session, sessionId, "observe", cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -340,12 +370,12 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         }
         catch (Exception ex) when (IsTimeout(ex))
         {
+            LogBrowserFailure("observe", "capture", "timeout");
             return Result("timeout");
         }
-        catch (PlaywrightException)
+        catch (PlaywrightException ex)
         {
-            _logger.LogWarning("Browser provider is unavailable.");
-            return Unavailable();
+            return await FailAsync(session, "observe", "capture", ex).ConfigureAwait(false);
         }
         finally
         {
@@ -416,6 +446,13 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 return Result("stale_reference");
             }
 
+            if (live.Actions.Count > 0
+                && !live.Actions.Contains(request.Operation, StringComparer.Ordinal))
+            {
+                LogBrowserFailure("act", "interaction", "unsupportedOperation");
+                return Result("unsupported_operation");
+            }
+
             var before = session.Page.Url;
             session.DeniedNavigation = false;
             session.PopupCode = null;
@@ -454,7 +491,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 session.LastAllowedUrl = session.Page.Url;
             }
 
-            return new BrowserOperationResult(null, await CaptureAsync(session, request.SessionId, cancellationToken).ConfigureAwait(false));
+            return await CaptureWithRetryAsync(session, request.SessionId, "act", cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -468,12 +505,12 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         }
         catch (Exception ex) when (IsTimeout(ex))
         {
+            LogBrowserFailure("act", "interaction", "timeout");
             return Result("timeout");
         }
-        catch (PlaywrightException)
+        catch (PlaywrightException ex)
         {
-            _logger.LogWarning("Browser provider is unavailable.");
-            return Unavailable();
+            return await FailAsync(session, "act", "interaction", ex).ConfigureAwait(false);
         }
         finally
         {
@@ -1077,6 +1114,12 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         Guid sessionId,
         CancellationToken cancellationToken)
     {
+        var probe = CaptureProbe?.Invoke();
+        if (probe is not null)
+        {
+            throw probe;
+        }
+
         RemoveRefs(sessionId);
         var title = await session.Page.TitleAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
         var text = await session.Page.Locator("body").InnerTextAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -1184,13 +1227,20 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         IReadOnlyList<string> secrets,
         CancellationToken cancellationToken)
     {
-        var locator = session.Page.Locator("a, button, input, select, textarea");
-        var count = Math.Min(await locator.CountAsync().WaitAsync(cancellationToken).ConfigureAwait(false), BrowserToolLimits.MaxElements);
-        var elements = new List<BrowserElement>(count);
-        for (var index = 0; index < count; index++)
+        var list = await session.Page.EvaluateHandleAsync(CollectInteractive, BrowserToolLimits.MaxElements)
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var properties = await list.GetPropertiesAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+        var elements = new List<BrowserElement>();
+        foreach (var property in properties)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var handle = await locator.Nth(index).ElementHandleAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+            if (elements.Count >= BrowserToolLimits.MaxElements)
+            {
+                break;
+            }
+
+            var handle = property.Value.AsElement();
             if (handle is null)
             {
                 continue;
@@ -1199,6 +1249,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             var described = await handle.EvaluateAsync<string>(DescribeElement).WaitAsync(cancellationToken).ConfigureAwait(false);
             var role = "generic";
             var name = string.Empty;
+            var actions = new List<string>();
             if (!string.IsNullOrWhiteSpace(described))
             {
                 using var document = JsonDocument.Parse(described);
@@ -1211,14 +1262,29 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 {
                     name = nameProperty.GetString() ?? string.Empty;
                 }
+
+                if (document.RootElement.TryGetProperty("actions", out var actionProperty)
+                    && actionProperty.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var action in actionProperty.EnumerateArray())
+                    {
+                        if (action.ValueKind == JsonValueKind.String
+                            && action.GetString() is { Length: > 0 } value
+                            && BrowserToolLimits.Operations.Contains(value, StringComparer.Ordinal))
+                        {
+                            actions.Add(value);
+                        }
+                    }
+                }
             }
 
             var token = MintToken();
-            _refs[token] = new LiveElement(sessionId, session.Generation, handle);
+            _refs[token] = new LiveElement(sessionId, session.Generation, handle, actions);
             elements.Add(new BrowserElement(
                 token,
                 Clip(Redact(role, secrets), BrowserToolLimits.MaxRoleLength),
-                Clip(Redact(name, secrets), BrowserToolLimits.MaxAccessibleNameLength)));
+                Clip(Redact(name, secrets), BrowserToolLimits.MaxAccessibleNameLength),
+                actions));
         }
 
         return elements;
@@ -1662,6 +1728,74 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         return "el_" + encoded;
     }
 
+    private async Task<BrowserOperationResult> CaptureWithRetryAsync(
+        SessionBrowser session,
+        Guid sessionId,
+        string operation,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return new BrowserOperationResult(null, await CaptureAsync(session, sessionId, cancellationToken).ConfigureAwait(false));
+        }
+        catch (PlaywrightException ex) when (BrowserFailureClassifier.IsTransientCapture(ex.Message))
+        {
+            LogBrowserFailure(operation, "capture", BrowserFailureClassifier.Classify(ex.Message).Reason);
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken).ConfigureAwait(false);
+                return new BrowserOperationResult(null, await CaptureAsync(session, sessionId, cancellationToken).ConfigureAwait(false));
+            }
+            catch (PlaywrightException retry)
+            {
+                return await FailAsync(session, operation, "capture", retry).ConfigureAwait(false);
+            }
+        }
+        catch (PlaywrightException ex)
+        {
+            return await FailAsync(session, operation, "capture", ex).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<BrowserOperationResult> FailAsync(
+        SessionBrowser? session,
+        string operation,
+        string stage,
+        PlaywrightException exception)
+    {
+        var decision = BrowserFailureClassifier.Classify(exception.Message);
+        var reportedStage = decision.Reason is "pageClosed" or "contextClosed" ? "lifecycle" : stage;
+        LogBrowserFailure(operation, reportedStage, decision.Reason);
+        if (session is not null
+            && decision.Reason is "pageClosed" or "contextClosed"
+            && PageIsClosed(session))
+        {
+            await CloseQuietlyAsync(session.Context).ConfigureAwait(false);
+            ForgetClosed(session);
+        }
+
+        return decision.Code == "provider_unavailable" ? Unavailable() : Result(decision.Code);
+    }
+
+    private static bool PageIsClosed(SessionBrowser session)
+    {
+        try
+        {
+            return session.Page.IsClosed;
+        }
+        catch (PlaywrightException)
+        {
+            return true;
+        }
+    }
+
+    private void LogBrowserFailure(string operation, string stage, string reason) =>
+        _logger.LogWarning(
+            "browser.operation.failure operation={Operation} stage={Stage} reason={Reason}",
+            operation,
+            stage,
+            reason);
+
     private static BrowserOperationResult Unavailable() => Result("provider_unavailable");
 
     private static BrowserOperationResult Result(string code) => new(code, null);
@@ -1765,7 +1899,11 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         public SemaphoreSlim Gate { get; } = new(1, 1);
     }
 
-    private sealed record LiveElement(Guid SessionId, int Generation, IElementHandle Handle);
+    private sealed record LiveElement(
+        Guid SessionId,
+        int Generation,
+        IElementHandle Handle,
+        IReadOnlyList<string> Actions);
 
     private sealed record BrowserSecretItem(string? Kind, string? Key, string? Value);
 }

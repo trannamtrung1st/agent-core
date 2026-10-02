@@ -35,7 +35,13 @@ public sealed record BrowserHostPolicy(
     public IReadOnlyList<string> EffectiveResourceOrigins => ResourceOrigins ?? [];
 }
 
-public sealed record BrowserElement(string Ref, string Role, string Name);
+public sealed record BrowserElement(string Ref, string Role, string Name, IReadOnlyList<string> Actions)
+{
+    public BrowserElement(string Ref, string Role, string Name)
+        : this(Ref, Role, Name, [])
+    {
+    }
+}
 
 public sealed record BrowserObservation(
     string Url,

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Identity</title>
+</head>
+<body>
+  <label for="identity">Identity</label>
+  <div id="identity" role="combobox" aria-label="Identity" tabindex="0">Choose</div>
+  <div id="list"></div>
+  <p id="result"></p>
+  <label for="stage">Stage</label>
+  <select id="stage" aria-label="Stage">
+    <option value="open">Open</option>
+    <option value="closed">Closed</option>
+  </select>
+  <label for="notify">Notify</label>
+  <input id="notify" type="checkbox" aria-label="Notify">
+  <button id="detach" type="button">Detach</button>
+  <script>
+    document.getElementById("identity").addEventListener("click", () => {
+      const list = document.getElementById("list");
+      list.replaceChildren();
+      const option = document.createElement("div");
+      option.id = "tom";
+      option.setAttribute("role", "option");
+      option.textContent = "Tom";
+      option.addEventListener("click", () => {
+        document.body.replaceChildren();
+        const selected = document.createElement("p");
+        selected.textContent = "Selected Tom";
+        const current = document.createElement("div");
+        current.setAttribute("role", "combobox");
+        current.setAttribute("aria-label", "Identity");
+        current.textContent = "Tom";
+        document.body.append(selected, current);
+      });
+      list.append(option);
+    });
+    document.getElementById("detach").addEventListener("click", () => {
+      document.getElementById("detach").remove();
+    });
+  </script>
+</body>
+</html>
