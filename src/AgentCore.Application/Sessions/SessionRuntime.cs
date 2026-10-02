@@ -228,6 +228,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _artifacts = artifacts ?? new FixtureArtifactReferenceAuthorizer();
         _tools = tools ?? new SessionToolExecutor();
         _browserLease = browserLease;
+        if (browserLease is IBrowserProfileBinding binding)
+        {
+            binding.BindSession(snapshot.SessionId, snapshot.AgentInstanceId);
+        }
         _voice = voice ?? new VoiceAvailability { SpeechAdaptersResolved = true };
         _recognition = recognition
             ?? _voice.EffectivePlan.RecognitionCapabilities

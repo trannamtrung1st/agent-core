@@ -12,6 +12,12 @@ public enum BrowserPolicyMode
     OpenWeb
 }
 
+public enum BrowserProfileMode
+{
+    EphemeralSession,
+    PersistentAgent
+}
+
 public sealed record BrowserHostPolicy(
     bool Enabled,
     bool Headless,
@@ -19,7 +25,8 @@ public sealed record BrowserHostPolicy(
     IReadOnlyList<string> NavigationOrigins,
     IReadOnlyList<string>? InteractionOrigins = null,
     IReadOnlyList<string>? ResourceOrigins = null,
-    BrowserPolicyMode PolicyMode = BrowserPolicyMode.Restricted)
+    BrowserPolicyMode PolicyMode = BrowserPolicyMode.Restricted,
+    BrowserProfileMode ProfileMode = BrowserProfileMode.EphemeralSession)
 {
     public IReadOnlyList<string> TargetOrigins => NavigationOrigins;
 
@@ -46,6 +53,11 @@ public sealed record BrowserActRequest(Guid SessionId, string Operation, string 
 public interface IBrowserSessionLease
 {
     ValueTask ReleaseAsync(Guid sessionId, CancellationToken cancellationToken = default);
+}
+
+public interface IBrowserProfileBinding
+{
+    void BindSession(Guid sessionId, Guid? agentInstanceId);
 }
 
 public interface IBrowserSession

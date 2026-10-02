@@ -11,7 +11,7 @@ import { capture } from "../audio/capture";
 import { encodePcm16Le } from "../audio/pcm";
 import { emptySession, useSessionStore, type ServerEvent } from "../state/sessionStore";
 import { listSessionMessages } from "./api";
-import { realtimeTestHooks, composerSendEnabled, composerStopEnabled, reportCommittedEntries, requestVoice, sendDraft, cancelRenderedResponse, setMuted, hangUp, cancelVoice, startConversation } from "./realtime";
+import { realtimeTestHooks, composerSendEnabled, composerStopEnabled, reportCommittedEntries, requestVoice, resumeCapture, sendDraft, cancelRenderedResponse, setMuted, hangUp, cancelVoice, startConversation } from "./realtime";
 
 const hooks = realtimeTestHooks!;
 
@@ -864,6 +864,7 @@ describe("realtime race handling", () => {
       sessionId: "s1",
       attachmentId: "a1",
       mode: "voice",
+      captureAuthorized: true,
       streamId: "stream-1",
       error: "Previous fatal error.",
       errorFatal: true,
@@ -1123,8 +1124,10 @@ describe("realtime race handling", () => {
         }
       }
     });
-    expect(useSessionStore.getState().mode).toBe("text");
-    expect(useSessionStore.getState().streamId).toBeNull();
+    expect(useSessionStore.getState().mode).toBe("voice");
+    expect(useSessionStore.getState().captureAuthorized).toBe(false);
+    expect(invoke.mock.calls.filter((call) => call[1]?.payload?.mode === "voice")).toHaveLength(1);
+    expect(invoke).toHaveBeenCalledWith("SetMode", expect.objectContaining({ payload: { mode: "text" } }));
   });
 
   it("preflights serverAudio input without playback worklet for clientSpeech output", async () => {
@@ -1484,7 +1487,7 @@ describe("realtime race handling", () => {
     expect((invoke.mock.calls[1]?.[1] as { eventId?: string })?.eventId).toBe(firstId);
   });
 
-  it("downgrades durable voice to text on passive session.ready", async () => {
+  it("keeps durable voice and does not start capture on a passive session.ready", async () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
@@ -1496,7 +1499,6 @@ describe("realtime race handling", () => {
       agents: [],
       selectedAgentId: "examiner"
     });
-    hooks.markPassiveVoiceReadyDowngrade();
     hooks.handleEvent({
       protocolVersion: 1,
       sessionId: "s1",
@@ -1521,8 +1523,8 @@ describe("realtime race handling", () => {
         }
       }
     });
-    expect(useSessionStore.getState().mode).toBe("text");
-    expect(useSessionStore.getState().streamId).toBeNull();
+    expect(useSessionStore.getState().mode).toBe("voice");
+    expect(useSessionStore.getState().captureAuthorized).toBe(false);
     hooks.handleEvent({
       protocolVersion: 1,
       sessionId: "s1",
@@ -1547,11 +1549,135 @@ describe("realtime race handling", () => {
         }
       }
     });
-    expect(useSessionStore.getState().mode).toBe("text");
-    expect(useSessionStore.getState().streamId).toBeNull();
-    await vi.waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith("SetMode", expect.objectContaining({ payload: { mode: "text" } }));
+    expect(useSessionStore.getState().mode).toBe("voice");
+    expect(useSessionStore.getState().captureAuthorized).toBe(false);
+    expect(invoke).not.toHaveBeenCalledWith("SetMode", expect.anything());
+  });
+
+  it("does not send SetMode text when session.ready arrives during a live voice response", async () => {
+    vi.spyOn(capture, "preflight").mockResolvedValue(undefined);
+    vi.spyOn(capture, "isPrepared").mockReturnValue(false);
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      mode: "voice",
+      captureAuthorized: true,
+      liveResponseId: "r-live",
+      outputState: "runningTools",
+      sttTransport: "serverAudio",
+      ttsTransport: "serverAudio",
+      agents: [],
+      selectedAgentId: "examiner"
     });
+    await requestVoice();
+    invoke.mockClear();
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s1",
+      attachmentId: "a1",
+      eventId: "ready-live-tool",
+      sequence: 8,
+      timestamp: "2026-09-15T00:00:08.000Z",
+      correlationId: "c1",
+      causationId: null,
+      responseId: null,
+      type: "session.ready",
+      payload: {
+        mode: "voice",
+        pendingMode: null,
+        status: "attached",
+        outputState: "runningTools",
+        activeResponseId: "r-live",
+        streamId: "stream-live",
+        agent: { name: "Alex", role: "Examiner", voiceAvailable: true },
+        history: [],
+        capabilities: {
+          stt: { transport: "serverAudio" },
+          tts: { transport: "serverAudio" }
+        }
+      }
+    });
+    expect(invoke).not.toHaveBeenCalledWith("SetMode", expect.anything());
+    expect(useSessionStore.getState().mode).toBe("voice");
+    expect(useSessionStore.getState().liveResponseId).toBe("r-live");
+  });
+
+  it("keeps voice and leaves capture disarmed after a sequence gap", async () => {
+    vi.spyOn(capture, "preflight").mockResolvedValue(undefined);
+    vi.spyOn(capture, "isPrepared").mockReturnValue(false);
+    const stop = vi.fn().mockResolvedValue(undefined);
+    const start = vi.fn().mockResolvedValue(undefined);
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn(), stop, start } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      lastServerSequence: 2,
+      mode: "voice",
+      captureAuthorized: true,
+      captureLive: true,
+      liveResponseId: "r-tool",
+      outputState: "runningTools",
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    await requestVoice();
+    invoke.mockClear();
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s1",
+      attachmentId: "a1",
+      eventId: "gap",
+      sequence: 4,
+      timestamp: "2026-09-15T00:00:00.000Z",
+      correlationId: "c1",
+      causationId: null,
+      responseId: "r-tool",
+      type: "agent.progress",
+      payload: { kind: "runningTool", state: "started" }
+    });
+    expect(useSessionStore.getState().captureAuthorized).toBe(false);
+    expect(useSessionStore.getState().mode).toBe("voice");
+    await vi.waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("Attach", expect.anything());
+    });
+    expect(invoke).not.toHaveBeenCalledWith("SetMode", expect.anything());
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s1",
+      attachmentId: "a1",
+      eventId: "ready-after-gap",
+      sequence: 4,
+      timestamp: "2026-09-15T00:00:01.000Z",
+      correlationId: "c1",
+      causationId: null,
+      responseId: null,
+      type: "session.ready",
+      payload: {
+        mode: "voice",
+        pendingMode: null,
+        status: "attached",
+        outputState: "runningTools",
+        activeResponseId: "r-tool",
+        streamId: "stream-2",
+        agent: { name: "Alex", role: "Examiner", voiceAvailable: true },
+        history: [],
+        capabilities: {
+          stt: { transport: "serverAudio" },
+          tts: { transport: "serverAudio" }
+        }
+      }
+    });
+    expect(invoke).not.toHaveBeenCalledWith("SetMode", expect.anything());
+    expect(useSessionStore.getState().mode).toBe("voice");
+    expect(useSessionStore.getState().captureAuthorized).toBe(false);
+    expect(window.__agentCore?.reconnectCause?.()).toBe("controlSequenceGap");
   });
 
   it("does not send SetMode text when a muted voice session receives another session.ready", async () => {

@@ -72,7 +72,7 @@ test("two completed voice turns reset worklet identity and consume each response
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.captureStreaming() ?? false)).toBe(true);
 });
 
-test("disconnect during playback then reconnect plays a new response", async ({ page }) => {
+test("disconnect during playback keeps voice and requires resume before capture", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("button", { name: /^Voice$/ })).toBeVisible({ timeout: 15_000 });
   await startListening(page);
@@ -83,19 +83,22 @@ test("disconnect during playback then reconnect plays a new response", async ({ 
   await expect(page.getByTestId("connection")).toHaveText("Reconnecting to Agent Core…");
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.flushing?.() ?? false)).toBe(false);
   await page.evaluate(() => window.__agentCore?.reconnect?.());
-  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
-  await startListening(page);
-  await page.getByLabel("Message").fill("Hello");
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect.poll(async () => page.evaluate(() => window.__agentCore?.playbackConsumed() ?? 0), { timeout: 20_000 }).toBeGreaterThan(0);
+  await expect(page.getByRole("button", { name: "Voice", exact: true })).toHaveAttribute("aria-pressed", "true", { timeout: 15_000 });
+  await expect(page.getByText("Mode changed")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Resume microphone" })).toBeVisible();
+  await expect.poll(async () => page.evaluate(() => window.__agentCore?.captureStreaming() ?? true)).toBe(false);
+  await page.getByRole("button", { name: "Resume microphone" }).click();
+  await expect.poll(async () => page.evaluate(() => window.__agentCore?.captureAuthorized?.() ?? false)).toBe(true);
 });
 
 async function startListening(page: import("@playwright/test").Page): Promise<void> {
   const voice = page.getByRole("button", { name: "Voice", exact: true });
   await expect(voice).toBeEnabled({ timeout: 15_000 });
-  // Reconnect keeps durable voice mode until the passive downgrade finishes.
-  // Clicking Voice while it is pressed cancels voice instead of starting capture.
-  await expect(voice).toHaveAttribute("aria-pressed", "false", { timeout: 15_000 });
-  await voice.click();
+  const pressed = await voice.getAttribute("aria-pressed");
+  if (pressed === "true") {
+    await page.getByRole("button", { name: "Resume microphone" }).click();
+  } else {
+    await voice.click();
+  }
   await expect(page.getByTestId("connection")).toHaveText("Listening…", { timeout: 20_000 });
 }

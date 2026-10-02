@@ -9,6 +9,9 @@ interface Window {
     audioFramesSent: () => number;
     disconnect: () => Promise<void>;
     reconnect?: () => Promise<void>;
+    reconnectCause?: () => string | null;
+    voiceOwnership?: () => boolean;
+    captureAuthorized?: () => boolean;
     capturePrepared: () => boolean;
     workletLoaded: () => boolean;
     outputWorkletLoaded: () => boolean;

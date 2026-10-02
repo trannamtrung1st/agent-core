@@ -11,7 +11,7 @@ using Microsoft.Playwright;
 
 namespace AgentCore.Infrastructure.Browser;
 
-public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionLease, IBrowserRuntimeReadiness, IHostedService
+public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionLease, IBrowserProfileBinding, IBrowserRuntimeReadiness, IHostedService
 {
     private const string DescribeElement = """
         el => {
@@ -59,6 +59,10 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
     private readonly Func<CancellationToken, Task<bool>>? _chromiumProbe;
     private readonly SemaphoreSlim _launch = new(1, 1);
     private readonly ConcurrentDictionary<Guid, SessionBrowser> _sessions = new();
+    private readonly ConcurrentDictionary<Guid, Guid?> _sessionOwners = new();
+    private readonly ConcurrentDictionary<Guid, SessionBrowser> _persistent = new();
+    private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _profileGates = new();
+    private readonly List<IPlaywright> _persistentDrivers = [];
     private readonly ConcurrentDictionary<string, LiveElement> _refs = new();
     private IPlaywright? _playwright;
     private IBrowser? _browser;
@@ -144,12 +148,31 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             return;
         }
 
-        foreach (var session in _sessions.Values)
+        foreach (var session in _sessions.Values.Distinct())
         {
             await CloseQuietlyAsync(session.Context).ConfigureAwait(false);
         }
 
+        foreach (var session in _persistent.Values)
+        {
+            await CloseQuietlyAsync(session.Context).ConfigureAwait(false);
+            session.ProfileLease?.Dispose();
+        }
+
+        foreach (var driver in _persistentDrivers)
+        {
+            try
+            {
+                driver.Dispose();
+            }
+            catch (Exception ex) when (ex is PlaywrightException or ObjectDisposedException)
+            {
+            }
+        }
+
         _sessions.Clear();
+        _persistent.Clear();
+        _sessionOwners.Clear();
         _refs.Clear();
         if (_browser is not null)
         {
@@ -266,6 +289,10 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         catch (Exception ex) when (IsTimeout(ex))
         {
             return Result("timeout");
+        }
+        catch (BrowserProfileException ex)
+        {
+            return Result(ex.Code);
         }
         catch (Exception ex) when (ex is PlaywrightException or BrowserLaunchException)
         {
@@ -472,15 +499,35 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         if (_sessions.TryRemove(sessionId, out var session))
         {
             RemoveRefs(sessionId);
-            await CloseQuietlyAsync(session.Context).ConfigureAwait(false);
+            _sessionOwners.TryRemove(sessionId, out _);
+            if (!session.Persistent)
+            {
+                await CloseQuietlyAsync(session.Context).ConfigureAwait(false);
+            }
         }
     }
+
+    public void BindSession(Guid sessionId, Guid? agentInstanceId) =>
+        _sessionOwners[sessionId] = agentInstanceId;
 
     private async Task<SessionBrowser> EnsureSessionAsync(Guid sessionId, CancellationToken cancellationToken)
     {
         if (_sessions.TryGetValue(sessionId, out var existing))
         {
             return existing;
+        }
+
+        if (_options.ResolveProfile() == BrowserProfileMode.PersistentAgent
+            && _sessionOwners.TryGetValue(sessionId, out var owner)
+            && owner is Guid agentInstanceId)
+        {
+            var persistent = await EnsurePersistentAsync(agentInstanceId, cancellationToken).ConfigureAwait(false);
+            if (!_sessions.TryAdd(sessionId, persistent))
+            {
+                return _sessions[sessionId];
+            }
+
+            return persistent;
         }
 
         var browser = await EnsureBrowserAsync(cancellationToken).ConfigureAwait(false);
@@ -498,6 +545,119 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         }
 
         return session;
+    }
+
+    private async Task<SessionBrowser> EnsurePersistentAsync(Guid agentInstanceId, CancellationToken cancellationToken)
+    {
+        if (_persistent.TryGetValue(agentInstanceId, out var existing))
+        {
+            return existing;
+        }
+
+        var gate = _profileGates.GetOrAdd(agentInstanceId, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_persistent.TryGetValue(agentInstanceId, out existing))
+            {
+                return existing;
+            }
+
+            string directory;
+            try
+            {
+                directory = ProfileDirectory(agentInstanceId);
+                Directory.CreateDirectory(directory);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger.LogWarning("Browser profile is unavailable.");
+                throw new BrowserProfileException("profile_unavailable");
+            }
+
+            FileStream? lease = null;
+            IPlaywright? playwright = null;
+            try
+            {
+                try
+                {
+                    lease = new FileStream(
+                        directory + ".lock",
+                        FileMode.OpenOrCreate,
+                        FileAccess.ReadWrite,
+                        FileShare.None);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    _logger.LogWarning("Browser profile is unavailable.");
+                    throw new BrowserProfileException("profile_busy");
+                }
+
+                playwright = await Playwright.CreateAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+                var options = new BrowserTypeLaunchPersistentContextOptions
+                {
+                    Headless = _options.Headless,
+                    Args = ["--disable-popup-blocking"]
+                };
+                if (!string.IsNullOrWhiteSpace(_options.Channel))
+                {
+                    options.Channel = _options.Channel;
+                }
+
+                IBrowserContext context;
+                try
+                {
+                    context = await playwright.Chromium.LaunchPersistentContextAsync(directory, options)
+                        .WaitAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (PlaywrightException ex)
+                {
+                    _logger.LogWarning("Browser profile is unavailable.");
+                    var busy = ex.Message.Contains("lock", StringComparison.OrdinalIgnoreCase)
+                        || ex.Message.Contains("already", StringComparison.OrdinalIgnoreCase)
+                        || ex.Message.Contains("in use", StringComparison.OrdinalIgnoreCase)
+                        || ex.Message.Contains("ProcessSingleton", StringComparison.OrdinalIgnoreCase);
+                    throw new BrowserProfileException(busy ? "profile_busy" : "profile_unavailable");
+                }
+
+                var page = context.Pages.FirstOrDefault() ?? await context.NewPageAsync().ConfigureAwait(false);
+                page.SetDefaultTimeout(TimeoutMs());
+                page.SetDefaultNavigationTimeout(TimeoutMs());
+                var session = new SessionBrowser(context, page) { Persistent = true, ProfileLease = lease };
+                context.Page += (_, opened) => OnContextPage(session, opened);
+                await context.RouteAsync("**/*", route => RouteAsync(session, route)).ConfigureAwait(false);
+                _persistent[agentInstanceId] = session;
+                _persistentDrivers.Add(playwright);
+                lease = null;
+                playwright = null;
+                return session;
+            }
+            finally
+            {
+                playwright?.Dispose();
+                lease?.Dispose();
+            }
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private string ProfileDirectory(Guid agentInstanceId)
+    {
+        var root = string.IsNullOrWhiteSpace(_options.ProfileRoot) ? "data/browser-profiles" : _options.ProfileRoot;
+        var name = agentInstanceId.ToString("D");
+        var rootFull = Path.GetFullPath(root);
+        var full = Path.GetFullPath(Path.Combine(rootFull, name));
+        if (!full.StartsWith(rootFull + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+            && !full.Equals(rootFull, StringComparison.Ordinal))
+        {
+            throw new IOException();
+        }
+
+        return full;
     }
 
     private async Task<IBrowser> EnsureBrowserAsync(CancellationToken cancellationToken)
@@ -1313,11 +1473,20 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
     private sealed class BrowserLaunchException : Exception;
 
+    private sealed class BrowserProfileException(string code) : Exception
+    {
+        public string Code { get; } = code;
+    }
+
     private sealed class SessionBrowser(IBrowserContext context, IPage page)
     {
         public IBrowserContext Context { get; } = context;
 
         public IPage Page { get; set; } = page;
+
+        public bool Persistent { get; init; }
+
+        public FileStream? ProfileLease { get; init; }
 
         public int Generation { get; set; }
 

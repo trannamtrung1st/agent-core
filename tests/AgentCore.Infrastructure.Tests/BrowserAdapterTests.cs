@@ -343,6 +343,218 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         }
     }
 
+    [Fact]
+    public async Task Persistent_agent_profile_survives_sessions_and_restart_and_stays_isolated()
+    {
+        var port = BindEphemeralPort();
+        using var listener = new HttpListener();
+        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+        listener.Start();
+        var origin = $"http://127.0.0.1:{port}";
+        using var stop = new CancellationTokenSource();
+        var serving = ServeButtonAsync(listener, stop.Token);
+        var root = Path.Combine(Path.GetTempPath(), "agent-core-profiles-" + Guid.NewGuid().ToString("N"));
+        var tommy = Guid.NewGuid();
+        var other = Guid.NewGuid();
+        PlaywrightBrowserSession? first = NewPersistent(root);
+        await first.StartAsync(CancellationToken.None);
+        var sessionA = Guid.NewGuid();
+        PlaywrightBrowserSession? restarted = null;
+        PlaywrightBrowserSession? rival = null;
+        try
+        {
+            first.BindSession(sessionA, tommy);
+            var home = await first.NavigateAsync(new BrowserNavigateRequest(sessionA, new Uri(origin + "/")));
+            Assert.Null(home.ErrorCode);
+            var button = Assert.Single(home.Observation!.Elements, element => element.Name == "Go");
+            await first.ContextFor(sessionA)!.AddCookiesAsync(
+            [
+                new Microsoft.Playwright.Cookie
+                {
+                    Name = "persist",
+                    Value = "alpha",
+                    Url = origin + "/",
+                    Expires = DateTimeOffset.UtcNow.AddDays(1).ToUnixTimeSeconds()
+                }
+            ]);
+            await first.ContextFor(sessionA)!.Pages.First().EvaluateAsync("() => localStorage.setItem('persistKey', 'beta')");
+            await first.ReleaseAsync(sessionA);
+
+            var sessionB = Guid.NewGuid();
+            first.BindSession(sessionB, tommy);
+            var again = await first.NavigateAsync(new BrowserNavigateRequest(sessionB, new Uri(origin + "/")));
+            Assert.Null(again.ErrorCode);
+            Assert.Contains(
+                await first.ContextFor(sessionB)!.CookiesAsync(),
+                cookie => cookie.Name == "persist" && cookie.Value == "alpha");
+            Assert.Equal(
+                "beta",
+                await first.ContextFor(sessionB)!.Pages.First().EvaluateAsync<string?>("() => localStorage.getItem('persistKey')"));
+            var stale = await first.ActAsync(new BrowserActRequest(sessionB, "click", button.Ref, null));
+            Assert.Equal("stale_reference", stale.ErrorCode);
+
+            var sessionOther = Guid.NewGuid();
+            first.BindSession(sessionOther, other);
+            var foreign = await first.NavigateAsync(new BrowserNavigateRequest(sessionOther, new Uri(origin + "/")));
+            Assert.Null(foreign.ErrorCode);
+            Assert.DoesNotContain(
+                await first.ContextFor(sessionOther)!.CookiesAsync(),
+                cookie => cookie.Name == "persist");
+
+            rival = NewPersistent(root);
+            await rival.StartAsync(CancellationToken.None);
+            var rivalSession = Guid.NewGuid();
+            rival.BindSession(rivalSession, tommy);
+            var busy = await rival.NavigateAsync(new BrowserNavigateRequest(rivalSession, new Uri(origin + "/")));
+            Assert.Equal("profile_busy", busy.ErrorCode);
+
+            await first.StopAsync(CancellationToken.None);
+            first = null;
+            restarted = NewPersistent(root);
+            await restarted.StartAsync(CancellationToken.None);
+            var sessionC = Guid.NewGuid();
+            restarted.BindSession(sessionC, tommy);
+            var restored = await restarted.NavigateAsync(new BrowserNavigateRequest(sessionC, new Uri(origin + "/")));
+            Assert.Null(restored.ErrorCode);
+            Assert.Contains(
+                await restarted.ContextFor(sessionC)!.CookiesAsync(),
+                cookie => cookie.Name == "persist" && cookie.Value == "alpha");
+            Assert.Equal(
+                "beta",
+                await restarted.ContextFor(sessionC)!.Pages.First().EvaluateAsync<string?>("() => localStorage.getItem('persistKey')"));
+        }
+        finally
+        {
+            if (first is not null)
+            {
+                await first.StopAsync(CancellationToken.None);
+            }
+
+            if (restarted is not null)
+            {
+                await restarted.StopAsync(CancellationToken.None);
+            }
+
+            if (rival is not null)
+            {
+                await rival.StopAsync(CancellationToken.None);
+            }
+
+            await stop.CancelAsync();
+            listener.Stop();
+            await serving;
+            try
+            {
+                Directory.Delete(root, true);
+            }
+            catch (IOException)
+            {
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Ephemeral_session_drops_site_state_when_released()
+    {
+        var port = BindEphemeralPort();
+        using var listener = new HttpListener();
+        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+        listener.Start();
+        var origin = $"http://127.0.0.1:{port}";
+        using var stop = new CancellationTokenSource();
+        var serving = ServeButtonAsync(listener, stop.Token);
+        var root = Path.Combine(Path.GetTempPath(), "agent-core-profiles-" + Guid.NewGuid().ToString("N"));
+        var session = new PlaywrightBrowserSession(
+            new BrowserOptions
+            {
+                Enabled = true,
+                Headless = true,
+                PolicyMode = nameof(BrowserPolicyMode.OpenWeb),
+                ProfileMode = nameof(BrowserProfileMode.EphemeralSession),
+                ProfileRoot = root,
+                FixtureEnabled = false,
+                NavigationOrigins = []
+            },
+            loggerFactory: null);
+        await session.StartAsync(CancellationToken.None);
+        var owner = Guid.NewGuid();
+        var first = Guid.NewGuid();
+        try
+        {
+            session.BindSession(first, owner);
+            var home = await session.NavigateAsync(new BrowserNavigateRequest(first, new Uri(origin + "/")));
+            Assert.Null(home.ErrorCode);
+            await session.ContextFor(first)!.AddCookiesAsync(
+            [
+                new Microsoft.Playwright.Cookie
+                {
+                    Name = "persist",
+                    Value = "alpha",
+                    Url = origin + "/",
+                    Expires = DateTimeOffset.UtcNow.AddDays(1).ToUnixTimeSeconds()
+                }
+            ]);
+            await session.ReleaseAsync(first);
+            var second = Guid.NewGuid();
+            session.BindSession(second, owner);
+            var again = await session.NavigateAsync(new BrowserNavigateRequest(second, new Uri(origin + "/")));
+            Assert.Null(again.ErrorCode);
+            Assert.DoesNotContain(
+                await session.ContextFor(second)!.CookiesAsync(),
+                cookie => cookie.Name == "persist");
+        }
+        finally
+        {
+            await session.StopAsync(CancellationToken.None);
+            await stop.CancelAsync();
+            listener.Stop();
+            await serving;
+            try
+            {
+                Directory.Delete(root, true);
+            }
+            catch (IOException)
+            {
+            }
+        }
+    }
+
+    private static PlaywrightBrowserSession NewPersistent(string root) =>
+        new(
+            new BrowserOptions
+            {
+                Enabled = true,
+                Headless = true,
+                PolicyMode = nameof(BrowserPolicyMode.OpenWeb),
+                ProfileMode = nameof(BrowserProfileMode.PersistentAgent),
+                ProfileRoot = root,
+                FixtureEnabled = false,
+                NavigationOrigins = []
+            },
+            loggerFactory: null);
+
+    private static async Task ServeButtonAsync(HttpListener listener, CancellationToken cancellationToken)
+    {
+        var html = Encoding.UTF8.GetBytes("<!DOCTYPE html><html><head><title>Persist</title></head><body><button type=\"button\">Go</button></body></html>");
+        while (!cancellationToken.IsCancellationRequested && listener.IsListening)
+        {
+            HttpListenerContext context;
+            try
+            {
+                context = await listener.GetContextAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or HttpListenerException or ObjectDisposedException)
+            {
+                break;
+            }
+
+            context.Response.ContentType = "text/html; charset=utf-8";
+            context.Response.ContentLength64 = html.Length;
+            await context.Response.OutputStream.WriteAsync(html, cancellationToken).ConfigureAwait(false);
+            context.Response.Close();
+        }
+    }
+
     private static async Task ServeOpenWebAsync(HttpListener listener, CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested && listener.IsListening)

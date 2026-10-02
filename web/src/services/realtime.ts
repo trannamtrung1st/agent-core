@@ -104,6 +104,9 @@ let captureStreamId: string | null = null;
 let voiceRequest: Promise<void> | null = null;
 let voiceModeRequested = false;
 let clientOwnsVoice = false;
+let captureAuthorized = false;
+type ReconnectCause = "transportReconnecting" | "hubClosed" | "controlSequenceGap" | "textOffsetGap" | "explicit";
+let lastReconnectCause: ReconnectCause | null = null;
 let voiceEpoch = 0;
 let sendRequest: Promise<void> | null = null;
 const pendingStops = new Map<string, Promise<void>>();
@@ -533,9 +536,21 @@ const RECONNECT_DELAYS_MS = [0, 2000, 5000, 10000];
 
 let reconnectBudgetStarted = 0;
 let attachLoop = 0;
-let voiceReadyDowngradeOnNextReady = false;
-let passiveVoiceSuppressed = false;
 let awaitingAgentResponseStart = false;
+
+function setCaptureAuthorized(authorized: boolean): void {
+  captureAuthorized = authorized;
+  if (useSessionStore.getState().captureAuthorized !== authorized) {
+    useSessionStore.setState({ captureAuthorized: authorized });
+  }
+}
+
+function disarmCapture(cause: ReconnectCause): void {
+  lastReconnectCause = cause;
+  setCaptureAuthorized(false);
+  capture.release();
+  void transcriptLife?.exitVoice();
+}
 
 function clearAwaitingAgentResponseStart(): void {
   awaitingAgentResponseStart = false;
@@ -635,7 +650,6 @@ function isTransientAttachError(ack: { error?: { code?: string } } | null | unde
 
 async function attachWithBusyRetry(lastServerSequence: number | null): Promise<boolean> {
   const loop = attachLoop;
-  voiceReadyDowngradeOnNextReady = !voiceModeRequested && !clientOwnsVoice;
   let delayIndex = 0;
   let retriedOwnerCapability = false;
   while (loop === attachLoop && connection) {
@@ -701,7 +715,7 @@ async function attachWithBusyRetry(lastServerSequence: number | null): Promise<b
 }
 
 function handleHubClosed(): void {
-  clientOwnsVoice = false;
+  disarmCapture("hubClosed");
   attachLoop += 1;
   if (disposed) {
     return;
@@ -736,7 +750,8 @@ async function recoverFromTransientDisconnect(): Promise<void> {
   }
 }
 
-async function recoverFromSequenceGap(): Promise<void> {
+async function recoverFromSequenceGap(cause: ReconnectCause): Promise<void> {
+  disarmCapture(cause);
   const snapshot = useSessionStore.getState();
   if (!connection || !snapshot.sessionId) {
     return;
@@ -777,11 +792,11 @@ function handleEvent(raw: ServerEvent): void {
   if (hasControlSequenceGap(prior, raw)) {
     abortPlayback();
     useSessionStore.setState(applyServerEvent(prior, raw));
-    void recoverFromSequenceGap();
+    void recoverFromSequenceGap("controlSequenceGap");
     return;
   }
   if (prior.connection === "ready" && hasTextOffsetGap(prior, raw)) {
-    void recoverFromSequenceGap();
+    void recoverFromSequenceGap("textOffsetGap");
     return;
   }
 
@@ -845,17 +860,6 @@ function handleEvent(raw: ServerEvent): void {
     if (orphanPatch) {
       useSessionStore.setState(orphanPatch);
     }
-    const serverVoice = String(raw.payload?.mode ?? "") === "voice";
-    if (
-      serverVoice
-      && !clientOwnsVoice
-      && !voiceModeRequested
-      && (voiceReadyDowngradeOnNextReady || passiveVoiceSuppressed)
-    ) {
-      downgradePassiveVoiceAttach();
-      passiveVoiceSuppressed = true;
-    }
-    voiceReadyDowngradeOnNextReady = false;
   }
   if (raw.type === "agent.response.completed" && String(raw.payload.status ?? "completed") === "completed") {
     void maybeAutoDispatchQueueHead();
@@ -864,6 +868,7 @@ function handleEvent(raw: ServerEvent): void {
     const status = String(raw.payload.status ?? "");
     if (status === "paused" || status === "ended") {
       clientOwnsVoice = false;
+      setCaptureAuthorized(false);
       clearAwaitingAgentResponseStart();
       void stopConnection();
       stopReceipts();
@@ -1498,22 +1503,6 @@ function voicePlaybackHoldActive(): boolean {
   );
 }
 
-function downgradePassiveVoiceAttach(): void {
-  useSessionStore.setState({
-    mode: "text",
-    pendingMode: null,
-    streamId: null,
-    captureLive: false,
-    muted: false,
-    preflightReady: false
-  });
-  void releaseClientSpeech();
-  capture.release();
-  void dispatchHubCommand((sequence) =>
-    invoke("SetMode", "session.mode.set", { mode: "text" }, sequence)
-  );
-}
-
 function syncCapture(): void {
   const state = useSessionStore.getState();
   if (state.connection !== "ready") {
@@ -1527,6 +1516,11 @@ function syncCapture(): void {
   }
 
   if (state.mode === "voice" && state.streamId && connection) {
+    if (!state.captureAuthorized) {
+      publishCaptureLive();
+      return;
+    }
+
     if (state.sttTransport === "clientTranscript") {
       ensureSpeechAdapters();
       const life = ensureTranscriptLife();
@@ -1687,16 +1681,13 @@ export const realtimeTestHooks =
         markOutputStarted(responseId: string) {
           outputGate.markStarted(responseId);
         },
-        markPassiveVoiceReadyDowngrade() {
-          voiceReadyDowngradeOnNextReady = true;
-        },
         resetOutput() {
           attachLoop += 1;
           reconnectBudgetStarted = 0;
-          voiceReadyDowngradeOnNextReady = false;
-          passiveVoiceSuppressed = false;
+          lastReconnectCause = null;
           voiceModeRequested = false;
           clientOwnsVoice = false;
+          setCaptureAuthorized(false);
           clearAwaitingAgentResponseStart();
           pendingUserText = null;
           sendRequest = null;
@@ -1774,7 +1765,7 @@ async function startConnection(
       return;
     }
 
-    clientOwnsVoice = false;
+    disarmCapture("transportReconnecting");
     beginReconnectBudget();
     dropLiveTransport("reconnecting");
   });
@@ -1840,7 +1831,7 @@ async function attachAfterReconnect(): Promise<void> {
 
 async function stopConnection(options?: { keepPreparedCapture?: boolean }): Promise<void> {
   if (!options?.keepPreparedCapture) {
-    clientOwnsVoice = false;
+    disarmCapture("explicit");
   }
   attachLoop += 1;
   abortPlayback();
@@ -2083,6 +2074,7 @@ export async function beginNewChat(options?: { syncUrl?: boolean; urlMode?: "pus
   voiceEpoch += 1;
   voiceModeRequested = false;
   clientOwnsVoice = false;
+  setCaptureAuthorized(false);
   clientTranscriptHeldForAgent = false;
   beginSessionHistory();
   await stopConnection();
@@ -3589,7 +3581,6 @@ export async function requestVoice(): Promise<void> {
 
   voiceRequest = (async () => {
     voiceModeRequested = true;
-    passiveVoiceSuppressed = false;
     const epoch = ++voiceEpoch;
     try {
       useSessionStore.setState({ preflightReady: true, ...clearSessionFailure() });
@@ -3639,6 +3630,8 @@ export async function requestVoice(): Promise<void> {
 
         if (ack?.accepted) {
           clientOwnsVoice = true;
+          setCaptureAuthorized(true);
+          syncCapture();
         } else {
           capture.release();
           useSessionStore.setState({
@@ -3678,10 +3671,43 @@ export async function requestVoice(): Promise<void> {
   }
 }
 
+export async function resumeCapture(): Promise<void> {
+  const state = useSessionStore.getState();
+  if (state.mode !== "voice" || state.connection !== "ready") {
+    return;
+  }
+
+  setCaptureAuthorized(true);
+  ensureSpeechAdapters();
+  try {
+    const microphone = state.sttTransport !== "clientTranscript";
+    const playback = state.ttsTransport !== "clientSpeech";
+    if ((microphone || playback) && !capture.isPrepared()) {
+      await capture.preflight({ microphone, playback });
+    }
+  } catch (error) {
+    setCaptureAuthorized(false);
+    capture.release();
+    useSessionStore.setState({
+      preflightReady: false,
+      ...sessionFailurePatch(microphoneError(error), { category: "Speech", code: "SpeechCaptureFailed" })
+    });
+    return;
+  }
+
+  if (useSessionStore.getState().mode !== "voice") {
+    setCaptureAuthorized(false);
+    return;
+  }
+
+  useSessionStore.setState({ preflightReady: true });
+  syncCapture();
+}
+
 export async function cancelVoice(): Promise<void> {
   voiceModeRequested = false;
   clientOwnsVoice = false;
-  passiveVoiceSuppressed = false;
+  setCaptureAuthorized(false);
   voiceEpoch += 1;
   try {
     const ack = await dispatchHubCommand((sequence) =>
@@ -3853,6 +3879,9 @@ if (typeof window !== "undefined") {
         await startConnection(sessionId);
       }
     },
+    reconnectCause: () => lastReconnectCause,
+    voiceOwnership: () => clientOwnsVoice,
+    captureAuthorized: () => captureAuthorized,
     capturePrepared: () => capture.isPrepared() || capture.isStreaming(),
     workletLoaded: () => capture.workletLoaded(),
     outputWorkletLoaded: () => capture.outputWorkletLoaded(),

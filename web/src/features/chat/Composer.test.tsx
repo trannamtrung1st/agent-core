@@ -42,7 +42,9 @@ function emptyComposerProps() {
     onStop: vi.fn(),
     onVoice: vi.fn(),
     onCancelVoice: vi.fn(),
+    captureNeedsResume: false,
     onMute: vi.fn(),
+    onResumeCapture: vi.fn(),
     onRetry: vi.fn()
   };
 }
@@ -243,6 +245,25 @@ describe("Composer voice toolbar", () => {
     expect(unmute).not.toHaveClass("composer-voice-live");
     fireEvent.click(unmute);
     expect(onMute).toHaveBeenCalledWith(false);
+  });
+
+  it("offers Resume microphone without turning voice off", () => {
+    const onResumeCapture = vi.fn();
+    const onCancelVoice = vi.fn();
+    render(
+      <Composer
+        {...emptyComposerProps()}
+        voiceAvailable
+        voiceModeActive
+        captureNeedsResume
+        onResumeCapture={onResumeCapture}
+        onCancelVoice={onCancelVoice}
+      />
+    );
+    expect(screen.getByRole("button", { name: /^Voice$/ })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Resume microphone" }));
+    expect(onResumeCapture).toHaveBeenCalled();
+    expect(onCancelVoice).not.toHaveBeenCalled();
   });
 
   it("shows inactive microphone state when capture is not live and user is not muted", () => {

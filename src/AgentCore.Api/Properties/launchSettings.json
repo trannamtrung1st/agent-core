@@ -62,6 +62,8 @@
         "Persistence__Provider": "Sqlite",
         "Persistence__ConnectionString": "Data Source=data/agent-core.db",
         "Browser__PolicyMode": "OpenWeb",
+        "Browser__ProfileMode": "PersistentAgent",
+        "Browser__ProfileRoot": "../../local/browser-profiles",
         "Browser__FixtureEnabled": "false",
         "Browser__Headless": "false",
         "Browser__InteractionMode": "InteractiveDemo"

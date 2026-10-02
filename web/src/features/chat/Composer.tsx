@@ -81,17 +81,35 @@ function MicrophoneControl({
   voiceInputLive,
   voiceInputBlocked,
   voiceInputHeldForAgentOutput,
+  captureNeedsResume,
   muted,
   onVoice,
-  onMute
+  onMute,
+  onResumeCapture
 }: {
   voiceInputLive: boolean;
   voiceInputBlocked: boolean;
   voiceInputHeldForAgentOutput: boolean;
+  captureNeedsResume: boolean;
   muted: boolean;
   onVoice: () => void;
   onMute: (muted: boolean) => void;
+  onResumeCapture: () => void;
 }) {
+  if (captureNeedsResume) {
+    return (
+      <Tooltip title="Resume microphone">
+        <Button
+          type="text"
+          className="composer-icon"
+          aria-label="Resume microphone"
+          icon={<AudioOutlined />}
+          onClick={onResumeCapture}
+        />
+      </Tooltip>
+    );
+  }
+
   if (voiceInputBlocked) {
     return (
       <Tooltip title="Retry microphone">
@@ -191,6 +209,7 @@ export function Composer({
   voiceInputLive,
   voiceInputBlocked,
   voiceInputHeldForAgentOutput,
+  captureNeedsResume,
   muted,
   canRetry,
   placeholder,
@@ -200,6 +219,7 @@ export function Composer({
   onVoice,
   onCancelVoice,
   onMute,
+  onResumeCapture,
   onRetry,
   modelControls,
   imageIncompatibilityMessage
@@ -219,6 +239,7 @@ export function Composer({
   voiceInputLive: boolean;
   voiceInputBlocked: boolean;
   voiceInputHeldForAgentOutput: boolean;
+  captureNeedsResume: boolean;
   muted: boolean;
   canRetry: boolean;
   placeholder: string;
@@ -228,6 +249,7 @@ export function Composer({
   onVoice: () => void;
   onCancelVoice: () => void;
   onMute: (muted: boolean) => void;
+  onResumeCapture: () => void;
   onRetry: () => void;
   modelControls?: ReactNode;
   imageIncompatibilityMessage?: string | null;
@@ -441,9 +463,11 @@ export function Composer({
                     voiceInputLive={voiceInputLive}
                     voiceInputBlocked={voiceInputBlocked}
                     voiceInputHeldForAgentOutput={voiceInputHeldForAgentOutput}
+                    captureNeedsResume={captureNeedsResume}
                     muted={muted}
                     onVoice={onVoice}
                     onMute={onMute}
+                    onResumeCapture={onResumeCapture}
                   />
                 ) : null}
               </>

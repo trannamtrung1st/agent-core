@@ -164,6 +164,7 @@ export type SessionView = {
   errorFatal: boolean;
   errorHoldSequence: number;
   preflightReady: boolean;
+  captureAuthorized: boolean;
   captureLive: boolean;
   clientTranscriptBlocked: boolean;
   voiceInputHeldForAgentOutput: boolean;
@@ -220,6 +221,7 @@ export const emptySession = (): SessionView => ({
   errorFatal: false,
   errorHoldSequence: 0,
   preflightReady: false,
+  captureAuthorized: false,
   captureLive: false,
   clientTranscriptBlocked: false,
   voiceInputHeldForAgentOutput: false,

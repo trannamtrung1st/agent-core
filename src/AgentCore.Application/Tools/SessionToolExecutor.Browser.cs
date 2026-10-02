@@ -15,7 +15,9 @@ public sealed partial class SessionToolExecutor
         "stale_reference",
         "timeout",
         "provider_unavailable",
-        "unsupported_operation"
+        "unsupported_operation",
+        "profile_busy",
+        "profile_unavailable"
     };
 
     private async Task<string> NavigateBrowserAsync(
@@ -233,6 +235,8 @@ public sealed partial class SessionToolExecutor
             "stale_reference" => "Element reference is stale.",
             "timeout" => "Browser operation timed out.",
             "unsupported_operation" => "Browser operation is not supported.",
+            "profile_busy" => "The browser profile is already in use.",
+            "profile_unavailable" => "The browser profile is unavailable.",
             _ => "Browser is unavailable."
         };
 

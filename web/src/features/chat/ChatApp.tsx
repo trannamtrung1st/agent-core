@@ -15,6 +15,7 @@ import {
   openCatalogSession,
   reportCommittedEntries,
   requestVoice,
+  resumeCapture,
   retryConnection,
   resumePausedSession,
   reloadChatAgentInstances,
@@ -465,6 +466,7 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
                       voiceInputLive={voiceInputLive}
                       voiceInputBlocked={voiceInputBlocked}
                       voiceInputHeldForAgentOutput={state.voiceInputHeldForAgentOutput}
+                      captureNeedsResume={voiceModeActive && !state.captureAuthorized}
                       muted={state.muted}
                       placeholder={`Message ${agentName}...`}
                       onDraftChange={setDraft}
@@ -473,6 +475,7 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
                       onVoice={() => void requestVoice()}
                       onCancelVoice={() => void cancelVoice()}
                       onMute={(muted) => void setMuted(muted)}
+                      onResumeCapture={() => void resumeCapture()}
                       canRetry={false}
                       onRetry={() => void retryConnection()}
                       modelControls={modelPicker}

@@ -126,3 +126,7 @@ Hosted Synthetic is green for this post-closure chain and does not move the free
 
 - [`d310b9e`](https://github.com/trannamtrung1st/agent-core/commit/d310b9e) — [36907229401](https://github.com/trannamtrung1st/agent-core/actions/runs/36907229401)
 - [`8092731`](https://github.com/trannamtrung1st/agent-core/commit/8092731) — [36910823830](https://github.com/trannamtrung1st/agent-core/actions/runs/36910823830)
+
+## Appendix — Agent Instance browser profile
+
+This appendix does not move `bba1de4`. P9 closed with a session-scoped ephemeral browser. A later enhancement adds `ProfileMode` `PersistentAgent` for the Real `http-openrouter` profile: one on-disk browser profile per `AgentInstanceId`, reused across chats and process restarts, never the human user's Chrome profile. Synthetic stays `EphemeralSession`. Element refs stay session-scoped. Hosted Synthetic for this profile enhancement is not yet recorded. Profile reset is a follow-up.

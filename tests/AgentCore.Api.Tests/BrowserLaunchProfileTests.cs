@@ -11,6 +11,7 @@ public sealed class BrowserLaunchProfileTests
         using var appsettings = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "src/AgentCore.Api/appsettings.json")));
         var browser = appsettings.RootElement.GetProperty("Browser");
         Assert.Equal("Restricted", browser.GetProperty("PolicyMode").GetString());
+        Assert.Equal("EphemeralSession", browser.GetProperty("ProfileMode").GetString());
         Assert.True(browser.GetProperty("FixtureEnabled").GetBoolean());
 
         using var launch = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "src/AgentCore.Api/Properties/launchSettings.json")));
@@ -22,6 +23,7 @@ public sealed class BrowserLaunchProfileTests
         var real = profiles.GetProperty("http-openrouter").GetProperty("environmentVariables");
         Assert.Equal("Real", real.GetProperty("AgentCore__Profile").GetString());
         Assert.Equal("OpenWeb", real.GetProperty("Browser__PolicyMode").GetString());
+        Assert.Equal("PersistentAgent", real.GetProperty("Browser__ProfileMode").GetString());
         Assert.Equal("false", real.GetProperty("Browser__FixtureEnabled").GetString());
         Assert.Equal("false", real.GetProperty("Browser__Headless").GetString());
         Assert.Equal("InteractiveDemo", real.GetProperty("Browser__InteractionMode").GetString());

@@ -15,6 +15,12 @@ public sealed class BrowserOptions
 
     public string PolicyMode { get; set; } = nameof(BrowserPolicyMode.Restricted);
 
+    public string ProfileMode { get; set; } = nameof(BrowserProfileMode.EphemeralSession);
+
+    public string ProfileRoot { get; set; } = "data/browser-profiles";
+
+    public string? Channel { get; set; }
+
     public bool FixtureEnabled { get; set; } = true;
 
     public int FixturePort { get; set; } = 5091;
@@ -35,7 +41,13 @@ public sealed class BrowserOptions
             ResolveNavigation(),
             ResolveInteraction(ResolveNavigation()),
             ResourceOrigins ?? [],
-            ResolvePolicy());
+            ResolvePolicy(),
+            ResolveProfile());
+
+    public BrowserProfileMode ResolveProfile() =>
+        string.Equals(ProfileMode, nameof(BrowserProfileMode.PersistentAgent), StringComparison.OrdinalIgnoreCase)
+            ? BrowserProfileMode.PersistentAgent
+            : BrowserProfileMode.EphemeralSession;
 
     public BrowserPolicyMode ResolvePolicy() =>
         string.Equals(PolicyMode, nameof(BrowserPolicyMode.OpenWeb), StringComparison.OrdinalIgnoreCase)

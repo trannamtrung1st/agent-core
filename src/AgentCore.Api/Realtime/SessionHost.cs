@@ -1822,8 +1822,26 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                 cancellationToken);
         }
 
-        var evt = SessionEventMapper.Map(output, live.AttachmentId, live.NextSequence(), _catalog);
-        return new ValueTask(PublishEventAsync(live, output, evt, cancellationToken));
+        return new ValueTask(PublishOrderedEventAsync(live, output, cancellationToken));
+    }
+
+    private async Task PublishOrderedEventAsync(Live live, SessionOutput output, CancellationToken cancellationToken)
+    {
+        await live.EventPublish.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (live.ConnectionId is null)
+            {
+                return;
+            }
+
+            var evt = SessionEventMapper.Map(output, live.AttachmentId, live.NextSequence(), _catalog);
+            await PublishEventAsync(live, output, evt, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            live.EventPublish.Release();
+        }
     }
 
     private async Task PublishEventAsync(Live live, SessionOutput output, ServerEvent evt, CancellationToken cancellationToken)
@@ -2232,6 +2250,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         public long LastSequence { get; set; }
         public string? LastEventId { get; set; }
         public SemaphoreSlim Admission { get; } = new(1, 1);
+        public SemaphoreSlim EventPublish { get; } = new(1, 1);
         public Dictionary<string, InFlightAdmit> InFlight { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, DedupeRecord> Dedupe { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Task Dispatcher { get; }
