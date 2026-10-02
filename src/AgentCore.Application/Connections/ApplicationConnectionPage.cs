@@ -86,18 +86,21 @@ public static class ApplicationConnectionPrompt
             "nopCommerce connected: " + Text(connected),
             "authenticated: " + Text(authenticated),
             "available: " + Text(authenticated),
-            "trusted origin host: " + Host(connection.TrustedOrigins));
+            "trusted origin: " + Origin(connection.TrustedOrigins),
+            "Use this origin exactly, including its port.");
     }
 
     private static string Text(bool value) => value ? "true" : "false";
 
-    private static string Host(IReadOnlyList<string> origins)
+    private static string Origin(IReadOnlyList<string> origins)
     {
         if (origins.Count == 0 || !Uri.TryCreate(origins[0], UriKind.Absolute, out var origin))
         {
             return "unknown";
         }
 
-        return origin.Host;
+        return origin.IsDefaultPort
+            ? $"{origin.Scheme}://{origin.Host}"
+            : $"{origin.Scheme}://{origin.Host}:{origin.Port}";
     }
 }

@@ -115,7 +115,8 @@ public sealed class ApplicationConnectionTests
             reset.StatusDetail);
         AssertNoSecrets(rendered);
         Assert.Contains("nopCommerce connected: false", prompt, StringComparison.Ordinal);
-        Assert.Contains("trusted origin host: 127.0.0.1", prompt, StringComparison.Ordinal);
+        Assert.Contains("trusted origin: http://127.0.0.1:5088", prompt, StringComparison.Ordinal);
+        Assert.Contains("Use this origin exactly, including its port.", prompt, StringComparison.Ordinal);
         Assert.Contains("nopCommerce connected: false", environment, StringComparison.Ordinal);
     }
 
