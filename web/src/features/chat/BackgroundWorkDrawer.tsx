@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
+  BellOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
   CloseCircleOutlined,
@@ -248,6 +249,13 @@ export function BackgroundWorkDrawer({
                 {item.approvalPreview}
               </Typography.Paragraph>
             </div>
+          ) : null}
+
+          {item.attentionRequired ? (
+            <Flex align="center" gap={token.paddingXS} className="background-work-attention">
+              <BellOutlined aria-hidden />
+              <Typography.Text>Needs attention</Typography.Text>
+            </Flex>
           ) : null}
 
           {results[item.workItemId] ? (

@@ -450,6 +450,23 @@ internal static class AdminEndpoints
             }
         });
 
+        group.MapPost("/agent-instances/{instanceId:guid}/connection/open-browser", async (
+            Guid instanceId,
+            ApplicationConnectionService connections,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var connection = await connections.ApplyObservationAsync(instanceId, cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToApplicationConnection(connection));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
         group.MapPost("/agent-instances/{instanceId:guid}/connection/revoke", async (
             Guid instanceId,
             ApplicationConnectionService connections,

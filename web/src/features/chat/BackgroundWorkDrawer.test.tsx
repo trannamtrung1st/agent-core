@@ -118,6 +118,7 @@ describe("BackgroundWorkDrawer", () => {
     expect(screen.getAllByText("Scheduled reminder").length).toBeGreaterThan(0);
     expect(screen.getByText("Application event")).toBeInTheDocument();
     expect(screen.getByText("Queued")).toBeInTheDocument();
+    expect(screen.queryByText("Needs attention")).not.toBeInTheDocument();
     expect(screen.getByText("Needs approval")).toBeInTheDocument();
     expect(screen.getByText("Completed")).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
@@ -220,5 +221,22 @@ describe("BackgroundWorkDrawer", () => {
       await vi.advanceTimersByTimeAsync(5_000);
     });
     expect(load).toHaveBeenCalledTimes(calls);
+  });
+
+  it("labels attention results and leaves quiet completions unlabeled", async () => {
+    const attention = { ...completed, workItemId: "work-attention", origin: "Morning review", attentionRequired: true };
+    const quiet = { ...completed, workItemId: "work-quiet", origin: "Quiet check", attentionRequired: false };
+    renderDrawer(async () => [attention, quiet], {
+      loadResult: async (sessionId, workItemId) => ({
+        workItemId,
+        text: workItemId === attention.workItemId ? "Two orders need review." : "Nothing to report.",
+        completedAt: completed.updatedAt,
+        attentionRequired: workItemId === attention.workItemId
+      })
+    });
+    expect(await screen.findByText("Needs attention")).toBeInTheDocument();
+    expect(screen.getAllByText("Needs attention")).toHaveLength(1);
+    expect(screen.getByText("Two orders need review.")).toBeInTheDocument();
+    expect(screen.getByText("Nothing to report.")).toBeInTheDocument();
   });
 });

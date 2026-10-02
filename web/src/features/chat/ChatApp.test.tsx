@@ -43,6 +43,7 @@ vi.mock("../../services/api", async (importOriginal) => {
   return {
     ...actual,
     listWorkItems: vi.fn(async () => []),
+    getSession: vi.fn(async () => ({ agentInstanceId: null })),
     getWorkItemResult: vi.fn(),
     cancelWorkItem: vi.fn(),
     approveWorkItem: vi.fn(),

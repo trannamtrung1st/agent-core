@@ -59,6 +59,7 @@ export type SessionResponse = {
   model?: SessionModelSelection | null;
   agentName?: string | null;
   agentRole?: string | null;
+  agentInstanceId?: string | null;
 };
 
 export type WorkItem = {

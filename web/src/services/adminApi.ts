@@ -898,6 +898,62 @@ export async function resetAdminLearnedMemoryScope(
   return payload.itemsRemoved;
 }
 
+export type ApplicationConnection = {
+  connectionId: string;
+  agentInstanceId: string;
+  kind: string;
+  displayName: string;
+  baseUrl: string;
+  status: string;
+  revision: number;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+  statusDetail?: string | null;
+};
+
+export async function getApplicationConnection(instanceId: string): Promise<ApplicationConnection | null> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/connection`);
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw await adminProblemMessage(response, `Application connection failed (${response.status})`);
+  }
+  return (await response.json()) as ApplicationConnection;
+}
+
+async function postApplicationConnection(instanceId: string, action: string, body?: unknown): Promise<ApplicationConnection> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/connection/${action}`, {
+    method: "POST",
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (!response.ok) {
+    throw await adminProblemMessage(response, `Application connection ${action} failed (${response.status})`);
+  }
+  return (await response.json()) as ApplicationConnection;
+}
+
+export function connectApplication(instanceId: string, displayName: string, baseUrl: string) {
+  return postApplicationConnection(instanceId, "connect", { displayName, baseUrl });
+}
+
+export function reauthenticateApplication(instanceId: string) {
+  return postApplicationConnection(instanceId, "reauthenticate");
+}
+
+export function openApplicationBrowser(instanceId: string) {
+  return postApplicationConnection(instanceId, "open-browser");
+}
+
+export function revokeApplication(instanceId: string) {
+  return postApplicationConnection(instanceId, "revoke");
+}
+
+export function resetApplicationProfile(instanceId: string) {
+  return postApplicationConnection(instanceId, "reset-profile");
+}
+
 export async function listAdminAutomationRegistrations(
   instanceId: string
 ): Promise<AdminAutomationRegistration[]> {

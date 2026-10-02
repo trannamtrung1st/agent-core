@@ -867,7 +867,7 @@ P9 is not a plugin marketplace, a prepared-worker package system, a visual workf
 
 # P9.5 — Proactive Secretary / Real Assistant Demo
 
-**Status: next.** This is a vertical product-validation phase, not a new general platform-abstraction phase. P9 remains closed/frozen on `bba1de4`; post-P9 browser enhancements and hardening remain post-closure evidence and do not create a new P9 freeze.
+**Status: implemented locally, not closed.** This is a vertical product-validation phase, not a new general platform-abstraction phase. P9 remains closed/frozen on `bba1de4`; post-P9 browser enhancements and hardening remain post-closure evidence and do not create a new P9 freeze. Closure waits on the hosted Synthetic workflow, a real headed Journey A, and one live scheduled Journey C or D. See [docs/reports/p9.5-freeze-candidate.md](docs/reports/p9.5-freeze-candidate.md).
 
 ## Goal
 

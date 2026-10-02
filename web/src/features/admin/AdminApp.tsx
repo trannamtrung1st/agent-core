@@ -38,6 +38,7 @@ import {
   type DefinitionCandidate
 } from "./definitionCandidate";
 import { DefinitionCandidateEditor, PublishedSkillList, type DefinitionEditorView } from "./definitionCandidateEditor";
+import { ApplicationConnectionSection } from "./ApplicationConnectionSection";
 import { DefinitionDraftPublishGatePanel } from "./definitionDraftPublishGatePanel";
 import { ResourceImportPanel } from "./resourceImportPanel";
 import {
@@ -2314,6 +2315,7 @@ function InstanceDetail({
           onDeleted={onInstanceDeleted}
         />
       ) : null}
+      <ApplicationConnectionSection instanceId={instanceId} />
       {effective.kind === "ready" && !effective.data.compatibility ? (
         <section className="admin-definition-panel" aria-label="Memory and automation">
           <div className="admin-definition-panel-heading">

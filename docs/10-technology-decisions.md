@@ -279,6 +279,10 @@ Owners: [Protocol](14-api-and-realtime-protocol.md) (capability, leases vs Attac
 
 **Decision:** The first browser provider is direct `Microsoft.Playwright` 1.63.0 inside Infrastructure. It is not Playwright MCP, a Node sidecar, or a second tool host. The shipped definition for new general-assistant instances is v12, which adds `browser.close`. `general-assistant` v11 remains the P9 browser allowlist (`browser.navigate`, `browser.observe`, `browser.act`) and is unchanged. Versions v1–v10 stay unchanged. At the P9 freeze, browser state was ephemeral and was not a SQLite snapshot. A later `ProfileMode` `PersistentAgent` stores an Agent Instance browser profile on disk under `ProfileRoot`. That profile is not memory, not a Skill, and not the human user's Chrome profile. Closure evidence: [p9-freeze-candidate.md](reports/p9-freeze-candidate.md).
 
+## P9.5 connection and attention (observed, not closed)
+
+**Decision:** The secretary store stays a direct Playwright profile plus one application connection row. There is no second scheduler, no browser panel, and no Chromium package in the Agent Core image. Attention is a result flag and one durable alert, not a new notification product. Closure evidence is [p9.5-freeze-candidate.md](reports/p9.5-freeze-candidate.md) and is not accepted yet.
+
 ## What may still be measured
 
 Provider selection within independently configured speech ports, VAD thresholds, frame size within the allowed range, TTS phrase segmentation and latency optimization are tuning variables. The default behavior and degraded paths are specified; measurement must not reopen project ownership, transport, storage or response identity decisions. No guaranteed provider-dependent SLA is implied.

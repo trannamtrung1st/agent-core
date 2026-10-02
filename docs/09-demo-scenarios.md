@@ -165,6 +165,10 @@ With trusted-local owner capability in Synthetic mode, an operator can fork a bu
 
 Riley on the shipped `general-assistant` v11, with the scripted Synthetic model, accepts a user message that contains `record AC-1042`. The first browser generation navigates the trusted fixture start URL and does not send a chat message. The turn then loads `browser.record.lookup`, sends one application message (`I found the record. I'm checking the details now.`), and finishes with one assistant answer (`AC-1042 is In review.`). While a `browser.*` tool runs, the existing activity row shows `Using browser…`. The journey does not add a page panel, screenshot, or click log. Browser evidence is `e2e/p9-browser-journey.spec.ts` on the `synthetic` Playwright project. Closure evidence, including the headed demo, is [p9-freeze-candidate.md](reports/p9-freeze-candidate.md).
 
+## P9.5 secretary connection and attention (observed, not closed)
+
+A managed or compatibility instance shows one store connection on Admin. Chat shows the same status and opens that Admin instance. Background Work labels a completed attention result with the words Needs attention and leaves a quiet completion unlabeled. The local nopCommerce store is `scripts/nopcommerce-demo.sh`. Hosted Synthetic, a real headed Journey A, and a live scheduled Journey C or D are still required before closure. See [p9.5-freeze-candidate.md](reports/p9.5-freeze-candidate.md).
+
 ## Post-MVP planned until verified
 
 Observed later demos: durable multi-chat Support and Compliance flows with attachments, bounded work, artifacts, rich presentation, deactivation, and reopen (`SupportComplianceWorkflowTests`). Docker `sandbox.run` is a runtime capability, not a separate UI demo. Examiner MVP conversational demos above remain.

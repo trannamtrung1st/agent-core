@@ -143,7 +143,11 @@ While a session is open, the chat header shows a compact **Schedules** action. I
 
 ## Background Work drawer (observed)
 
-The header **Background work** action is available whenever a session exists, including paused and ended. It opens a drawer on the same spacing as Schedules and lists that owner's durable work: human status, origin, progress, failure summary, and the bounded approval preview. Approve, reject, and cancel confirm before sending the current revision and, for a decision, the approval revision and action hash. A completed result is loaded from the result route into the drawer only. It is not added to the transcript. The list polls every 5 seconds only while the drawer is open, and a newer response replaces an older in-flight response. Ant Design v6 `List` is used directly.
+The header **Background work** action is available whenever a session exists, including paused and ended. It opens a drawer on the same spacing as Schedules and lists that owner's durable work: human status, origin, progress, failure summary, and the bounded approval preview. A completed item with `attentionRequired` shows the text **Needs attention** and a bell icon. Quiet completions stay in the list and do not increment the header count. The count is the number of completed attention results for that session's owner. Approve, reject, and cancel confirm before sending the current revision and, for a decision, the approval revision and action hash. A completed result is loaded from the result route into the drawer only. It is not added to the transcript. The drawer list polls every 5 seconds only while the drawer is open, and a newer response replaces an older in-flight response. The header count refreshes on the same interval while a session is open. Ant Design v6 `List` is used directly.
+
+## Store connection (observed)
+
+Admin instance detail shows one **Store connection** section. The status text is Not connected, Connecting / sign-in required, Connected, Needs reauthentication, or Unavailable. Connect, Reauthenticate, Open browser, Revoke, and Reset profile call the admin connection routes. The section shows the display name, store URL, and a mapped status sentence. It does not show cookies, tokens, or a profile path. Chat shows the same status as read-only text and a Manage action that opens that instance in Admin. Chat does not connect or revoke.
 
 ## Post-MVP planned until verified
 

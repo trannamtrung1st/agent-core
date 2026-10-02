@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Button, Dropdown, Flex, Typography } from "antd";
+import { Badge, Button, Dropdown, Flex, Typography } from "antd";
 import { MoreOutlined } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import { formatChatTime } from "./chatTime";
@@ -12,6 +12,7 @@ export function ChatHeader({
   speechLocale,
   onSchedules,
   onBackgroundWork,
+  attentionCount = 0,
   onEnd,
   inSession
 }: {
@@ -22,6 +23,7 @@ export function ChatHeader({
   speechLocale?: ReactNode;
   onSchedules?: () => void;
   onBackgroundWork?: () => void;
+  attentionCount?: number;
   onEnd: () => void;
   inSession: boolean;
 }) {
@@ -63,9 +65,15 @@ export function ChatHeader({
         <Flex align="center" gap={8} className="chat-header-actions">
           {speechLocale}
           {onBackgroundWork ? (
-            <Button size="small" aria-label="Background work" onClick={onBackgroundWork}>
-              Background work
-            </Button>
+            <Badge count={attentionCount} size="small" offset={[-4, 4]}>
+              <Button
+                size="small"
+                aria-label={attentionCount > 0 ? `Background work, ${attentionCount} need attention` : "Background work"}
+                onClick={onBackgroundWork}
+              >
+                Background work
+              </Button>
+            </Badge>
           ) : null}
           {inSession && onSchedules ? (
             <Button size="small" aria-label="Schedules" onClick={onSchedules}>

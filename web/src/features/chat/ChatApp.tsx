@@ -53,6 +53,7 @@ import {
   rejectWorkItem
 } from "../../services/api";
 import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
+import { ChatStoreConnection } from "./ChatStoreConnection";
 import { ScheduleDrawer } from "./ScheduleDrawer";
 import { Composer } from "./Composer";
 import { Conversation } from "./Conversation";
@@ -97,6 +98,37 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [schedulesOpen, setSchedulesOpen] = useState(false);
   const [workOpen, setWorkOpen] = useState(false);
+  const [attentionCount, setAttentionCount] = useState(0);
+
+  useEffect(() => {
+    if (!state.sessionId) {
+      setAttentionCount(0);
+      return;
+    }
+
+    let current = true;
+    async function refresh() {
+      try {
+        const items = await listWorkItems(state.sessionId!);
+        if (current) {
+          setAttentionCount(items.filter((item) => item.status === "completed" && item.attentionRequired).length);
+        }
+      } catch {
+        if (current) {
+          setAttentionCount(0);
+        }
+      }
+    }
+
+    void refresh();
+    const timer = window.setInterval(() => {
+      void refresh();
+    }, 5_000);
+    return () => {
+      current = false;
+      window.clearInterval(timer);
+    };
+  }, [state.sessionId]);
   const [scheduleEpoch, setScheduleEpoch] = useState(0);
   const outputStateRef = useRef(state.outputState);
   const { isNarrow, siderWidth } = useViewport();
@@ -306,8 +338,10 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
               inSession={inSession && !readonly}
               onSchedules={inSession && !readonly && state.sessionId ? () => setSchedulesOpen(true) : undefined}
               onBackgroundWork={state.sessionId ? () => setWorkOpen(true) : undefined}
+              attentionCount={attentionCount}
               onEnd={() => void hangUp()}
             />
+            {state.sessionId ? <ChatStoreConnection sessionId={state.sessionId} /> : null}
             <Flex align="center" gap={8} className="chat-header-meta">
               {onOpenAdmin ? (
                 <Button
