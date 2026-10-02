@@ -17,6 +17,7 @@ public sealed class BrowserFailureClassifierTests
     [InlineData("Element is not a <select> element", "unsupported_operation", "unsupportedOperation")]
     [InlineData("Element is not attached to the DOM", "stale_reference", "staleElement")]
     [InlineData("Timeout 30000ms exceeded.", "timeout", "timeout")]
+    [InlineData("net::ERR_CONNECTION_REFUSED at http://127.0.0.1:9/", "target_unreachable", "connectionRefused")]
     [InlineData("Execution context was destroyed, most likely because of a navigation.", "stale_reference", "pageChanged")]
     [InlineData("Target page, context or browser has been closed", "stale_reference", "pageClosed")]
     [InlineData("Browser closed", "provider_unavailable", "browserDisconnected")]
@@ -35,6 +36,15 @@ public sealed class BrowserFailureClassifierTests
     [InlineData("Element is not a <select> element", false)]
     public void Capture_retries_only_transient_dom_churn(string message, bool retry) =>
         Assert.Equal(retry, BrowserFailureClassifier.IsTransientCapture(message));
+
+    [Theory]
+    [InlineData("Navigation to \"http://127.0.0.1/admin\" is interrupted by another navigation to \"http://127.0.0.1/admin/\".", true)]
+    [InlineData("net::ERR_ABORTED at http://127.0.0.1:5088/admin", true)]
+    [InlineData("Execution context was destroyed, most likely because of a navigation.", true)]
+    [InlineData("Timeout 30000ms exceeded.", false)]
+    [InlineData("Browser closed", false)]
+    public void Interrupted_navigation_is_distinct_from_a_dead_browser(string message, bool interrupted) =>
+        Assert.Equal(interrupted, BrowserFailureClassifier.IsInterruptedNavigation(message));
 }
 
 public sealed class LoopbackBrowserFixtureHostTests
@@ -94,6 +104,27 @@ public sealed class LoopbackBrowserFixtureHostTests
             Assert.DoesNotContain(
                 session.HostPolicy.TargetOrigins,
                 origin => origin.EndsWith(":5091", StringComparison.Ordinal) && origin != session.Fixture.Origin);
+        }
+        finally
+        {
+            await session.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task Same_origin_bounce_returns_the_landed_page()
+    {
+        var session = new PlaywrightBrowserSession(DemoOptions(headless: true), loggerFactory: null);
+        await session.StartAsync(CancellationToken.None);
+        try
+        {
+            var origin = session.Fixture.Origin!;
+            var result = await session.NavigateAsync(new BrowserNavigateRequest(
+                Guid.NewGuid(),
+                new Uri(origin + "/bounce")));
+            Assert.Null(result.ErrorCode);
+            Assert.Contains("Record lookup", result.Observation!.VisibleText, StringComparison.Ordinal);
+            Assert.StartsWith(origin, result.Observation.Url, StringComparison.Ordinal);
         }
         finally
         {

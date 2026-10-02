@@ -20,7 +20,8 @@ public sealed partial class SessionToolExecutor
         "unsupported_operation",
         "profile_busy",
         "profile_unavailable",
-        "user_intervention_required"
+        "user_intervention_required",
+        "target_unreachable"
     };
 
     private async Task<string?> DenyBrowserUnlessConnectedAsync(
@@ -534,6 +535,7 @@ public sealed partial class SessionToolExecutor
             "invalid" => "Browser arguments are invalid.",
             "target_denied" => "Browser target is not allowed.",
             "stale_reference" => "Element reference is stale.",
+            "target_unreachable" => "The host refused the connection. Do not retry that host.",
             "timeout" => "Browser operation timed out.",
             "unsupported_operation" => "Browser operation is not supported.",
             "profile_busy" => "The browser profile is already in use.",

@@ -45,6 +45,13 @@ internal static class BrowserFailureClassifier
             return new Decision("unsupported_operation", "unsupportedOperation");
         }
 
+        if (text.Contains("ERR_CONNECTION_REFUSED", StringComparison.Ordinal)
+            || text.Contains("ERR_NAME_NOT_RESOLVED", StringComparison.Ordinal)
+            || text.Contains("ERR_CONNECTION_RESET", StringComparison.Ordinal))
+        {
+            return new Decision("target_unreachable", "connectionRefused");
+        }
+
         if (text.Contains("Execution context was destroyed", StringComparison.Ordinal)
             || text.Contains("frame was detached", StringComparison.OrdinalIgnoreCase)
             || text.Contains("most likely because of a navigation", StringComparison.Ordinal))
@@ -67,5 +74,13 @@ internal static class BrowserFailureClassifier
     {
         var reason = Classify(message).Reason;
         return reason is "pageChanged" or "staleElement";
+    }
+
+    internal static bool IsInterruptedNavigation(string? message)
+    {
+        var text = message ?? string.Empty;
+        return text.Contains("interrupted by another navigation", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("most likely because of a navigation", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("ERR_ABORTED", StringComparison.Ordinal);
     }
 }

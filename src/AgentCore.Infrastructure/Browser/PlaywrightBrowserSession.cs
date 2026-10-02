@@ -280,6 +280,9 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             catch (PlaywrightException) when (session.DeniedNavigation || session.PopupCode is not null || session.TimedOut)
             {
             }
+            catch (PlaywrightException ex) when (CanKeepInterruptedNavigation(session, ex))
+            {
+            }
 
             if (session.TimedOut)
             {
@@ -1763,6 +1766,19 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 _policy.NavigationOrigins,
                 _policy.EffectiveResourceOrigins,
                 _policy.PolicyMode).Allowed;
+    }
+
+    private bool CanKeepInterruptedNavigation(SessionBrowser session, PlaywrightException exception)
+    {
+        if (!BrowserFailureClassifier.IsInterruptedNavigation(exception.Message))
+        {
+            return false;
+        }
+
+        var url = session.Page.Url;
+        return Uri.TryCreate(url, UriKind.Absolute, out var landed)
+            && landed.Scheme is "http" or "https"
+            && IsAllowed(session, url);
     }
 
     private bool IsAllowed(string url) =>

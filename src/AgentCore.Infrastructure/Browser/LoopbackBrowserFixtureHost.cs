@@ -283,6 +283,17 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
                 return;
             }
 
+            if (string.Equals(path, "/bounce", StringComparison.Ordinal))
+            {
+                var bytes = Encoding.UTF8.GetBytes(
+                    "<!doctype html><meta charset=\"utf-8\"><script>location.replace('/');</script>");
+                context.Response.StatusCode = 200;
+                context.Response.ContentType = "text/html; charset=utf-8";
+                context.Response.ContentLength64 = bytes.Length;
+                await context.Response.OutputStream.WriteAsync(bytes).ConfigureAwait(false);
+                return;
+            }
+
             if (path is "/" or "/index.html")
             {
                 await WriteResourceAsync(context, IndexResource, 200).ConfigureAwait(false);
