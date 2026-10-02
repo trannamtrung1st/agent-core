@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Typography } from "antd";
+import { Button, Flex, Typography, theme } from "antd";
 import { adminInstancePath, navigateToAppPath, rememberChatUrl } from "../../app/appRoute";
 import { getSession } from "../../services/api";
 import { getApplicationConnection } from "../../services/adminApi";
@@ -7,6 +7,7 @@ import { suspendLiveSessionForNavigation } from "../../services/realtime";
 import { connectionStatusLabel } from "../admin/ApplicationConnectionSection";
 
 export function ChatStoreConnection({ sessionId }: { sessionId: string }) {
+  const { token } = theme.useToken();
   const [label, setLabel] = useState<string | null>(null);
   const [instanceId, setInstanceId] = useState<string | null>(null);
 
@@ -41,8 +42,8 @@ export function ChatStoreConnection({ sessionId }: { sessionId: string }) {
   }
 
   return (
-    <Typography.Text className="chat-store-connection" aria-label="Store connection">
-      Store {label}
+    <Flex align="center" gap={token.paddingXS} className="chat-store-connection">
+      <Typography.Text aria-label="Store connection">Store {label}</Typography.Text>
       <Button
         type="link"
         size="small"
@@ -56,6 +57,6 @@ export function ChatStoreConnection({ sessionId }: { sessionId: string }) {
       >
         Manage
       </Button>
-    </Typography.Text>
+    </Flex>
   );
 }

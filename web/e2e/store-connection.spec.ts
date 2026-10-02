@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { LEGACY_IDENTITY_LABELS, selectLegacyIdentity } from "./support/legacy-identity";
 
 test("store connection and quiet background work stay labeled", async ({ page }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   const consoleErrors: string[] = [];
   const serverErrors: string[] = [];
   page.on("console", (message) => {
@@ -39,6 +39,63 @@ test("store connection and quiet background work stay labeled", async ({ page })
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
 
+  const attentionId = "019944af-00c5-7000-8000-0000000000a1";
+  const quietId = "019944af-00c5-7000-8000-0000000000a2";
+  await page.route("**/work-items**", async (route) => {
+    const url = route.request().url();
+    const completed = (workItemId: string, origin: string, attentionRequired: boolean) => ({
+      workItemId,
+      status: "completed",
+      revision: 2,
+      origin,
+      progress: null,
+      needsApproval: false,
+      approvalId: null,
+      approvalRevision: null,
+      approvalPreview: null,
+      actionHash: null,
+      cancellationAvailable: false,
+      failureCode: null,
+      failureSummary: null,
+      knownEffect: null,
+      attentionRequired,
+      createdAt: "2026-10-02T09:00:00.000Z",
+      updatedAt: "2026-10-02T09:01:00.000Z"
+    });
+    if (url.includes("/result")) {
+      const attention = url.includes(attentionId);
+      await route.fulfill({
+        json: {
+          workItemId: attention ? attentionId : quietId,
+          text: attention ? "Low stock on AC Keyboard." : "Stock is unchanged.",
+          completedAt: "2026-10-02T09:01:00.000Z",
+          attentionRequired: attention
+        }
+      });
+      return;
+    }
+
+    await route.fulfill({
+      json: {
+        items: [
+          completed(attentionId, "Morning review", true),
+          completed(quietId, "Quiet check", false)
+        ]
+      }
+    });
+  });
+
+  const attentionWork = page.getByRole("button", { name: /Background work, 1 need attention/ });
+  await expect(attentionWork).toBeVisible({ timeout: 12_000 });
+  await attentionWork.click();
+  await expect(drawer.getByText("Needs attention")).toHaveCount(1);
+  await expect(drawer.getByText("Low stock on AC Keyboard.")).toBeVisible();
+  const quietRow = drawer.getByRole("listitem").filter({ hasText: "Stock is unchanged." });
+  await expect(quietRow).toBeVisible();
+  await expect(quietRow.getByText("Needs attention")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(drawer).toBeHidden();
+
   await expect(page.getByLabel("Store connection", { exact: true })).toContainText("Not connected");
   await page.getByRole("button", { name: "Manage store connection" }).click();
   await expect(page).toHaveURL(/\/admin\/instances\/[0-9a-f-]{36}$/i);
@@ -51,6 +108,15 @@ test("store connection and quiet background work stay labeled", async ({ page })
   await expect(section.getByRole("button", { name: "Connect" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(section.getByText("Base URL must be an absolute http or https origin without credentials.")).toBeVisible();
+  await expect(section.getByText(/cookie|token|profile path/i)).toHaveCount(0);
+
+  await section.getByLabel("Store URL").fill("http://127.0.0.1:5091");
+  await section.getByRole("button", { name: "Connect" }).click();
+  await expect(section.getByText("Connected", { exact: true })).toBeVisible({ timeout: 45_000 });
+  await section.getByRole("button", { name: "Revoke connection" }).click();
+  const confirm = page.getByRole("dialog", { name: "Revoke this connection?" });
+  await confirm.getByRole("button", { name: "Revoke" }).click();
+  await expect(section.getByText("Not connected", { exact: true })).toBeVisible();
   await expect(section.getByText(/cookie|token|profile path/i)).toHaveCount(0);
 
   await page.setViewportSize({ width: 390, height: 800 });

@@ -151,7 +151,7 @@ Policy and journey tests that do not launch Chromium: `BrowserToolTests`, `Brows
 
 ## P9.5 connection and attention (observed, not closed)
 
-Connection admission, unattended browser, and owner attention are covered by the application and persistence tests named in batches C–F. The browser journey `web/e2e/store-connection.spec.ts` covers the quiet Background Work name, the Chat status, the Admin connect validation error, keyboard focus, and a narrow viewport. It does not launch Chromium or nopCommerce. Hosted Synthetic CI, a real headed Journey A, and a live scheduled Journey C or D were not run for this phase. See [p9.5-freeze-candidate.md](reports/p9.5-freeze-candidate.md).
+Connection admission, unattended browser, and owner attention are covered by the application and persistence tests named in batches C–F. The browser journey `web/e2e/store-connection.spec.ts` covers the quiet Background Work name, one attention badge beside a quiet completion, the Chat status, the Admin connect validation error, Revoke back to Not connected, keyboard focus, and a narrow viewport. Connect observes the loopback fixture. It does not start nopCommerce. Hosted Synthetic CI, a real headed Journey A, and a live scheduled Journey C or D were not run for this phase. See [p9.5-freeze-candidate.md](reports/p9.5-freeze-candidate.md).
 
 ## Post-MVP planned until verified
 
