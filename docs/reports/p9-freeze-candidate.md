@@ -118,6 +118,11 @@ No polish edit. The progress row stays the existing activity line.
 
 ## Appendix — post-closure browser hardening
 
-This appendix does not move `bba1de4`. Hosted Synthetic has not been re-run for this pass.
+This appendix does not move `bba1de4`.
 
-Two local Real attempts failed for different reasons. The nopCommerce attempt hit `target_denied` because the browser was limited to the Record Lookup fixture origin, and a later turn opened that fixture because it was advertised as `Trusted browser start`. `target_denied` itself is ordinary tool JSON. A separate Google attempt did open the site; Google then showed a human-verification page, and the text turn failed as `InvalidResponse` / `invalidSpeech` / `responseFunction` because unused speech metadata invalidated `agent_core_respond`. That Google failure is not evidence of `InvalidAgentStep`. Text turns now canonicalize unused speech to `same` with null text. `PolicyMode` `OpenWeb` is selected by the `http-openrouter` Real launch profile. Base settings and Synthetic/CI stay `Restricted`, and it still appends a fixture start sentence only when every navigation origin is loopback. Hosted Synthetic has not been re-run for this pass.
+Two local Real attempts failed for different reasons. The nopCommerce attempt hit `target_denied` because the browser was limited to the Record Lookup fixture origin, and a later turn opened that fixture because it was advertised as `Trusted browser start`. `target_denied` itself is ordinary tool JSON. A separate Google attempt did open the site; Google then showed a human-verification page, and the text turn failed as `InvalidResponse` / `invalidSpeech` / `responseFunction` because unused speech metadata invalidated `agent_core_respond`. That Google failure is not evidence of `InvalidAgentStep`. Text turns now canonicalize unused speech to `same` with null text. `PolicyMode` `OpenWeb` is selected by the `http-openrouter` Real launch profile. Base settings and Synthetic/CI stay `Restricted`. Restricted still appends a fixture start sentence only when every navigation origin is loopback. `8092731` keeps an accepted Voice session in Voice across mute and a later `session.ready`.
+
+Hosted Synthetic is green for this post-closure chain and does not move the freeze:
+
+- [`d310b9e`](https://github.com/trannamtrung1st/agent-core/commit/d310b9e) — [36907229401](https://github.com/trannamtrung1st/agent-core/actions/runs/36907229401)
+- [`8092731`](https://github.com/trannamtrung1st/agent-core/commit/8092731) — [36910823830](https://github.com/trannamtrung1st/agent-core/actions/runs/36910823830)
