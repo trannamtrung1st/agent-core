@@ -167,7 +167,7 @@ Riley on the shipped `general-assistant` v11, with the scripted Synthetic model,
 
 ## P9.5 secretary connection and attention (observed, not closed)
 
-A managed or compatibility instance shows one store connection on Admin. Chat shows the same status and opens that Admin instance. Background Work labels a completed attention result with the words Needs attention and leaves a quiet completion unlabeled. The local nopCommerce store is `scripts/nopcommerce-demo.sh`. A real headed Journey A was attempted and did not establish the storefront postcondition. A live Journey C attention result observed the connected store. Journey E wrote a workspace note and completed a quiet reminder. Hosted Synthetic and Journey D are still required before closure. See [p9.5-freeze-candidate.md](reports/p9.5-freeze-candidate.md).
+A managed or compatibility instance shows one store connection on Admin. Chat shows the same status and opens that Admin instance. Background Work labels a completed attention result with the words Needs attention and leaves a quiet completion unlabeled. The local nopCommerce store is `scripts/nopcommerce-demo.sh`. A real headed Journey A was attempted and did not establish the storefront postcondition. A live Journey C attention result observed the connected store. Journey E wrote a workspace note and completed a quiet reminder. Journey D re-observed the store and did not change a price. Hosted Synthetic is still required before closure. See [p9.5-freeze-candidate.md](reports/p9.5-freeze-candidate.md).
 
 ## Post-MVP planned until verified
 
