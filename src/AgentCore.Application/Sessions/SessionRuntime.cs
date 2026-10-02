@@ -2541,8 +2541,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         ModelRequest request,
         IReadOnlyList<ModelToolDefinition>? authorizedTools,
         AgentTrigger trigger,
-        ILanguageModel model,
-        bool suppressBrowserTools = false)
+        ILanguageModel model)
     {
         var tools = ApplicationMessageToolOffer.Apply(
             authorizedTools,
@@ -2552,13 +2551,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             trigger,
             _tools.ConfigurationGate,
             model.Capabilities.Tools);
-        if (suppressBrowserTools && tools is { Count: > 0 })
-        {
-            tools = tools
-                .Where(tool => !tool.Name.StartsWith("browser.", StringComparison.Ordinal))
-                .ToArray();
-        }
-
         if (tools is not { Count: > 0 })
         {
             return request with
@@ -2591,7 +2583,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var pinnedSkills = activeSkillIds.ToArray();
         var steps = 0;
         var outputBytes = 0;
-        var browserHandoff = false;
+        var retryingGeneration = false;
+        var blockedBrowserOrigins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string? browserPageOrigin = null;
         var toolDeadline = request.Tools is { Count: > 0 };
         using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using ITimer? overallTimer = toolDeadline ? ScheduleCancel(_time, overallCts, ToolLimits.Overall) : null;
@@ -2603,42 +2597,67 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             {
                 var pending = new List<ModelToolCall>();
                 var finished = false;
+                var publishedVisible = false;
+                var retryGeneration = false;
+                var generationRetries = retryingGeneration ? 1 : 0;
+                retryingGeneration = false;
                 messages = PromptContextBuilder.WithActiveSkillSystem(messages, _snapshot.Definition, pinnedSkills).ToList();
                 var working = WithOfferedTools(
                     request with { Messages = messages },
                     authorizedTools,
                     trigger,
-                    model,
-                    browserHandoff);
+                    model);
                 await foreach (var evt in model.GenerateAsync(working, generateToken).ConfigureAwait(false))
                 {
-                    switch (evt)
+                    if (evt is ModelToolCallEvent tool)
                     {
-                        case ModelToolCallEvent tool:
-                            pending.Add(tool.Call);
-                            continue;
-                        case ModelCompleted completed when completed.Reason == ModelStopReason.ToolCalls:
-                            continue;
-                        default:
-                            if (!_recordedLlm && evt is ModelTextDelta or ModelDisplayDelta or ModelSemanticResponseReady)
-                            {
-                                _recordedLlm = true;
-                                RuntimeTelemetry.Record("llm", RuntimeTelemetry.ElapsedMs(started));
-                            }
-
-                            if (!await MailboxModelAsync(cause, request.ResponseId, evt, generateToken)
-                                    .ConfigureAwait(false))
-                            {
-                                return;
-                            }
-
-                            if (evt is ModelCompleted or ModelFailed)
-                            {
-                                finished = true;
-                            }
-
-                            break;
+                        pending.Add(tool.Call);
+                        continue;
                     }
+
+                    if (evt is ModelCompleted { Reason: ModelStopReason.ToolCalls })
+                    {
+                        continue;
+                    }
+
+                    if (evt is ModelFailed failed
+                        && TryRetryGeneration(failed, pending, publishedVisible, generationRetries, generateToken))
+                    {
+                        generationRetries++;
+                        retryingGeneration = true;
+                        RuntimeTelemetry.RecordGenerationRetry(
+                            steps == 0 ? "initial" : "follow-up",
+                            failed.Failure.FailureReason!);
+                        retryGeneration = true;
+                        break;
+                    }
+
+                    if (IsMeaningfulVisible(evt))
+                    {
+                        publishedVisible = true;
+                    }
+
+                    if (!_recordedLlm && evt is ModelTextDelta or ModelDisplayDelta or ModelSemanticResponseReady)
+                    {
+                        _recordedLlm = true;
+                        RuntimeTelemetry.Record("llm", RuntimeTelemetry.ElapsedMs(started));
+                    }
+
+                    if (!await MailboxModelAsync(cause, request.ResponseId, evt, generateToken)
+                            .ConfigureAwait(false))
+                    {
+                        return;
+                    }
+
+                    if (evt is ModelCompleted or ModelFailed)
+                    {
+                        finished = true;
+                    }
+                }
+
+                if (retryGeneration)
+                {
+                    continue;
                 }
 
                 if (finished || pending.Count == 0)
@@ -2706,6 +2725,20 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         JsonElement args;
                         try
                         {
+                            if (string.Equals(call.Name, ToolCatalog.BrowserClose, StringComparison.Ordinal))
+                            {
+                                if (!BrowserToolArguments.TryCanonicalizeClose(call.ArgumentsJson, out var closeError))
+                                {
+                                    executionResult = ToolExecutionResult.FromText(closeError);
+                                    args = default;
+                                }
+                                else
+                                {
+                                    args = JsonSerializer.Deserialize<JsonElement>("{}");
+                                }
+                            }
+                            else
+                            {
                             args = JsonSerializer.Deserialize<JsonElement>(
                                 string.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson);
                             if (args.ValueKind != JsonValueKind.Object)
@@ -2723,6 +2756,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 executionResult = ToolExecutionResult.FromText(
                                     """{"error":"invalid","message":"Tool arguments must be a JSON object."}""");
                                 args = default;
+                            }
                             }
                         }
                         catch (JsonException)
@@ -2864,10 +2898,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                                 if (!preparedFailed)
                                 {
-                                    if (browserHandoff && call.Name.StartsWith("browser.", StringComparison.Ordinal))
+                                    if (TryRefuseBlockedBrowser(
+                                            call,
+                                            blockedBrowserOrigins,
+                                            browserPageOrigin,
+                                            out var blockedJson))
                                     {
-                                        executionResult = ToolExecutionResult.FromText(
-                                            """{"error":"user_intervention_required","message":"Browser tools are paused for this turn."}""");
+                                        executionResult = ToolExecutionResult.FromText(blockedJson);
                                     }
                                     else
                                     {
@@ -2936,10 +2973,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     RuntimeTelemetry.Record("tools", RuntimeTelemetry.ElapsedMs(toolStarted), call.Name);
 
                     executionResult = ToolResultAdmission.AdmitForModel(model, executionResult);
-                    if (SignalsBrowserHandoff(executionResult.Text))
-                    {
-                        browserHandoff = true;
-                    }
+                    NoteBrowserTarget(call.Name, executionResult.Text, blockedBrowserOrigins, ref browserPageOrigin);
                     outputBytes += ToolOutputBudget.TextByteCount(executionResult);
                     if (outputBytes > ToolLimits.MaxOutputBytes)
                     {
@@ -5714,8 +5748,140 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             ? ResponseProgressMessages.UsingBrowser
             : ResponseProgressMessages.RunningTools;
 
-    private static bool SignalsBrowserHandoff(string? json)
+    private static bool TryRetryGeneration(
+        ModelFailed failed,
+        List<ModelToolCall> pending,
+        bool publishedVisible,
+        int generationRetries,
+        CancellationToken cancellationToken)
     {
+        if (generationRetries >= 1
+            || publishedVisible
+            || cancellationToken.IsCancellationRequested
+            || failed.Failure.Code != ProviderErrorCode.Unavailable)
+        {
+            return false;
+        }
+
+        var reason = failed.Failure.FailureReason;
+        if (reason is ProviderFailureReason.TransportFailure
+            or ProviderFailureReason.Http5xx
+            or ProviderFailureReason.StreamIdle
+            or ProviderFailureReason.StreamMalformed
+            or ProviderFailureReason.StreamIncomplete
+            or ProviderFailureReason.ProviderStreamError)
+        {
+            return true;
+        }
+
+        return reason == ProviderFailureReason.IncompleteToolCall && pending.Count == 0;
+    }
+
+    private static bool IsMeaningfulVisible(ModelGenerationEvent evt) =>
+        evt switch
+        {
+            ModelTextDelta delta => !string.IsNullOrWhiteSpace(delta.Text),
+            ModelDisplayDelta delta => !string.IsNullOrWhiteSpace(delta.Text),
+            ModelSemanticResponseReady ready => !string.IsNullOrWhiteSpace(ready.Response.DisplayText)
+                || ready.Response.Blocks.Count > 0,
+            _ => false
+        };
+
+    private static bool TryRefuseBlockedBrowser(
+        ModelToolCall call,
+        HashSet<string> blockedOrigins,
+        string? pageOrigin,
+        out string json)
+    {
+        json = string.Empty;
+        if (blockedOrigins.Count == 0
+            || call.Name is not (ToolCatalog.BrowserNavigate or ToolCatalog.BrowserObserve or ToolCatalog.BrowserAct))
+        {
+            return false;
+        }
+
+        if (string.Equals(call.Name, ToolCatalog.BrowserNavigate, StringComparison.Ordinal))
+        {
+            if (!TryNavigateOrigin(call.ArgumentsJson, out var origin) || !blockedOrigins.Contains(origin))
+            {
+                return false;
+            }
+
+            json = BlockedBrowserJson(origin);
+            return true;
+        }
+
+        if (pageOrigin is null || !blockedOrigins.Contains(pageOrigin))
+        {
+            return false;
+        }
+
+        json = BlockedBrowserJson(pageOrigin);
+        return true;
+    }
+
+    private static void NoteBrowserTarget(
+        string tool,
+        string? json,
+        HashSet<string> blockedOrigins,
+        ref string? pageOrigin)
+    {
+        if (!TryBrowserResultUrl(json, out var url, out var error) || !TryBrowserOrigin(url, out var origin))
+        {
+            return;
+        }
+
+        if (string.Equals(error, "user_intervention_required", StringComparison.Ordinal))
+        {
+            blockedOrigins.Add(origin);
+            pageOrigin = origin;
+            return;
+        }
+
+        if (error is null
+            && tool is ToolCatalog.BrowserNavigate or ToolCatalog.BrowserObserve or ToolCatalog.BrowserAct)
+        {
+            pageOrigin = origin;
+        }
+    }
+
+    private static string BlockedBrowserJson(string origin) =>
+        JsonSerializer.Serialize(new
+        {
+            error = "user_intervention_required",
+            url = origin,
+            message = "This site is waiting for you. Other sites can still be opened in this turn."
+        });
+
+    private static bool TryNavigateOrigin(string? argumentsJson, out string origin)
+    {
+        origin = string.Empty;
+        if (string.IsNullOrWhiteSpace(argumentsJson))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(argumentsJson);
+            if (!document.RootElement.TryGetProperty("url", out var url)
+                || url.ValueKind != JsonValueKind.String)
+            {
+                return false;
+            }
+
+            return TryBrowserOrigin(url.GetString(), out origin);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryBrowserResultUrl(string? json, out string url, out string? error)
+    {
+        url = string.Empty;
+        error = null;
         if (string.IsNullOrWhiteSpace(json))
         {
             return false;
@@ -5724,14 +5890,40 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         try
         {
             using var document = JsonDocument.Parse(json);
-            return document.RootElement.TryGetProperty("error", out var error)
-                && error.ValueKind == JsonValueKind.String
-                && string.Equals(error.GetString(), "user_intervention_required", StringComparison.Ordinal);
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("url", out var urlProperty)
+                || urlProperty.ValueKind != JsonValueKind.String
+                || string.IsNullOrWhiteSpace(urlProperty.GetString()))
+            {
+                return false;
+            }
+
+            url = urlProperty.GetString()!;
+            if (document.RootElement.TryGetProperty("error", out var errorProperty)
+                && errorProperty.ValueKind == JsonValueKind.String)
+            {
+                error = errorProperty.GetString();
+            }
+
+            return true;
         }
         catch (JsonException)
         {
             return false;
         }
+    }
+
+    private static bool TryBrowserOrigin(string? url, out string origin)
+    {
+        origin = string.Empty;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || uri.Scheme is not ("http" or "https"))
+        {
+            return false;
+        }
+
+        origin = uri.GetLeftPart(UriPartial.Authority);
+        return origin.Length > 0;
     }
 
     private async Task PublishProgressAsync(

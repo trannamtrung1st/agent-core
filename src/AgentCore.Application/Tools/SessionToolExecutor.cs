@@ -98,12 +98,24 @@ public sealed partial class SessionToolExecutor(
         JsonElement args;
         try
         {
-            args = JsonSerializer.Deserialize<JsonElement>(
-                string.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson,
-                JsonOptions);
-            if (args.ValueKind != JsonValueKind.Object)
+            if (string.Equals(call.Name, ToolCatalog.BrowserClose, StringComparison.Ordinal))
             {
-                return TextResult(Error("invalid", "Tool arguments must be a JSON object."));
+                if (!BrowserToolArguments.TryCanonicalizeClose(call.ArgumentsJson, out var closeError))
+                {
+                    return TextResult(closeError);
+                }
+
+                args = JsonSerializer.Deserialize<JsonElement>("{}", JsonOptions);
+            }
+            else
+            {
+                args = JsonSerializer.Deserialize<JsonElement>(
+                    string.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson,
+                    JsonOptions);
+                if (args.ValueKind != JsonValueKind.Object)
+                {
+                    return TextResult(Error("invalid", "Tool arguments must be a JSON object."));
+                }
             }
         }
         catch (JsonException)

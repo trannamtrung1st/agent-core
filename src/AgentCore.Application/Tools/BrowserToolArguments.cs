@@ -79,20 +79,52 @@ public static class BrowserToolArguments
         return true;
     }
 
+    public static bool TryCanonicalizeClose(string? argumentsJson, out string errorJson)
+    {
+        errorJson = string.Empty;
+        if (string.IsNullOrWhiteSpace(argumentsJson))
+        {
+            return true;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(argumentsJson);
+            if (document.RootElement.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                return true;
+            }
+
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                errorJson = Error("invalid", "close accepts an object.");
+                return false;
+            }
+
+            return TryClose(document.RootElement, out errorJson);
+        }
+        catch (JsonException)
+        {
+            errorJson = Error("invalid", "Tool arguments were malformed.");
+            return false;
+        }
+    }
+
     public static bool TryClose(JsonElement args, out string errorJson)
     {
-        if (!TryRejectProperties(args, out errorJson))
+        if (args.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
         {
+            errorJson = string.Empty;
+            return true;
+        }
+
+        if (args.ValueKind != JsonValueKind.Object)
+        {
+            errorJson = Error("invalid", "close accepts an object.");
             return false;
         }
 
-        if (args.EnumerateObject().Any())
-        {
-            errorJson = Error("invalid", "close accepts an empty object.");
-            return false;
-        }
-
-        return true;
+        return TryRejectProperties(args, out errorJson);
     }
 
     public static bool TryAct(

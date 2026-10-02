@@ -633,6 +633,10 @@ public sealed class BrowserToolTests
             .OfferTools(v12, Context(v12, TriggerKind.UserTurn, detached: false));
         Assert.DoesNotContain(ToolCatalog.BrowserClose, offeredV11.Select(tool => tool.Name));
         Assert.Contains(ToolCatalog.BrowserClose, offeredV12.Select(tool => tool.Name));
+        Assert.Contains(
+            """{"type":"object","additionalProperties":false,"properties":{}}""",
+            offeredV12.Single(tool => tool.Name == ToolCatalog.BrowserClose).ParametersJson,
+            StringComparison.Ordinal);
         Assert.Contains(ToolCatalog.BrowserClose, RoleEnvironments.Of(v12).ToolList);
         Assert.DoesNotContain(ToolCatalog.BrowserClose, RoleEnvironments.Of(v11).ToolList);
     }
@@ -655,18 +659,41 @@ public sealed class BrowserToolTests
         Assert.Contains($"\"status\":\"{status}\"", result.Text, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task Close_rejects_non_empty_arguments()
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("null")]
+    [InlineData("""{"browser":"current"}""")]
+    public async Task Close_canonicalizes_harmless_argument_shapes(string arguments)
     {
         var fake = new FakeBrowser();
         var result = await Executor(fake).ExecuteAsync(
             BrowserDefinitionV12(),
             Guid.NewGuid(),
-            Call(ToolCatalog.BrowserClose, """{"force":true}"""),
+            Call(ToolCatalog.BrowserClose, arguments),
+            ToolLimits.MaxOutputBytes,
+            admission: UserTurn());
+        Assert.Equal(1, fake.CloseCalls);
+        Assert.Contains("\"status\":\"closed\"", result.Text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""{"mode":"openWeb"}""")]
+    [InlineData("""{"headless":true}""")]
+    [InlineData("""{"script":"page.evaluate(() => 1)"}""")]
+    [InlineData("""{"selector":"#login"}""")]
+    public async Task Close_rejects_authority_and_script_arguments(string arguments)
+    {
+        var fake = new FakeBrowser();
+        var result = await Executor(fake).ExecuteAsync(
+            BrowserDefinitionV12(),
+            Guid.NewGuid(),
+            Call(ToolCatalog.BrowserClose, arguments),
             ToolLimits.MaxOutputBytes,
             admission: UserTurn());
         Assert.Equal(0, fake.CloseCalls);
-        Assert.Contains("invalid", result.Text, StringComparison.Ordinal);
+        Assert.Contains("error", result.Text, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -19,6 +19,7 @@ public static class RuntimeTelemetry
     private static readonly Counter<long> TriggerSchedulerEvents = Meter.CreateCounter<long>("trigger_scheduler_events");
     private static readonly Counter<long> TriggerRegistrationEvents = Meter.CreateCounter<long>("trigger_registration_events");
     private static readonly Histogram<double> TriggerDueLagMs = Meter.CreateHistogram<double>("trigger_due_lag_ms");
+    private static readonly Counter<long> GenerationRetries = Meter.CreateCounter<long>("llm.generation.retry");
 
     private static readonly ConcurrentQueue<TimelineEvent> Timeline = new();
     private static readonly ConcurrentDictionary<string, List<double>> Samples = new(StringComparer.Ordinal);
@@ -81,6 +82,28 @@ public static class RuntimeTelemetry
     public static void RecordMemoryRetrieval(string result)
     {
         MemoryRetrieval.Add(1, new KeyValuePair<string, object?>("result", result));
+    }
+
+    public static void RecordGenerationRetry(string phase, string reason)
+    {
+        if (phase is not ("initial" or "follow-up"))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(reason) || reason.Length > 64)
+        {
+            return;
+        }
+
+        GenerationRetries.Add(
+            1,
+            new TagList
+            {
+                { "attempt", "1" },
+                { "phase", phase },
+                { "reason", reason }
+            });
     }
 
     public static void RecordTriggerScheduler(string outcome)

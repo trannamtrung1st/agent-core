@@ -181,7 +181,7 @@ public sealed class BrowserRecordJourneyTests
         Assert.Contains(
             recording.Requests,
             request => request.Tools is not null
-                && !request.Tools.Any(tool => tool.Name.StartsWith("browser.", StringComparison.Ordinal))
+                && request.Tools.Any(tool => tool.Name == ToolCatalog.BrowserNavigate)
                 && request.Messages.Any(message => message.Role == ModelRole.Tool
                     && message.Text.Contains("user_intervention_required", StringComparison.Ordinal)
                     && message.Text.Contains("registration", StringComparison.Ordinal)));
