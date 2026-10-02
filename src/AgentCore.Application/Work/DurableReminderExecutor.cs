@@ -150,6 +150,20 @@ public sealed class DurableReminderExecutor(
             }
 
             var decision = await brain.DecideAsync(context, ids.NewId(), linked.Token).ConfigureAwait(false);
+            if (decision is Speak scheduledTools
+                && scheduledTools.Request.Tools is { Count: > 0 }
+                && context.LanguageModel is not null)
+            {
+                return await ExecuteApplicationAsync(
+                    item,
+                    running,
+                    generation,
+                    asOfUtc,
+                    context,
+                    linked.Token,
+                    scheduledTools).ConfigureAwait(false);
+            }
+
             if (decision is not Speak speak || speak.Request.Tools is not null || context.LanguageModel is null)
             {
                 await FailAsync(running, generation, asOfUtc, "reminder-invalid", "Scheduled reminder did not produce a tool-free request.", false, null, CancellationToken.None)
@@ -264,10 +278,24 @@ public sealed class DurableReminderExecutor(
         Guid generation,
         DateTimeOffset asOfUtc,
         AgentContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Speak? decided = null)
     {
-        var decision = await brain.DecideAsync(context, ids.NewId(), cancellationToken).ConfigureAwait(false);
-        if (decision is not Speak speak || context.LanguageModel is null)
+        var speak = decided;
+        if (speak is null)
+        {
+            var decision = await brain.DecideAsync(context, ids.NewId(), cancellationToken).ConfigureAwait(false);
+            if (decision is not Speak fresh || context.LanguageModel is null)
+            {
+                await FailAsync(running, generation, asOfUtc, "event-invalid", "Application event did not produce a model request.", false, null, CancellationToken.None)
+                    .ConfigureAwait(false);
+                return true;
+            }
+
+            speak = fresh;
+        }
+
+        if (context.LanguageModel is null)
         {
             await FailAsync(running, generation, asOfUtc, "event-invalid", "Application event did not produce a model request.", false, null, CancellationToken.None)
                 .ConfigureAwait(false);
@@ -292,7 +320,8 @@ public sealed class DurableReminderExecutor(
             generation,
             asOfUtc,
             ids,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            context.TrustedConnection).ConfigureAwait(false);
         if (await TryCommitCancellationAsync(item.Provenance.SourceOccurrenceId, generation).ConfigureAwait(false))
         {
             return true;

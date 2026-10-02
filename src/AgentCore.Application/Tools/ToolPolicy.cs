@@ -23,10 +23,7 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         }
 
-        if (ToolCatalog.IsBrowserTool(toolName)
-            && (admission is null
-                || admission.Detached
-                || admission.TriggerKind != TriggerKind.UserTurn))
+        if (ToolCatalog.IsBrowserTool(toolName) && !BrowserAdmissionAllows(admission))
         {
             return ToolPolicyDecision.Deny;
         }
@@ -68,7 +65,9 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         }
 
-        if (admission?.Detached == true && descriptor.Scope == ToolResourceScope.Session)
+        if (admission?.Detached == true
+            && descriptor.Scope == ToolResourceScope.Session
+            && !(ToolCatalog.IsBrowserTool(toolName) && UnattendedBrowser(admission)))
         {
             return ToolPolicyDecision.Deny;
         }
@@ -106,7 +105,9 @@ public static class ToolPolicy
             return false;
         }
 
-        if (context?.DetachedExecution == true && descriptor.Scope == ToolResourceScope.Session)
+        if (context?.DetachedExecution == true
+            && descriptor.Scope == ToolResourceScope.Session
+            && !(ToolCatalog.IsBrowserTool(descriptor.Name) && UnattendedBrowser(context)))
         {
             return false;
         }
@@ -123,10 +124,7 @@ public static class ToolPolicy
             return false;
         }
 
-        if (ToolCatalog.IsBrowserTool(descriptor.Name)
-            && (context is null
-                || context.DetachedExecution
-                || context.Trigger.Kind != TriggerKind.UserTurn))
+        if (ToolCatalog.IsBrowserTool(descriptor.Name) && !BrowserOfferAllows(context))
         {
             return false;
         }
@@ -158,4 +156,18 @@ public static class ToolPolicy
         IToolConfigurationGate configurationGate) =>
         ToolRegistry.TryGet(toolName, out var descriptor)
         && IsOffered(descriptor, definition, context, configurationGate);
+
+    private static bool BrowserAdmissionAllows(ToolExecutionAdmission? admission) =>
+        admission is { Detached: false, TriggerKind: TriggerKind.UserTurn } || UnattendedBrowser(admission);
+
+    private static bool BrowserOfferAllows(AgentContext? context) =>
+        context is { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn } || UnattendedBrowser(context);
+
+    private static bool UnattendedBrowser(ToolExecutionAdmission? admission) =>
+        admission is { Detached: true, TriggerKind: TriggerKind.ScheduledOccurrence, TrustedConnection: true }
+        && admission.AgentInstanceId is Guid agentInstanceId
+        && agentInstanceId != Guid.Empty;
+
+    private static bool UnattendedBrowser(AgentContext? context) =>
+        context is { DetachedExecution: true, TrustedConnection: true, Trigger.Kind: TriggerKind.ScheduledOccurrence };
 }

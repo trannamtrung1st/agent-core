@@ -677,6 +677,85 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         }
     }
 
+    [Fact]
+    public async Task Unattended_lease_keeps_open_web_from_leaving_the_connection_origin()
+    {
+        var storePort = BindEphemeralPort();
+        var otherPort = BindEphemeralPort();
+        using var storeListener = new HttpListener();
+        using var otherListener = new HttpListener();
+        storeListener.Prefixes.Add($"http://127.0.0.1:{storePort}/");
+        otherListener.Prefixes.Add($"http://127.0.0.1:{otherPort}/");
+        storeListener.Start();
+        otherListener.Start();
+        var storeOrigin = $"http://127.0.0.1:{storePort}";
+        var otherOrigin = $"http://127.0.0.1:{otherPort}";
+        using var stop = new CancellationTokenSource();
+        var storeServing = ServeLeaseStoreAsync(storeListener, otherOrigin, stop.Token);
+        var otherHits = 0;
+        var otherServing = ServeCountingAsync(otherListener, () => otherHits++, stop.Token);
+        var root = Path.Combine(Path.GetTempPath(), "agent-core-lease-" + Guid.NewGuid().ToString("N"));
+        var agent = Guid.NewGuid();
+        var session = NewPersistent(root);
+        await session.StartAsync(CancellationToken.None);
+        var workSession = Guid.NewGuid();
+        var interactiveSession = Guid.NewGuid();
+        try
+        {
+            Assert.Equal(BrowserPolicyMode.OpenWeb, session.HostPolicy.PolicyMode);
+            session.BindSession(workSession, agent);
+            session.BindSession(interactiveSession, agent);
+            await using var lease = await session.EnterUnattendedAsync(agent, [storeOrigin]);
+            session.AdoptUnattendedFlow(agent);
+            var redirected = await session.NavigateAsync(
+                new BrowserNavigateRequest(workSession, new Uri(storeOrigin + "/redirect")));
+            Assert.Equal("target_denied", redirected.ErrorCode);
+            var afterRedirect = await session.GetCurrentUrlAsync(workSession);
+            Assert.DoesNotContain(otherOrigin, afterRedirect?.AbsoluteUri ?? string.Empty, StringComparison.Ordinal);
+
+            var page = await session.NavigateAsync(new BrowserNavigateRequest(workSession, new Uri(storeOrigin + "/")));
+            Assert.Null(page.ErrorCode);
+            Assert.Contains("Store page", page.Observation!.VisibleText, StringComparison.Ordinal);
+            Assert.Equal(0, otherHits);
+            var pop = Assert.Single(page.Observation.Elements, element => element.Name == "Pop");
+            var popped = await session.ActAsync(new BrowserActRequest(workSession, "click", pop.Ref, null));
+            Assert.NotEqual("provider_unavailable", popped.ErrorCode);
+            var current = await session.GetCurrentUrlAsync(workSession);
+            Assert.StartsWith(storeOrigin, current?.AbsoluteUri ?? string.Empty, StringComparison.Ordinal);
+            Assert.Single(session.ContextFor(workSession)!.Pages);
+
+            session.ExpectInteractive(agent);
+            Task<BrowserOperationResult> waiting;
+            using (ExecutionContext.SuppressFlow())
+            {
+                waiting = Task.Run(() => session.NavigateAsync(
+                    new BrowserNavigateRequest(interactiveSession, new Uri(otherOrigin + "/"))).AsTask());
+            }
+
+            await session.InteractiveEntered(agent).WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.False(waiting.IsCompleted);
+            await lease.DisposeAsync();
+            var opened = await waiting.WaitAsync(TimeSpan.FromSeconds(20));
+            Assert.Null(opened.ErrorCode);
+            Assert.Contains(otherOrigin, opened.Observation!.Url, StringComparison.Ordinal);
+            Assert.Equal(BrowserPolicyMode.OpenWeb, session.HostPolicy.PolicyMode);
+            Assert.Single(Directory.GetDirectories(root));
+        }
+        finally
+        {
+            await session.StopAsync(CancellationToken.None);
+            await stop.CancelAsync();
+            storeListener.Stop();
+            otherListener.Stop();
+            await storeServing;
+            await otherServing;
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     private static PlaywrightBrowserSession NewPersistent(string root) =>
         new(
             new BrowserOptions
@@ -706,6 +785,65 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
                 break;
             }
 
+            context.Response.ContentType = "text/html; charset=utf-8";
+            context.Response.ContentLength64 = html.Length;
+            await context.Response.OutputStream.WriteAsync(html, cancellationToken).ConfigureAwait(false);
+            context.Response.Close();
+        }
+    }
+
+    private static async Task ServeLeaseStoreAsync(HttpListener listener, string otherOrigin, CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested && listener.IsListening)
+        {
+            HttpListenerContext context;
+            try
+            {
+                context = await listener.GetContextAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or HttpListenerException or ObjectDisposedException)
+            {
+                break;
+            }
+
+            if (string.Equals(context.Request.Url?.AbsolutePath, "/redirect", StringComparison.Ordinal))
+            {
+                context.Response.StatusCode = 302;
+                context.Response.RedirectLocation = otherOrigin + "/";
+                context.Response.Close();
+                continue;
+            }
+
+            var html = "<!DOCTYPE html><html><head><title>Store</title></head><body><p>Store page</p>"
+                + $"<img src=\"{otherOrigin}/pixel.png\" alt=\"pixel\">"
+                + $"<button type=\"button\" onclick=\"window.open('{otherOrigin}/')\">Pop</button></body></html>";
+            var bytes = Encoding.UTF8.GetBytes(html);
+            context.Response.ContentType = "text/html; charset=utf-8";
+            context.Response.ContentLength64 = bytes.Length;
+            await context.Response.OutputStream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+            context.Response.Close();
+        }
+    }
+
+    private static async Task ServeCountingAsync(
+        HttpListener listener,
+        Action hit,
+        CancellationToken cancellationToken)
+    {
+        var html = Encoding.UTF8.GetBytes("<!DOCTYPE html><html><head><title>Other</title></head><body>Other origin</body></html>");
+        while (!cancellationToken.IsCancellationRequested && listener.IsListening)
+        {
+            HttpListenerContext context;
+            try
+            {
+                context = await listener.GetContextAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or HttpListenerException or ObjectDisposedException)
+            {
+                break;
+            }
+
+            hit();
             context.Response.ContentType = "text/html; charset=utf-8";
             context.Response.ContentLength64 = html.Length;
             await context.Response.OutputStream.WriteAsync(html, cancellationToken).ConfigureAwait(false);

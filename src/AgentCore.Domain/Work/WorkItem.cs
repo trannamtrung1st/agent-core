@@ -418,12 +418,17 @@ public sealed class WorkItem
 
         RequireOperational(expectedRevision, generation);
         var unsafeEffect = SideEffect.Disposition is WorkSideEffectDisposition.InFlight or WorkSideEffectDisposition.Indeterminate;
+        var observationRequired = Checkpoint?.PayloadJson.Contains("\"ObservationRequired\":true", StringComparison.Ordinal) == true;
         if (!replaySafe || unsafeEffect || AttemptCount >= MaxAttempts)
         {
             var effect = unsafeEffect ? AsIndeterminate(failedAtUtc) : SideEffect;
-            var code = unsafeEffect ? "side-effect-indeterminate" : failureCode ?? throw new ArgumentException("Failure code is required.");
+            var code = unsafeEffect
+                ? observationRequired ? "observation-required" : "side-effect-indeterminate"
+                : failureCode ?? throw new ArgumentException("Failure code is required.");
             var summary = unsafeEffect
-                ? "External effect outcome is unknown and was not replayed."
+                ? observationRequired
+                    ? "A browser change must be observed before the work item can run again."
+                    : "External effect outcome is unknown and was not replayed."
                 : failureSummary ?? throw new ArgumentException("Failure is required.");
             return AsFailed(failedAtUtc, code, summary, effect, RequireDiagnosticId(allocateDiagnosticId));
         }
@@ -528,10 +533,13 @@ public sealed class WorkItem
 
         if (SideEffect.Disposition is WorkSideEffectDisposition.InFlight or WorkSideEffectDisposition.Indeterminate)
         {
+            var observationRequired = Checkpoint?.PayloadJson.Contains("\"ObservationRequired\":true", StringComparison.Ordinal) == true;
             return AsFailed(
                 asOfUtc,
-                "side-effect-indeterminate",
-                "External effect outcome is unknown and was not replayed.",
+                observationRequired ? "observation-required" : "side-effect-indeterminate",
+                observationRequired
+                    ? "A browser change must be observed before the work item can run again."
+                    : "External effect outcome is unknown and was not replayed.",
                 AsIndeterminate(asOfUtc),
                 RequireDiagnosticId(allocateDiagnosticId));
         }
@@ -769,6 +777,32 @@ public sealed class WorkItem
             Result,
             Failure,
             new WorkSideEffect(disposition, toolCallId, actionHash, updatedAtUtc),
+            Approval,
+            updatedAtUtc);
+    }
+
+    public WorkItem AcceptBrowserObservation(long expectedRevision, Guid generation, DateTimeOffset updatedAtUtc)
+    {
+        if (SideEffect.Disposition is not (WorkSideEffectDisposition.InFlight or WorkSideEffectDisposition.Indeterminate))
+        {
+            return this;
+        }
+
+        RequireOperational(expectedRevision, generation);
+        return Copy(
+            Status,
+            Revision + 1,
+            AttemptCount,
+            NextRetryAtUtc,
+            Claim,
+            CancellationRequested,
+            CancellationRequestedAtUtc,
+            KnownEffectSummary,
+            Progress,
+            Checkpoint,
+            Result,
+            Failure,
+            WorkSideEffect.None,
             Approval,
             updatedAtUtc);
     }

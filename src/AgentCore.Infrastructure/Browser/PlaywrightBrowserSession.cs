@@ -11,7 +11,7 @@ using Microsoft.Playwright;
 
 namespace AgentCore.Infrastructure.Browser;
 
-public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionLease, IBrowserProfileBinding, IBrowserRuntimeReadiness, IHostedService
+public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionLease, IBrowserProfileBinding, IBrowserContextUse, IBrowserRuntimeReadiness, IHostedService
 {
     private const string DescribeElement = """
         el => {
@@ -87,6 +87,10 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
     private readonly ConcurrentDictionary<Guid, Guid?> _sessionOwners = new();
     private readonly ConcurrentDictionary<Guid, SessionBrowser> _persistent = new();
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _profileGates = new();
+    private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _contextUse = new();
+    private readonly ConcurrentDictionary<Guid, string[]> _connectionLeases = new();
+    private readonly ConcurrentDictionary<Guid, TaskCompletionSource> _interactiveWaiters = new();
+    private readonly AsyncLocal<Guid?> _unattendedOwner = new();
     private readonly ConcurrentBag<IPlaywright> _retiredDrivers = [];
     private readonly ConcurrentDictionary<string, LiveElement> _refs = new();
     private IPlaywright? _playwright;
@@ -228,15 +232,22 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         BrowserNavigateRequest request,
         CancellationToken cancellationToken = default)
     {
+        await using var interactive = await EnterInteractiveAsync(request.SessionId, cancellationToken).ConfigureAwait(false);
         if (!IsAvailable)
         {
             return Unavailable();
         }
 
-        var decision = BrowserTargetPolicy.EvaluateDestination(
-            request.Url.AbsoluteUri,
-            _policy.NavigationOrigins,
-            _policy.PolicyMode);
+        var leasedOrigins = LeaseOrigins(request.SessionId);
+        var decision = leasedOrigins is null
+            ? BrowserTargetPolicy.EvaluateDestination(
+                request.Url.AbsoluteUri,
+                _policy.NavigationOrigins,
+                _policy.PolicyMode)
+            : BrowserTargetPolicy.EvaluateDestination(
+                request.Url.AbsoluteUri,
+                leasedOrigins,
+                BrowserPolicyMode.Restricted);
         if (!decision.Allowed)
         {
             return Result(decision.Code ?? "target_denied");
@@ -345,6 +356,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         Guid sessionId,
         CancellationToken cancellationToken = default)
     {
+        await using var interactive = await EnterInteractiveAsync(sessionId, cancellationToken).ConfigureAwait(false);
         if (!IsAvailable || !_sessions.TryGetValue(sessionId, out var session))
         {
             return Unavailable();
@@ -393,6 +405,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         BrowserActRequest request,
         CancellationToken cancellationToken = default)
     {
+        await using var interactive = await EnterInteractiveAsync(request.SessionId, cancellationToken).ConfigureAwait(false);
         if (!IsAvailable)
         {
             return Unavailable();
@@ -536,6 +549,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
     public async ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
+        await using var interactive = await EnterInteractiveAsync(sessionId, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         if (Volatile.Read(ref _stopped) == 1 || !IsRuntimeReady)
         {
@@ -731,6 +745,81 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
     public void BindSession(Guid sessionId, Guid? agentInstanceId) =>
         _sessionOwners[sessionId] = agentInstanceId;
+
+    public async ValueTask<IAsyncDisposable> EnterUnattendedAsync(
+        Guid agentInstanceId,
+        IReadOnlyList<string> origins,
+        CancellationToken cancellationToken = default)
+    {
+        if (agentInstanceId == Guid.Empty)
+        {
+            throw new ArgumentException("Agent instance is required.", nameof(agentInstanceId));
+        }
+
+        var gate = _contextUse.GetOrAdd(agentInstanceId, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        _connectionLeases[agentInstanceId] = origins.ToArray();
+        return new UnattendedLease(this, agentInstanceId, gate);
+    }
+
+    public void AdoptUnattendedFlow(Guid agentInstanceId)
+    {
+        if (agentInstanceId != Guid.Empty && _connectionLeases.ContainsKey(agentInstanceId))
+        {
+            _unattendedOwner.Value = agentInstanceId;
+        }
+    }
+
+    internal void ExpectInteractive(Guid agentInstanceId) =>
+        _interactiveWaiters.TryAdd(
+            agentInstanceId,
+            new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
+
+    internal Task InteractiveEntered(Guid agentInstanceId) =>
+        _interactiveWaiters[agentInstanceId].Task;
+
+    private async ValueTask<IAsyncDisposable> EnterInteractiveAsync(Guid sessionId, CancellationToken cancellationToken)
+    {
+        if (!_sessionOwners.TryGetValue(sessionId, out var owner)
+            || owner is not Guid agentInstanceId
+            || agentInstanceId == Guid.Empty
+            || !_connectionLeases.ContainsKey(agentInstanceId)
+            || _unattendedOwner.Value == agentInstanceId)
+        {
+            return NoopHold.Instance;
+        }
+
+        var gate = _contextUse.GetOrAdd(agentInstanceId, static _ => new SemaphoreSlim(1, 1));
+        if (_interactiveWaiters.TryGetValue(agentInstanceId, out var waiting))
+        {
+            waiting.TrySetResult();
+        }
+
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        return new InteractiveHold(gate);
+    }
+
+    private string[]? LeaseOrigins(Guid sessionId)
+    {
+        if (_sessionOwners.TryGetValue(sessionId, out var owner)
+            && owner is Guid agentInstanceId
+            && _connectionLeases.TryGetValue(agentInstanceId, out var origins))
+        {
+            return origins;
+        }
+
+        if (_unattendedOwner.Value is Guid current && _connectionLeases.TryGetValue(current, out var leased))
+        {
+            return leased;
+        }
+
+        return null;
+    }
+
+    private string[]? LeaseOrigins(SessionBrowser session) =>
+        session.AgentInstanceId is Guid agentInstanceId && _connectionLeases.TryGetValue(agentInstanceId, out var origins)
+            ? origins
+            : null;
 
     private async Task<SessionBrowser> EnsureSessionAsync(Guid sessionId, CancellationToken cancellationToken)
     {
@@ -948,10 +1037,12 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
         try
         {
+            var lease = LeaseOrigins(session);
             if (!ReferenceEquals(page, session.Page))
             {
-                if (_policy.PolicyMode == BrowserPolicyMode.OpenWeb
-                    && (url.StartsWith("about:", StringComparison.OrdinalIgnoreCase) || Allows(url, true)))
+                if (lease is null
+                    && _policy.PolicyMode == BrowserPolicyMode.OpenWeb
+                    && (url.StartsWith("about:", StringComparison.OrdinalIgnoreCase) || Allows(session, url, true)))
                 {
                     await route.ContinueAsync().ConfigureAwait(false);
                     return;
@@ -960,7 +1051,10 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
                     || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                 {
-                    var popup = BrowserTargetPolicy.EvaluatePopup(url, _policy.NavigationOrigins, _policy.PolicyMode);
+                    var popup = BrowserTargetPolicy.EvaluatePopup(
+                        url,
+                        lease ?? _policy.NavigationOrigins,
+                        lease is null ? _policy.PolicyMode : BrowserPolicyMode.Restricted);
                     session.PopupCode ??= popup.Code ?? "unsupported_operation";
                 }
 
@@ -986,14 +1080,18 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             }
 
             var documentNavigation = string.Equals(route.Request.ResourceType, "document", StringComparison.OrdinalIgnoreCase);
-            if (!Allows(url, documentNavigation))
+            if (!Allows(session, url, documentNavigation))
             {
-                session.DeniedNavigation = true;
+                if (documentNavigation)
+                {
+                    session.DeniedNavigation = true;
+                }
+
                 await route.AbortAsync().ConfigureAwait(false);
                 return;
             }
 
-            if (_policy.PolicyMode == BrowserPolicyMode.OpenWeb)
+            if (lease is null && _policy.PolicyMode == BrowserPolicyMode.OpenWeb)
             {
                 if (IsCancelled(session, session.OperationCall))
                 {
@@ -1056,9 +1154,13 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             }
         }
 
-        if (IsRedirect(response.Status) && !RedirectStaysAllowed(url, response.Headers, documentNavigation))
+        if (IsRedirect(response.Status) && !RedirectStaysAllowed(session, url, response.Headers, documentNavigation))
         {
-            session.DeniedNavigation = true;
+            if (documentNavigation)
+            {
+                session.DeniedNavigation = true;
+            }
+
             await AbortQuietlyAsync(route).ConfigureAwait(false);
             return;
         }
@@ -1072,7 +1174,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         await route.FulfillAsync(new RouteFulfillOptions { Response = response }).ConfigureAwait(false);
     }
 
-    private bool RedirectStaysAllowed(string requestUrl, IDictionary<string, string> headers, bool documentNavigation)
+    private bool RedirectStaysAllowed(SessionBrowser session, string requestUrl, IDictionary<string, string> headers, bool documentNavigation)
     {
         string? location = null;
         foreach (var header in headers)
@@ -1087,7 +1189,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         return !string.IsNullOrWhiteSpace(location)
             && Uri.TryCreate(requestUrl, UriKind.Absolute, out var baseUri)
             && Uri.TryCreate(baseUri, location, out var resolved)
-            && Allows(resolved.AbsoluteUri, documentNavigation);
+            && Allows(session, resolved.AbsoluteUri, documentNavigation);
     }
 
     private static bool IsRedirect(int status) => status is 301 or 302 or 303 or 307 or 308;
@@ -1481,7 +1583,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             return;
         }
 
-        if (_policy.PolicyMode == BrowserPolicyMode.OpenWeb)
+        if (LeaseOrigins(session) is null && _policy.PolicyMode == BrowserPolicyMode.OpenWeb)
         {
             session.PendingOpenedPage = opened;
             return;
@@ -1496,7 +1598,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
     private async Task AdoptOpenWebPageAsync(SessionBrowser session, CancellationToken cancellationToken)
     {
-        if (_policy.PolicyMode != BrowserPolicyMode.OpenWeb)
+        if (LeaseOrigins(session) is not null || _policy.PolicyMode != BrowserPolicyMode.OpenWeb)
         {
             return;
         }
@@ -1639,14 +1741,24 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         }
     }
 
-    private bool Allows(string url, bool documentNavigation) =>
-        documentNavigation
+    private bool Allows(SessionBrowser session, string url, bool documentNavigation)
+    {
+        var lease = LeaseOrigins(session);
+        if (lease is not null)
+        {
+            return documentNavigation
+                ? BrowserTargetPolicy.EvaluateDestination(url, lease, BrowserPolicyMode.Restricted).Allowed
+                : BrowserTargetPolicy.EvaluateResource(url, lease, lease, BrowserPolicyMode.Restricted).Allowed;
+        }
+
+        return documentNavigation
             ? BrowserTargetPolicy.EvaluateDestination(url, _policy.NavigationOrigins, _policy.PolicyMode).Allowed
             : BrowserTargetPolicy.EvaluateResource(
                 url,
                 _policy.NavigationOrigins,
                 _policy.EffectiveResourceOrigins,
                 _policy.PolicyMode).Allowed;
+    }
 
     private bool IsAllowed(string url) =>
         BrowserTargetPolicy.EvaluateDestination(url, _policy.NavigationOrigins, _policy.PolicyMode).Allowed;
@@ -1972,4 +2084,43 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         IReadOnlyList<string> Actions);
 
     private sealed record BrowserSecretItem(string? Kind, string? Key, string? Value);
+
+    private sealed class NoopHold : IAsyncDisposable
+    {
+        public static NoopHold Instance { get; } = new();
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class InteractiveHold(SemaphoreSlim gate) : IAsyncDisposable
+    {
+        public ValueTask DisposeAsync()
+        {
+            gate.Release();
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class UnattendedLease(PlaywrightBrowserSession owner, Guid agentInstanceId, SemaphoreSlim gate)
+        : IAsyncDisposable
+    {
+        private int _disposed;
+
+        public ValueTask DisposeAsync()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            {
+                return ValueTask.CompletedTask;
+            }
+
+            owner._connectionLeases.TryRemove(agentInstanceId, out _);
+            if (owner._unattendedOwner.Value == agentInstanceId)
+            {
+                owner._unattendedOwner.Value = null;
+            }
+
+            gate.Release();
+            return ValueTask.CompletedTask;
+        }
+    }
 }

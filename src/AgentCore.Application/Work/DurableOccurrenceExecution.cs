@@ -30,9 +30,27 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
         Guid generation,
         DateTimeOffset asOfUtc,
         IIdGenerator ids,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool trustedConnection = false)
     {
-        var resumed = DurableToolCallCheckpoint.TryRead(running.Checkpoint, out var savedMessages);
+        var browserScope = triggerKind == TriggerKind.ScheduledOccurrence
+            ? await tools.OpenOccurrenceBrowserAsync(
+                running.WorkItemId,
+                running.Owner.AgentInstanceId,
+                trustedConnection,
+                cancellationToken).ConfigureAwait(false)
+            : NoopScope.Instance;
+        if (trustedConnection && triggerKind == TriggerKind.ScheduledOccurrence)
+        {
+            tools.AdoptOccurrenceBrowser(running.Owner.AgentInstanceId);
+        }
+
+        await using var heldBrowser = browserScope;
+        var resumed = DurableToolCallCheckpoint.TryReadState(
+            running.Checkpoint,
+            out var savedMessages,
+            out var restoredObservation,
+            out var restoredBlockedHash);
         var messages = resumed ? savedMessages!.ToList() : request.Messages.ToList();
         var steps = resumed ? running.Checkpoint!.StepCount : 0;
         var outputBytes = resumed ? running.Checkpoint!.OutputBytes : 0;
@@ -51,7 +69,14 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
             overallCts,
             remaining,
             Timeout.InfiniteTimeSpan);
-        var admission = new ToolExecutionAdmission(Detached: true, triggerKind);
+        var admission = new ToolExecutionAdmission(
+            Detached: true,
+            triggerKind,
+            AgentInstanceId: running.Owner.AgentInstanceId,
+            TrustedConnection: trustedConnection);
+        var observationRequired = restoredObservation;
+        string? blockedActionHash = restoredBlockedHash;
+        var browserUnavailable = false;
         if (resumed)
         {
             var normalizedSteps = DurableToolCallCheckpoint.NormalizeResumedStepCount(steps, messages);
@@ -129,6 +154,16 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
 
             if (pending.Count == 0)
             {
+                if (observationRequired
+                    && running.SideEffect.Disposition is WorkSideEffectDisposition.InFlight
+                        or WorkSideEffectDisposition.Indeterminate)
+                {
+                    return new DurableOccurrenceFailed(
+                        running,
+                        "observation-required",
+                        "A browser change must be observed before the work item can run again.");
+                }
+
                 var result = text.ToString().Trim();
                 if (!finished || result.Length == 0)
                 {
@@ -193,6 +228,50 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
 
             var policy = tools.EvaluateExecutionPolicy(definition, call.Name, admission: admission);
             var hash = await ResolveActionHashAsync(call, args, cancellationToken).ConfigureAwait(false);
+            if (browserUnavailable && ToolCatalog.IsBrowserTool(call.Name))
+            {
+                return await AppendResultAsync(
+                    call,
+                    ToolExecutionResult.FromText(
+                        """{"error":"provider_unavailable","message":"Browser is unavailable."}"""),
+                    false).ConfigureAwait(false);
+            }
+
+            if (call.Name == ToolCatalog.BrowserAct
+                && blockedActionHash is not null
+                && string.Equals(hash, blockedActionHash, StringComparison.Ordinal))
+            {
+                return await AppendResultAsync(
+                    call,
+                    ToolExecutionResult.FromText(
+                        """{"error":"not_replayed","message":"This browser change was not replayed. Observe the page first."}"""),
+                    false).ConfigureAwait(false);
+            }
+
+            var uncertainBrowserAct = running.SideEffect.Disposition is WorkSideEffectDisposition.InFlight
+                    or WorkSideEffectDisposition.Indeterminate
+                && IsBrowserActHash(messages, running.SideEffect.ActionHash);
+            if (uncertainBrowserAct)
+            {
+                observationRequired = true;
+                blockedActionHash ??= running.SideEffect.ActionHash;
+                if (call.Name is not (ToolCatalog.BrowserNavigate or ToolCatalog.BrowserObserve))
+                {
+                    return await AppendResultAsync(
+                        call,
+                        ToolExecutionResult.FromText(
+                            """{"error":"observation_required","message":"Observe the page before another browser change."}"""),
+                        false).ConfigureAwait(false);
+                }
+            }
+            else if (running.SideEffect.Disposition is WorkSideEffectDisposition.InFlight
+                or WorkSideEffectDisposition.Indeterminate)
+            {
+                return new DurableOccurrenceFailed(
+                    running,
+                    "side-effect-indeterminate",
+                    "External effect outcome is unknown and was not replayed.");
+            }
             if (policy == ToolPolicyDecision.RequireApproval && !ApprovedFor(running, call, hash))
             {
                 if (running.Approval is { } decided
@@ -211,17 +290,10 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
             }
 
             var needsApproval = policy == ToolPolicyDecision.RequireApproval;
-            var dispatchFenced = needsApproval || ToolCatalog.ReplaySafetyOf(call.Name) != ToolReplaySafety.ReplaySafe;
+            var dispatchFenced = !uncertainBrowserAct
+                && (needsApproval || ToolCatalog.ReplaySafetyOf(call.Name) != ToolReplaySafety.ReplaySafe);
             if (dispatchFenced)
             {
-                if (running.SideEffect.Disposition is WorkSideEffectDisposition.InFlight or WorkSideEffectDisposition.Indeterminate)
-                {
-                    return new DurableOccurrenceFailed(
-                        running,
-                        "side-effect-indeterminate",
-                        "External effect outcome is unknown and was not replayed.");
-                }
-
                 if (running.SideEffect.Disposition == WorkSideEffectDisposition.None)
                 {
                     running = await store.MarkSideEffectAsync(
@@ -257,7 +329,7 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                     Timeout.InfiniteTimeSpan);
                 execution = await tools.ExecuteAsync(
                     definition,
-                    Guid.Empty,
+                    running.WorkItemId,
                     call,
                     RemainingOutput(outputBytes),
                     toolCts.Token,
@@ -277,6 +349,25 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                     execution = ToolExecutionResult.FromText(
                         """{"error":"timeout","message":"Tool deadline reached."}""");
                 }
+                else if (call.Name == ToolCatalog.BrowserAct)
+                {
+                    running = await store.MarkSideEffectAsync(
+                        running.WorkItemId,
+                        running.Revision,
+                        generation,
+                        WorkSideEffectDisposition.Indeterminate,
+                        call.Id,
+                        hash,
+                        asOfUtc,
+                        CancellationToken.None).ConfigureAwait(false);
+                    observationRequired = true;
+                    blockedActionHash = hash;
+                    return await AppendResultAsync(
+                        call,
+                        ToolExecutionResult.FromText(
+                            """{"error":"observation_required","message":"Observe the page before another browser change."}"""),
+                        false).ConfigureAwait(false);
+                }
                 else
                 {
                     running = await store.MarkSideEffectAsync(
@@ -293,6 +384,46 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                         "side-effect-indeterminate",
                         "External effect outcome is unknown and was not replayed.");
                 }
+            }
+
+            if (execution.Text.Contains("user_intervention_required", StringComparison.Ordinal))
+            {
+                if (dispatchFenced)
+                {
+                    running = await store.MarkSideEffectAsync(
+                        running.WorkItemId,
+                        running.Revision,
+                        generation,
+                        WorkSideEffectDisposition.DefinitelyFailed,
+                        call.Id,
+                        hash,
+                        asOfUtc,
+                        CancellationToken.None).ConfigureAwait(false);
+                }
+
+                return new DurableOccurrenceFailed(
+                    running,
+                    "user_intervention_required",
+                    "The page needs a person before this work can continue.");
+            }
+
+            if (ToolCatalog.IsBrowserTool(call.Name)
+                && execution.Text.Contains("provider_unavailable", StringComparison.Ordinal))
+            {
+                browserUnavailable = true;
+            }
+
+            if (uncertainBrowserAct
+                && call.Name is ToolCatalog.BrowserNavigate or ToolCatalog.BrowserObserve
+                && !execution.Text.Contains("\"error\"", StringComparison.Ordinal))
+            {
+                observationRequired = false;
+                running = await store.AcceptBrowserObservationAsync(
+                    running.WorkItemId,
+                    running.Revision,
+                    generation,
+                    asOfUtc,
+                    cancellationToken).ConfigureAwait(false);
             }
 
             if (dispatchFenced)
@@ -396,7 +527,7 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
             checkpoint(
                 running,
                 new WorkCheckpoint(
-                    DurableToolCallCheckpoint.Write(messages),
+                    DurableToolCallCheckpoint.Write(messages, observationRequired, blockedActionHash),
                     steps,
                     outputBytes,
                     (int)Math.Max(remaining.TotalMilliseconds, 0)),
@@ -424,6 +555,52 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
         item.Approval is { Decision: WorkApprovalDecision.Approved } approval
         && string.Equals(approval.ToolName, call.Name, StringComparison.Ordinal)
         && string.Equals(approval.ActionHash, hash, StringComparison.Ordinal);
+
+    private static bool IsBrowserActHash(IReadOnlyList<ModelMessage> messages, string? actionHash)
+    {
+        if (string.IsNullOrWhiteSpace(actionHash))
+        {
+            return false;
+        }
+
+        foreach (var message in messages)
+        {
+            if (message.ToolCalls is null)
+            {
+                continue;
+            }
+
+            foreach (var call in message.ToolCalls)
+            {
+                if (!string.Equals(call.Name, ToolCatalog.BrowserAct, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var args = JsonSerializer.Deserialize<JsonElement>(
+                        string.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson);
+                    if (string.Equals(ToolActionHash.Compute(call.Name, args), actionHash, StringComparison.Ordinal))
+                    {
+                        return true;
+                    }
+                }
+                catch (JsonException)
+                {
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private sealed class NoopScope : IAsyncDisposable
+    {
+        public static NoopScope Instance { get; } = new();
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
 
     private static bool HasToolResult(IReadOnlyList<ModelMessage> messages, string toolCallId) =>
         messages.Any(message =>

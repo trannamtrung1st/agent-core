@@ -28,7 +28,8 @@ public sealed record ToolExecutionAdmission(
     bool Detached,
     TriggerKind TriggerKind,
     bool IntermediateMessagingAllowed = false,
-    Guid? AgentInstanceId = null);
+    Guid? AgentInstanceId = null,
+    bool TrustedConnection = false);
 
 public sealed record ToolDescriptor(
     ModelToolDefinition ModelDefinition,

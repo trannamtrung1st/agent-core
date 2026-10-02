@@ -65,11 +65,13 @@ public sealed class DurableWorkContextFactory(
             ModelSelectionSource.SystemDefault,
             item.Model.ReasoningEffort);
         string? applicationConnectionStatus = null;
+        var trustedConnection = false;
         if (connections is not null)
         {
             var applicationConnection = await connections
                 .GetByAgentAsync(item.Owner.AgentInstanceId, cancellationToken)
                 .ConfigureAwait(false);
+            trustedConnection = applicationConnection?.Status == Domain.Connections.ApplicationConnectionStatus.Connected;
             var formatted = ApplicationConnectionPrompt.Format(applicationConnection);
             applicationConnectionStatus = formatted.Length == 0 ? null : formatted;
         }
@@ -97,7 +99,8 @@ public sealed class DurableWorkContextFactory(
             Persona: item.Provenance.ResolvePersona(definition),
             ModelSupportsTools: descriptor.Tools,
             DetachedExecution: true,
-            ApplicationConnectionStatus: applicationConnectionStatus);
+            ApplicationConnectionStatus: applicationConnectionStatus,
+            TrustedConnection: trustedConnection);
     }
 
     private static TriggerKind SourceTrigger(WorkItem item) =>

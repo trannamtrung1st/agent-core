@@ -61,7 +61,7 @@ public static class DurableToolCallCheckpoint
         string? actionHash,
         WorkApproval? approval)
     {
-        if (!TryReadMessages(checkpoint, out var messages) || messages is null)
+        if (!TryReadMessages(checkpoint, out var messages, out _, out _) || messages is null)
         {
             return null;
         }
@@ -113,10 +113,24 @@ public static class DurableToolCallCheckpoint
     }
 
     public static bool TryRead(WorkCheckpoint? checkpoint, out IReadOnlyList<ModelMessage>? messages) =>
-        TryReadMessages(checkpoint, out messages);
+        TryReadMessages(checkpoint, out messages, out _, out _);
 
-    public static string Write(IReadOnlyList<ModelMessage> messages) =>
-        JsonSerializer.Serialize(new Document(Phase, messages.Select(MessageDto.From).ToArray()));
+    public static bool TryReadState(
+        WorkCheckpoint? checkpoint,
+        out IReadOnlyList<ModelMessage>? messages,
+        out bool observationRequired,
+        out string? blockedActionHash) =>
+        TryReadMessages(checkpoint, out messages, out observationRequired, out blockedActionHash);
+
+    public static string Write(
+        IReadOnlyList<ModelMessage> messages,
+        bool observationRequired = false,
+        string? blockedActionHash = null) =>
+        JsonSerializer.Serialize(new Document(
+            Phase,
+            messages.Select(MessageDto.From).ToArray(),
+            observationRequired,
+            blockedActionHash));
 
     private const string Phase = "model-turn";
 
@@ -153,9 +167,15 @@ public static class DurableToolCallCheckpoint
         }
     }
 
-    private static bool TryReadMessages(WorkCheckpoint? checkpoint, out IReadOnlyList<ModelMessage>? messages)
+    private static bool TryReadMessages(
+        WorkCheckpoint? checkpoint,
+        out IReadOnlyList<ModelMessage>? messages,
+        out bool observationRequired,
+        out string? blockedActionHash)
     {
         messages = null;
+        observationRequired = false;
+        blockedActionHash = null;
         if (checkpoint is null || !checkpoint.PayloadJson.Contains(Phase, StringComparison.Ordinal))
         {
             return false;
@@ -170,6 +190,8 @@ public static class DurableToolCallCheckpoint
             }
 
             messages = document.Messages.Select(message => message.ToMessage()).ToArray();
+            observationRequired = document.ObservationRequired;
+            blockedActionHash = document.BlockedActionHash;
             return true;
         }
         catch (JsonException)
@@ -178,7 +200,11 @@ public static class DurableToolCallCheckpoint
         }
     }
 
-    private sealed record Document(string Phase, MessageDto[] Messages);
+    private sealed record Document(
+        string Phase,
+        MessageDto[] Messages,
+        bool ObservationRequired = false,
+        string? BlockedActionHash = null);
 
     private sealed record MessageDto(
         string Role,

@@ -73,7 +73,12 @@ public sealed partial class SessionToolExecutor(
             return TextResult(Error("forbidden", "Tool effect is owned by the session runtime."));
         }
 
-        if (admission?.Detached == true && ToolResources.IsSessionTool(call.Name))
+        if (admission?.Detached == true
+            && ToolResources.IsSessionTool(call.Name)
+            && !(ToolCatalog.IsBrowserTool(call.Name)
+                && admission is { TriggerKind: TriggerKind.ScheduledOccurrence, TrustedConnection: true }
+                && admission.AgentInstanceId is Guid agentInstanceId
+                && agentInstanceId != Guid.Empty))
         {
             return TextResult(Error("forbidden", "Session context is required."));
         }

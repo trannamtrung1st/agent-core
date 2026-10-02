@@ -82,6 +82,16 @@ public interface IBrowserProfileBinding
     void BindSession(Guid sessionId, Guid? agentInstanceId);
 }
 
+public interface IBrowserContextUse
+{
+    ValueTask<IAsyncDisposable> EnterUnattendedAsync(
+        Guid agentInstanceId,
+        IReadOnlyList<string> origins,
+        CancellationToken cancellationToken = default);
+
+    void AdoptUnattendedFlow(Guid agentInstanceId);
+}
+
 public interface IBrowserSession
 {
     bool IsAvailable { get; }

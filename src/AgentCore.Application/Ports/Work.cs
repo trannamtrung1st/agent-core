@@ -133,6 +133,13 @@ public interface IWorkItemStore
         Guid generation,
         DateTimeOffset clearedAtUtc,
         CancellationToken cancellationToken = default);
+
+    ValueTask<WorkItem> AcceptBrowserObservationAsync(
+        Guid workItemId,
+        long expectedRevision,
+        Guid generation,
+        DateTimeOffset acceptedAtUtc,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IDurableWorkHandoff
