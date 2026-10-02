@@ -1,11 +1,16 @@
 using System.Text.Json;
 using AgentCore.Application.Memory;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentCore.Infrastructure.Providers.SemanticResponses;
 
 internal static class NativeSemanticResponseParser
 {
+    private static readonly ILogger SpeechNormalizationLogger =
+        NullLogger.Instance;
     public static bool TryParse(
         string json,
         out ModelSemanticResponse? response,
@@ -387,18 +392,28 @@ internal static class NativeSemanticResponseParser
                 return true;
             }
 
-            return false;
+            speech = new ModelSpeechProjection(ModelSpeechMode.Same, null);
+            failureReason = string.Empty;
+            NoteSpeechNormalized(ProviderFailureReason.SpeechOmitted);
+            return true;
         }
 
-        if (speechEl.ValueKind != JsonValueKind.Object)
+        if (speechEl.ValueKind == JsonValueKind.Null)
         {
-            return false;
+            speech = new ModelSpeechProjection(ModelSpeechMode.None, null);
+            failureReason = string.Empty;
+            NoteSpeechNormalized(ProviderFailureReason.SpeechMalformed);
+            return true;
         }
 
-        if (!speechEl.TryGetProperty("mode", out var modeEl) || modeEl.ValueKind != JsonValueKind.String)
+        if (speechEl.ValueKind != JsonValueKind.Object
+            || !speechEl.TryGetProperty("mode", out var modeEl)
+            || modeEl.ValueKind != JsonValueKind.String)
         {
-            failureReason = ProviderFailureReason.InvalidSpeechMode;
-            return false;
+            speech = new ModelSpeechProjection(ModelSpeechMode.None, null);
+            failureReason = string.Empty;
+            NoteSpeechNormalized(ProviderFailureReason.SpeechMalformed);
+            return true;
         }
 
         var modeText = modeEl.GetString();
@@ -416,26 +431,30 @@ internal static class NativeSemanticResponseParser
             return true;
         }
 
-        if (!string.Equals(modeText, "custom", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(modeText, "custom", StringComparison.OrdinalIgnoreCase)
+            || !TrySpeechText(speechEl, out var text)
+            || string.IsNullOrWhiteSpace(text)
+            || text.Length > AssistantResponseSchema.MaxSpeechCharacters)
         {
-            failureReason = ProviderFailureReason.InvalidSpeechMode;
-            return false;
-        }
-
-        if (!TrySpeechText(speechEl, out var text) || string.IsNullOrWhiteSpace(text))
-        {
-            failureReason = ProviderFailureReason.MissingCustomSpeechText;
-            return false;
-        }
-
-        if (text.Length > AssistantResponseSchema.MaxSpeechCharacters)
-        {
-            return false;
+            speech = new ModelSpeechProjection(ModelSpeechMode.None, null);
+            failureReason = string.Empty;
+            NoteSpeechNormalized(ProviderFailureReason.SpeechMalformed);
+            return true;
         }
 
         speech = new ModelSpeechProjection(ModelSpeechMode.Custom, text);
         failureReason = string.Empty;
         return true;
+    }
+
+    private static void NoteSpeechNormalized(string reason)
+    {
+        DiagnosticLog.Warning(
+            SpeechNormalizationLogger,
+            new InvalidOperationException("Assistant speech projection was normalized."),
+            Guid.NewGuid(),
+            "Assistant speech projection was normalized.",
+            new DiagnosticContext(FailureReason: reason, ProviderResponseChannel: ProviderResponseChannel.ResponseFunction));
     }
 
     private static bool TryRecognizeSpeech(JsonElement root, out ModelSpeechMode mode, out string? customText)

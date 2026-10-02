@@ -2563,7 +2563,8 @@ public static class SessionEventMapper
                 ["heardTextEndExclusive"] = terminal.HeardTextEndExclusive,
                 ["finishReason"] = terminal.FinishReason,
                 ["speechText"] = terminal.SpeechText,
-                ["memoryReceipts"] = MemoryReceiptPayload(terminal.MemoryReceipts)
+                ["memoryReceipts"] = MemoryReceiptPayload(terminal.MemoryReceipts),
+                ["effectReceipts"] = EffectReceiptPayload(terminal.EffectReceipts)
             }),
             PlaybackStopOutput stop => ("playback.stop", new Dictionary<string, object?>
             {
@@ -2676,6 +2677,16 @@ public static class SessionEventMapper
             Payload = payload
         };
     }
+
+    private static object[]? EffectReceiptPayload(IReadOnlyList<PublicEffectReceipt>? receipts) =>
+        receipts is not { Count: > 0 }
+            ? null
+            : receipts.Select(item => (object)new Dictionary<string, object?>
+            {
+                ["tool"] = item.Tool,
+                ["status"] = item.Status,
+                ["label"] = item.Label
+            }).ToArray();
 
     private static object[]? MemoryReceiptPayload(IReadOnlyList<PublicMemoryReceipt>? receipts) =>
         receipts is not { Count: > 0 }
@@ -2805,6 +2816,7 @@ public static class SessionEventMapper
             ["interruptReason"] = entry.InterruptReason,
             ["speechText"] = entry.SpeechText,
             ["memoryReceipts"] = MemoryReceiptPayload(entry.MemoryReceipts),
+            ["effectReceipts"] = EffectReceiptPayload(entry.EffectReceipts),
             ["failure"] = entry.Failure is { } failure
                 ? new Dictionary<string, object?>
                 {

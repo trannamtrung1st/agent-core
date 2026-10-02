@@ -17,7 +17,9 @@ internal static class AssistantResponseSchema
     public static string CompatibilityInstruction(ModelResponseContract contract, bool responseFunction = false)
     {
         var speech = contract.SpeechWillBeUsed
-            ? "A spoken projection may be needed; omit [[speech:...]] when the display is natural to say aloud. "
+            ? responseFunction
+                ? "agent_core_respond must contain speech. Normally use {\"mode\":\"same\",\"text\":null}. Use {\"mode\":\"none\",\"text\":null} only when the answer should not be spoken. Use {\"mode\":\"custom\",\"text\":\"...\"} only when spoken wording must differ from displayText. "
+                : "A spoken projection may be needed; omit [[speech:...]] when the display is natural to say aloud. "
             : responseFunction
                 ? "This is a text turn. agent_core_respond speech must be {\"mode\":\"same\",\"text\":null}. Do not copy displayText into speech.text. "
                 : "Omit [[speech:...]] unless spoken wording must differ from the display. ";
@@ -252,7 +254,7 @@ internal static class AssistantResponseSchema
     private static string ResponseFunctionDescription(ModelResponseContract contract)
     {
         var speech = contract.SpeechWillBeUsed
-            ? " When speech is used, same and none keep text null; custom requires non-empty text."
+            ? " speech is required. Normally use {\"mode\":\"same\",\"text\":null}. Use {\"mode\":\"none\",\"text\":null} only for visual-only output. Use {\"mode\":\"custom\",\"text\":\"...\"} only when spoken wording must differ from displayText."
             : " For a text turn, speech must be {\"mode\":\"same\",\"text\":null}.";
         return contract.RequireChatResponse
             ? "Submit the agent step for a direct user chat request. disposition must be Continue or Complete. action must be {\"kind\":\"chat.respond\"} with non-empty displayText. Wait, Blocked, and action null are invalid for this request. Memory entries are proposals." + speech

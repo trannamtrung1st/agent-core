@@ -34,7 +34,17 @@ const failureReasonTokens = new Set([
   "unknownAction",
   "unknownDisposition",
   "outputLimit",
-  "toolCallTruncated"
+  "toolCallTruncated",
+  "transportFailure",
+  "http5xx",
+  "streamIdle",
+  "streamMalformed",
+  "streamIncomplete",
+  "incompleteToolCall",
+  "circuitOpen",
+  "streamLimit",
+  "speechOmitted",
+  "speechMalformed"
 ]);
 
 const responseChannelTokens = new Set([

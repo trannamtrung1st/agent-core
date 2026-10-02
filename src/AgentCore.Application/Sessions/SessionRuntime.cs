@@ -93,6 +93,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private Guid? _activeEntryId;
     private readonly ResponseTextAccumulator _accumulator = new();
     private ResponseEnvelope? _envelope;
+    private readonly List<EffectReceipt> _committedEffects = [];
     private bool _usesResponseContract;
     private bool _structuredOutput;
     private bool _semanticReady;
@@ -2970,6 +2971,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             ToolProgressMessage(call.Name),
                             CancellationToken.None)
                         .ConfigureAwait(false);
+                    NoteCommittedEffect(call.Name, executionResult.Text);
                     messages.Add(new ModelMessage(
                         ModelRole.Tool,
                         executionResult.Text,
@@ -3627,7 +3629,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     HeardTextEndExclusive: heard,
                                     FinishReason: failed ? null : _modelFinishReason,
                                     SpeechText: PublicSpeechText(),
-                                    MemoryReceipts: VisibleMemoryReceipts())),
+                                    MemoryReceipts: VisibleMemoryReceipts(),
+                                    EffectReceipts: VisibleEffectReceipts())),
                             ct)
                         .ConfigureAwait(false);
                 }
@@ -3766,9 +3769,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     {
                         Text = DisplayText(),
                         Status = status,
-                        Envelope = status == EntryStatus.Failed && (!_usesResponseContract || !_semanticReady)
-                            ? null
-                            : CurrentEnvelope(status != EntryStatus.Streaming),
+                        Envelope = EnvelopeFor(status),
                         FinishReason = status == EntryStatus.Completed ? _modelFinishReason : null,
                         InterruptReason = status switch
                         {
@@ -4637,6 +4638,30 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         var source = CurrentTtsSource();
         return source.Length == 0 ? DisplayLength() : source.Length;
+    }
+
+    private ResponseEnvelope? EnvelopeFor(EntryStatus status)
+    {
+        var failedBeforeReply = status == EntryStatus.Failed && (!_usesResponseContract || !_semanticReady);
+        var envelope = failedBeforeReply ? null : CurrentEnvelope(status != EntryStatus.Streaming);
+        if (_committedEffects.Count == 0)
+        {
+            return envelope;
+        }
+
+        var effects = _committedEffects.ToArray();
+        return (envelope ?? new ResponseEnvelope(string.Empty, null, [], ResponseSpeechMode.None)) with
+        {
+            EffectReceipts = effects
+        };
+    }
+
+    private void NoteCommittedEffect(string tool, string json)
+    {
+        if (EffectReceipts.TryFromToolResult(tool, json, out var receipt))
+        {
+            _committedEffects.Add(receipt);
+        }
     }
 
     private ResponseEnvelope CurrentEnvelope(bool finalize)

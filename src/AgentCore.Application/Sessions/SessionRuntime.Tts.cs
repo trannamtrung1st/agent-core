@@ -592,7 +592,8 @@ public sealed partial class SessionRuntime
                                     HeardTextEndExclusive: heard,
                                     FinishReason: failed ? null : _modelFinishReason,
                                     SpeechText: PublicSpeechText(),
-                                    MemoryReceipts: VisibleMemoryReceipts())),
+                                    MemoryReceipts: VisibleMemoryReceipts(),
+                                    EffectReceipts: VisibleEffectReceipts())),
                             ct)
                         .ConfigureAwait(false);
                 }

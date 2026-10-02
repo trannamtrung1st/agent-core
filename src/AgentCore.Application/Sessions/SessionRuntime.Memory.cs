@@ -117,4 +117,9 @@ public sealed partial class SessionRuntime
 
     private IReadOnlyList<PublicMemoryReceipt>? VisibleMemoryReceipts() =>
         PublicMemoryReceipt.Visible(_envelope?.MemoryReceipts);
+
+    private IReadOnlyList<PublicEffectReceipt>? VisibleEffectReceipts() =>
+        _envelope?.EffectReceipts is { Count: > 0 } effects
+            ? effects.Select(item => new PublicEffectReceipt(item.Tool, item.Status, item.Label)).ToArray()
+            : null;
 }

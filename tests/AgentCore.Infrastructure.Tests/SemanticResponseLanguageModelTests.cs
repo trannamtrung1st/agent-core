@@ -477,7 +477,7 @@ public sealed class SemanticResponseLanguageModelTests
     }
 
     [Fact]
-    public async Task Function_channel_voice_turn_rejects_empty_custom_speech()
+    public async Task Function_channel_voice_turn_degrades_empty_custom_speech()
     {
         var json = """
             {"disposition":"Complete","action":{"kind":"chat.respond"},"displayText":"Shown","speech":{"mode":"custom","text":""},"blocks":[],"memory":[]}
@@ -489,14 +489,14 @@ public sealed class SemanticResponseLanguageModelTests
         ]);
         var voice = Contracted with { ResponseContract = new ModelResponseContract(SpeechWillBeUsed: true) };
         var events = await CollectAsync(new SemanticResponseLanguageModel(inner), voice);
-        var failed = Assert.Single(events.OfType<ModelFailed>());
-        Assert.Equal(ProviderFailureReason.MissingCustomSpeechText, failed.Failure.FailureReason);
-        Assert.Equal(ProviderResponseChannel.ResponseFunction, failed.Failure.ResponseChannel);
-        Assert.DoesNotContain(json, failed.Failure.SafeMessage, StringComparison.Ordinal);
+        var ready = Assert.Single(events.OfType<ModelSemanticResponseReady>()).Response;
+        Assert.Equal("Shown", ready.DisplayText);
+        Assert.Equal(ModelSpeechMode.None, ready.Speech.Mode);
+        Assert.DoesNotContain(events, item => item is ModelFailed);
     }
 
     [Fact]
-    public async Task Function_channel_rejects_unknown_speech_mode()
+    public async Task Function_channel_voice_turn_degrades_unknown_speech_mode()
     {
         var json = """
             {"disposition":"Complete","action":{"kind":"chat.respond"},"displayText":"Shown","speech":{"mode":"maybe","text":null},"blocks":[],"memory":[]}
@@ -508,9 +508,9 @@ public sealed class SemanticResponseLanguageModelTests
         ]);
         var voice = Contracted with { ResponseContract = new ModelResponseContract(SpeechWillBeUsed: true) };
         var events = await CollectAsync(new SemanticResponseLanguageModel(inner), voice);
-        var failed = Assert.Single(events.OfType<ModelFailed>());
-        Assert.Equal(ProviderFailureReason.InvalidSpeechMode, failed.Failure.FailureReason);
-        Assert.Equal(ProviderResponseChannel.ResponseFunction, failed.Failure.ResponseChannel);
+        var ready = Assert.Single(events.OfType<ModelSemanticResponseReady>()).Response;
+        Assert.Equal(ModelSpeechMode.None, ready.Speech.Mode);
+        Assert.DoesNotContain(events, item => item is ModelFailed);
     }
 
     [Fact]

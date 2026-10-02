@@ -14,6 +14,8 @@ public static class DiagnosticDetailAllowlist
         "invalidSpeech",
         "invalidSpeechMode",
         "missingCustomSpeechText",
+        "speechOmitted",
+        "speechMalformed",
         "invalidBlocks",
         "invalidMemory",
         "invalidMemoryProposal",
@@ -23,7 +25,15 @@ public static class DiagnosticDetailAllowlist
         "unknownAction",
         "unknownDisposition",
         "outputLimit",
-        "toolCallTruncated"
+        "toolCallTruncated",
+        "transportFailure",
+        "http5xx",
+        "streamIdle",
+        "streamMalformed",
+        "streamIncomplete",
+        "incompleteToolCall",
+        "circuitOpen",
+        "streamLimit"
     };
 
     public static readonly IReadOnlySet<string> ResponseChannels = new HashSet<string>(StringComparer.Ordinal)

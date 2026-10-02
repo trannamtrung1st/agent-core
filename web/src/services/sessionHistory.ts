@@ -34,7 +34,8 @@ export function mergeHistoryEntries(existing: HistoryEntry[], incoming: HistoryE
       byId.set(entry.entryId, {
         ...entry,
         speechText: entry.speechText || current.speechText,
-        memoryReceipts: entry.memoryReceipts?.length ? entry.memoryReceipts : current.memoryReceipts
+        memoryReceipts: entry.memoryReceipts?.length ? entry.memoryReceipts : current.memoryReceipts,
+        effectReceipts: entry.effectReceipts?.length ? entry.effectReceipts : current.effectReceipts
       });
       continue;
     }
@@ -47,7 +48,8 @@ export function mergeHistoryEntries(existing: HistoryEntry[], incoming: HistoryE
       byId.set(entry.entryId, {
         ...current,
         speechText: current.speechText || entry.speechText,
-        memoryReceipts: current.memoryReceipts?.length ? current.memoryReceipts : entry.memoryReceipts
+        memoryReceipts: current.memoryReceipts?.length ? current.memoryReceipts : entry.memoryReceipts,
+        effectReceipts: current.effectReceipts?.length ? current.effectReceipts : entry.effectReceipts
       });
       continue;
     }
@@ -57,7 +59,8 @@ export function mergeHistoryEntries(existing: HistoryEntry[], incoming: HistoryE
       byId.set(entry.entryId, {
         ...entry,
         speechText: entry.speechText || current.speechText,
-        memoryReceipts: entry.memoryReceipts?.length ? entry.memoryReceipts : current.memoryReceipts
+        memoryReceipts: entry.memoryReceipts?.length ? entry.memoryReceipts : current.memoryReceipts,
+        effectReceipts: entry.effectReceipts?.length ? entry.effectReceipts : current.effectReceipts
       });
       continue;
     }
@@ -65,7 +68,8 @@ export function mergeHistoryEntries(existing: HistoryEntry[], incoming: HistoryE
     byId.set(entry.entryId, {
       ...current,
       speechText: current.speechText || entry.speechText,
-      memoryReceipts: current.memoryReceipts?.length ? current.memoryReceipts : entry.memoryReceipts
+      memoryReceipts: current.memoryReceipts?.length ? current.memoryReceipts : entry.memoryReceipts,
+      effectReceipts: current.effectReceipts?.length ? current.effectReceipts : entry.effectReceipts
     });
   }
 

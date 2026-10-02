@@ -60,7 +60,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
     {
         if (_breaker.IsOpen)
         {
-            yield return Fail(ProviderErrorCode.Unavailable, "Language model circuit is open.");
+            yield return Fail(ProviderErrorCode.Unavailable, "Language model circuit is open.", ProviderFailureReason.CircuitOpen);
             yield break;
         }
 
@@ -117,12 +117,12 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         {
             _breaker.RecordFailure();
             RecordRequest(request, callNumber, callStarted, 0);
-            setupFailed = Fail(ProviderErrorCode.Unavailable, "Language model transport failed.");
+            setupFailed = Fail(ProviderErrorCode.Unavailable, "Language model transport failed.", ProviderFailureReason.TransportFailure);
         }
 
         if (setupFailed is not null || response is null)
         {
-            yield return setupFailed ?? Fail(ProviderErrorCode.Unavailable, "Language model transport failed.");
+            yield return setupFailed ?? Fail(ProviderErrorCode.Unavailable, "Language model transport failed.", ProviderFailureReason.TransportFailure);
             yield break;
         }
 
@@ -186,7 +186,8 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                         emittedText ? ProviderErrorCode.Unavailable : ProviderErrorCode.Timeout,
                         emittedText
                             ? "Language model stream ended unexpectedly."
-                            : "Language model stream idle timeout.");
+                            : "Language model stream idle timeout.",
+                        emittedText ? ProviderFailureReason.StreamIdle : null);
                 }
                 catch (SseStreamTotalTimeoutException)
                 {
@@ -202,7 +203,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                 catch (InvalidOperationException)
                 {
                     _breaker.RecordFailure();
-                    streamFailed = Fail(ProviderErrorCode.Unavailable, "Language model stream exceeded the event size limit.");
+                    streamFailed = Fail(ProviderErrorCode.Unavailable, "Language model stream exceeded the event size limit.", ProviderFailureReason.StreamLimit);
                 }
 
                 if (streamFailed is not null)
@@ -238,7 +239,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                 catch (JsonException)
                 {
                     _breaker.RecordFailure();
-                    parseFailed = Fail(ProviderErrorCode.Unavailable, "Language model stream was malformed.");
+                    parseFailed = Fail(ProviderErrorCode.Unavailable, "Language model stream was malformed.", ProviderFailureReason.StreamMalformed);
                 }
 
                 if (parseFailed is not null)
@@ -293,7 +294,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                 {
                     if (string.IsNullOrWhiteSpace(draft.Id) || string.IsNullOrWhiteSpace(draft.Name))
                     {
-                        yield return Fail(ProviderErrorCode.Unavailable, "Language model tool call was incomplete.");
+                        yield return Fail(ProviderErrorCode.Unavailable, "Language model tool call was incomplete.", ProviderFailureReason.IncompleteToolCall);
                         yield break;
                     }
 
@@ -324,7 +325,8 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                 ProviderErrorCode.Unavailable,
                 sawDone
                     ? "Language model stream was incomplete."
-                    : "Language model stream ended without a finish marker.");
+                    : "Language model stream ended without a finish marker.",
+                ProviderFailureReason.StreamIncomplete);
         }
     }
 
@@ -593,7 +595,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         var root = document.RootElement;
         if (root.TryGetProperty("error", out _))
         {
-            return [Fail(ProviderErrorCode.Unavailable, "Language model reported a stream error.")];
+            return [Fail(ProviderErrorCode.Unavailable, "Language model reported a stream error.", ProviderFailureReason.StreamMalformed)];
         }
 
         if (root.TryGetProperty("usage", out var usage))
@@ -832,7 +834,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         {
             401 or 403 => new ProviderFailure(ProviderErrorCode.Authentication, "Language model authentication failed."),
             429 => new ProviderFailure(ProviderErrorCode.RateLimited, "Language model rate limited.", retry),
-            >= 500 => new ProviderFailure(ProviderErrorCode.Unavailable, "Language model is unavailable."),
+            >= 500 => new ProviderFailure(ProviderErrorCode.Unavailable, "Language model is unavailable.", FailureReason: ProviderFailureReason.Http5xx),
             _ => new ProviderFailure(ProviderErrorCode.Unknown, "Language model request failed.")
         };
     }

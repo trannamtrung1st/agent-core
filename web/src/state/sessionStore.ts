@@ -83,6 +83,13 @@ export type HistoryEntry = {
   speechText?: string | null;
   failure?: HistoryFailure | null;
   memoryReceipts?: MemoryReceiptView[];
+  effectReceipts?: EffectReceiptView[];
+};
+
+export type EffectReceiptView = {
+  tool: string;
+  status: string;
+  label: string;
 };
 
 export type MemoryReceiptView = {
@@ -421,7 +428,8 @@ export function historyFromPayload(raw: unknown): HistoryEntry[] {
       interruptReason: row.interruptReason == null ? null : asString(row.interruptReason),
       speechText: asSpeechText(row.speechText),
       failure: asHistoryFailure(row.failure),
-      memoryReceipts: asMemoryReceipts(row.memoryReceipts)
+      memoryReceipts: asMemoryReceipts(row.memoryReceipts),
+      effectReceipts: asEffectReceipts(row.effectReceipts)
     };
   });
 }
@@ -472,6 +480,31 @@ function asMemoryReceipts(raw: unknown): MemoryReceiptView[] | undefined {
       presentation,
       label
     });
+  }
+
+  return receipts.length > 0 ? receipts : undefined;
+}
+
+function asEffectReceipts(raw: unknown): EffectReceiptView[] | undefined {
+  if (!Array.isArray(raw)) {
+    return undefined;
+  }
+
+  const receipts: EffectReceiptView[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      continue;
+    }
+
+    const row = item as Record<string, unknown>;
+    const tool = asString(row.tool).trim();
+    const status = asString(row.status).trim();
+    const label = asString(row.label).trim();
+    if (!tool || !status || !label) {
+      continue;
+    }
+
+    receipts.push({ tool, status, label });
   }
 
   return receipts.length > 0 ? receipts : undefined;
@@ -962,6 +995,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
                 interruptReason: interruptReason ?? entry.interruptReason ?? null,
                 speechText: asSpeechText(event.payload.speechText) ?? entry.speechText,
                 memoryReceipts: asMemoryReceipts(event.payload.memoryReceipts) ?? entry.memoryReceipts,
+                effectReceipts: asEffectReceipts(event.payload.effectReceipts) ?? entry.effectReceipts,
                 failure: entry.failure ?? failureForResponse(state.sessionError, event.responseId)
               }
             : entry)

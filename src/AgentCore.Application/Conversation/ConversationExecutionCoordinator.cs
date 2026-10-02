@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Application.Conversation;
@@ -37,9 +38,25 @@ public sealed class ConversationExecutionCoordinator(
                 continue;
             }
 
-            if (await runner.DispatchAsync(claimed, cancellationToken).ConfigureAwait(false))
+            try
             {
-                ran++;
+                if (await runner.DispatchAsync(claimed, cancellationToken).ConfigureAwait(false))
+                {
+                    ran++;
+                }
+            }
+            catch (AgentCoreException ex) when (IsMissingSession(ex))
+            {
+                if (claimed.Claim is { } claim)
+                {
+                    await store.FailAsync(
+                            claimed.ExecutionId,
+                            claimed.Revision,
+                            claim.Generation,
+                            now,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
             }
         }
 
@@ -50,4 +67,8 @@ public sealed class ConversationExecutionCoordinator(
         Guid sessionId,
         CancellationToken cancellationToken = default) =>
         store.ListOpenForSessionAsync(sessionId, cancellationToken);
+
+    private static bool IsMissingSession(AgentCoreException exception) =>
+        string.Equals(exception.Code, "NotFound", StringComparison.Ordinal)
+        && exception.Message.Contains("Session was not found", StringComparison.Ordinal);
 }

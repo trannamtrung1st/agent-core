@@ -16,8 +16,6 @@ public sealed class NativeSemanticResponseParserTests
     [InlineData(
         """{"disposition":"Complete","action":{"kind":"chat.respond"},"displayText":"   ","speech":{"mode":"same","text":null},"blocks":[],"memory":[]}""",
         ProviderFailureReason.MissingDisplayText)]
-    [InlineData("""{"displayText":"Shown","speech":{"mode":"maybe"}}""", ProviderFailureReason.InvalidSpeechMode)]
-    [InlineData("""{"displayText":"Shown","speech":{"mode":"custom","text":null}}""", ProviderFailureReason.MissingCustomSpeechText)]
     [InlineData("""{"displayText":"Shown","speech":{"mode":"same"},"sessionId":"other"}""", ProviderFailureReason.ModelSuppliedDestination)]
     [InlineData("""{"displayText":"Shown","speech":{"mode":"same"},"destination":"other"}""", ProviderFailureReason.ModelSuppliedDestination)]
     [InlineData("""{"displayText":"Shown","speech":{"mode":"same"},"profileId":"p"}""", ProviderFailureReason.ModelSuppliedDestination)]
@@ -64,7 +62,40 @@ public sealed class NativeSemanticResponseParserTests
     }
 
     [Fact]
-    public void Voice_contract_ignores_same_text_and_rejects_unknown_mode()
+    public void Voice_contract_preserves_valid_speech_and_degrades_malformed_speech()
+    {
+        var voice = new ModelResponseContract(SpeechWillBeUsed: true);
+        Assert.Equal(ModelSpeechMode.Same, ParseVoice(voice, """{"displayText":"Shown"}""").Mode);
+        Assert.Equal(ModelSpeechMode.None, ParseVoice(voice, """{"displayText":"Shown","speech":null}""").Mode);
+        Assert.Equal(ModelSpeechMode.None, ParseVoice(voice, """{"displayText":"Shown","speech":"whatever"}""").Mode);
+        Assert.Equal(ModelSpeechMode.None, ParseVoice(voice, """{"displayText":"Shown","speech":{"mode":"maybe"}}""").Mode);
+        Assert.Equal(ModelSpeechMode.None, ParseVoice(voice, """{"displayText":"Shown","speech":{"mode":"custom","text":null}}""").Mode);
+        Assert.Equal(ModelSpeechMode.None, ParseVoice(voice, """{"displayText":"Shown","speech":{"mode":"custom","text":"  "}}""").Mode);
+        var same = ParseVoice(voice, """{"displayText":"Shown","speech":{"mode":"same","text":null}}""");
+        Assert.Equal(ModelSpeechMode.Same, same.Mode);
+        Assert.Null(same.Text);
+        var none = ParseVoice(voice, """{"displayText":"Shown","speech":{"mode":"none","text":null}}""");
+        Assert.Equal(ModelSpeechMode.None, none.Mode);
+        var custom = ParseVoice(voice, """{"displayText":"Shown","speech":{"mode":"custom","text":"Say this"}}""");
+        Assert.Equal(ModelSpeechMode.Custom, custom.Mode);
+        Assert.Equal("Say this", custom.Text);
+        Assert.False(NativeSemanticResponseParser.TryParse(
+            """{"disposition":"Complete","action":{"kind":"chat.respond"},"displayText":"","speech":"bad"}""",
+            out _,
+            out var displayReason,
+            voice));
+        Assert.Equal(ProviderFailureReason.MissingDisplayText, displayReason);
+    }
+
+    private static ModelSpeechProjection ParseVoice(ModelResponseContract voice, string json)
+    {
+        Assert.True(NativeSemanticResponseParser.TryParse(json, out var response, out var reason, voice));
+        Assert.Equal(string.Empty, reason);
+        return response!.Speech;
+    }
+
+    [Fact]
+    public void Voice_contract_ignores_same_text()
     {
         var voice = new ModelResponseContract(SpeechWillBeUsed: true);
         Assert.True(NativeSemanticResponseParser.TryParse(
@@ -75,11 +106,5 @@ public sealed class NativeSemanticResponseParserTests
         Assert.Equal(string.Empty, sameReason);
         Assert.Equal(ModelSpeechMode.Same, same!.Speech.Mode);
         Assert.Null(same.Speech.Text);
-        Assert.False(NativeSemanticResponseParser.TryParse(
-            """{"displayText":"Shown","speech":{"mode":"maybe"}}""",
-            out _,
-            out var modeReason,
-            voice));
-        Assert.Equal(ProviderFailureReason.InvalidSpeechMode, modeReason);
     }
 }

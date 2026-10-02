@@ -45,12 +45,18 @@ public sealed record MemoryReceipt(
     public bool IsUserVisible => Presentation is Indicator or Explicit;
 }
 
+/// <summary>
+/// A committed tool side effect. The label is runtime copy, not model prose.
+/// </summary>
+public sealed record EffectReceipt(string Tool, string Status, string Label);
+
 public sealed record ResponseEnvelope(
     string DisplayText,
     string? SpeechText,
     IReadOnlyList<ResponseBlock> Blocks,
     ResponseSpeechMode SpeechMode,
-    IReadOnlyList<MemoryReceipt>? MemoryReceipts = null)
+    IReadOnlyList<MemoryReceipt>? MemoryReceipts = null,
+    IReadOnlyList<EffectReceipt>? EffectReceipts = null)
 {
     public ResponseEnvelope(string displayText, string? speechText, IReadOnlyList<ResponseBlock> blocks)
         : this(

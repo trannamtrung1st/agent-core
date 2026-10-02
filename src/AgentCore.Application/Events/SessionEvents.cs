@@ -289,7 +289,10 @@ public sealed record PublicHistoryEntry(
     string? InterruptReason = null,
     string? SpeechText = null,
     PublicFailureReference? Failure = null,
-    IReadOnlyList<PublicMemoryReceipt>? MemoryReceipts = null);
+    IReadOnlyList<PublicMemoryReceipt>? MemoryReceipts = null,
+    IReadOnlyList<PublicEffectReceipt>? EffectReceipts = null);
+
+public sealed record PublicEffectReceipt(string Tool, string Status, string Label);
 
 public sealed record PublicMemoryReceipt(
     string Outcome,
@@ -427,7 +430,8 @@ public sealed record ResponseCompletedOutput(
     string? InterruptReason = null,
     string? FinishReason = null,
     string? SpeechText = null,
-    IReadOnlyList<PublicMemoryReceipt>? MemoryReceipts = null) : OutputPayload;
+    IReadOnlyList<PublicMemoryReceipt>? MemoryReceipts = null,
+    IReadOnlyList<PublicEffectReceipt>? EffectReceipts = null) : OutputPayload;
 
 public sealed record ResponseInterruptedOutput(string Reason, int HeardTextEndExclusive) : OutputPayload;
 
@@ -565,6 +569,9 @@ public static class PublicHistory
         var memoryReceipts = entry.Role == ConversationRole.Assistant
             ? PublicMemoryReceipt.Visible(entry.Envelope?.MemoryReceipts)
             : null;
+        var effectReceipts = entry.Role == ConversationRole.Assistant && entry.Envelope?.EffectReceipts is { Count: > 0 } effects
+            ? effects.Select(item => new PublicEffectReceipt(item.Tool, item.Status, item.Label)).ToArray()
+            : null;
         return new PublicHistoryEntry(
             entry.EntryId,
             entry.Sequence,
@@ -591,7 +598,8 @@ public static class PublicHistory
                     failure.FailureReason,
                     failure.ProviderResponseChannel)
                 : null,
-            memoryReceipts);
+            memoryReceipts,
+            effectReceipts);
     }
 
     private static PublicResponseBlock ToPublicBlock(ResponseBlock block) =>
