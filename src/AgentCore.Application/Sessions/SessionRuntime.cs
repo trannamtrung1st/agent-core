@@ -2925,6 +2925,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                     var executionResult = ToolExecutionResult.FromText(
                         """{"error":"invalid","message":"Tool execution failed."}""");
+                    var refusedBlocked = false;
                     var toolStarted = Stopwatch.GetTimestamp();
                     ToolApprovalGrant? approvalGrant = null;
                     try
@@ -3111,6 +3112,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             browserPageOrigin,
                                             out var blockedJson))
                                     {
+                                        refusedBlocked = true;
                                         executionResult = ToolExecutionResult.FromText(blockedJson);
                                         blockedNoProgress++;
                                         if (blockedNoProgress >= 2)
@@ -3185,11 +3187,23 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     RuntimeTelemetry.Record("tools", RuntimeTelemetry.ElapsedMs(toolStarted), call.Name);
 
                     executionResult = ToolResultAdmission.AdmitForModel(model, executionResult);
-                    NoteBrowserTarget(call.Name, call.ArgumentsJson, executionResult.Text, blockedBrowserOrigins, ref browserPageOrigin);
+                    var closedPage = false;
+                    if (!refusedBlocked)
+                    {
+                        closedPage = NoteBrowserTarget(
+                            call.Name,
+                            call.ArgumentsJson,
+                            executionResult.Text,
+                            blockedBrowserOrigins,
+                            ref browserPageOrigin);
+                    }
+
                     if (!terminalBrowserContinuation
-                        && string.Equals(call.Name, ToolCatalog.BrowserNavigate, StringComparison.Ordinal)
-                        && browserPageOrigin is not null
-                        && !blockedBrowserOrigins.Contains(browserPageOrigin))
+                        && !refusedBlocked
+                        && (closedPage
+                            || (string.Equals(call.Name, ToolCatalog.BrowserNavigate, StringComparison.Ordinal)
+                                && browserPageOrigin is not null
+                                && !blockedBrowserOrigins.Contains(browserPageOrigin))))
                     {
                         blockedNoProgress = 0;
                     }
@@ -6134,13 +6148,24 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         return true;
     }
 
-    private static void NoteBrowserTarget(
+    private static bool NoteBrowserTarget(
         string tool,
         string? argumentsJson,
         string? json,
         HashSet<string> blockedOrigins,
         ref string? pageOrigin)
     {
+        if (string.Equals(tool, ToolCatalog.BrowserClose, StringComparison.Ordinal))
+        {
+            if (TryBrowserCloseStatus(json) is "closed" or "already_closed")
+            {
+                pageOrigin = null;
+                return true;
+            }
+
+            return false;
+        }
+
         string? finalOrigin = null;
         string? error = null;
         if (TryBrowserResultUrl(json, out var url, out error) && TryBrowserOrigin(url, out var parsedOrigin))
@@ -6160,7 +6185,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 blockedOrigins.Add(requested);
             }
 
-            return;
+            return false;
         }
 
         if (finalOrigin is not null
@@ -6168,6 +6193,33 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             && tool is ToolCatalog.BrowserNavigate or ToolCatalog.BrowserObserve or ToolCatalog.BrowserAct)
         {
             pageOrigin = finalOrigin;
+        }
+
+        return false;
+    }
+
+    private static string? TryBrowserCloseStatus(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("status", out var status)
+                || status.ValueKind != JsonValueKind.String)
+            {
+                return null;
+            }
+
+            return status.GetString();
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 

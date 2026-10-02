@@ -141,6 +141,89 @@ public sealed class BrowserOriginHandoffTests
             model.ToolTexts,
             text => text.Contains("\"status\":\"closed\"", StringComparison.Ordinal)
                 && !text.Contains("user_intervention_required", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            model.Requests[2].Messages,
+            message => message.Text.Contains("requires human intervention", StringComparison.Ordinal));
+        Assert.Equal(
+            EntryStatus.Completed,
+            Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
+    }
+
+    [Fact]
+    public async Task Closing_a_challenged_page_clears_the_current_origin()
+    {
+        var browser = new TwoSiteBrowser("already_closed");
+        var model = new SequencedModel(
+            Navigate("a-1", "https://a.test/"),
+            [
+                new ModelToolCallEvent(new ModelToolCall("see-a", ToolCatalog.BrowserObserve, "{}")),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ],
+            [
+                new ModelToolCallEvent(new ModelToolCall("close-1", ToolCatalog.BrowserClose, "{}")),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ],
+            Navigate("a-2", "https://a.test/again"),
+            Navigate("b-1", "https://b.test/specs"),
+            [
+                new ModelToolCallEvent(new ModelToolCall("see-b", ToolCatalog.BrowserObserve, "{}")),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ],
+            Answer("Specs are open."));
+        await using var runtime = Create(model, browser);
+        await runtime.AttachAsync();
+
+        Assert.True(await runtime.SubmitUserTextAsync("close the challenged page and continue"));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Contains(model.Requests[3].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserObserve);
+        Assert.Contains(model.Requests[3].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserAct);
+        Assert.DoesNotContain(
+            model.Requests[3].Messages,
+            message => message.Text.Contains("requires human intervention", StringComparison.Ordinal));
+        Assert.Equal(["https://a.test/", "https://b.test/specs"], browser.Navigated);
+        Assert.Contains(model.Requests[4].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserObserve);
+        Assert.Contains(model.Requests[4].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserNavigate);
+        Assert.DoesNotContain(
+            model.Requests[4].Messages,
+            message => message.Text.Contains("requires human intervention", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            model.Requests[4].Messages,
+            message => message.Text.Contains("Do not request more browser actions", StringComparison.Ordinal));
+        Assert.Contains(model.Requests[5].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserObserve);
+        Assert.Equal(1, browser.CloseCalls);
+        Assert.Equal(1, browser.ObserveCalls);
+        Assert.Equal(
+            EntryStatus.Completed,
+            Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
+    }
+
+    [Fact]
+    public async Task A_refused_return_to_a_blocked_origin_keeps_the_open_page()
+    {
+        var browser = new TwoSiteBrowser();
+        var model = new SequencedModel(
+            Navigate("a-1", "https://a.test/"),
+            Navigate("b-1", "https://b.test/specs"),
+            Navigate("a-2", "https://a.test/again"),
+            [
+                new ModelToolCallEvent(new ModelToolCall("see-b", ToolCatalog.BrowserObserve, "{}")),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ],
+            Answer("Specs stayed open."));
+        await using var runtime = Create(model, browser);
+        await runtime.AttachAsync();
+
+        Assert.True(await runtime.SubmitUserTextAsync("leave the challenged site"));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(["https://a.test/", "https://b.test/specs"], browser.Navigated);
+        Assert.Contains(model.Requests[3].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserObserve);
+        Assert.Contains(model.Requests[3].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserAct);
+        Assert.DoesNotContain(
+            model.Requests[3].Messages,
+            message => message.Text.Contains("requires human intervention", StringComparison.Ordinal));
+        Assert.Equal(1, browser.ObserveCalls);
         Assert.Equal(
             EntryStatus.Completed,
             Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
@@ -342,7 +425,7 @@ public sealed class BrowserOriginHandoffTests
         }
     }
 
-    private sealed class TwoSiteBrowser : IBrowserSession
+    private sealed class TwoSiteBrowser(string closeStatus = "closed") : IBrowserSession
     {
         public List<string> Navigated { get; } = [];
 
@@ -388,7 +471,7 @@ public sealed class BrowserOriginHandoffTests
         public ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             CloseCalls++;
-            return new(new BrowserCloseResult("closed"));
+            return new(new BrowserCloseResult(closeStatus));
         }
 
         private static BrowserOperationResult Page(Uri url)
