@@ -2584,6 +2584,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var steps = 0;
         var outputBytes = 0;
         var retryingGeneration = false;
+        var repairingTerminal = false;
+        var terminalRepairUsed = false;
         var blockedBrowserOrigins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string? browserPageOrigin = null;
         var toolDeadline = request.Tools is { Count: > 0 };
@@ -2600,18 +2602,50 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 var publishedVisible = false;
                 var retryGeneration = false;
                 var generationRetries = retryingGeneration ? 1 : 0;
+                var inRepair = repairingTerminal;
+                string? repairOutcome = null;
+                repairingTerminal = false;
+                if (!inRepair && !retryingGeneration)
+                {
+                    terminalRepairUsed = false;
+                }
+
                 retryingGeneration = false;
                 messages = PromptContextBuilder.WithActiveSkillSystem(messages, _snapshot.Definition, pinnedSkills).ToList();
-                var working = WithOfferedTools(
-                    request with { Messages = messages },
-                    authorizedTools,
-                    trigger,
-                    model);
+                var prompt = messages;
+                if (inRepair)
+                {
+                    prompt = messages.ToList();
+                    prompt.Add(new ModelMessage(ModelRole.System, TerminalDisplayRepairInstruction));
+                }
+
+                var working = inRepair
+                    ? request with
+                    {
+                        Messages = prompt,
+                        Tools = null,
+                        ToolChoice = ModelToolChoice.Auto,
+                        ToolChoiceName = null,
+                        MaxOutputTokens = ModelOutputBudgets.ForTurn(
+                            request.MaxOutputTokens,
+                            toolsOffered: authorizedTools is { Count: > 0 })
+                    }
+                    : WithOfferedTools(
+                        request with { Messages = prompt },
+                        authorizedTools,
+                        trigger,
+                        model);
+                try
+                {
                 await foreach (var evt in model.GenerateAsync(working, generateToken).ConfigureAwait(false))
                 {
                     if (evt is ModelToolCallEvent tool)
                     {
-                        pending.Add(tool.Call);
+                        if (!inRepair)
+                        {
+                            pending.Add(tool.Call);
+                        }
+
                         continue;
                     }
 
@@ -2620,7 +2654,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         continue;
                     }
 
-                    if (evt is ModelFailed failed
+                    if (!inRepair
+                        && evt is ModelFailed failed
                         && TryRetryGeneration(failed, pending, publishedVisible, generationRetries, generateToken))
                     {
                         generationRetries++;
@@ -2630,6 +2665,27 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             failed.Failure.FailureReason!);
                         retryGeneration = true;
                         break;
+                    }
+
+                    if (!inRepair
+                        && evt is ModelFailed repairable
+                        && !terminalRepairUsed
+                        && TryRepairMissingDisplay(repairable, pending, publishedVisible, generateToken))
+                    {
+                        terminalRepairUsed = true;
+                        repairingTerminal = true;
+                        RuntimeTelemetry.RecordResponseRepair(ProviderFailureReason.MissingDisplayText, "started");
+                        retryGeneration = true;
+                        break;
+                    }
+
+                    if (inRepair && evt is ModelFailed)
+                    {
+                        repairOutcome = "failed";
+                    }
+                    else if (inRepair && evt is ModelSemanticResponseReady && repairOutcome != "failed")
+                    {
+                        repairOutcome = "succeeded";
                     }
 
                     if (IsMeaningfulVisible(evt))
@@ -2652,6 +2708,31 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     if (evt is ModelCompleted or ModelFailed)
                     {
                         finished = true;
+                    }
+                }
+
+                if (!retryGeneration && inRepair && !finished)
+                {
+                    repairOutcome = "failed";
+                    await MailboxModelAsync(
+                            cause,
+                            request.ResponseId,
+                            new ModelFailed(new ProviderFailure(
+                                ProviderErrorCode.InvalidResponse,
+                                "Malformed assistant envelope.",
+                                FailureReason: ProviderFailureReason.MissingDisplayText)),
+                            generateToken)
+                        .ConfigureAwait(false);
+                    return;
+                }
+                }
+                finally
+                {
+                    if (inRepair && !retryGeneration && repairOutcome is not null)
+                    {
+                        RuntimeTelemetry.RecordResponseRepair(
+                            ProviderFailureReason.MissingDisplayText,
+                            repairOutcome);
                     }
                 }
 
@@ -5776,6 +5857,20 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         return reason == ProviderFailureReason.IncompleteToolCall && pending.Count == 0;
     }
+
+    private const string TerminalDisplayRepairInstruction =
+        "The previous terminal response was rejected because chat.respond had no non-empty displayText. Produce the terminal response again using the existing tool results. Do not repeat completed work or request additional tools.";
+
+    private static bool TryRepairMissingDisplay(
+        ModelFailed failed,
+        List<ModelToolCall> pending,
+        bool publishedVisible,
+        CancellationToken cancellationToken) =>
+        !publishedVisible
+        && pending.Count == 0
+        && !cancellationToken.IsCancellationRequested
+        && failed.Failure.Code == ProviderErrorCode.InvalidResponse
+        && failed.Failure.FailureReason == ProviderFailureReason.MissingDisplayText;
 
     private static bool IsMeaningfulVisible(ModelGenerationEvent evt) =>
         evt switch

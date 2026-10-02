@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Text.RegularExpressions;
+using AgentCore.Application.Ports;
 
 namespace AgentCore.Application.Observability;
 
@@ -20,6 +21,7 @@ public static class RuntimeTelemetry
     private static readonly Counter<long> TriggerRegistrationEvents = Meter.CreateCounter<long>("trigger_registration_events");
     private static readonly Histogram<double> TriggerDueLagMs = Meter.CreateHistogram<double>("trigger_due_lag_ms");
     private static readonly Counter<long> GenerationRetries = Meter.CreateCounter<long>("llm.generation.retry");
+    private static readonly Counter<long> ResponseRepairs = Meter.CreateCounter<long>("llm.response.repair");
 
     private static readonly ConcurrentQueue<TimelineEvent> Timeline = new();
     private static readonly ConcurrentDictionary<string, List<double>> Samples = new(StringComparer.Ordinal);
@@ -103,6 +105,23 @@ public static class RuntimeTelemetry
                 { "attempt", "1" },
                 { "phase", phase },
                 { "reason", reason }
+            });
+    }
+
+    public static void RecordResponseRepair(string reason, string outcome)
+    {
+        if (reason != ProviderFailureReason.MissingDisplayText
+            || outcome is not ("started" or "succeeded" or "failed"))
+        {
+            return;
+        }
+
+        ResponseRepairs.Add(
+            1,
+            new TagList
+            {
+                { "reason", reason },
+                { "outcome", outcome }
             });
     }
 
