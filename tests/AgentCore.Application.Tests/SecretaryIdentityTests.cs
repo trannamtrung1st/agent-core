@@ -96,6 +96,15 @@ public sealed class SecretaryIdentityTests
         Assert.Contains("Save and Continue", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("Multimedia", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("Never pass ac-keyboard.png as artifactId", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("/Admin/Product/Edit/{id}", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("Do not return to /Admin/Product/Create after a product was successfully created", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("repair the current persisted product", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("observe the current edit page before deciding whether another create is necessary", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("inspect and repair the existing product, not create a duplicate", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("Create only when the initial check showed that no intended product exists", product.Procedure, StringComparison.Ordinal);
+        Assert.Equal(
+            ["product", "sku", "catalog", "product price", "product image", "publish product", "store product"],
+            product.ActivationKeywords);
         Assert.Contains(ToolCatalog.ArtifactsCreateFromWorkspace, product.RequiredCapabilities);
         Assert.Contains("dashboard", product.Procedure, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("A Save or Publish click is not completion", product.Procedure, StringComparison.Ordinal);
@@ -124,6 +133,76 @@ public sealed class SecretaryIdentityTests
                 ToolCatalog.BrowserNavigate,
                 ToolConfigurationGates.AllowAll,
                 admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn)));
+    }
+
+    [Fact]
+    public async Task Journey_style_product_request_pins_store_product_manage_and_other_turns_do_not()
+    {
+        var secretary = await LoadSecretaryAsync();
+        var turns = new InMemoryConversationTurnExecutionStore();
+        var model = new CompletingLanguageModel();
+        var sessionIds = new DeterministicIdGenerator(
+            Enumerable.Range(1, 32).Select(index => Guid.Parse($"019944af-00c5-7000-8000-{index:D12}")),
+            [SessionId]);
+        var snapshot = new SessionSnapshot(
+            1,
+            sessionIds.NewSessionId(),
+            1,
+            secretary,
+            SessionMode.Text,
+            null,
+            SessionStatus.Created,
+            [],
+            string.Empty,
+            0,
+            null,
+            ProfileId,
+            Now,
+            Now,
+            AgentInstanceId: InstanceId,
+            ModelSelection: new SessionModelSelection(
+                "synthetic-offline/scripted",
+                "primary-llm",
+                "scripted",
+                ModelSelectionSource.SystemDefault,
+                null));
+        var sessions = new InMemoryMemoryStore();
+        await sessions.SaveAsync(snapshot, 0);
+        await using var runtime = new SessionRuntime(
+            snapshot,
+            model,
+            new DefaultAgentBrain(new PromptContextBuilder()),
+            sessions,
+            new CapturingSessionOutput(),
+            sessionIds,
+            new FakeTimeProvider(Now),
+            NullLogger<SessionRuntime>.Instance,
+            turnExecutions: turns);
+        await runtime.AttachAsync();
+
+        const string journey = "Publish AC Keyboard with SKU AC-KBD-001 at $99 using ac-keyboard.png and verify it on the storefront.";
+        Assert.True(await runtime.SubmitUserTextAsync(journey));
+        await runtime.WaitUntilIdleAsync();
+        var user = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.User);
+        var pinned = await turns.GetBySourceEventAsync(runtime.SessionId, user.SourceEventId ?? user.EntryId);
+        Assert.Contains("store.product.manage", pinned!.PinnedActiveSkillIds);
+        Assert.Contains(
+            "Do not return to /Admin/Product/Create after a product was successfully created",
+            string.Join('\n', model.Requests[0].Messages.Select(message => message.Text)),
+            StringComparison.Ordinal);
+
+        Assert.True(await runtime.SubmitUserTextAsync("Remind me tomorrow at 9 AM to call John."));
+        await runtime.WaitUntilIdleAsync();
+        var reminder = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.User && entry.Text.Contains("Remind me", StringComparison.Ordinal));
+        var reminderPin = await turns.GetBySourceEventAsync(runtime.SessionId, reminder.SourceEventId ?? reminder.EntryId);
+        Assert.DoesNotContain("store.product.manage", reminderPin!.PinnedActiveSkillIds);
+
+        Assert.True(await runtime.SubmitUserTextAsync("Review pending orders."));
+        await runtime.WaitUntilIdleAsync();
+        var orders = runtime.Snapshot.Entries.Last(entry => entry.Text == "Review pending orders.");
+        var orderPin = await turns.GetBySourceEventAsync(runtime.SessionId, orders.SourceEventId ?? orders.EntryId);
+        Assert.DoesNotContain("store.product.manage", orderPin!.PinnedActiveSkillIds);
+        Assert.Contains("store.order.review", orderPin.PinnedActiveSkillIds);
     }
 
     [Fact]
@@ -274,6 +353,25 @@ public sealed class SecretaryIdentityTests
         var saved = Assert.Single(await triggers.ListAsync(new TriggerOwner(InstanceId, ProfileId), null));
         Assert.Equal("Call John", saved.Intent);
         Assert.Equal(TriggerRegistrationStatus.Active, saved.Status);
+    }
+
+    private sealed class CompletingLanguageModel : ILanguageModel
+    {
+        public List<ModelRequest> Requests { get; } = [];
+
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            await Task.Yield();
+            yield return new ModelDisplayDelta("Shown");
+            yield return new ModelSemanticResponseReady(
+                new ModelSemanticResponse("Shown", new ModelSpeechProjection(ModelSpeechMode.Same, null), []));
+            yield return new ModelCompleted(ModelStopReason.Completed);
+        }
     }
 
     private static AgentContext Context(AgentDefinition definition, IReadOnlyList<string> activeIds) =>
