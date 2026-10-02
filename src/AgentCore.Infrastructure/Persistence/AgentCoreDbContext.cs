@@ -212,6 +212,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         Set<AgentDefinitionPublicationResourceRecord>();
     public DbSet<AdminEventRecord> AdminEvents => Set<AdminEventRecord>();
 
+    public DbSet<ApplicationConnectionRecord> ApplicationConnections => Set<ApplicationConnectionRecord>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<SessionRecord>(entity =>
@@ -521,6 +523,21 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.TargetId).HasMaxLength(256).IsRequired();
             entity.Property(row => row.SummaryJson).IsRequired();
             entity.HasIndex(row => new { row.TargetType, row.TargetId, row.OccurredAtUtc });
+        });
+        modelBuilder.Entity<ApplicationConnectionRecord>(entity =>
+        {
+            entity.ToTable("ApplicationConnections");
+            entity.HasKey(row => row.ConnectionId);
+            entity.Property(row => row.ConnectionId).HasMaxLength(36);
+            entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.Kind).HasMaxLength(32).IsRequired();
+            entity.Property(row => row.DisplayName).HasMaxLength(80).IsRequired();
+            entity.Property(row => row.BaseUrl).HasMaxLength(200).IsRequired();
+            entity.Property(row => row.TrustedOriginsJson).HasMaxLength(500).IsRequired();
+            entity.Property(row => row.Status).HasMaxLength(32).IsRequired();
+            entity.Property(row => row.ProfileKey).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.StatusDetail).HasMaxLength(80);
+            entity.HasIndex(row => row.AgentInstanceId).IsUnique();
         });
     }
 

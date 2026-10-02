@@ -1,4 +1,5 @@
 using AgentCore.Application.Admin;
+using AgentCore.Application.Connections;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Identity;
@@ -157,6 +158,8 @@ public static class InfrastructureServiceCollectionExtensions
                     provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                     provider.GetRequiredService<IIdGenerator>(),
                     provider.GetRequiredService<TimeProvider>()));
+            services.AddSingleton<IApplicationConnectionStore>(provider => new SqliteApplicationConnectionStore(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.TryAddSingleton<IOwnerCapabilityStore, SqliteOwnerCapabilityStore>();
             services.TryAddSingleton<IAttachmentStore>(provider => new SqliteAttachmentStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
@@ -189,6 +192,7 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<InMemoryConversationTurnExecutionStore>());
             services.TryAddSingleton<IDurableWorkHandoff>(provider =>
                 new InMemoryDurableWorkHandoff(provider.GetRequiredService<InMemoryDurableState>()));
+            services.TryAddSingleton<IApplicationConnectionStore, InMemoryApplicationConnectionStore>();
             services.TryAddSingleton<IOwnerCapabilityStore, InMemoryOwnerCapabilityStore>();
             services.TryAddSingleton<IAttachmentStore>(provider =>
                 new InMemoryAttachmentStore(provider.GetRequiredService<TimeProvider>()));
@@ -233,6 +237,7 @@ public static class InfrastructureServiceCollectionExtensions
                     provider.GetRequiredService<AdminAutomationService>(),
                     provider.GetRequiredService<InMemoryDurableState>()));
         }
+        services.TryAddSingleton<ApplicationConnectionService>();
         services.TryAddSingleton<IAttachmentProcessor, AttachmentProcessor>();
         services.TryAddSingleton<DefinitionPublicationResourceReader>();
         services.TryAddSingleton<ISessionWorkspace>(provider => new FileSessionWorkspace(
@@ -392,7 +397,8 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IStructuredMemoryService>(),
                 provider.GetRequiredService<IConversationTurnExecutionStore>(),
                 provider.GetRequiredService<IDiagnosticIdSource>(),
-                provider.GetService<IBrowserSessionLease>());
+                provider.GetService<IBrowserSessionLease>(),
+                provider.GetService<IApplicationConnectionStore>());
         });
         services.TryAddSingleton<ConversationExecutionCoordinator>();
         return services;

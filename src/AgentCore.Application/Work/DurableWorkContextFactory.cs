@@ -1,3 +1,4 @@
+using AgentCore.Application.Connections;
 using AgentCore.Application.Memory;
 using AgentCore.Application.Models;
 using AgentCore.Application.Ports;
@@ -15,7 +16,8 @@ public sealed class DurableWorkContextFactory(
     IStructuredMemoryService memories,
     IModelCatalog catalog,
     ILanguageModelResolver models,
-    TimeProvider time)
+    TimeProvider time,
+    IApplicationConnectionStore? connections = null)
 {
     public async ValueTask<AgentContext> CreateAsync(WorkItem item, CancellationToken cancellationToken = default)
     {
@@ -62,6 +64,16 @@ public sealed class DurableWorkContextFactory(
             descriptor.ModelId,
             ModelSelectionSource.SystemDefault,
             item.Model.ReasoningEffort);
+        string? applicationConnectionStatus = null;
+        if (connections is not null)
+        {
+            var applicationConnection = await connections
+                .GetByAgentAsync(item.Owner.AgentInstanceId, cancellationToken)
+                .ConfigureAwait(false);
+            var formatted = ApplicationConnectionPrompt.Format(applicationConnection);
+            applicationConnectionStatus = formatted.Length == 0 ? null : formatted;
+        }
+
         var learned = await SessionMemoryPrompt.LoadOwnerAsync(
             memories,
             instance.InstanceId,
@@ -84,7 +96,8 @@ public sealed class DurableWorkContextFactory(
             LearnedMemories: learned,
             Persona: item.Provenance.ResolvePersona(definition),
             ModelSupportsTools: descriptor.Tools,
-            DetachedExecution: true);
+            DetachedExecution: true,
+            ApplicationConnectionStatus: applicationConnectionStatus);
     }
 
     private static TriggerKind SourceTrigger(WorkItem item) =>

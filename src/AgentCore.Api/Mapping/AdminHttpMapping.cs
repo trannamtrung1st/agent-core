@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgentCore.Application.Admin;
+using AgentCore.Domain.Connections;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Triggers;
@@ -311,4 +312,18 @@ internal static class AdminHttpMapping
             item.Version,
             document.RootElement.Clone());
     }
+
+    public static AdminApplicationConnectionResponse ToApplicationConnection(ApplicationConnection connection) =>
+        new(
+            connection.ConnectionId.ToString("D"),
+            connection.AgentInstanceId.ToString("D"),
+            connection.Kind,
+            connection.DisplayName,
+            connection.BaseUrl,
+            connection.TrustedOrigins,
+            connection.Status.ToString(),
+            connection.Revision,
+            connection.CreatedAtUtc.ToString("o"),
+            connection.UpdatedAtUtc.ToString("o"),
+            connection.StatusDetail);
 }

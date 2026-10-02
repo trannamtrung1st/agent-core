@@ -51,7 +51,8 @@ public sealed record AgentContext(
     ScheduleDraftContext? ScheduleDraft = null,
     bool DetachedExecution = false,
     IReadOnlyList<string>? ActiveSkillIds = null,
-    bool IntermediateMessagingAllowed = false)
+    bool IntermediateMessagingAllowed = false,
+    string? ApplicationConnectionStatus = null)
 {
     public AgentIdentity EffectiveIdentity => Persona ?? Definition.Identity;
 }

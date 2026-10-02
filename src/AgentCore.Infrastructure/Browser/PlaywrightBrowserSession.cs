@@ -570,6 +570,48 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         }
     }
 
+    public async ValueTask ResetPersistentProfileAsync(Guid agentInstanceId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (IsRuntimeReady && Volatile.Read(ref _stopped) == 0)
+        {
+            await ClosePersistentAsync(agentInstanceId, cancellationToken).ConfigureAwait(false);
+        }
+
+        var directory = ProfileDirectory(agentInstanceId);
+        var lockFile = directory + ".lock";
+        try
+        {
+            if (Directory.Exists(directory))
+            {
+                var info = new DirectoryInfo(directory);
+                if (info.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                {
+                    throw new IOException();
+                }
+
+                info.Delete(recursive: true);
+            }
+
+            if (File.Exists(lockFile))
+            {
+                File.Delete(lockFile);
+            }
+        }
+        catch (IOException)
+        {
+            _logger.LogWarning("Browser profile reset failed.");
+            throw;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _logger.LogWarning("Browser profile reset failed.");
+            throw;
+        }
+
+        _logger.LogInformation("Browser profile reset.");
+    }
+
     private async Task<BrowserCloseResult> ClosePersistentAsync(Guid agentInstanceId, CancellationToken cancellationToken)
     {
         var gate = _profileGates.GetOrAdd(agentInstanceId, static _ => new SemaphoreSlim(1, 1));

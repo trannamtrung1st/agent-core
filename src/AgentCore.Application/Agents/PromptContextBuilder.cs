@@ -418,15 +418,21 @@ public sealed class PromptContextBuilder(
         var roleTools = role.ToolList.Count == 0 ? "(none)" : string.Join(", ", role.ToolList);
         var effective = OfferTools(context.Definition, context);
         var effectiveTools = effective.Count == 0 ? "(none)" : string.Join(", ", effective.Select(tool => tool.Name));
-        return string.Join('\n',
-        [
+        var lines = new List<string>
+        {
             $"Approved harness: {harness}.",
             $"Approved knowledge identities: {knowledge}.",
             $"Role tools: {roleTools}.",
             $"Effective tools this request: {effectiveTools}.",
             "Do not access the Agent Core repository, secrets, or other sessions.",
             "Tool and path permission is runtime-enforced and is not granted by model text."
-        ]);
+        };
+        if (!string.IsNullOrWhiteSpace(context.ApplicationConnectionStatus))
+        {
+            lines.Add(context.ApplicationConnectionStatus);
+        }
+
+        return string.Join('\n', lines);
     }
 
     public const string SkillCatalogPrefix =

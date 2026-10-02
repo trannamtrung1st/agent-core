@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Connections;
 using AgentCore.Application.Audio;
 using AgentCore.Application.Events;
 using AgentCore.Application.Execution;
@@ -57,6 +58,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly IArtifactReferenceAuthorizer _artifacts;
     private readonly SessionToolExecutor _tools;
     private readonly IBrowserSessionLease? _browserLease;
+    private readonly IApplicationConnectionStore? _applicationConnections;
     private bool _intermediateMessagingAllowed;
     private readonly ApplicationMessagePolicy _applicationMessagePolicy = ApplicationMessagePolicy.Default;
     private readonly InteractionPolicy _policy;
@@ -207,7 +209,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IStructuredMemoryService? structuredMemory = null,
         IConversationTurnExecutionStore? turnExecutions = null,
         IDiagnosticIdSource? diagnostics = null,
-        IBrowserSessionLease? browserLease = null)
+        IBrowserSessionLease? browserLease = null,
+        IApplicationConnectionStore? applicationConnections = null)
     {
         _diagnostics = diagnostics ?? FallbackDiagnosticIdSource.Instance;
         _snapshot = snapshot;
@@ -231,6 +234,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _artifacts = artifacts ?? new FixtureArtifactReferenceAuthorizer();
         _tools = tools ?? new SessionToolExecutor();
         _browserLease = browserLease;
+        _applicationConnections = applicationConnections;
         if (browserLease is IBrowserProfileBinding binding)
         {
             binding.BindSession(snapshot.SessionId, snapshot.AgentInstanceId);
@@ -2359,6 +2363,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             try
             {
                 var sessionAttachments = await BuildSessionAttachmentManifestAsync(evaluationToken).ConfigureAwait(false);
+                string? applicationConnectionStatus = null;
+                if (_applicationConnections is not null && _snapshot.AgentInstanceId is Guid applicationInstanceId)
+                {
+                    var applicationConnection = await _applicationConnections
+                        .GetByAgentAsync(applicationInstanceId, evaluationToken)
+                        .ConfigureAwait(false);
+                    var formatted = ApplicationConnectionPrompt.Format(applicationConnection);
+                    applicationConnectionStatus = formatted.Length == 0 ? null : formatted;
+                }
+
                 var learned = await SessionMemoryPrompt.LoadAsync(
                     _structuredMemory,
                     _snapshot.SessionId,
@@ -2395,7 +2409,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     Persona: _snapshot.PinnedPersona,
                     ScheduleConversation: _scheduleConversationContext,
                     ScheduleDraft: _scheduleDraftContext,
-                    ActiveSkillIds: ResolveActiveSkillIds(trigger, responseId));
+                    ActiveSkillIds: ResolveActiveSkillIds(trigger, responseId),
+                    ApplicationConnectionStatus: applicationConnectionStatus);
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
                 AgentDecision? decision = null;

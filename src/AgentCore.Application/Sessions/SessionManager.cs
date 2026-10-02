@@ -1037,7 +1037,8 @@ public sealed class SessionRuntimeFactory(
     IStructuredMemoryService? structuredMemory = null,
     IConversationTurnExecutionStore? turnExecutions = null,
     IDiagnosticIdSource? diagnostics = null,
-    IBrowserSessionLease? browserLease = null)
+    IBrowserSessionLease? browserLease = null,
+    IApplicationConnectionStore? applicationConnections = null)
 {
     public SessionRuntime Create(SessionSnapshot snapshot, ISessionOutput output) =>
         new(
@@ -1067,5 +1068,6 @@ public sealed class SessionRuntimeFactory(
             structuredMemory: structuredMemory,
             turnExecutions: turnExecutions,
             diagnostics: diagnostics,
-            browserLease: browserLease);
+            browserLease: browserLease,
+            applicationConnections: applicationConnections);
 }

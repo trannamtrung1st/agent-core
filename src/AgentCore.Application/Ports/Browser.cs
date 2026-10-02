@@ -97,6 +97,9 @@ public interface IBrowserSession
 
     ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
         new(new BrowserCloseResult("provider_unavailable"));
+
+    ValueTask ResetPersistentProfileAsync(Guid agentInstanceId, CancellationToken cancellationToken = default) =>
+        ValueTask.CompletedTask;
 }
 
 public sealed record BrowserCloseResult(string Status);

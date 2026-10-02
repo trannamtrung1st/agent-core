@@ -1847,6 +1847,24 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
             new ProviderPreferences("primary-llm", null, null),
             new Dictionary<string, string>());
 
+    [Fact]
+    public async Task Admin_application_connection_requires_owner_and_a_known_instance()
+    {
+        var anonymous = _factory.CreateClient();
+        var missing = Guid.NewGuid();
+        var unauthorized = await anonymous.GetAsync($"/api/v2/admin/agent-instances/{missing:D}/connection");
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+
+        var client = OwnerClient();
+        var response = await client.GetAsync($"/api/v2/admin/agent-instances/{missing:D}/connection");
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("browser-profiles", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("password", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("cookie", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("token", body, StringComparison.OrdinalIgnoreCase);
+    }
+
     private HttpClient OwnerClient(string? token = null)
     {
         var client = _factory.CreateClient();
