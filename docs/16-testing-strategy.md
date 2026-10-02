@@ -151,7 +151,7 @@ Policy and journey tests that do not launch Chromium: `BrowserToolTests`, `Brows
 
 ## P9.5 connection and attention (observed, not closed)
 
-Connection admission, unattended browser, and owner attention are covered by the application and persistence tests named in batches C–F. The browser journey `web/e2e/store-connection.spec.ts` covers the quiet Background Work name, one attention badge beside a quiet completion, the Chat status, the Admin connect validation error, Revoke back to Not connected, keyboard focus, and a narrow viewport. Connect observes the loopback fixture. It does not start nopCommerce. A real headed Journey A was attempted with `deepseek/deepseek-v4.1-flash` and did not establish the storefront postcondition. Hosted Synthetic CI and a live scheduled Journey C or D were not run. See [p9.5-freeze-candidate.md](reports/p9.5-freeze-candidate.md).
+Connection admission, unattended browser, and owner attention are covered by the application and persistence tests named in batches C–F. The browser journey `web/e2e/store-connection.spec.ts` covers the quiet Background Work name, one attention badge beside a quiet completion, the Chat status, the Admin connect validation error, Revoke back to Not connected, keyboard focus, and a narrow viewport. Connect observes the loopback fixture. It does not start nopCommerce. A real headed Journey A was attempted with `deepseek/deepseek-v4.1-flash` and `openai/gpt-4o-mini-2024-07-18` and did not establish the storefront postcondition. Hosted Synthetic CI and a live scheduled Journey C or D were not run. See [p9.5-freeze-candidate.md](reports/p9.5-freeze-candidate.md).
 
 ## Post-MVP planned until verified
 
