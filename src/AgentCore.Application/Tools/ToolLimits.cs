@@ -7,3 +7,52 @@ public static class ToolLimits
     public static readonly TimeSpan Overall = TimeSpan.FromSeconds(180);
     public const int MaxOutputBytes = 8 * 1024 * 1024;
 }
+
+public enum ToolExecutionClass
+{
+    Standard,
+    InteractiveBrowser,
+    UnattendedBoundBrowser
+}
+
+public readonly record struct ToolBudgetSignal(bool InteractiveBrowser, bool BoundApplicationBrowser);
+
+public readonly record struct ToolExecutionBudget(
+    ToolExecutionClass Class,
+    int MaxSteps,
+    TimeSpan Overall,
+    TimeSpan PerTool)
+{
+    public static ToolExecutionBudget Standard { get; } = new(
+        ToolExecutionClass.Standard,
+        ToolLimits.MaxSteps,
+        ToolLimits.Overall,
+        ToolLimits.PerTool);
+
+    public static ToolExecutionBudget InteractiveBrowser { get; } = new(
+        ToolExecutionClass.InteractiveBrowser,
+        48,
+        TimeSpan.FromSeconds(300),
+        ToolLimits.PerTool);
+
+    public static ToolExecutionBudget UnattendedBoundBrowser { get; } = new(
+        ToolExecutionClass.UnattendedBoundBrowser,
+        32,
+        TimeSpan.FromSeconds(240),
+        ToolLimits.PerTool);
+
+    public static ToolExecutionBudget Resolve(ToolBudgetSignal signal)
+    {
+        if (signal.BoundApplicationBrowser)
+        {
+            return UnattendedBoundBrowser;
+        }
+
+        if (signal.InteractiveBrowser)
+        {
+            return InteractiveBrowser;
+        }
+
+        return Standard;
+    }
+}

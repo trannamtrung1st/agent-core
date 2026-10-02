@@ -101,6 +101,44 @@ public sealed class ToolWorkflowRuntimeTests
     }
 
     [Fact]
+    public async Task Interactive_browser_turn_allows_twenty_five_workspace_writes()
+    {
+        var loaded = await Load("customer-support");
+        var environment = RoleEnvironments.Of(loaded);
+        var definition = loaded with
+        {
+            Environment = environment with
+            {
+                ToolAllowlist = environment.ToolList.Append(ToolCatalog.BrowserNavigate).ToArray()
+            }
+        };
+        var artifacts = new InMemoryArtifactStore(TimeProvider.System);
+        var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
+        var workspace = new CountingWorkspace();
+        var tools = new SessionToolExecutor(
+            knowledge,
+            workspace: workspace,
+            artifacts: artifacts,
+            configurationGate: ToolConfigurationGates.AllowAll);
+        var model = new BoundedWriteLanguageModel(25);
+        var output = new CapturingSessionOutput();
+        await using var runtime = CreateRuntime(
+            output,
+            definition,
+            model,
+            tools,
+            artifacts,
+            new DefaultAgentBrain(new PromptContextBuilder(ToolConfigurationGates.AllowAll)));
+        await runtime.AttachAsync();
+        Assert.True(await runtime.SubmitUserTextAsync("Write twenty five files."));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(25, workspace.Writes.Count);
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Completed, assistant.Status);
+        Assert.Contains("Twenty five files are ready.", assistant.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Deactivation_rejects_stale_workspace_write()
     {
         var workspace = new GatedWorkspace();
@@ -138,7 +176,8 @@ public sealed class ToolWorkflowRuntimeTests
         AgentDefinition definition,
         ILanguageModel model,
         SessionToolExecutor tools,
-        IArtifactStore artifacts)
+        IArtifactStore artifacts,
+        IAgentBrain? brain = null)
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));
         var ids = new DeterministicIdGenerator(
@@ -165,7 +204,7 @@ public sealed class ToolWorkflowRuntimeTests
         return new SessionRuntime(
             snapshot,
             model,
-            new DefaultAgentBrain(new PromptContextBuilder()),
+            brain ?? new DefaultAgentBrain(new PromptContextBuilder()),
             store,
             output,
             ids,
@@ -253,6 +292,32 @@ public sealed class ToolWorkflowRuntimeTests
 
         public ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             ValueTask.CompletedTask;
+    }
+
+    private sealed class BoundedWriteLanguageModel(int writes) : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            cancellationToken.ThrowIfCancellationRequested();
+            var rounds = request.Messages.Count(message => message.Role == ModelRole.Tool);
+            if (rounds < writes)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall(
+                    $"call-{rounds + 1}",
+                    ToolCatalog.WorkspaceWrite,
+                    $$"""{"path":"/workspace/working/file-{{rounds + 1}}.txt","content":"n"}"""));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            yield return new ModelTextDelta("Twenty five files are ready.");
+            yield return new ModelCompleted(ModelStopReason.Completed);
+        }
     }
 
     private sealed class MultiFileLanguageModel : ILanguageModel

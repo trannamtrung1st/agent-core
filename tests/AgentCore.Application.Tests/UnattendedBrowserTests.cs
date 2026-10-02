@@ -159,6 +159,22 @@ public sealed class UnattendedBrowserTests
     }
 
     [Fact]
+    public async Task Bound_browser_occurrence_runs_past_the_standard_step_budget()
+    {
+        var browser = new RecordingBrowser();
+        var connections = await ConnectedStoreAsync(OwnerId);
+        var completed = await RunAsync(browser, connections, new CountingNavigateModel(25));
+        Assert.IsType<DurableOccurrenceCompleted>(completed);
+        Assert.Equal(25, browser.NavigateCalls);
+
+        browser = new RecordingBrowser();
+        var failed = Assert.IsType<DurableOccurrenceFailed>(
+            await RunAsync(browser, connections, new CountingNavigateModel(33)));
+        Assert.Equal("tool-step-limit", failed.Code);
+        Assert.Equal(ToolExecutionBudget.UnattendedBoundBrowser.MaxSteps, browser.NavigateCalls);
+    }
+
+    [Fact]
     public async Task Uncertain_browser_act_is_not_replayed_until_observe()
     {
         var browser = new RecordingBrowser();
@@ -495,6 +511,31 @@ public sealed class UnattendedBrowserTests
     private static readonly Guid ProfileId = Guid.Parse("019944af-00e1-7000-8000-000000000004");
     private static readonly Guid WorkId = Guid.Parse("019944af-00e1-7000-8000-000000000002");
 
+    private sealed class CountingNavigateModel(int navigations) : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            var done = request.Messages.Count(message => message.Role == ModelRole.Tool);
+            if (done < navigations)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall(
+                    $"nav-{done + 1}",
+                    ToolCatalog.BrowserNavigate,
+                    $$"""{"url":"{{Store}}/admin"}"""));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            yield return new ModelTextDelta("observed");
+            yield return new ModelCompleted(ModelStopReason.Completed);
+        }
+    }
+
     private sealed class ScriptModel(params Func<IReadOnlyList<ModelGenerationEvent>>[] rounds) : ILanguageModel
     {
         private readonly Queue<Func<IReadOnlyList<ModelGenerationEvent>>> _rounds = new(rounds);
@@ -513,7 +554,7 @@ public sealed class UnattendedBrowserTests
         }
     }
 
-    private sealed class RecordingBrowser : IBrowserSession, IBrowserProfileBinding
+    private sealed class RecordingBrowser : IBrowserSession, IBrowserProfileBinding, IBrowserContextUse
     {
         private readonly List<Guid> _bound = [];
 
@@ -548,6 +589,23 @@ public sealed class UnattendedBrowserTests
             {
                 _bound.Add(agent);
             }
+        }
+
+        public ValueTask<IAsyncDisposable> EnterUnattendedAsync(
+            Guid agentInstanceId,
+            IReadOnlyList<string> origins,
+            CancellationToken cancellationToken = default) =>
+            new(NoopLease.Instance);
+
+        public void AdoptUnattendedFlow(Guid agentInstanceId)
+        {
+        }
+
+        private sealed class NoopLease : IAsyncDisposable
+        {
+            public static readonly NoopLease Instance = new();
+
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         }
 
         public ValueTask<Uri?> GetCurrentUrlAsync(Guid sessionId, CancellationToken cancellationToken = default) =>

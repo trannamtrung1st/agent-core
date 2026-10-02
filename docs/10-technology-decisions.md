@@ -255,15 +255,21 @@ Unless a later item records a tested change:
 | Extraction output | 256 KiB |
 | Parser timeout | 10 s |
 | Parser memory | 256 MiB |
-| Tool steps | 24 max |
+| Tool steps, standard | 24 max |
+| Tool steps, interactive browser | 48 max |
+| Tool steps, unattended bound browser | 32 max |
 | Per-tool timeout | 30 s |
-| Overall tool deadline | 180 s |
+| Overall tool deadline, standard | 180 s |
+| Overall tool deadline, interactive browser | 300 s |
+| Overall tool deadline, unattended bound browser | 240 s |
 | Tool output | 8 MiB |
 | Sandbox memory | 64 MiB |
 | Sandbox CPUs | 0.5 |
 | Sandbox PIDs | 32 |
 | Sandbox timeout | 8 s |
 | Sandbox output | 64 KiB |
+
+P9.5 records a tested change to the tool-loop rows above. Real external-application browser workflows use a larger Core-owned execution budget than ordinary tool workflows. The original 24-step/180-second values remain the standard profile. A user turn whose authorized tools include a browser tool uses 48 steps and 300 seconds. A scheduled WorkItem that holds the bound application-browser lease uses 32 steps and 240 seconds. Core resolves that profile from trusted execution context before the loop. The model has no tool or argument that raises the budget. Per-tool timeout, tool output, `skills.load`, `app.message.send`, approval semantics, and browser origin policy stay unchanged. Infrastructure recovery retries still count toward the same step budget. The change exists because a real nopCommerce product-publish-and-verify journey exhausted the standard profile before its storefront postcondition could be established.
 
 Owners: [Protocol](14-api-and-realtime-protocol.md) (capability, leases vs Attachment, additive routes); [Persistence](15-persistence-and-configuration.md) (revision/bind/cleanup); [Controller](05-interaction-controller.md) (initiative/receipts); [Implementation Plan](18-implementation-plan.md) (phase gates).
 

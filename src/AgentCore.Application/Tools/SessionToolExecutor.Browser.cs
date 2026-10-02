@@ -572,7 +572,7 @@ public sealed partial class SessionToolExecutor
             RuntimeTelemetry.ElapsedMs(started),
             $"{toolName}:{outcome}");
 
-    public async ValueTask<IAsyncDisposable> OpenOccurrenceBrowserAsync(
+    public async ValueTask<OccurrenceBrowserScope> OpenOccurrenceBrowserAsync(
         Guid workItemId,
         Guid agentInstanceId,
         bool trustedConnection,
@@ -611,21 +611,34 @@ public sealed partial class SessionToolExecutor
             use.AdoptUnattendedFlow(agentInstanceId);
         }
     }
+}
 
-    private sealed class OccurrenceBrowserScope(IBrowserSession? browser, Guid workItemId, IAsyncDisposable? lease)
-        : IAsyncDisposable
+public sealed class OccurrenceBrowserScope : IAsyncDisposable
+{
+    private readonly IBrowserSession? _browser;
+    private readonly Guid _workItemId;
+    private readonly IAsyncDisposable? _lease;
+
+    public OccurrenceBrowserScope(IBrowserSession? browser, Guid workItemId, IAsyncDisposable? lease)
     {
-        public async ValueTask DisposeAsync()
-        {
-            if (lease is not null)
-            {
-                await lease.DisposeAsync().ConfigureAwait(false);
-            }
+        _browser = browser;
+        _workItemId = workItemId;
+        _lease = lease;
+        BoundApplicationBrowser = lease is not null;
+    }
 
-            if (workItemId != Guid.Empty && browser is IBrowserSessionLease sessionLease)
-            {
-                await sessionLease.ReleaseAsync(workItemId).ConfigureAwait(false);
-            }
+    public bool BoundApplicationBrowser { get; }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_lease is not null)
+        {
+            await _lease.DisposeAsync().ConfigureAwait(false);
+        }
+
+        if (_workItemId != Guid.Empty && _browser is IBrowserSessionLease sessionLease)
+        {
+            await sessionLease.ReleaseAsync(_workItemId).ConfigureAwait(false);
         }
     }
 }

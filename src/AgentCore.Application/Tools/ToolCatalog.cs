@@ -42,6 +42,9 @@ public static class ToolCatalog
     public static bool IsBrowserTool(string toolName) =>
         toolName is BrowserNavigate or BrowserObserve or BrowserAct or BrowserClose;
 
+    public static bool AuthorizesBrowser(IReadOnlyList<ModelToolDefinition>? tools) =>
+        tools?.Any(tool => IsBrowserTool(tool.Name)) == true;
+
     public static IReadOnlyList<ModelToolDefinition> For(
         AgentDefinition definition,
         AgentContext? context,

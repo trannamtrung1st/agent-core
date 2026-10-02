@@ -2612,10 +2612,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         string? browserPageOrigin = null;
         var blockedNoProgress = 0;
         var terminalBrowserContinuation = false;
+        var budget = ToolExecutionBudget.Resolve(new ToolBudgetSignal(
+            InteractiveBrowser: trigger.Kind == TriggerKind.UserTurn
+                && ToolCatalog.AuthorizesBrowser(
+                    WithOfferedTools(request, authorizedTools, trigger, model).Tools),
+            BoundApplicationBrowser: false));
         var toolDeadline = request.Tools is { Count: > 0 };
         using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        using ITimer? overallTimer = toolDeadline ? ScheduleCancel(_time, overallCts, ToolLimits.Overall) : null;
-        var overallDeadline = toolDeadline ? _time.GetUtcNow() + ToolLimits.Overall : (DateTimeOffset?)null;
+        using ITimer? overallTimer = toolDeadline ? ScheduleCancel(_time, overallCts, budget.Overall) : null;
+        var overallDeadline = toolDeadline ? _time.GetUtcNow() + budget.Overall : (DateTimeOffset?)null;
         var generateToken = toolDeadline ? overallCts.Token : cancellationToken;
         try
         {
@@ -2887,7 +2892,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     return;
                 }
 
-                if (steps + pending.Count > ToolLimits.MaxSteps)
+                if (steps + pending.Count > budget.MaxSteps)
                 {
                     await MailboxModelAsync(
                             cause,

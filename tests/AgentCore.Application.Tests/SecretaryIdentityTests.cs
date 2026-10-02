@@ -89,6 +89,10 @@ public sealed class SecretaryIdentityTests
         Assert.Contains("concise product description", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("including when the owner asks for one", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("storefront", product.Procedure, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("/Admin/Product/List?GoDirectlyToSku=", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("/Admin/Product/Create", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("/search?q=", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("dashboard", product.Procedure, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("A Save or Publish click is not completion", product.Procedure, StringComparison.Ordinal);
         Assert.Contains(ToolCatalog.BrowserNavigate, product.RequiredCapabilities);
         var bare = SampleDefinitions.Examiner with

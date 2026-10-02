@@ -40,13 +40,16 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                 running.Owner.AgentInstanceId,
                 trustedConnection,
                 cancellationToken).ConfigureAwait(false)
-            : NoopScope.Instance;
+            : null;
         if (trustedConnection && triggerKind == TriggerKind.ScheduledOccurrence)
         {
             tools.AdoptOccurrenceBrowser(running.Owner.AgentInstanceId);
         }
 
-        await using var heldBrowser = browserScope;
+        await using var heldBrowser = browserScope ?? (IAsyncDisposable)NoopScope.Instance;
+        var budget = ToolExecutionBudget.Resolve(new ToolBudgetSignal(
+            InteractiveBrowser: false,
+            BoundApplicationBrowser: browserScope?.BoundApplicationBrowser == true));
         var resumed = DurableToolCallCheckpoint.TryReadState(
             running.Checkpoint,
             out var savedMessages,
@@ -57,7 +60,7 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
         var outputBytes = resumed ? running.Checkpoint!.OutputBytes : 0;
         var remaining = resumed
             ? TimeSpan.FromMilliseconds(running.Checkpoint!.RemainingOverallBudgetMs)
-            : ToolLimits.Overall;
+            : budget.Overall;
         if (remaining <= TimeSpan.Zero)
         {
             return new DurableOccurrenceFailed(running, "tool-budget", "Tool budget is exhausted.");
@@ -81,7 +84,7 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
         if (resumed)
         {
             var normalizedSteps = DurableToolCallCheckpoint.NormalizeResumedStepCount(steps, messages);
-            if (normalizedSteps > ToolLimits.MaxSteps)
+            if (normalizedSteps > budget.MaxSteps)
             {
                 return new DurableOccurrenceFailed(running, "tool-step-limit", "Tool step limit reached.");
             }
@@ -183,7 +186,7 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                 return new DurableOccurrenceCompleted(running, result);
             }
 
-            if (steps + pending.Count > ToolLimits.MaxSteps)
+            if (steps + pending.Count > budget.MaxSteps)
             {
                 return new DurableOccurrenceFailed(running, "tool-step-limit", "Tool step limit reached.");
             }
