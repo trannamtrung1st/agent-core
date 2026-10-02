@@ -2607,6 +2607,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 var transientGenerationRetryCount = retryingGeneration ? 1 : 0;
                 var inRepair = repairingTerminal;
                 string? repairOutcome = null;
+                var repairAnswerAccepted = false;
                 repairingTerminal = false;
                 if (!inRepair && !retryingGeneration)
                 {
@@ -2693,10 +2694,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     {
                         repairOutcome = "failed";
                     }
-                    else if (inRepair && evt is ModelSemanticResponseReady && repairOutcome != "failed")
-                    {
-                        repairOutcome = "succeeded";
-                    }
 
                     if (IsMeaningfulVisible(evt))
                     {
@@ -2724,11 +2721,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     {
                         finished = true;
                     }
+
+                    if (inRepair && repairOutcome is null && evt is ModelSemanticResponseReady)
+                    {
+                        repairAnswerAccepted = true;
+                    }
+
+                    if (inRepair && repairOutcome is null && repairAnswerAccepted && evt is ModelCompleted)
+                    {
+                        repairOutcome = "succeeded";
+                    }
                 }
 
                 if (!retryGeneration && inRepair && !finished)
                 {
-                    repairOutcome = "failed";
+                    repairOutcome ??= cancellationToken.IsCancellationRequested ? "cancelled" : "failed";
                     await MailboxModelAsync(
                             cause,
                             request.ResponseId,
@@ -2743,8 +2750,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
                 finally
                 {
-                    if (inRepair && !retryGeneration && repairOutcome is not null && repairReason is not null)
+                    if (inRepair && !retryGeneration && repairReason is not null)
                     {
+                        repairOutcome ??= cancellationToken.IsCancellationRequested ? "cancelled" : "failed";
                         RuntimeTelemetry.RecordResponseRepair(repairReason, repairOutcome, repairPhase);
                         repairOpen = false;
                     }
@@ -3128,12 +3136,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
             }
 
-            if (repairOpen && repairReason is not null && cancellationToken.IsCancellationRequested)
-            {
-                RuntimeTelemetry.RecordResponseRepair(repairReason, "cancelled", repairPhase);
-                repairOpen = false;
-            }
-
             if (toolDeadline
                 && generateToken.IsCancellationRequested
                 && !cancellationToken.IsCancellationRequested)
@@ -3150,11 +3152,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             if (cancellationToken.IsCancellationRequested)
             {
-                if (repairOpen && repairReason is not null)
-                {
-                    RuntimeTelemetry.RecordResponseRepair(repairReason, "cancelled", repairPhase);
-                }
-
                 return;
             }
 
@@ -3198,6 +3195,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     new ModelFailed(new ProviderFailure(ProviderErrorCode.Unknown, "Generation failed."), diagnosticId),
                     CancellationToken.None)
                 .ConfigureAwait(false);
+        }
+        finally
+        {
+            if (repairOpen && repairReason is not null)
+            {
+                RuntimeTelemetry.RecordResponseRepair(
+                    repairReason,
+                    cancellationToken.IsCancellationRequested ? "cancelled" : "failed",
+                    repairPhase);
+            }
         }
     }
 

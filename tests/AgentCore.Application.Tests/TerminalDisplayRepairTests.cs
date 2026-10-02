@@ -1,4 +1,6 @@
+using System.Diagnostics.Metrics;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Testing;
@@ -69,6 +71,46 @@ public sealed class TerminalDisplayRepairTests
         Assert.Equal(EntryStatus.Completed, assistant.Status);
         Assert.Equal("The repaired answer.", assistant.Text);
         Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Text.Contains("application protocol", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_repair_completion_without_a_semantic_response_records_failure()
+    {
+        var outcomes = new List<string>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, meterListener) =>
+        {
+            if (instrument.Meter.Name == RuntimeTelemetry.Name && instrument.Name == "llm.response.repair")
+            {
+                meterListener.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((_, _, tags, _) =>
+        {
+            foreach (var tag in tags)
+            {
+                if (tag.Key == "outcome")
+                {
+                    outcomes.Add(tag.Value?.ToString() ?? "");
+                }
+            }
+        });
+        listener.Start();
+        var model = new RecordingModel(
+            [Invalid(ProviderFailureReason.MissingDisplayText)],
+            [new ModelCompleted(ModelStopReason.Completed)]);
+        await using var runtime = Create(model, browser: null);
+        await runtime.AttachAsync();
+
+        Assert.True(await runtime.SubmitUserTextAsync("hello"));
+        await runtime.WaitUntilIdleAsync();
+        listener.Dispose();
+
+        Assert.Equal(2, model.Calls);
+        Assert.Equal(
+            EntryStatus.Failed,
+            Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
+        Assert.Equal(["started", "failed"], outcomes);
     }
 
     [Fact]
