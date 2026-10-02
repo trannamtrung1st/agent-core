@@ -3007,7 +3007,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 admission: new ToolExecutionAdmission(
                                     Detached: false,
                                     trigger.Kind,
-                                    allowedIntermediate));
+                                    allowedIntermediate,
+                                    _snapshot.AgentInstanceId));
                             if (policy == ToolPolicyDecision.Deny || string.IsNullOrWhiteSpace(call.Name))
                             {
                                 if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal))
@@ -3150,7 +3151,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             new ToolExecutionAdmission(
                                                 Detached: false,
                                                 trigger.Kind,
-                                                allowedIntermediate))
+                                                allowedIntermediate,
+                                                _snapshot.AgentInstanceId))
                                         .ConfigureAwait(false);
                                     if (executionResult.ReplaceTriggerProposal)
                                     {

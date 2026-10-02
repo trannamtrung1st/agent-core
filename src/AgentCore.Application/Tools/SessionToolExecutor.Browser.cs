@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
+using AgentCore.Domain.Connections;
 
 namespace AgentCore.Application.Tools;
 
@@ -21,12 +22,52 @@ public sealed partial class SessionToolExecutor
         "user_intervention_required"
     };
 
+    private async Task<string?> DenyBrowserUnlessConnectedAsync(
+        Guid sessionId,
+        ToolExecutionAdmission? admission,
+        CancellationToken cancellationToken)
+    {
+        if (applicationConnections is null
+            || admission?.AgentInstanceId is not Guid agentInstanceId
+            || agentInstanceId == Guid.Empty)
+        {
+            return null;
+        }
+
+        var connection = await applicationConnections
+            .GetByAgentAsync(agentInstanceId, cancellationToken)
+            .ConfigureAwait(false);
+        if (connection is null || connection.Status == ApplicationConnectionStatus.Connected)
+        {
+            if (browser is IBrowserProfileBinding binding)
+            {
+                binding.BindSession(sessionId, agentInstanceId);
+            }
+
+            return null;
+        }
+
+        if (browser is IBrowserProfileBinding unbind)
+        {
+            unbind.BindSession(sessionId, null);
+        }
+
+        return Error("forbidden", "This application connection cannot be used.");
+    }
+
     private async Task<string> NavigateBrowserAsync(
         Guid sessionId,
         JsonElement args,
+        ToolExecutionAdmission? admission,
         CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
+        var denied = await DenyBrowserUnlessConnectedAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
+        if (denied is not null)
+        {
+            return FinishBrowser(ToolCatalog.BrowserNavigate, started, denied);
+        }
+
         if (!BrowserToolArguments.TryNavigate(args, out var url, out var errorJson))
         {
             return FinishBrowser(ToolCatalog.BrowserNavigate, started, errorJson);
@@ -85,9 +126,16 @@ public sealed partial class SessionToolExecutor
     private async Task<string> ObserveBrowserAsync(
         Guid sessionId,
         JsonElement args,
+        ToolExecutionAdmission? admission,
         CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
+        var denied = await DenyBrowserUnlessConnectedAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
+        if (denied is not null)
+        {
+            return FinishBrowser(ToolCatalog.BrowserObserve, started, denied);
+        }
+
         if (!BrowserToolArguments.TryObserve(args, out var errorJson))
         {
             return FinishBrowser(ToolCatalog.BrowserObserve, started, errorJson);
@@ -116,9 +164,16 @@ public sealed partial class SessionToolExecutor
     private async Task<string> ActBrowserAsync(
         Guid sessionId,
         JsonElement args,
+        ToolExecutionAdmission? admission,
         CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
+        var denied = await DenyBrowserUnlessConnectedAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
+        if (denied is not null)
+        {
+            return FinishBrowser(ToolCatalog.BrowserAct, started, denied);
+        }
+
         if (!BrowserToolArguments.TryAct(args, out var operation, out var reference, out var value, out var errorJson))
         {
             return FinishBrowser(ToolCatalog.BrowserAct, started, errorJson);

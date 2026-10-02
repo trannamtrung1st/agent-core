@@ -38,7 +38,7 @@ public sealed class ApplicationConnectionTests
             first,
             "Store",
             $"http://127.0.0.1:5088/admin?password={Password}");
-        Assert.Equal(new Uri("http://127.0.0.1:5088/login"), browser.Navigated);
+        Assert.Equal(new Uri("http://127.0.0.1:5088/admin"), browser.Navigated);
         Assert.Equal(first, browser.BoundAgent);
         var other = await service.ConnectAsync(second, "Other", "http://127.0.0.1:5099/");
 
@@ -48,7 +48,7 @@ public sealed class ApplicationConnectionTests
         Assert.Equal(first, connecting.ProfileKey);
         Assert.Equal(second, other.ProfileKey);
         Assert.NotEqual(connecting.ConnectionId, other.ConnectionId);
-        Assert.Equal(new Uri("http://127.0.0.1:5099/login"), browser.Navigated);
+        Assert.Equal(new Uri("http://127.0.0.1:5099/admin"), browser.Navigated);
         Assert.Equal(second, browser.BoundAgent);
         Assert.Equal(ApplicationConnectionDetails.SignInRequired, connecting.StatusDetail);
         var stillSigningIn = await service.MarkConnectedAsync(first);

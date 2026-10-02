@@ -183,7 +183,7 @@ public sealed class ApplicationConnectionService(
             binding.BindSession(current.ConnectionId, current.AgentInstanceId);
         }
 
-        var signIn = new Uri(current.BaseUrl.TrimEnd('/') + "/login");
+        var signIn = AdminSignInUrl(current.BaseUrl);
         BrowserOperationResult navigated;
         try
         {
@@ -408,6 +408,8 @@ public sealed class ApplicationConnectionService(
 
         return uri.GetLeftPart(UriPartial.Authority);
     }
+
+    private static Uri AdminSignInUrl(string baseUrl) => new(baseUrl.TrimEnd('/') + "/admin");
 
     private void LogStatus(ApplicationConnection connection) =>
         logger?.LogInformation(

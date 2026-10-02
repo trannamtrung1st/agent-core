@@ -28,7 +28,8 @@ public sealed partial class SessionToolExecutor(
     IAgentInstanceStore? agentInstances = null,
     IAgentDefinitionStore? agentDefinitions = null,
     IMemoryStore? profiles = null,
-    IBrowserSession? browser = null)
+    IBrowserSession? browser = null,
+    IApplicationConnectionStore? applicationConnections = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -183,13 +184,13 @@ public sealed partial class SessionToolExecutor(
                     await ExecuteHttpRequestAsync(args, approvalGrant, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.BrowserNavigate => FitResult(
                     remainingOutputBytes,
-                    await NavigateBrowserAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
+                    await NavigateBrowserAsync(sessionId, args, admission, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.BrowserObserve => FitResult(
                     remainingOutputBytes,
-                    await ObserveBrowserAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
+                    await ObserveBrowserAsync(sessionId, args, admission, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.BrowserAct => FitResult(
                     remainingOutputBytes,
-                    await ActBrowserAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
+                    await ActBrowserAsync(sessionId, args, admission, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.BrowserClose => FitResult(
                     remainingOutputBytes,
                     await CloseBrowserAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),

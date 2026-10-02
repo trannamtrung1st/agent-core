@@ -27,7 +27,8 @@ public enum ToolResourceScope
 public sealed record ToolExecutionAdmission(
     bool Detached,
     TriggerKind TriggerKind,
-    bool IntermediateMessagingAllowed = false);
+    bool IntermediateMessagingAllowed = false,
+    Guid? AgentInstanceId = null);
 
 public sealed record ToolDescriptor(
     ModelToolDefinition ModelDefinition,
