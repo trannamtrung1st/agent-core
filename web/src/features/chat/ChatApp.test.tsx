@@ -243,7 +243,7 @@ describe("ChatApp accessibility", () => {
     expect(screen.queryByRole("button", { name: "Mute" })).not.toBeInTheDocument();
 
     await act(async () => {
-      useSessionStore.setState({ captureLive: true, muted: false });
+      useSessionStore.setState({ captureLive: true, captureAuthorized: true, muted: false });
       rerenderChat(view);
     });
     expect(screen.getByTestId("connection")).toHaveTextContent("Listening…");
@@ -261,6 +261,7 @@ describe("ChatApp accessibility", () => {
         connection: "ready",
         mode: "voice",
         captureLive: true,
+        captureAuthorized: true,
         clientTranscriptBlocked: true,
         muted: false,
         voiceAvailable: true,
@@ -303,6 +304,7 @@ describe("ChatApp accessibility", () => {
         mode: "voice",
         muted: true,
         captureLive: false,
+        captureAuthorized: true,
         voiceAvailable: true,
         sttTransport: "clientTranscript",
         agentName: "Alex",
@@ -328,6 +330,7 @@ describe("ChatApp accessibility", () => {
         connection: "ready",
         mode: "voice",
         captureLive: false,
+        captureAuthorized: true,
         muted: false,
         voiceAvailable: true,
         sttTransport: "clientTranscript",
@@ -354,6 +357,7 @@ describe("ChatApp accessibility", () => {
         connection: "ready",
         mode: "voice",
         captureLive: true,
+        captureAuthorized: true,
         muted: false,
         voiceAvailable: true,
         agentName: "Alex",
@@ -445,7 +449,8 @@ describe("ChatApp accessibility", () => {
         outputState: "idle",
         liveResponseId: null,
         mode: "voice",
-        captureLive: true
+        captureLive: true,
+        captureAuthorized: true
       });
       rerenderChat(view);
     });

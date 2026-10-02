@@ -62,7 +62,6 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
     private readonly ConcurrentDictionary<Guid, Guid?> _sessionOwners = new();
     private readonly ConcurrentDictionary<Guid, SessionBrowser> _persistent = new();
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _profileGates = new();
-    private readonly List<IPlaywright> _persistentDrivers = [];
     private readonly ConcurrentDictionary<string, LiveElement> _refs = new();
     private IPlaywright? _playwright;
     private IBrowser? _browser;
@@ -130,7 +129,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             ResourceOrigins = _options.ResourceOrigins ?? []
         };
         var ready = _chromiumProbe is null
-            ? await PlaywrightChromiumReadiness.InstalledAsync(cancellationToken).ConfigureAwait(false)
+            ? await PlaywrightChromiumReadiness.InstalledAsync(_options.Channel, cancellationToken).ConfigureAwait(false)
             : await _chromiumProbe(cancellationToken).ConfigureAwait(false);
         if (!ready)
         {
@@ -157,17 +156,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         {
             await CloseQuietlyAsync(session.Context).ConfigureAwait(false);
             session.ProfileLease?.Dispose();
-        }
-
-        foreach (var driver in _persistentDrivers)
-        {
-            try
-            {
-                driver.Dispose();
-            }
-            catch (Exception ex) when (ex is PlaywrightException or ObjectDisposedException)
-            {
-            }
+            DisposeQuietly(session.PlaywrightDriver);
         }
 
         _sessions.Clear();
@@ -624,11 +613,15 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 var page = context.Pages.FirstOrDefault() ?? await context.NewPageAsync().ConfigureAwait(false);
                 page.SetDefaultTimeout(TimeoutMs());
                 page.SetDefaultNavigationTimeout(TimeoutMs());
-                var session = new SessionBrowser(context, page) { Persistent = true, ProfileLease = lease };
+                var session = new SessionBrowser(context, page)
+                {
+                    Persistent = true,
+                    ProfileLease = lease,
+                    PlaywrightDriver = playwright
+                };
                 context.Page += (_, opened) => OnContextPage(session, opened);
                 await context.RouteAsync("**/*", route => RouteAsync(session, route)).ConfigureAwait(false);
                 _persistent[agentInstanceId] = session;
-                _persistentDrivers.Add(playwright);
                 lease = null;
                 playwright = null;
                 return session;
@@ -1471,6 +1464,22 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         }
     }
 
+    private static void DisposeQuietly(IPlaywright? playwright)
+    {
+        if (playwright is null)
+        {
+            return;
+        }
+
+        try
+        {
+            playwright.Dispose();
+        }
+        catch (Exception ex) when (ex is PlaywrightException or ObjectDisposedException)
+        {
+        }
+    }
+
     private sealed class BrowserLaunchException : Exception;
 
     private sealed class BrowserProfileException(string code) : Exception
@@ -1487,6 +1496,8 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         public bool Persistent { get; init; }
 
         public FileStream? ProfileLease { get; init; }
+
+        public IPlaywright? PlaywrightDriver { get; init; }
 
         public int Generation { get; set; }
 

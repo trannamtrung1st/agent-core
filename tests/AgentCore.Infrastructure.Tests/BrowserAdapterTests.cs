@@ -454,6 +454,49 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
     }
 
     [Fact]
+    public async Task Persistent_concurrent_sessions_share_one_context_and_serialize_browser_ops()
+    {
+        var port = BindEphemeralPort();
+        using var listener = new HttpListener();
+        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+        listener.Start();
+        var origin = $"http://127.0.0.1:{port}";
+        using var stop = new CancellationTokenSource();
+        var serving = ServeButtonAsync(listener, stop.Token);
+        var root = Path.Combine(Path.GetTempPath(), "agent-core-profiles-" + Guid.NewGuid().ToString("N"));
+        var agent = Guid.NewGuid();
+        var session = NewPersistent(root);
+        await session.StartAsync(CancellationToken.None);
+        var sessionA = Guid.NewGuid();
+        var sessionB = Guid.NewGuid();
+        try
+        {
+            session.BindSession(sessionA, agent);
+            session.BindSession(sessionB, agent);
+            var navA = session.NavigateAsync(new BrowserNavigateRequest(sessionA, new Uri(origin + "/"))).AsTask();
+            var navB = session.NavigateAsync(new BrowserNavigateRequest(sessionB, new Uri(origin + "/"))).AsTask();
+            var results = await Task.WhenAll(navA, navB);
+            Assert.All(results, result => Assert.Null(result.ErrorCode));
+            Assert.Same(session.ContextFor(sessionA), session.ContextFor(sessionB));
+        }
+        finally
+        {
+            await session.StopAsync(CancellationToken.None);
+            try
+            {
+                Directory.Delete(root, true);
+            }
+            catch (IOException)
+            {
+            }
+
+            await stop.CancelAsync();
+            listener.Stop();
+            await serving;
+        }
+    }
+
+    [Fact]
     public async Task Ephemeral_session_drops_site_state_when_released()
     {
         var port = BindEphemeralPort();

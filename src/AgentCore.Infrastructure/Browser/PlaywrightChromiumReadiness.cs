@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Playwright;
 
 namespace AgentCore.Infrastructure.Browser;
@@ -5,11 +6,12 @@ namespace AgentCore.Infrastructure.Browser;
 internal static class PlaywrightChromiumReadiness
 {
     private static readonly SemaphoreSlim Gate = new(1, 1);
-    private static bool? _installed;
+    private static readonly ConcurrentDictionary<string, bool> InstalledByTarget = new(StringComparer.OrdinalIgnoreCase);
 
-    public static async Task<bool> InstalledAsync(CancellationToken cancellationToken)
+    public static async Task<bool> InstalledAsync(string? channel, CancellationToken cancellationToken)
     {
-        if (_installed is bool cached)
+        var key = string.IsNullOrWhiteSpace(channel) ? string.Empty : channel.Trim();
+        if (InstalledByTarget.TryGetValue(key, out var cached))
         {
             return cached;
         }
@@ -17,13 +19,13 @@ internal static class PlaywrightChromiumReadiness
         await Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_installed is bool cachedAgain)
+            if (InstalledByTarget.TryGetValue(key, out cached))
             {
-                return cachedAgain;
+                return cached;
             }
 
-            var installed = await ProbeAsync(cancellationToken).ConfigureAwait(false);
-            _installed = installed;
+            var installed = await ProbeAsync(key, cancellationToken).ConfigureAwait(false);
+            InstalledByTarget[key] = installed;
             return installed;
         }
         finally
@@ -32,14 +34,25 @@ internal static class PlaywrightChromiumReadiness
         }
     }
 
-    private static async Task<bool> ProbeAsync(CancellationToken cancellationToken)
+    private static async Task<bool> ProbeAsync(string channelKey, CancellationToken cancellationToken)
     {
         IPlaywright? playwright = null;
+        IBrowser? browser = null;
         try
         {
             playwright = await Playwright.CreateAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
-            var path = playwright.Chromium.ExecutablePath;
-            return !string.IsNullOrWhiteSpace(path) && File.Exists(path);
+            if (string.IsNullOrEmpty(channelKey))
+            {
+                var path = playwright.Chromium.ExecutablePath;
+                return !string.IsNullOrWhiteSpace(path) && File.Exists(path);
+            }
+
+            browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
+            {
+                Headless = true,
+                Channel = channelKey
+            }).WaitAsync(cancellationToken).ConfigureAwait(false);
+            return true;
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested
             && ex is PlaywrightException or TimeoutException or IOException or InvalidOperationException)
@@ -48,6 +61,17 @@ internal static class PlaywrightChromiumReadiness
         }
         finally
         {
+            if (browser is not null)
+            {
+                try
+                {
+                    await browser.CloseAsync().ConfigureAwait(false);
+                }
+                catch (PlaywrightException)
+                {
+                }
+            }
+
             playwright?.Dispose();
         }
     }

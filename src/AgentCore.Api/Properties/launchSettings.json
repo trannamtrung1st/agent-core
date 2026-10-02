@@ -64,6 +64,7 @@
         "Browser__PolicyMode": "OpenWeb",
         "Browser__ProfileMode": "PersistentAgent",
         "Browser__ProfileRoot": "../../local/browser-profiles",
+        "Browser__Channel": "chrome",
         "Browser__FixtureEnabled": "false",
         "Browser__Headless": "false",
         "Browser__InteractionMode": "InteractiveDemo"

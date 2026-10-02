@@ -228,6 +228,7 @@ describe("realtime overflow and capture restart", () => {
       attachmentId: "a1",
       mode: "voice",
       streamId: "stream-1",
+      captureAuthorized: true,
       agents: [],
       selectedAgentId: "examiner"
     });
@@ -260,6 +261,7 @@ describe("realtime overflow and capture restart", () => {
       attachmentId: "a1",
       mode: "voice",
       streamId: "stream-1",
+      captureAuthorized: true,
       agents: [],
       selectedAgentId: "examiner"
     });
@@ -298,6 +300,7 @@ describe("realtime overflow and capture restart", () => {
       attachmentId: "a1",
       mode: "voice",
       streamId: "stream-1",
+      captureAuthorized: true,
       agents: [],
       selectedAgentId: "examiner"
     });

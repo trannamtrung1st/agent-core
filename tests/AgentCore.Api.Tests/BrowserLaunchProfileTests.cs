@@ -24,6 +24,7 @@ public sealed class BrowserLaunchProfileTests
         Assert.Equal("Real", real.GetProperty("AgentCore__Profile").GetString());
         Assert.Equal("OpenWeb", real.GetProperty("Browser__PolicyMode").GetString());
         Assert.Equal("PersistentAgent", real.GetProperty("Browser__ProfileMode").GetString());
+        Assert.Equal("chrome", real.GetProperty("Browser__Channel").GetString());
         Assert.Equal("false", real.GetProperty("Browser__FixtureEnabled").GetString());
         Assert.Equal("false", real.GetProperty("Browser__Headless").GetString());
         Assert.Equal("InteractiveDemo", real.GetProperty("Browser__InteractionMode").GetString());

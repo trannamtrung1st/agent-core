@@ -1680,6 +1680,42 @@ describe("realtime race handling", () => {
     expect(window.__agentCore?.reconnectCause?.()).toBe("controlSequenceGap");
   });
 
+  it("resumeCapture reauthorizes microphone without SetMode while session stays voice", async () => {
+    let prepared = false;
+    vi.spyOn(capture, "isPrepared").mockImplementation(() => prepared);
+    vi.spyOn(capture, "isStreaming").mockReturnValue(false);
+    const preflight = vi.spyOn(capture, "preflight").mockImplementation(async () => {
+      prepared = true;
+    });
+    const start = vi.spyOn(capture, "start").mockResolvedValue(undefined);
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      streamId: "stream-1",
+      lastServerSequence: 2,
+      mode: "voice",
+      captureAuthorized: false,
+      captureLive: false,
+      voiceAvailable: true,
+      sttTransport: "serverAudio",
+      ttsTransport: "serverAudio",
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    invoke.mockClear();
+    await resumeCapture();
+    expect(useSessionStore.getState().mode).toBe("voice");
+    expect(useSessionStore.getState().captureAuthorized).toBe(true);
+    expect(useSessionStore.getState().preflightReady).toBe(true);
+    expect(preflight).toHaveBeenCalledWith({ microphone: true, playback: true });
+    expect(start).toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalledWith("SetMode", expect.anything());
+  });
+
   it("does not send SetMode text when a muted voice session receives another session.ready", async () => {
     const preflight = vi.spyOn(capture, "preflight").mockResolvedValue(undefined);
     vi.spyOn(capture, "isPrepared").mockReturnValue(false);
