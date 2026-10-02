@@ -52,6 +52,9 @@ public sealed class NopCommerceBrowserProbeTests
             Assert.True(
                 !(prior.Observation?.VisibleText ?? string.Empty).Contains("AC Probe", StringComparison.Ordinal),
                 $"Probe product {sku} is already on the storefront. Run scripts/nopcommerce-demo.sh reset before another create probe. This probe does not delete store data.");
+            var absent = await SubmitSkuLookup(session, browserId, origin, "AC-MISSING-001");
+            Assert.Contains("/Admin/Product/List", absent, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("/Admin/Product/Edit/", absent, StringComparison.OrdinalIgnoreCase);
             var create = await session.NavigateAsync(
                 new BrowserNavigateRequest(browserId, new Uri($"{origin}/Admin/Product/Create")),
                 CancellationToken.None);
@@ -175,11 +178,47 @@ public sealed class NopCommerceBrowserProbeTests
             Assert.Null(storefront.ErrorCode);
             Assert.Contains("AC Probe", storefront.Observation!.VisibleText, StringComparison.Ordinal);
             Assert.Contains("99", storefront.Observation.VisibleText, StringComparison.Ordinal);
+            var present = await SubmitSkuLookup(session, browserId, origin, sku);
+            Assert.Contains("/Admin/Product/Edit/", present, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
             await session.StopAsync(CancellationToken.None);
         }
+    }
+
+    private static async Task<string> SubmitSkuLookup(
+        PlaywrightBrowserSession session,
+        Guid browserId,
+        string origin,
+        string sku)
+    {
+        var list = await session.NavigateAsync(
+            new BrowserNavigateRequest(browserId, new Uri($"{origin}/Admin/Product/List")),
+            CancellationToken.None);
+        Assert.Null(list.ErrorCode);
+        var observed = await session.ObserveAsync(browserId, CancellationToken.None);
+        Assert.Null(observed.ErrorCode);
+        var field = Require(
+            observed.Observation!,
+            element => element.Actions.Contains("fill")
+                && element.Name.Contains("SKU", StringComparison.OrdinalIgnoreCase)
+                && element.Name.Contains("directly", StringComparison.OrdinalIgnoreCase),
+            Names(observed.Observation!));
+        var filled = await session.ActAsync(
+            new BrowserActRequest(browserId, "fill", field.Ref, sku),
+            CancellationToken.None);
+        Assert.Null(filled.ErrorCode);
+        var go = Require(
+            filled.Observation!,
+            element => element.Actions.Contains("click")
+                && element.Name.Equals("Go", StringComparison.OrdinalIgnoreCase),
+            Names(filled.Observation!));
+        var clicked = await session.ActAsync(
+            new BrowserActRequest(browserId, "click", go.Ref, null),
+            CancellationToken.None);
+        Assert.Null(clicked.ErrorCode);
+        return clicked.Observation!.Url;
     }
 
     private static string Names(BrowserObservation observation) =>

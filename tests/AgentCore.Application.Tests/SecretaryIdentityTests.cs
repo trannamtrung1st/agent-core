@@ -89,7 +89,11 @@ public sealed class SecretaryIdentityTests
         Assert.Contains("concise product description", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("including when the owner asks for one", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("storefront", product.Procedure, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("/Admin/Product/List?GoDirectlyToSku=", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("Go directly to SKU", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("click its Go button once", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("Remaining on the List page after that Go action is the absence signal", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("edit that product and do not create another", product.Procedure, StringComparison.Ordinal);
+        Assert.DoesNotContain("/Admin/Product/List?GoDirectlyToSku=", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("/Admin/Product/Create", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("/search?q=", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("artifacts.create_from_workspace", product.Procedure, StringComparison.Ordinal);
