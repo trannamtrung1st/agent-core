@@ -1,0 +1,22 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Control state</title>
+<form>
+  <label>Empty note <input id="empty" name="empty" value=""></label>
+  <label>Filled note <input id="filled" name="filled" value="already-set"></label>
+  <label>Long note <input id="long" name="long" value="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"></label>
+  <label>Details <textarea id="details">line one</textarea></label>
+  <label>Published <input id="published" type="checkbox"></label>
+  <label>Featured <input id="featured" type="checkbox" checked></label>
+  <label>Ship overnight <input id="overnight" type="radio" name="ship" value="overnight" checked></label>
+  <label>Ship later <input id="later" type="radio" name="ship" value="later"></label>
+  <label>Notify <input id="notify" type="checkbox" role="switch"></label>
+  <label for="category">Category</label>
+  <select id="category"><option value="simple" selected>Simple</option><option value="grouped">Grouped</option></select>
+  <label>Password <input id="password" type="password" autocomplete="current-password" value="p9-password-secret"></label>
+  <input type="hidden" id="hidden-token" name="hidden-token" value="hidden-input-secret">
+  <label>API token <input id="api-token" name="api_token" value="sk-live-secret-token"></label>
+  <label>Client secret <input id="client-secret" name="client_secret" value="client-secret-value"></label>
+  <label>Verification code <input id="otp" name="otp" autocomplete="one-time-code" value="otp-secret-value"></label>
+  <label>Picture file <input id="picture" type="file" hidden data-path="C:\fakepath\secret.png"></label>
+</form>

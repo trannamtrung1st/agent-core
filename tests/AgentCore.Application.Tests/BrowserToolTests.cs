@@ -298,6 +298,45 @@ public sealed class BrowserToolTests
     }
 
     [Fact]
+    public async Task Observation_serializes_present_control_state_and_clips_it()
+    {
+        var fake = new FakeBrowser
+        {
+            Observation = new BrowserObservation(
+                "http://127.0.0.1:5091/state",
+                "Control state",
+                "Empty note",
+                false,
+                [
+                    new BrowserElement("el_name", "textbox", "Product name", ["fill", "press"], new BrowserControlState(Value: "AC Probe")),
+                    new BrowserElement("el_published", "checkbox", "Published", ["check", "uncheck"], new BrowserControlState(Checked: true)),
+                    new BrowserElement("el_category", "combobox", "Category", ["select"], new BrowserControlState(SelectedText: "Simple")),
+                    new BrowserElement("el_picture", "button", "Picture file", ["upload"]),
+                    new BrowserElement("el_long", "textbox", "Long note", ["fill"], new BrowserControlState(Value: new string('A', BrowserToolLimits.MaxFillLength + 40)))
+                ])
+        };
+        var serialized = await Executor(fake).ExecuteAsync(
+            BrowserDefinition(),
+            Guid.NewGuid(),
+            Call(ToolCatalog.BrowserObserve, "{}"),
+            ToolLimits.MaxOutputBytes,
+            admission: UserTurn());
+        using var document = JsonDocument.Parse(serialized.Text);
+        var elements = document.RootElement.GetProperty("elements");
+        Assert.Equal("AC Probe", elements[0].GetProperty("state").GetProperty("value").GetString());
+        Assert.False(elements[0].GetProperty("state").TryGetProperty("checked", out _));
+        Assert.False(elements[0].GetProperty("state").TryGetProperty("selectedText", out _));
+        Assert.True(elements[1].GetProperty("state").GetProperty("checked").GetBoolean());
+        Assert.False(elements[1].GetProperty("state").TryGetProperty("value", out _));
+        Assert.Equal("Simple", elements[2].GetProperty("state").GetProperty("selectedText").GetString());
+        Assert.False(elements[3].TryGetProperty("state", out _));
+        Assert.Equal(BrowserToolLimits.MaxFillLength, elements[4].GetProperty("state").GetProperty("value").GetString()!.Length);
+        Assert.DoesNotContain("selector", serialized.Text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("playwright", serialized.Text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"html\"", serialized.Text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Stale_and_cross_session_refs_do_not_click()
     {
         var reference = OpaqueRef();

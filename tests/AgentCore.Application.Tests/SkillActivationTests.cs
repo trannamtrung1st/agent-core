@@ -40,6 +40,19 @@ public sealed class SkillActivationTests
     }
 
     [Fact]
+    public void Selector_matches_whole_words_and_an_optional_plural()
+    {
+        var definition = Definition(
+            Skill("store.product.manage", "PRODUCT", ["product", "sku", "publish product"]),
+            Skill("store.order.review", "ORDER", ["pending order", "order review"]));
+
+        Assert.Equal(["store.product.manage"], DeterministicSkillSelector.SelectActiveIds(definition, "publish this product"));
+        Assert.Equal(["store.product.manage"], DeterministicSkillSelector.SelectActiveIds(definition, "SKU AC-KBD-001"));
+        Assert.Empty(DeterministicSkillSelector.SelectActiveIds(definition, "improve my productivity"));
+        Assert.Equal(["store.order.review"], DeterministicSkillSelector.SelectActiveIds(definition, "review pending orders"));
+    }
+
+    [Fact]
     public void Prompt_includes_only_pinned_procedures()
     {
         var definition = Definition(

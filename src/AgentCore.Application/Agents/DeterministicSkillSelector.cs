@@ -30,13 +30,47 @@ public sealed class DeterministicSkillSelector : ISkillSelector
                 break;
             }
 
-            if (skill.ActivationKeywords.Any(keyword =>
-                    triggerText.Contains(keyword, StringComparison.OrdinalIgnoreCase)))
+            if (skill.ActivationKeywords.Any(keyword => MatchesKeyword(triggerText, keyword)))
             {
                 selected.Add(skill.Id);
             }
         }
 
         return selected;
+    }
+
+    private static bool MatchesKeyword(string triggerText, string keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword))
+        {
+            return false;
+        }
+
+        var start = 0;
+        while (start <= triggerText.Length - keyword.Length)
+        {
+            var found = triggerText.IndexOf(keyword, start, StringComparison.OrdinalIgnoreCase);
+            if (found < 0)
+            {
+                return false;
+            }
+
+            var end = found + keyword.Length;
+            var before = found == 0 || !char.IsLetterOrDigit(triggerText[found - 1]);
+            var after = end >= triggerText.Length || !char.IsLetterOrDigit(triggerText[end]);
+            if (!after && (triggerText[end] is 's' or 'S') && (end + 1 >= triggerText.Length || !char.IsLetterOrDigit(triggerText[end + 1])))
+            {
+                after = true;
+            }
+
+            if (before && after)
+            {
+                return true;
+            }
+
+            start = found + 1;
+        }
+
+        return false;
     }
 }

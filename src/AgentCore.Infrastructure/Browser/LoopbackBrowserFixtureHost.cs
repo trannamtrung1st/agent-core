@@ -21,6 +21,7 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
     public const string IdentityResource = "AgentCore.Infrastructure.Browser.Fixture.identity.html";
     public const string UploadResource = "AgentCore.Infrastructure.Browser.Fixture.upload.html";
     public const string ControlsResource = "AgentCore.Infrastructure.Browser.Fixture.controls.html";
+    public const string StateResource = "AgentCore.Infrastructure.Browser.Fixture.state.html";
 
     private static readonly string[] RequiredResources =
     [
@@ -37,7 +38,8 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
         LoginBelowFoldResource,
         IdentityResource,
         UploadResource,
-        ControlsResource
+        ControlsResource,
+        StateResource
     ];
 
     private readonly ILogger _logger;
@@ -288,6 +290,12 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
             if (string.Equals(path, "/controls", StringComparison.Ordinal))
             {
                 await WriteResourceAsync(context, ControlsResource, 200).ConfigureAwait(false);
+                return;
+            }
+
+            if (string.Equals(path, "/state", StringComparison.Ordinal))
+            {
+                await WriteResourceAsync(context, StateResource, 200).ConfigureAwait(false);
                 return;
             }
 

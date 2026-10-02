@@ -497,16 +497,26 @@ public sealed partial class SessionToolExecutor
     {
         var elements = (observation.Elements ?? [])
             .Take(BrowserToolLimits.MaxElements)
-            .Select(element => new
+            .Select(element =>
             {
-                @ref = ClipBrowser(element.Ref, BrowserToolLimits.MaxRefLength),
-                role = ClipBrowser(element.Role, BrowserToolLimits.MaxRoleLength),
-                name = ClipBrowser(element.Name, BrowserToolLimits.MaxAccessibleNameLength),
-                actions = (element.Actions ?? [])
-                    .Where(action => BrowserToolLimits.Operations.Contains(action, StringComparer.Ordinal))
-                    .Distinct(StringComparer.Ordinal)
-                    .Take(BrowserToolLimits.Operations.Length)
-                    .ToArray()
+                var item = new Dictionary<string, object?>
+                {
+                    ["ref"] = ClipBrowser(element.Ref, BrowserToolLimits.MaxRefLength),
+                    ["role"] = ClipBrowser(element.Role, BrowserToolLimits.MaxRoleLength),
+                    ["name"] = ClipBrowser(element.Name, BrowserToolLimits.MaxAccessibleNameLength),
+                    ["actions"] = (element.Actions ?? [])
+                        .Where(action => BrowserToolLimits.Operations.Contains(action, StringComparer.Ordinal))
+                        .Distinct(StringComparer.Ordinal)
+                        .Take(BrowserToolLimits.Operations.Length)
+                        .ToArray()
+                };
+                var state = ControlState(element.State);
+                if (state is not null)
+                {
+                    item["state"] = state;
+                }
+
+                return item;
             })
             .ToArray();
         var text = observation.VisibleText ?? string.Empty;
@@ -538,6 +548,32 @@ public sealed partial class SessionToolExecutor
             title = ClipBrowser(observation.Title, BrowserToolLimits.MaxTitleLength),
             message = "Complete this step in the browser, then tell me to continue."
         });
+    }
+
+    private static Dictionary<string, object?>? ControlState(BrowserControlState? state)
+    {
+        if (state is null)
+        {
+            return null;
+        }
+
+        var payload = new Dictionary<string, object?>();
+        if (state.Value is not null)
+        {
+            payload["value"] = ClipBrowser(state.Value, BrowserToolLimits.MaxFillLength);
+        }
+
+        if (state.Checked is not null)
+        {
+            payload["checked"] = state.Checked.Value;
+        }
+
+        if (state.SelectedText is not null)
+        {
+            payload["selectedText"] = ClipBrowser(state.SelectedText, BrowserToolLimits.MaxFillLength);
+        }
+
+        return payload.Count == 0 ? null : payload;
     }
 
     private static string ClipBrowser(string? value, int max)

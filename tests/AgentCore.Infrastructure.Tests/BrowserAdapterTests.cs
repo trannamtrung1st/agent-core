@@ -1369,6 +1369,91 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
     }
 
     [Fact]
+    public async Task Observations_expose_ordinary_control_state_and_omit_secrets()
+    {
+        var session = await StartDemoSession();
+        try
+        {
+            var id = Guid.NewGuid();
+            var page = await Navigate(session, id, "/state");
+            Assert.Null(page.ErrorCode);
+            var observation = page.Observation!;
+            Assert.True(observation.Elements.Count <= BrowserToolLimits.MaxElements);
+            Assert.True(observation.VisibleText.Length <= BrowserToolLimits.MaxVisibleTextLength);
+
+            Assert.Equal(string.Empty, Field(observation, "Empty note").State?.Value);
+            Assert.Equal("already-set", Field(observation, "Filled note").State?.Value);
+            var longValue = Field(observation, "Long note").State?.Value ?? string.Empty;
+            Assert.Equal(BrowserToolLimits.MaxFillLength, longValue.Length);
+            Assert.Equal("line one", Field(observation, "Details").State?.Value);
+            Assert.False(Field(observation, "Published").State?.Checked);
+            Assert.True(Field(observation, "Featured").State?.Checked);
+            Assert.True(Field(observation, "Ship overnight").State?.Checked);
+            Assert.False(Field(observation, "Ship later").State?.Checked);
+            Assert.False(Field(observation, "Notify").State?.Checked);
+            Assert.Equal(["check", "uncheck"], Field(observation, "Notify").Actions);
+            Assert.Equal("Simple", Field(observation, "Category").State?.SelectedText);
+            var picture = Field(observation, "Picture file");
+            Assert.Equal(["upload"], picture.Actions);
+            Assert.Null(picture.State);
+            AssertSecretsAbsent(observation);
+
+            var filled = await session.ActAsync(new BrowserActRequest(id, "fill", Field(observation, "Empty note").Ref, "AC-KBD-001"));
+            Assert.Null(filled.ErrorCode);
+            Assert.Equal("AC-KBD-001", Field(filled.Observation!, "Empty note").State?.Value);
+
+            var described = await session.ActAsync(new BrowserActRequest(id, "fill", Field(filled.Observation!, "Details").Ref, "A concise description."));
+            Assert.Null(described.ErrorCode);
+            Assert.Equal("A concise description.", Field(described.Observation!, "Details").State?.Value);
+
+            var checkedBox = await session.ActAsync(new BrowserActRequest(id, "check", Field(described.Observation!, "Published").Ref, null));
+            Assert.Null(checkedBox.ErrorCode);
+            Assert.True(Field(checkedBox.Observation!, "Published").State?.Checked);
+            var cleared = await session.ActAsync(new BrowserActRequest(id, "uncheck", Field(checkedBox.Observation!, "Published").Ref, null));
+            Assert.Null(cleared.ErrorCode);
+            Assert.False(Field(cleared.Observation!, "Published").State?.Checked);
+
+            var selected = await session.ActAsync(new BrowserActRequest(id, "select", Field(cleared.Observation!, "Category").Ref, "grouped"));
+            Assert.Null(selected.ErrorCode);
+            Assert.Equal("Grouped", Field(selected.Observation!, "Category").State?.SelectedText);
+
+            var password = await session.ActAsync(new BrowserActRequest(id, "fill", Field(selected.Observation!, "Password").Ref, "p9-password-secret"));
+            Assert.Null(password.ErrorCode);
+            AssertSecretsAbsent(password.Observation!);
+            Assert.Null(Field(password.Observation!, "Password").State);
+        }
+        finally
+        {
+            await session.StopAsync(CancellationToken.None);
+        }
+    }
+
+    private static BrowserElement Field(BrowserObservation observation, string name) =>
+        Assert.Single(observation.Elements, element => element.Name == name);
+
+    private static void AssertSecretsAbsent(BrowserObservation observation)
+    {
+        var secrets = new[]
+        {
+            "p9-password-secret",
+            "hidden-input-secret",
+            "sk-live-secret-token",
+            "client-secret-value",
+            "otp-secret-value",
+            "fakepath",
+            "secret.png"
+        };
+        foreach (var secret in secrets)
+        {
+            Assert.DoesNotContain(secret, observation.VisibleText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(
+                observation.Elements,
+                element => (element.State?.Value ?? string.Empty).Contains(secret, StringComparison.OrdinalIgnoreCase)
+                    || (element.State?.SelectedText ?? string.Empty).Contains(secret, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    [Fact]
     public async Task File_input_upload_uses_the_artifact_bytes()
     {
         var session = await StartDemoSession();

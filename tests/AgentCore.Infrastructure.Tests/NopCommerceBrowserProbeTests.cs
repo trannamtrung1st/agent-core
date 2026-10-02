@@ -67,6 +67,8 @@ public sealed class NopCommerceBrowserProbeTests
             Assert.Contains(current.Elements, element => element.Name.Contains("advanced", StringComparison.OrdinalIgnoreCase));
             var name = Require(current, element => element.Name.Contains("Product name", StringComparison.OrdinalIgnoreCase) && element.Actions.Contains("fill"), visible);
             var skuField = Require(current, element => element.Name.Equals("SKU", StringComparison.OrdinalIgnoreCase) && element.Actions.Contains("fill"), visible);
+            Assert.Equal(string.Empty, name.State?.Value);
+            Assert.Equal(string.Empty, skuField.State?.Value);
             var priceOrCard = current.Elements.FirstOrDefault(element =>
                 element.Name.Contains("Price", StringComparison.OrdinalIgnoreCase)
                 && element.Actions.Contains("fill"))
@@ -76,10 +78,24 @@ public sealed class NopCommerceBrowserProbeTests
             var named = await session.ActAsync(new BrowserActRequest(browserId, "fill", name.Ref, "AC Probe"), CancellationToken.None);
             Assert.Null(named.ErrorCode);
             current = named.Observation!;
+            Assert.Equal("AC Probe", Require(current, element => element.Name.Contains("Product name", StringComparison.OrdinalIgnoreCase) && element.Actions.Contains("fill"), Names(current)).State?.Value);
             skuField = Require(current, element => element.Name.Equals("SKU", StringComparison.OrdinalIgnoreCase) && element.Actions.Contains("fill"), Names(current));
             var skuSet = await session.ActAsync(new BrowserActRequest(browserId, "fill", skuField.Ref, sku), CancellationToken.None);
             Assert.Null(skuSet.ErrorCode);
             current = skuSet.Observation!;
+            Assert.Equal(sku, Require(current, element => element.Name.Equals("SKU", StringComparison.OrdinalIgnoreCase) && element.Actions.Contains("fill"), Names(current)).State?.Value);
+            var description = Require(
+                current,
+                element => element.Name.Contains("Short description", StringComparison.OrdinalIgnoreCase) && element.Actions.Contains("fill"),
+                Names(current));
+            const string summary = "Probe keyboard for the catalog.";
+            var described = await session.ActAsync(new BrowserActRequest(browserId, "fill", description.Ref, summary), CancellationToken.None);
+            Assert.Null(described.ErrorCode);
+            current = described.Observation!;
+            Assert.Contains(
+                summary,
+                Require(current, element => element.Name.Contains("Short description", StringComparison.OrdinalIgnoreCase) && element.Actions.Contains("fill"), Names(current)).State?.Value,
+                StringComparison.Ordinal);
             priceOrCard = current.Elements.FirstOrDefault(element =>
                 element.Name.Contains("Price", StringComparison.OrdinalIgnoreCase)
                 && element.Actions.Contains("fill"))
@@ -93,6 +109,19 @@ public sealed class NopCommerceBrowserProbeTests
 
             var priced = await session.ActAsync(new BrowserActRequest(browserId, "fill", priceOrCard.Ref, "99"), CancellationToken.None);
             Assert.Null(priced.ErrorCode);
+            var priceState = Require(
+                priced.Observation!,
+                element => element.Name.Contains("Price", StringComparison.OrdinalIgnoreCase) && element.Actions.Contains("fill"),
+                Names(priced.Observation!)).State?.Value ?? string.Empty;
+            Assert.Contains("99", priceState, StringComparison.Ordinal);
+            var published = priced.Observation!.Elements.FirstOrDefault(element =>
+                element.Name.Contains("Published", StringComparison.OrdinalIgnoreCase)
+                && element.State?.Checked is not null);
+            if (published is not null)
+            {
+                Assert.True(published.State!.Checked);
+            }
+
             save = Require(
                 priced.Observation!,
                 element => element.Name.Contains("Save and Continue", StringComparison.OrdinalIgnoreCase) && element.Actions.Contains("click"),
@@ -101,19 +130,26 @@ public sealed class NopCommerceBrowserProbeTests
             Assert.Null(saved.ErrorCode);
             Assert.Contains("/Admin/Product/Edit/", saved.Observation!.Url, StringComparison.OrdinalIgnoreCase);
 
-            var upload = saved.Observation.Elements.FirstOrDefault(element => element.Actions.Contains("upload"));
+            var settledEdit = await session.ObserveAsync(browserId, CancellationToken.None);
+            Assert.Null(settledEdit.ErrorCode);
+            var upload = settledEdit.Observation!.Elements.FirstOrDefault(element =>
+                element.Actions.Contains("upload")
+                && element.Name.Contains("Picture", StringComparison.OrdinalIgnoreCase));
             if (upload is null)
             {
                 var multimedia = Require(
-                    saved.Observation,
+                    settledEdit.Observation,
                     element => element.Name.Contains("Multimedia", StringComparison.OrdinalIgnoreCase)
                         || element.Name.Contains("Picture", StringComparison.OrdinalIgnoreCase),
-                    string.Join(" | ", saved.Observation.Elements.Select(element => element.Name)));
+                    Names(settledEdit.Observation));
                 var expanded = await session.ActAsync(
                     new BrowserActRequest(browserId, multimedia.Actions[0], multimedia.Ref, null),
                     CancellationToken.None);
                 Assert.Null(expanded.ErrorCode);
-                upload = Require(expanded.Observation!, element => element.Actions.Contains("upload"), "picture file input");
+                upload = Require(
+                    expanded.Observation!,
+                    element => element.Actions.Contains("upload") && element.Name.Contains("Picture", StringComparison.OrdinalIgnoreCase),
+                    Names(expanded.Observation!));
             }
 
             Assert.Equal(["upload"], upload.Actions);
@@ -122,6 +158,16 @@ public sealed class NopCommerceBrowserProbeTests
                 new BrowserActRequest(browserId, "upload", upload.Ref, null, new BrowserUpload("ac-keyboard.png", "image/png", png)),
                 CancellationToken.None);
             Assert.Null(uploaded.ErrorCode);
+            Assert.All(
+                uploaded.Observation!.Elements,
+                element => Assert.DoesNotContain("fakepath", element.State?.Value ?? string.Empty, StringComparison.OrdinalIgnoreCase));
+            var pictured = await session.ObserveAsync(browserId, CancellationToken.None);
+            Assert.Null(pictured.ErrorCode);
+            Assert.Contains("/Admin/Product/Edit/", pictured.Observation!.Url, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(
+                pictured.Observation.Elements,
+                element => element.Name.Contains("Picture", StringComparison.OrdinalIgnoreCase)
+                    || element.Actions.Contains("upload"));
 
             var storefront = await session.NavigateAsync(
                 new BrowserNavigateRequest(browserId, new Uri($"{origin}/search?q={sku}")),

@@ -35,8 +35,10 @@ public sealed class BrowserObservationCompactionTests
             Assert.False(document.RootElement.TryGetProperty("elements", out _));
             Assert.DoesNotContain("el_round_", message.Text, StringComparison.Ordinal);
             Assert.DoesNotContain("\"ref\"", message.Text, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"state\"", message.Text, StringComparison.Ordinal);
         });
         Assert.Contains("el_round_7", observations[7].Text, StringComparison.Ordinal);
+        Assert.Contains("\"state\"", observations[7].Text, StringComparison.Ordinal);
         Assert.Contains("\"elements\"", observations[7].Text, StringComparison.Ordinal);
         Assert.DoesNotContain("el_round_6", observations[6].Text, StringComparison.Ordinal);
         Assert.Equal("obs-7", observations[7].ToolCallId);
@@ -78,7 +80,9 @@ public sealed class BrowserObservationCompactionTests
     private static ModelMessage Observation(int round, string reference)
     {
         var elements = Enumerable.Range(0, 40)
-            .Select(index => new { @ref = index == 0 ? reference : $"el_{round}_{index}", role = "button", name = new string('n', 80), actions = new[] { "click" } })
+            .Select(index => index == 0
+                ? (object)new { @ref = reference, role = "textbox", name = "SKU", actions = new[] { "fill" }, state = new { value = $"SKU-{reference}" } }
+                : new { @ref = $"el_{round}_{index}", role = "button", name = new string('n', 80), actions = new[] { "click" } })
             .ToArray();
         var json = JsonSerializer.Serialize(new
         {

@@ -47,13 +47,61 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
           if (!name && el.htmlFor) name = humanize(el.htmlFor);
           if (!name && el.id) name = humanize(el.id);
           if (tag === "input" && type === "hidden") return "null";
+          if (type === "file") {
+            let node = el.parentElement;
+            for (let depth = 0; depth < 5 && node && node !== document.body && node !== document.documentElement; depth += 1, node = node.parentElement) {
+              if (node.children.length > 4) continue;
+              for (const child of node.children) {
+                if (child.contains(el)) continue;
+                const caption = ((child.innerText || child.textContent) || "").replace(/\s+/g, " ").trim();
+                if (caption && caption.length <= 40 && !/upload|browse/i.test(caption)) {
+                  name = caption;
+                  depth = 5;
+                  break;
+                }
+              }
+            }
+          }
           let actions = ["click"];
           if (type === "file") actions = ["upload"];
           else if (tag === "select") actions = ["select"];
           else if (role === "checkbox" || role === "switch" || type === "checkbox") actions = ["check", "uncheck"];
           else if (role === "textbox" || role === "searchbox" || tag === "textarea" || (tag === "input" && type !== "button" && type !== "submit" && type !== "checkbox" && type !== "radio" && type !== "file")) actions = ["fill", "press"];
           else actions = ["click"];
-          return JSON.stringify({ role, name: name.slice(0, 200), actions });
+          const source = (() => {
+            if (tag !== "label") return el;
+            const linkedId = el.htmlFor || el.getAttribute("for");
+            const linked = linkedId ? document.getElementById(linkedId) : null;
+            return linked || el.querySelector("input, select, textarea") || el;
+          })();
+          const sourceTag = (source.tagName || "").toLowerCase();
+          const sourceType = (source.getAttribute("type") || "").toLowerCase();
+          const sourceRole = (source.getAttribute("role") || role || "").toLowerCase();
+          const haystack = [name, source.id, source.getAttribute("name"), source.getAttribute("autocomplete"), source.getAttribute("aria-label")]
+            .filter(Boolean).join(" ").toLowerCase();
+          const sensitiveTerms = ["password", "passwd", "passcode", "secret", "token", "api key", "apikey", "access key", "private key", "client secret", "authorization", "one-time-code", "otp"];
+          const sensitive = sourceType === "password"
+            || sourceType === "hidden"
+            || (source.getAttribute("autocomplete") || "").toLowerCase().includes("one-time-code")
+            || sensitiveTerms.some(term => haystack.includes(term));
+          const state = {};
+          if (!sensitive && sourceType !== "file") {
+            if (sourceTag === "select") {
+              const option = source.selectedOptions && source.selectedOptions[0];
+              if (option) state.selectedText = ((option.label || option.textContent) || "").trim().slice(0, 500);
+            } else if (sourceType === "checkbox" || sourceType === "radio") {
+              state.checked = source.checked === true;
+            } else if (sourceRole === "checkbox" || sourceRole === "radio" || sourceRole === "switch") {
+              const ariaChecked = source.getAttribute("aria-checked");
+              if (ariaChecked === "true" || ariaChecked === "false") state.checked = ariaChecked === "true";
+              else if (typeof source.checked === "boolean") state.checked = source.checked === true;
+            } else if (sourceTag === "textarea" || (sourceTag === "input" && ["", "text", "search", "email", "url", "tel", "number"].includes(sourceType))) {
+              state.value = String(source.value || "").slice(0, 500);
+            }
+          }
+          const payload = { role, name: name.slice(0, 200), actions };
+          if (Object.keys(state).length > 0) payload.state = state;
+          return JSON.stringify(payload);
         }
         """;
 
@@ -1586,7 +1634,8 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 token,
                 Clip(Redact(role, secrets), BrowserToolLimits.MaxRoleLength),
                 Clip(Redact(name, secrets), BrowserToolLimits.MaxAccessibleNameLength),
-                actions));
+                actions,
+                ReadControlState(described, name, secrets)));
         }
 
         return elements;
@@ -2010,6 +2059,74 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         }
 
         secrets.Add(value);
+    }
+
+    private static BrowserControlState? ReadControlState(string described, string name, IReadOnlyList<string> secrets)
+    {
+        if (SensitiveControl(name))
+        {
+            return null;
+        }
+
+        using var document = JsonDocument.Parse(described);
+        if (!document.RootElement.TryGetProperty("state", out var state)
+            || state.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        string? value = null;
+        bool? checkedState = null;
+        string? selected = null;
+        if (state.TryGetProperty("value", out var valueProperty) && valueProperty.ValueKind == JsonValueKind.String)
+        {
+            value = Clip(Redact(valueProperty.GetString(), secrets), BrowserToolLimits.MaxFillLength);
+        }
+
+        if (state.TryGetProperty("checked", out var checkedProperty)
+            && (checkedProperty.ValueKind is JsonValueKind.True or JsonValueKind.False))
+        {
+            checkedState = checkedProperty.GetBoolean();
+        }
+
+        if (state.TryGetProperty("selectedText", out var selectedProperty) && selectedProperty.ValueKind == JsonValueKind.String)
+        {
+            selected = Clip(Redact(selectedProperty.GetString(), secrets), BrowserToolLimits.MaxFillLength);
+        }
+
+        if (value is null && checkedState is null && selected is null)
+        {
+            return null;
+        }
+
+        return new BrowserControlState(value, checkedState, selected);
+    }
+
+    private static bool SensitiveControl(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
+        var haystack = name.ToLowerInvariant();
+        string[] terms =
+        [
+            "password",
+            "passwd",
+            "passcode",
+            "secret",
+            "token",
+            "api key",
+            "apikey",
+            "access key",
+            "private key",
+            "client secret",
+            "authorization",
+            "one-time-code",
+            "otp"
+        ];
+        return terms.Any(term => haystack.Contains(term, StringComparison.Ordinal));
     }
 
     private static string Redact(string? text, IReadOnlyList<string> secrets)

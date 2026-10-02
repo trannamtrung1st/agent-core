@@ -108,6 +108,7 @@ public sealed class SecretaryIdentityTests
         Assert.Contains(ToolCatalog.ArtifactsCreateFromWorkspace, product.RequiredCapabilities);
         Assert.Contains("dashboard", product.Procedure, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("A Save or Publish click is not completion", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("read that element's state in the next observation", product.Procedure, StringComparison.Ordinal);
         Assert.Contains(ToolCatalog.BrowserNavigate, product.RequiredCapabilities);
         var bare = SampleDefinitions.Examiner with
         {
@@ -139,6 +140,12 @@ public sealed class SecretaryIdentityTests
     public async Task Journey_style_product_request_pins_store_product_manage_and_other_turns_do_not()
     {
         var secretary = await LoadSecretaryAsync();
+        Assert.Contains("store.product.manage", DeterministicSkillSelector.SelectActiveIds(secretary, "publish this product"));
+        Assert.Contains("store.product.manage", DeterministicSkillSelector.SelectActiveIds(secretary, "SKU AC-KBD-001"));
+        Assert.DoesNotContain("store.product.manage", DeterministicSkillSelector.SelectActiveIds(secretary, "improve my productivity"));
+        var pending = DeterministicSkillSelector.SelectActiveIds(secretary, "review pending orders");
+        Assert.DoesNotContain("store.product.manage", pending);
+        Assert.Contains("store.order.review", pending);
         var turns = new InMemoryConversationTurnExecutionStore();
         var model = new CompletingLanguageModel();
         var sessionIds = new DeterministicIdGenerator(
