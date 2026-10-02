@@ -149,7 +149,10 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
         foreach (var session in _sessions.Values.Distinct())
         {
-            await CloseQuietlyAsync(session.Context).ConfigureAwait(false);
+            if (!session.Persistent)
+            {
+                await CloseQuietlyAsync(session.Context).ConfigureAwait(false);
+            }
         }
 
         foreach (var session in _persistent.Values)
