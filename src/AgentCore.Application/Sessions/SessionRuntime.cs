@@ -3201,9 +3201,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     if (!terminalBrowserContinuation
                         && !refusedBlocked
                         && (closedPage
-                            || (string.Equals(call.Name, ToolCatalog.BrowserNavigate, StringComparison.Ordinal)
-                                && browserPageOrigin is not null
-                                && !blockedBrowserOrigins.Contains(browserPageOrigin))))
+                            || SuccessfulUnblockedBrowser(
+                                call.Name,
+                                executionResult.Text,
+                                browserPageOrigin,
+                                blockedBrowserOrigins)))
                     {
                         blockedNoProgress = 0;
                     }
@@ -6196,6 +6198,41 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         return false;
+    }
+
+    private static bool SuccessfulUnblockedBrowser(
+        string tool,
+        string? json,
+        string? pageOrigin,
+        HashSet<string> blockedOrigins) =>
+        tool is ToolCatalog.BrowserNavigate or ToolCatalog.BrowserObserve or ToolCatalog.BrowserAct
+        && pageOrigin is not null
+        && !blockedOrigins.Contains(pageOrigin)
+        && !BrowserResultHasError(json);
+
+    private static bool BrowserResultHasError(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return true;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return true;
+            }
+
+            return document.RootElement.TryGetProperty("error", out var error)
+                && error.ValueKind == JsonValueKind.String
+                && !string.IsNullOrEmpty(error.GetString());
+        }
+        catch (JsonException)
+        {
+            return true;
+        }
     }
 
     private static string? TryBrowserCloseStatus(string? json)

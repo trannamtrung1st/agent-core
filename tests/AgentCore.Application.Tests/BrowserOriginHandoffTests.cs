@@ -230,6 +230,38 @@ public sealed class BrowserOriginHandoffTests
     }
 
     [Fact]
+    public async Task A_successful_observe_breaks_the_blocked_attempt_streak()
+    {
+        var browser = new TwoSiteBrowser();
+        var model = new SequencedModel(
+            Navigate("a-1", "https://a.test/"),
+            Navigate("b-1", "https://b.test/specs"),
+            Navigate("a-2", "https://a.test/again"),
+            [
+                new ModelToolCallEvent(new ModelToolCall("see-b", ToolCatalog.BrowserObserve, "{}")),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ],
+            Navigate("a-3", "https://a.test/later"),
+            Answer("Specs stayed open."));
+        await using var runtime = Create(model, browser);
+        await runtime.AttachAsync();
+
+        Assert.True(await runtime.SubmitUserTextAsync("keep the open site"));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(["https://a.test/", "https://b.test/specs"], browser.Navigated);
+        Assert.Equal(1, browser.ObserveCalls);
+        Assert.Contains(model.Requests[5].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserObserve);
+        Assert.Contains(model.Requests[5].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserAct);
+        Assert.DoesNotContain(
+            model.Requests[5].Messages,
+            message => message.Text.Contains("Do not request more browser actions", StringComparison.Ordinal));
+        Assert.Equal(
+            EntryStatus.Completed,
+            Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
+    }
+
+    [Fact]
     public async Task A_challenged_page_hides_observe_and_act_until_another_site_opens()
     {
         var browser = new TwoSiteBrowser();
