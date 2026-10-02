@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -97,6 +98,34 @@ public sealed class SafeExecutionTraceTests
         Assert.Contains("targetRole=textbox", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("API token", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("targetName=", detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildActDetail_records_closed_argument_reason_without_value_ref_or_artifact()
+    {
+        const string reference = "el_0123456789abcdefghijkl";
+        const string secret = "do-not-log-fill-value";
+        var missing = $$"""{"operation":"fill","ref":"{{reference}}","value":"{{secret}}"}""";
+        using var missingDocument = JsonDocument.Parse($$"""{"operation":"fill","ref":"{{reference}}"}""");
+        Assert.False(BrowserToolArguments.TryAct(
+            missingDocument.RootElement,
+            out _,
+            out _,
+            out _,
+            out var error));
+        var detail = SafeExecutionTrace.BuildToolDetail(ToolCatalog.BrowserAct, missing, error);
+        Assert.Contains("operation=fill", detail, StringComparison.Ordinal);
+        Assert.Contains("argumentReason=missing_value", detail, StringComparison.Ordinal);
+        Assert.DoesNotContain(secret, detail, StringComparison.Ordinal);
+        Assert.DoesNotContain(reference, detail, StringComparison.Ordinal);
+
+        var uploadArgs = $$"""{"operation":"upload","ref":"{{reference}}","artifactId":"/tmp/ac-keyboard.png"}""";
+        using var upload = JsonDocument.Parse(uploadArgs);
+        Assert.False(BrowserToolArguments.TryAct(upload.RootElement, out _, out _, out _, out var uploadError));
+        var uploadDetail = SafeExecutionTrace.BuildToolDetail(ToolCatalog.BrowserAct, uploadArgs, uploadError);
+        Assert.Contains("argumentReason=invalid_artifact_id", uploadDetail, StringComparison.Ordinal);
+        Assert.DoesNotContain("/tmp/ac-keyboard.png", uploadDetail, StringComparison.Ordinal);
+        Assert.DoesNotContain(reference, uploadDetail, StringComparison.Ordinal);
     }
 
     [Fact]

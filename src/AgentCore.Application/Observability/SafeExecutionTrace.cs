@@ -13,6 +13,19 @@ public static class SafeExecutionTrace
     private const int MaxOutcomeLength = 80;
     private const int MaxDetailLength = 480;
     private const int MaxAccessibleNameLength = 80;
+
+    private static readonly HashSet<string> ArgumentReasons = new(StringComparer.Ordinal)
+    {
+        "missing_ref",
+        "invalid_ref",
+        "missing_value",
+        "value_too_long",
+        "missing_key",
+        "unsupported_key",
+        "missing_artifact_id",
+        "invalid_artifact_id",
+        "unsupported_property"
+    };
     private const int MaxRoleLength = 40;
 
     public static string NormalizeToolOutcome(string? resultJson)
@@ -207,6 +220,11 @@ public static class SafeExecutionTrace
         }
 
         var parts = new List<string> { $"operation={Clip(operation, 20)}" };
+        if (TryReadStringProperty(resultJson, "reason", out var argumentReason)
+            && ArgumentReasons.Contains(argumentReason))
+        {
+            parts.Add($"argumentReason={argumentReason}");
+        }
         if (TryReadStringProperty(resultJson, "url", out var url))
         {
             parts.Add($"path={SafeUrlPath(url)}");

@@ -163,25 +163,19 @@ public static class BrowserToolArguments
 
         if (!TryString(args, "ref", out reference))
         {
-            errorJson = Error("invalid", "ref is required.");
+            errorJson = Error("invalid", "ref is required.", "missing_ref");
             return false;
         }
 
-        if (reference.Length > BrowserToolLimits.MaxRefLength)
+        if (reference.Length > BrowserToolLimits.MaxRefLength
+            || LooksLikeSelector(reference)
+            || !OpaqueRef.IsMatch(reference))
         {
-            errorJson = Error("invalid", "ref must be at most 128 characters.");
-            return false;
-        }
-
-        if (LooksLikeSelector(reference))
-        {
-            errorJson = Error("unsupported_operation", "Browser selectors are not supported.");
-            return false;
-        }
-
-        if (!OpaqueRef.IsMatch(reference))
-        {
-            errorJson = Error("invalid", "ref must be an opaque element reference.");
+            errorJson = LooksLikeSelector(reference)
+                ? Error("unsupported_operation", "Browser selectors are not supported.", "invalid_ref")
+                : Error("invalid", reference.Length > BrowserToolLimits.MaxRefLength
+                    ? "ref must be at most 128 characters."
+                    : "ref must be an opaque element reference.", "invalid_ref");
             return false;
         }
 
@@ -189,14 +183,14 @@ public static class BrowserToolArguments
         {
             if (!TryString(args, "value", out var text))
             {
-                errorJson = Error("invalid", "value is required.");
+                errorJson = Error("invalid", "value is required.", "missing_value");
                 return false;
             }
 
             var max = operation == "fill" ? BrowserToolLimits.MaxFillLength : BrowserToolLimits.MaxSelectLength;
             if (text.Length > max)
             {
-                errorJson = Error("invalid", $"value must be at most {max} characters.");
+                errorJson = Error("invalid", $"value must be at most {max} characters.", "value_too_long");
                 return false;
             }
 
@@ -204,10 +198,15 @@ public static class BrowserToolArguments
         }
         else if (operation == "press")
         {
-            if (!TryString(args, "key", out var key)
-                || !BrowserToolLimits.PressKeys.Contains(key, StringComparer.Ordinal))
+            if (!TryString(args, "key", out var key))
             {
-                errorJson = Error("unsupported_operation", "Browser key is not supported.");
+                errorJson = Error("unsupported_operation", "Browser key is not supported.", "missing_key");
+                return false;
+            }
+
+            if (!BrowserToolLimits.PressKeys.Contains(key, StringComparer.Ordinal))
+            {
+                errorJson = Error("unsupported_operation", "Browser key is not supported.", "unsupported_key");
                 return false;
             }
 
@@ -217,7 +216,7 @@ public static class BrowserToolArguments
         {
             if (!TryString(args, "artifactId", out var artifactId))
             {
-                errorJson = Error("invalid", "artifactId is required.");
+                errorJson = Error("invalid", "artifactId is required.", "missing_artifact_id");
                 return false;
             }
 
@@ -227,7 +226,7 @@ public static class BrowserToolArguments
                 || artifactId.Contains(':')
                 || Uri.TryCreate(artifactId, UriKind.Absolute, out _))
             {
-                errorJson = Error("invalid", "artifactId must be an artifact or definition resource id.");
+                errorJson = Error("invalid", "artifactId must be an artifact or definition resource id.", "invalid_artifact_id");
                 return false;
             }
 
@@ -249,7 +248,7 @@ public static class BrowserToolArguments
 
             if (ScriptProperties.Contains(property.Name))
             {
-                errorJson = Error("unsupported_operation", "Browser scripting and selectors are not supported.");
+                errorJson = Error("unsupported_operation", "Browser scripting and selectors are not supported.", "unsupported_property");
                 return false;
             }
 
@@ -274,7 +273,7 @@ public static class BrowserToolArguments
         {
             if (!allowed.Contains(property.Name, StringComparer.Ordinal))
             {
-                errorJson = Error("invalid", "Browser arguments contain an unsupported property.");
+                errorJson = Error("invalid", "Browser arguments contain an unsupported property.", "unsupported_property");
                 return false;
             }
         }
@@ -310,6 +309,8 @@ public static class BrowserToolArguments
             || value.Contains("querySelector", StringComparison.OrdinalIgnoreCase)
             || value.Contains("Playwright", StringComparison.OrdinalIgnoreCase));
 
-    private static string Error(string code, string message) =>
-        JsonSerializer.Serialize(new { error = code, message });
+    private static string Error(string code, string message, string? reason = null) =>
+        reason is null
+            ? JsonSerializer.Serialize(new { error = code, message })
+            : JsonSerializer.Serialize(new { error = code, message, reason });
 }
