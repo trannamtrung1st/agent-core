@@ -1,0 +1,166 @@
+using AgentCore.Application.Agents;
+using AgentCore.Application.Events;
+using AgentCore.Application.Execution;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Sessions;
+using AgentCore.Application.Testing;
+using AgentCore.Application.Tools;
+using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
+using AgentCore.Infrastructure.Identity;
+using AgentCore.Infrastructure.Persistence;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
+
+namespace AgentCore.Application.Tests;
+
+public sealed class EffectReceiptJourneyTests
+{
+    [Fact]
+    public async Task Browser_close_receipt_survives_unavailable_follow_up_and_does_not_leak()
+    {
+        var output = new CapturingSessionOutput();
+        var store = new InMemoryMemoryStore();
+        var model = new CloseThenUnavailableModel();
+        await using var runtime = Create(output, store, model);
+        await runtime.AttachAsync();
+
+        await runtime.SubmitUserTextAsync("close the browser");
+        await runtime.WaitUntilIdleAsync();
+
+        var first = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Failed, first.Status);
+        var receipt = Assert.Single(first.Envelope!.EffectReceipts!);
+        Assert.Equal("Browser closed", receipt.Label);
+
+        var live = output.Items.Select(item => item.Payload).OfType<ResponseCompletedOutput>().Single();
+        Assert.Equal("Browser closed", Assert.Single(live.EffectReceipts!).Label);
+
+        var loaded = await store.LoadAsync(runtime.Snapshot.SessionId);
+        var reloaded = Assert.Single(loaded!.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(
+            "Browser closed",
+            Assert.Single(PublicHistory.FromEntry(reloaded).EffectReceipts!).Label);
+
+        await runtime.SubmitUserTextAsync("why did it fail?");
+        await runtime.WaitUntilIdleAsync();
+
+        var assistants = runtime.Snapshot.Entries.Where(entry => entry.Role == ConversationRole.Assistant).ToArray();
+        Assert.Equal(2, assistants.Length);
+        Assert.Equal(EntryStatus.Failed, assistants[1].Status);
+        Assert.True(assistants[1].Envelope?.EffectReceipts is null or { Count: 0 });
+        var completions = output.Items.Select(item => item.Payload).OfType<ResponseCompletedOutput>().ToArray();
+        Assert.Equal(2, completions.Length);
+        Assert.True(completions[1].EffectReceipts is null or { Count: 0 });
+    }
+
+    private static SessionRuntime Create(
+        CapturingSessionOutput output,
+        InMemoryMemoryStore store,
+        ILanguageModel model)
+    {
+        var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-02T12:00:00Z"));
+        var ids = new DeterministicIdGenerator(
+            Enumerable.Range(1, 80).Select(index => Guid.Parse($"019944af-00e1-7000-8000-{index:D12}")),
+            [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940d201")]);
+        var now = time.GetUtcNow();
+        var definition = new AgentDefinition(
+            1,
+            "general-assistant",
+            12,
+            new AgentIdentity("Test", "Role", "desc", "Tone"),
+            [],
+            "instructions",
+            new BehaviorPolicy("answerNewTurn", true, true),
+            new ConversationPolicy("balanced", false, "en", 2048),
+            new InitiativePolicy(false, 60_000, 120_000, 1, ["longSilence"], 0),
+            new VoiceConfiguration(false, "default", 1.0),
+            new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new RoleEnvironment(ToolAllowlist: [ToolCatalog.BrowserClose]));
+        var snapshot = new SessionSnapshot(
+            1,
+            ids.NewSessionId(),
+            1,
+            definition,
+            SessionMode.Text,
+            null,
+            SessionStatus.Created,
+            [],
+            string.Empty,
+            0,
+            null,
+            null,
+            now,
+            now,
+            ModelSelection: new SessionModelSelection(
+                "synthetic-offline/scripted",
+                "primary-llm",
+                "scripted",
+                ModelSelectionSource.SystemDefault,
+                null));
+        store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
+        var browser = new ClosingBrowser();
+        return new SessionRuntime(
+            snapshot,
+            model,
+            new DefaultAgentBrain(new PromptContextBuilder(ToolConfigurationGates.AllowAll, browser)),
+            store,
+            output,
+            ids,
+            time,
+            NullLogger<SessionRuntime>.Instance,
+            tools: new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll),
+            turnExecutions: new InMemoryConversationTurnExecutionStore());
+    }
+
+    private sealed class CloseThenUnavailableModel : ILanguageModel
+    {
+        private int _calls;
+
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            var call = Interlocked.Increment(ref _calls);
+            if (call == 1)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall("close-1", ToolCatalog.BrowserClose, "{}"));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            yield return new ModelFailed(new ProviderFailure(
+                ProviderErrorCode.Unavailable,
+                "Language model is unavailable.",
+                FailureReason: ProviderFailureReason.Http5xx));
+        }
+    }
+
+    private sealed class ClosingBrowser : IBrowserSession
+    {
+        public bool IsAvailable => true;
+
+        public BrowserHostPolicy HostPolicy { get; } = new(true, true, BrowserInteractionMode.InteractiveDemo, ["https://example.test"]);
+
+        public ValueTask<Uri?> GetCurrentUrlAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+            new((Uri?)null);
+
+        public ValueTask<BrowserOperationResult> NavigateAsync(
+            BrowserNavigateRequest request,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<BrowserOperationResult> ActAsync(BrowserActRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+            new(new BrowserCloseResult("closed"));
+    }
+}

@@ -595,7 +595,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         var root = document.RootElement;
         if (root.TryGetProperty("error", out _))
         {
-            return [Fail(ProviderErrorCode.Unavailable, "Language model reported a stream error.", ProviderFailureReason.StreamMalformed)];
+            return [Fail(ProviderErrorCode.Unavailable, "Language model reported a stream error.", ProviderFailureReason.ProviderStreamError)];
         }
 
         if (root.TryGetProperty("usage", out var usage))

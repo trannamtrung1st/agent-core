@@ -21,7 +21,11 @@ export function ChatMessage({
   const isUser = entry.role === "user";
   const isApplication = entry.role === "applicationMessage";
   const speaker = isUser ? "You" : agentName || "Agent";
-  const status = isApplication ? null : statusLabel(entry.status, entry.finishReason, entry.interruptReason);
+  const status = isApplication
+    ? null
+    : entry.status === "failed" && entry.effectReceipts?.length
+      ? "Reply failed"
+      : statusLabel(entry.status, entry.finishReason, entry.interruptReason);
   const timeLabel = formatChatTime(entry.createdAt);
   const hasFiles = Boolean(entry.attachments?.length && sessionId);
   const hasBlocks = Boolean(entry.blocks?.length);

@@ -25,7 +25,7 @@ export function ChatMessageStatus({
       title={hasDetails ? undefined : entry.interruptReason ?? undefined}
       role={hasDetails ? "button" : undefined}
       tabIndex={hasDetails ? 0 : undefined}
-      aria-label={hasDetails ? "Failed — show error details" : undefined}
+      aria-label={hasDetails ? `${label} — show error details` : undefined}
     >
       {label}
     </Tag>

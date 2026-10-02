@@ -2,15 +2,11 @@ using System.Text.Json;
 using AgentCore.Application.Memory;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentCore.Infrastructure.Providers.SemanticResponses;
 
 internal static class NativeSemanticResponseParser
 {
-    private static readonly ILogger SpeechNormalizationLogger =
-        NullLogger.Instance;
     public static bool TryParse(
         string json,
         out ModelSemanticResponse? response,
@@ -447,15 +443,8 @@ internal static class NativeSemanticResponseParser
         return true;
     }
 
-    private static void NoteSpeechNormalized(string reason)
-    {
-        DiagnosticLog.Warning(
-            SpeechNormalizationLogger,
-            new InvalidOperationException("Assistant speech projection was normalized."),
-            Guid.NewGuid(),
-            "Assistant speech projection was normalized.",
-            new DiagnosticContext(FailureReason: reason, ProviderResponseChannel: ProviderResponseChannel.ResponseFunction));
-    }
+    private static void NoteSpeechNormalized(string reason) =>
+        SpeechTelemetry.RecordSpeechNormalized(reason);
 
     private static bool TryRecognizeSpeech(JsonElement root, out ModelSpeechMode mode, out string? customText)
     {

@@ -27,6 +27,7 @@ public static class ProviderFailureReason
     public const string Http5xx = "http5xx";
     public const string StreamIdle = "streamIdle";
     public const string StreamMalformed = "streamMalformed";
+    public const string ProviderStreamError = "providerStreamError";
     public const string StreamIncomplete = "streamIncomplete";
     public const string IncompleteToolCall = "incompleteToolCall";
     public const string CircuitOpen = "circuitOpen";

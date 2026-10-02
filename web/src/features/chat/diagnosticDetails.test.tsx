@@ -126,6 +126,28 @@ describe("failed assistant details", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Copied");
   });
 
+  it("labels a failed reply that already committed an effect", () => {
+    render(
+      <ChatMessage
+        agentName="Alex"
+        sessionId="session-1"
+        entry={{
+          ...failedEntry({
+            diagnosticId: "diag-effect",
+            category: "Provider",
+            code: "Unavailable"
+          }),
+          text: "",
+          effectReceipts: [{ tool: "browser.close", status: "closed", label: "Browser closed" }]
+        }}
+      />
+    );
+    expect(screen.getByText("✓ Browser closed")).toBeInTheDocument();
+    expect(screen.getByText("Reply failed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reply failed — show error details" })).toBeInTheDocument();
+    expect(screen.queryByText("Failed")).not.toBeInTheDocument();
+  });
+
   it("copies allowlisted reason and channel and omits them when absent", async () => {
     const { rerender } = render(
       <ChatMessage

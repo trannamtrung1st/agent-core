@@ -1783,6 +1783,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _activeEntryId = entryId;
         _accumulator.Reset();
         _envelope = null;
+        _committedEffects.Clear();
         _usesResponseContract = true;
         _semanticReady = false;
         _chatAcceptedTimestamp = 0;
@@ -4650,10 +4651,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         var effects = _committedEffects.ToArray();
-        return (envelope ?? new ResponseEnvelope(string.Empty, null, [], ResponseSpeechMode.None)) with
+        var withEffects = (envelope ?? new ResponseEnvelope(string.Empty, null, [], ResponseSpeechMode.None)) with
         {
             EffectReceipts = effects
         };
+        _envelope = withEffects;
+        return withEffects;
     }
 
     private void NoteCommittedEffect(string tool, string json)

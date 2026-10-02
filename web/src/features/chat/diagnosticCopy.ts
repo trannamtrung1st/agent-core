@@ -39,6 +39,7 @@ const failureReasonTokens = new Set([
   "http5xx",
   "streamIdle",
   "streamMalformed",
+  "providerStreamError",
   "streamIncomplete",
   "incompleteToolCall",
   "circuitOpen",

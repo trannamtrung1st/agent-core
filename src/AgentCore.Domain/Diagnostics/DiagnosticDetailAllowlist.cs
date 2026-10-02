@@ -30,6 +30,7 @@ public static class DiagnosticDetailAllowlist
         "http5xx",
         "streamIdle",
         "streamMalformed",
+        "providerStreamError",
         "streamIncomplete",
         "incompleteToolCall",
         "circuitOpen",

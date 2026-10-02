@@ -8,34 +8,6 @@ public static class EffectReceipts
     public static bool TryFromToolResult(string tool, string json, out EffectReceipt receipt)
     {
         receipt = null!;
-        if (ToolCatalog.EffectOf(tool) is not (ToolEffect.Write or ToolEffect.SensitiveWrite or ToolEffect.Destructive))
-        {
-            return false;
-        }
-
-        if (!TryStatus(json, out var status))
-        {
-            return false;
-        }
-
-        var label = string.Equals(tool, ToolCatalog.BrowserClose, StringComparison.Ordinal)
-            && status is "closed" or "already_closed"
-            ? "Browser closed"
-            : string.Equals(tool, ToolCatalog.EmailSend, StringComparison.Ordinal)
-                ? "Email sent"
-                : null;
-        if (label is null)
-        {
-            return false;
-        }
-
-        receipt = new EffectReceipt(tool, status, label);
-        return true;
-    }
-
-    private static bool TryStatus(string json, out string status)
-    {
-        status = string.Empty;
         try
         {
             using var document = JsonDocument.Parse(json);
@@ -44,17 +16,20 @@ public static class EffectReceipts
                 return false;
             }
 
-            if (document.RootElement.TryGetProperty("error", out _))
+            if (string.Equals(tool, ToolCatalog.BrowserClose, StringComparison.Ordinal)
+                && TryString(document.RootElement, "status", out var status)
+                && status is "closed" or "already_closed")
             {
-                return false;
+                receipt = new EffectReceipt(tool, status, "Browser closed");
+                return true;
             }
 
-            if (document.RootElement.TryGetProperty("status", out var statusEl)
-                && statusEl.ValueKind == JsonValueKind.String
-                && statusEl.GetString() is { Length: > 0 } value)
+            if (string.Equals(tool, ToolCatalog.EmailSend, StringComparison.Ordinal)
+                && TryString(document.RootElement, "outcome", out var outcome)
+                && string.Equals(outcome, "sent", StringComparison.Ordinal))
             {
-                status = value;
-                return status is "closed" or "already_closed" or "sent";
+                receipt = new EffectReceipt(tool, outcome, "Email sent");
+                return true;
             }
         }
         catch (JsonException)
@@ -63,5 +38,14 @@ public static class EffectReceipts
         }
 
         return false;
+    }
+
+    private static bool TryString(JsonElement root, string name, out string value)
+    {
+        value = string.Empty;
+        return root.TryGetProperty(name, out var property)
+            && property.ValueKind == JsonValueKind.String
+            && property.GetString() is { Length: > 0 } text
+            && (value = text) is not null;
     }
 }

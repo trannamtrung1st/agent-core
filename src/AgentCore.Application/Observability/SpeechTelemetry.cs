@@ -14,6 +14,7 @@ public static class SpeechTelemetry
     public const string CancelReasonInstrument = "speech.cancel.reason";
     public const string ErrorCodeInstrument = "speech.error.code";
     public const string VoiceSpeechFallbackInstrument = "speech.voice.fallback";
+    public const string SpeechNormalizedInstrument = "llm.speech.normalized";
 
     private static readonly Counter<long> PartialCount =
         RuntimeTelemetry.Meter.CreateCounter<long>(PartialCountInstrument);
@@ -38,6 +39,9 @@ public static class SpeechTelemetry
 
     private static readonly Counter<long> VoiceSpeechFallback =
         RuntimeTelemetry.Meter.CreateCounter<long>(VoiceSpeechFallbackInstrument);
+
+    private static readonly Counter<long> SpeechNormalized =
+        RuntimeTelemetry.Meter.CreateCounter<long>(SpeechNormalizedInstrument);
 
     private static readonly HashSet<string> CancelReasons =
     [
@@ -114,6 +118,17 @@ public static class SpeechTelemetry
         {
             RecordError(VoiceSpeechFallbackCode);
         }
+    }
+
+    public static void RecordSpeechNormalized(string reason)
+    {
+        if (reason is not (ProviderFailureReason.SpeechOmitted or ProviderFailureReason.SpeechMalformed))
+        {
+            return;
+        }
+
+        SpeechNormalized.Add(1, new TagList { { "reason", reason } });
+        RuntimeTelemetry.RecordDiagnostic(SpeechNormalizedInstrument, 0, reason);
     }
 
     public static void RecordError(string code)

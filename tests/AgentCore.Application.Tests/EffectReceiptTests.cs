@@ -17,6 +17,25 @@ public sealed class EffectReceiptTests
     }
 
     [Fact]
+    public void Email_send_uses_outcome_sent_even_when_error_is_null()
+    {
+        var json = """
+            {"outcome":"sent","providerMessageId":"msg-1","error":null,"message":null}
+            """;
+        Assert.True(EffectReceipts.TryFromToolResult(ToolCatalog.EmailSend, json, out var receipt));
+        Assert.Equal("Email sent", receipt.Label);
+        Assert.Equal("sent", receipt.Status);
+        Assert.False(EffectReceipts.TryFromToolResult(
+            ToolCatalog.EmailSend,
+            """{"outcome":"failed","providerMessageId":null,"error":"rejected","message":"no"}""",
+            out _));
+        Assert.False(EffectReceipts.TryFromToolResult(
+            ToolCatalog.EmailSend,
+            """{"outcome":"unknown","error":null,"message":null}""",
+            out _));
+    }
+
+    [Fact]
     public void Browser_close_failure_and_read_tools_are_not_receipts()
     {
         Assert.False(EffectReceipts.TryFromToolResult(
