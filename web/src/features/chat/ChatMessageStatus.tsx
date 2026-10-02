@@ -45,7 +45,9 @@ export function ChatMessageStatus({
         category: failure!.category,
         code: failure!.code,
         failureReason: failure!.failureReason,
-        providerResponseChannel: failure!.providerResponseChannel
+        providerResponseChannel: failure!.providerResponseChannel,
+        protocolRepair: failure!.protocolRepair,
+        protocolRepairOutcome: failure!.protocolRepairOutcome
       }}
       trigger={tag}
     />

@@ -12,6 +12,8 @@ export type DiagnosticFields = {
   code?: string | null;
   failureReason?: string | null;
   providerResponseChannel?: string | null;
+  protocolRepair?: string | null;
+  protocolRepairOutcome?: string | null;
 };
 
 export function detailLinesCopyText(header: string, lines: DetailLine[]): string {
@@ -68,6 +70,17 @@ export function allowlistedResponseChannel(value: unknown): string | null {
   return allowlistedDiagnosticToken(value, responseChannelTokens);
 }
 
+const protocolRepairTokens = new Set(["attempted"]);
+const protocolRepairOutcomeTokens = new Set(["succeeded", "failed", "cancelled"]);
+
+export function allowlistedProtocolRepair(value: unknown): string | null {
+  return allowlistedDiagnosticToken(value, protocolRepairTokens);
+}
+
+export function allowlistedProtocolRepairOutcome(value: unknown): string | null {
+  return allowlistedDiagnosticToken(value, protocolRepairOutcomeTokens);
+}
+
 function present(value: string | null | undefined): string | null {
   const text = value?.trim();
   return text ? text : null;
@@ -118,6 +131,14 @@ export function diagnosticCopyText(fields: DiagnosticFields, extraLines: DetailL
   }
   if (providerResponseChannel) {
     lines.push(`Channel: ${providerResponseChannel}`);
+  }
+  const protocolRepair = allowlistedProtocolRepair(fields.protocolRepair);
+  const protocolRepairOutcome = allowlistedProtocolRepairOutcome(fields.protocolRepairOutcome);
+  if (protocolRepair) {
+    lines.push("Protocol repair: attempted");
+  }
+  if (protocolRepairOutcome) {
+    lines.push(`Repair outcome: ${protocolRepairOutcome}`);
   }
 
   for (const line of extraLines) {

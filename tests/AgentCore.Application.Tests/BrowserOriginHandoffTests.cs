@@ -105,15 +105,14 @@ public sealed class BrowserOriginHandoffTests
             Navigate("open", "https://cars.test/page"),
             Navigate("retry-requested", "https://cars.test/page"),
             Navigate("retry-final", "https://www.cars.test/page"),
-            Navigate("other", "https://b.test/specs"),
-            Answer("Zigwheels is open."));
+            Answer("Both car addresses need you."));
         await using var runtime = Create(model, browser);
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("compare cars and another site"));
         await runtime.WaitUntilIdleAsync();
 
-        Assert.Equal(["https://cars.test/page", "https://b.test/specs"], browser.Navigated);
+        Assert.Equal(["https://cars.test/page"], browser.Navigated);
         Assert.Equal(
             EntryStatus.Completed,
             Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
@@ -144,6 +143,97 @@ public sealed class BrowserOriginHandoffTests
                 && !text.Contains("user_intervention_required", StringComparison.Ordinal));
         Assert.Equal(
             EntryStatus.Completed,
+            Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
+    }
+
+    [Fact]
+    public async Task A_challenged_page_hides_observe_and_act_until_another_site_opens()
+    {
+        var browser = new TwoSiteBrowser();
+        var model = new SequencedModel(
+            Navigate("a-1", "https://a.test/"),
+            Navigate("b-1", "https://b.test/specs"),
+            [
+                new ModelToolCallEvent(new ModelToolCall("see-b", ToolCatalog.BrowserObserve, "{}")),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ],
+            Answer("Specs are open."));
+        await using var runtime = Create(model, browser);
+        await runtime.AttachAsync();
+
+        Assert.True(await runtime.SubmitUserTextAsync("open another site"));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.DoesNotContain(model.Requests[1].Tools ?? [], tool => tool.Name is ToolCatalog.BrowserObserve or ToolCatalog.BrowserAct);
+        Assert.Contains(model.Requests[1].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserNavigate);
+        Assert.Contains(model.Requests[1].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserClose);
+        Assert.Contains(model.Requests[1].Messages, message => message.Role == ModelRole.System && message.Text.Contains("requires human intervention", StringComparison.Ordinal));
+        Assert.Contains(model.Requests[2].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserObserve);
+        Assert.Contains(model.Requests[2].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserAct);
+        Assert.Equal(1, browser.ObserveCalls);
+        Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Text.Contains("requires human intervention", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Two_blocked_attempts_finish_without_more_browser_tools()
+    {
+        var browser = new TwoSiteBrowser();
+        var model = new SequencedModel(
+            Navigate("a-1", "https://a.test/"),
+            [
+                new ModelToolCallEvent(new ModelToolCall("see-a", ToolCatalog.BrowserObserve, "{}")),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ],
+            [
+                new ModelToolCallEvent(new ModelToolCall("see-a-2", ToolCatalog.BrowserObserve, "{}")),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ],
+            Answer("Cars.com needs you before I can continue."));
+        await using var runtime = Create(model, browser);
+        await runtime.AttachAsync();
+
+        Assert.True(await runtime.SubmitUserTextAsync("open cars"));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(["https://a.test/"], browser.Navigated);
+        Assert.Equal(0, browser.ObserveCalls);
+        Assert.True(model.Requests[3].Tools is not { Count: > 0 });
+        Assert.Contains(model.Requests[3].Messages, message => message.Role == ModelRole.System && message.Text.Contains("Do not request more browser actions", StringComparison.Ordinal));
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Completed, assistant.Status);
+        Assert.Equal("Cars.com needs you before I can continue.", assistant.Text);
+        Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Text.Contains("Do not request more browser actions", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_tool_call_after_the_no_progress_stop_does_not_keep_generating()
+    {
+        var browser = new TwoSiteBrowser();
+        var model = new SequencedModel(
+            Navigate("a-1", "https://a.test/"),
+            [
+                new ModelToolCallEvent(new ModelToolCall("see-a", ToolCatalog.BrowserObserve, "{}")),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ],
+            [
+                new ModelToolCallEvent(new ModelToolCall("see-a-2", ToolCatalog.BrowserObserve, "{}")),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ],
+            [
+                new ModelToolCallEvent(new ModelToolCall("see-a-3", ToolCatalog.BrowserObserve, "{}")),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ]);
+        await using var runtime = Create(model, browser);
+        await runtime.AttachAsync();
+
+        Assert.True(await runtime.SubmitUserTextAsync("open cars"));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(4, model.Requests.Count);
+        Assert.Equal(["https://a.test/"], browser.Navigated);
+        Assert.Equal(0, browser.ObserveCalls);
+        Assert.Equal(
+            EntryStatus.Failed,
             Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
     }
 
@@ -233,6 +323,8 @@ public sealed class BrowserOriginHandoffTests
 
         public List<string> ToolTexts { get; } = [];
 
+        public List<ModelRequest> Requests { get; } = [];
+
         public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
 
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
@@ -240,6 +332,7 @@ public sealed class BrowserOriginHandoffTests
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             await Task.Yield();
+            Requests.Add(request);
             ToolTexts.AddRange(request.Messages.Where(message => message.Role == ModelRole.Tool).Select(message => message.Text));
             var call = Interlocked.Increment(ref _calls);
             foreach (var evt in steps[Math.Min(call, steps.Length) - 1])

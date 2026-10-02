@@ -37,6 +37,18 @@ public static class DiagnosticDetailAllowlist
         "streamLimit"
     };
 
+    public static readonly IReadOnlySet<string> ProtocolRepairs = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "attempted"
+    };
+
+    public static readonly IReadOnlySet<string> ProtocolRepairOutcomes = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "succeeded",
+        "failed",
+        "cancelled"
+    };
+
     public static readonly IReadOnlySet<string> ResponseChannels = new HashSet<string>(StringComparer.Ordinal)
     {
         "responseFunction",

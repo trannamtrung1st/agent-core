@@ -10,7 +10,9 @@ public sealed record FailureReference
         string code,
         Guid? correlationId = null,
         string? failureReason = null,
-        string? providerResponseChannel = null)
+        string? providerResponseChannel = null,
+        string? protocolRepair = null,
+        string? protocolRepairOutcome = null)
     {
         if (diagnosticId == Guid.Empty)
         {
@@ -31,6 +33,14 @@ public sealed record FailureReference
             providerResponseChannel,
             DiagnosticDetailAllowlist.ResponseChannels,
             nameof(providerResponseChannel));
+        ProtocolRepair = RequireAllowlisted(
+            protocolRepair,
+            DiagnosticDetailAllowlist.ProtocolRepairs,
+            nameof(protocolRepair));
+        ProtocolRepairOutcome = RequireAllowlisted(
+            protocolRepairOutcome,
+            DiagnosticDetailAllowlist.ProtocolRepairOutcomes,
+            nameof(protocolRepairOutcome));
     }
 
     public Guid DiagnosticId { get; }
@@ -44,6 +54,10 @@ public sealed record FailureReference
     public string? FailureReason { get; }
 
     public string? ProviderResponseChannel { get; }
+
+    public string? ProtocolRepair { get; }
+
+    public string? ProtocolRepairOutcome { get; }
 
     public static bool IsSafeToken(string? value)
     {

@@ -25,7 +25,9 @@ public static class FailureReferenceJson
                 reference.Category,
                 reference.Code,
                 reference.FailureReason,
-                reference.ProviderResponseChannel),
+                reference.ProviderResponseChannel,
+                reference.ProtocolRepair,
+                reference.ProtocolRepairOutcome),
             Json);
     }
 
@@ -48,6 +50,8 @@ public static class FailureReferenceJson
         string? code = null;
         string? failureReason = null;
         string? providerResponseChannel = null;
+        string? protocolRepair = null;
+        string? protocolRepairOutcome = null;
         foreach (var property in document.RootElement.EnumerateObject())
         {
             switch (property.Name)
@@ -76,6 +80,16 @@ public static class FailureReferenceJson
                 case "providerResponseChannel":
                     providerResponseChannel = property.Value.GetString();
                     break;
+                case "protocolRepair" when property.Value.ValueKind == JsonValueKind.Null:
+                    break;
+                case "protocolRepair":
+                    protocolRepair = property.Value.GetString();
+                    break;
+                case "protocolRepairOutcome" when property.Value.ValueKind == JsonValueKind.Null:
+                    break;
+                case "protocolRepairOutcome":
+                    protocolRepairOutcome = property.Value.GetString();
+                    break;
                 default:
                     throw new ArgumentException("Failure reference JSON contains an unknown field.");
             }
@@ -92,7 +106,9 @@ public static class FailureReferenceJson
             code ?? throw new ArgumentException("Failure reference JSON requires code."),
             correlationId,
             failureReason,
-            providerResponseChannel);
+            providerResponseChannel,
+            protocolRepair,
+            protocolRepairOutcome);
     }
 
     private static Guid ReadGuid(JsonElement value, string name)
@@ -111,5 +127,7 @@ public static class FailureReferenceJson
         string Category,
         string Code,
         string? FailureReason,
-        string? ProviderResponseChannel);
+        string? ProviderResponseChannel,
+        string? ProtocolRepair,
+        string? ProtocolRepairOutcome);
 }

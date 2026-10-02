@@ -350,7 +350,9 @@ public sealed record PublicFailureReference(
     string Category,
     string Code,
     string? FailureReason = null,
-    string? ProviderResponseChannel = null);
+    string? ProviderResponseChannel = null,
+    string? ProtocolRepair = null,
+    string? ProtocolRepairOutcome = null);
 
 public sealed record PublicPendingApproval(
     Guid ApprovalId,
@@ -596,7 +598,9 @@ public static class PublicHistory
                     failure.Category,
                     failure.Code,
                     failure.FailureReason,
-                    failure.ProviderResponseChannel)
+                    failure.ProviderResponseChannel,
+                    failure.ProtocolRepair,
+                    failure.ProtocolRepairOutcome)
                 : null,
             memoryReceipts,
             effectReceipts);

@@ -7,7 +7,7 @@ import type {
   SessionModelSelection
 } from "../services/api";
 import type { PendingAttachment } from "../services/attachments";
-import { allowlistedFailureReason, allowlistedResponseChannel } from "../features/chat/diagnosticCopy";
+import { allowlistedFailureReason, allowlistedProtocolRepair, allowlistedProtocolRepairOutcome, allowlistedResponseChannel } from "../features/chat/diagnosticCopy";
 import { sessionErrorFromMessage, sessionErrorFromWire, type SessionErrorView } from "../features/chat/sessionError";
 
 export type ConnectionStatus = "idle" | "connecting" | "ready" | "reconnecting" | "failed";
@@ -62,6 +62,8 @@ export type HistoryFailure = {
   code: string;
   failureReason?: string | null;
   providerResponseChannel?: string | null;
+  protocolRepair?: string | null;
+  protocolRepairOutcome?: string | null;
 };
 
 export type HistoryEntry = {
@@ -524,13 +526,17 @@ function asHistoryFailure(raw: unknown): HistoryFailure | null {
   const correlationId = asString(row.correlationId).trim();
   const failureReason = allowlistedFailureReason(row.failureReason);
   const providerResponseChannel = allowlistedResponseChannel(row.providerResponseChannel);
+  const protocolRepair = allowlistedProtocolRepair(row.protocolRepair);
+  const protocolRepairOutcome = allowlistedProtocolRepairOutcome(row.protocolRepairOutcome);
   return {
     diagnosticId,
     correlationId: correlationId || null,
     category: asString(row.category),
     code: asString(row.code),
     ...(failureReason ? { failureReason } : {}),
-    ...(providerResponseChannel ? { providerResponseChannel } : {})
+    ...(providerResponseChannel ? { providerResponseChannel } : {}),
+    ...(protocolRepair ? { protocolRepair } : {}),
+    ...(protocolRepairOutcome ? { protocolRepairOutcome } : {})
   };
 }
 

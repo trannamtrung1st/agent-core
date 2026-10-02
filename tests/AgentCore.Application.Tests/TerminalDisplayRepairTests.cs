@@ -126,9 +126,10 @@ public sealed class TerminalDisplayRepairTests
         await runtime.WaitUntilIdleAsync();
 
         Assert.Equal(2, model.Calls);
-        Assert.Equal(
-            EntryStatus.Failed,
-            Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Failed, assistant.Status);
+        Assert.Equal("attempted", assistant.Failure!.ProtocolRepair);
+        Assert.Equal("failed", assistant.Failure.ProtocolRepairOutcome);
     }
 
     [Theory]
@@ -385,7 +386,7 @@ public sealed class TerminalDisplayRepairTests
         Assert.Equal(disposition, ProtocolFailures.Disposition(reason));
         if (disposition == ProtocolFailureDisposition.Repairable)
         {
-            Assert.Contains("non-empty displayText", ProtocolFailures.RepairInstruction(reason), StringComparison.Ordinal);
+            Assert.Contains("visible reply was empty", ProtocolFailures.RepairInstruction(reason), StringComparison.Ordinal);
         }
         else
         {
@@ -407,12 +408,11 @@ public sealed class TerminalDisplayRepairTests
 
     private static void AssertTerminalChannelOnly(ModelRequest request)
     {
-        Assert.NotNull(request.ResponseContract);
+        Assert.Null(request.ResponseContract);
         Assert.Contains(
             request.Messages,
             message => message.Role == ModelRole.System
-                && message.Text.Contains("rejected by the application protocol", StringComparison.Ordinal)
-                && message.Text.Contains("non-empty displayText", StringComparison.Ordinal));
+                && message.Text.Contains("Do not emit JSON", StringComparison.Ordinal));
         Assert.DoesNotContain(
             request.Tools ?? [],
             tool => tool.Name is ToolCatalog.BrowserNavigate
@@ -426,10 +426,7 @@ public sealed class TerminalDisplayRepairTests
 
     private static ModelGenerationEvent[] Answer(string text) =>
     [
-        new ModelSemanticResponseReady(new ModelSemanticResponse(
-            text,
-            new ModelSpeechProjection(ModelSpeechMode.Same, null),
-            [])),
+        new ModelTextDelta(text),
         new ModelCompleted(ModelStopReason.Completed)
     ];
 

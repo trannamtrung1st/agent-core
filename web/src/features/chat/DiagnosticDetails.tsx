@@ -68,6 +68,14 @@ export function DiagnosticDetails({
           {fields.providerResponseChannel?.trim() ? (
             <DetailField label="Channel" value={fields.providerResponseChannel.trim()} testId="diagnostic-channel" />
           ) : null}
+          {fields.protocolRepair === "attempted" ? (
+            <DetailField label="Protocol repair" value="attempted" testId="diagnostic-protocol-repair" />
+          ) : null}
+          {fields.protocolRepairOutcome === "succeeded"
+            || fields.protocolRepairOutcome === "failed"
+            || fields.protocolRepairOutcome === "cancelled" ? (
+            <DetailField label="Repair outcome" value={fields.protocolRepairOutcome} testId="diagnostic-protocol-repair-outcome" />
+          ) : null}
           <DetailFieldList items={extraLines} dataTestId={failureDetailsTestId} />
         </DetailPopoverBody>
       }

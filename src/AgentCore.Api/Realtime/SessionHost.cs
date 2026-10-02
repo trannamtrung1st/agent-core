@@ -2825,7 +2825,9 @@ public static class SessionEventMapper
                     ["category"] = failure.Category,
                     ["code"] = failure.Code,
                     ["failureReason"] = failure.FailureReason,
-                    ["providerResponseChannel"] = failure.ProviderResponseChannel
+                    ["providerResponseChannel"] = failure.ProviderResponseChannel,
+                    ["protocolRepair"] = failure.ProtocolRepair,
+                    ["protocolRepairOutcome"] = failure.ProtocolRepairOutcome
                 }
                 : null
         };

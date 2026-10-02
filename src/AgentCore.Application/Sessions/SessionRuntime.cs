@@ -94,6 +94,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly ResponseTextAccumulator _accumulator = new();
     private ResponseEnvelope? _envelope;
     private readonly List<EffectReceipt> _committedEffects = [];
+    private string? _protocolRepair;
+    private string? _protocolRepairOutcome;
     private bool _usesResponseContract;
     private bool _structuredOutput;
     private bool _semanticReady;
@@ -1784,6 +1786,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _accumulator.Reset();
         _envelope = null;
         _committedEffects.Clear();
+        _protocolRepair = null;
+        _protocolRepairOutcome = null;
         _usesResponseContract = true;
         _semanticReady = false;
         _chatAcceptedTimestamp = 0;
@@ -2591,6 +2595,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var repairOpen = false;
         var blockedBrowserOrigins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string? browserPageOrigin = null;
+        var blockedNoProgress = 0;
+        var terminalBrowserContinuation = false;
         var toolDeadline = request.Tools is { Count: > 0 };
         using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using ITimer? overallTimer = toolDeadline ? ScheduleCancel(_time, overallCts, ToolLimits.Overall) : null;
@@ -2608,6 +2614,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 var inRepair = repairingTerminal;
                 string? repairOutcome = null;
                 var repairAnswerAccepted = false;
+                var repairDisplay = new StringBuilder();
+                var repairDisplayOverflow = false;
                 repairingTerminal = false;
                 if (!inRepair && !retryingGeneration)
                 {
@@ -2616,11 +2624,22 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                 retryingGeneration = false;
                 messages = PromptContextBuilder.WithActiveSkillSystem(messages, _snapshot.Definition, pinnedSkills).ToList();
+                var pageBlocked = browserPageOrigin is not null && blockedBrowserOrigins.Contains(browserPageOrigin);
                 var prompt = messages;
                 if (inRepair)
                 {
                     prompt = messages.ToList();
                     prompt.Add(new ModelMessage(ModelRole.System, ProtocolFailures.RepairInstruction(repairReason)!));
+                }
+                else if (terminalBrowserContinuation)
+                {
+                    prompt = messages.ToList();
+                    prompt.Add(new ModelMessage(ModelRole.System, TerminalBrowserContinuationInstruction));
+                }
+                else if (pageBlocked)
+                {
+                    prompt = messages.ToList();
+                    prompt.Add(new ModelMessage(ModelRole.System, ChallengedBrowserInstruction));
                 }
 
                 var working = inRepair
@@ -2630,27 +2649,96 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         Tools = null,
                         ToolChoice = ModelToolChoice.Auto,
                         ToolChoiceName = null,
+                        ResponseContract = null,
                         MaxOutputTokens = ModelOutputBudgets.ForTurn(
                             request.MaxOutputTokens,
                             toolsOffered: authorizedTools is { Count: > 0 })
                     }
-                    : WithOfferedTools(
-                        request with { Messages = prompt },
-                        authorizedTools,
-                        trigger,
-                        model);
+                    : ProjectBrowserTools(
+                        WithOfferedTools(
+                            request with { Messages = prompt },
+                            authorizedTools,
+                            trigger,
+                            model),
+                        pageBlocked,
+                        terminalBrowserContinuation);
                 try
                 {
                 await foreach (var evt in model.GenerateAsync(working, generateToken).ConfigureAwait(false))
                 {
                     if (evt is ModelToolCallEvent tool)
                     {
-                        if (!inRepair)
+                        if (!inRepair && !terminalBrowserContinuation)
                         {
                             pending.Add(tool.Call);
                         }
 
                         continue;
+                    }
+
+                    if (inRepair && evt is ModelTextDelta delta)
+                    {
+                        if (repairDisplay.Length + delta.Text.Length > ProtocolFailures.MaxRepairDisplayCharacters)
+                        {
+                            repairDisplayOverflow = true;
+                        }
+                        else
+                        {
+                            repairDisplay.Append(delta.Text);
+                        }
+
+                        continue;
+                    }
+
+                    if (inRepair && evt is ModelSemanticResponseReady or ModelDisplayDelta)
+                    {
+                        continue;
+                    }
+
+                    if (inRepair && evt is ModelCompleted { Reason: not ModelStopReason.ToolCalls })
+                    {
+                        var repaired = repairDisplay.ToString().Trim();
+                        if (repairDisplayOverflow || repaired.Length == 0 || IsJsonDocument(repaired))
+                        {
+                            repairOutcome = cancellationToken.IsCancellationRequested ? "cancelled" : "failed";
+                            _protocolRepairOutcome = repairOutcome;
+                            await MailboxModelAsync(
+                                    cause,
+                                    request.ResponseId,
+                                    new ModelFailed(new ProviderFailure(
+                                        ProviderErrorCode.InvalidResponse,
+                                        "Malformed assistant envelope.",
+                                        FailureReason: ProviderFailureReason.MissingDisplayText)),
+                                    generateToken)
+                                .ConfigureAwait(false);
+                            finished = true;
+                            continue;
+                        }
+
+                        if (!await MailboxModelAsync(
+                                    cause,
+                                    request.ResponseId,
+                                    new ModelSemanticResponseReady(new ModelSemanticResponse(
+                                        repaired,
+                                        new ModelSpeechProjection(ModelSpeechMode.Same, null),
+                                        [],
+                                        Memory: [],
+                                        Disposition: "Complete",
+                                        ActionKind: AgentStepNormalizer.ChatRespondKind,
+                                        ActionSpecified: true)),
+                                    generateToken)
+                                .ConfigureAwait(false))
+                        {
+                            if (cancellationToken.IsCancellationRequested)
+                            {
+                                repairOutcome = "cancelled";
+                                _protocolRepairOutcome = "cancelled";
+                            }
+
+                            return;
+                        }
+
+                        repairAnswerAccepted = true;
                     }
 
                     if (evt is ModelCompleted { Reason: ModelStopReason.ToolCalls })
@@ -2685,6 +2773,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         repairReason = repairable.Failure.FailureReason;
                         repairPhase = steps == 0 ? "initial" : "follow-up";
                         repairOpen = true;
+                        _protocolRepair = "attempted";
                         RuntimeTelemetry.RecordResponseRepair(repairReason!, "started", repairPhase);
                         retryGeneration = true;
                         break;
@@ -2693,6 +2782,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     if (inRepair && evt is ModelFailed)
                     {
                         repairOutcome = "failed";
+                        _protocolRepairOutcome = "failed";
                     }
 
                     if (IsMeaningfulVisible(evt))
@@ -2712,6 +2802,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         if (inRepair && cancellationToken.IsCancellationRequested)
                         {
                             repairOutcome = "cancelled";
+                            _protocolRepairOutcome = "cancelled";
                         }
 
                         return;
@@ -2736,6 +2827,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (!retryGeneration && inRepair && !finished)
                 {
                     repairOutcome ??= cancellationToken.IsCancellationRequested ? "cancelled" : "failed";
+                    _protocolRepairOutcome = repairOutcome;
                     await MailboxModelAsync(
                             cause,
                             request.ResponseId,
@@ -2754,6 +2846,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     {
                         repairOutcome ??= cancellationToken.IsCancellationRequested ? "cancelled" : "failed";
                         RuntimeTelemetry.RecordResponseRepair(repairReason, repairOutcome, repairPhase);
+                        _protocolRepairOutcome = repairOutcome;
                         repairOpen = false;
                     }
                 }
@@ -2761,6 +2854,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (retryGeneration)
                 {
                     continue;
+                }
+
+                if (terminalBrowserContinuation && !finished)
+                {
+                    await MailboxModelAsync(
+                            cause,
+                            request.ResponseId,
+                            new ModelCompleted(ModelStopReason.Completed),
+                            generateToken)
+                        .ConfigureAwait(false);
+                    return;
                 }
 
                 if (finished || pending.Count == 0)
@@ -3008,6 +3112,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             out var blockedJson))
                                     {
                                         executionResult = ToolExecutionResult.FromText(blockedJson);
+                                        blockedNoProgress++;
+                                        if (blockedNoProgress >= 2)
+                                        {
+                                            terminalBrowserContinuation = true;
+                                        }
                                     }
                                     else
                                     {
@@ -3077,6 +3186,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                     executionResult = ToolResultAdmission.AdmitForModel(model, executionResult);
                     NoteBrowserTarget(call.Name, call.ArgumentsJson, executionResult.Text, blockedBrowserOrigins, ref browserPageOrigin);
+                    if (!terminalBrowserContinuation
+                        && string.Equals(call.Name, ToolCatalog.BrowserNavigate, StringComparison.Ordinal)
+                        && browserPageOrigin is not null
+                        && !blockedBrowserOrigins.Contains(browserPageOrigin))
+                    {
+                        blockedNoProgress = 0;
+                    }
                     outputBytes += ToolOutputBudget.TextByteCount(executionResult);
                     if (outputBytes > ToolLimits.MaxOutputBytes)
                     {
@@ -3204,6 +3320,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     repairReason,
                     cancellationToken.IsCancellationRequested ? "cancelled" : "failed",
                     repairPhase);
+                _protocolRepairOutcome = cancellationToken.IsCancellationRequested ? "cancelled" : "failed";
             }
         }
     }
@@ -3946,7 +4063,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 failure.Code.ToString(),
                 CorrelationOrNull(context),
                 failure.FailureReason,
-                failure.ResponseChannel);
+                failure.ResponseChannel,
+                _protocolRepair,
+                _protocolRepair is null ? null : _protocolRepairOutcome);
         }
 
         var diagnosticId = _diagnostics.NewId();
@@ -3966,7 +4085,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             failure.Code.ToString(),
             CorrelationOrNull(context),
             failure.FailureReason,
-            failure.ResponseChannel);
+            failure.ResponseChannel,
+            _protocolRepair,
+            _protocolRepair is null ? null : _protocolRepairOutcome);
     }
 
     private FailureReference ReferenceForResponse(
@@ -5888,6 +6009,72 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         return reason == ProviderFailureReason.IncompleteToolCall && pending.Count == 0;
+    }
+
+    private const string ChallengedBrowserInstruction =
+        """
+        The current browser origin requires human intervention.
+        Do not retry or interact with that blocked origin.
+        Navigate to another relevant origin if the task can continue;
+        otherwise finish using completed work and explain the blocked source.
+        """;
+
+    private const string TerminalBrowserContinuationInstruction =
+        """
+        Use the work already completed.
+        Explain which site requires human intervention.
+        Do not request more browser actions.
+        """;
+
+    private static bool IsJsonDocument(string text)
+    {
+        if (text.Length == 0 || text[0] is not ('{' or '['))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(text);
+            return document.RootElement.ValueKind is JsonValueKind.Object or JsonValueKind.Array;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static ModelRequest ProjectBrowserTools(ModelRequest request, bool pageBlocked, bool terminalOnly)
+    {
+        if (terminalOnly)
+        {
+            return request with
+            {
+                Tools = null,
+                ToolChoice = ModelToolChoice.Auto,
+                ToolChoiceName = null
+            };
+        }
+
+        if (!pageBlocked || request.Tools is not { Count: > 0 } tools)
+        {
+            return request;
+        }
+
+        var offered = tools
+            .Where(tool => tool.Name is not (ToolCatalog.BrowserObserve or ToolCatalog.BrowserAct))
+            .ToArray();
+        if (offered.Length == tools.Count)
+        {
+            return request;
+        }
+
+        return request with
+        {
+            Tools = offered.Length == 0 ? null : offered,
+            ToolChoice = ModelToolChoice.Auto,
+            ToolChoiceName = null
+        };
     }
 
     private bool TryProtocolRepair(

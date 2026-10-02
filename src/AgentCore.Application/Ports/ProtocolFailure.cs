@@ -13,13 +13,12 @@ public enum ProtocolFailureDisposition
 
 public static class ProtocolFailures
 {
+    public const int MaxRepairDisplayCharacters = 64 * 1024;
+
     public const string MissingDisplayTextInstruction =
         """
-        The previous terminal response was rejected by the application protocol.
-
-        Reason: chat.respond requires non-empty displayText.
-
-        Produce the terminal response again using the work and tool results already present in this request. Do not repeat completed work. Do not request or call additional tools.
+        The previous terminal answer was rejected because its visible reply was empty.
+        Using the existing conversation and tool results, return only the final user-visible answer text. Do not emit JSON, call tools, repeat completed work, or request another action.
         """;
 
     public static ProtocolFailureDisposition Disposition(string? reason) => reason switch

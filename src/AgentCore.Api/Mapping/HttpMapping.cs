@@ -166,7 +166,9 @@ public static partial class HttpMapping
                     failure.Category,
                     failure.Code,
                     failure.FailureReason,
-                    failure.ProviderResponseChannel)
+                    failure.ProviderResponseChannel,
+                    failure.ProtocolRepair,
+                    failure.ProtocolRepairOutcome)
                 : null,
             projected.MemoryReceipts?.Select(item => new HistoryMemoryReceiptResponse(
                 item.Outcome,
