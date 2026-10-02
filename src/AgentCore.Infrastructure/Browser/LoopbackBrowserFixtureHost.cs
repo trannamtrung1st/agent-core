@@ -15,6 +15,7 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
     public const string LoginResource = "AgentCore.Infrastructure.Browser.Fixture.login.html";
     public const string SignupResource = "AgentCore.Infrastructure.Browser.Fixture.signup.html";
     public const string AccountResource = "AgentCore.Infrastructure.Browser.Fixture.account.html";
+    public const string HiddenAuthResource = "AgentCore.Infrastructure.Browser.Fixture.hidden-auth.html";
 
     private static readonly string[] RequiredResources =
     [
@@ -25,7 +26,8 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
         ChallengeResource,
         LoginResource,
         SignupResource,
-        AccountResource
+        AccountResource,
+        HiddenAuthResource
     ];
 
     private readonly ILogger _logger;
@@ -240,6 +242,12 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
             if (string.Equals(path, "/account", StringComparison.Ordinal))
             {
                 await WriteResourceAsync(context, AccountResource, 200).ConfigureAwait(false);
+                return;
+            }
+
+            if (string.Equals(path, "/hidden-auth", StringComparison.Ordinal))
+            {
+                await WriteResourceAsync(context, HiddenAuthResource, 200).ConfigureAwait(false);
                 return;
             }
 

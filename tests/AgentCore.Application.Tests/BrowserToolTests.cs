@@ -27,6 +27,7 @@ public sealed class BrowserToolTests
         Assert.Equal(ToolEffect.ReadOnly, ToolCatalog.EffectOf(ToolCatalog.BrowserNavigate));
         Assert.Equal(ToolEffect.ReadOnly, ToolCatalog.EffectOf(ToolCatalog.BrowserObserve));
         Assert.Equal(ToolEffect.Write, ToolCatalog.EffectOf(ToolCatalog.BrowserAct));
+        Assert.Equal(ToolEffect.Write, ToolCatalog.EffectOf(ToolCatalog.BrowserClose));
         Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.BrowserNavigate));
         Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.BrowserObserve));
         Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.BrowserAct));
@@ -615,6 +616,84 @@ public sealed class BrowserToolTests
     }
 
     [Fact]
+    public async Task V12_offers_browser_close_and_v11_does_not()
+    {
+        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var v11 = (await store.GetAsync("general-assistant", 11))!;
+        var v12 = (await store.GetAsync("general-assistant", 12))!;
+        var fake = new FakeBrowser();
+        var userTurn = Context(v11, TriggerKind.UserTurn, detached: false);
+        var offeredV11 = new PromptContextBuilder(ToolConfigurationGates.AllowAll, fake)
+            .OfferTools(v11, userTurn);
+        var offeredV12 = new PromptContextBuilder(ToolConfigurationGates.AllowAll, fake)
+            .OfferTools(v12, Context(v12, TriggerKind.UserTurn, detached: false));
+        Assert.DoesNotContain(ToolCatalog.BrowserClose, offeredV11.Select(tool => tool.Name));
+        Assert.Contains(ToolCatalog.BrowserClose, offeredV12.Select(tool => tool.Name));
+        Assert.Contains(ToolCatalog.BrowserClose, RoleEnvironments.Of(v12).ToolList);
+        Assert.DoesNotContain(ToolCatalog.BrowserClose, RoleEnvironments.Of(v11).ToolList);
+    }
+
+    [Theory]
+    [InlineData("closed")]
+    [InlineData("already_closed")]
+    public async Task Close_routes_to_the_browser_port_and_serializes_status(string status)
+    {
+        var fake = new FakeBrowser { CloseResult = new BrowserCloseResult(status) };
+        var sessionId = Guid.NewGuid();
+        var result = await Executor(fake).ExecuteAsync(
+            BrowserDefinitionV12(),
+            sessionId,
+            Call(ToolCatalog.BrowserClose, "{}"),
+            ToolLimits.MaxOutputBytes,
+            admission: UserTurn());
+        Assert.Equal(1, fake.CloseCalls);
+        Assert.Equal(sessionId, fake.LastSessionId);
+        Assert.Contains($"\"status\":\"{status}\"", result.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Close_rejects_non_empty_arguments()
+    {
+        var fake = new FakeBrowser();
+        var result = await Executor(fake).ExecuteAsync(
+            BrowserDefinitionV12(),
+            Guid.NewGuid(),
+            Call(ToolCatalog.BrowserClose, """{"force":true}"""),
+            ToolLimits.MaxOutputBytes,
+            admission: UserTurn());
+        Assert.Equal(0, fake.CloseCalls);
+        Assert.Contains("invalid", result.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Close_maps_unavailable_browser_to_provider_unavailable()
+    {
+        var fake = new FakeBrowser { IsAvailable = false };
+        var result = await Executor(fake).ExecuteAsync(
+            BrowserDefinitionV12(),
+            Guid.NewGuid(),
+            Call(ToolCatalog.BrowserClose, "{}"),
+            ToolLimits.MaxOutputBytes,
+            admission: UserTurn());
+        Assert.Equal(0, fake.CloseCalls);
+        Assert.Contains("provider_unavailable", result.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Close_maps_port_provider_unavailable_to_tool_failure()
+    {
+        var fake = new FakeBrowser { CloseResult = new BrowserCloseResult("provider_unavailable") };
+        var result = await Executor(fake).ExecuteAsync(
+            BrowserDefinitionV12(),
+            Guid.NewGuid(),
+            Call(ToolCatalog.BrowserClose, "{}"),
+            ToolLimits.MaxOutputBytes,
+            admission: UserTurn());
+        Assert.Equal(1, fake.CloseCalls);
+        Assert.Contains("provider_unavailable", result.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Publication_blocks_browser_tools_when_the_host_gate_is_closed()
     {
         var candidate = AgentDefinitionCandidate.FromDefinition(SampleDefinitions.Support) with
@@ -658,6 +737,19 @@ public sealed class BrowserToolTests
                 ToolCatalog.BrowserObserve,
                 ToolCatalog.BrowserAct
             ]));
+
+    private static AgentDefinition BrowserDefinitionV12() =>
+        BrowserDefinition() with
+        {
+            Version = 12,
+            Environment = new RoleEnvironment(ToolAllowlist:
+            [
+                ToolCatalog.BrowserNavigate,
+                ToolCatalog.BrowserObserve,
+                ToolCatalog.BrowserAct,
+                ToolCatalog.BrowserClose
+            ])
+        };
 
     private static AgentContext Context(AgentDefinition definition, TriggerKind kind, bool detached) =>
         new(
@@ -739,6 +831,10 @@ public sealed class BrowserToolTests
 
         public Guid? LastActSession { get; private set; }
 
+        public BrowserCloseResult CloseResult { get; set; } = new("closed");
+
+        public int CloseCalls { get; private set; }
+
         public Dictionary<string, Guid> Refs { get; } = new(StringComparer.Ordinal);
 
         public ValueTask<Uri?> GetCurrentUrlAsync(Guid sessionId, CancellationToken cancellationToken = default)
@@ -796,6 +892,14 @@ public sealed class BrowserToolTests
             }
 
             return new(new BrowserOperationResult(null, Observation));
+        }
+
+        public ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CloseCalls++;
+            LastSessionId = sessionId;
+            return new(CloseResult);
         }
     }
 }

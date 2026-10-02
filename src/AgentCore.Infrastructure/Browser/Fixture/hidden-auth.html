@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Public catalog</title>
+  <style>
+    :root { color-scheme: light; font-family: "Segoe UI", sans-serif; }
+    body { margin: 0; background: #f9fafb; color: #111827; }
+    main { max-width: 40rem; margin: 0 auto; padding: 32px 16px; }
+    h1 { font-size: 1.75rem; margin: 0 0 8px; }
+    p { margin: 0; line-height: 1.5; }
+    dialog { display: none; }
+    .vault { display: none; visibility: hidden; }
+    .dormant { opacity: 0; position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Public catalog</h1>
+    <p>Browse products without signing in. Hidden login templates below must not trigger intervention.</p>
+  </main>
+
+  <dialog id="login-modal" aria-hidden="true">
+    <form>
+      <input type="email" autocomplete="username" value="hidden@example.test">
+      <input type="password" autocomplete="current-password" value="hidden-password">
+    </form>
+  </dialog>
+
+  <div hidden aria-hidden="true">
+    <input type="password" autocomplete="current-password">
+    <input autocomplete="one-time-code" name="otp" value="000000">
+    <div class="cf-turnstile" data-sitekey="hidden-fixture"></div>
+    <iframe src="https://challenges.cloudflare.com/turnstile/v0/api.js" title="hidden captcha"></iframe>
+  </div>
+
+  <div class="vault" inert>
+    <input type="password" disabled autocomplete="new-password">
+    <input type="email" autocomplete="email">
+  </div>
+
+  <template>
+    <input type="password" autocomplete="current-password">
+  </template>
+
+  <div class="dormant">
+    <div class="g-recaptcha" data-sitekey="dormant"></div>
+  </div>
+</body>
+</html>

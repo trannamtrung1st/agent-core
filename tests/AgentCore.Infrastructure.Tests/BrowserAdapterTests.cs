@@ -820,6 +820,17 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
     }
 
     [Fact]
+    public async Task Hidden_auth_templates_in_the_dom_do_not_report_intervention()
+    {
+        var session = fixture.Session;
+        var id = Guid.NewGuid();
+        var page = await Navigate(session, id, "/hidden-auth");
+        Assert.Null(page.ErrorCode);
+        Assert.Equal(BrowserInterventionKind.None, page.Observation!.Intervention);
+        Assert.Contains("Public catalog", page.Observation.VisibleText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Contexts_do_not_share_cookies_storage_or_element_refs()
     {
         var session = fixture.Session;

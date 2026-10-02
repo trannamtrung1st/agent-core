@@ -1097,18 +1097,56 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
     private const string ClassifyInterventionScript = """
         () => {
-          const captcha = document.querySelector(
-            'iframe[src*="recaptcha"], iframe[src*="hcaptcha"], iframe[src*="challenges.cloudflare.com"], .g-recaptcha, .h-captcha, [data-sitekey], .cf-turnstile');
-          if (captcha) return "verification";
-          const otp = document.querySelector(
+          const isVisible = (el) => {
+            if (!(el instanceof Element) || !el.isConnected) return false;
+            if (el.closest("[hidden], template")) return false;
+            if (el.closest("[inert]")) return false;
+            if (el.hasAttribute("disabled")) return false;
+            if (el.getAttribute("aria-disabled") === "true") return false;
+            for (let node = el; node; node = node.parentElement) {
+              if (node.getAttribute?.("aria-hidden") === "true") return false;
+            }
+            const style = window.getComputedStyle(el);
+            if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") return false;
+            const rect = el.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) return false;
+            return true;
+          };
+          const firstVisible = (selector) => {
+            for (const el of document.querySelectorAll(selector)) {
+              if (isVisible(el)) return el;
+            }
+            return null;
+          };
+          const firstVisibleWithin = (root, selector) => {
+            for (const el of root.querySelectorAll(selector)) {
+              if (isVisible(el)) return el;
+            }
+            return null;
+          };
+          const captchaSelectors = [
+            'iframe[src*="recaptcha"]',
+            'iframe[src*="hcaptcha"]',
+            'iframe[src*="challenges.cloudflare.com"]',
+            ".g-recaptcha",
+            ".h-captcha",
+            "[data-sitekey]",
+            ".cf-turnstile"
+          ];
+          for (const selector of captchaSelectors) {
+            if (firstVisible(selector)) return "verification";
+          }
+          const otp = firstVisible(
             'input[autocomplete="one-time-code"], input[name*="otp" i], input[id*="otp" i], input[name*="mfa" i]');
           if (otp) return "verification";
-          const password = document.querySelector('input[type="password"]');
+          const password = firstVisible('input[type="password"]');
           if (!password) return "none";
           const form = password.closest("form") || document.body;
-          const email = form.querySelector('input[type="email"], input[autocomplete="username"], input[autocomplete="email"]');
+          const email = firstVisibleWithin(
+            form,
+            'input[type="email"], input[autocomplete="username"], input[autocomplete="email"]');
           const registration = password.getAttribute("autocomplete") === "new-password"
-            || !!form.querySelector('input[autocomplete="new-password"]');
+            || !!firstVisibleWithin(form, 'input[autocomplete="new-password"]');
           if (registration && email) return "registration";
           return "authentication";
         }
