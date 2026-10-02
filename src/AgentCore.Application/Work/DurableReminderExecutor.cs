@@ -26,6 +26,10 @@ public sealed class DurableReminderExecutor(
     {
         var recovery = await work.RecoverExpiredClaimsAsync(asOfUtc, cancellationToken).ConfigureAwait(false);
         LogRecoveredTerminalFailures(recovery);
+        foreach (var resumed in recovery.ObservationResumes)
+        {
+            await ExecuteResumedAsync(resumed, asOfUtc, cancellationToken).ConfigureAwait(false);
+        }
         await work.ExpireDueApprovalsAsync(asOfUtc, cancellationToken).ConfigureAwait(false);
         var due = await work.ListRunnableAsync(asOfUtc, limit, cancellationToken).ConfigureAwait(false);
         var runnable = due
@@ -100,12 +104,34 @@ public sealed class DurableReminderExecutor(
             return false;
         }
 
+        return await ContinueClaimedAsync(claimed, generation, asOfUtc, cancellationToken).ConfigureAwait(false);
+    }
+
+    private ValueTask<bool> ExecuteResumedAsync(
+        WorkItem claimed,
+        DateTimeOffset asOfUtc,
+        CancellationToken cancellationToken)
+    {
+        if (claimed.Claim is null)
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        return ContinueClaimedAsync(claimed, claimed.Claim.Generation, asOfUtc, cancellationToken);
+    }
+
+    private async ValueTask<bool> ContinueClaimedAsync(
+        WorkItem item,
+        Guid generation,
+        DateTimeOffset asOfUtc,
+        CancellationToken cancellationToken)
+    {
         var linked = cancellation.Link(item.WorkItemId, cancellationToken);
         try
         {
             var running = await work.RenewClaimAsync(
-                claimed.WorkItemId,
-                claimed.Revision,
+                item.WorkItemId,
+                item.Revision,
                 generation,
                 asOfUtc.AddMinutes(1),
                 asOfUtc,
@@ -143,7 +169,9 @@ public sealed class DurableReminderExecutor(
                 return true;
             }
 
-            if (item.Provenance.SourceKind == WorkSourceKind.ApplicationEvent)
+            if (item.Provenance.SourceKind == WorkSourceKind.ApplicationEvent
+                || (running.SideEffect.Disposition is WorkSideEffectDisposition.InFlight or WorkSideEffectDisposition.Indeterminate
+                    && running.Checkpoint?.PayloadJson.Contains("\"ObservationRequired\":true", StringComparison.Ordinal) == true))
             {
                 return await ExecuteApplicationAsync(item, running, generation, asOfUtc, context, linked.Token)
                     .ConfigureAwait(false);

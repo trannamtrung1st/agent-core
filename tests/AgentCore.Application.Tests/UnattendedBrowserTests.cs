@@ -249,12 +249,40 @@ public sealed class UnattendedBrowserTests
         var failed = Assert.IsType<DurableOccurrenceFailed>(outcome);
         Assert.Equal("observation-required", failed.Code);
         Assert.Equal(0, browser.ActCalls);
-        var stored = (await store.GetAsync(new WorkOwner(OwnerId, ProfileId), WorkId))!;
-        Assert.Contains("\"ObservationRequired\":true", stored.Checkpoint!.PayloadJson, StringComparison.Ordinal);
-        var recovered = stored.RecoverExpiredClaim(now.AddMinutes(2), () => Guid.NewGuid());
-        Assert.Equal(WorkItemStatus.Failed, recovered.Status);
-        Assert.Equal("observation-required", recovered.Failure!.Code);
-        Assert.NotEqual(WorkItemStatus.WaitingToRetry, recovered.Status);
+        var recovery = await store.RecoverExpiredClaimsAsync(now.AddMinutes(2));
+        var resumed = Assert.Single(recovery.ObservationResumes);
+        Assert.Empty(recovery.TerminalFailures);
+        Assert.Equal(WorkItemStatus.Running, resumed.Status);
+        Assert.NotEqual(WorkItemStatus.WaitingToRetry, resumed.Status);
+        Assert.Equal(WorkSideEffectDisposition.InFlight, resumed.SideEffect.Disposition);
+        Assert.Contains("\"ObservationRequired\":true", resumed.Checkpoint!.PayloadJson, StringComparison.Ordinal);
+        var resumeGeneration = resumed.Claim!.Generation;
+        var continued = await new DurableOccurrenceExecution(Executor(browser, connections), TimeProvider.System).RunAsync(
+            resumed,
+            new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "publish")]),
+            new ScriptModel(
+                () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
+                () => ToolRound(Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{RepairRef}}"}""")),
+                () => TextRound("observed")),
+            Definition(),
+            TriggerKind.ScheduledOccurrence,
+            (current, body, token) => store.CheckpointAsync(
+                current.WorkItemId,
+                current.Revision,
+                resumeGeneration,
+                body,
+                null,
+                now.AddMinutes(2),
+                token),
+            store,
+            resumeGeneration,
+            now.AddMinutes(2),
+            Ids(),
+            CancellationToken.None,
+            trustedConnection: true);
+        Assert.IsType<DurableOccurrenceCompleted>(continued);
+        Assert.Equal(1, browser.ActCalls);
+        Assert.Equal(RepairRef, browser.LastActRef);
     }
 
     private static async Task<DurableOccurrenceOutcome> RunAsync(

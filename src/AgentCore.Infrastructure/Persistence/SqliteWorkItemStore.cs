@@ -224,6 +224,7 @@ public sealed class SqliteWorkItemStore(
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         var terminal = new List<WorkItem>();
+        var resumes = new List<WorkItem>();
         foreach (var row in rows)
         {
             var approval = await LoadApprovalAsync(db, row, cancellationToken).ConfigureAwait(false);
@@ -231,16 +232,22 @@ public sealed class SqliteWorkItemStore(
             WorkItem updated;
             try
             {
+                var observationRequired = current.Checkpoint?.PayloadJson.Contains(
+                    "\"ObservationRequired\":true",
+                    StringComparison.Ordinal) == true;
                 updated = current.RecoverExpiredClaim(asOfUtc, _diagnostics.NewId);
+                if (updated.Status == WorkItemStatus.Failed)
+                {
+                    terminal.Add(updated);
+                }
+                else if (observationRequired && updated.Status == WorkItemStatus.Running)
+                {
+                    resumes.Add(updated);
+                }
             }
             catch (Exception exception) when (exception is WorkItemTransitionException or ArgumentException)
             {
                 throw WorkStoreMapping.Map(exception);
-            }
-
-            if (updated.Status == WorkItemStatus.Failed)
-            {
-                terminal.Add(updated);
             }
 
             WorkStoreMapping.Apply(row, updated);
@@ -257,7 +264,7 @@ public sealed class SqliteWorkItemStore(
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        return new ExpiredClaimRecovery(rows.Count, terminal);
+        return new ExpiredClaimRecovery(rows.Count, terminal, resumes);
     }
 
     public async ValueTask<int> ExpireDueApprovalsAsync(DateTimeOffset asOfUtc, CancellationToken cancellationToken = default)

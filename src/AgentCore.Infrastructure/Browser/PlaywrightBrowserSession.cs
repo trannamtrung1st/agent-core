@@ -220,7 +220,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
     public ValueTask<Uri?> GetCurrentUrlAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!_sessions.TryGetValue(sessionId, out var session) || !IsAllowed(session.Page.Url))
+        if (!_sessions.TryGetValue(sessionId, out var session) || !IsAllowed(session, session.Page.Url))
         {
             return new ValueTask<Uri?>(result: null);
         }
@@ -292,7 +292,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 return Result(session.PopupCode);
             }
 
-            if (session.DeniedNavigation || !IsAllowed(session.Page.Url))
+            if (session.DeniedNavigation || !IsAllowed(session, session.Page.Url))
             {
                 await RestoreAllowedPageAsync(session, cancellationToken).ConfigureAwait(false);
                 return Result("target_denied");
@@ -368,9 +368,9 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             entered = true;
             await AdoptOpenWebPageAsync(session, cancellationToken).ConfigureAwait(false);
-            if (!IsAllowed(session.Page.Url))
+            if (!IsAllowed(session, session.Page.Url))
             {
-                return Unavailable();
+                return Result("target_denied");
             }
 
             return await CaptureWithRetryAsync(session, sessionId, "observe", cancellationToken).ConfigureAwait(false);
@@ -424,6 +424,11 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         if (!_sessions.TryGetValue(request.SessionId, out var session) || live.Generation != session.Generation)
         {
             return Result("stale_reference");
+        }
+
+        if (!IsAllowed(session, session.Page.Url))
+        {
+            return Result("target_denied");
         }
 
         var current = await GetCurrentUrlAsync(request.SessionId, cancellationToken).ConfigureAwait(false);
@@ -501,7 +506,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
             await AdoptOpenWebPageAsync(session, cancellationToken).ConfigureAwait(false);
 
-            if (session.DeniedNavigation || !IsAllowed(session.Page.Url))
+            if (session.DeniedNavigation || !IsAllowed(session, session.Page.Url))
             {
                 await RestoreAllowedPageAsync(session, cancellationToken).ConfigureAwait(false);
                 return Result("target_denied");
@@ -1497,7 +1502,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                         })
                     .WaitAsync(cancellationToken)
                     .ConfigureAwait(false);
-                if (IsAllowed(session.Page.Url))
+                if (IsAllowed(session, session.Page.Url))
                 {
                     return;
                 }
@@ -1663,7 +1668,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
     private void RememberAllowedUrl(SessionBrowser session)
     {
-        if (IsAllowed(session.Page.Url))
+        if (IsAllowed(session, session.Page.Url))
         {
             session.LastAllowedUrl = session.Page.Url;
         }
@@ -1762,6 +1767,14 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
     private bool IsAllowed(string url) =>
         BrowserTargetPolicy.EvaluateDestination(url, _policy.NavigationOrigins, _policy.PolicyMode).Allowed;
+
+    private bool IsAllowed(SessionBrowser session, string url)
+    {
+        var lease = LeaseOrigins(session);
+        return lease is null
+            ? IsAllowed(url)
+            : BrowserTargetPolicy.EvaluateDestination(url, lease, BrowserPolicyMode.Restricted).Allowed;
+    }
 
     private void RemoveRefs(Guid sessionId)
     {

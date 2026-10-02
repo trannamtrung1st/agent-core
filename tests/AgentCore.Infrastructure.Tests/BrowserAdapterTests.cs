@@ -756,6 +756,61 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         }
     }
 
+    [Fact]
+    public async Task Unattended_observe_rejects_a_page_already_outside_the_connection_origin()
+    {
+        var storePort = BindEphemeralPort();
+        var otherPort = BindEphemeralPort();
+        using var storeListener = new HttpListener();
+        using var otherListener = new HttpListener();
+        storeListener.Prefixes.Add($"http://127.0.0.1:{storePort}/");
+        otherListener.Prefixes.Add($"http://127.0.0.1:{otherPort}/");
+        storeListener.Start();
+        otherListener.Start();
+        var storeOrigin = $"http://127.0.0.1:{storePort}";
+        var otherOrigin = $"http://127.0.0.1:{otherPort}";
+        using var stop = new CancellationTokenSource();
+        var storeServing = ServeLeaseStoreAsync(storeListener, otherOrigin, stop.Token);
+        var otherServing = ServeCountingAsync(otherListener, static () => { }, stop.Token);
+        var root = Path.Combine(Path.GetTempPath(), "agent-core-observe-" + Guid.NewGuid().ToString("N"));
+        var agent = Guid.NewGuid();
+        var session = NewPersistent(root);
+        await session.StartAsync(CancellationToken.None);
+        var workSession = Guid.NewGuid();
+        try
+        {
+            session.BindSession(workSession, agent);
+            var outside = await session.NavigateAsync(new BrowserNavigateRequest(workSession, new Uri(otherOrigin + "/")));
+            Assert.Null(outside.ErrorCode);
+            await using var lease = await session.EnterUnattendedAsync(agent, [storeOrigin]);
+            session.AdoptUnattendedFlow(agent);
+            var observed = await session.ObserveAsync(workSession);
+            Assert.Equal("target_denied", observed.ErrorCode);
+            Assert.Null(observed.Observation);
+            var hidden = await session.GetCurrentUrlAsync(workSession);
+            Assert.Null(hidden);
+            var home = await session.NavigateAsync(new BrowserNavigateRequest(workSession, new Uri(storeOrigin + "/")));
+            Assert.Null(home.ErrorCode);
+            Assert.Contains("Store page", home.Observation!.VisibleText, StringComparison.Ordinal);
+            Assert.Equal(BrowserPolicyMode.OpenWeb, session.HostPolicy.PolicyMode);
+            Assert.Single(Directory.GetDirectories(root));
+            await lease.DisposeAsync();
+        }
+        finally
+        {
+            await session.StopAsync(CancellationToken.None);
+            await stop.CancelAsync();
+            storeListener.Stop();
+            otherListener.Stop();
+            await storeServing;
+            await otherServing;
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     private static PlaywrightBrowserSession NewPersistent(string root) =>
         new(
             new BrowserOptions

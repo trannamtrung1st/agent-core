@@ -10,7 +10,10 @@ public enum WorkItemCreateKind
 
 public sealed record WorkItemCreateResult(WorkItemCreateKind Kind, WorkItem Item);
 
-public sealed record ExpiredClaimRecovery(int RecoveredCount, IReadOnlyList<WorkItem> TerminalFailures);
+public sealed record ExpiredClaimRecovery(
+    int RecoveredCount,
+    IReadOnlyList<WorkItem> TerminalFailures,
+    IReadOnlyList<WorkItem> ObservationResumes);
 
 public interface IWorkItemStore
 {

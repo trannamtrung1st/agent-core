@@ -170,6 +170,30 @@ public sealed class WorkItemContractTests
     }
 
     [Fact]
+    public void Observation_required_claim_expiry_resumes_without_a_runnable_retry()
+    {
+        var claimed = NewItem().TakeClaim(GenerationA, Now, Now.AddMinutes(1));
+        var prepared = claimed.MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ToolCallId, ActionHash, Now.AddSeconds(1));
+        var inFlight = prepared.MarkSideEffect(3, GenerationA, WorkSideEffectDisposition.InFlight, ToolCallId, ActionHash, Now.AddSeconds(2));
+        var checkpoint = inFlight.SaveCheckpoint(
+            inFlight.Revision,
+            GenerationA,
+            Checkpoint("""{"phase":"model-turn","ObservationRequired":true}"""),
+            null,
+            Now.AddSeconds(3));
+        var resumeId = Guid.Parse("019944af-0008-7000-8000-0000000000d3");
+        var recovered = checkpoint.RecoverExpiredClaim(Now.AddMinutes(1), () => resumeId);
+        Assert.Equal(WorkItemStatus.Running, recovered.Status);
+        Assert.NotEqual(WorkItemStatus.WaitingToRetry, recovered.Status);
+        Assert.Null(recovered.Failure);
+        Assert.Equal(WorkSideEffectDisposition.InFlight, recovered.SideEffect.Disposition);
+        Assert.Equal(resumeId, recovered.Claim!.Generation);
+        Assert.Equal(checkpoint.AttemptCount, recovered.AttemptCount);
+        Assert.Contains("\"ObservationRequired\":true", recovered.Checkpoint!.PayloadJson, StringComparison.Ordinal);
+        Assert.Throws<WorkItemTransitionException>(() => recovered.TakeClaim(GenerationB, Now.AddMinutes(2), Now.AddMinutes(3)));
+    }
+
+    [Fact]
     public void Approval_wait_releases_the_claim_and_binds_the_exact_action()
     {
         var claimed = NewItem().TakeClaim(GenerationA, Now, Now.AddMinutes(1));

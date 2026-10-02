@@ -239,15 +239,23 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
                     && item.Claim.LeaseExpiresAtUtc <= asOfUtc)
                 .ToArray();
             var terminal = new List<WorkItem>();
+            var resumes = new List<WorkItem>();
             foreach (var item in expired)
             {
                 try
                 {
+                    var observationRequired = item.Checkpoint?.PayloadJson.Contains(
+                        "\"ObservationRequired\":true",
+                        StringComparison.Ordinal) == true;
                     var updated = item.RecoverExpiredClaim(asOfUtc, _diagnostics.NewId);
                     _state.WorkItems[item.WorkItemId] = updated;
                     if (updated.Status == WorkItemStatus.Failed)
                     {
                         terminal.Add(updated);
+                    }
+                    else if (observationRequired && updated.Status == WorkItemStatus.Running)
+                    {
+                        resumes.Add(updated);
                     }
                 }
                 catch (Exception exception) when (exception is WorkItemTransitionException or ArgumentException)
@@ -256,7 +264,7 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
                 }
             }
 
-            return ValueTask.FromResult(new ExpiredClaimRecovery(expired.Length, terminal));
+            return ValueTask.FromResult(new ExpiredClaimRecovery(expired.Length, terminal, resumes));
         }
     }
 
