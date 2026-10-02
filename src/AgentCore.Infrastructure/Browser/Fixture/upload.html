@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+<body>
+  <label for="image">Product image</label>
+  <input id="image" type="file" />
+  <p id="chosen">none</p>
+  <script>
+    document.getElementById("image").addEventListener("change", (event) => {
+      const file = event.target.files && event.target.files[0];
+      document.getElementById("chosen").textContent = file ? file.name : "none";
+    });
+  </script>
+</body>
+</html>

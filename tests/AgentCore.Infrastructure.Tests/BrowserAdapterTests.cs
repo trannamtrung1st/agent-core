@@ -1090,6 +1090,34 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
     }
 
     [Fact]
+    public async Task File_input_upload_uses_the_artifact_bytes()
+    {
+        var session = await StartDemoSession();
+        try
+        {
+            var id = Guid.NewGuid();
+            var page = await Navigate(session, id, "/upload");
+            Assert.Null(page.ErrorCode);
+            var image = Assert.Single(page.Observation!.Elements, element => element.Name == "Product image");
+            Assert.Equal(["upload"], image.Actions);
+            var bytes = await File.ReadAllBytesAsync(FindKeyboardImage());
+            var uploaded = await session.ActAsync(
+                new BrowserActRequest(
+                    id,
+                    "upload",
+                    image.Ref,
+                    null,
+                    new BrowserUpload("ac-keyboard.png", "image/png", bytes)));
+            Assert.Null(uploaded.ErrorCode);
+            Assert.Contains("ac-keyboard.png", uploaded.Observation!.VisibleText, StringComparison.Ordinal);
+        }
+        finally
+        {
+            await session.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
     public async Task Post_action_capture_retries_once_after_transient_dom_churn()
     {
         var session = await StartDemoSession();
@@ -1154,6 +1182,23 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
 
     private static string Ref(BrowserObservation observation, string name) =>
         Assert.Single(observation.Elements, element => element.Name == name).Ref;
+
+    private static string FindKeyboardImage()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var path = Path.Combine(dir.FullName, "deploy", "nopcommerce", "assets", "ac-keyboard.png");
+            if (File.Exists(path))
+            {
+                return path;
+            }
+
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException("ac-keyboard.png");
+    }
 
     private sealed class SecretListLogger : ILoggerProvider
     {

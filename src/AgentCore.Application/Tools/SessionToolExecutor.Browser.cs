@@ -3,6 +3,7 @@ using System.Text.Json;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Connections;
+using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Tools;
 
@@ -161,7 +162,10 @@ public sealed partial class SessionToolExecutor
         }
     }
 
+    private const int MaxBrowserUploadBytes = 8 * 1024 * 1024;
+
     private async Task<string> ActBrowserAsync(
+        AgentDefinition definition,
         Guid sessionId,
         JsonElement args,
         ToolExecutionAdmission? admission,
@@ -227,8 +231,22 @@ public sealed partial class SessionToolExecutor
                     Error(decision.Code ?? "forbidden", decision.Message ?? "Browser actions are not permitted."));
             }
 
+            BrowserUpload? upload = null;
+            if (operation == "upload")
+            {
+                var resolved = await ResolveBrowserUploadAsync(definition, sessionId, value, cancellationToken)
+                    .ConfigureAwait(false);
+                if (resolved.ErrorJson is not null)
+                {
+                    return FinishBrowser(ToolCatalog.BrowserAct, started, resolved.ErrorJson);
+                }
+
+                upload = resolved.Upload;
+                value = null;
+            }
+
             var result = await browser
-                .ActAsync(new BrowserActRequest(sessionId, operation, reference, value), cancellationToken)
+                .ActAsync(new BrowserActRequest(sessionId, operation, reference, value, upload), cancellationToken)
                 .ConfigureAwait(false);
             return FinishBrowser(ToolCatalog.BrowserAct, started, FromBrowserProvider(result));
         }
@@ -237,6 +255,119 @@ public sealed partial class SessionToolExecutor
             RecordBrowser(ToolCatalog.BrowserAct, started, "canceled");
             throw;
         }
+    }
+
+    private async Task<(BrowserUpload? Upload, string? ErrorJson)> ResolveBrowserUploadAsync(
+        AgentDefinition definition,
+        Guid sessionId,
+        string? artifactId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(artifactId) || !Guid.TryParse(artifactId, out var id))
+        {
+            return (null, Error("invalid", "The artifact was not found."));
+        }
+
+        if (artifacts is not null && artifacts.Exists(sessionId, id))
+        {
+            var record = await artifacts.GetAsync(sessionId, id, cancellationToken).ConfigureAwait(false);
+            if (record is null || record.ByteSize <= 0 || record.ByteSize > MaxBrowserUploadBytes)
+            {
+                return (null, Error("invalid", "The artifact cannot be uploaded."));
+            }
+
+            await using var stream = await artifacts.OpenContentAsync(sessionId, id, cancellationToken).ConfigureAwait(false);
+            var bytes = await ReadBoundedUploadAsync(stream, cancellationToken).ConfigureAwait(false);
+            if (bytes is null)
+            {
+                return (null, Error("invalid", "The artifact cannot be uploaded."));
+            }
+
+            return (new BrowserUpload(SafeUploadFileName(record.DisplayName), SafeUploadMediaType(record.ContentType), bytes), null);
+        }
+
+        if (definitionResources is not null)
+        {
+            var published = await definitionResources
+                .ListPublicationResourcesAsync(definition.Id, definition.Version, cancellationToken)
+                .ConfigureAwait(false);
+            var match = published.FirstOrDefault(item => item.ResourceId == id);
+            if (match is null)
+            {
+                return (null, Error("invalid", "The artifact was not found."));
+            }
+
+            if (match.ByteLength <= 0 || match.ByteLength > MaxBrowserUploadBytes)
+            {
+                return (null, Error("invalid", "The artifact cannot be uploaded."));
+            }
+
+            var content = await definitionResources
+                .ReadPublicationResourceContentAsync(definition.Id, definition.Version, id, cancellationToken)
+                .ConfigureAwait(false);
+            if (content is null || content.Length == 0 || content.Length > MaxBrowserUploadBytes)
+            {
+                return (null, Error("invalid", "The artifact was not found."));
+            }
+
+            return (new BrowserUpload(SafeUploadFileName(match.LogicalPath), SafeUploadMediaType(match.MediaType), content), null);
+        }
+
+        return (null, Error("invalid", "The artifact was not found."));
+    }
+
+    private static async Task<byte[]?> ReadBoundedUploadAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        using var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        while (true)
+        {
+            var read = await stream.ReadAsync(chunk, cancellationToken).ConfigureAwait(false);
+            if (read == 0)
+            {
+                break;
+            }
+
+            if (buffer.Length + read > MaxBrowserUploadBytes)
+            {
+                return null;
+            }
+
+            buffer.Write(chunk, 0, read);
+        }
+
+        return buffer.Length == 0 ? null : buffer.ToArray();
+    }
+
+    private static string SafeUploadFileName(string? raw)
+    {
+        var name = Path.GetFileName((raw ?? string.Empty).Replace('\\', '/').Trim());
+        if (string.IsNullOrWhiteSpace(name) || name is "." or "..")
+        {
+            return "upload.bin";
+        }
+
+        return name.Length <= 120 ? name : name[^120..];
+    }
+
+    private static string SafeUploadMediaType(string? raw)
+    {
+        var value = (raw ?? string.Empty).Trim();
+        var slash = value.IndexOf('/');
+        if (slash <= 0 || slash != value.LastIndexOf('/') || value.Length > 100)
+        {
+            return "application/octet-stream";
+        }
+
+        foreach (var character in value)
+        {
+            if (!char.IsAsciiLetterOrDigit(character) && character is not ('/' or '.' or '+' or '-'))
+            {
+                return "application/octet-stream";
+            }
+        }
+
+        return value;
     }
 
     private async Task<string> CloseBrowserAsync(

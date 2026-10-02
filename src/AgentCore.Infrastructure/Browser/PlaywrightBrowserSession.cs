@@ -24,6 +24,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             else if (tag === "select") role = "combobox";
             else if (type === "checkbox") role = "checkbox";
             else if (type === "radio") role = "radio";
+            else if (type === "file") role = "button";
             else if (tag === "textarea" || tag === "input") role = "textbox";
             else role = tag || "generic";
           }
@@ -32,7 +33,8 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
           if (!name) name = (el.getAttribute("aria-label") || "").trim();
           if (!name && tag !== "input") name = (el.innerText || "").trim();
           let actions = ["click"];
-          if (tag === "select") actions = ["select"];
+          if (type === "file") actions = ["upload"];
+          else if (tag === "select") actions = ["select"];
           else if (role === "checkbox" || role === "switch" || type === "checkbox") actions = ["check", "uncheck"];
           else if (role === "textbox" || role === "searchbox" || tag === "textarea" || (tag === "input" && type !== "button" && type !== "submit" && type !== "checkbox" && type !== "radio" && type !== "file" && type !== "hidden")) actions = ["fill", "press"];
           else actions = ["click"];
@@ -438,6 +440,11 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             }
 
             if (request.Operation is "fill" or "select" or "press" && string.IsNullOrEmpty(request.Value))
+            {
+                return Result("invalid");
+            }
+
+            if (request.Operation == "upload" && request.Upload is not { Content.Length: > 0 })
             {
                 return Result("invalid");
             }
@@ -1119,6 +1126,21 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         if (operation == "uncheck")
         {
             await handle.UncheckAsync(new ElementHandleUncheckOptions { Timeout = timeout })
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        if (operation == "upload" && request.Upload is { Content.Length: > 0 } upload)
+        {
+            await handle.SetInputFilesAsync(
+                    new FilePayload
+                    {
+                        Name = upload.FileName,
+                        MimeType = upload.MediaType,
+                        Buffer = upload.Content.ToArray()
+                    },
+                    new ElementHandleSetInputFilesOptions { Timeout = timeout })
                 .WaitAsync(cancellationToken)
                 .ConfigureAwait(false);
             return;

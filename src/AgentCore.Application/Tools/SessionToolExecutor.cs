@@ -29,7 +29,8 @@ public sealed partial class SessionToolExecutor(
     IAgentDefinitionStore? agentDefinitions = null,
     IMemoryStore? profiles = null,
     IBrowserSession? browser = null,
-    IApplicationConnectionStore? applicationConnections = null)
+    IApplicationConnectionStore? applicationConnections = null,
+    IAgentDefinitionResourceAdminStore? definitionResources = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -190,7 +191,7 @@ public sealed partial class SessionToolExecutor(
                     await ObserveBrowserAsync(sessionId, args, admission, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.BrowserAct => FitResult(
                     remainingOutputBytes,
-                    await ActBrowserAsync(sessionId, args, admission, cancellationToken).ConfigureAwait(false)),
+                    await ActBrowserAsync(definition, sessionId, args, admission, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.BrowserClose => FitResult(
                     remainingOutputBytes,
                     await CloseBrowserAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),

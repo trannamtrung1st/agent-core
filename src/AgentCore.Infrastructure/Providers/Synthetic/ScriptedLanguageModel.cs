@@ -176,6 +176,17 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
 
+        if (TryScriptProductPublish(request, out var productEvents))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var productEvent in productEvents)
+            {
+                yield return productEvent;
+            }
+
+            yield break;
+        }
+
         if (TryScriptBrowserRecordLookup(request, out var browserEvents))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1132,6 +1143,21 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
     public const string BrowserRecordSkillId = "browser.record.lookup";
 
+    public const string ProductPublishMarker = "Publish SKU AC-KBD-001";
+
+    public const string ProductPublishStopMarker = "stop after the click";
+
+    public const string ProductPublishLoginMarker = "login wall";
+
+    public const string ProductPublishSkillId = "store.product.manage";
+
+    public const string ProductPublishVerifiedAnswer = "AC Keyboard is published at $99.";
+
+    public const string ProductPublishUnverifiedAnswer =
+        "I clicked publish. The storefront was not checked, so I cannot confirm the product.";
+
+    public const string ProductPublishLoginAnswer = "The page needs a person to sign in. I stopped.";
+
     private static bool TryScriptBrowserSignup(
         ModelRequest request,
         out IReadOnlyList<ModelGenerationEvent> events)
@@ -1337,6 +1363,98 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         ];
         return true;
     }
+
+    private static bool TryScriptProductPublish(
+        ModelRequest request,
+        out IReadOnlyList<ModelGenerationEvent> events)
+    {
+        events = [];
+        var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        if (!lastUser.Contains(ProductPublishMarker, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var login = lastUser.Contains(ProductPublishLoginMarker, StringComparison.OrdinalIgnoreCase);
+        var stopAfterClick = lastUser.Contains(ProductPublishStopMarker, StringComparison.OrdinalIgnoreCase);
+        var offersBrowser = Offers(request, ToolCatalog.BrowserNavigate);
+        var startUrl = string.Empty;
+        if (offersBrowser && !TryReadTrustedBrowserStart(request, out startUrl))
+        {
+            return false;
+        }
+
+        var rounds = ToolRoundsSinceLastUser(request.Messages);
+        if (!offersBrowser)
+        {
+            if (rounds == 0)
+            {
+                return false;
+            }
+
+            events = ProductPublishAnswer(login, stopAfterClick);
+            return true;
+        }
+
+        var origin = startUrl.TrimEnd('/');
+        if (login)
+        {
+            if (rounds == 0)
+            {
+                events = ToolTurn(
+                    "product-login",
+                    ToolCatalog.BrowserNavigate,
+                    JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = origin + "/login" }));
+                return true;
+            }
+
+            events = ProductPublishAnswer(login: true, stopAfterClick: false);
+            return true;
+        }
+
+        switch (rounds)
+        {
+            case 0:
+                events = ToolTurn(
+                    "product-skill",
+                    ToolCatalog.SkillsLoad,
+                    JsonSerializer.Serialize(new { ids = new[] { ProductPublishSkillId } }));
+                return true;
+            case 1:
+                events = ToolTurn(
+                    "product-open",
+                    ToolCatalog.BrowserNavigate,
+                    JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = origin + "/" }));
+                return true;
+            case 2:
+                events = ToolTurn("product-observe", ToolCatalog.BrowserObserve, "{}");
+                return true;
+            case 3:
+                return TryAct("product-publish", "click", ElementRef(request.Messages, "Publish"), null, out events);
+            case 4 when !stopAfterClick:
+                events = ToolTurn(
+                    "product-storefront",
+                    ToolCatalog.BrowserNavigate,
+                    JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = origin + "/storefront" }));
+                return true;
+            case 5 when !stopAfterClick:
+                events = ToolTurn("product-storefront-observe", ToolCatalog.BrowserObserve, "{}");
+                return true;
+            default:
+                events = ProductPublishAnswer(login: false, stopAfterClick);
+                return true;
+        }
+    }
+
+    private static IReadOnlyList<ModelGenerationEvent> ProductPublishAnswer(bool login, bool stopAfterClick) =>
+    [
+        new ModelTextDelta(login
+            ? ProductPublishLoginAnswer
+            : stopAfterClick
+                ? ProductPublishUnverifiedAnswer
+                : ProductPublishVerifiedAnswer),
+        new ModelCompleted(ModelStopReason.Completed)
+    ];
 
     private static bool TryScriptBrowserRecordLookup(
         ModelRequest request,

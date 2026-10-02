@@ -368,7 +368,8 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<IAgentDefinitionStore>(),
             provider.GetRequiredService<IMemoryStore>(),
             provider.GetService<IBrowserSession>(),
-            provider.GetService<IApplicationConnectionStore>()));
+            provider.GetService<IApplicationConnectionStore>(),
+            provider.GetService<IAgentDefinitionResourceAdminStore>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),

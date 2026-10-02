@@ -83,6 +83,11 @@ public sealed class SecretaryIdentityTests
     public async Task Skill_load_does_not_add_browser_tools_to_a_definition_that_lacks_them()
     {
         var product = Assert.Single((await LoadSecretaryAsync()).SkillList, skill => skill.Id == "store.product.manage");
+        Assert.Contains("AC-KBD-001", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("ac-keyboard.png", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("$99", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("storefront", product.Procedure, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("A Save or Publish click is not completion", product.Procedure, StringComparison.Ordinal);
         Assert.Contains(ToolCatalog.BrowserNavigate, product.RequiredCapabilities);
         var bare = SampleDefinitions.Examiner with
         {

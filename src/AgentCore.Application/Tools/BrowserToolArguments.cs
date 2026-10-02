@@ -153,6 +153,7 @@ public static class BrowserToolArguments
         {
             "fill" or "select" => new[] { "operation", "ref", "value" },
             "press" => new[] { "operation", "ref", "key" },
+            "upload" => new[] { "operation", "ref", "artifactId" },
             _ => new[] { "operation", "ref" }
         };
         if (!HasOnly(args, allowed, out errorJson))
@@ -211,6 +212,26 @@ public static class BrowserToolArguments
             }
 
             value = key;
+        }
+        else if (operation == "upload")
+        {
+            if (!TryString(args, "artifactId", out var artifactId))
+            {
+                errorJson = Error("invalid", "artifactId is required.");
+                return false;
+            }
+
+            if (artifactId.Length > 80
+                || artifactId.Contains('/')
+                || artifactId.Contains('\\')
+                || artifactId.Contains(':')
+                || Uri.TryCreate(artifactId, UriKind.Absolute, out _))
+            {
+                errorJson = Error("invalid", "artifactId must be an artifact or definition resource id.");
+                return false;
+            }
+
+            value = artifactId;
         }
 
         return true;

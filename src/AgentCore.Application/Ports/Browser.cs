@@ -63,7 +63,14 @@ public sealed record BrowserOperationResult(string? ErrorCode, BrowserObservatio
 
 public sealed record BrowserNavigateRequest(Guid SessionId, Uri Url);
 
-public sealed record BrowserActRequest(Guid SessionId, string Operation, string Ref, string? Value);
+public sealed record BrowserUpload(string FileName, string MediaType, ReadOnlyMemory<byte> Content);
+
+public sealed record BrowserActRequest(
+    Guid SessionId,
+    string Operation,
+    string Ref,
+    string? Value,
+    BrowserUpload? Upload = null);
 
 public interface IBrowserSessionLease
 {

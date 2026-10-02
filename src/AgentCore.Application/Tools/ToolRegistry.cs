@@ -112,9 +112,9 @@ public static class ToolRegistry
                 ToolReplaySafety.NonReplayable),
             [ToolCatalog.BrowserAct] = Descriptor(
                 ToolCatalog.BrowserAct,
-                "Perform one typed interaction on an opaque element reference from a recent observation. Use only an action listed for that element. Click, fill, select, press a bounded key, check, or uncheck. Does not run scripts or selectors. "
+                "Perform one typed interaction on an opaque element reference from a recent observation. Use only an action listed for that element. Click, fill, select, press a bounded key, check, uncheck, or upload. Upload takes an artifact or definition resource id, never a filesystem path or URL. Does not run scripts or selectors. "
                 + BrowserOutcomeGuidance,
-                """{"type":"object","additionalProperties":false,"properties":{"operation":{"type":"string","enum":["click","fill","select","press","check","uncheck"]},"ref":{"type":"string","maxLength":128},"value":{"type":"string","maxLength":500},"key":{"type":"string","enum":["Enter","Tab","Escape"]}},"required":["operation","ref"]}""",
+                """{"type":"object","additionalProperties":false,"properties":{"operation":{"type":"string","enum":["click","fill","select","press","check","uncheck","upload"]},"ref":{"type":"string","maxLength":128},"value":{"type":"string","maxLength":500},"key":{"type":"string","enum":["Enter","Tab","Escape"]},"artifactId":{"type":"string","maxLength":80}},"required":["operation","ref"]}""",
                 ToolEffect.Write,
                 ToolOfferRule.ConfigurationWhenRoleAllows,
                 ToolResourceScope.Session,
