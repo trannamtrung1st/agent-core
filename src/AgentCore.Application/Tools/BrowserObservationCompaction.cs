@@ -5,7 +5,7 @@ namespace AgentCore.Application.Tools;
 
 internal static class BrowserObservationCompaction
 {
-    internal const int RecentFullObservations = 3;
+    internal const int RecentFullObservations = 1;
     internal const int ReceiptVisibleText = 240;
 
     internal static void Compact(List<ModelMessage> messages)

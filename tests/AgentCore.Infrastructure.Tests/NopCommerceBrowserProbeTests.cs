@@ -45,6 +45,13 @@ public sealed class NopCommerceBrowserProbeTests
         {
             Assert.True(session.IsAvailable, "Chromium is not ready for the nopCommerce probe.");
             ((IBrowserProfileBinding)session).BindSession(browserId, agentId);
+            var prior = await session.NavigateAsync(
+                new BrowserNavigateRequest(browserId, new Uri($"{origin}/search?q={sku}")),
+                CancellationToken.None);
+            Assert.Null(prior.ErrorCode);
+            Assert.True(
+                !(prior.Observation?.VisibleText ?? string.Empty).Contains("AC Probe", StringComparison.Ordinal),
+                $"Probe product {sku} is already on the storefront. Run scripts/nopcommerce-demo.sh reset before another create probe. This probe does not delete store data.");
             var create = await session.NavigateAsync(
                 new BrowserNavigateRequest(browserId, new Uri($"{origin}/Admin/Product/Create")),
                 CancellationToken.None);

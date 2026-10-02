@@ -361,7 +361,7 @@ public sealed class TerminalDisplayRepairTests
 
         Assert.True(await runtime.SubmitUserTextAsync("check zigwheels"));
         await model.Holding.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        clock.Advance(TimeSpan.FromSeconds(181));
+        clock.Advance(TimeSpan.FromSeconds(301));
         model.Release.TrySetResult();
         await runtime.WaitUntilIdleAsync();
 
