@@ -188,8 +188,75 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
         Guid generation,
         string resultText,
         DateTimeOffset completedAtUtc,
-        CancellationToken cancellationToken = default) =>
-        Mutate(workItemId, item => item.Complete(expectedRevision, generation, resultText, completedAtUtc));
+        CancellationToken cancellationToken = default,
+        bool attentionRequired = false)
+    {
+        lock (_state.Gate)
+        {
+            if (!_state.WorkItems.TryGetValue(workItemId, out var current))
+            {
+                throw AgentCoreErrors.NotFound("Work item was not found.");
+            }
+
+            WorkItem updated;
+            try
+            {
+                updated = current.Complete(expectedRevision, generation, resultText, completedAtUtc, attentionRequired);
+            }
+            catch (Exception exception) when (exception is WorkItemTransitionException or ArgumentException)
+            {
+                throw WorkStoreMapping.Map(exception);
+            }
+
+            _state.WorkItems[workItemId] = updated;
+            if (updated.Result?.AttentionRequired == true)
+            {
+                RememberAttentionAlert(updated.WorkItemId, updated.Revision);
+            }
+
+            return ValueTask.FromResult(updated);
+        }
+    }
+
+    public ValueTask<bool> TryRecordAttentionAlertAsync(
+        Guid workItemId,
+        long revision,
+        DateTimeOffset createdAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        _ = createdAtUtc;
+        lock (_state.Gate)
+        {
+            return ValueTask.FromResult(RememberAttentionAlert(workItemId, revision));
+        }
+    }
+
+    public ValueTask<IReadOnlyList<string>> ListAttentionAlertKeysAsync(
+        Guid workItemId,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_state.Gate)
+        {
+            IReadOnlyList<string> keys = _state.AttentionAlerts
+                .Where(item => item.Value == workItemId)
+                .Select(item => item.Key)
+                .OrderBy(key => key, StringComparer.Ordinal)
+                .ToArray();
+            return ValueTask.FromResult(keys);
+        }
+    }
+
+    private bool RememberAttentionAlert(Guid workItemId, long revision)
+    {
+        var key = WorkAttentionKey.Format(workItemId, revision);
+        if (_state.AttentionAlerts.ContainsKey(key) || _state.AttentionAlerts.ContainsValue(workItemId))
+        {
+            return false;
+        }
+
+        _state.AttentionAlerts.Add(key, workItemId);
+        return true;
+    }
 
     public ValueTask<WorkItem> FailAsync(
         Guid workItemId,

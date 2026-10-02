@@ -357,7 +357,12 @@ public sealed class WorkItem
             updatedAtUtc);
     }
 
-    public WorkItem Complete(long expectedRevision, Guid generation, string resultText, DateTimeOffset completedAtUtc)
+    public WorkItem Complete(
+        long expectedRevision,
+        Guid generation,
+        string resultText,
+        DateTimeOffset completedAtUtc,
+        bool attentionRequired = false)
     {
         if (Status == WorkItemStatus.Completed
             && resultText is not null
@@ -390,7 +395,7 @@ public sealed class WorkItem
             knownEffectSummary: null,
             Progress,
             Checkpoint,
-            new WorkResult(resultText, completedAtUtc),
+            new WorkResult(resultText, completedAtUtc, attentionRequired),
             failure: null,
             SideEffect,
             Approval,

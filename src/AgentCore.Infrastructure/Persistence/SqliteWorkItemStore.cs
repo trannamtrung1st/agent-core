@@ -153,17 +153,73 @@ public sealed class SqliteWorkItemStore(
             item => item.SaveCheckpoint(expectedRevision, generation, checkpoint, progressSummary, updatedAtUtc),
             cancellationToken));
 
-    public ValueTask<WorkItem> CompleteAsync(
+    public async ValueTask<WorkItem> CompleteAsync(
         Guid workItemId,
         long expectedRevision,
         Guid generation,
         string resultText,
         DateTimeOffset completedAtUtc,
-        CancellationToken cancellationToken = default) =>
-        Required(MutateAsync(
+        CancellationToken cancellationToken = default,
+        bool attentionRequired = false)
+    {
+        var updated = await Required(MutateAsync(
             workItemId,
-            item => item.Complete(expectedRevision, generation, resultText, completedAtUtc),
-            cancellationToken));
+            item => item.Complete(expectedRevision, generation, resultText, completedAtUtc, attentionRequired),
+            cancellationToken)).ConfigureAwait(false);
+        if (updated.Result?.AttentionRequired == true)
+        {
+            await TryRecordAttentionAlertAsync(updated.WorkItemId, updated.Revision, completedAtUtc, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return updated;
+    }
+
+    public async ValueTask<bool> TryRecordAttentionAlertAsync(
+        Guid workItemId,
+        long revision,
+        DateTimeOffset createdAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var key = WorkAttentionKey.Format(workItemId, revision);
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        if (await db.WorkAttentionAlerts.AsNoTracking().AnyAsync(row => row.AlertKey == key, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        db.WorkAttentionAlerts.Add(new WorkAttentionAlertRecord
+        {
+            AlertKey = key,
+            WorkItemId = workItemId.ToString("D"),
+            Revision = revision,
+            CreatedAtUtc = createdAtUtc.ToUnixTimeMilliseconds()
+        });
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (DbUpdateException)
+        {
+            return false;
+        }
+    }
+
+    public async ValueTask<IReadOnlyList<string>> ListAttentionAlertKeysAsync(
+        Guid workItemId,
+        CancellationToken cancellationToken = default)
+    {
+        var id = workItemId.ToString("D");
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        return await db.WorkAttentionAlerts.AsNoTracking()
+            .Where(row => row.WorkItemId == id)
+            .OrderBy(row => row.AlertKey)
+            .Select(row => row.AlertKey)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
 
     public ValueTask<WorkItem> FailAsync(
         Guid workItemId,

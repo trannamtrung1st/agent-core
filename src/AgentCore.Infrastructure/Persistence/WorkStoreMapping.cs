@@ -40,6 +40,7 @@ internal static class WorkStoreMapping
         row.CheckpointRemainingOverallBudgetMs = item.Checkpoint?.RemainingOverallBudgetMs;
         row.ResultText = item.Result?.Text;
         row.ResultCompletedAtUtc = item.Result is null ? null : item.Result.CompletedAtUtc.ToUnixTimeMilliseconds();
+        row.ResultAttentionRequired = item.Result?.AttentionRequired ?? false;
         row.FailureCode = item.Failure?.Code;
         row.FailureSummary = item.Failure?.Summary;
         row.FailureAtUtc = item.Failure is null ? null : item.Failure.FailedAtUtc.ToUnixTimeMilliseconds();
@@ -117,7 +118,7 @@ internal static class WorkStoreMapping
                 row.CheckpointRemainingOverallBudgetMs ?? 0);
         var result = row.ResultText is null
             ? null
-            : new WorkResult(row.ResultText, FromUnix(row.ResultCompletedAtUtc));
+            : new WorkResult(row.ResultText, FromUnix(row.ResultCompletedAtUtc), row.ResultAttentionRequired);
         var failure = row.FailureCode is null
             ? null
             : new WorkFailure(

@@ -73,6 +73,11 @@ public sealed partial class SessionToolExecutor(
             return TextResult(Error("forbidden", "Tool effect is owned by the session runtime."));
         }
 
+        if (string.Equals(call.Name, ToolCatalog.WorkComplete, StringComparison.Ordinal))
+        {
+            return TextResult(Error("forbidden", "Completion is owned by the occurrence."));
+        }
+
         if (admission?.Detached == true
             && ToolResources.IsSessionTool(call.Name)
             && !(ToolCatalog.IsBrowserTool(call.Name)

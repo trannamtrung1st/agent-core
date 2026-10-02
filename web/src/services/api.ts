@@ -81,12 +81,14 @@ export type WorkItem = {
   triggerRegistrationId?: string | null;
   createdAt: string;
   updatedAt: string;
+  attentionRequired?: boolean;
 };
 
 export type WorkItemResult = {
   workItemId: string;
   text: string;
   completedAt: string;
+  attentionRequired?: boolean;
 };
 
 export type SessionTrigger = {

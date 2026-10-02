@@ -834,6 +834,87 @@ public sealed class WorkItemStoreContractTests
         return resumed;
     }
 
+    [Fact]
+    public async Task Quiet_completion_has_no_alert_and_attention_recovery_keeps_one_key()
+    {
+        await ForEachStore(async store =>
+        {
+            var owner = new WorkOwner(InstanceA, ProfileA);
+            var quietClaim = await ClaimAsync(store, owner, Id(41), Id(42));
+            var quiet = await store.CompleteAsync(
+                quietClaim.WorkItemId,
+                quietClaim.Revision,
+                quietClaim.Claim!.Generation,
+                "Nothing to report.",
+                Now.AddMinutes(1),
+                attentionRequired: false);
+            Assert.False(quiet.Result!.AttentionRequired);
+            Assert.Empty(await store.ListAttentionAlertKeysAsync(quiet.WorkItemId));
+
+            var attentionClaim = await ClaimAsync(store, owner, Id(43), Id(44));
+            var attention = await store.CompleteAsync(
+                attentionClaim.WorkItemId,
+                attentionClaim.Revision,
+                attentionClaim.Claim!.Generation,
+                "Two orders need review.",
+                Now.AddMinutes(2),
+                attentionRequired: true);
+            var key = WorkAttentionKey.Format(attention.WorkItemId, attention.Revision);
+            Assert.Equal([key], await store.ListAttentionAlertKeysAsync(attention.WorkItemId));
+            var recovered = await store.CompleteAsync(
+                attention.WorkItemId,
+                attention.Revision,
+                attentionClaim.Claim.Generation,
+                "Two orders need review.",
+                Now.AddMinutes(3),
+                attentionRequired: true);
+            Assert.Equal(attention.Revision, recovered.Revision);
+            Assert.False(await store.TryRecordAttentionAlertAsync(attention.WorkItemId, attention.Revision, Now.AddMinutes(4)));
+            Assert.Equal([key], await store.ListAttentionAlertKeysAsync(attention.WorkItemId));
+        });
+    }
+
+    [Fact]
+    public async Task Attention_result_survives_sqlite_reopen()
+    {
+        var path = TempDatabase();
+        var factory = Factory(path);
+        try
+        {
+            await new SqliteMemoryStore(factory, new FakeTimeProvider(Now)).EnsureCreatedAsync();
+            var owner = new WorkOwner(InstanceA, ProfileA);
+            var store = new SqliteWorkItemStore(factory);
+            var claimed = await ClaimAsync(store, owner, Id(45), Id(46));
+            var completed = await store.CompleteAsync(
+                claimed.WorkItemId,
+                claimed.Revision,
+                claimed.Claim!.Generation,
+                "A payment failed.",
+                Now.AddMinutes(1),
+                attentionRequired: true);
+            var key = WorkAttentionKey.Format(completed.WorkItemId, completed.Revision);
+
+            var reopened = new SqliteWorkItemStore(Factory(path));
+            var loaded = await reopened.GetAsync(owner, completed.WorkItemId);
+            Assert.True(loaded!.Result!.AttentionRequired);
+            Assert.Equal("A payment failed.", loaded.Result.Text);
+            Assert.Equal([key], await reopened.ListAttentionAlertKeysAsync(completed.WorkItemId));
+            Assert.False(await reopened.TryRecordAttentionAlertAsync(completed.WorkItemId, completed.Revision, Now.AddMinutes(2)));
+            Assert.Equal([key], await reopened.ListAttentionAlertKeysAsync(completed.WorkItemId));
+        }
+        finally
+        {
+            Release(path);
+        }
+    }
+
+    private static async Task<WorkItem> ClaimAsync(IWorkItemStore store, WorkOwner owner, Guid workItemId, Guid sourceId)
+    {
+        await store.CreateAsync(NewItem(owner, workItemId, sourceId, Now, kind: WorkSourceKind.Schedule));
+        var generation = Id(workItemId.GetHashCode() & 0x7fffffff);
+        return (await store.TryClaimAsync(workItemId, generation, Now.AddSeconds(1), Now.AddMinutes(1)))!;
+    }
+
     private static WorkItem NewItem(
         WorkOwner owner,
         Guid workItemId,

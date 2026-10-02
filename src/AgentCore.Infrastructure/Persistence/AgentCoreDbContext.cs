@@ -214,6 +214,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
 
     public DbSet<ApplicationConnectionRecord> ApplicationConnections => Set<ApplicationConnectionRecord>();
 
+    public DbSet<WorkAttentionAlertRecord> WorkAttentionAlerts => Set<WorkAttentionAlertRecord>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<SessionRecord>(entity =>
@@ -420,6 +422,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.FailureDiagnosticId).HasMaxLength(36);
             entity.Property(row => row.KnownEffectSummary).HasMaxLength(WorkLimits.MaxKnownEffectCharacters);
             entity.Property(row => row.ResultText).HasMaxLength(WorkLimits.MaxResultCharacters);
+            entity.Property(row => row.ResultAttentionRequired).HasDefaultValue(false);
             entity.Property(row => row.CheckpointJson).HasMaxLength(WorkLimits.MaxCheckpointBytes);
             entity.Property(row => row.SideEffectToolCallId).HasMaxLength(128);
             entity.Property(row => row.SideEffectActionHash).HasMaxLength(WorkLimits.ActionHashCharacters);
@@ -427,6 +430,14 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.CreatedAtUtc });
             entity.HasIndex(row => new { row.Status, row.ClaimLeaseExpiresAtUtc });
             entity.HasIndex(row => new { row.Status, row.NextRetryAtUtc });
+        });
+        modelBuilder.Entity<WorkAttentionAlertRecord>(entity =>
+        {
+            entity.ToTable("WorkAttentionAlerts");
+            entity.HasKey(row => row.AlertKey);
+            entity.Property(row => row.AlertKey).HasMaxLength(80);
+            entity.Property(row => row.WorkItemId).HasMaxLength(36).IsRequired();
+            entity.HasIndex(row => row.WorkItemId).IsUnique();
         });
         modelBuilder.Entity<WorkApprovalRecord>(entity =>
         {

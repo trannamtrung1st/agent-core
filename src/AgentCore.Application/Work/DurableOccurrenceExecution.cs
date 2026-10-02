@@ -9,7 +9,8 @@ namespace AgentCore.Application.Work;
 
 public abstract record DurableOccurrenceOutcome(WorkItem Running);
 
-public sealed record DurableOccurrenceCompleted(WorkItem Running, string Text) : DurableOccurrenceOutcome(Running);
+public sealed record DurableOccurrenceCompleted(WorkItem Running, string Text, bool AttentionRequired = false)
+    : DurableOccurrenceOutcome(Running);
 
 public sealed record DurableOccurrenceRetry(WorkItem Running, string Code, string Summary) : DurableOccurrenceOutcome(Running);
 
@@ -272,6 +273,26 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                     "side-effect-indeterminate",
                     "External effect outcome is unknown and was not replayed.");
             }
+
+            if (string.Equals(call.Name, ToolCatalog.WorkComplete, StringComparison.Ordinal))
+            {
+                if (policy != ToolPolicyDecision.Allow)
+                {
+                    return await AppendResultAsync(
+                        call,
+                        ToolExecutionResult.FromText(
+                            """{"error":"forbidden","message":"Completion is owned by the occurrence."}"""),
+                        false).ConfigureAwait(false);
+                }
+
+                if (!WorkCompletionRequest.TryParse(args, out var summary, out var attentionRequired, out var rejection))
+                {
+                    return new DurableOccurrenceFailed(running, "invalid-completion", rejection);
+                }
+
+                return new DurableOccurrenceCompleted(running, summary, attentionRequired);
+            }
+
             if (policy == ToolPolicyDecision.RequireApproval && !ApprovedFor(running, call, hash))
             {
                 if (running.Approval is { } decided

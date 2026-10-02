@@ -364,7 +364,8 @@ public sealed class DurableReminderExecutor(
                     generation,
                     completed.Text,
                     asOfUtc,
-                    CancellationToken.None).ConfigureAwait(false);
+                    CancellationToken.None,
+                    completed.AttentionRequired).ConfigureAwait(false);
                 RuntimeTelemetry.RecordWork("completed");
                 break;
             case DurableOccurrenceRetry retry:

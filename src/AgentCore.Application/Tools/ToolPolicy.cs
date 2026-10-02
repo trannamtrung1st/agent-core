@@ -28,6 +28,13 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         }
 
+        if (descriptor.OfferRule == ToolOfferRule.OccurrenceCapability)
+        {
+            return OccurrenceCompletion(admission)
+                ? ToolPolicyDecision.Allow
+                : ToolPolicyDecision.Deny;
+        }
+
         if (descriptor.OfferRule == ToolOfferRule.CurrentExecutionCapability)
         {
             if (admission is null
@@ -145,6 +152,7 @@ public static class ToolPolicy
                 && !ToolResources.IsOccurrence(context.Trigger.Kind)
                 && (descriptor.Name != ToolCatalog.SkillsLoad || definition.SkillList.Count > 0)
                 && (descriptor.Name != ToolCatalog.AppMessageSend || context.IntermediateMessagingAllowed),
+            ToolOfferRule.OccurrenceCapability => OccurrenceCompletion(context),
             _ => false
         };
     }
@@ -170,4 +178,14 @@ public static class ToolPolicy
 
     private static bool UnattendedBrowser(AgentContext? context) =>
         context is { DetachedExecution: true, TrustedConnection: true, Trigger.Kind: TriggerKind.ScheduledOccurrence };
+
+    private static bool OccurrenceCompletion(ToolExecutionAdmission? admission) =>
+        admission is { Detached: true }
+        && ToolResources.IsOccurrence(admission.TriggerKind)
+        && (admission.TriggerKind != TriggerKind.ScheduledOccurrence || admission.TrustedConnection);
+
+    private static bool OccurrenceCompletion(AgentContext? context) =>
+        context is { DetachedExecution: true }
+        && ToolResources.IsOccurrence(context.Trigger.Kind)
+        && (context.Trigger.Kind != TriggerKind.ScheduledOccurrence || context.TrustedConnection);
 }

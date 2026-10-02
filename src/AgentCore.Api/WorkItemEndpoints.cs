@@ -80,7 +80,8 @@ public static class WorkItemEndpoints
                 return Results.Json(new WorkItemResultResponse(
                     item.WorkItemId.ToString(),
                     result.Text,
-                    HttpMapping.Format(result.CompletedAtUtc)));
+                    HttpMapping.Format(result.CompletedAtUtc),
+                    result.AttentionRequired));
             }
             catch (AgentCoreException ex)
             {
@@ -254,7 +255,8 @@ public static class WorkItemEndpoints
             summary.KnownEffectSummary,
             HttpMapping.Format(summary.CreatedAtUtc),
             HttpMapping.Format(summary.UpdatedAtUtc),
-            summary.FailureDiagnosticId?.ToString("D"));
+            summary.FailureDiagnosticId?.ToString("D"),
+            item.Result?.AttentionRequired ?? false);
     }
 
     private static string ToStatus(WorkItemStatus status) => status switch

@@ -1323,6 +1323,17 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 """,
                 cancellationToken).ConfigureAwait(false);
         }
+
+        if (await ColumnExistsAsync(connection, "WorkItems", "ResultAttentionRequired", cancellationToken)
+            .ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20261002114349_P95WorkAttention', '10.0.12');
+                """,
+                cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private static async Task RepairEnsureCreatedP7SchemaGapsAsync(

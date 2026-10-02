@@ -46,6 +46,8 @@ public sealed class WorkItemRecord
 
     public long? ResultCompletedAtUtc { get; set; }
 
+    public bool ResultAttentionRequired { get; set; }
+
     public string? FailureCode { get; set; }
 
     public string? FailureSummary { get; set; }
@@ -128,6 +130,17 @@ public sealed class WorkApprovalRecord
     public long? DecidedAtUtc { get; set; }
 
     public bool Consumed { get; set; }
+
+    public long Revision { get; set; }
+
+    public long CreatedAtUtc { get; set; }
+}
+
+public sealed class WorkAttentionAlertRecord
+{
+    public string AlertKey { get; set; } = "";
+
+    public string WorkItemId { get; set; } = "";
 
     public long Revision { get; set; }
 

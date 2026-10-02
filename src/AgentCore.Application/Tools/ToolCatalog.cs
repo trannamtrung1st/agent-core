@@ -37,6 +37,7 @@ public static class ToolCatalog
     public const string BrowserObserve = "browser.observe";
     public const string BrowserAct = "browser.act";
     public const string BrowserClose = "browser.close";
+    public const string WorkComplete = "work.complete";
 
     public static bool IsBrowserTool(string toolName) =>
         toolName is BrowserNavigate or BrowserObserve or BrowserAct or BrowserClose;
@@ -53,7 +54,9 @@ public static class ToolCatalog
 
         if (context?.Trigger.Kind == TriggerKind.ScheduledOccurrence)
         {
-            return [];
+            return context.TrustedConnection
+                ? OccurrenceTools(definition, context, configurationGate)
+                : [];
         }
 
         var offered = new List<ModelToolDefinition>();
@@ -91,7 +94,46 @@ public static class ToolCatalog
             offered.Add(descriptor.ModelDefinition);
         }
 
+        AddWorkComplete(offered, seen, definition, context, configurationGate);
         return offered;
+    }
+
+    private static List<ModelToolDefinition> OccurrenceTools(
+        AgentDefinition definition,
+        AgentContext context,
+        IToolConfigurationGate configurationGate)
+    {
+        var offered = new List<ModelToolDefinition>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var name in RoleEnvironments.Of(definition).ToolList)
+        {
+            if (!ToolRegistry.TryGet(name, out var descriptor)
+                || !ToolPolicy.IsOffered(descriptor, definition, context, configurationGate)
+                || !seen.Add(name))
+            {
+                continue;
+            }
+
+            offered.Add(descriptor.ModelDefinition);
+        }
+
+        AddWorkComplete(offered, seen, definition, context, configurationGate);
+        return offered;
+    }
+
+    private static void AddWorkComplete(
+        List<ModelToolDefinition> offered,
+        HashSet<string> seen,
+        AgentDefinition definition,
+        AgentContext? context,
+        IToolConfigurationGate configurationGate)
+    {
+        if (ToolRegistry.TryGet(WorkComplete, out var descriptor)
+            && ToolPolicy.IsOffered(descriptor, definition, context, configurationGate)
+            && seen.Add(WorkComplete))
+        {
+            offered.Add(descriptor.ModelDefinition);
+        }
     }
 
     public static bool OffersAttachmentRead(

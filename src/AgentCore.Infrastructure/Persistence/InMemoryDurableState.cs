@@ -16,6 +16,8 @@ internal sealed class InMemoryDurableState
 
     public Dictionary<Guid, WorkItem> WorkItems { get; } = [];
 
+    public Dictionary<string, Guid> AttentionAlerts { get; } = [];
+
     public Dictionary<Guid, Guid> WorkBySource { get; } = [];
 
     public Dictionary<Guid, ConversationTurnExecution> TurnExecutions { get; } = [];

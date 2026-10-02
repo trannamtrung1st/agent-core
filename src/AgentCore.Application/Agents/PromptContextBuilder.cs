@@ -1056,7 +1056,20 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder, IInitiativeE
         {
             var messages = request.Messages.ToList();
             messages.Insert(1, new ModelMessage(ModelRole.System, PromptContextBuilder.BuildScheduledReminderDeliverySystem()));
-            request = request with { Messages = messages, Tools = null };
+            IReadOnlyList<ModelToolDefinition>? tools = null;
+            if (context.TrustedConnection)
+            {
+                var offered = builder.OfferTools(context.Definition, context);
+                if (offered.Any(tool => ToolCatalog.IsBrowserTool(tool.Name)))
+                {
+                    tools = offered;
+                    messages.Add(new ModelMessage(
+                        ModelRole.System,
+                        "This connected occurrence may use the offered browser tools and work.complete. work.complete records the owner-facing result. Set attentionRequired only when the owner should be notified. Do not choose a recipient. A plain final answer stays quiet."));
+                }
+            }
+
+            request = request with { Messages = messages, Tools = tools };
             return new Speak(request);
         }
 

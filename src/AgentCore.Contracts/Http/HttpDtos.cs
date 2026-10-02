@@ -291,11 +291,16 @@ public sealed record WorkItemResponse(
     string? KnownEffect,
     string CreatedAt,
     string UpdatedAt,
-    string? DiagnosticId = null);
+    string? DiagnosticId = null,
+    bool AttentionRequired = false);
 
 public sealed record WorkItemListResponse(IReadOnlyList<WorkItemResponse> Items);
 
-public sealed record WorkItemResultResponse(string WorkItemId, string Text, string CompletedAt);
+public sealed record WorkItemResultResponse(
+    string WorkItemId,
+    string Text,
+    string CompletedAt,
+    bool AttentionRequired = false);
 
 public sealed record CancelWorkItemRequest(long ExpectedRevision);
 

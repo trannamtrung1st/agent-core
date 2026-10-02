@@ -57,6 +57,17 @@ public interface IWorkItemStore
         Guid generation,
         string resultText,
         DateTimeOffset completedAtUtc,
+        CancellationToken cancellationToken = default,
+        bool attentionRequired = false);
+
+    ValueTask<bool> TryRecordAttentionAlertAsync(
+        Guid workItemId,
+        long revision,
+        DateTimeOffset createdAtUtc,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<IReadOnlyList<string>> ListAttentionAlertKeysAsync(
+        Guid workItemId,
         CancellationToken cancellationToken = default);
 
     ValueTask<WorkItem> FailAsync(

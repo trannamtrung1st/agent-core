@@ -285,16 +285,37 @@ public sealed class WorkCheckpoint
 
 public sealed class WorkResult
 {
-    public WorkResult(string text, DateTimeOffset completedAtUtc)
+    public WorkResult(string text, DateTimeOffset completedAtUtc, bool attentionRequired = false)
     {
         WorkTime.RequireUtc(completedAtUtc, "Result");
         Text = WorkText.RequireMultiline(text, WorkLimits.MaxResultCharacters, "Result");
         CompletedAtUtc = completedAtUtc;
+        AttentionRequired = attentionRequired;
     }
 
     public string Text { get; }
 
     public DateTimeOffset CompletedAtUtc { get; }
+
+    public bool AttentionRequired { get; }
+}
+
+public static class WorkAttentionKey
+{
+    public static string Format(Guid workItemId, long revision)
+    {
+        if (workItemId == Guid.Empty)
+        {
+            throw new ArgumentException("Work item id is required.", nameof(workItemId));
+        }
+
+        if (revision < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(revision), "Revision is required.");
+        }
+
+        return $"{workItemId:D}:{revision}";
+    }
 }
 
 public sealed class WorkFailure
