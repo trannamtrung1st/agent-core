@@ -227,7 +227,7 @@ describe("BackgroundWorkDrawer", () => {
     const attention = { ...completed, workItemId: "work-attention", origin: "Morning review", attentionRequired: true };
     const quiet = { ...completed, workItemId: "work-quiet", origin: "Quiet check", attentionRequired: false };
     renderDrawer(async () => [attention, quiet], {
-      loadResult: async (sessionId, workItemId) => ({
+      loadResult: async (_sessionId, workItemId) => ({
         workItemId,
         text: workItemId === attention.workItemId ? "Two orders need review." : "Nothing to report.",
         completedAt: completed.updatedAt,

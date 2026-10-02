@@ -12,7 +12,7 @@ public abstract record DurableOccurrenceOutcome(WorkItem Running);
 public sealed record DurableOccurrenceCompleted(WorkItem Running, string Text, bool AttentionRequired = false)
     : DurableOccurrenceOutcome(Running);
 
-public sealed record DurableOccurrenceRetry(WorkItem Running, string Code, string Summary) : DurableOccurrenceOutcome(Running);
+public sealed record DurableOccurrenceRetry(WorkItem Running, string Code, string Summary, Exception? Error = null) : DurableOccurrenceOutcome(Running);
 
 public sealed record DurableOccurrenceFailed(WorkItem Running, string Code, string Summary) : DurableOccurrenceOutcome(Running);
 
@@ -143,8 +143,17 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                     }
                 }
             }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
             {
+                if (triggerKind == TriggerKind.ScheduledOccurrence && steps == 0 && pending.Count == 0)
+                {
+                    return new DurableOccurrenceRetry(
+                        running,
+                        "model-timeout",
+                        "The model did not finish within the reminder budget.",
+                        exception);
+                }
+
                 return new DurableOccurrenceFailed(running, "tool-budget", "Tool budget is exhausted.");
             }
 

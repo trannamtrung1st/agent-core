@@ -369,15 +369,17 @@ public sealed class DurableReminderExecutor(
                 RuntimeTelemetry.RecordWork("completed");
                 break;
             case DurableOccurrenceRetry retry:
+                var failedAtUtc = retry.Code == "model-timeout" ? time.GetUtcNow() : asOfUtc;
                 await FailAsync(
                     retry.Running,
                     generation,
-                    asOfUtc,
+                    failedAtUtc,
                     retry.Code,
                     retry.Summary,
                     true,
-                    asOfUtc.Add(RetryDelay(retry.Running.AttemptCount)),
-                    CancellationToken.None).ConfigureAwait(false);
+                    failedAtUtc.Add(RetryDelay(retry.Running.AttemptCount)),
+                    CancellationToken.None,
+                    retry.Error).ConfigureAwait(false);
                 break;
             case DurableOccurrenceSuspended:
                 RuntimeTelemetry.RecordWork("waiting");
