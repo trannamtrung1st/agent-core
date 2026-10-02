@@ -4,7 +4,7 @@ Living roadmap: current status, active requirements, future dependency order, an
 
 Detailed architecture and behavior live in `/docs`. Historical implementation and freeze evidence live in `docs/reports/`. This file does not duplicate either.
 
-Reviewed against `main` through **`10af0a9`** on **2026-10-02**. Pre-P8 bounded follow-up after P7.7 is **closed** (hosted Synthetic [**`36667172857`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green on **`1cadf46`**). **P8** remains **frozen** on **`ca3eb23`** (hosted Synthetic [**`36696902928`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). **Post-freeze P8 follow-up is closed** on **`c9aec29`** (provider-contract **`6fda4c5`**, CI stabilization **`c9aec29`**, hosted Synthetic [**`36745126226`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green). That closure does not move or reopen the P8 freeze. **P8.5** is **closed** on **`1461567`** (hosted Synthetic [**`36770385588`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green). Bounded post-closure corrections through **`0d1cfdd`** (assistant routing, truncation budgets, Playwright sync) are **closed** on hosted Synthetic [**`36807383922`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36807383922) green. A second bounded post-closure chain through **`fff7761`** (SSE idle at `ReadAsync`, Skill editor comma draft, no-chat Agent Step admission and execution state, response-function `displayText`) is **closed** on hosted Synthetic [**`36818061198`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36818061198) green. A third bounded post-closure stabilization chain through **`aedea70`** (realtime and history convergence, durable `session.ready` paging with live streaming overlay, direct-user response contract and inspectable failures, gated and budgeted `app.message.send`, test and CI synchronization) is **closed** on hosted Synthetic [**`36851267423`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36851267423) green; [appendix](docs/reports/p8.5-freeze-candidate.md). Real probes on DeepSeek V4.1 Flash and GPT-4o mini showed substantive work, intermediate application messages, and terminal `chat.respond`. None of these chains moves the P8 or P8.5 freeze SHAs. **P9 — Visible browser** is **closed** on `bba1de4` ([closure report](docs/reports/p9-freeze-candidate.md); hosted Synthetic [`36890525463`](https://github.com/trannamtrung1st/agent-core/actions/runs/36890525463) green). Bounded post-closure hardening on this tree does not move that SHA.
+Reviewed against `main` through **`3400d64`** on **2026-10-02**. Pre-P8 bounded follow-up after P7.7 is **closed** (hosted Synthetic [**`36667172857`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green on **`1cadf46`**). **P8** remains **frozen** on **`ca3eb23`** (hosted Synthetic [**`36696902928`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). **Post-freeze P8 follow-up is closed** on **`c9aec29`** (provider-contract **`6fda4c5`**, CI stabilization **`c9aec29`**, hosted Synthetic [**`36745126226`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green). That closure does not move or reopen the P8 freeze. **P8.5** is **closed** on **`1461567`** (hosted Synthetic [**`36770385588`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green). Bounded post-closure corrections through **`0d1cfdd`** (assistant routing, truncation budgets, Playwright sync) are **closed** on hosted Synthetic [**`36807383922`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36807383922) green. A second bounded post-closure chain through **`fff7761`** (SSE idle at `ReadAsync`, Skill editor comma draft, no-chat Agent Step admission and execution state, response-function `displayText`) is **closed** on hosted Synthetic [**`36818061198`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36818061198) green. A third bounded post-closure stabilization chain through **`aedea70`** (realtime and history convergence, durable `session.ready` paging with live streaming overlay, direct-user response contract and inspectable failures, gated and budgeted `app.message.send`, test and CI synchronization) is **closed** on hosted Synthetic [**`36851267423`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36851267423) green; [appendix](docs/reports/p8.5-freeze-candidate.md). Real probes on DeepSeek V4.1 Flash and GPT-4o mini showed substantive work, intermediate application messages, and terminal `chat.respond`. None of these chains moves the P8 or P8.5 freeze SHAs. **P9 — Visible browser** is **closed** on `bba1de4` ([closure report](docs/reports/p9-freeze-candidate.md); hosted Synthetic [`36890525463`](https://github.com/trannamtrung1st/agent-core/actions/runs/36890525463) green). Bounded post-closure hardening on this tree does not move that SHA.
 
 Closure reports through P7.7 still say the next phase was P8. That sentence records the handoff at freeze time, when P8 meant harness/platform extensibility. Those reports were not rewritten. In this TODO that work is P9.
 
@@ -59,7 +59,7 @@ Clients cannot supply trusted diagnostic, correlation, or causation identity. JS
 
 **P8 — Agent Execution Contract, Application Actions & Skills** is **frozen** on `ca3eb23` (workflow [`36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). Post-freeze bounded follow-up (provider contract **`6fda4c5`**, CI stabilization **`c9aec29`**) is **closed** on hosted Synthetic [**`36745126226`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green. See `docs/reports/p8-freeze-candidate.md` (freeze narrative + appendix).
 
-**P8.5 — Application Messaging & Dynamic Skill Activation** is **closed** on `1461567` ([closure report](docs/reports/p8.5-freeze-candidate.md); hosted Synthetic [`36770385588`](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green). `app.message.send` and `skills.load` continue the same bounded user-turn execution. They do not change the P8 freeze. Post-closure corrections through **`aedea70`** are recorded in that report's appendix (truncation **`36807383922`** on **`0d1cfdd`**, SSE/no-chat/editor **`36818061198`** on **`fff7761`**, stabilization **`36851267423`** on **`aedea70`**); they do not move the P8.5 closure SHA. **P9 — Visible browser** is **closed** on `bba1de4` ([closure report](docs/reports/p9-freeze-candidate.md); hosted Synthetic [`36890525463`](https://github.com/trannamtrung1st/agent-core/actions/runs/36890525463) green). Bounded post-closure hardening on this tree does not move that SHA. Browser navigation, interaction, and subresource origins are separate host lists. The Record Lookup site is an optional fixture. `target_denied` stays a normal tool result. P10 and P11 stay requirement-triggered.
+**P8.5 — Application Messaging & Dynamic Skill Activation** is **closed** on `1461567` ([closure report](docs/reports/p8.5-freeze-candidate.md); hosted Synthetic [`36770385588`](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green). `app.message.send` and `skills.load` continue the same bounded user-turn execution. They do not change the P8 freeze. Post-closure corrections through **`aedea70`** are recorded in that report's appendix (truncation **`36807383922`** on **`0d1cfdd`**, SSE/no-chat/editor **`36818061198`** on **`fff7761`**, stabilization **`36851267423`** on **`aedea70`**); they do not move the P8.5 closure SHA. **P9 — Visible browser** is **closed** on `bba1de4` ([closure report](docs/reports/p9-freeze-candidate.md); hosted Synthetic [`36890525463`](https://github.com/trannamtrung1st/agent-core/actions/runs/36890525463) green). Bounded post-closure hardening on this tree does not move that SHA. Browser navigation, interaction, and subresource origins are separate host lists. The Record Lookup site is an optional fixture. `target_denied` stays a normal tool result. **P9.5 — Proactive Secretary / Real Assistant Demo** is the next implementation phase. P10 and P11 stay requirement-triggered.
 
 ---
 
@@ -68,8 +68,9 @@ Clients cannot supply trusted diagnostic, correlation, or causation identity. JS
 1. **P0–P8 — frozen.** P7.5 is frozen on `70a5720`; P7.6 on `17d89ae`; P7.7 on `40a1d92`; and P8 on `ca3eb23`. Post-P7.7 / pre-P8 bounded follow-up is closed on `1cadf46`. Post-freeze P8 follow-up is **closed** on `c9aec29` (hosted Synthetic **`36745126226`** green).
 2. **P8.5 — Application Messaging & Dynamic Skill Activation — closed** on `1461567` (post-closure corrections **closed** on **`aedea70`**, hosted Synthetic [**`36851267423`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36851267423) green).
 3. **P9 — Visible browser — closed** on `bba1de4`. Post-closure hardening does not move that SHA.
-4. **P10 — Sandbox Evolution — when the current sandbox is insufficient.**
-5. **P11 — Multi-user + Production Infrastructure — when a real hosting or pilot requirement appears.**
+4. **P9.5 — Proactive Secretary / Real Assistant Demo — next.** Validate the existing architecture through one durable Secretary identity, bounded proactive work, trusted-owner delivery, and visible authenticated participation in self-hosted nopCommerce.
+5. **P10 — Sandbox Evolution — requirement-triggered when the current sandbox is insufficient.**
+6. **P11 — Multi-user + Production Infrastructure — requirement-triggered when a real hosting or pilot requirement appears.**
 
 ---
 
@@ -242,7 +243,7 @@ Properties that already belong in the current stack: durable source of truth whe
 
 # Product / Architecture North Star
 
-**Status: long-term direction. P8 is the frozen bounded slice on `ca3eb23`. P8.5 is closed on `1461567`. P9 visible browser is closed on `bba1de4`. The rest is future guidance.**
+**Status: long-term direction. P8 is the frozen bounded slice on `ca3eb23`. P8.5 is closed on `1461567`. P9 visible browser is closed on `bba1de4`. P9.5 is the next bounded product-validation phase. The rest is future guidance.**
 
 This section says why later phases exist. P8, P8.5, and P9 record what those phases implemented and verified. It does not reopen closed phases, widen P8 past its stop condition, or pull P10 or P11 forward.
 
@@ -297,7 +298,7 @@ Identity ≠ Session
 Identity ≠ Authority
 ```
 
-## Application Binding — future
+## Application Binding — bounded P9.5 proving slice, broader model future
 
 An Application Binding would describe how one durable identity participates in one application without redefining that identity. Example: Sam in application A is support, in application B is a team member, and in application C is a researcher. A future binding may carry role, application instructions, resources, permitted capabilities, policy, and application-scoped memory, workspace, or triggers where a real workflow needs them.
 
@@ -309,7 +310,7 @@ Definition
 → Session / Task / Event
 ```
 
-Do not add that persistence until a second concrete application defines ownership, mutation, versioning, authorization, and portability. It must not rewrite the Definition, persona, or identity-wide state. P8 uses Chat as the first application adapter and does not build this schema.
+P9.5 may introduce only the minimum durable application connection/binding semantics that authenticated nopCommerce participation proves necessary: application identity/type and base scope, Agent Instance ownership, reference to that instance's browser profile, safe connection status, and connect/reauthenticate/revoke/reset lifecycle. It must not rewrite the Definition, persona, identity-wide state, or expose credentials. Do not generalize that slice into a universal Integration, Plugin, Application Binding, portability, or marketplace model. Broader persistence waits for another concrete application to prove ownership, mutation, versioning, authorization, and portability requirements. P8 used Chat as the first application adapter and did not build this schema.
 
 ## Create, teach, and hire — future product surface
 
@@ -337,7 +338,7 @@ A bounded browser capability can reach many existing web applications before a d
 
 Browser use is access to logged-in applications. Availability is not authority. Do not share one authenticated browser profile across identities or applications. Do not persist every click, selector, or DOM observation as product history. Durable receipts are for meaningful observations, approvals, and side effects.
 
-P9 closed the first concrete provider on `bba1de4`. It is a direct Playwright adapter on the frozen P8 tool path, with P8.5 messaging and Skill activation unchanged. One browser context belongs to one Session. The visible proof is the loopback AC-1042 journey, not navigation to arbitrary public sites. Authenticated profiles, cookie retention across sessions, and tenant isolation stay unresolved until a later browser workflow requires them.
+P9 closed the first concrete provider on `bba1de4`. It is a direct Playwright adapter on the frozen P8 tool path, with P8.5 messaging and Skill activation unchanged. At that freeze, one browser context belonged to one Session and the visible proof was the loopback AC-1042 journey, not navigation to arbitrary public sites. Authenticated profiles and cookie retention across sessions were unresolved at the freeze; the post-closure `PersistentAgent` behavior recorded below now provides them for local Real/demo use without moving the P9 SHA. Production tenant isolation remains future.
 
 ---
 
@@ -864,6 +865,198 @@ P9 is not a plugin marketplace, a prepared-worker package system, a visual workf
 
 ---
 
+# P9.5 — Proactive Secretary / Real Assistant Demo
+
+**Status: next.** This is a vertical product-validation phase, not a new general platform-abstraction phase. P9 remains closed/frozen on `bba1de4`; post-P9 browser enhancements and hardening remain post-closure evidence and do not create a new P9 freeze.
+
+## Goal
+
+Prove the already-built Agent Core architecture through one coherent real assistant use case:
+
+```text
+Durable Secretary Agent Instance
+        │
+        ├── persona / standing instructions
+        ├── learned memory
+        ├── Skills
+        ├── broad demo capability set
+        ├── normal authority / approval policy
+        ├── triggers / WorkItems
+        │
+        └── authenticated nopCommerce participation
+                    ↓
+              visible browser
+```
+
+A viewer should understand that one persistent AI identity can remember context, perform miscellaneous owner-assistant work, wake proactively under bounded rules, and participate in an external application. nopCommerce is the first concrete proving application; it is not the Secretary's identity and must not become a nopCommerce-specific Agent Core architecture.
+
+## Existing behavior P9.5 consumes
+
+Do not reimplement or claim the following as new P9.5 browser work:
+
+- Infrastructure already provides direct `Microsoft.Playwright`; it is not MCP and not a second tool host.
+- `general-assistant` v12 already includes `browser.close`, which closes the live browser while preserving the saved Agent Instance profile.
+- Real `http-openrouter` already uses `Browser.ProfileMode=PersistentAgent`: one on-disk profile per `AgentInstanceId`, reusable across chats and process restarts, using installed Chrome and never the operator's normal Chrome profile.
+- Synthetic and CI remain `EphemeralSession` and `Restricted`; Real/demo uses `OpenWeb`.
+- Opaque element refs remain session-scoped even when authentication state persists.
+- Browser login, registration, and human-verification boundaries are detected and safely handed back. Credentials, cookies, password values, storage secrets, and equivalent material remain outside model-visible observations.
+- Recent ordinary-failure and challenge hardening remains post-P9 closure evidence.
+- The existing Docker Agent Core image intentionally does not install Chromium and keeps Browser disabled.
+
+## P9.5A — Prepared Secretary identity
+
+Create a prepared Secretary demo Definition and Agent Instance rather than mutating historical `general-assistant` versions. It has:
+
+- a professional secretary/assistant persona and standing instructions for general owner assistance;
+- an appropriate cross-session learned-memory policy;
+- relevant procedural Skills, including store operations, product management, promotion/marketing, and order review;
+- broad access to the existing registered capability set so the demo can exercise most of Agent Core;
+- scheduling and the normal browser capability enabled;
+- existing unrelated capabilities such as workspace, attachments, artifacts, knowledge, web, and email where supported.
+
+Skills remain procedures:
+
+```text
+Skill requirement ≠ capability grant
+```
+
+The same Secretary must remain useful for ordinary general-assistant work unrelated to nopCommerce.
+
+## P9.5B — Broad trusted demo authority without bypass
+
+Define a broad trusted owner/demo policy, provisionally named `TrustedOwnerDemo`, suitable for a disposable owner-controlled environment. It may deliberately grant broad authority and minimize approvals where safe, but it is configuration through the normal boundary:
+
+```text
+registered capability
+    ↓
+contextual availability
+    ↓
+policy / authorization
+    ↓
+exact-action approval when required
+    ↓
+execution
+    ↓
+result / receipt
+```
+
+There is no `if demo: skip authorization` branch. Background and unattended work recheck the same capability, policy, approval, execution, and receipt rules. The model cannot create or widen its own authority.
+
+## P9.5C — nopCommerce demo environment and application relationship
+
+Treat self-hosted nopCommerce as an external application. The primary integration is its visible browser UI. Do not couple Agent Core to nopCommerce internals or add a native nopCommerce API/tool unless implementation evidence shows that the required demo cannot be completed through browser automation.
+
+Provide a reproducible Docker Compose-based nopCommerce environment using the least surprising repository convention: a profile or a narrow demo/nopCommerce overlay. Document simple start, stop, and reset workflows. Seed or bootstrap deterministic products, customers, orders, and stock conditions where useful so the demo can return to a known state.
+
+The nopCommerce database is an external demo-application dependency. Its database choice does not migrate Agent Core from SQLite and does not start P11. Keep Agent Core native in the Real profile with a headed installed Chrome while nopCommerce runs under Compose unless implementation proves browser packaging must change. Do not automatically add Chromium to the existing Agent Core image.
+
+Make nopCommerce an explicit, minimal assistant/application relationship. Define only the connection/binding behavior this workflow proves:
+
+- application identity/type and allowed base URL/application scope;
+- owning `AgentInstanceId`;
+- reference to that Agent Instance's persistent browser profile, never another identity's profile;
+- safe connected/authenticated/available status;
+- connect/login, reauthentication, revoke/disconnect, and profile/session reset lifecycle.
+
+Build on `PersistentAgent`; do not reimplement durable authentication. Profile reset is in scope. Passwords, cookies, tokens, browser storage, and equivalent credentials must not enter model context, ordinary history, logs, or ordinary Admin projections. The model receives only bounded trusted state such as “nopCommerce is connected/authenticated/available.” Do not create a universal Integration, Plugin, Application, or marketplace model.
+
+## P9.5D — Bounded proactivity and unattended browser execution
+
+No unrestricted autonomous or infinite loop is added. Durable cross-session proactivity uses existing ownership:
+
+```text
+TriggerRegistration
+    ↓
+TriggerOccurrence
+    ↓
+routing
+    ↓
+WorkItem
+    ↓
+bounded Secretary execution
+```
+
+Candidate routines include a morning store review, low-stock inspection, pending-order review, a previously scheduled product/price change, owner notification when attention is needed, and quiet completion when nothing useful needs reporting. Existing finite conversational initiative may remain, but schedules and WorkItems are the primary durable mechanism.
+
+P9.5 must explicitly close the current gap that browser tools are not offered to detached, background, or occurrence execution. Add only a narrow authorized unattended browser path for the Secretary/nopCommerce workflow. It must:
+
+- originate from an admitted `TriggerOccurrence`/`WorkItem` owned by the correct Agent Instance;
+- use only that Agent Instance's persistent browser profile;
+- recheck contextual capability availability and policy at execution time;
+- preserve exact-action approval and authority semantics;
+- stay bounded by time, tool, continuation, and cancellation budgets;
+- recover across process restart without replaying completed side effects;
+- preserve profile and secret isolation;
+- avoid granting unrestricted browser access to every background WorkItem.
+
+Browser ownership does not move into the scheduler. The scheduler routes work; it does not own browser state or let the model create authority.
+
+## P9.5E — Trusted-owner proactive result delivery
+
+P8.5 `app.message.send` remains bounded to the trusted current application/session execution. Do not silently redefine it for durable work that may have no live Chat session.
+
+Add the smallest first-party owner-visible completion/attention delivery behavior needed by this demo. The later implementation proposal may choose a first-party Chat notification, activity/inbox item, durable assistant message, or another narrow surface consistent with current architecture, provided that:
+
+- the destination is the trusted owner/current Agent Core application context, never an arbitrary model-selected recipient;
+- this does not become Slack, Teams, email, cross-application, or arbitrary-recipient messaging;
+- completed background work remains inspectable when live delivery fails;
+- delivery is idempotent and retry-safe enough to avoid duplicate spam;
+- work that finds nothing needing attention can complete quietly.
+
+## P9.5F — Acceptance journeys
+
+**Product publishing**
+
+> “Add AC Keyboard for $99. Use the image I provided, write a suitable description, publish it, and tell me when it is ready.”
+
+The Secretary loads a relevant Skill when needed, communicates useful intermediate progress, opens the visible authenticated browser, creates or updates and publishes the product in nopCommerce Admin, opens the storefront, verifies the observable resulting application state, and only then reports completion. Clicking Save alone is not verification.
+
+**Authentication continuity**
+
+Connect/login once, close the browser, then start another Chat with the same Agent Instance and/or restart Agent Core. The profile remains authenticated. A different Agent Instance cannot inherit or borrow that authentication.
+
+**Proactive store check**
+
+A scheduled occurrence becomes bounded work. The Secretary uses its authorized nopCommerce profile, inspects a relevant condition, takes only authorized action, produces a trusted-owner-visible result when attention is warranted, and completes quietly when nothing matters.
+
+**General-assistant proof**
+
+The same Secretary completes an unrelated task through existing capabilities, such as research, attachment summarization, artifact creation, policy-governed email, a reminder, or learned memory. This proves nopCommerce is an application the identity participates in rather than what the identity fundamentally is.
+
+## P9.5G — UX and Admin quality
+
+Add user-visible surfaces only where the workflow requires them. Likely surfaces are safe application connection/authentication status; connect, reauthenticate, revoke, and profile-reset controls; browser opening/closing state; owner-visible proactive outcomes; intervention/failure handling; and Admin configuration of the prepared Secretary and demo authority.
+
+Reuse Ant Design v6 and existing Chat/Admin patterns. Do not add a browser-control dashboard, click log, raw-cookie viewer, or secret-management UI. Run Impeccable against affected surfaces, address relevant findings before closure, then synchronize canonical frontend/design documentation.
+
+## P9.5H — Verification and closure evidence
+
+Default Synthetic CI remains key-free, deterministic, offline where expected, and independent of public websites or a live nopCommerce deployment. Prove new Core semantics with deterministic fixtures/fakes where possible. Keep actual nopCommerce/real-model evidence in a separate optional demo/integration gate rather than making the whole default CI depend on a heavyweight third-party application.
+
+Closure evidence must include:
+
+- unit/integration coverage for application/profile ownership and profile-reset semantics;
+- cross-Agent-Instance authentication isolation;
+- cross-session and process-restart profile reuse;
+- unattended WorkItem authorization, budget, cancellation, recovery, and no completed-side-effect replay;
+- proactive result-delivery idempotency and quiet completion;
+- no secret leakage into model observations, history, logs, or ordinary Admin projections;
+- the deterministic Synthetic regression suite green, including existing P8, P8.5, and P9 behavior;
+- one real-model Real-profile end-to-end nopCommerce demonstration with a headed browser;
+- documented demo start, stop, and reset procedure.
+
+Hosted Synthetic remains the standard regression gate. Real-model/nopCommerce evidence may be an explicit manual or opt-in closure gate.
+
+## P9.5 non-goals
+
+P9.5 does not include P10 sandbox evolution; P11 multi-user/production infrastructure; migration of Agent Core from SQLite; Kubernetes, Redis, a broker, or a microservice split; MCP-first redesign; a universal plugin/integration framework or marketplace; a native nopCommerce integration; required Facebook, Mastodon, or social-network support; arbitrary cross-application or arbitrary-recipient messaging; an unrestricted autonomous/infinite loop; multi-agent coordination or a swarm; a visual workflow builder; a persistent general Agent Instance filesystem; authorization bypasses; the operator's normal Chrome profile; or model-visible credentials/browser storage.
+
+## P9.5 stop condition
+
+P9.5 closes when a developer can use one simple documented workflow to bring up and reset the demo environment, open a prepared Secretary Agent Instance, and demonstrate with a real model that the same durable identity can converse normally and perform an unrelated assistant task; use Skills, learned memory, capabilities, policy, approvals, execution, scheduling, WorkItems, messaging, and browser behavior through existing Core contracts; operate self-hosted nopCommerce in a visible browser; retain nopCommerce authentication across Chats and an Agent Core process restart without sharing it across Agent Instances; create or modify something in nopCommerce and verify the resulting storefront/application state; execute at least one bounded scheduled proactive nopCommerce check through Trigger → Occurrence → WorkItem; deliver an appropriate trusted-owner-visible result when attention is warranted and complete quietly otherwise; and do all of this without model-visible credentials, authorization bypasses, an unrestricted loop, or reopening P9. Synthetic/offline regressions must remain green, and the user-visible workflow must complete the normal UI, Impeccable, and canonical-documentation review.
+
+---
+
 # P10 — Sandbox evolution
 
 **Status: requirement-triggered.**
@@ -896,15 +1089,15 @@ Start when Agent Core leaves trusted single-owner local development or begins a 
 
 # Deferred / requirement-triggered work
 
-These items are recorded decisions. They do not block P8.5. They are not reasons to start P9, P10, or P11 early. Each waits for a concrete requirement.
+These items are recorded decisions. P9.5 takes only the narrow exceptions named in its scope. The remaining items are not reasons to widen P9.5 or start P10 or P11 early. Each waits for a concrete requirement.
 
 **Production infrastructure and distributed scheduling.** The P11 stack, plus Hangfire, Quartz, or another job framework. If a scheduler is ever justified, it implements wake-up and dispatch under Trigger → Occurrence → WorkItem. It does not replace that model. Misfire policies beyond current coalesce-to-latest (`SkipMissed`, `CatchUp`) wait for a workflow that needs them.
 
-**Platform and packaging.** A universal plugin framework, plugin marketplace, Skill marketplace, application marketplace, prepared-worker marketplace, ZIP or package import/export, Git resource sync, remote filesystem or object-storage browsing, live folder sync, and FTP/SFTP. P9 may add one concrete provider seam. It may not absorb this list.
+**Platform and packaging.** A universal plugin framework, plugin marketplace, Skill marketplace, application marketplace, prepared-worker marketplace, ZIP or package import/export, Git resource sync, remote filesystem or object-storage browsing, live folder sync, and FTP/SFTP. P9.5 may add only the narrow nopCommerce connection/binding behavior its workflow proves. It may not absorb this list.
 
-**Bindings, messaging, and skills beyond P8.5.** Full Application Binding persistence. Cross-application and arbitrary-recipient messaging, including Slack/Teams/email delivery implementations. An independently versioned Skill shared across many Definitions. Skill or plugin marketplaces. Embeddings/vector Skill retrieval and a dedicated Skill-router model.
+**Bindings, messaging, and skills beyond P9.5.** Full/universal Application Binding persistence remains deferred; P9.5 owns only a minimal Agent-Instance-owned nopCommerce relationship. Cross-application and arbitrary-recipient messaging remains deferred; P9.5 owns only narrow trusted-owner proactive delivery. An independently versioned Skill shared across many Definitions, Skill/plugin marketplaces, embeddings/vector Skill retrieval, and a dedicated Skill-router model remain deferred.
 
-**Agent scope.** Multi-agent coordination or an agent swarm. A visual workflow builder. An arbitrary autonomous loop. A persistent general Agent Instance filesystem. An Admin assistant agent.
+**Agent scope.** Multi-agent coordination or an agent swarm. A visual workflow builder. An arbitrary autonomous loop; P9.5 proactivity is bounded Trigger → Occurrence → WorkItem execution only. A persistent general Agent Instance filesystem. An Admin assistant agent.
 
 **Voice and hosted providers.** The known Real/OpenRouter historical-image reread gap: bounded, credential-gated, outside default CI. HOSTED-04, one non-Synthetic voice smoke on an explicitly selected hosted configuration. Replacing realtime `OpenAiSpeechRecognizer` only when a concrete need exists. Native speech-to-speech only if measured latency or quality shows that `STT → text model → TTS` is insufficient.
 
@@ -957,4 +1150,4 @@ Orientation for what later work can build on. Detail and gate history are in `/d
 
 # Next implementation item
 
-No phase is open. P9 remains closed on `bba1de4`. P10 and P11 stay requirement-triggered.
+**P9.5 — Proactive Secretary / Real Assistant Demo.** Prepare one durable Secretary identity and validate existing Agent Core contracts through general assistance, bounded proactive WorkItems, trusted-owner result delivery, and visible authenticated participation in self-hosted nopCommerce. P9 remains closed on `bba1de4`; P10 and P11 remain requirement-triggered.
