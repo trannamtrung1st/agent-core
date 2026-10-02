@@ -31,10 +31,7 @@ const draft = {
 describe("DefinitionDraftPublishGatePanel evidence loading", () => {
   it("keeps publish blocked while evaluation evidence is still loading", async () => {
     vi.mocked(listAdminDefinitionEvaluationScenarios).mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          setTimeout(() => resolve([]), 200);
-        })
+      () => new Promise(() => {})
     );
     vi.mocked(listAdminDefinitionEvaluationResults).mockResolvedValue([]);
 
