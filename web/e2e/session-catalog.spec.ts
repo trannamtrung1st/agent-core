@@ -21,8 +21,10 @@ async function renameFirstRow(page: Page, title: string): Promise<void> {
 }
 
 async function endConversation(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Conversation actions" }).click();
-  await page.getByRole("menuitem", { name: "End" }).click();
+  await page.getByRole("button", { name: "End" }).click();
+  await page.getByRole("dialog").filter({ hasText: "End this conversation?" })
+    .getByRole("button", { name: "End", exact: true })
+    .click();
   await expect(page.getByTestId("connection")).toHaveText("Ended", { timeout: 15_000 });
   await expect(page.getByText("This conversation has ended.")).toBeVisible();
 }

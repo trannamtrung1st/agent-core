@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { Badge, Button, Dropdown, Flex, Typography } from "antd";
-import { MoreOutlined } from "@ant-design/icons";
-import type { MenuProps } from "antd";
+import { App as AntApp, Badge, Button, Flex, Tooltip, Typography } from "antd";
+import { CalendarOutlined, InboxOutlined, PoweroffOutlined } from "@ant-design/icons";
+import { confirmAction } from "../../app/confirmAction";
 import { formatChatTime } from "./chatTime";
 
 export function ChatHeader({
@@ -27,16 +27,7 @@ export function ChatHeader({
   onEnd: () => void;
   inSession: boolean;
 }) {
-  const items: MenuProps["items"] = inSession
-    ? [
-        {
-          key: "end",
-          danger: true,
-          label: "End",
-          onClick: onEnd
-        }
-      ]
-    : [];
+  const { modal } = AntApp.useApp();
   const timeLabel = timestamp ? formatChatTime(timestamp) : null;
 
   return (
@@ -66,24 +57,49 @@ export function ChatHeader({
           {speechLocale}
           {onBackgroundWork ? (
             <Badge count={attentionCount} size="small" offset={[-4, 4]}>
-              <Button
-                size="small"
-                aria-label={attentionCount > 0 ? `Background work, ${attentionCount} need attention` : "Background work"}
-                onClick={onBackgroundWork}
-              >
-                Background work
-              </Button>
+              <Tooltip title="Background work">
+                <Button
+                  type="text"
+                  size="small"
+                  className="chat-header-icon-action chat-header-background-work"
+                  aria-label={attentionCount > 0 ? `Background work, ${attentionCount} need attention` : "Background work"}
+                  icon={<InboxOutlined />}
+                  onClick={onBackgroundWork}
+                />
+              </Tooltip>
             </Badge>
           ) : null}
           {inSession && onSchedules ? (
-            <Button size="small" aria-label="Schedules" onClick={onSchedules}>
-              Schedules
-            </Button>
+            <Tooltip title="Schedules">
+              <Button
+                type="text"
+                size="small"
+                className="chat-header-icon-action"
+                aria-label="Schedules"
+                icon={<CalendarOutlined />}
+                onClick={onSchedules}
+              />
+            </Tooltip>
           ) : null}
           {inSession ? (
-            <Dropdown menu={{ items }} trigger={["click"]} placement="bottomRight">
-              <Button type="text" size="small" className="session-overflow" aria-label="Conversation actions" icon={<MoreOutlined />} />
-            </Dropdown>
+            <Tooltip title="End conversation">
+              <Button
+                type="text"
+                size="small"
+                className="chat-header-icon-action"
+                aria-label="End"
+                icon={<PoweroffOutlined />}
+                onClick={() => {
+                  confirmAction(modal, {
+                    title: "End this conversation?",
+                    content: "This conversation will become read-only and cannot be resumed.",
+                    okText: "End",
+                    danger: true,
+                    onOk: onEnd
+                  });
+                }}
+              />
+            </Tooltip>
           ) : null}
         </Flex>
       ) : null}

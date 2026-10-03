@@ -108,8 +108,21 @@ test("store connection and quiet background work stay labeled", async ({ page })
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden({ timeout: 15_000 });
 
-  await expect(page.getByLabel("Store connection", { exact: true })).toContainText("Not connected");
-  await page.getByRole("button", { name: "Manage store connection" }).click();
+  const sessionId = page.url().match(/\/c\/([^/?#]+)/i)?.[1];
+  expect(sessionId).toBeTruthy();
+  const instanceId = await page.evaluate(async (id) => {
+    const capability = window.localStorage.getItem("agent-core.owner-capability");
+    const response = await fetch(`/api/v1/sessions/${id}`, {
+      headers: capability ? { "X-AgentCore-Owner-Capability": capability } : {}
+    });
+    if (!response.ok) {
+      throw new Error(`session lookup failed: ${response.status}`);
+    }
+    const session = (await response.json()) as { agentInstanceId?: string | null };
+    return session.agentInstanceId ?? null;
+  }, sessionId!);
+  expect(instanceId).toBeTruthy();
+  await page.goto(`/admin/instances/${instanceId}`);
   await expect(page).toHaveURL(/\/admin\/instances\/[0-9a-f-]{36}$/i);
   const section = page.getByRole("region", { name: "Application connection" });
   await expect(section.getByRole("heading", { name: "Store connection" })).toBeVisible();

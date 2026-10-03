@@ -157,8 +157,10 @@ test("MANUAL_A faithful wall-clock detached reminder", async ({ page }) => {
   const sessionId = page.url().match(/\/c\/([0-9a-f-]{36})/i)?.[1];
   expect(sessionId).toBeTruthy();
 
-  await page.getByRole("button", { name: "Conversation actions" }).click();
-  await page.getByRole("menuitem", { name: "End" }).click();
+  await page.getByRole("button", { name: "End" }).click();
+  await page.getByRole("dialog").filter({ hasText: "End this conversation?" })
+    .getByRole("button", { name: "End", exact: true })
+    .click();
   await expect(page.getByText("This conversation has ended.")).toBeVisible({ timeout: 15_000 });
   const transcriptBefore = await page.locator(".conversation-scroll").innerText();
   const helloBefore = (transcriptBefore.match(/Hello from synthetic/g) ?? []).length;

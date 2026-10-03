@@ -254,8 +254,10 @@ test("a detached reminder completes in Background work and cancel survives reloa
 
   await waitForResponseSettled(page);
 
-  await page.getByRole("button", { name: "Conversation actions" }).click();
-  await page.getByRole("menuitem", { name: "End" }).click();
+  await page.getByRole("button", { name: "End" }).click();
+  await page.getByRole("dialog").filter({ hasText: "End this conversation?" })
+    .getByRole("button", { name: "End", exact: true })
+    .click();
   await expect(page.getByText("This conversation has ended.")).toBeVisible({ timeout: 15_000 });
 
   await releaseOtherLiveRuntimes(page, sessionId);

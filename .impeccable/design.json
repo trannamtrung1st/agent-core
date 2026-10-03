@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-24T16:32:00.000Z",
+  "generatedAt": "2026-10-03T11:06:00.000Z",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -125,6 +125,14 @@
       "css": ".ds-send { width: 32px; height: 32px; padding: 0; border: 0; border-radius: 6px; background: var(--ac-color-primary, #1677ff); color: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; } .ds-send svg { display: block; transform: translate(1px, -1px); } .ds-send:hover { filter: brightness(1.08); } .ds-send:focus-visible { outline: 2px solid var(--ac-color-primary, #1677ff); outline-offset: 2px; } .ds-send:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }"
     },
     {
+      "name": "Header actions",
+      "kind": "nav",
+      "refersTo": "antd-control",
+      "description": "Responsive Chat header controls: Speech locale, 32px fill-hover icon actions, attention-badged Background Work, Schedules, direct confirmed End, Admin, profile, and connection metadata. The shipped Flex rows remain one 57px row at 1024px and wrap intentionally at 768px and 390px.",
+      "html": "<div class=\"ds-header-actions\"><label class=\"ds-header-locale\">Speech locale <select aria-label=\"Speech locale\"><option>Agent default</option></select></label><nav class=\"ds-header-icons\" aria-label=\"Conversation actions\"><span class=\"ds-header-badge\"><button type=\"button\" aria-label=\"Background work, 2 need attention\"><svg class=\"ds-icon-inbox\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 4h16l2 9v7H2v-7l2-9Z\"/><path d=\"M2 13h5l2 3h6l2-3h5\"/></svg></button><span aria-hidden=\"true\">2</span></span><button type=\"button\" aria-label=\"Schedules\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M7 3v4M17 3v4M3 10h18\"/></svg></button><button type=\"button\" aria-label=\"End\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 2v10\"/><path d=\"M6.3 5.7a8 8 0 1 0 11.4 0\"/></svg></button><button type=\"button\" aria-label=\"Open Admin\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z\"/></svg></button></nav><div class=\"ds-header-meta\"><span>Synthetic</span><span class=\"ds-header-status\">Ready</span></div></div>",
+      "css": ".ds-header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; color: var(--ac-color-text-secondary, rgba(255,255,255,.65)); font: 400 12px/1.4 -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-header-locale, .ds-header-icons, .ds-header-meta { display: inline-flex; align-items: center; gap: 8px; min-width: 0; } .ds-header-locale select { height: 32px; min-width: 0; border: 1px solid var(--ac-color-border, #303030); border-radius: 6px; background: var(--ac-color-container, #141414); color: var(--ac-color-text, rgba(255,255,255,.88)); } .ds-header-icons button { display: inline-flex; align-items: center; justify-content: center; width: 32px; min-width: 32px; height: 32px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--ac-color-text-secondary, rgba(255,255,255,.65)); cursor: pointer; } .ds-header-icons button:hover, .ds-header-icons button:focus-visible { outline: 0; background: var(--ac-color-fill, rgba(255,255,255,.08)); color: var(--ac-color-text, rgba(255,255,255,.88)); } .ds-header-icons svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; } .ds-header-icons .ds-icon-inbox { width: 18px; height: 18px; } .ds-header-badge { position: relative; display: inline-flex; } .ds-header-badge > span { position: absolute; inset-block-start: -2px; inset-inline-end: -2px; min-width: 14px; height: 14px; padding-inline: 3px; border-radius: 7px; background: #ff4d4f; color: #fff; font-size: 10px; line-height: 14px; text-align: center; } .ds-header-status { position: relative; padding-inline-start: 12px; } .ds-header-status::before { position: absolute; inset-block-start: 50%; inset-inline-start: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--ac-color-success, #52c41a); content: \"\"; transform: translateY(-50%); }"
+    },
+    {
       "name": "Composer shell",
       "kind": "input",
       "refersTo": "composer-shell",
@@ -199,11 +207,11 @@
   ],
   "narrative": {
     "northStar": "Ant Design operate UI",
-    "overview": "Agent Core is a personal-chat operate surface. Ant Design v6 is the MVP component system; Impeccable refines layout, spacing, composition, hierarchy, and polish while preserving AntD primitives. ChatGPT/Codex are UX and hierarchy references for the conversational experience (quiet session rail, centered reading column, user bubbles, open assistant Markdown, bottom composer with inference controls, in-flow activity)—not a component dependency or pixel clone.\n\nThe shipped appearance is Ant Design `darkAlgorithm`: black layout, conversation container, elevated composer, and primary blue for Send and Voice-on. Product CSS maps those roles from `:root` custom properties; it does not invert a former light palette or invent a second token catalog.",
+    "overview": "Agent Core is a personal-chat operate surface plus a shipped Admin configuration surface. Both use Ant Design v6. Impeccable refines layout, spacing, composition, hierarchy, and polish while preserving AntD primitives. ChatGPT/Codex are UX and hierarchy references for the conversational experience (quiet session rail, centered reading column, user bubbles, open assistant Markdown, bottom composer with inference controls, in-flow activity)—not a component dependency or pixel clone. Admin uses the same dark roles, type, and 8/12/16 spacing for definitions and instances. It does not borrow a navy enterprise sider or copy Chat's composer onto configuration screens.\n\nThe shipped appearance is Ant Design `darkAlgorithm`: black layout, conversation container, elevated composer, and primary blue for Send and Voice-on. Product CSS maps those roles from `:root` custom properties; it does not invert a former light palette or invent a second token catalog.",
     "keyCharacteristics": [
       "Ant Design v6 imported directly in product components; `app.css` only sizes the shell, overflow, product layout, previews, and accessibility.",
       "Compact / default / section spacing (8 / 12 / 16px) owns shells, docks, and sibling `gap`. Text-control inner padding is `{spacing.controlInner}` (8px, Ant Design `paddingXS`, same as a session-row body).",
-      "Composer owns Model (reasoning level inside the Model button when supported) with Attach/Voice and context-sensitive Stop/Queue/Send; header owns identity, Speech locale, and overflow.",
+      "Composer owns Model (reasoning level inside the Model button when supported) with Attach/Voice and context-sensitive Stop/Queue/Send; header owns identity, Speech locale, compact icon actions, and status metadata.",
       "Model catalog rows expose enabled vision, reasoning, tools, and structured-output capabilities as compact named icons. Queued drafts remain a compact local work list above the composer.",
       "Assistant display Markdown stays primary for reading; persisted public speech text is a quieter **Spoken** inset first on the same turn when it differs (the TTS projection).",
       "Background Work and Schedules share an operational drawer language: two-line headers, open List rows, semantic filled icon-and-text status chips, elevated detail insets, and trailing actions where needed."
@@ -219,6 +227,7 @@
     "dos": [
       "**Do** import `antd` in feature files; ConfigProvider uses `darkAlgorithm`. Keep Sider `theme=\"light\"` so chat surfaces stay black.",
       "**Do** use compact/default/section (8/12/16px) for shells and sibling `gap`; use Ant Design `paddingXS` (8px, `{spacing.controlInner}`) via `theme.useToken()` for text-control inner padding so it matches session-row inset; align Spoken and composer toolbar to that rhythm.",
+      "**Do** disclose a failed turn, work item, or admin error with one Ant Design popover, Error details, and a keyboard-reachable Copy control. Keep the Failed label. Show the popover only when a diagnostic id exists. Space the id and the copy control with `paddingXS`.",
       "**Do** put Model in the composer when the composer is shown (Reasoning level inside the Model button when supported); keep Identity/Speech locale in the new-chat intro; keep Speech locale in the live header.",
       "**Do** show enabled model capabilities as compact tooltip-backed icons in catalog rows; preserve the Default tag and selected-row check as separate signals.",
       "**Do** keep queued drafts above the composer in a compact local work list, with truncation, bounded expansion, and trailing Steer/Remove actions.",
@@ -226,21 +235,27 @@
       "**Do** render Spoken only for assistant public `speechText` that differs after whitespace normalization; keep it first in the turn as the TTS projection, with Markdown as on-screen display below.",
       "**Do** honor `prefers-reduced-motion`; keep labeled errors, visible focus, and testids `connection` and `profile`.",
       "**Do** keep the labeled composer available while voice is live until `/docs` and tests change together.",
+      "**Do** treat Admin as the same dark product: shared spacing tokens, configuration panels, and operator copy. Behavior stays in `/docs`.",
+      "**Do** use the shared centered Ant Design confirmation dialog (`confirmAction` in `web/src/app/confirmAction.ts`) for destructive or consequential actions across Chat, Admin, Background Work, and Schedules (session delete, Admin definition/instance delete, deprecation, work cancel, approval decisions, memory reset, automation revoke, and similar). Prefer a stable `dialog` surface for tests and keyboard focus.",
+      "**Do** keep header identity, Speech locale, compact icon actions, profile, and connection status visible. Use 32×32px, 6px-radius fill-hover actions; keep Background Work at an 18px inbox icon with attention badge and Schedules/Admin/End at 16px.",
       "**Do** keep ended history on the same reading column with a quiet ended note, not a disabled input.",
-      "**Do** reuse the operational drawer language for Background Work and Schedules: two-line headers, open List rows, semantic filled icon-and-text status chips, elevated 8px detail insets, and trailing separated actions only where the row exposes actions.",
+      "**Do** reuse the operational drawer language for Background Work and Schedules: two-line headers, open List rows, semantic filled icon-and-text status chips, elevated 8px detail insets, and trailing actions only where the row exposes an operation.",
+      "**Do** show store connection status on the Admin instance detail only, not in Chat. Attention results use the words Needs attention plus an icon. Quiet completions do not change the header count.",
       "**Do** format schedule occurrences for the viewer locale in the schedule’s named time zone; keep the zone identifier visible beside the readable time."
     ],
     "donts": [
       "**Don't** reproduce Pixel Dialogue Field, Obsidian Mint, Martian Mono, field textures, presence plates, or a custom Select.",
       "**Don't** add generic wrappers, Ant Design Pro/ProComponents/X, or another CSS framework.",
-      "**Don't** use Layout.Sider `theme=\"dark\"` (navy admin sider).",
+      "**Don't** use Layout.Sider `theme=\"dark\"` (navy admin sider) or restyle Admin as a separate enterprise dashboard.",
       "**Don't** treat this file as behavioral authority over `/docs`.",
       "**Don't** use a blocking Modal or a second Select/button for model or effort; keep one Dropdown anchored to the Model chip, with effort in the overlay footer.",
       "**Don't** render queued drafts as transcript turns or move pending attachments into a separate dock.",
       "**Don't** zero a text control’s padding, use negative margin, or stack extra child padding to fake alignment with a sibling.",
       "**Don't** show Spoken as another conversational turn or from internal generated tails.",
       "**Don't** wrap every operational List row in a card or generalize drawer actions to rows that do not expose an operation.",
-      "**Don't** present schedule occurrence timestamps as raw transport strings when they parse as dates."
+      "**Don't** present schedule occurrence timestamps as raw transport strings when they parse as dates.",
+      "**Don't** use transient `Popconfirm` overlays for lifecycle, deletion, approval, cancellation, reset, or revoke actions when `confirmAction` is available; reserve Popconfirm for low-risk inline affordances only.",
+      "**Don't** add a browser panel, iframe, screenshot, or click log. Browser progress stays on the existing activity row as `Using browser…`."
     ]
   }
 }

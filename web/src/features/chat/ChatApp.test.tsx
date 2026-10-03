@@ -110,8 +110,9 @@ describe("ChatApp accessibility", () => {
     expect(screen.getByRole("button", { name: "Attach" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
-    expect(await screen.findByRole("menuitem", { name: "End" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "End" }));
+    const endDialog = await screen.findByRole("dialog");
+    expect(within(endDialog).getAllByText("End this conversation?")).not.toHaveLength(0);
   });
 
   it("shows recoverable structured failure details from the chat owner", async () => {
@@ -580,7 +581,7 @@ describe("ChatApp accessibility", () => {
     expect(screen.getByText("This conversation has ended.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Message")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Conversation actions" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "End" })).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Speech locale" })).not.toBeInTheDocument();
   });
 
@@ -682,8 +683,9 @@ describe("ChatApp accessibility", () => {
     await act(async () => renderChat());
     expect(screen.getByLabelText("Message")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
-    expect(await screen.findByRole("menuitem", { name: "End" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "End" }));
+    const endDialog = await screen.findByRole("dialog");
+    expect(within(endDialog).getAllByText("End this conversation?")).not.toHaveLength(0);
     expect(screen.queryByText("This conversation has ended.")).not.toBeInTheDocument();
   });
 

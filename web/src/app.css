@@ -141,6 +141,38 @@ body,
   min-width: 0;
 }
 
+.chat-header-icon-action.ant-btn {
+  flex: 0 0 auto;
+}
+
+.chat-header-icon-action.ant-btn,
+.chat-header-admin.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 6px;
+  color: var(--ac-color-text-secondary);
+}
+
+.chat-header-icon-action.ant-btn:not(:disabled):hover,
+.chat-header-icon-action.ant-btn:not(:disabled):focus-visible {
+  color: var(--ac-color-text);
+  background: var(--ac-color-fill);
+}
+
+.chat-header-icon-action.ant-btn .anticon,
+.chat-header-admin.ant-btn .anticon {
+  font-size: 16px;
+}
+
+.chat-header-background-work.ant-btn .anticon {
+  font-size: 18px;
+}
+
 .chat-header-meta {
   flex: 0 1 auto;
   min-width: 0;
@@ -150,10 +182,6 @@ body,
 
 .chat-header-admin.ant-btn {
   flex: 0 0 auto;
-  height: 32px;
-  padding-inline: var(--ac-space-compact);
-  color: var(--ac-color-text-secondary);
-  border-radius: 6px;
 }
 
 .chat-header-admin.ant-btn:not(:disabled):hover,
@@ -1377,18 +1405,6 @@ body,
   .background-work-actions .ant-btn,
   .schedule-actions .ant-btn {
     min-height: 40px;
-  }
-}
-
-@media (max-width: 479px) {
-  .chat-header-admin.ant-btn {
-    width: 32px;
-    min-width: 32px;
-    padding: 0;
-  }
-
-  .chat-header-admin-label {
-    display: none;
   }
 }
 

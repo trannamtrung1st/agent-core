@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { App as AntApp, Alert, Button, Drawer, Flex, Layout, Typography } from "antd";
+import { App as AntApp, Alert, Button, Drawer, Flex, Layout, Tooltip, Typography } from "antd";
 import { MenuOutlined, PlusOutlined, SettingOutlined } from "@ant-design/icons";
 import { isReadonlySession, isSessionModelBusy, useSessionStore } from "../../state/sessionStore";
 import {
@@ -53,7 +53,6 @@ import {
   rejectWorkItem
 } from "../../services/api";
 import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
-import { ChatStoreConnection } from "./ChatStoreConnection";
 import { ScheduleDrawer } from "./ScheduleDrawer";
 import { Composer } from "./Composer";
 import { Conversation } from "./Conversation";
@@ -341,27 +340,27 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
               attentionCount={attentionCount}
               onEnd={() => void hangUp()}
             />
-            {state.sessionId ? <ChatStoreConnection sessionId={state.sessionId} /> : null}
             <Flex align="center" gap={8} className="chat-header-meta">
               {onOpenAdmin ? (
-                <Button
-                  type="text"
-                  size="small"
-                  className="chat-header-admin"
-                  icon={<SettingOutlined />}
-                  onClick={onOpenAdmin}
-                  aria-label="Open Admin"
-                >
-                  <span className="chat-header-admin-label">Admin</span>
-                </Button>
+                <Tooltip title="Admin">
+                  <Button
+                    type="text"
+                    size="small"
+                    className="chat-header-admin"
+                    icon={<SettingOutlined />}
+                    onClick={onOpenAdmin}
+                    aria-label="Open Admin"
+                  />
+                </Tooltip>
               ) : null}
               <Typography.Text
                 data-testid="profile"
+                aria-label={profileText}
                 type="secondary"
                 className="chat-header-profile"
                 ellipsis={{ tooltip: profileText }}
               >
-                {profileText}
+                {profile || "…"}
               </Typography.Text>
               <Typography.Text
                 data-testid="connection"

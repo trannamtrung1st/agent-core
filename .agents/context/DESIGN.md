@@ -118,7 +118,7 @@ The shipped appearance is Ant Design `darkAlgorithm`: black layout, conversation
 
 - Ant Design v6 imported directly in product components; `app.css` only sizes the shell, overflow, product layout, previews, and accessibility.
 - Compact / default / section spacing (8 / 12 / 16px) owns shells, docks, and sibling `gap`. Text-control inner padding is `{spacing.controlInner}` (8px, Ant Design `paddingXS`, same as a session-row body).
-- Composer owns Model (reasoning level inside the Model button when supported) with Attach/Voice and context-sensitive Stop/Queue/Send; header owns identity, Speech locale, and overflow.
+- Composer owns Model (reasoning level inside the Model button when supported) with Attach/Voice and context-sensitive Stop/Queue/Send; header owns identity, Speech locale, compact icon actions, and status metadata.
 - Model catalog rows expose enabled vision, reasoning, tools, and structured-output capabilities as compact named icons. Queued drafts remain a compact local work list above the composer.
 - Assistant display Markdown stays primary for reading; persisted public speech text is a quieter **Spoken** inset first on the same turn when it differs (the TTS projection).
 - Background Work and Schedules share an operational drawer language: two-line headers, open List rows, semantic filled icon-and-text status chips, elevated detail insets, and trailing actions where needed.
@@ -163,7 +163,7 @@ Dark operate neutrals with one primary accent and one success accent for live mi
 One session: black rail + conversation column + sticky composer. Column is `min(100%, 52rem)` centered with 16px inline padding. Conversation list gap is section (16px); inside a turn, compact (8px) owns sibling stacks (meta → body: speech projection when present, then display).
 
 - Rail: 280px at 1200px+, 240px from 768–1199px, Drawer below 768px. Shared 16px left edge for New chat, Chats, session titles. Sections use title + gap, not dividing rules.
-- Header: 56px min height, container background, compact block padding, 16px inline.
+- Header: 56px CSS minimum, container background, compact block padding, 16px inline. At 1024px it renders as one 57px row including its hairline border. At 768px and 390px its Flex rows wrap intentionally according to available width; profile and connection status remain visible rather than being hidden.
 - Composer dock: 12px above, 16px below the shell. Toolbar min-height 32px (44px below 768px); wrap with 8px gap.
 - Queued drafts sit above the message well in a 12px-radius elevated container. Rows use an icon / truncated content / actions grid, 8px rhythm, and a 12.5rem maximum expanded list height.
 - After a user send, leave about half the pane for the incoming reply; shrink as the reply grows. Historical turns stay compact.
@@ -194,7 +194,7 @@ Operational drawer details use the elevated tone, a border, and an 8px radius to
 ## Shapes
 
 - **Inline** (4px): inline Markdown code and compact focus outlines.
-- **Control** (6px): AntD buttons, Selects, 32px composer icon/send hits, status tags.
+- **Control** (6px): AntD buttons, Selects, 32px composer and header icon hits, status tags.
 - **Surface** (8px): session rows, code blocks, and image previews.
 - **Chip** (12px): attachment/file chips, queued-send container, and 24px operational status/time-zone chips.
 - **Composer** (16px): message well and Model overlay.
@@ -205,9 +205,9 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 ## Components
 
 ### Buttons
-- **Shape:** 6px radius; icon Send/Attach/Voice are 32×32px (44px tall toolbar on small screens).
+- **Shape:** 6px radius; header icon actions are 32×32px. Composer Send/Attach/Voice are 32×32px and become 44px below 768px.
 - **Primary:** Send/Queue and Voice-on use `{colors.primary}`.
-- **Ghost/text:** Attach, overflow, New chat, Model, catalog rows; hover uses `{colors.fill}` only. Suppress Ant Design text-button `::before`/`::after` rings so hover does not flash a border. Selected catalog row is a checkmark, not a persistent fill.
+- **Ghost/text:** Header actions, Attach, overflow, New chat, Model, catalog rows; hover uses `{colors.fill}` only. Suppress Ant Design text-button `::before`/`::after` rings so hover does not flash a border. Selected catalog row is a checkmark, not a persistent fill.
 - **Success:** live microphone control uses `{colors.success}`.
 
 ### Chips
@@ -227,7 +227,7 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 
 ### Navigation
 - Session row hover, keyboard focus-within, and active state fill the whole row including overflow (24px icon, inside row padding, common right edge).
-- Header: agent name + 12px timestamp; Speech locale; conversation overflow (End). No Model in the live header.
+- Header: identity (agent name, 12px timestamp, and role), Speech locale, compact icon actions, and status metadata. The 32×32px actions use a 6px radius and `{colors.fill}` hover. Background Work uses an 18px inbox icon plus an attention badge; Schedules, Admin, and the direct confirmed End action use 16px icons. End opens the shared centered confirmation. Profile and connection remain visible. Chat has no store-connection chrome; store connection belongs only on Admin instance detail. No Model appears in the live header.
 
 ### Operational drawers
 - Background Work and Schedules use a two-line title: a strong title above a 12px secondary subtitle.
@@ -262,9 +262,10 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 - **Do** keep the labeled composer available while voice is live until `/docs` and tests change together.
 - **Do** treat Admin as the same dark product: shared spacing tokens, configuration panels, and operator copy. Behavior stays in `/docs`.
 - **Do** use the shared centered Ant Design confirmation dialog (`confirmAction` in `web/src/app/confirmAction.ts`) for destructive or consequential actions across Chat, Admin, Background Work, and Schedules (session delete, Admin definition/instance delete, deprecation, work cancel, approval decisions, memory reset, automation revoke, and similar). Prefer a stable `dialog` surface for tests and keyboard focus.
+- **Do** keep header identity, Speech locale, compact icon actions, profile, and connection status visible. Use 32×32px, 6px-radius fill-hover actions; keep Background Work at an 18px inbox icon with attention badge and Schedules/Admin/End at 16px.
 - **Do** keep ended history on the same reading column with a quiet ended note, not a disabled input.
 - **Do** reuse the operational drawer language for Background Work and Schedules: two-line headers, open List rows, semantic filled icon-and-text status chips, elevated 8px detail insets, and trailing actions only where the row exposes an operation.
-- **Do** show store connection status as text on the Admin instance and as read-only text in Chat. Attention results use the words Needs attention plus an icon. Quiet completions do not change the header count.
+- **Do** show store connection status on the Admin instance detail only, not in Chat. Attention results use the words Needs attention plus an icon. Quiet completions do not change the header count.
 - **Do** format schedule occurrences for the viewer locale in the schedule’s named time zone; keep the zone identifier visible beside the readable time.
 
 ### Don't:
