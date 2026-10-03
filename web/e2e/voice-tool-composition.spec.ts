@@ -31,8 +31,12 @@ async function allowGeneralAssistantBrowser(page: Page): Promise<void> {
       return `instances-${listed.status}`;
     }
 
-    const instances = (await listed.json()) as { items?: Array<{ instanceId: string; definitionId: string }> };
-    const instance = instances.items?.find((item) => item.definitionId === "general-assistant");
+    const instances = (await listed.json()) as {
+      items?: Array<{ instanceId: string; definitionId: string; compatibility?: boolean }>;
+    };
+    const instance = instances.items?.find(
+      (item) => item.definitionId === "general-assistant" && item.compatibility === true
+    );
     if (!instance) {
       return "missing-instance";
     }
