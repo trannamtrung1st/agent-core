@@ -1062,7 +1062,7 @@ P9.5 closes when a developer can use one simple documented workflow to bring up 
 
 # P9.6 — Visual Browser, Reactive Triggers & Deterministic Unattended Execution
 
-**Status: implemented; not closed.** P9 remains closed on `bba1de4` and P9.5 remains closed on `1012653`. P9.6 does not move either closure SHA and does not start P10. Local key-free gates passed and the candidate report is [p9.6-freeze-candidate.md](docs/reports/p9.6-freeze-candidate.md). The hosted Synthetic run is still outstanding. `scripts/nopcommerce-demo.sh start` was not run.
+**Status: implemented; not closed.** P9 remains closed on `bba1de4` and P9.5 remains closed on `1012653`. P9.6 does not move either closure SHA and does not start P10. Local key-free gates passed. Hosted Synthetic [`37152788171`](https://github.com/trannamtrung1st/agent-core/actions/runs/37152788171) is green on `24e2281`. The candidate report is [p9.6-freeze-candidate.md](docs/reports/p9.6-freeze-candidate.md). `scripts/nopcommerce-demo.sh start` was not run, so AC-27 is not passed and the phase stays open.
 
 ## Verified starting point
 
@@ -1401,6 +1401,6 @@ Orientation for what later work can build on. Detail and gate history are in `/d
 
 # Next implementation item
 
-**P9.6 closure.** The execution-model pin, Browser Capability v1, authenticated `order.placed` ingress, unattended browser parity, `tool-result-lost` reconciliation, Admin and Background Work, and the four-mode Secretary proof are implemented. Close the phase only after the key-free gates, the hosted Synthetic run, and `docs/reports/p9.6-freeze-candidate.md`.
+**P9.6 closure.** The execution-model pin, Browser Capability v1, authenticated `order.placed` ingress, unattended browser parity, `tool-result-lost` reconciliation, Admin and Background Work, and the four-mode Secretary proof are implemented. Hosted Synthetic [`37152788171`](https://github.com/trannamtrung1st/agent-core/actions/runs/37152788171) is green on `24e2281` and named in `docs/reports/p9.6-freeze-candidate.md`. The phase stays open because `scripts/nopcommerce-demo.sh start` was not run.
 
 P9 remains closed on `bba1de4`; P9.5 remains closed on `1012653`; the post-P9.5 enhancement remains recorded on `6f6ff42`. P10 and P11 remain requirement-triggered.
