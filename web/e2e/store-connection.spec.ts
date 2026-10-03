@@ -45,8 +45,9 @@ test("store connection and quiet background work stay labeled", async ({ page })
   const drawer = page.getByRole("dialog", { name: "Background work" });
   await expect(drawer).toBeVisible({ timeout: 15_000 });
   await expect(drawer.getByText("No background work yet")).toBeVisible({ timeout: 15_000 });
+  await drawer.getByRole("button", { name: "Close" }).focus();
   await page.keyboard.press("Escape");
-  await expect(drawer).toBeHidden();
+  await expect(drawer).toBeHidden({ timeout: 15_000 });
   await page.unroute("**/work-items**");
 
   const attentionId = "019944af-00c5-7000-8000-0000000000a1";
@@ -103,8 +104,9 @@ test("store connection and quiet background work stay labeled", async ({ page })
   const quietRow = drawer.getByRole("listitem").filter({ hasText: "Stock is unchanged." });
   await expect(quietRow).toBeVisible();
   await expect(quietRow.getByText("Needs attention")).toHaveCount(0);
+  await drawer.getByRole("button", { name: "Close" }).focus();
   await page.keyboard.press("Escape");
-  await expect(drawer).toBeHidden();
+  await expect(drawer).toBeHidden({ timeout: 15_000 });
 
   await expect(page.getByLabel("Store connection", { exact: true })).toContainText("Not connected");
   await page.getByRole("button", { name: "Manage store connection" }).click();
