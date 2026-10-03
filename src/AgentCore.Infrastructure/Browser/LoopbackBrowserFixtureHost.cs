@@ -22,6 +22,10 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
     public const string UploadResource = "AgentCore.Infrastructure.Browser.Fixture.upload.html";
     public const string ControlsResource = "AgentCore.Infrastructure.Browser.Fixture.controls.html";
     public const string StateResource = "AgentCore.Infrastructure.Browser.Fixture.state.html";
+    public const string SettleDelayedResource = "AgentCore.Infrastructure.Browser.Fixture.settle-delayed.html";
+    public const string SettleClickResource = "AgentCore.Infrastructure.Browser.Fixture.settle-click.html";
+    public const string SettlePendingResource = "AgentCore.Infrastructure.Browser.Fixture.settle-pending.html";
+    public const string SettleChurnResource = "AgentCore.Infrastructure.Browser.Fixture.settle-churn.html";
 
     private static readonly string[] RequiredResources =
     [
@@ -39,7 +43,11 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
         IdentityResource,
         UploadResource,
         ControlsResource,
-        StateResource
+        StateResource,
+        SettleDelayedResource,
+        SettleClickResource,
+        SettlePendingResource,
+        SettleChurnResource
     ];
 
     private readonly ILogger _logger;
@@ -299,6 +307,36 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
                 return;
             }
 
+            if (string.Equals(path, "/settle-hold", StringComparison.Ordinal))
+            {
+                await WriteSettleHoldAsync(context, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            if (string.Equals(path, "/settle-delayed", StringComparison.Ordinal))
+            {
+                await WriteResourceAsync(context, SettleDelayedResource, 200).ConfigureAwait(false);
+                return;
+            }
+
+            if (string.Equals(path, "/settle-click", StringComparison.Ordinal))
+            {
+                await WriteResourceAsync(context, SettleClickResource, 200).ConfigureAwait(false);
+                return;
+            }
+
+            if (string.Equals(path, "/settle-pending", StringComparison.Ordinal))
+            {
+                await WriteResourceAsync(context, SettlePendingResource, 200).ConfigureAwait(false);
+                return;
+            }
+
+            if (string.Equals(path, "/settle-churn", StringComparison.Ordinal))
+            {
+                await WriteResourceAsync(context, SettleChurnResource, 200).ConfigureAwait(false);
+                return;
+            }
+
             if (string.Equals(path, "/bounce", StringComparison.Ordinal))
             {
                 var bytes = Encoding.UTF8.GetBytes(
@@ -332,6 +370,36 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
             {
             }
         }
+    }
+
+    private static async Task WriteSettleHoldAsync(HttpListenerContext context, CancellationToken cancellationToken)
+    {
+        var ms = 500;
+        if (int.TryParse(context.Request.QueryString["ms"], out var parsed))
+        {
+            ms = Math.Clamp(parsed, 0, 5000);
+        }
+
+        var token = context.Request.QueryString["token"];
+        if (token is not ("AC-SETTLE-ROW" or "AC-SETTLE-RESULT" or "AC-SETTLE-LATE"))
+        {
+            token = "AC-SETTLE-ROW";
+        }
+
+        try
+        {
+            await Task.Delay(ms, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        var bytes = Encoding.UTF8.GetBytes(token);
+        context.Response.StatusCode = 200;
+        context.Response.ContentType = "text/plain; charset=utf-8";
+        context.Response.ContentLength64 = bytes.Length;
+        await context.Response.OutputStream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task WriteResourceAsync(HttpListenerContext context, string resourceName, int statusCode)

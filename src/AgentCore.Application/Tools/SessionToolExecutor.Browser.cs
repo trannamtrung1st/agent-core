@@ -170,7 +170,7 @@ public sealed partial class SessionToolExecutor
             return FinishBrowser(ToolCatalog.BrowserObserve, started, denied);
         }
 
-        if (!BrowserToolArguments.TryObserve(args, out var errorJson))
+        if (!BrowserToolArguments.TryObserve(args, out var observeOptions, out var errorJson))
         {
             return FinishBrowser(ToolCatalog.BrowserObserve, started, errorJson);
         }
@@ -185,7 +185,9 @@ public sealed partial class SessionToolExecutor
 
         try
         {
-            var result = await browser.ObserveAsync(sessionId, cancellationToken).ConfigureAwait(false);
+            var result = observeOptions is null
+                ? await browser.ObserveAsync(sessionId, cancellationToken).ConfigureAwait(false)
+                : await browser.ObserveAsync(sessionId, observeOptions, cancellationToken).ConfigureAwait(false);
             return FinishBrowser(ToolCatalog.BrowserObserve, started, FromBrowserProvider(result));
         }
         catch (OperationCanceledException)
@@ -521,15 +523,29 @@ public sealed partial class SessionToolExecutor
             .ToArray();
         var text = observation.VisibleText ?? string.Empty;
         var truncated = observation.TextTruncated || text.Length > BrowserToolLimits.MaxVisibleTextLength;
-        return JsonSerializer.Serialize(new
-        {
-            untrustedBrowserContent = true,
-            url = ClipBrowser(observation.Url, BrowserToolLimits.MaxUrlLength),
-            title = ClipBrowser(observation.Title, BrowserToolLimits.MaxTitleLength),
-            visibleText = ClipBrowser(text, BrowserToolLimits.MaxVisibleTextLength),
-            textTruncated = truncated,
-            elements
-        });
+        var url = ClipBrowser(observation.Url, BrowserToolLimits.MaxUrlLength);
+        var title = ClipBrowser(observation.Title, BrowserToolLimits.MaxTitleLength);
+        var visibleText = ClipBrowser(text, BrowserToolLimits.MaxVisibleTextLength);
+        return observation.Settled is bool settled
+            ? JsonSerializer.Serialize(new
+            {
+                untrustedBrowserContent = true,
+                url,
+                title,
+                visibleText,
+                textTruncated = truncated,
+                settled,
+                elements
+            })
+            : JsonSerializer.Serialize(new
+            {
+                untrustedBrowserContent = true,
+                url,
+                title,
+                visibleText,
+                textTruncated = truncated,
+                elements
+            });
     }
 
     private static string SerializeBrowserIntervention(BrowserObservation observation)

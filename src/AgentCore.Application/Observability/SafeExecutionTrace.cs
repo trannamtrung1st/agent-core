@@ -70,7 +70,7 @@ public static class SafeExecutionTrace
         return toolName switch
         {
             ToolCatalog.BrowserNavigate => BuildNavigateDetail(argumentsJson, resultJson),
-            ToolCatalog.BrowserObserve => BuildObserveDetail(resultJson),
+            ToolCatalog.BrowserObserve => BuildObserveDetail(argumentsJson, resultJson),
             ToolCatalog.BrowserAct => BuildActDetail(argumentsJson, resultJson),
             ToolCatalog.BrowserClose => BuildCloseDetail(resultJson),
             _ => string.Empty
@@ -220,17 +220,30 @@ public static class SafeExecutionTrace
             parts.Add($"resultPath={SafeUrlPath(observed)}");
         }
 
+        AppendSettled(parts, resultJson);
         return string.Join(';', parts);
     }
 
-    private static string BuildObserveDetail(string? resultJson)
+    private static string BuildObserveDetail(string? argumentsJson, string? resultJson)
     {
-        if (string.IsNullOrWhiteSpace(resultJson))
+        if (string.IsNullOrWhiteSpace(resultJson) && string.IsNullOrWhiteSpace(argumentsJson))
         {
             return string.Empty;
         }
 
         var parts = new List<string>();
+        if (TryReadStringProperty(argumentsJson, "waitFor", out var waitFor)
+            && string.Equals(waitFor, "stable", StringComparison.Ordinal))
+        {
+            parts.Add("waitFor=stable");
+        }
+
+        if (TryReadIntProperty(argumentsJson, "timeoutMs", out var timeoutMs)
+            && timeoutMs is >= BrowserToolLimits.MinObserveTimeoutMs and <= BrowserToolLimits.MaxObserveTimeoutMs)
+        {
+            parts.Add($"timeoutMs={timeoutMs}");
+        }
+
         if (TryReadStringProperty(resultJson, "url", out var url))
         {
             parts.Add($"path={SafeUrlPath(url)}");
@@ -240,13 +253,26 @@ public static class SafeExecutionTrace
         {
             parts.Add("intervention=true");
         }
-        else
+        else if (!string.IsNullOrWhiteSpace(resultJson))
         {
             parts.Add("intervention=false");
         }
 
-        parts.Add($"elementCount={CountElements(resultJson)}");
+        AppendSettled(parts, resultJson);
+        if (!string.IsNullOrWhiteSpace(resultJson))
+        {
+            parts.Add($"elementCount={CountElements(resultJson)}");
+        }
+
         return string.Join(';', parts);
+    }
+
+    private static void AppendSettled(List<string> parts, string? resultJson)
+    {
+        if (TryReadBoolProperty(resultJson, "settled", out var settled))
+        {
+            parts.Add(settled ? "settled=true" : "settled=false");
+        }
     }
 
     private static string BuildActDetail(string? argumentsJson, string? resultJson)
@@ -267,6 +293,7 @@ public static class SafeExecutionTrace
             parts.Add($"path={SafeUrlPath(url)}");
         }
 
+        AppendSettled(parts, resultJson);
         if (string.Equals(operation, "upload", StringComparison.Ordinal))
         {
             if (TryResolveActTarget(argumentsJson, resultJson, out var role, out var name))
@@ -401,6 +428,59 @@ public static class SafeExecutionTrace
         catch (JsonException)
         {
             return 0;
+        }
+    }
+
+    private static bool TryReadBoolProperty(string? json, string propertyName, out bool value)
+    {
+        value = false;
+        if (!TryReadProperty(json, propertyName, out var property))
+        {
+            return false;
+        }
+
+        if (property.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+        {
+            return false;
+        }
+
+        value = property.GetBoolean();
+        return true;
+    }
+
+    private static bool TryReadIntProperty(string? json, string propertyName, out int value)
+    {
+        value = 0;
+        if (!TryReadProperty(json, propertyName, out var property) || property.ValueKind != JsonValueKind.Number)
+        {
+            return false;
+        }
+
+        return property.TryGetInt32(out value);
+    }
+
+    private static bool TryReadProperty(string? json, string propertyName, out JsonElement property)
+    {
+        property = default;
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (!document.RootElement.TryGetProperty(propertyName, out var found))
+            {
+                return false;
+            }
+
+            property = found.Clone();
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
         }
     }
 

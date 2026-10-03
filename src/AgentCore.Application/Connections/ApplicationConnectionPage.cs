@@ -74,7 +74,7 @@ public static class ApplicationConnectionPrompt
 {
     public static string Format(ApplicationConnection? connection)
     {
-        if (connection is null || connection.Kind != ApplicationConnectionKinds.NopCommerce)
+        if (connection is null)
         {
             return string.Empty;
         }
@@ -83,7 +83,10 @@ public static class ApplicationConnectionPrompt
         var connected = authenticated || connection.Status == ApplicationConnectionStatus.NeedsReauthentication;
         return string.Join(
             '\n',
-            "nopCommerce connected: " + Text(connected),
+            "Application connection:",
+            "name: " + connection.DisplayName,
+            "kind: " + connection.Kind,
+            "connected: " + Text(connected),
             "authenticated: " + Text(authenticated),
             "available: " + Text(authenticated),
             "trusted origin: " + Origin(connection.TrustedOrigins),

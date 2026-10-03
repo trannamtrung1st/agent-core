@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Changing page</title>
+</head>
+<body>
+  <h1>Live</h1>
+  <p id="tick">0</p>
+  <script>
+    let n = 0;
+    setInterval(() => {
+      n += 1;
+      document.getElementById("tick").textContent = String(n);
+    }, 80);
+  </script>
+</body>
+</html>

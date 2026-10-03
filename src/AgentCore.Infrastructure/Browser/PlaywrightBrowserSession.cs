@@ -467,7 +467,13 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
             session.Generation++;
             session.LastAllowedUrl = session.Page.Url;
-            return await CaptureWithRetryAsync(session, request.SessionId, "navigate", cancellationToken).ConfigureAwait(false);
+            return await CaptureWithRetryAsync(
+                session,
+                request.SessionId,
+                "navigate",
+                BrowserCaptureSettle.Automatic,
+                timeoutMs: null,
+                cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -519,9 +525,21 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         }
     }
 
-    public async ValueTask<BrowserOperationResult> ObserveAsync(
+    public ValueTask<BrowserOperationResult> ObserveAsync(
         Guid sessionId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ObserveCoreAsync(sessionId, null, cancellationToken);
+
+    public ValueTask<BrowserOperationResult> ObserveAsync(
+        Guid sessionId,
+        BrowserObserveOptions options,
+        CancellationToken cancellationToken = default) =>
+        ObserveCoreAsync(sessionId, options, cancellationToken);
+
+    private async ValueTask<BrowserOperationResult> ObserveCoreAsync(
+        Guid sessionId,
+        BrowserObserveOptions? options,
+        CancellationToken cancellationToken)
     {
         await using var interactive = await EnterInteractiveAsync(sessionId, cancellationToken).ConfigureAwait(false);
         if (!IsAvailable || !_sessions.TryGetValue(sessionId, out var session))
@@ -540,7 +558,16 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 return Result("target_denied");
             }
 
-            return await CaptureWithRetryAsync(session, sessionId, "observe", cancellationToken).ConfigureAwait(false);
+            var settle = options is { WaitFor: "stable" }
+                ? BrowserCaptureSettle.Stable
+                : BrowserCaptureSettle.None;
+            return await CaptureWithRetryAsync(
+                session,
+                sessionId,
+                "observe",
+                settle,
+                options?.TimeoutMs,
+                cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -685,7 +712,16 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 session.LastAllowedUrl = session.Page.Url;
             }
 
-            return await CaptureWithRetryAsync(session, request.SessionId, "act", cancellationToken).ConfigureAwait(false);
+            var settle = request.Operation is "click" or "press" or "select" or "check" or "uncheck"
+                ? BrowserCaptureSettle.Automatic
+                : BrowserCaptureSettle.None;
+            return await CaptureWithRetryAsync(
+                session,
+                request.SessionId,
+                "act",
+                settle,
+                timeoutMs: null,
+                cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -1015,6 +1051,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
         var browser = await EnsureBrowserAsync(cancellationToken).ConfigureAwait(false);
         var context = await browser.NewContextAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+        await context.AddInitScriptAsync(BrowserPageSettle.InitScript).WaitAsync(cancellationToken).ConfigureAwait(false);
         var page = await context.NewPageAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
         page.SetDefaultTimeout(TimeoutMs());
         page.SetDefaultNavigationTimeout(TimeoutMs());
@@ -1096,6 +1133,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                     context = await playwright.Chromium.LaunchPersistentContextAsync(directory, options)
                         .WaitAsync(cancellationToken)
                         .ConfigureAwait(false);
+                    await context.AddInitScriptAsync(BrowserPageSettle.InitScript).WaitAsync(cancellationToken).ConfigureAwait(false);
                 }
                 catch (PlaywrightException ex)
                 {
@@ -1476,6 +1514,16 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             truncated,
             elements,
             intervention);
+    }
+
+    private async Task<BrowserObservation> CaptureMarkedAsync(
+        SessionBrowser session,
+        Guid sessionId,
+        bool? settled,
+        CancellationToken cancellationToken)
+    {
+        var observation = await CaptureAsync(session, sessionId, cancellationToken).ConfigureAwait(false);
+        return settled is bool value ? observation with { Settled = value } : observation;
     }
 
     private const string ClassifyInterventionScript = """
@@ -2178,15 +2226,44 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         return "el_" + encoded;
     }
 
+    private enum BrowserCaptureSettle
+    {
+        None,
+        Automatic,
+        Stable
+    }
+
     private async Task<BrowserOperationResult> CaptureWithRetryAsync(
         SessionBrowser session,
         Guid sessionId,
         string operation,
+        BrowserCaptureSettle settle,
+        int? timeoutMs,
         CancellationToken cancellationToken)
     {
+        bool? settled = null;
         try
         {
-            return new BrowserOperationResult(null, await CaptureAsync(session, sessionId, cancellationToken).ConfigureAwait(false));
+            if (settle != BrowserCaptureSettle.None)
+            {
+                var budget = settle == BrowserCaptureSettle.Automatic
+                    ? BrowserPageSettle.AutomaticDeadlineMs
+                    : Math.Clamp(
+                        timeoutMs ?? BrowserToolLimits.DefaultObserveTimeoutMs,
+                        BrowserToolLimits.MinObserveTimeoutMs,
+                        BrowserToolLimits.MaxObserveTimeoutMs);
+                var started = Environment.TickCount64;
+                var reached = await BrowserPageSettle.WaitAsync(session.Page, budget, cancellationToken).ConfigureAwait(false);
+                settled = reached;
+                _logger.LogInformation(
+                    "browser.settle operation={Operation} waitFor={WaitFor} settled={Settled} durationMs={DurationMs}",
+                    operation,
+                    settle == BrowserCaptureSettle.Stable ? "stable" : "automatic",
+                    reached,
+                    Environment.TickCount64 - started);
+            }
+
+            return new BrowserOperationResult(null, await CaptureMarkedAsync(session, sessionId, settled, cancellationToken).ConfigureAwait(false));
         }
         catch (PlaywrightException ex) when (BrowserFailureClassifier.IsTransientCapture(ex.Message))
         {
@@ -2194,7 +2271,9 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             try
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken).ConfigureAwait(false);
-                return new BrowserOperationResult(null, await CaptureAsync(session, sessionId, cancellationToken).ConfigureAwait(false));
+                return new BrowserOperationResult(
+                    null,
+                    await CaptureMarkedAsync(session, sessionId, settled, cancellationToken).ConfigureAwait(false));
             }
             catch (PlaywrightException retry)
             {

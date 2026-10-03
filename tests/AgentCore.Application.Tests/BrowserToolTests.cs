@@ -222,6 +222,10 @@ public sealed class BrowserToolTests
             (ToolCatalog.BrowserNavigate, "{}"),
             (ToolCatalog.BrowserNavigate, $$"""{"url":"{{new string('u', BrowserToolLimits.MaxUrlLength + 1)}}"}"""),
             (ToolCatalog.BrowserObserve, """{"url":"http://127.0.0.1:5091/"}"""),
+            (ToolCatalog.BrowserObserve, """{"sleep":2000}"""),
+            (ToolCatalog.BrowserObserve, """{"waitFor":"networkidle"}"""),
+            (ToolCatalog.BrowserObserve, """{"waitFor":"stable","timeoutMs":9000}"""),
+            (ToolCatalog.BrowserObserve, """{"waitFor":"stable","selector":"#rows"}"""),
             (ToolCatalog.BrowserAct, """{"operation":"evaluate","ref":"el_aaaaaaaaaaaaaaaaaaaaaa"}"""),
             (ToolCatalog.BrowserAct, """{"operation":"click","selector":"#search"}"""),
             (ToolCatalog.BrowserAct, """{"operation":"click","xpath":"//*","ref":"el_aaaaaaaaaaaaaaaaaaaaaa"}"""),
@@ -247,6 +251,45 @@ public sealed class BrowserToolTests
         Assert.Equal(0, fake.NavigateCalls);
         Assert.Equal(0, fake.ObserveCalls);
         Assert.Equal(0, fake.ActCalls);
+    }
+
+    [Fact]
+    public async Task Observe_stable_is_forwarded_and_empty_observe_omits_settled()
+    {
+        var fake = new FakeBrowser
+        {
+            CurrentUrl = new Uri("http://127.0.0.1:5091/"),
+            Observation = new BrowserObservation(
+                "http://127.0.0.1:5091/",
+                "Orders",
+                "AC-SETTLE-ROW",
+                false,
+                [],
+                Settled: true)
+        };
+        var executor = Executor(fake);
+        var definition = BrowserDefinition();
+        var sessionId = Guid.NewGuid();
+        var stable = await executor.ExecuteAsync(
+            definition,
+            sessionId,
+            Call(ToolCatalog.BrowserObserve, """{"waitFor":"stable","timeoutMs":3000}"""),
+            ToolLimits.MaxOutputBytes,
+            admission: UserTurn());
+        Assert.Equal("stable", fake.LastObserve?.WaitFor);
+        Assert.Equal(3000, fake.LastObserve?.TimeoutMs);
+        Assert.Contains("\"settled\":true", stable.Text, StringComparison.Ordinal);
+
+        fake.Observation = fake.Observation with { Settled = null };
+        var quick = await executor.ExecuteAsync(
+            definition,
+            sessionId,
+            Call(ToolCatalog.BrowserObserve, "{}"),
+            ToolLimits.MaxOutputBytes,
+            admission: UserTurn());
+        Assert.Equal(2, fake.ObserveCalls);
+        Assert.DoesNotContain("\"settled\"", quick.Text, StringComparison.Ordinal);
+        Assert.Contains("AC-SETTLE-ROW", quick.Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1001,6 +1044,8 @@ public sealed class BrowserToolTests
 
         public int ObserveCalls { get; private set; }
 
+        public BrowserObserveOptions? LastObserve { get; private set; }
+
         public int ActCalls { get; private set; }
 
         public BrowserUpload? LastUpload { get; private set; }
@@ -1049,6 +1094,15 @@ public sealed class BrowserToolTests
             ObserveCalls++;
             LastSessionId = sessionId;
             return new(new BrowserOperationResult(null, Observation));
+        }
+
+        public ValueTask<BrowserOperationResult> ObserveAsync(
+            Guid sessionId,
+            BrowserObserveOptions options,
+            CancellationToken cancellationToken = default)
+        {
+            LastObserve = options;
+            return ObserveAsync(sessionId, cancellationToken);
         }
 
         public ValueTask<BrowserOperationResult> ActAsync(

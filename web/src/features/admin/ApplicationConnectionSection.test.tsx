@@ -42,9 +42,9 @@ describe("ApplicationConnectionSection", () => {
     vi.mocked(connectApplication).mockResolvedValue({
       connectionId: "connection-1",
       agentInstanceId: instanceId,
-      kind: "nopCommerce",
-      displayName: "Store",
-      baseUrl: "http://127.0.0.1:5088",
+      kind: "crm",
+      displayName: "Example CRM",
+      baseUrl: "https://crm.example",
       status: "Connecting",
       revision: 1,
       createdAtUtc: "2026-10-02T00:00:00Z",
@@ -52,12 +52,19 @@ describe("ApplicationConnectionSection", () => {
       statusDetail: "sign_in_required"
     });
     renderSection();
+    expect(await screen.findByRole("heading", { name: "Application connection" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Display name")).toHaveValue("");
+    expect(screen.getByLabelText("Base URL")).toHaveValue("");
+    expect(screen.queryByText(/store|nopCommerce/i)).not.toBeInTheDocument();
     expect(await screen.findByText("Not connected")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Connection display name"), { target: { value: "Store" } });
+    fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "Example CRM" } });
+    fireEvent.change(screen.getByLabelText("Base URL"), { target: { value: "https://crm.example" } });
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
     expect(await screen.findByText("Connecting / sign-in required")).toBeInTheDocument();
-    expect(screen.getByText("Sign in is required in the store browser.")).toBeInTheDocument();
-    expect(connectApplication).toHaveBeenCalledWith(instanceId, "Store", "http://127.0.0.1:5088");
+    expect(screen.getByText("Sign in is required in the application browser.")).toBeInTheDocument();
+    expect(screen.getByText("Example CRM")).toBeInTheDocument();
+    expect(screen.getByText("https://crm.example")).toBeInTheDocument();
+    expect(connectApplication).toHaveBeenCalledWith(instanceId, "Example CRM", "https://crm.example");
     expect(screen.queryByText(/cookie|token|profile path/i)).not.toBeInTheDocument();
   });
 
@@ -65,9 +72,9 @@ describe("ApplicationConnectionSection", () => {
     vi.mocked(getApplicationConnection).mockResolvedValue({
       connectionId: "connection-1",
       agentInstanceId: instanceId,
-      kind: "nopCommerce",
-      displayName: "Store",
-      baseUrl: "http://127.0.0.1:5088",
+      kind: "crm",
+      displayName: "Example CRM",
+      baseUrl: "https://crm.example",
       status: "Connected",
       revision: 2,
       createdAtUtc: "2026-10-02T00:00:00Z",
@@ -76,9 +83,9 @@ describe("ApplicationConnectionSection", () => {
     vi.mocked(revokeApplication).mockResolvedValue({
       connectionId: "connection-1",
       agentInstanceId: instanceId,
-      kind: "nopCommerce",
-      displayName: "Store",
-      baseUrl: "http://127.0.0.1:5088",
+      kind: "crm",
+      displayName: "Example CRM",
+      baseUrl: "https://crm.example",
       status: "NotConnected",
       revision: 3,
       createdAtUtc: "2026-10-02T00:00:00Z",

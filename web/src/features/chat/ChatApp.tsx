@@ -53,6 +53,7 @@ import {
   rejectWorkItem
 } from "../../services/api";
 import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
+import { ChatApplicationConnection } from "./ChatApplicationConnection";
 import { ScheduleDrawer } from "./ScheduleDrawer";
 import { Composer } from "./Composer";
 import { Conversation } from "./Conversation";
@@ -339,6 +340,9 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
               onBackgroundWork={state.sessionId ? () => setWorkOpen(true) : undefined}
               attentionCount={attentionCount}
               onEnd={() => void hangUp()}
+              applicationConnection={
+                state.sessionId ? <ChatApplicationConnection sessionId={state.sessionId} /> : null
+              }
             />
             <Flex align="center" gap={8} className="chat-header-meta">
               {onOpenAdmin ? (

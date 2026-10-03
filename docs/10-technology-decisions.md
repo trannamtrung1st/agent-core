@@ -287,7 +287,15 @@ Owners: [Protocol](14-api-and-realtime-protocol.md) (capability, leases vs Attac
 
 ## P9.5 connection and attention (closed)
 
-**Decision:** The secretary store stays a direct Playwright profile plus one application connection row. There is no second scheduler, no browser panel, and no Chromium package in the Agent Core image. Attention is a result flag and one durable alert, not a new notification product. P9.5 is closed on `1012653`. Closure evidence is [p9.5-freeze-candidate.md](reports/p9.5-freeze-candidate.md). Hosted Synthetic [`37111979501`](https://github.com/trannamtrung1st/agent-core/actions/runs/37111979501) is green.
+**Decision:** nopCommerce stays a direct Playwright profile plus one application connection row. It is the first concrete kind, not a Core domain term. There is no second scheduler, no browser panel, and no Chromium package in the Agent Core image. Attention is a result flag and one durable alert, not a new notification product. P9.5 is closed on `1012653`. Closure evidence is [p9.5-freeze-candidate.md](reports/p9.5-freeze-candidate.md). Hosted Synthetic [`37111979501`](https://github.com/trannamtrung1st/agent-core/actions/runs/37111979501) is green.
+
+## Post-P9.5 application connection projection
+
+**Decision:** Chat and Admin project the one application connection on an Agent Instance by its display name and status. The model context uses that display name and kind. nopCommerce remains the first concrete kind and is not Core vocabulary. This follow-up does not add a second connection, a provider registry, or a persistence migration, and it does not move `1012653`.
+
+## Post-P9.5 bounded browser settle
+
+**Decision:** Browser observations may use a bounded settle, and the agent can request a settled re-observation through `browser.observe` `waitFor` `stable`. `stable` is a bounded observational condition, not page completion. The provider owns the wait and the truthful current observation. The agent owns whether the evidence is sufficient. The model does not receive a sleep tool, selectors, or Playwright locators. This enhancement does not reopen P9 or P9.5 and does not move `bba1de4` or `1012653`. P10 and P11 remain requirement-triggered.
 
 ## What may still be measured
 

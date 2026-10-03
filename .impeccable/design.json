@@ -240,7 +240,7 @@
       "**Do** keep header identity, Speech locale, compact icon actions, profile, and connection status visible. Use 32×32px, 6px-radius fill-hover actions; keep Background Work at an 18px inbox icon with attention badge and Schedules/Admin/End at 16px.",
       "**Do** keep ended history on the same reading column with a quiet ended note, not a disabled input.",
       "**Do** reuse the operational drawer language for Background Work and Schedules: two-line headers, open List rows, semantic filled icon-and-text status chips, elevated 8px detail insets, and trailing actions only where the row exposes an operation.",
-      "**Do** show store connection status on the Admin instance detail only, not in Chat. Attention results use the words Needs attention plus an icon. Quiet completions do not change the header count.",
+      "**Do** show an application connection under the agent name only when a connection row exists, as display name, status, and Manage. Admin owns connect, revoke, and reset. Attention results use the words Needs attention plus an icon. Quiet completions do not change the header count.",
       "**Do** format schedule occurrences for the viewer locale in the schedule’s named time zone; keep the zone identifier visible beside the readable time."
     ],
     "donts": [

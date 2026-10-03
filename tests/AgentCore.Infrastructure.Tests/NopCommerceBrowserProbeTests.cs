@@ -3,6 +3,17 @@ using AgentCore.Infrastructure.Browser;
 
 namespace AgentCore.Infrastructure.Tests;
 
+public sealed class NopCommerceReadProbeFactAttribute : FactAttribute
+{
+    public NopCommerceReadProbeFactAttribute()
+    {
+        if (!string.Equals(Environment.GetEnvironmentVariable("AGENTCORE_NOPCOMMERCE_READ_PROBE"), "1", StringComparison.Ordinal))
+        {
+            Skip = "Opt-in AGENTCORE_NOPCOMMERCE_READ_PROBE=1 is required. Default suites do not open nopCommerce.";
+        }
+    }
+}
+
 public sealed class NopCommerceBrowserProbeFactAttribute : FactAttribute
 {
     public NopCommerceBrowserProbeFactAttribute()
@@ -16,6 +27,75 @@ public sealed class NopCommerceBrowserProbeFactAttribute : FactAttribute
 
 public sealed class NopCommerceBrowserProbeTests
 {
+    [NopCommerceReadProbeFact]
+    public async Task Orders_and_products_include_grid_rows_without_a_manual_wait()
+    {
+        var origin = Environment.GetEnvironmentVariable("AGENTCORE_NOPCOMMERCE_ORIGIN") ?? "http://127.0.0.1:5088";
+        var agentText = Environment.GetEnvironmentVariable("AGENTCORE_NOPCOMMERCE_AGENT")
+            ?? "01a0fcc9-e7b6-7a19-84e9-bc0aec2396d6";
+        var agentId = Guid.Parse(agentText);
+        var session = new PlaywrightBrowserSession(
+            new BrowserOptions
+            {
+                Enabled = true,
+                Headless = true,
+                Channel = "chrome",
+                InteractionMode = nameof(BrowserInteractionMode.InteractiveDemo),
+                PolicyMode = nameof(BrowserPolicyMode.OpenWeb),
+                ProfileMode = nameof(BrowserProfileMode.PersistentAgent),
+                ProfileRoot = FindProfileRoot(agentId),
+                FixtureEnabled = false
+            },
+            loggerFactory: null);
+        var browserId = Guid.NewGuid();
+        await session.StartAsync(CancellationToken.None);
+        try
+        {
+            Assert.True(session.IsAvailable, "Chrome is not ready for the read-only nopCommerce probe.");
+            ((IBrowserProfileBinding)session).BindSession(browserId, agentId);
+            var orders = await session.NavigateAsync(
+                new BrowserNavigateRequest(browserId, new Uri($"{origin}/Admin/Order/List")),
+                CancellationToken.None);
+            Assert.Null(orders.ErrorCode);
+            orders = await EnsureGridAsync(session, browserId, orders, "Pending");
+            Assert.Contains("/Admin/Order/List", orders.Observation!.Url, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(BrowserInterventionKind.None, orders.Observation.Intervention);
+            Assert.Contains("Order #", orders.Observation.VisibleText, StringComparison.Ordinal);
+            Assert.Matches(@"\$\d", orders.Observation.VisibleText);
+
+            var products = await session.NavigateAsync(
+                new BrowserNavigateRequest(browserId, new Uri($"{origin}/Admin/Product/List")),
+                CancellationToken.None);
+            Assert.Null(products.ErrorCode);
+            products = await EnsureGridAsync(session, browserId, products, "Published");
+            Assert.Contains("/Admin/Product/List", products.Observation!.Url, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(BrowserInterventionKind.None, products.Observation.Intervention);
+            Assert.Contains("SKU", products.Observation.VisibleText, StringComparison.Ordinal);
+            Assert.Matches(@"\$\d", products.Observation.VisibleText);
+        }
+        finally
+        {
+            await session.StopAsync(CancellationToken.None);
+        }
+    }
+
+    private static async Task<BrowserOperationResult> EnsureGridAsync(
+        PlaywrightBrowserSession session,
+        Guid browserId,
+        BrowserOperationResult first,
+        string marker)
+    {
+        if (first.Observation?.VisibleText.Contains(marker, StringComparison.Ordinal) == true)
+        {
+            return first;
+        }
+
+        return await session.ObserveAsync(
+            browserId,
+            new BrowserObserveOptions("stable", 4000),
+            CancellationToken.None);
+    }
+
     [NopCommerceBrowserProbeFact]
     public async Task Create_page_exposes_usable_controls_and_upload_after_save()
     {

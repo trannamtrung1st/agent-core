@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Delayed orders</title>
+</head>
+<body>
+  <h1>Orders</h1>
+  <p id="status">Loading...</p>
+  <table id="grid"></table>
+  <script>
+    fetch("/settle-hold?ms=500&token=AC-SETTLE-ROW")
+      .then((response) => response.text())
+      .then((token) => {
+        document.getElementById("status").textContent = "Ready";
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.textContent = token;
+        row.appendChild(cell);
+        document.getElementById("grid").appendChild(row);
+      });
+  </script>
+</body>
+</html>

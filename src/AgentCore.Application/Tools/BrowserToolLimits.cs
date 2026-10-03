@@ -11,8 +11,13 @@ public static class BrowserToolLimits
     public const int MaxElements = 40;
     public const int MaxAccessibleNameLength = 200;
     public const int MaxRoleLength = 80;
+    public const int MinObserveTimeoutMs = 100;
+    public const int MaxObserveTimeoutMs = 5000;
+    public const int DefaultObserveTimeoutMs = 2500;
 
     public static readonly string[] Operations = ["click", "fill", "select", "press", "check", "uncheck", "upload"];
+
+    public static readonly string[] ObserveWaitModes = ["stable"];
 
     public static readonly string[] PressKeys = ["Enter", "Tab", "Escape"];
 }

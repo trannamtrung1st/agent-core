@@ -13,8 +13,8 @@ import {
 import { describeAdminError } from "./adminErrors";
 
 const detailCopy: Record<string, string> = {
-  sign_in_required: "Sign in is required in the store browser.",
-  login_wall: "The store is asking for sign-in again.",
+  sign_in_required: "Sign in is required in the application browser.",
+  login_wall: "The application is asking for sign-in again.",
   human_verification: "A person needs to finish a verification check.",
   browser_unavailable: "The browser is unavailable.",
   profile_reset: "The saved sign-in was cleared.",
@@ -43,8 +43,8 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [displayName, setDisplayName] = useState("nopCommerce");
-  const [baseUrl, setBaseUrl] = useState("http://127.0.0.1:5088");
+  const [displayName, setDisplayName] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
 
   useEffect(() => {
     let current = true;
@@ -92,9 +92,9 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
   return (
     <section className="admin-definition-panel" aria-label="Application connection">
       <div className="admin-definition-panel-heading">
-        <Typography.Title level={4}>Store connection</Typography.Title>
+        <Typography.Title level={4}>Application connection</Typography.Title>
         <Typography.Text type="secondary">
-          One nopCommerce connection for this agent. Sign-in stays in the browser profile.
+          Connect an external application to this agent. Authentication stays in this agent&apos;s browser profile.
         </Typography.Text>
       </div>
       <div className="admin-definition-panel-body">
@@ -105,9 +105,10 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
             <>
               <Typography.Text strong>{connectionStatusLabel(status)}</Typography.Text>
               {connection ? (
-                <Typography.Text type="secondary">
-                  {connection.displayName} · {connection.baseUrl}
-                </Typography.Text>
+                <Flex vertical>
+                  <Typography.Text>{connection.displayName}</Typography.Text>
+                  <Typography.Text type="secondary">{connection.baseUrl}</Typography.Text>
+                </Flex>
               ) : null}
               {detail ? <Typography.Text>{detail}</Typography.Text> : null}
               {status === null || status === "NotConnected" ? (
@@ -116,21 +117,21 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
                   onFinish={() =>
                     void run(
                       () => connectApplication(instanceId, displayName.trim(), baseUrl.trim()),
-                      "Opening the store sign-in."
+                      "Opening the application sign-in."
                     )
                   }
                 >
                   <Form.Item label="Display name">
                     <Input
-                      aria-label="Connection display name"
+                      aria-label="Display name"
                       value={displayName}
                       disabled={busy}
                       onChange={(event) => setDisplayName(event.target.value)}
                     />
                   </Form.Item>
-                  <Form.Item label="Store URL">
+                  <Form.Item label="Base URL">
                     <Input
-                      aria-label="Store URL"
+                      aria-label="Base URL"
                       value={baseUrl}
                       disabled={busy}
                       onChange={(event) => setBaseUrl(event.target.value)}
@@ -146,7 +147,7 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
                   <Button
                     disabled={busy}
                     aria-label="Reauthenticate"
-                    onClick={() => void run(() => reauthenticateApplication(instanceId), "Opening the store sign-in.")}
+                    onClick={() => void run(() => reauthenticateApplication(instanceId), "Opening the application sign-in.")}
                   >
                     Reauthenticate
                   </Button>
@@ -155,7 +156,7 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
                   <Button
                     disabled={busy}
                     aria-label="Open browser"
-                    onClick={() => void run(() => openApplicationBrowser(instanceId), "Opened the store browser.")}
+                    onClick={() => void run(() => openApplicationBrowser(instanceId), "Opened the application browser.")}
                   >
                     Open browser
                   </Button>
@@ -168,7 +169,7 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
                     onClick={() =>
                       confirmAction(modal, {
                         title: "Revoke this connection?",
-                        content: "The browser profile stays. The store cannot be used until you connect again.",
+                        content: "The browser profile stays. The application cannot be used until you connect again.",
                         okText: "Revoke",
                         cancelText: "Keep",
                         danger: true,

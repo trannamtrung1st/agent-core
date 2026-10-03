@@ -114,10 +114,39 @@ public sealed class ApplicationConnectionTests
             connecting.StatusDetail,
             reset.StatusDetail);
         AssertNoSecrets(rendered);
-        Assert.Contains("nopCommerce connected: false", prompt, StringComparison.Ordinal);
+        Assert.Contains("Application connection:", prompt, StringComparison.Ordinal);
+        Assert.Contains("name: Store", prompt, StringComparison.Ordinal);
+        Assert.Contains("kind: nopCommerce", prompt, StringComparison.Ordinal);
+        Assert.Contains("connected: false", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("nopCommerce connected:", prompt, StringComparison.Ordinal);
         Assert.Contains("trusted origin: http://127.0.0.1:5088", prompt, StringComparison.Ordinal);
         Assert.Contains("Use this origin exactly, including its port.", prompt, StringComparison.Ordinal);
-        Assert.Contains("nopCommerce connected: false", environment, StringComparison.Ordinal);
+        Assert.Contains("name: Store", environment, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Prompt_uses_display_name_and_kind()
+    {
+        var prompt = ApplicationConnectionPrompt.Format(new ApplicationConnection(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "crm",
+            "Example CRM",
+            "https://crm.example",
+            ["https://crm.example"],
+            ApplicationConnectionStatus.NeedsReauthentication,
+            Guid.NewGuid(),
+            1,
+            DateTimeOffset.UnixEpoch,
+            DateTimeOffset.UnixEpoch,
+            null));
+        Assert.Contains("name: Example CRM", prompt, StringComparison.Ordinal);
+        Assert.Contains("kind: crm", prompt, StringComparison.Ordinal);
+        Assert.Contains("connected: true", prompt, StringComparison.Ordinal);
+        Assert.Contains("authenticated: false", prompt, StringComparison.Ordinal);
+        Assert.Contains("available: false", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("nopCommerce", prompt, StringComparison.Ordinal);
+        Assert.Equal(string.Empty, ApplicationConnectionPrompt.Format(null));
     }
 
     [Fact]

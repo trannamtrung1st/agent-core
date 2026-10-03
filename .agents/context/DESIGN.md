@@ -227,7 +227,7 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 
 ### Navigation
 - Session row hover, keyboard focus-within, and active state fill the whole row including overflow (24px icon, inside row padding, common right edge).
-- Header: identity (agent name, 12px timestamp, and role), Speech locale, compact icon actions, and status metadata. The 32×32px actions use a 6px radius and `{colors.fill}` hover. Background Work uses an 18px inbox icon plus an attention badge; Schedules, Admin, and the direct confirmed End action use 16px icons. End opens the shared centered confirmation. Profile and connection remain visible. Chat has no store-connection chrome; store connection belongs only on Admin instance detail. No Model appears in the live header.
+- Header: identity (agent name, 12px timestamp, and role), Speech locale, compact icon actions, and status metadata. The 32×32px actions use a 6px radius and `{colors.fill}` hover. Background Work uses an 18px inbox icon plus an attention badge; Schedules, Admin, and the direct confirmed End action use 16px icons. End opens the shared centered confirmation. Profile and conversation status remain visible. When an Agent Instance has an application connection, a 12px secondary row under the agent name shows its display name, status, and Manage. No row appears when there is no connection. Header actions stay on the identity row. No Model appears in the live header.
 
 ### Operational drawers
 - Background Work and Schedules use a two-line title: a strong title above a 12px secondary subtitle.
@@ -265,7 +265,7 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 - **Do** keep header identity, Speech locale, compact icon actions, profile, and connection status visible. Use 32×32px, 6px-radius fill-hover actions; keep Background Work at an 18px inbox icon with attention badge and Schedules/Admin/End at 16px.
 - **Do** keep ended history on the same reading column with a quiet ended note, not a disabled input.
 - **Do** reuse the operational drawer language for Background Work and Schedules: two-line headers, open List rows, semantic filled icon-and-text status chips, elevated 8px detail insets, and trailing actions only where the row exposes an operation.
-- **Do** show store connection status on the Admin instance detail only, not in Chat. Attention results use the words Needs attention plus an icon. Quiet completions do not change the header count.
+- **Do** show an application connection under the agent name only when a connection row exists, as display name, status, and Manage. Admin owns connect, revoke, and reset. Attention results use the words Needs attention plus an icon. Quiet completions do not change the header count.
 - **Do** format schedule occurrences for the viewer locale in the schedule’s named time zone; keep the zone identifier visible beside the readable time.
 
 ### Don't:

@@ -56,7 +56,14 @@ public sealed record BrowserObservation(
     string VisibleText,
     bool TextTruncated,
     IReadOnlyList<BrowserElement> Elements,
-    BrowserInterventionKind Intervention = BrowserInterventionKind.None);
+    BrowserInterventionKind Intervention = BrowserInterventionKind.None,
+    bool? Settled = null);
+
+/// <summary>
+/// Provider-neutral observe wait. <paramref name="WaitFor"/> is <c>stable</c>.
+/// <paramref name="TimeoutMs"/> is optional and already bounded by Core.
+/// </summary>
+public sealed record BrowserObserveOptions(string WaitFor, int? TimeoutMs);
 
 public enum BrowserInterventionKind
 {
@@ -117,6 +124,12 @@ public interface IBrowserSession
     ValueTask<BrowserOperationResult> ObserveAsync(
         Guid sessionId,
         CancellationToken cancellationToken = default);
+
+    ValueTask<BrowserOperationResult> ObserveAsync(
+        Guid sessionId,
+        BrowserObserveOptions options,
+        CancellationToken cancellationToken = default) =>
+        ObserveAsync(sessionId, cancellationToken);
 
     ValueTask<BrowserOperationResult> ActAsync(
         BrowserActRequest request,

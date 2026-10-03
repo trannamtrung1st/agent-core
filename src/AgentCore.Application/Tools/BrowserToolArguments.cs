@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using AgentCore.Application.Ports;
 
 namespace AgentCore.Application.Tools;
 
@@ -63,17 +64,57 @@ public static class BrowserToolArguments
         return true;
     }
 
-    public static bool TryObserve(JsonElement args, out string errorJson)
+    public static bool TryObserve(JsonElement args, out BrowserObserveOptions? options, out string errorJson)
     {
+        options = null;
         if (!TryRejectProperties(args, out errorJson))
         {
             return false;
         }
 
-        if (args.EnumerateObject().Any())
+        if (!HasOnly(args, ["waitFor", "timeoutMs"], out errorJson))
         {
-            errorJson = Error("invalid", "observe accepts an empty object.");
             return false;
+        }
+
+        string? waitFor = null;
+        if (args.TryGetProperty("waitFor", out var waitProperty))
+        {
+            if (waitProperty.ValueKind != JsonValueKind.String
+                || waitProperty.GetString() is not { Length: > 0 } mode
+                || !BrowserToolLimits.ObserveWaitModes.Contains(mode, StringComparer.Ordinal))
+            {
+                errorJson = Error("invalid", "Browser wait is not supported.", "unsupported_wait");
+                return false;
+            }
+
+            waitFor = mode;
+        }
+
+        int? timeout = null;
+        if (args.TryGetProperty("timeoutMs", out var timeoutProperty))
+        {
+            if (waitFor is null)
+            {
+                errorJson = Error("invalid", "timeoutMs requires waitFor.", "timeout_without_wait");
+                return false;
+            }
+
+            if (timeoutProperty.ValueKind != JsonValueKind.Number
+                || !timeoutProperty.TryGetInt32(out var parsed)
+                || parsed < BrowserToolLimits.MinObserveTimeoutMs
+                || parsed > BrowserToolLimits.MaxObserveTimeoutMs)
+            {
+                errorJson = Error("invalid", "timeoutMs must be from 100 to 5000.", "timeout_out_of_range");
+                return false;
+            }
+
+            timeout = parsed;
+        }
+
+        if (waitFor is not null)
+        {
+            options = new BrowserObserveOptions(waitFor, timeout);
         }
 
         return true;

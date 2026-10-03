@@ -32,6 +32,33 @@ public sealed class SafeExecutionTraceTests
     }
 
     [Fact]
+    public void BuildObserveDetail_records_wait_and_settled_without_page_text()
+    {
+        var args = """{"waitFor":"stable","timeoutMs":3000}""";
+        var result = """
+            {
+              "untrustedBrowserContent": true,
+              "url": "http://127.0.0.1:5088/Admin/Order/List",
+              "title": "Orders",
+              "visibleText": "Order 1001 Processing",
+              "settled": false,
+              "elements": [
+                {"ref":"el_secretrefsecretrefsec","role":"link","name":"Orders","actions":["click"]}
+              ]
+            }
+            """;
+
+        var detail = SafeExecutionTrace.BuildToolDetail(ToolCatalog.BrowserObserve, args, result);
+        Assert.Contains("waitFor=stable", detail, StringComparison.Ordinal);
+        Assert.Contains("timeoutMs=3000", detail, StringComparison.Ordinal);
+        Assert.Contains("settled=false", detail, StringComparison.Ordinal);
+        Assert.Contains("elementCount=1", detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("Order 1001", detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("el_secretrefsecretrefsec", detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("Processing", detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildActDetail_records_operation_and_safe_target_metadata()
     {
         var args = """{"operation":"fill","ref":"e12","value":"AC Keyboard"}""";
