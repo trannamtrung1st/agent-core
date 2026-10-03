@@ -31,13 +31,23 @@ test("store connection and quiet background work stay labeled", async ({ page })
   const work = page.getByRole("button", { name: "Background work", exact: true });
   await expect(work).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("button", { name: /need attention/ })).toHaveCount(0);
+  await page.route("**/work-items**", async (route) => {
+    if (route.request().url().includes("/result")) {
+      await route.fulfill({ status: 404, body: "" });
+      return;
+    }
+
+    await route.fulfill({ json: { items: [] } });
+  });
   await work.focus();
   await expect(work).toBeFocused();
   await page.keyboard.press("Enter");
   const drawer = page.getByRole("dialog", { name: "Background work" });
-  await expect(drawer.getByText("No background work yet")).toBeVisible();
+  await expect(drawer).toBeVisible({ timeout: 15_000 });
+  await expect(drawer.getByText("No background work yet")).toBeVisible({ timeout: 15_000 });
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
+  await page.unroute("**/work-items**");
 
   const attentionId = "019944af-00c5-7000-8000-0000000000a1";
   const quietId = "019944af-00c5-7000-8000-0000000000a2";
