@@ -19,6 +19,33 @@ public sealed class TriggerScheduleTimeResolutionTests
     private static readonly DateTimeOffset Now = new(2026, 9, 23, 17, 17, 0, TimeSpan.Zero);
 
     [Fact]
+    public async Task Relative_delay_seconds_ignores_a_zero_day_offset_default()
+    {
+        var created = await CreateOnceAsync(
+            """{"intent":"Hello","relativeDelaySeconds":60,"relativeDayOffset":0,"localDate":"","localTime":"","atUtc":""}""");
+        var schedule = Assert.IsType<OneShotSchedule>(created.Schedule);
+        Assert.Equal(Now.AddSeconds(60), schedule.AtUtc);
+    }
+
+    [Fact]
+    public async Task Relative_delay_seconds_ignores_blank_time_strings()
+    {
+        var created = await CreateOnceAsync(
+            """{"intent":"Hello","relativeDelaySeconds":"60","relativeDayOffset":null,"localDate":"","localTime":"","atUtc":"","timeZone":null}""");
+        var schedule = Assert.IsType<OneShotSchedule>(created.Schedule);
+        Assert.Equal(Now.AddSeconds(60), schedule.AtUtc);
+    }
+
+    [Fact]
+    public async Task Relative_delay_seconds_ignores_null_time_fields()
+    {
+        var created = await CreateOnceAsync(
+            """{"intent":"Hello","relativeDelaySeconds":60,"relativeDayOffset":null,"localDate":null,"localTime":null,"atUtc":null,"timeZone":null}""");
+        var schedule = Assert.IsType<OneShotSchedule>(created.Schedule);
+        Assert.Equal(Now.AddSeconds(60), schedule.AtUtc);
+    }
+
+    [Fact]
     public async Task Relative_delay_seconds_schedules_from_trusted_now()
     {
         var created = await CreateOnceAsync("""{"intent":"Hello","relativeDelaySeconds":120}""");

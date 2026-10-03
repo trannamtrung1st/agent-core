@@ -64,7 +64,7 @@ public static class SafeExecutionTrace
     {
         if (!ToolCatalog.IsBrowserTool(toolName))
         {
-            return string.Empty;
+            return ScheduleFailureDetail(resultJson);
         }
 
         return toolName switch
@@ -168,6 +168,43 @@ public static class SafeExecutionTrace
             "otp"
         ];
         return terms.Any(term => haystack.Contains(term, StringComparison.Ordinal));
+    }
+
+    private static string ScheduleFailureDetail(string? resultJson)
+    {
+        if (string.IsNullOrWhiteSpace(resultJson))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(resultJson);
+            if (!document.RootElement.TryGetProperty("error", out var error)
+                || error.ValueKind != JsonValueKind.String
+                || error.GetString() != "schedule_validation_failed"
+                || !document.RootElement.TryGetProperty("message", out var message)
+                || message.ValueKind != JsonValueKind.String)
+            {
+                return string.Empty;
+            }
+
+            var text = message.GetString() ?? string.Empty;
+            const string marker = "Present: ";
+            var at = text.IndexOf(marker, StringComparison.Ordinal);
+            if (at < 0)
+            {
+                return "schedule_validation_failed";
+            }
+
+            var rest = text[(at + marker.Length)..];
+            var end = rest.IndexOf('.');
+            return "present=" + Clip(end >= 0 ? rest[..end] : rest, 80);
+        }
+        catch (JsonException)
+        {
+            return string.Empty;
+        }
     }
 
     private static string BuildNavigateDetail(string? argumentsJson, string? resultJson)

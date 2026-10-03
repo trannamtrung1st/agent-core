@@ -483,15 +483,49 @@ public static class TriggerScheduleCommands
         }
 
         var now = TriggerScheduleCalculator.Truncate(context.UtcNow);
-        var hasOffset = arguments.TryGetProperty("relativeDayOffset", out var offsetElement);
-        var hasDate = TryString(arguments, "localDate", out var localDateText);
-        var hasAt = TryString(arguments, "atUtc", out var atText);
-        var hasDelay = arguments.TryGetProperty("relativeDelaySeconds", out var delayElement);
+        var hasOffset = TryPresent(arguments, "relativeDayOffset", out var offsetElement);
+        var hasDate = TryTimeString(arguments, "localDate", out var localDateText);
+        var hasAt = TryTimeString(arguments, "atUtc", out var atText);
+        var hasDelay = TryPresent(arguments, "relativeDelaySeconds", out var delayElement);
+        if (hasDelay
+            && hasOffset
+            && !hasDate
+            && !hasAt
+            && TryWholeNumber(offsetElement, out var unusedOffset)
+            && unusedOffset == 0
+            && !TryTimeString(arguments, "localTime", out _))
+        {
+            hasOffset = false;
+        }
+
         var forms = (hasOffset ? 1 : 0) + (hasDate ? 1 : 0) + (hasAt ? 1 : 0) + (hasDelay ? 1 : 0);
         if (forms != 1)
         {
+            var present = new List<string>(4);
+            if (hasDelay)
+            {
+                present.Add("relativeDelaySeconds");
+            }
+
+            if (hasOffset)
+            {
+                present.Add("relativeDayOffset");
+            }
+
+            if (hasDate)
+            {
+                present.Add("localDate");
+            }
+
+            if (hasAt)
+            {
+                present.Add("atUtc");
+            }
+
             throw new ArgumentException(
-                "Schedule time is missing or ambiguous. Use exactly one of relativeDelaySeconds, relativeDayOffset with localTime, localDate with localTime, or atUtc. Ask the user to restate the full request with a clear time. Do not ask for a bare yes/no confirmation.");
+                "Schedule time is missing or ambiguous. Present: "
+                + (present.Count == 0 ? "none" : string.Join(',', present))
+                + ". Use exactly one of relativeDelaySeconds, relativeDayOffset with localTime, localDate with localTime, or atUtc. Ask the user to restate the full request with a clear time. Do not ask for a bare yes/no confirmation.");
         }
 
         DateTimeOffset instant;
@@ -501,7 +535,7 @@ public static class TriggerScheduleCommands
         if (hasOffset)
         {
             zone = RequireTimeZone(arguments, context);
-            if (offsetElement.ValueKind != JsonValueKind.Number || !offsetElement.TryGetInt32(out var offset))
+            if (!TryWholeNumber(offsetElement, out var offset))
             {
                 throw new ArgumentException("relativeDayOffset must be a whole number of days.");
             }
@@ -525,7 +559,7 @@ public static class TriggerScheduleCommands
         }
         else if (hasDelay)
         {
-            if (delayElement.ValueKind != JsonValueKind.Number || !delayElement.TryGetInt32(out var seconds))
+            if (!TryWholeNumber(delayElement, out var seconds))
             {
                 throw new ArgumentException("relativeDelaySeconds must be a whole number of seconds.");
             }
@@ -962,10 +996,51 @@ public static class TriggerScheduleCommands
     }
 
     private static bool HasOneShotFields(JsonElement arguments) =>
-        arguments.TryGetProperty("relativeDayOffset", out _)
-        || arguments.TryGetProperty("localDate", out _)
-        || arguments.TryGetProperty("atUtc", out _)
-        || arguments.TryGetProperty("relativeDelaySeconds", out _);
+        TryPresent(arguments, "relativeDayOffset", out _)
+        || TryTimeString(arguments, "localDate", out _)
+        || TryTimeString(arguments, "atUtc", out _)
+        || TryPresent(arguments, "relativeDelaySeconds", out _);
+
+    private static bool TryTimeString(JsonElement arguments, string name, out string value)
+    {
+        if (!TryString(arguments, name, out value) || string.IsNullOrWhiteSpace(value))
+        {
+            value = "";
+            return false;
+        }
+
+        value = value.Trim();
+        return true;
+    }
+
+    private static bool TryWholeNumber(JsonElement element, out int number)
+    {
+        if (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out number))
+        {
+            return true;
+        }
+
+        if (element.ValueKind == JsonValueKind.String
+            && int.TryParse(element.GetString(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out number))
+        {
+            return true;
+        }
+
+        number = 0;
+        return false;
+    }
+
+    private static bool TryPresent(JsonElement arguments, string name, out JsonElement element)
+    {
+        if (!arguments.TryGetProperty(name, out element)
+            || element.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            element = default;
+            return false;
+        }
+
+        return true;
+    }
 
     private static string RequireString(JsonElement arguments, string name) =>
         TryString(arguments, name, out var value) && !string.IsNullOrWhiteSpace(value)
