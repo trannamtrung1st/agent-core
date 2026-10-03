@@ -66,6 +66,19 @@ public sealed class SecretaryIdentityTests
         var daily = secretary.SkillList.Single(skill => skill.Id == "store.daily.review");
         Assert.Contains("Visit each required review area at most once", daily.Procedure, StringComparison.Ordinal);
         Assert.Contains("Do not restart the whole review", daily.Procedure, StringComparison.Ordinal);
+        Assert.Contains("not evidence that filtering succeeded", daily.Procedure, StringComparison.Ordinal);
+        Assert.Contains("Count pending orders only when the observed order status is Pending", daily.Procedure, StringComparison.Ordinal);
+        Assert.Contains("whole-grid or page summary", daily.Procedure, StringComparison.Ordinal);
+        Assert.Contains("unpublished-product review as unknown or unverified", daily.Procedure, StringComparison.Ordinal);
+        Assert.Contains("Do not invent a threshold", daily.Procedure, StringComparison.Ordinal);
+        Assert.Contains("no changes were made", daily.Procedure, StringComparison.Ordinal);
+        var orders = secretary.SkillList.Single(skill => skill.Id == "store.order.review");
+        Assert.Contains("not evidence that filtering succeeded", orders.Procedure, StringComparison.Ordinal);
+        Assert.Contains("Count only rows whose observed order status is Pending", orders.Procedure, StringComparison.Ordinal);
+        Assert.Contains("whole-grid or page summary", orders.Procedure, StringComparison.Ordinal);
+        var inventory = secretary.SkillList.Single(skill => skill.Id == "store.inventory.review");
+        Assert.Contains("confirmed low-stock subset", inventory.Procedure, StringComparison.Ordinal);
+        Assert.Contains("Do not invent a threshold", inventory.Procedure, StringComparison.Ordinal);
         Assert.Contains(
             "store.daily.review",
             DeterministicSkillSelector.SelectActiveIds(secretary, "check current state of our nopCommerce store"));
