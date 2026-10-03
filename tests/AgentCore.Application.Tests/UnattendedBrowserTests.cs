@@ -100,6 +100,9 @@ public sealed class UnattendedBrowserTests
             ToolPolicy.EvaluateExecution(messaging, ToolCatalog.AppMessageSend, ToolConfigurationGates.AllowAll, admission: Admission()));
         Assert.Equal(
             ToolPolicyDecision.Deny,
+            ToolPolicy.EvaluateExecution(Definition(), ToolCatalog.BrowserNavigate, ToolConfigurationGates.AllowAll, admission: Admission() with { TriggerKind = TriggerKind.ApplicationEvent, TrustedConnection = false }));
+        Assert.Equal(
+            ToolPolicyDecision.Allow,
             ToolPolicy.EvaluateExecution(Definition(), ToolCatalog.BrowserNavigate, ToolConfigurationGates.AllowAll, admission: Admission() with { TriggerKind = TriggerKind.ApplicationEvent, TrustedConnection = true }));
         Assert.False(ToolPolicy.IsOffered(
             Definition(),
@@ -329,7 +332,7 @@ public sealed class UnattendedBrowserTests
                 () => ToolRound(Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{RepairRef}}"}""")),
                 () => TextRound("observed")),
             Definition(),
-            TriggerKind.ScheduledOccurrence,
+            TriggerKind.ApplicationEvent,
             (current, body, token) => store.CheckpointAsync(current.WorkItemId, current.Revision, generation, body, null, now, token),
             store,
             generation,
@@ -342,6 +345,7 @@ public sealed class UnattendedBrowserTests
         Assert.Equal(1, browser.ActCalls);
         Assert.Equal(RepairRef, browser.LastActRef);
         Assert.True(browser.ObserveCalls >= 1);
+        Assert.Equal([OwnerId], browser.UnattendedAgents);
     }
 
     [Fact]
@@ -489,10 +493,152 @@ public sealed class UnattendedBrowserTests
         Assert.Equal(RepairRef, browser.LastActRef);
     }
 
+    [Fact]
+    public async Task Application_event_uses_the_instance_profile_and_bound_budget()
+    {
+        var browser = new RecordingBrowser();
+        var connections = await ConnectedStoreAsync(OwnerId);
+        var completed = await RunAsync(
+            browser,
+            connections,
+            new CountingNavigateModel(25),
+            TriggerKind.ApplicationEvent);
+        Assert.IsType<DurableOccurrenceCompleted>(completed);
+        Assert.Equal(25, browser.NavigateCalls);
+        Assert.Equal([OwnerId], browser.UnattendedAgents);
+        Assert.Contains(Store, browser.UnattendedOrigins[0]);
+
+        browser = new RecordingBrowser();
+        var standard = Assert.IsType<DurableOccurrenceFailed>(await RunAsync(
+            browser,
+            connections,
+            new CountingNavigateModel(25),
+            TriggerKind.ApplicationEvent,
+            trusted: false));
+        Assert.Equal("tool-step-limit", standard.Code);
+        Assert.Equal(0, browser.NavigateCalls);
+        Assert.Empty(browser.UnattendedAgents);
+
+        var offered = ToolCatalog.For(
+            Definition(),
+            Context(trusted: true, TriggerKind.ApplicationEvent),
+            ToolConfigurationGates.AllowAll);
+        Assert.Contains(offered, tool => tool.Name == ToolCatalog.BrowserNavigate);
+        var quiet = ToolCatalog.For(
+            Definition(),
+            Context(trusted: false, TriggerKind.ApplicationEvent),
+            ToolConfigurationGates.AllowAll);
+        Assert.DoesNotContain(quiet, tool => ToolCatalog.IsBrowserTool(tool.Name));
+        Assert.Contains(quiet, tool => tool.Name == ToolCatalog.WorkComplete);
+
+        var live = new ToolExecutionAdmission(
+            false,
+            TriggerKind.ApplicationEvent,
+            AgentInstanceId: OwnerId,
+            TrustedConnection: true);
+        Assert.Equal(
+            ToolPolicyDecision.Allow,
+            ToolPolicy.EvaluateExecution(Definition(), ToolCatalog.BrowserNavigate, ToolConfigurationGates.AllowAll, admission: live));
+        Assert.Equal(
+            ToolPolicyDecision.Deny,
+            ToolPolicy.EvaluateExecution(
+                Definition(),
+                ToolCatalog.BrowserNavigate,
+                ToolConfigurationGates.AllowAll,
+                admission: live with { TrustedConnection = false }));
+        var liveBrowser = new RecordingBrowser();
+        var navigated = await Executor(liveBrowser, connections).ExecuteAsync(
+            Definition(),
+            WorkId,
+            Call(ToolCatalog.BrowserNavigate, $$"""{"url":"{{Store}}/admin"}"""),
+            ToolLimits.MaxOutputBytes,
+            admission: live);
+        Assert.DoesNotContain("error", navigated.Text, StringComparison.Ordinal);
+        Assert.Equal([OwnerId], liveBrowser.BoundAgents.Distinct());
+        Assert.Empty(liveBrowser.UnattendedAgents);
+    }
+
+    [Fact]
+    public async Task Succeeded_browser_act_without_a_tool_result_is_not_replayed()
+    {
+        var browser = new RecordingBrowser();
+        var connections = await ConnectedStoreAsync(OwnerId);
+        var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
+        var generation = Guid.Parse("019944af-00e7-7000-8000-000000000001");
+        var act = Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""");
+        var payload = DurableToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [act])]);
+        var store = new InMemoryWorkItemStore();
+        await store.CreateAsync(WorkItem.Create(
+            WorkId,
+            new WorkOwner(OwnerId, ProfileId),
+            Provenance(now, "order.placed:evt-1"),
+            new WorkModelPin("synthetic-default", "synthetic", "synthetic-small", "minimal"),
+            3,
+            now));
+        var claimed = (await store.TryClaimAsync(WorkId, generation, now, now.AddMinutes(1)))!;
+        var saved = await store.CheckpointAsync(
+            WorkId,
+            claimed.Revision,
+            generation,
+            new WorkCheckpoint(payload, 0, 0, (int)ToolLimits.Overall.TotalMilliseconds),
+            null,
+            now);
+        var hash = ToolActionHash.Compute(ToolCatalog.BrowserAct, JsonDocument.Parse(act.ArgumentsJson).RootElement);
+        var prepared = await store.MarkSideEffectAsync(
+            WorkId, saved.Revision, generation, WorkSideEffectDisposition.Prepared, act.Id, hash, now);
+        var inflight = await store.MarkSideEffectAsync(
+            WorkId, prepared.Revision, generation, WorkSideEffectDisposition.InFlight, act.Id, hash, now);
+        var succeeded = await store.MarkSideEffectAsync(
+            WorkId, inflight.Revision, generation, WorkSideEffectDisposition.Succeeded, act.Id, hash, now);
+        string? checkpoint = null;
+        var definition = Definition() with
+        {
+            Environment = new RoleEnvironment(ToolAllowlist:
+            [
+                ToolCatalog.BrowserNavigate,
+                ToolCatalog.BrowserObserve,
+                ToolCatalog.BrowserAct,
+                ToolCatalog.WorkComplete
+            ])
+        };
+        var outcome = await new DurableOccurrenceExecution(Executor(browser, connections), TimeProvider.System).RunAsync(
+            succeeded,
+            new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "publish")]),
+            new ScriptModel(
+                () => ToolRound(act),
+                () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
+                () => ToolRound(Call(ToolCatalog.WorkComplete, """{"summary":"Order checked.","attentionRequired":false}"""))),
+            definition,
+            TriggerKind.ApplicationEvent,
+            (current, body, token) =>
+            {
+                checkpoint = body.PayloadJson;
+                return store.CheckpointAsync(current.WorkItemId, current.Revision, generation, body, null, now, token);
+            },
+            store,
+            generation,
+            now,
+            Ids(),
+            CancellationToken.None,
+            trustedConnection: true);
+
+        var completed = Assert.IsType<DurableOccurrenceCompleted>(outcome);
+        Assert.Equal("Order checked.", completed.Text);
+        Assert.False(completed.AttentionRequired);
+        Assert.Equal(0, browser.ActCalls);
+        Assert.True(browser.ObserveCalls >= 1);
+        Assert.NotNull(checkpoint);
+        Assert.Contains("already_completed", checkpoint, StringComparison.Ordinal);
+        Assert.Contains("replayed", checkpoint, StringComparison.Ordinal);
+        Assert.Equal("Order placed", succeeded.OriginLabel);
+    }
+
     private static async Task<DurableOccurrenceOutcome> RunAsync(
         RecordingBrowser browser,
         InMemoryApplicationConnectionStore connections,
-        ILanguageModel model)
+        ILanguageModel model,
+        TriggerKind kind = TriggerKind.ScheduledOccurrence,
+        bool trusted = true)
     {
         var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
         var generation = Guid.Parse("019944af-00e2-7000-8000-000000000001");
@@ -510,14 +656,14 @@ public sealed class UnattendedBrowserTests
             new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "publish")]),
             model,
             Definition(),
-            TriggerKind.ScheduledOccurrence,
+            kind,
             (current, body, token) => store.CheckpointAsync(current.WorkItemId, current.Revision, generation, body, null, now, token),
             store,
             generation,
             now,
             Ids(),
             CancellationToken.None,
-            trustedConnection: true);
+            trustedConnection: trusted);
     }
 
     private static SessionToolExecutor Executor(RecordingBrowser browser, InMemoryApplicationConnectionStore connections) =>
@@ -571,14 +717,16 @@ public sealed class UnattendedBrowserTests
             0);
     }
 
-    private static WorkProvenance Provenance(DateTimeOffset now) =>
+    private static WorkProvenance Provenance(DateTimeOffset now, string dedupeKey = "source|browser") =>
         new(
             Guid.Parse("019944af-00e1-7000-8000-000000000005"),
-            WorkSourceKind.Schedule,
+            dedupeKey.StartsWith("order.placed:", StringComparison.Ordinal)
+                ? WorkSourceKind.ApplicationEvent
+                : WorkSourceKind.Schedule,
             null,
             null,
             null,
-            "source|browser",
+            dedupeKey,
             now,
             now,
             """{"instruction":"synthetic"}""",
@@ -609,7 +757,7 @@ public sealed class UnattendedBrowserTests
                 ToolCatalog.AppMessageSend
             ]));
 
-    private static AgentContext Context(bool trusted) =>
+    private static AgentContext Context(bool trusted, TriggerKind kind = TriggerKind.ScheduledOccurrence) =>
         new(
             Definition(),
             [],
@@ -619,7 +767,7 @@ public sealed class UnattendedBrowserTests
             null,
             false,
             null,
-            new AgentTrigger(Guid.NewGuid(), TriggerKind.ScheduledOccurrence, "review"),
+            new AgentTrigger(Guid.NewGuid(), kind, "review"),
             DetachedExecution: true,
             TrustedConnection: trusted);
 
@@ -738,11 +886,19 @@ public sealed class UnattendedBrowserTests
             }
         }
 
+        public List<Guid> UnattendedAgents { get; } = [];
+
+        public List<IReadOnlyList<string>> UnattendedOrigins { get; } = [];
+
         public ValueTask<IAsyncDisposable> EnterUnattendedAsync(
             Guid agentInstanceId,
             IReadOnlyList<string> origins,
-            CancellationToken cancellationToken = default) =>
-            new(NoopLease.Instance);
+            CancellationToken cancellationToken = default)
+        {
+            UnattendedAgents.Add(agentInstanceId);
+            UnattendedOrigins.Add(origins);
+            return new(NoopLease.Instance);
+        }
 
         public void AdoptUnattendedFlow(Guid agentInstanceId)
         {

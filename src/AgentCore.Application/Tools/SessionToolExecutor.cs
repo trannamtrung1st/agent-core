@@ -82,7 +82,8 @@ public sealed partial class SessionToolExecutor(
         if (admission?.Detached == true
             && ToolResources.IsSessionTool(call.Name)
             && !(ToolCatalog.IsBrowserTool(call.Name)
-                && admission is { TriggerKind: TriggerKind.ScheduledOccurrence, TrustedConnection: true }
+                && admission is { TrustedConnection: true }
+                && ToolResources.IsOccurrence(admission.TriggerKind)
                 && admission.AgentInstanceId is Guid agentInstanceId
                 && agentInstanceId != Guid.Empty))
         {

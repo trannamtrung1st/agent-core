@@ -131,12 +131,13 @@ public sealed class DurableReminderTests
             Assert.Equal(WorkSourceKind.ApplicationEvent, observed.Provenance.SourceKind);
             Assert.Equal("Oven is ready.", observed.Result!.Text);
             var eventRequest = harness.Model.Requests.Single(item =>
-                item.Tools?.Any(tool => tool.Name == ToolCatalog.KnowledgeRetrieve) == true);
+                item.Messages.Any(message => message.Text.Contains("Observed occurrence data", StringComparison.Ordinal)));
             var eventPrompt = string.Join('\n', eventRequest.Messages.Select(message => message.Text));
             Assert.Contains("Observed occurrence data", eventPrompt, StringComparison.Ordinal);
             Assert.DoesNotContain("Scheduled reminder delivery mode.", eventPrompt, StringComparison.Ordinal);
             var eventTools = eventRequest.Tools!.Select(tool => tool.Name).ToArray();
-            Assert.Contains(ToolCatalog.KnowledgeRetrieve, eventTools);
+            Assert.Equal([ToolCatalog.WorkComplete], eventTools);
+            Assert.DoesNotContain(ToolCatalog.KnowledgeRetrieve, eventTools);
             Assert.DoesNotContain(ToolCatalog.WorkspaceRead, eventTools);
             Assert.DoesNotContain(ToolCatalog.TriggerScheduleOnce, eventTools);
             Assert.DoesNotContain(SourceSessionId.ToString(), eventPrompt, StringComparison.Ordinal);
@@ -896,7 +897,7 @@ public sealed class DurableReminderTests
     }
 
     [Fact]
-    public async Task Succeeded_fence_without_checkpointed_tool_result_fails_as_tool_result_lost()
+    public async Task Succeeded_fence_without_checkpointed_tool_result_continues_without_replaying()
     {
         await ForEachAsync(async harness =>
         {
@@ -945,9 +946,9 @@ public sealed class DurableReminderTests
             harness.Time.SetUtcNow(later);
             await harness.Work.RecoverExpiredClaimsAsync(later);
             Assert.Equal(1, await harness.Executor.ExecuteDueAsync(later, 10));
-            var failed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
-            Assert.Equal(WorkItemStatus.Failed, failed!.Status);
-            Assert.Equal("tool-result-lost", failed.Failure!.Code);
+            var completed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Completed, completed!.Status);
+            Assert.Equal("Sent.", completed.Result!.Text);
             Assert.Equal(0, harness.Http.Calls);
         }, () => new ApprovalHttpModel());
     }
@@ -1159,9 +1160,9 @@ public sealed class DurableReminderTests
             harness.Time.SetUtcNow(later);
             await harness.Work.RecoverExpiredClaimsAsync(later);
             Assert.Equal(1, await harness.Executor.ExecuteDueAsync(later, 10));
-            var failed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
-            Assert.Equal(WorkItemStatus.Failed, failed!.Status);
-            Assert.Equal("tool-result-lost", failed.Failure!.Code);
+            var completed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Completed, completed!.Status);
+            Assert.Equal("Done.", completed.Result!.Text);
             Assert.Equal(1, harness.Http.Calls);
         }, () => new DuplicateHttpApprovalModel());
     }
@@ -1350,9 +1351,9 @@ public sealed class DurableReminderTests
             var later = Now.AddMinutes(1);
             harness.Time.SetUtcNow(later);
             Assert.Equal(1, await harness.Executor.ExecuteDueAsync(later, 10));
-            var failed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
-            Assert.Equal(WorkItemStatus.Failed, failed!.Status);
-            Assert.Equal("tool-result-lost", failed.Failure!.Code);
+            var completed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Completed, completed!.Status);
+            Assert.Equal("Done.", completed.Result!.Text);
             Assert.Equal(0, harness.Http.Calls);
         }, () => new DualHttpApprovalBatchModel());
     }

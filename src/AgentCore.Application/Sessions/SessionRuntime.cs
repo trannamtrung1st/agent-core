@@ -16,6 +16,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Speech;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Triggers;
+using AgentCore.Domain.Connections;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Diagnostics;
 using AgentCore.Domain.Triggers;
@@ -2376,11 +2377,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             {
                 var sessionAttachments = await BuildSessionAttachmentManifestAsync(evaluationToken).ConfigureAwait(false);
                 string? applicationConnectionStatus = null;
+                var trustedConnection = false;
                 if (_applicationConnections is not null && _snapshot.AgentInstanceId is Guid applicationInstanceId)
                 {
                     var applicationConnection = await _applicationConnections
                         .GetByAgentAsync(applicationInstanceId, evaluationToken)
                         .ConfigureAwait(false);
+                    trustedConnection = applicationConnection?.Status == ApplicationConnectionStatus.Connected
+                        && trigger.Kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent;
                     var formatted = ApplicationConnectionPrompt.Format(applicationConnection);
                     applicationConnectionStatus = formatted.Length == 0 ? null : formatted;
                 }
@@ -2423,7 +2427,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ScheduleConversation: _scheduleConversationContext,
                     ScheduleDraft: _scheduleDraftContext,
                     ActiveSkillIds: ResolveActiveSkillIds(trigger, responseId),
-                    ApplicationConnectionStatus: applicationConnectionStatus);
+                    ApplicationConnectionStatus: applicationConnectionStatus,
+                    TrustedConnection: trustedConnection);
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
                 AgentDecision? decision = null;
@@ -3029,7 +3034,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     Detached: false,
                                     trigger.Kind,
                                     allowedIntermediate,
-                                    _snapshot.AgentInstanceId));
+                                    _snapshot.AgentInstanceId,
+                                    TrustedConnection: await LiveTrustedConnectionAsync(trigger.Kind, overallCts.Token)
+                                        .ConfigureAwait(false)));
                             if (policy == ToolPolicyDecision.Deny || string.IsNullOrWhiteSpace(call.Name))
                             {
                                 if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal))
@@ -3175,6 +3182,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                                 trigger.Kind,
                                                 allowedIntermediate,
                                                 _snapshot.AgentInstanceId,
+                                                TrustedConnection: await LiveTrustedConnectionAsync(trigger.Kind, toolCts.Token)
+                                                    .ConfigureAwait(false),
                                                 SupportsVision: model.Capabilities.Vision,
                                                 CaptureScope: request.ResponseId.ToString()))
                                         .ConfigureAwait(false);
@@ -5506,6 +5515,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 null);
         var resolved = _models.Resolve(selection, purpose);
         return TestDecorateLanguageModel?.Invoke(resolved) ?? resolved;
+    }
+
+    private async ValueTask<bool> LiveTrustedConnectionAsync(TriggerKind kind, CancellationToken cancellationToken)
+    {
+        if (kind is not (TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent)
+            || _applicationConnections is null
+            || _snapshot.AgentInstanceId is not Guid agentInstanceId
+            || agentInstanceId == Guid.Empty)
+        {
+            return false;
+        }
+
+        var connection = await _applicationConnections.GetByAgentAsync(agentInstanceId, cancellationToken)
+            .ConfigureAwait(false);
+        return connection?.Status == ApplicationConnectionStatus.Connected;
     }
 
     private ILanguageModel ResolveTurnModel(TriggerKind kind)

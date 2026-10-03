@@ -34,14 +34,15 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
         CancellationToken cancellationToken,
         bool trustedConnection = false)
     {
-        var browserScope = triggerKind == TriggerKind.ScheduledOccurrence
+        var occurrenceBrowser = triggerKind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent;
+        var browserScope = occurrenceBrowser
             ? await tools.OpenOccurrenceBrowserAsync(
                 running.WorkItemId,
                 running.Owner.AgentInstanceId,
                 trustedConnection,
                 cancellationToken).ConfigureAwait(false)
             : null;
-        if (trustedConnection && triggerKind == TriggerKind.ScheduledOccurrence)
+        if (trustedConnection && occurrenceBrowser)
         {
             tools.AdoptOccurrenceBrowser(running.Owner.AgentInstanceId);
         }
@@ -151,7 +152,11 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
             }
             catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
             {
-                if (triggerKind == TriggerKind.ScheduledOccurrence && steps == 0 && pending.Count == 0)
+                var leasedApplicationEvent = triggerKind == TriggerKind.ApplicationEvent
+                    && browserScope?.BoundApplicationBrowser == true;
+                if ((triggerKind == TriggerKind.ScheduledOccurrence || leasedApplicationEvent)
+                    && steps == 0
+                    && pending.Count == 0)
                 {
                     return new DurableOccurrenceRetry(
                         running,
@@ -217,20 +222,41 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
             if (running.SideEffect.Disposition == WorkSideEffectDisposition.Succeeded)
             {
                 var fencedToolCallId = running.SideEffect.ToolCallId;
-                if (fencedToolCallId is null || !HasToolResult(messages, fencedToolCallId))
+                if (fencedToolCallId is not null && !HasToolResult(messages, fencedToolCallId))
                 {
-                    return new DurableOccurrenceFailed(
-                        running,
-                        "tool-result-lost",
-                        "External effect completed but the tool result was not durably recorded.");
+                    blockedActionHash ??= running.SideEffect.ActionHash;
+                    observationRequired = true;
+                    var fencedCall = string.Equals(call.Id, fencedToolCallId, StringComparison.Ordinal)
+                        ? call
+                        : new ModelToolCall(
+                            fencedToolCallId,
+                            ToolNameFor(messages, fencedToolCallId) ?? call.Name,
+                            call.ArgumentsJson);
+                    var reconciled = await AppendResultAsync(
+                        fencedCall,
+                        ToolExecutionResult.FromText(
+                            """{"effect":"already_completed","replayed":false}"""),
+                        true).ConfigureAwait(false);
+                    if (reconciled is not null || string.Equals(call.Id, fencedToolCallId, StringComparison.Ordinal))
+                    {
+                        return reconciled;
+                    }
                 }
+                else
+                {
+                    if (fencedToolCallId is null)
+                    {
+                        blockedActionHash ??= running.SideEffect.ActionHash;
+                        observationRequired = true;
+                    }
 
-                running = await store.ClearSideEffectAsync(
-                    running.WorkItemId,
-                    running.Revision,
-                    generation,
-                    asOfUtc,
-                    cancellationToken).ConfigureAwait(false);
+                    running = await store.ClearSideEffectAsync(
+                        running.WorkItemId,
+                        running.Revision,
+                        generation,
+                        asOfUtc,
+                        cancellationToken).ConfigureAwait(false);
+                }
             }
 
             if (!TryArguments(call, out var args))
@@ -253,9 +279,10 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                     false).ConfigureAwait(false);
             }
 
-            if (call.Name == ToolCatalog.BrowserAct
-                && blockedActionHash is not null
-                && string.Equals(hash, blockedActionHash, StringComparison.Ordinal))
+            if (blockedActionHash is not null
+                && string.Equals(hash, blockedActionHash, StringComparison.Ordinal)
+                && (call.Name == ToolCatalog.BrowserAct
+                    || ToolCatalog.ReplaySafetyOf(call.Name) != ToolReplaySafety.ReplaySafe))
             {
                 return await AppendResultAsync(
                     call,
@@ -641,6 +668,27 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
         public static NoopScope Instance { get; } = new();
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private static string? ToolNameFor(IReadOnlyList<ModelMessage> messages, string toolCallId)
+    {
+        foreach (var message in messages)
+        {
+            if (message.ToolCalls is null)
+            {
+                continue;
+            }
+
+            foreach (var call in message.ToolCalls)
+            {
+                if (string.Equals(call.Id, toolCallId, StringComparison.Ordinal))
+                {
+                    return call.Name;
+                }
+            }
+        }
+
+        return null;
     }
 
     private static bool HasToolResult(IReadOnlyList<ModelMessage> messages, string toolCallId) =>

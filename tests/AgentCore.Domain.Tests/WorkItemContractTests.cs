@@ -50,6 +50,9 @@ public sealed class WorkItemContractTests
         var item = NewItem(kind: WorkSourceKind.ApplicationEvent);
         Assert.Equal(WorkSourceKind.ApplicationEvent, item.Provenance.SourceKind);
         Assert.Equal("Application event", item.OriginLabel);
+        var placed = NewItem(kind: WorkSourceKind.ApplicationEvent, dedupeKey: "order.placed:evt-1");
+        Assert.Equal("Order placed", placed.OriginLabel);
+        Assert.DoesNotContain("evt-1", placed.ToPublicSummary().OriginLabel, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -499,7 +502,8 @@ public sealed class WorkItemContractTests
         Guid? sourceId = null,
         int maxAttempts = 3,
         WorkSourceKind kind = WorkSourceKind.Schedule,
-        string? evidence = null) =>
+        string? evidence = null,
+        string? dedupeKey = null) =>
         WorkItem.Create(
             id ?? WorkItemId,
             new WorkOwner(InstanceId, ProfileId),
@@ -509,7 +513,7 @@ public sealed class WorkItemContractTests
                 Guid.Parse("019944af-0008-7000-8000-000000000091"),
                 Guid.Parse("019944af-0008-7000-8000-000000000092"),
                 null,
-                "registration|1|1758600000000",
+                dedupeKey ?? "registration|1|1758600000000",
                 Now,
                 Now,
                 evidence ?? """{"kind":"reminder"}""",

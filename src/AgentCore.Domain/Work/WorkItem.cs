@@ -238,6 +238,7 @@ public sealed class WorkItem
     public string OriginLabel => Provenance.SourceKind switch
     {
         WorkSourceKind.Schedule => "Scheduled reminder",
+        WorkSourceKind.ApplicationEvent when Provenance.DedupeKey.StartsWith("order.placed:", StringComparison.Ordinal) => "Order placed",
         WorkSourceKind.ApplicationEvent => "Application event",
         _ => throw new InvalidOperationException("Source kind is not valid.")
     };

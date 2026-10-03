@@ -43,7 +43,7 @@ public sealed partial class SessionToolExecutor
         ToolExecutionAdmission? admission,
         CancellationToken cancellationToken)
     {
-        var scheduled = admission is { Detached: true, TriggerKind: TriggerKind.ScheduledOccurrence };
+        var scheduled = admission is { Detached: true } && ToolResources.IsOccurrence(admission.TriggerKind);
         if (applicationConnections is null
             || admission?.AgentInstanceId is not Guid agentInstanceId
             || agentInstanceId == Guid.Empty)
@@ -125,9 +125,8 @@ public sealed partial class SessionToolExecutor
                     Error(decision.Code ?? "target_denied", decision.Message ?? "Browser target is not allowed."));
             }
 
-            if (admission is { Detached: true, TriggerKind: TriggerKind.ScheduledOccurrence, TrustedConnection: true }
-                && applicationConnections is not null
-                && admission.AgentInstanceId is Guid connectedAgent)
+            if (applicationConnections is not null
+                && TrustedOccurrenceOrigin(admission, out var connectedAgent))
             {
                 var connected = await applicationConnections.GetByAgentAsync(connectedAgent, cancellationToken)
                     .ConfigureAwait(false);
@@ -291,9 +290,8 @@ public sealed partial class SessionToolExecutor
                 browser.HostPolicy.EffectiveInteractionOrigins,
                 browser.HostPolicy.PolicyMode);
             if (decision.Allowed
-                && admission is { Detached: true, TriggerKind: TriggerKind.ScheduledOccurrence, TrustedConnection: true }
                 && applicationConnections is not null
-                && admission.AgentInstanceId is Guid connectedAgent)
+                && TrustedOccurrenceOrigin(admission, out var connectedAgent))
             {
                 var connected = await applicationConnections.GetByAgentAsync(connectedAgent, cancellationToken)
                     .ConfigureAwait(false);
@@ -1064,6 +1062,20 @@ public sealed partial class SessionToolExecutor
         }
 
         return new OccurrenceBrowserScope(browser, workItemId, lease);
+    }
+
+    private static bool TrustedOccurrenceOrigin(ToolExecutionAdmission? admission, out Guid agentInstanceId)
+    {
+        if (admission is { TrustedConnection: true, AgentInstanceId: Guid id }
+            && id != Guid.Empty
+            && ToolResources.IsOccurrence(admission.TriggerKind))
+        {
+            agentInstanceId = id;
+            return true;
+        }
+
+        agentInstanceId = Guid.Empty;
+        return false;
     }
 
     public void AdoptOccurrenceBrowser(Guid agentInstanceId)

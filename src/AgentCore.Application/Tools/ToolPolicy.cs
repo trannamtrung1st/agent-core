@@ -172,18 +172,34 @@ public static class ToolPolicy
         && IsOffered(descriptor, definition, context, configurationGate);
 
     private static bool BrowserAdmissionAllows(ToolExecutionAdmission? admission) =>
-        admission is { Detached: false, TriggerKind: TriggerKind.UserTurn } || UnattendedBrowser(admission);
+        admission is { Detached: false, TriggerKind: TriggerKind.UserTurn }
+        || UnattendedBrowser(admission)
+        || LiveTrustedOccurrence(admission);
 
     private static bool BrowserOfferAllows(AgentContext? context) =>
-        context is { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn } || UnattendedBrowser(context);
+        context is { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn }
+        || UnattendedBrowser(context)
+        || LiveTrustedOccurrence(context);
 
     private static bool UnattendedBrowser(ToolExecutionAdmission? admission) =>
-        admission is { Detached: true, TriggerKind: TriggerKind.ScheduledOccurrence, TrustedConnection: true }
+        admission is { Detached: true, TrustedConnection: true }
+        && ToolResources.IsOccurrence(admission.TriggerKind)
         && admission.AgentInstanceId is Guid agentInstanceId
         && agentInstanceId != Guid.Empty;
 
     private static bool UnattendedBrowser(AgentContext? context) =>
-        context is { DetachedExecution: true, TrustedConnection: true, Trigger.Kind: TriggerKind.ScheduledOccurrence };
+        context is { DetachedExecution: true, TrustedConnection: true }
+        && ToolResources.IsOccurrence(context.Trigger.Kind);
+
+    private static bool LiveTrustedOccurrence(ToolExecutionAdmission? admission) =>
+        admission is { Detached: false, TrustedConnection: true }
+        && ToolResources.IsOccurrence(admission.TriggerKind)
+        && admission.AgentInstanceId is Guid agentInstanceId
+        && agentInstanceId != Guid.Empty;
+
+    private static bool LiveTrustedOccurrence(AgentContext? context) =>
+        context is { DetachedExecution: false, TrustedConnection: true }
+        && ToolResources.IsOccurrence(context.Trigger.Kind);
 
     private static bool OccurrenceCompletion(ToolExecutionAdmission? admission) =>
         admission is { Detached: true } && ToolResources.IsOccurrence(admission.TriggerKind);

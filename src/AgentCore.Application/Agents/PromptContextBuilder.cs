@@ -1052,10 +1052,13 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder, IInitiativeE
     private Speak SpeakOccurrence(AgentContext context, Guid responseId)
     {
         var request = builder.Build(context, responseId);
-        if (context.Trigger.Kind == TriggerKind.ScheduledOccurrence)
+        if (context.Trigger.Kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent)
         {
             var messages = request.Messages.ToList();
-            messages.Insert(1, new ModelMessage(ModelRole.System, PromptContextBuilder.BuildScheduledReminderDeliverySystem()));
+            if (context.Trigger.Kind == TriggerKind.ScheduledOccurrence)
+            {
+                messages.Insert(1, new ModelMessage(ModelRole.System, PromptContextBuilder.BuildScheduledReminderDeliverySystem()));
+            }
             IReadOnlyList<ModelToolDefinition>? tools = null;
             var offered = builder.OfferTools(context.Definition, context);
             if (offered.Count > 0)

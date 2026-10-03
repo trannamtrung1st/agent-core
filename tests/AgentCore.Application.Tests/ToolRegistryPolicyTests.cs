@@ -92,8 +92,9 @@ public sealed class ToolRegistryPolicyTests
             ModelSupportsTools: true,
             DetachedExecution: true);
         var offered = ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll).Select(tool => tool.Name).ToArray();
-        Assert.Contains(ToolCatalog.KnowledgeRetrieve, offered);
-        Assert.Contains(ToolCatalog.WebFetch, offered);
+        Assert.Equal([ToolCatalog.WorkComplete], offered);
+        Assert.DoesNotContain(ToolCatalog.KnowledgeRetrieve, offered);
+        Assert.DoesNotContain(ToolCatalog.WebFetch, offered);
         Assert.DoesNotContain(ToolCatalog.WorkspaceRead, offered);
         Assert.DoesNotContain(ToolCatalog.SandboxRun, offered);
         Assert.DoesNotContain(ToolCatalog.TriggerScheduleOnce, offered);

@@ -57,7 +57,7 @@ public static class ToolCatalog
             return [];
         }
 
-        if (context?.Trigger.Kind == TriggerKind.ScheduledOccurrence)
+        if (context?.Trigger.Kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent)
         {
             return context.TrustedConnection
                 ? OccurrenceTools(definition, context, configurationGate)
