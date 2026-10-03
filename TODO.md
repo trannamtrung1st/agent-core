@@ -1150,4 +1150,6 @@ Orientation for what later work can build on. Detail and gate history are in `/d
 
 # Next implementation item
 
-**P9.5 — Proactive Secretary / Real Assistant Demo — closed** on `1012653`. P9 remains closed on `bba1de4`. P10 and P11 remain requirement-triggered.
+**P9.5 — Proactive Secretary / Real Assistant Demo — closed** on `1012653` (hosted Synthetic [`37111979501`](https://github.com/trannamtrung1st/agent-core/actions/runs/37111979501); post-closure [`37113492451`](https://github.com/trannamtrung1st/agent-core/actions/runs/37113492451) on `b7d673f` does not move the closure SHA). P9 remains closed on `bba1de4`. P10 and P11 remain requirement-triggered.
+
+**Bounded follow-up (post-P9.5, does not reopen the phase):** reconcile durable WorkItem side effects when a terminal tool result is lost (`tool-result-lost`). Journey D recovery is accepted; the mutating work item `01a0ff31` remains failed.

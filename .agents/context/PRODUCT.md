@@ -88,7 +88,7 @@ Stack (existing codebase, not a greenfield choice): React SPA, Vite, pnpm, stric
 
 Observed P9 Chat behavior, not a new visual system: while a browser tool runs, the existing activity row shows the server progress message `Using browser…`. There is no page panel, screenshot, or click log. `/docs` remains the product specification.
 
-Observed P9.5 connection and result behavior: Admin instance detail owns the store connection. Chat shows that status and opens the same Admin instance. Background Work labels attention results in text and counts only those results. Quiet completions stay in the list. `/docs` remains the product specification.
+P9.5 (closed on `1012653`) connection and result behavior: Admin instance detail owns the store connection. Chat shows that status and opens the same Admin instance. Background Work labels attention results in text and counts only those results. Quiet completions stay in the list. `/docs` remains the product specification.
 
 ## Accessibility & Inclusion
 
