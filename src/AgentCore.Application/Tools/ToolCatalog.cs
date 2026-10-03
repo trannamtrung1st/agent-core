@@ -59,8 +59,13 @@ public static class ToolCatalog
 
         if (context?.Trigger.Kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent)
         {
-            return context.TrustedConnection
-                ? OccurrenceTools(definition, context, configurationGate)
+            if (context.TrustedConnection)
+            {
+                return OccurrenceTools(definition, context, configurationGate);
+            }
+
+            return context.Trigger.Kind == TriggerKind.ApplicationEvent
+                ? UnconnectedApplicationTools(definition, context, configurationGate)
                 : CompletionOnly(definition, context, configurationGate);
         }
 
@@ -113,6 +118,30 @@ public static class ToolCatalog
         foreach (var name in RoleEnvironments.Of(definition).ToolList)
         {
             if (!ToolRegistry.TryGet(name, out var descriptor)
+                || !ToolPolicy.IsOffered(descriptor, definition, context, configurationGate)
+                || !seen.Add(name))
+            {
+                continue;
+            }
+
+            offered.Add(descriptor.ModelDefinition);
+        }
+
+        AddWorkComplete(offered, seen, definition, context, configurationGate);
+        return offered;
+    }
+
+    private static List<ModelToolDefinition> UnconnectedApplicationTools(
+        AgentDefinition definition,
+        AgentContext context,
+        IToolConfigurationGate configurationGate)
+    {
+        var offered = new List<ModelToolDefinition>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var name in RoleEnvironments.Of(definition).ToolList)
+        {
+            if (!string.Equals(name, DemoSensitiveAction, StringComparison.Ordinal)
+                || !ToolRegistry.TryGet(name, out var descriptor)
                 || !ToolPolicy.IsOffered(descriptor, definition, context, configurationGate)
                 || !seen.Add(name))
             {

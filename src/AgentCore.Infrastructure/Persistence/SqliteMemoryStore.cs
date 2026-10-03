@@ -1334,6 +1334,38 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 """,
                 cancellationToken).ConfigureAwait(false);
         }
+
+        if (await ColumnExistsAsync(connection, "TriggerRegistrations", "ModelOverrideCatalogKey", cancellationToken)
+            .ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20261003155703_P96ExecutionModelPin', '10.0.12');
+                """,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await TableExistsAsync(connection, "WorkCaptures", cancellationToken).ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20261003163628_P96WorkCaptures', '10.0.12');
+                """,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await ColumnExistsAsync(connection, "ApplicationConnections", "WebhookKey", cancellationToken)
+            .ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20261003175239_P96OrderPlacedWebhook', '10.0.12');
+                """,
+                cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private static async Task RepairEnsureCreatedP7SchemaGapsAsync(

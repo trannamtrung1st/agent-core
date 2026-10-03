@@ -1062,7 +1062,7 @@ P9.5 closes when a developer can use one simple documented workflow to bring up 
 
 # P9.6 — Visual Browser, Reactive Triggers & Deterministic Unattended Execution
 
-**Status: implemented; not closed.** P9 remains closed on `bba1de4` and P9.5 remains closed on `1012653`. P9.6 does not move either closure SHA and does not start P10. Full gates, the hosted Synthetic run, and the freeze-candidate report are still outstanding. `scripts/nopcommerce-demo.sh start` was not run.
+**Status: implemented; not closed.** P9 remains closed on `bba1de4` and P9.5 remains closed on `1012653`. P9.6 does not move either closure SHA and does not start P10. Local key-free gates passed and the candidate report is [p9.6-freeze-candidate.md](docs/reports/p9.6-freeze-candidate.md). The hosted Synthetic run is still outstanding. `scripts/nopcommerce-demo.sh start` was not run.
 
 ## Verified starting point
 
