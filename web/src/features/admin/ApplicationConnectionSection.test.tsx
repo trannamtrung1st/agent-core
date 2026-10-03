@@ -42,9 +42,9 @@ describe("ApplicationConnectionSection", () => {
     vi.mocked(connectApplication).mockResolvedValue({
       connectionId: "connection-1",
       agentInstanceId: instanceId,
-      kind: "crm",
-      displayName: "Example CRM",
-      baseUrl: "https://crm.example",
+      kind: "nopCommerce",
+      displayName: "Demo Store",
+      baseUrl: "https://store.example",
       status: "Connecting",
       revision: 1,
       createdAtUtc: "2026-10-02T00:00:00Z",
@@ -61,14 +61,14 @@ describe("ApplicationConnectionSection", () => {
     expect(screen.getByText("Application type")).toBeInTheDocument();
     expect(screen.getByText("nopCommerce")).toBeInTheDocument();
     expect(await screen.findByText("Not connected")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "Example CRM" } });
-    fireEvent.change(screen.getByLabelText("Base URL"), { target: { value: "https://crm.example" } });
+    fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "Demo Store" } });
+    fireEvent.change(screen.getByLabelText("Base URL"), { target: { value: "https://store.example" } });
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
     expect(await screen.findByText("Connecting / sign-in required")).toBeInTheDocument();
     expect(screen.getByText("Sign in is required in the application browser.")).toBeInTheDocument();
-    expect(screen.getByText("Example CRM")).toBeInTheDocument();
-    expect(screen.getByText("https://crm.example")).toBeInTheDocument();
-    expect(connectApplication).toHaveBeenCalledWith(instanceId, "Example CRM", "https://crm.example");
+    expect(screen.getByText("Demo Store")).toBeInTheDocument();
+    expect(screen.getByText("https://store.example")).toBeInTheDocument();
+    expect(connectApplication).toHaveBeenCalledWith(instanceId, "Demo Store", "https://store.example");
     expect(screen.queryByText(/cookie|token|profile path/i)).not.toBeInTheDocument();
   });
 
@@ -76,9 +76,9 @@ describe("ApplicationConnectionSection", () => {
     vi.mocked(getApplicationConnection).mockResolvedValue({
       connectionId: "connection-1",
       agentInstanceId: instanceId,
-      kind: "crm",
-      displayName: "Example CRM",
-      baseUrl: "https://crm.example",
+      kind: "nopCommerce",
+      displayName: "Demo Store",
+      baseUrl: "https://store.example",
       status: "Connected",
       revision: 2,
       createdAtUtc: "2026-10-02T00:00:00Z",
@@ -87,9 +87,9 @@ describe("ApplicationConnectionSection", () => {
     vi.mocked(revokeApplication).mockResolvedValue({
       connectionId: "connection-1",
       agentInstanceId: instanceId,
-      kind: "crm",
-      displayName: "Example CRM",
-      baseUrl: "https://crm.example",
+      kind: "nopCommerce",
+      displayName: "Demo Store",
+      baseUrl: "https://store.example",
       status: "NotConnected",
       revision: 3,
       createdAtUtc: "2026-10-02T00:00:00Z",
