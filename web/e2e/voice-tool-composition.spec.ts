@@ -15,11 +15,59 @@ async function enterMutedVoice(page: Page): Promise<void> {
   await expect(page.getByRole("button", { name: "Voice" })).toHaveAttribute("aria-pressed", "true");
 }
 
+// store-connection.spec.ts revokes the shared general-assistant connection.
+// A revoked row forbids later browser tools, so this journey restores Connected
+// when an earlier test left the instance unusable. An absent connection stays absent.
+async function allowGeneralAssistantBrowser(page: Page): Promise<void> {
+  await page.waitForFunction(() => window.localStorage.getItem("agent-core.owner-capability"));
+  const status = await page.evaluate(async () => {
+    const token = window.localStorage.getItem("agent-core.owner-capability") ?? "";
+    const headers = {
+      "Content-Type": "application/json",
+      "X-AgentCore-Owner-Capability": token
+    };
+    const listed = await fetch("/api/v2/admin/instances", { headers });
+    if (!listed.ok) {
+      return `instances-${listed.status}`;
+    }
+
+    const instances = (await listed.json()) as { items?: Array<{ instanceId: string; definitionId: string }> };
+    const instance = instances.items?.find((item) => item.definitionId === "general-assistant");
+    if (!instance) {
+      return "missing-instance";
+    }
+
+    const current = await fetch(`/api/v2/admin/agent-instances/${instance.instanceId}/connection`, { headers });
+    if (!current.ok) {
+      return `connection-${current.status}`;
+    }
+
+    const connection = (await current.json()) as { connectionId?: string; status?: string } | null;
+    if (!connection?.connectionId || connection.status === "Connected") {
+      return connection?.status ?? "absent";
+    }
+
+    const restored = await fetch(`/api/v2/admin/agent-instances/${instance.instanceId}/connection/connect`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ displayName: "nopCommerce", baseUrl: "http://127.0.0.1:5091" })
+    });
+    if (!restored.ok) {
+      return `connect-${restored.status}`;
+    }
+
+    const body = (await restored.json()) as { status?: string };
+    return body.status ?? "unknown";
+  });
+  expect(status === "absent" || status === "Connected").toBe(true);
+}
+
 test("muted voice keeps a browser tool turn in voice", async ({ page }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(240_000);
   await page.goto("/");
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await selectLegacyIdentity(page, LEGACY_IDENTITY_LABELS.generalAssistant);
+  await allowGeneralAssistantBrowser(page);
   await chooseScriptedAlpha(page);
   await enterMutedVoice(page);
   await page.getByLabel("Message").fill("Please look up record AC-1042.");
