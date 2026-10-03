@@ -297,6 +297,10 @@ Owners: [Protocol](14-api-and-realtime-protocol.md) (capability, leases vs Attac
 
 **Decision:** Browser observations may use a bounded settle, and the agent can request a settled re-observation through `browser.observe` `waitFor` `stable`. `stable` is a bounded observational condition, not page completion. The provider owns the wait and the truthful current observation. The agent owns whether the evidence is sufficient. The model does not receive a sleep tool, selectors, or Playwright locators. This enhancement does not reopen P9 or P9.5 and does not move `bba1de4` or `1012653`. P10 and P11 remain requirement-triggered.
 
+## Post-P9.5 browser and store-review enhancement (recorded)
+
+**Decision:** The post-P9.5 browser and store-review follow-up is recorded on `6f6ff42`. Hosted Synthetic [`37128161642`](https://github.com/trannamtrung1st/agent-core/actions/runs/37128161642) is green. It covers bounded browser settle, observation-repeat termination, compacted page receipts, daily-review activation, and store-review evidence that trusts a filter only when the observed rows support it. P9.5 stays closed on `1012653`. This record does not move `bba1de4` or `1012653`.
+
 ## What may still be measured
 
 Provider selection within independently configured speech ports, VAD thresholds, frame size within the allowed range, TTS phrase segmentation and latency optimization are tuning variables. The default behavior and degraded paths are specified; measurement must not reopen project ownership, transport, storage or response identity decisions. No guaranteed provider-dependent SLA is implied.
