@@ -1,3 +1,4 @@
+using AgentCore.Application.Models;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Triggers;
@@ -25,6 +26,9 @@ public sealed class TriggerScheduler
     private readonly ILogger<TriggerScheduler> _logger;
     private readonly ITriggerAdmissionGuard? _guard;
     private readonly IDiagnosticIdSource _diagnostics;
+    private readonly IAgentInstanceStore? _instances;
+    private readonly IAgentDefinitionStore? _definitions;
+    private readonly IModelCatalog? _catalog;
     private readonly int _batchSize;
 
     public TriggerScheduler(ITriggerStore store, ILogger<TriggerScheduler> logger)
@@ -51,6 +55,18 @@ public sealed class TriggerScheduler
     {
     }
 
+    public TriggerScheduler(
+        ITriggerStore store,
+        ILogger<TriggerScheduler> logger,
+        ITriggerAdmissionGuard guard,
+        IDiagnosticIdSource diagnostics,
+        IAgentInstanceStore instances,
+        IAgentDefinitionStore definitions,
+        IModelCatalog catalog)
+        : this(store, logger, DefaultBatchSize, guard, diagnostics, instances, definitions, catalog)
+    {
+    }
+
     internal TriggerScheduler(
         ITriggerStore store,
         ILogger<TriggerScheduler> logger,
@@ -66,12 +82,18 @@ public sealed class TriggerScheduler
         ILogger<TriggerScheduler> logger,
         int batchSize,
         ITriggerAdmissionGuard? guard,
-        IDiagnosticIdSource? diagnostics = null)
+        IDiagnosticIdSource? diagnostics = null,
+        IAgentInstanceStore? instances = null,
+        IAgentDefinitionStore? definitions = null,
+        IModelCatalog? catalog = null)
     {
         _store = store;
         _logger = logger;
         _guard = guard;
         _diagnostics = diagnostics ?? FallbackDiagnosticIdSource.Instance;
+        _instances = instances;
+        _definitions = definitions;
+        _catalog = catalog;
         _batchSize = Math.Clamp(batchSize, 1, DefaultBatchSize);
     }
 
@@ -126,6 +148,11 @@ public sealed class TriggerScheduler
                     dueAt,
                     asOf,
                     cancellationToken).ConfigureAwait(false);
+                if (result.Occurrence is not null)
+                {
+                    await PinAdmittedAsync(result.Occurrence, asOf, cancellationToken).ConfigureAwait(false);
+                }
+
                 switch (result.Outcome)
                 {
                     case ScheduledAdmitOutcome.Admitted:
@@ -217,6 +244,43 @@ public sealed class TriggerScheduler
             rejected,
             failed,
             occurrenceIds);
+    }
+
+    private async Task PinAdmittedAsync(
+        TriggerOccurrence occurrence,
+        DateTimeOffset asOf,
+        CancellationToken cancellationToken)
+    {
+        if (occurrence.ModelPin is not null || _catalog is null)
+        {
+            return;
+        }
+
+        var decision = await ExecutionModelAdmission.ResolveAsync(
+            _catalog,
+            _instances,
+            _definitions,
+            _store,
+            occurrence.Owner,
+            occurrence.RegistrationId,
+            cancellationToken).ConfigureAwait(false);
+        if (decision is null)
+        {
+            return;
+        }
+
+        if (decision.Pin is null)
+        {
+            await _store.TryRejectPendingAsync(
+                occurrence.OccurrenceId,
+                decision.FailureCode ?? ExecutionModelPolicy.UnavailableCode,
+                asOf,
+                cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await _store.TryAssignModelPinIfMissingAsync(occurrence.OccurrenceId, decision.Pin, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static void RecordLag(DateTimeOffset asOf, ScheduledAdmitResult result)

@@ -559,6 +559,30 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         }
     }
 
+    public ValueTask<TriggerOccurrence?> TryAssignModelPinIfMissingAsync(
+        Guid occurrenceId,
+        ExecutionModelPin pin,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(pin);
+        lock (_state.Gate)
+        {
+            if (!_state.Occurrences.TryGetValue(occurrenceId, out var current))
+            {
+                return ValueTask.FromResult<TriggerOccurrence?>(null);
+            }
+
+            if (current.ModelPin is not null)
+            {
+                return ValueTask.FromResult<TriggerOccurrence?>(current);
+            }
+
+            var next = current.WithModelPin(pin);
+            _state.Occurrences[occurrenceId] = next;
+            return ValueTask.FromResult<TriggerOccurrence?>(next);
+        }
+    }
+
     public ValueTask<IReadOnlyList<TriggerOccurrence>> ListByDispositionAsync(
         OccurrenceRoutingDisposition disposition,
         int limit,

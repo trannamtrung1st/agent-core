@@ -1,3 +1,5 @@
+using AgentCore.Domain.Work;
+
 namespace AgentCore.Domain.Triggers;
 
 public static class TriggerLimits
@@ -541,7 +543,10 @@ public sealed class TriggerRegistration
         long revision,
         long scheduleRevision,
         TriggerProvenance provenance,
-        string? suspensionReason)
+        string? suspensionReason,
+        string? modelOverrideCatalogKey = null,
+        string? modelOverrideReasoningEffort = null,
+        bool requiresVision = false)
     {
         if (registrationId == Guid.Empty)
         {
@@ -582,6 +587,12 @@ public sealed class TriggerRegistration
         ScheduleRevision = scheduleRevision;
         Provenance = provenance ?? throw new ArgumentException("Provenance is required.", nameof(provenance));
         SuspensionReason = TriggerText.OptionalReason(suspensionReason);
+        ModelOverrideCatalogKey = OptionalModelToken(modelOverrideCatalogKey, WorkLimits.MaxModelFieldCharacters, "Model override");
+        ModelOverrideReasoningEffort = OptionalModelToken(
+            modelOverrideReasoningEffort,
+            WorkLimits.MaxReasoningEffortCharacters,
+            "Model override reasoning effort");
+        RequiresVision = requiresVision;
     }
 
     public Guid RegistrationId { get; }
@@ -608,6 +619,12 @@ public sealed class TriggerRegistration
 
     public string? SuspensionReason { get; }
 
+    public string? ModelOverrideCatalogKey { get; }
+
+    public string? ModelOverrideReasoningEffort { get; }
+
+    public bool RequiresVision { get; }
+
     public TriggerRegistration WithUpdate(
         string intent,
         TriggerSchedule schedule,
@@ -628,7 +645,10 @@ public sealed class TriggerRegistration
             revision,
             scheduleRevision,
             Provenance.WithUpdated(updatedAt),
-            SuspensionReason);
+            SuspensionReason,
+            ModelOverrideCatalogKey,
+            ModelOverrideReasoningEffort,
+            RequiresVision);
 
     public TriggerRegistration WithScheduleAdvance(
         TriggerRegistrationStatus status,
@@ -649,7 +669,10 @@ public sealed class TriggerRegistration
             revision,
             ScheduleRevision,
             Provenance.WithUpdated(updatedAt),
-            suspensionReason);
+            suspensionReason,
+            ModelOverrideCatalogKey,
+            ModelOverrideReasoningEffort,
+            RequiresVision);
 
     public TriggerRegistration WithCancellation(long revision, DateTimeOffset cancelledAt) =>
         new(
@@ -664,7 +687,20 @@ public sealed class TriggerRegistration
             revision,
             ScheduleRevision,
             Provenance.WithUpdated(cancelledAt),
-            SuspensionReason);
+            SuspensionReason,
+            ModelOverrideCatalogKey,
+            ModelOverrideReasoningEffort,
+            RequiresVision);
+
+    private static string? OptionalModelToken(string? value, int max, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return WorkText.RequireToken(value, max, name);
+    }
 
     private static void RequireUtc(DateTimeOffset? value, string name)
     {
@@ -695,7 +731,8 @@ public sealed class TriggerOccurrence
         DateTimeOffset? routingUpdatedAtUtc,
         Guid? claimId,
         DateTimeOffset? claimLeaseExpiresAtUtc,
-        Guid? durableWorkItemId = null)
+        Guid? durableWorkItemId = null,
+        ExecutionModelPin? modelPin = null)
     {
         if (occurrenceId == Guid.Empty)
         {
@@ -766,6 +803,7 @@ public sealed class TriggerOccurrence
         ClaimId = claimId;
         ClaimLeaseExpiresAtUtc = claimLeaseExpiresAtUtc;
         DurableWorkItemId = durableWorkItemId;
+        ModelPin = modelPin;
     }
 
     public Guid OccurrenceId { get; }
@@ -804,6 +842,32 @@ public sealed class TriggerOccurrence
 
     public Guid? DurableWorkItemId { get; }
 
+    public ExecutionModelPin? ModelPin { get; }
+
+    public TriggerOccurrence WithModelPin(ExecutionModelPin pin) =>
+        ModelPin is null
+            ? new TriggerOccurrence(
+                OccurrenceId,
+                DedupeKey,
+                RegistrationId,
+                Owner,
+                SourceKind,
+                ScheduledAtUtc,
+                ObservedAtUtc,
+                AdmittedAtUtc,
+                EvidenceJson,
+                SourceEventId,
+                ScheduleRevision,
+                Disposition,
+                DispositionReason,
+                RoutingRevision,
+                RoutingUpdatedAtUtc,
+                ClaimId,
+                ClaimLeaseExpiresAtUtc,
+                DurableWorkItemId,
+                pin)
+            : this;
+
     public TriggerOccurrence WithDurableAcceptance(Guid workItemId, long routingRevision, DateTimeOffset acceptedAtUtc)
     {
         if (Disposition != OccurrenceRoutingDisposition.AwaitingDurableWork)
@@ -834,7 +898,8 @@ public sealed class TriggerOccurrence
             acceptedAtUtc,
             null,
             null,
-            workItemId);
+            workItemId,
+            ModelPin);
     }
 
     public TriggerOccurrence WithRouting(
@@ -862,7 +927,8 @@ public sealed class TriggerOccurrence
             routingUpdatedAtUtc,
             claimId,
             claimLeaseExpiresAtUtc,
-            durableWorkItemId: null);
+            durableWorkItemId: null,
+            modelPin: ModelPin);
 
     private static void RequireUtc(DateTimeOffset value, string name)
     {

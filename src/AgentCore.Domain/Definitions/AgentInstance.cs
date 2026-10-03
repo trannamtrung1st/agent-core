@@ -19,7 +19,9 @@ public sealed record AgentInstance(
     DateTimeOffset UpdatedAt,
     bool Compatibility,
     long Revision = 1,
-    long PersonaRevision = 1)
+    long PersonaRevision = 1,
+    string? UnattendedModelCatalogKey = null,
+    string? UnattendedReasoningEffort = null)
 {
     public static Guid CompatibilityFor(string definitionId)
     {

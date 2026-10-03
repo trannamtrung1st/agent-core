@@ -2,14 +2,18 @@ using System.Text.Json;
 using AgentCore.Application.Events;
 using AgentCore.Application.Testing;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Models;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Triggers;
+using AgentCore.Application.Work;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Triggers;
+using AgentCore.Domain.Work;
 using AgentCore.Infrastructure.Definitions;
+using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.Synthetic;
@@ -554,17 +558,268 @@ public sealed class TriggerOccurrenceRoutingTests
         Assert.Empty((await new InMemoryMemoryStore().ListCatalogAsync(null, 10, true)).Items);
     }
 
+    [Fact]
+    public async Task Live_and_durable_routes_keep_the_admitted_pin_after_the_default_changes()
+    {
+        var catalog = JourneyCatalog();
+        var seen = new RecordingResolver(new ScriptedLanguageModel());
+        var harness = await StartAsync(catalog: catalog, resolver: seen);
+        await using var runtime = harness.Runtime;
+        var definitions = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        await harness.Instances.UpdateWithExpectedRevisionAsync(
+            new AgentInstanceRevisionUpdate(
+                InstanceId,
+                1,
+                SetUnattendedModel: true,
+                UnattendedModelCatalogKey: "scripted-vision"),
+            Now);
+        var ingress = new DurableOrderEventIngress(
+            harness.Store,
+            harness.Guard,
+            new SystemIdGenerator(TimeProvider.System),
+            harness.Time,
+            harness.Instances,
+            definitions,
+            catalog);
+        var waiting = await ingress.PublishOrderStatusAsync(harness.Owner, Guid.NewGuid(), "PIN-2", "shipped", null);
+        Assert.Equal("scripted-vision", waiting.Occurrence!.ModelPin!.CatalogKey);
+        Assert.Equal(ExecutionModelSource.UnattendedDefault, waiting.Occurrence.ModelPin.Source);
+        await Router(harness, [], runtime: null, catalog, definitions).RouteOnceAsync();
+
+        var live = await ingress.PublishOrderStatusAsync(harness.Owner, Guid.NewGuid(), "PIN-1", "shipped", null);
+        Assert.Equal(waiting.Occurrence.ModelPin.CatalogKey, live.Occurrence!.ModelPin!.CatalogKey);
+        Assert.Equal(waiting.Occurrence.ModelPin.Source, live.Occurrence.ModelPin.Source);
+        await Router(harness, [runtime.Snapshot.SessionId], runtime, catalog, definitions).RouteOnceAsync();
+        await runtime.WaitUntilIdleAsync();
+
+        var liveSaved = await harness.Store.GetOccurrenceAsync(harness.Owner, live.Occurrence.OccurrenceId);
+        var waitingSaved = await harness.Store.GetOccurrenceAsync(harness.Owner, waiting.Occurrence.OccurrenceId);
+        Assert.Equal(OccurrenceRoutingDisposition.AcceptedLive, liveSaved!.Disposition);
+        Assert.Equal(OccurrenceRoutingDisposition.AwaitingDurableWork, waitingSaved!.Disposition);
+        AssertSamePin(live.Occurrence.ModelPin, liveSaved.ModelPin);
+        AssertSamePin(live.Occurrence.ModelPin, waitingSaved.ModelPin);
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal("scripted-vision", assistant.ModelProvenance?.CatalogKey);
+        Assert.Contains(seen.Calls, call => call.Selection.CatalogKey == "scripted-vision" && call.Purpose == ModelPurpose.Conversation);
+        Assert.DoesNotContain(seen.Calls, call => call.Purpose == ModelPurpose.Initiative);
+        Assert.Equal("scripted-vision", seen.Calls[0].Selection.CatalogKey);
+
+        var current = await harness.Instances.FindAsync(InstanceId);
+        await harness.Instances.UpdateWithExpectedRevisionAsync(
+            new AgentInstanceRevisionUpdate(
+                InstanceId,
+                current!.Revision,
+                SetUnattendedModel: true,
+                UnattendedModelCatalogKey: "scripted-alpha",
+                UnattendedReasoningEffort: "high"),
+            Now);
+        var handoff = new CapturingHandoff();
+        var intake = new DurableWorkIntake(
+            harness.Store,
+            handoff,
+            harness.Instances,
+            definitions,
+            catalog,
+            new SystemIdGenerator(TimeProvider.System),
+            harness.Time,
+            NullLogger<DurableWorkIntake>.Instance);
+        var admitted = await intake.AcceptAwaitingAsync();
+        Assert.Equal(1, admitted.Accepted);
+        Assert.Equal("scripted-vision", handoff.Proposed!.Model.CatalogKey);
+        Assert.Equal("primary-llm", handoff.Proposed.Model.ProviderAlias);
+        Assert.Equal("scripted-vision", handoff.Proposed.Model.ModelId);
+        Assert.Null(handoff.Proposed.Model.ReasoningEffort);
+        AssertSamePin(live.Occurrence.ModelPin, (await harness.Store.GetOccurrenceAsync(harness.Owner, live.Occurrence.OccurrenceId))!.ModelPin);
+        AssertSamePin(live.Occurrence.ModelPin, (await harness.Store.GetOccurrenceAsync(harness.Owner, waiting.Occurrence.OccurrenceId))!.ModelPin);
+    }
+
+    [Fact]
+    public async Task Vision_requirement_rejects_a_text_only_pin_before_execution()
+    {
+        var catalog = JourneyCatalog();
+        var seen = new RecordingResolver(new ScriptedLanguageModel());
+        var harness = await StartAsync(catalog: catalog, resolver: seen);
+        await using var runtime = harness.Runtime;
+        var definitions = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var registrationId = Guid.Parse("019944af-00c3-7000-8000-0000000000c6");
+        await harness.Store.CreateAsync(new TriggerRegistration(
+            registrationId,
+            harness.Owner,
+            TriggerRegistrationStatus.Active,
+            "Check the photo",
+            new OneShotSchedule(Now, "UTC", null, null),
+            Now,
+            null,
+            0,
+            1,
+            1,
+            new TriggerProvenance(TriggerAuthorizationOrigin.CurrentUserTurn, null, null, Now, Now),
+            null,
+            requiresVision: true));
+        var pin = new ExecutionModelPin(
+            "scripted-alpha",
+            "primary-llm",
+            "scripted-alpha",
+            "medium",
+            ExecutionModelSource.UnattendedDefault);
+        var occurrence = new TriggerOccurrence(
+            Guid.Parse("019944af-00c5-7000-8000-0000000000c6"),
+            "applicationEvent:vision",
+            registrationId,
+            harness.Owner,
+            TriggerSourceKind.ApplicationEvent,
+            null,
+            Now,
+            Now,
+            "{}",
+            Guid.Parse("019944af-00c5-7000-8000-0000000000d6"),
+            1,
+            OccurrenceRoutingDisposition.Pending,
+            null,
+            0,
+            null,
+            null,
+            null,
+            modelPin: pin);
+        Assert.Equal(TriggerOccurrenceAdmitKind.Admitted, (await harness.Store.AdmitOccurrenceAsync(occurrence)).Kind);
+        await Router(harness, [runtime.Snapshot.SessionId], runtime, catalog, definitions).RouteOnceAsync();
+        var saved = await harness.Store.GetOccurrenceAsync(harness.Owner, occurrence.OccurrenceId);
+        Assert.Equal(OccurrenceRoutingDisposition.Rejected, saved!.Disposition);
+        Assert.Equal(ExecutionModelPolicy.CapabilityCode, saved.DispositionReason);
+        AssertSamePin(pin, saved.ModelPin);
+        Assert.Empty(seen.Calls);
+        Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Empty(await harness.Store.ListByDispositionAsync(OccurrenceRoutingDisposition.AwaitingDurableWork, 10));
+    }
+
+    [Fact]
+    public async Task Unknown_pinned_catalog_key_fails_without_substituting_the_default()
+    {
+        var catalog = JourneyCatalog();
+        var seen = new RecordingResolver(new ScriptedLanguageModel());
+        var harness = await StartAsync(catalog: catalog, resolver: seen);
+        await using var runtime = harness.Runtime;
+        var definitions = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var pin = new ExecutionModelPin(
+            "retired-model",
+            "primary-llm",
+            "retired-model",
+            null,
+            ExecutionModelSource.TriggerOverride);
+        var occurrence = new TriggerOccurrence(
+            Guid.Parse("019944af-00c5-7000-8000-0000000000c7"),
+            "applicationEvent:retired",
+            null,
+            harness.Owner,
+            TriggerSourceKind.ApplicationEvent,
+            null,
+            Now,
+            Now,
+            "{}",
+            Guid.Parse("019944af-00c5-7000-8000-0000000000c8"),
+            null,
+            OccurrenceRoutingDisposition.Pending,
+            null,
+            0,
+            null,
+            null,
+            null,
+            modelPin: pin);
+        Assert.Equal(TriggerOccurrenceAdmitKind.Admitted, (await harness.Store.AdmitOccurrenceAsync(occurrence)).Kind);
+        await Router(harness, [runtime.Snapshot.SessionId], runtime, catalog, definitions).RouteOnceAsync();
+        await Router(harness, [], runtime: null, catalog, definitions).RouteOnceAsync();
+        var saved = await harness.Store.GetOccurrenceAsync(harness.Owner, occurrence.OccurrenceId);
+        Assert.Equal(OccurrenceRoutingDisposition.Rejected, saved!.Disposition);
+        Assert.Equal(ExecutionModelPolicy.UnavailableCode, saved.DispositionReason);
+        Assert.Equal("retired-model", saved.ModelPin!.CatalogKey);
+        Assert.Equal("retired-model", saved.ModelPin.ModelId);
+        Assert.Empty(seen.Calls);
+        Assert.Empty(await harness.Store.ListByDispositionAsync(OccurrenceRoutingDisposition.AwaitingDurableWork, 10));
+    }
+
+    private static void AssertSamePin(ExecutionModelPin expected, ExecutionModelPin? actual)
+    {
+        Assert.NotNull(actual);
+        Assert.Equal(expected.CatalogKey, actual.CatalogKey);
+        Assert.Equal(expected.ProviderAlias, actual.ProviderAlias);
+        Assert.Equal(expected.ModelId, actual.ModelId);
+        Assert.Equal(expected.ReasoningEffort, actual.ReasoningEffort);
+        Assert.Equal(expected.Source, actual.Source);
+    }
+
+    private static IModelCatalog JourneyCatalog() =>
+        new ConfigurationModelCatalog(
+            "scripted-alpha",
+            [
+                new ModelDescriptor(
+                    "scripted-alpha",
+                    "Scripted Alpha",
+                    "primary-llm",
+                    "scripted-alpha",
+                    Tools: true,
+                    Vision: false,
+                    StructuredOutput: false,
+                    Reasoning: true,
+                    ["low", "medium", "high"],
+                    "medium"),
+                new ModelDescriptor(
+                    "scripted-vision",
+                    "Scripted Vision",
+                    "primary-llm",
+                    "scripted-vision",
+                    Tools: true,
+                    Vision: true,
+                    StructuredOutput: false,
+                    Reasoning: false,
+                    [],
+                    null)
+            ]);
+
+    private sealed class RecordingResolver(ILanguageModel model) : ILanguageModelResolver
+    {
+        public List<(SessionModelSelection Selection, ModelPurpose Purpose)> Calls { get; } = [];
+
+        public ILanguageModel Resolve(SessionModelSelection selection, ModelPurpose purpose)
+        {
+            Calls.Add((selection, purpose));
+            return model;
+        }
+    }
+
+    private sealed class CapturingHandoff : IDurableWorkHandoff
+    {
+        public WorkItem? Proposed { get; private set; }
+
+        public ValueTask<WorkItemCreateResult> AcceptAsync(
+            Guid occurrenceId,
+            WorkItem proposed,
+            DateTimeOffset acceptedAtUtc,
+            CancellationToken cancellationToken = default)
+        {
+            Proposed = proposed;
+            return ValueTask.FromResult(new WorkItemCreateResult(WorkItemCreateKind.Created, proposed));
+        }
+    }
+
     private static DurableOrderEventIngress Ingress(Harness harness) =>
         new(harness.Store, harness.Guard, new SystemIdGenerator(TimeProvider.System), harness.Time);
 
-    private static TriggerOccurrenceRouter Router(Harness harness, IReadOnlyList<Guid> sessions, SessionRuntime? runtime) =>
+    private static TriggerOccurrenceRouter Router(
+        Harness harness,
+        IReadOnlyList<Guid> sessions,
+        SessionRuntime? runtime,
+        IModelCatalog? catalog = null,
+        IAgentDefinitionStore? definitions = null) =>
         new(
             harness.Store,
             harness.Guard,
             new FixedDirectory(sessions),
             runtime is null ? new UnavailableMailbox() : new RuntimeMailbox(runtime),
             new SystemIdGenerator(TimeProvider.System),
-            harness.Time);
+            harness.Time,
+            harness.Instances,
+            definitions,
+            catalog);
 
     private static async ValueTask<AgentInstance> ReassociateActiveVersionAsync(
         IAgentInstanceStore instances,
@@ -621,7 +876,9 @@ public sealed class TriggerOccurrenceRoutingTests
     private static async Task<Harness> StartAsync(
         string definitionId = "customer-support",
         int version = 2,
-        ILanguageModel? model = null)
+        ILanguageModel? model = null,
+        IModelCatalog? catalog = null,
+        ILanguageModelResolver? resolver = null)
     {
         var definition = await LoadAsync(definitionId, version);
         var time = new FakeTimeProvider(Now);
@@ -657,7 +914,9 @@ public sealed class TriggerOccurrenceRoutingTests
             output,
             sessionIds,
             time,
-            NullLogger<SessionRuntime>.Instance);
+            NullLogger<SessionRuntime>.Instance,
+            modelResolver: resolver,
+            catalog: catalog);
         await runtime.AttachAsync();
         return new Harness(runtime, store, guard.Guard, guard.Instances, time, new TriggerOwner(InstanceId, ProfileId), output);
     }

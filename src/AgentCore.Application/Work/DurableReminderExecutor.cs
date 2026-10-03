@@ -1,4 +1,5 @@
 using System.Text;
+using AgentCore.Application.Models;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -155,14 +156,15 @@ public sealed class DurableReminderExecutor(
             }
             catch (AgentCoreException exception)
             {
+                var modelUnavailable = exception.Message.Contains("Pinned model is unavailable", StringComparison.Ordinal);
                 await FailAsync(
                         running,
                         generation,
                         asOfUtc,
-                        "context-unavailable",
-                        "Pinned context is unavailable.",
-                        false,
-                        null,
+                        modelUnavailable ? ExecutionModelPolicy.UnavailableCode : "context-unavailable",
+                        modelUnavailable ? "Pinned model is unavailable." : "Pinned context is unavailable.",
+                        modelUnavailable,
+                        modelUnavailable ? asOfUtc.Add(RetryDelay(running.AttemptCount)) : null,
                         CancellationToken.None,
                         exception)
                     .ConfigureAwait(false);

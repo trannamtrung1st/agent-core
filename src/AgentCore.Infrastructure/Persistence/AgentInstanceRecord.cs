@@ -12,4 +12,6 @@ public sealed class AgentInstanceRecord
     public bool Compatibility { get; set; }
     public long Revision { get; set; } = 1;
     public long PersonaRevision { get; set; } = 1;
+    public string? UnattendedModelCatalogKey { get; set; }
+    public string? UnattendedReasoningEffort { get; set; }
 }

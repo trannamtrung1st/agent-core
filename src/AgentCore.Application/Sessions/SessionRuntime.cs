@@ -170,6 +170,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private bool _allowQueuedSuffixAutoDispatch;
     private readonly Queue<QueuedEnvironment> _environmentQueue = new();
     private readonly Queue<OccurrenceDelivery> _occurrenceQueue = new();
+    private ExecutionModelPin? _activeOccurrencePin;
     private readonly Dictionary<Guid, OccurrenceDelivery> _reservedOccurrences = new();
     private readonly HashSet<Guid> _acceptedOccurrenceIds = [];
     private readonly HashSet<Guid> _begunOccurrenceIds = [];
@@ -816,6 +817,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var responseId = _ids.NewId();
         var turn = ++_turnGeneration;
         var trigger = new AgentTrigger(delivery.OccurrenceId, kind, delivery.EvidenceJson);
+        _activeOccurrencePin = delivery.Model;
         LaunchBrain(context, trigger, responseId, turn);
     }
 
@@ -1785,7 +1787,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             0,
             0,
             now,
-            ModelProvenance: ToProvenance(_snapshot.ModelSelection));
+            ModelProvenance: OccurrenceProvenance(input.Trigger.Kind) ?? ToProvenance(_snapshot.ModelSelection));
 
         _activeResponseId = input.ResponseId;
         _activeResponseTriggerKind = input.Trigger.Kind;
@@ -1831,13 +1833,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var request = speakable.Request with
         {
             ResponseId = input.ResponseId,
-            ReasoningEffort = _snapshot.ModelSelection?.ReasoningEffort,
+            ReasoningEffort = ReasoningEffortFor(input.Trigger.Kind),
             ResponseContract = new ModelResponseContract(
                 SpeechWillBeUsed: _snapshot.Mode == SessionMode.Voice,
                 RequireChatResponse: input.Trigger.Kind == TriggerKind.UserTurn)
         };
-        var model = ResolveSessionModel(
-            input.Trigger.Kind == TriggerKind.UserTurn ? ModelPurpose.Conversation : ModelPurpose.Initiative);
+        var model = ResolveTurnModel(input.Trigger.Kind);
         _structuredOutput = model.Capabilities.StructuredOutput;
         _traceResponseChannel = _structuredOutput ? "structuredOutput" : "responseFunction";
         _traceDisposition = "none";
@@ -2362,9 +2363,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         _brainEvaluationCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         var evaluationToken = _brainEvaluationCts.Token;
-        PinModelSelectionIfMissing();
-        var model = ResolveSessionModel(
-            trigger.Kind == TriggerKind.UserTurn ? ModelPurpose.Conversation : ModelPurpose.Initiative);
+        if (trigger.Kind is not (TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent))
+        {
+            PinModelSelectionIfMissing();
+        }
+
+        var model = ResolveTurnModel(trigger.Kind);
 
         _ = Task.Run(async () =>
         {
@@ -2410,7 +2414,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     UtcNow: _time.GetUtcNow(),
                     LastUserActivityAt: _snapshot.LastUserActivityAt,
                     LanguageModel: model,
-                    ReasoningEffort: _snapshot.ModelSelection?.ReasoningEffort,
+                    ReasoningEffort: ReasoningEffortFor(trigger.Kind),
                     SummarizedThroughEntrySequence: _snapshot.SummarizedThroughEntrySequence,
                     LastEntrySequence: _snapshot.DurableLastEntrySequence,
                     LearnedMemories: learned,
@@ -5498,6 +5502,47 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 ModelSelectionSource.SystemDefault,
                 null);
         var resolved = _models.Resolve(selection, purpose);
+        return TestDecorateLanguageModel?.Invoke(resolved) ?? resolved;
+    }
+
+    private ILanguageModel ResolveTurnModel(TriggerKind kind)
+    {
+        if (kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent
+            && _activeOccurrencePin is ExecutionModelPin pin)
+        {
+            return ResolvePinnedModel(pin);
+        }
+
+        return ResolveSessionModel(
+            kind == TriggerKind.UserTurn ? ModelPurpose.Conversation : ModelPurpose.Initiative);
+    }
+
+    private ModelGenerationProvenance? OccurrenceProvenance(TriggerKind kind) =>
+        kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent
+            && _activeOccurrencePin is ExecutionModelPin pin
+            ? new ModelGenerationProvenance(pin.CatalogKey, pin.ProviderAlias, pin.ModelId, pin.ReasoningEffort)
+            : null;
+
+    private string? ReasoningEffortFor(TriggerKind kind) =>
+        kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent
+            && _activeOccurrencePin is ExecutionModelPin pin
+            ? pin.ReasoningEffort
+            : _snapshot.ModelSelection?.ReasoningEffort;
+
+    private ILanguageModel ResolvePinnedModel(ExecutionModelPin pin)
+    {
+        if (_catalog is not null && !ExecutionModelPolicy.Matches(_catalog, pin, out _))
+        {
+            throw AgentCoreErrors.Validation("Pinned model is unavailable.");
+        }
+
+        var selection = new SessionModelSelection(
+            pin.CatalogKey,
+            pin.ProviderAlias,
+            pin.ModelId,
+            ModelSelectionSource.Host,
+            pin.ReasoningEffort);
+        var resolved = _models.Resolve(selection, ModelPurpose.Conversation);
         return TestDecorateLanguageModel?.Invoke(resolved) ?? resolved;
     }
 

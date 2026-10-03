@@ -330,6 +330,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.DefinitionId).HasMaxLength(128).IsRequired();
             entity.Property(row => row.PersonaJson).IsRequired();
             entity.Property(row => row.Lifecycle).HasMaxLength(32).IsRequired();
+            entity.Property(row => row.UnattendedModelCatalogKey).HasMaxLength(128);
+            entity.Property(row => row.UnattendedReasoningEffort).HasMaxLength(64);
             entity.Property(row => row.Revision).IsConcurrencyToken();
             entity.HasIndex(row => row.DefinitionId)
                 .IsUnique()
@@ -347,6 +349,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.SourceSessionId).HasMaxLength(36);
             entity.Property(row => row.SourceEventId).HasMaxLength(36);
             entity.Property(row => row.SuspensionReason).HasMaxLength(200);
+            entity.Property(row => row.ModelOverrideCatalogKey).HasMaxLength(128);
+            entity.Property(row => row.ModelOverrideReasoningEffort).HasMaxLength(64);
             entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.Status });
             entity.HasIndex(row => new { row.Status, row.NextOccurrenceAtUtc, row.RegistrationId });
         });
@@ -364,6 +368,10 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.DispositionReason).HasMaxLength(200);
             entity.Property(row => row.ClaimId).HasMaxLength(36);
             entity.Property(row => row.DurableWorkItemId).HasMaxLength(36);
+            entity.Property(row => row.ModelCatalogKey).HasMaxLength(128);
+            entity.Property(row => row.ModelProviderAlias).HasMaxLength(128);
+            entity.Property(row => row.ModelId).HasMaxLength(128);
+            entity.Property(row => row.ModelReasoningEffort).HasMaxLength(64);
             entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.DedupeKey }).IsUnique();
             entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.Disposition });
             entity.HasIndex(row => new { row.Disposition, row.ClaimLeaseExpiresAtUtc });

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AgentCore.Application.Models;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Definitions;
@@ -33,7 +34,8 @@ public sealed record OccurrenceDelivery(
     Guid OccurrenceId,
     TriggerOwner Owner,
     TriggerSourceKind SourceKind,
-    string EvidenceJson);
+    string EvidenceJson,
+    ExecutionModelPin? Model = null);
 
 public sealed record LiveOccurrenceTarget(Guid SessionId);
 
@@ -124,7 +126,10 @@ public sealed class TriggerOccurrenceRouter(
     ILiveOccurrenceDirectory directory,
     IOccurrenceMailbox mailbox,
     IIdGenerator ids,
-    TimeProvider time)
+    TimeProvider time,
+    IAgentInstanceStore? instances = null,
+    IAgentDefinitionStore? definitions = null,
+    IModelCatalog? catalog = null)
 {
     public static readonly TimeSpan ClaimLease = TimeSpan.FromSeconds(30);
 
@@ -198,6 +203,13 @@ public sealed class TriggerOccurrenceRouter(
             }
         }
 
+        var pinned = await EnsureModelAsync(occurrence, now, cancellationToken).ConfigureAwait(false);
+        if (pinned is null)
+        {
+            return;
+        }
+
+        occurrence = pinned;
         var targets = directory.ListCompatible(occurrence.Owner, occurrence.SourceKind);
         var claimId = ids.NewId();
         var claimed = await store.TryClaimOccurrenceAsync(
@@ -222,11 +234,7 @@ public sealed class TriggerOccurrenceRouter(
             return;
         }
 
-        var delivery = new OccurrenceDelivery(
-            occurrence.OccurrenceId,
-            occurrence.Owner,
-            occurrence.SourceKind,
-            occurrence.EvidenceJson);
+        var delivery = Delivery(occurrence);
         var accepted = await mailbox.SubmitAsync(targets[0].SessionId, delivery, cancellationToken).ConfigureAwait(false);
         if (accepted == OccurrenceAccept.Unavailable)
         {
@@ -281,11 +289,7 @@ public sealed class TriggerOccurrenceRouter(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var delivery = new OccurrenceDelivery(
-            occurrence.OccurrenceId,
-            occurrence.Owner,
-            occurrence.SourceKind,
-            occurrence.EvidenceJson);
+        var delivery = Delivery(occurrence);
         var accept = await mailbox.SubmitAsync(sessionId, delivery, cancellationToken).ConfigureAwait(false);
         if (accept == OccurrenceAccept.Unavailable)
         {
@@ -388,6 +392,71 @@ public sealed class TriggerOccurrenceRouter(
         RuntimeTelemetry.RecordTriggerScheduler("released");
     }
 
+    private static OccurrenceDelivery Delivery(TriggerOccurrence occurrence) =>
+        new(occurrence.OccurrenceId, occurrence.Owner, occurrence.SourceKind, occurrence.EvidenceJson, occurrence.ModelPin);
+
+    private async Task<TriggerOccurrence?> EnsureModelAsync(
+        TriggerOccurrence occurrence,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (catalog is null || instances is null || definitions is null)
+        {
+            return occurrence;
+        }
+
+        if (occurrence.ModelPin is null)
+        {
+            var resolved = await ExecutionModelAdmission.ResolveAsync(
+                catalog,
+                instances,
+                definitions,
+                store,
+                occurrence.Owner,
+                occurrence.RegistrationId,
+                cancellationToken).ConfigureAwait(false);
+            if (resolved is null || resolved.Pin is null)
+            {
+                await store.TryRejectPendingAsync(
+                        occurrence.OccurrenceId,
+                        resolved?.FailureCode ?? ExecutionModelPolicy.UnavailableCode,
+                        now,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                RuntimeTelemetry.RecordTriggerScheduler("rejected");
+                return null;
+            }
+
+            var stored = await store.TryAssignModelPinIfMissingAsync(
+                    occurrence.OccurrenceId,
+                    resolved.Pin,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            occurrence = stored ?? occurrence.WithModelPin(resolved.Pin);
+        }
+
+        var decision = await ExecutionModelAdmission.ValidateAsync(
+            catalog,
+            instances,
+            definitions,
+            store,
+            occurrence,
+            cancellationToken).ConfigureAwait(false);
+        if (decision is { Accepted: false })
+        {
+            await store.TryRejectPendingAsync(
+                    occurrence.OccurrenceId,
+                    decision.FailureCode ?? ExecutionModelPolicy.UnavailableCode,
+                    now,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            RuntimeTelemetry.RecordTriggerScheduler("rejected");
+            return null;
+        }
+
+        return occurrence;
+    }
+
     private async Task RejectIneligibleAsync(
         TriggerOccurrence occurrence,
         string reason,
@@ -418,7 +487,10 @@ public sealed class DurableOrderEventIngress(
     ITriggerStore store,
     ITriggerAdmissionGuard guard,
     IIdGenerator ids,
-    TimeProvider time) : IDurableApplicationEventIngress
+    TimeProvider time,
+    IAgentInstanceStore? instances = null,
+    IAgentDefinitionStore? definitions = null,
+    IModelCatalog? catalog = null) : IDurableApplicationEventIngress
 {
     private static readonly JsonSerializerOptions EvidenceJsonOptions = new()
     {
@@ -447,6 +519,19 @@ public sealed class DurableOrderEventIngress(
         }
 
         var now = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
+        var pin = await ExecutionModelAdmission.ResolveAsync(
+            catalog,
+            instances,
+            definitions,
+            store,
+            owner,
+            registrationId: null,
+            cancellationToken).ConfigureAwait(false);
+        if (pin is { FailureCode: not null, Pin: null })
+        {
+            return new DurableEventResult(DurableEventOutcome.Rejected, pin.FailureCode, null);
+        }
+
         var occurrence = new TriggerOccurrence(
             ids.NewId(),
             $"applicationEvent:{eventId:D}",
@@ -464,7 +549,9 @@ public sealed class DurableOrderEventIngress(
             0,
             null,
             null,
-            null);
+            null,
+            null,
+            pin?.Pin);
         var admitted = await store.AdmitOccurrenceAsync(occurrence, cancellationToken).ConfigureAwait(false);
         return admitted.Kind == TriggerOccurrenceAdmitKind.Duplicate
             ? new DurableEventResult(DurableEventOutcome.Duplicate, null, admitted.Occurrence)

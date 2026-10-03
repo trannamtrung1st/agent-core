@@ -772,6 +772,35 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         return rows.Count;
     }
 
+    public async ValueTask<TriggerOccurrence?> TryAssignModelPinIfMissingAsync(
+        Guid occurrenceId,
+        ExecutionModelPin pin,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(pin);
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var id = occurrenceId.ToString("D");
+        var row = await db.TriggerOccurrences.FirstOrDefaultAsync(item => item.OccurrenceId == id, cancellationToken)
+            .ConfigureAwait(false);
+        if (row is null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(row.ModelCatalogKey))
+        {
+            return TriggerStoreMapping.ToOccurrence(row);
+        }
+
+        row.ModelCatalogKey = pin.CatalogKey;
+        row.ModelProviderAlias = pin.ProviderAlias;
+        row.ModelId = pin.ModelId;
+        row.ModelReasoningEffort = pin.ReasoningEffort;
+        row.ModelSource = (int)pin.Source;
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return TriggerStoreMapping.ToOccurrence(row);
+    }
+
     public async ValueTask<IReadOnlyList<TriggerOccurrence>> ListByDispositionAsync(
         OccurrenceRoutingDisposition disposition,
         int limit,
@@ -840,7 +869,10 @@ internal static class TriggerStoreMapping
         SourceEventId = registration.Provenance.SourceEventId?.ToString("D"),
         CreatedAtUtc = registration.Provenance.CreatedAt.ToUnixTimeMilliseconds(),
         UpdatedAtUtc = registration.Provenance.UpdatedAt.ToUnixTimeMilliseconds(),
-        SuspensionReason = registration.SuspensionReason
+        SuspensionReason = registration.SuspensionReason,
+        ModelOverrideCatalogKey = registration.ModelOverrideCatalogKey,
+        ModelOverrideReasoningEffort = registration.ModelOverrideReasoningEffort,
+        RequiresVision = registration.RequiresVision
     };
 
     public static TriggerRegistration ToRegistration(TriggerRegistrationRecord row) => new(
@@ -860,7 +892,10 @@ internal static class TriggerStoreMapping
             ParseOptional(row.SourceEventId),
             DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc),
             DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc)),
-        row.SuspensionReason);
+        row.SuspensionReason,
+        row.ModelOverrideCatalogKey,
+        row.ModelOverrideReasoningEffort,
+        row.RequiresVision);
 
     public static TriggerOccurrenceRecord ToRecord(TriggerOccurrence occurrence) => new()
     {
@@ -882,7 +917,12 @@ internal static class TriggerStoreMapping
         RoutingUpdatedAtUtc = occurrence.RoutingUpdatedAtUtc?.ToUnixTimeMilliseconds(),
         ClaimId = occurrence.ClaimId?.ToString("D"),
         ClaimLeaseExpiresAtUtc = occurrence.ClaimLeaseExpiresAtUtc?.ToUnixTimeMilliseconds(),
-        DurableWorkItemId = occurrence.DurableWorkItemId?.ToString("D")
+        DurableWorkItemId = occurrence.DurableWorkItemId?.ToString("D"),
+        ModelCatalogKey = occurrence.ModelPin?.CatalogKey,
+        ModelProviderAlias = occurrence.ModelPin?.ProviderAlias,
+        ModelId = occurrence.ModelPin?.ModelId,
+        ModelReasoningEffort = occurrence.ModelPin?.ReasoningEffort,
+        ModelSource = occurrence.ModelPin is null ? null : (int)occurrence.ModelPin.Source
     };
 
     public static void CopyRouting(TriggerOccurrenceRecord row, TriggerOccurrence next)
@@ -914,7 +954,27 @@ internal static class TriggerStoreMapping
         FromUnix(row.RoutingUpdatedAtUtc),
         ParseOptional(row.ClaimId),
         FromUnix(row.ClaimLeaseExpiresAtUtc),
-        ParseOptional(row.DurableWorkItemId));
+        ParseOptional(row.DurableWorkItemId),
+        ReadModelPin(row));
+
+    private static ExecutionModelPin? ReadModelPin(TriggerOccurrenceRecord row)
+    {
+        if (string.IsNullOrWhiteSpace(row.ModelCatalogKey)
+            || string.IsNullOrWhiteSpace(row.ModelProviderAlias)
+            || string.IsNullOrWhiteSpace(row.ModelId)
+            || row.ModelSource is not int source
+            || !Enum.IsDefined(typeof(ExecutionModelSource), source))
+        {
+            return null;
+        }
+
+        return new ExecutionModelPin(
+            row.ModelCatalogKey,
+            row.ModelProviderAlias,
+            row.ModelId,
+            row.ModelReasoningEffort,
+            (ExecutionModelSource)source);
+    }
 
     private static DateTimeOffset? FromUnix(long? value) =>
         value is null ? null : DateTimeOffset.FromUnixTimeMilliseconds(value.Value);

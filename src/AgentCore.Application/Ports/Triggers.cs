@@ -254,6 +254,12 @@ public interface ITriggerStore
         OccurrenceRoutingDisposition disposition,
         int limit,
         CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerOccurrence?> TryAssignModelPinIfMissingAsync(
+        Guid occurrenceId,
+        ExecutionModelPin pin,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult<TriggerOccurrence?>(null);
 }
 
 public interface ITriggerRegistrationService

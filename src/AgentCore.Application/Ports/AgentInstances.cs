@@ -56,7 +56,10 @@ public sealed record AgentInstanceRevisionUpdate(
     int? ActiveVersion = null,
     AgentIdentity? Persona = null,
     AgentInstanceLifecycle? Lifecycle = null,
-    long? ExpectedPersonaRevision = null);
+    long? ExpectedPersonaRevision = null,
+    bool SetUnattendedModel = false,
+    string? UnattendedModelCatalogKey = null,
+    string? UnattendedReasoningEffort = null);
 
 public interface IAgentInstanceService
 {

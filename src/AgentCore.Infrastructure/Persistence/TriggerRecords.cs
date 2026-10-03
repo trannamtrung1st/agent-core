@@ -20,6 +20,9 @@ public sealed class TriggerRegistrationRecord
     public long CreatedAtUtc { get; set; }
     public long UpdatedAtUtc { get; set; }
     public string? SuspensionReason { get; set; }
+    public string? ModelOverrideCatalogKey { get; set; }
+    public string? ModelOverrideReasoningEffort { get; set; }
+    public bool RequiresVision { get; set; }
 }
 
 public sealed class TriggerOccurrenceRecord
@@ -43,4 +46,9 @@ public sealed class TriggerOccurrenceRecord
     public string? ClaimId { get; set; }
     public long? ClaimLeaseExpiresAtUtc { get; set; }
     public string? DurableWorkItemId { get; set; }
+    public string? ModelCatalogKey { get; set; }
+    public string? ModelProviderAlias { get; set; }
+    public string? ModelId { get; set; }
+    public string? ModelReasoningEffort { get; set; }
+    public int? ModelSource { get; set; }
 }

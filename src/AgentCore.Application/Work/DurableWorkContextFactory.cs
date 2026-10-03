@@ -5,6 +5,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Triggers;
 using AgentCore.Domain.Work;
 
 namespace AgentCore.Application.Work;
@@ -49,11 +50,13 @@ public sealed class DurableWorkContextFactory(
             throw AgentCoreErrors.NotFound("Trusted profile was not found.");
         }
 
-        var descriptor = catalog.Get(item.Model.CatalogKey);
-        if (descriptor is null
-            || !string.Equals(descriptor.ProviderAlias, item.Model.ProviderAlias, StringComparison.Ordinal)
-            || !string.Equals(descriptor.ModelId, item.Model.ModelId, StringComparison.Ordinal)
-            || !EffortAllowed(descriptor, item.Model.ReasoningEffort))
+        var storedPin = new ExecutionModelPin(
+            item.Model.CatalogKey,
+            item.Model.ProviderAlias,
+            item.Model.ModelId,
+            item.Model.ReasoningEffort,
+            ExecutionModelSource.ConversationDefault);
+        if (!ExecutionModelPolicy.Matches(catalog, storedPin, out var descriptor) || descriptor is null)
         {
             throw AgentCoreErrors.Validation("Pinned model is unavailable.");
         }
@@ -107,15 +110,4 @@ public sealed class DurableWorkContextFactory(
         item.Provenance.SourceKind == WorkSourceKind.ApplicationEvent
             ? TriggerKind.ApplicationEvent
             : TriggerKind.ScheduledOccurrence;
-
-    private static bool EffortAllowed(ModelDescriptor descriptor, string? effort)
-    {
-        if (string.IsNullOrWhiteSpace(effort))
-        {
-            return true;
-        }
-
-        return descriptor.Reasoning
-            && descriptor.SupportedReasoningEfforts.Contains(effort, StringComparer.OrdinalIgnoreCase);
-    }
 }

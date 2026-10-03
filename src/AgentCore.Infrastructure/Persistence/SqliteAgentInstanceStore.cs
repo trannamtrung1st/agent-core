@@ -534,6 +534,16 @@ public sealed class SqliteAgentInstanceStore(
             row.ActiveVersion = activeVersion;
         }
 
+        if (update.SetUnattendedModel)
+        {
+            row.UnattendedModelCatalogKey = string.IsNullOrWhiteSpace(update.UnattendedModelCatalogKey)
+                ? null
+                : update.UnattendedModelCatalogKey.Trim();
+            row.UnattendedReasoningEffort = string.IsNullOrWhiteSpace(update.UnattendedReasoningEffort)
+                ? null
+                : update.UnattendedReasoningEffort.Trim();
+        }
+
         if (update.Lifecycle is AgentInstanceLifecycle lifecycle)
         {
             row.Lifecycle = lifecycle.ToString();
@@ -566,7 +576,9 @@ public sealed class SqliteAgentInstanceStore(
             DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc),
             row.Compatibility,
             row.Revision,
-            row.PersonaRevision);
+            row.PersonaRevision,
+            row.UnattendedModelCatalogKey,
+            row.UnattendedReasoningEffort);
 
     private static AgentInstanceRecord Map(AgentInstance instance) =>
         new()
@@ -580,6 +592,8 @@ public sealed class SqliteAgentInstanceStore(
             UpdatedAtUtc = instance.UpdatedAt.ToUnixTimeMilliseconds(),
             Compatibility = instance.Compatibility,
             Revision = instance.Revision,
-            PersonaRevision = instance.PersonaRevision
+            PersonaRevision = instance.PersonaRevision,
+            UnattendedModelCatalogKey = instance.UnattendedModelCatalogKey,
+            UnattendedReasoningEffort = instance.UnattendedReasoningEffort
         };
 }

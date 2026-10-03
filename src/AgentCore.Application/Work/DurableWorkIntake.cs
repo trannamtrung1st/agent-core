@@ -113,16 +113,39 @@ public sealed class DurableWorkIntake(
         }
 
         Guid? sourceSessionId = null;
+        TriggerRegistration? registration = null;
         if (occurrence.RegistrationId is Guid registrationId)
         {
-            var registration = await triggers.GetAsync(
+            registration = await triggers.GetAsync(
                 occurrence.Owner,
                 registrationId,
                 cancellationToken).ConfigureAwait(false);
             sourceSessionId = registration?.Provenance.SourceSessionId;
         }
 
-        var selection = SessionModelBinder.PinDefault(catalog, definition);
+        var pin = occurrence.ModelPin;
+        if (pin is null)
+        {
+            var resolved = ExecutionModelPolicy.Resolve(catalog, definition, instance, registration);
+            if (resolved.Pin is null || resolved.FailureCode is not null)
+            {
+                return null;
+            }
+
+            pin = resolved.Pin;
+            var stored = await triggers.TryAssignModelPinIfMissingAsync(occurrence.OccurrenceId, pin, cancellationToken)
+                .ConfigureAwait(false);
+            pin = stored?.ModelPin ?? pin;
+        }
+        else
+        {
+            var validated = ExecutionModelPolicy.Validate(catalog, pin, definition, registration);
+            if (!validated.Accepted)
+            {
+                return null;
+            }
+        }
+
         return WorkItem.Create(
             ids.NewId(),
             new WorkOwner(occurrence.Owner.AgentInstanceId, occurrence.Owner.ProfileId),
@@ -140,7 +163,7 @@ public sealed class DurableWorkIntake(
                 definition.Version,
                 instance.Persona.Name,
                 instance.Persona),
-            new WorkModelPin(selection.CatalogKey, selection.ProviderAlias, selection.ModelId, selection.ReasoningEffort),
+            new WorkModelPin(pin.CatalogKey, pin.ProviderAlias, pin.ModelId, pin.ReasoningEffort),
             WorkLimits.DefaultMaxAttempts,
             now);
     }

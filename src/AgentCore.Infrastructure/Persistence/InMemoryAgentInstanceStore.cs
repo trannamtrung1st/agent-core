@@ -590,10 +590,19 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                 Lifecycle = update.Lifecycle ?? instance.Lifecycle,
                 UpdatedAt = updatedAt,
                 Revision = instance.Revision + 1,
-                PersonaRevision = personaRevision
+                PersonaRevision = personaRevision,
+                UnattendedModelCatalogKey = update.SetUnattendedModel
+                    ? NullIfBlank(update.UnattendedModelCatalogKey)
+                    : instance.UnattendedModelCatalogKey,
+                UnattendedReasoningEffort = update.SetUnattendedModel
+                    ? NullIfBlank(update.UnattendedReasoningEffort)
+                    : instance.UnattendedReasoningEffort
             };
             _instances[update.InstanceId] = next;
             return ValueTask.FromResult(next);
         }
     }
+
+    private static string? NullIfBlank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
