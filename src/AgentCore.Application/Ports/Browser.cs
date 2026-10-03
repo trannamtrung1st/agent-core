@@ -73,10 +73,21 @@ public enum BrowserInterventionKind
     HumanVerificationRequired
 }
 
+/// <summary>
+/// One browser download from the current operation. Bytes are present only for an accepted file
+/// and stay out of tool JSON, checkpoints, and logs.
+/// </summary>
+public sealed record BrowserDownload(
+    string? ErrorCode,
+    string? FileName,
+    string? ContentType,
+    byte[]? Bytes);
+
 public sealed record BrowserOperationResult(
     string? ErrorCode,
     BrowserObservation? Observation,
-    IReadOnlyList<string>? AllowedActions = null);
+    IReadOnlyList<string>? AllowedActions = null,
+    IReadOnlyList<BrowserDownload>? Downloads = null);
 
 public sealed record BrowserNavigateRequest(Guid SessionId, Uri? Url, string Operation = "goto");
 

@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Net;
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -484,6 +486,9 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 }
             }
             catch (PlaywrightException) when (session.DeniedNavigation || session.PopupCode is not null || session.TimedOut)
+            {
+            }
+            catch (PlaywrightException ex) when (IsDownloadStart(ex))
             {
             }
             catch (PlaywrightException ex) when (CanKeepInterruptedNavigation(session, ex))
@@ -1325,7 +1330,9 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         }
 
         var browser = await EnsureBrowserAsync(cancellationToken).ConfigureAwait(false);
-        var context = await browser.NewContextAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+        var context = await browser.NewContextAsync(new BrowserNewContextOptions { AcceptDownloads = true })
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
         await context.AddInitScriptAsync(BrowserPageSettle.InitScript).WaitAsync(cancellationToken).ConfigureAwait(false);
         var page = await context.NewPageAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
         page.SetDefaultTimeout(TimeoutMs());
@@ -1396,6 +1403,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 var options = new BrowserTypeLaunchPersistentContextOptions
                 {
                     Headless = _options.Headless,
+                    AcceptDownloads = true,
                     Args = ["--disable-popup-blocking"]
                 };
                 if (!string.IsNullOrWhiteSpace(_options.Channel))
@@ -1612,6 +1620,33 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
     private async Task FulfillWithoutLeavingPolicyAsync(SessionBrowser session, IRoute route, string url, bool documentNavigation)
     {
         var call = session.OperationCall;
+        if (documentNavigation
+            && string.Equals(route.Request.Method, "GET", StringComparison.OrdinalIgnoreCase))
+        {
+            var streamed = await TryStreamAttachmentAsync(session, route, url, call).ConfigureAwait(false);
+            if (streamed is not null)
+            {
+                lock (session.PopupGate)
+                {
+                    session.StagedDownloads.Add(streamed);
+                }
+
+                if (IsCancelled(session, call))
+                {
+                    await AbortQuietlyAsync(route).ConfigureAwait(false);
+                    return;
+                }
+
+                await route.FulfillAsync(new RouteFulfillOptions
+                {
+                    Status = 204,
+                    ContentType = "text/plain",
+                    Body = ""
+                }).ConfigureAwait(false);
+                return;
+            }
+        }
+
         session.InFlightRoute = route;
         IAPIResponse response;
         try
@@ -1669,8 +1704,224 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             return;
         }
 
+        if (documentNavigation && TryAttachmentFileName(response.Headers, out var downloadName))
+        {
+            var staged = DeclaredOverDownloadCap(response.Headers)
+                ? new BrowserDownload("download_too_large", downloadName, null, null)
+                : await ReadCappedAttachmentAsync(session, route, response.Url, downloadName, call).ConfigureAwait(false);
+            lock (session.PopupGate)
+            {
+                session.StagedDownloads.Add(staged);
+            }
+
+            await route.FulfillAsync(new RouteFulfillOptions
+            {
+                Status = 204,
+                ContentType = "text/plain",
+                Body = ""
+            }).ConfigureAwait(false);
+            return;
+        }
+
         await route.FulfillAsync(new RouteFulfillOptions { Response = response }).ConfigureAwait(false);
     }
+
+    private static bool TryAttachmentFileName(IDictionary<string, string> headers, out string fileName)
+    {
+        fileName = "";
+        string? header = null;
+        foreach (var pair in headers)
+        {
+            if (pair.Key.Equals("content-disposition", StringComparison.OrdinalIgnoreCase))
+            {
+                header = pair.Value;
+                break;
+            }
+        }
+
+        if (header is null || !header.Contains("attachment", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        fileName = "download";
+        const string marker = "filename=";
+        var index = header.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (index >= 0)
+        {
+            var value = header[(index + marker.Length)..].Trim().Trim('"');
+            var semi = value.IndexOf(';');
+            if (semi >= 0)
+            {
+                value = value[..semi].Trim().Trim('"');
+            }
+
+            fileName = BrowserDownloadPolicy.SanitizeFileName(value);
+        }
+
+        return true;
+    }
+
+    private static bool DeclaredOverDownloadCap(IDictionary<string, string> headers)
+    {
+        foreach (var pair in headers)
+        {
+            if (pair.Key.Equals("content-length", StringComparison.OrdinalIgnoreCase)
+                && long.TryParse(pair.Value, out var length))
+            {
+                return length > BrowserToolLimits.MaxDownloadBytes;
+            }
+        }
+
+        return false;
+    }
+
+    private static readonly HttpClient AttachmentProbe = new(new SocketsHttpHandler
+    {
+        AllowAutoRedirect = false,
+        UseCookies = false,
+        AutomaticDecompression = DecompressionMethods.None,
+        MaxResponseDrainSize = 0
+    })
+    {
+        Timeout = Timeout.InfiniteTimeSpan
+    };
+
+    private async Task<BrowserDownload?> TryStreamAttachmentAsync(SessionBrowser session, IRoute route, string url, int call)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(TimeoutMs()));
+        HttpResponseMessage response;
+        try
+        {
+            using var request = AttachmentProbeRequest(route, url);
+            response = await AttachmentProbe
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or InvalidOperationException)
+        {
+            return null;
+        }
+
+        using (response)
+        {
+            if (IsRedirect((int)response.StatusCode))
+            {
+                return null;
+            }
+
+            if (!TryAttachmentFileName(HeaderMap(response), out var downloadName))
+            {
+                return null;
+            }
+
+            try
+            {
+                return await ReadBoundedAttachmentAsync(session, response, downloadName, call, timeout.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!IsCancelled(session, call))
+            {
+                return new BrowserDownload("download_rejected", downloadName, null, null);
+            }
+        }
+    }
+
+    private async Task<BrowserDownload> ReadCappedAttachmentAsync(
+        SessionBrowser session,
+        IRoute route,
+        string url,
+        string downloadName,
+        int call)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(TimeoutMs()));
+        try
+        {
+            using var request = AttachmentProbeRequest(route, url);
+            using var response = await AttachmentProbe
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token)
+                .ConfigureAwait(false);
+            return await ReadBoundedAttachmentAsync(session, response, downloadName, call, timeout.Token)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or InvalidOperationException)
+        {
+            return new BrowserDownload("download_rejected", downloadName, null, null);
+        }
+    }
+
+    private async Task<BrowserDownload> ReadBoundedAttachmentAsync(
+        SessionBrowser session,
+        HttpResponseMessage response,
+        string downloadName,
+        int call,
+        CancellationToken cancellationToken)
+    {
+        if (DeclaredOverDownloadCap(HeaderMap(response)))
+        {
+            return new BrowserDownload("download_too_large", downloadName, null, null);
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        var limit = BrowserToolLimits.MaxDownloadBytes + 1;
+        while (true)
+        {
+            if (IsCancelled(session, call))
+            {
+                throw new OperationCanceledException(cancellationToken);
+            }
+
+            var read = await stream.ReadAsync(chunk.AsMemory(0, chunk.Length), cancellationToken).ConfigureAwait(false);
+            if (read == 0)
+            {
+                break;
+            }
+
+            if (buffer.Length + read > limit)
+            {
+                return new BrowserDownload("download_too_large", downloadName, null, null);
+            }
+
+            buffer.Write(chunk, 0, read);
+        }
+
+        return BrowserDownloadPolicy.Classify(downloadName, buffer.GetBuffer().AsSpan(0, (int)buffer.Length));
+    }
+
+    private static HttpRequestMessage AttachmentProbeRequest(IRoute route, string url)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        foreach (var name in new[] { "cookie", "authorization", "accept" })
+        {
+            if (route.Request.Headers.TryGetValue(name, out var value) && !string.IsNullOrEmpty(value))
+            {
+                request.Headers.TryAddWithoutValidation(name, value);
+            }
+        }
+
+        return request;
+    }
+
+    private static Dictionary<string, string> HeaderMap(HttpResponseMessage response)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in response.Headers)
+        {
+            map[pair.Key] = string.Join(", ", pair.Value);
+        }
+
+        foreach (var pair in response.Content.Headers)
+        {
+            map[pair.Key] = string.Join(", ", pair.Value);
+        }
+
+        return map;
+    }
+
+    private static bool IsDownloadStart(PlaywrightException exception) =>
+        exception.Message.Contains("Download is starting", StringComparison.OrdinalIgnoreCase);
 
     private bool RedirectStaysAllowed(SessionBrowser session, string requestUrl, IDictionary<string, string> headers, bool documentNavigation)
     {
@@ -2691,6 +2942,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             return;
         }
 
+        var added = false;
         lock (session.PopupGate)
         {
             if (session.Pages.Any(item => ReferenceEquals(item.Page, page)))
@@ -2699,6 +2951,18 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             }
 
             session.Pages.Add(new PageBinding(MintPageToken(), page));
+            added = true;
+        }
+
+        if (added)
+        {
+            page.Download += (_, download) =>
+            {
+                lock (session.PopupGate)
+                {
+                    session.PendingDownloads.Add(download);
+                }
+            };
         }
     }
 
@@ -2789,7 +3053,10 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                     Environment.TickCount64 - started);
             }
 
-            return new BrowserOperationResult(null, await CaptureMarkedAsync(session, sessionId, settled, cancellationToken).ConfigureAwait(false));
+            return await AttachDownloadsAsync(
+                session,
+                new BrowserOperationResult(null, await CaptureMarkedAsync(session, sessionId, settled, cancellationToken).ConfigureAwait(false)),
+                cancellationToken).ConfigureAwait(false);
         }
         catch (PlaywrightException ex) when (BrowserFailureClassifier.IsTransientCapture(ex.Message))
         {
@@ -2797,18 +3064,116 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             try
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken).ConfigureAwait(false);
-                return new BrowserOperationResult(
-                    null,
-                    await CaptureMarkedAsync(session, sessionId, settled, cancellationToken).ConfigureAwait(false));
+                return await AttachDownloadsAsync(
+                    session,
+                    new BrowserOperationResult(
+                        null,
+                        await CaptureMarkedAsync(session, sessionId, settled, cancellationToken).ConfigureAwait(false)),
+                    cancellationToken).ConfigureAwait(false);
             }
             catch (PlaywrightException retry)
             {
-                return await FailAsync(session, operation, "capture", retry).ConfigureAwait(false);
+                return await AttachDownloadsAsync(
+                    session,
+                    await FailAsync(session, operation, "capture", retry).ConfigureAwait(false),
+                    cancellationToken).ConfigureAwait(false);
             }
         }
         catch (PlaywrightException ex)
         {
-            return await FailAsync(session, operation, "capture", ex).ConfigureAwait(false);
+            return await AttachDownloadsAsync(
+                session,
+                await FailAsync(session, operation, "capture", ex).ConfigureAwait(false),
+                cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<BrowserOperationResult> AttachDownloadsAsync(
+        SessionBrowser session,
+        BrowserOperationResult result,
+        CancellationToken cancellationToken)
+    {
+        var downloads = await DrainDownloadsAsync(session, cancellationToken).ConfigureAwait(false);
+        return downloads.Count == 0 ? result : result with { Downloads = downloads };
+    }
+
+    private async Task<IReadOnlyList<BrowserDownload>> DrainDownloadsAsync(
+        SessionBrowser session,
+        CancellationToken cancellationToken)
+    {
+        BrowserDownload[] staged;
+        IDownload[] pending;
+        lock (session.PopupGate)
+        {
+            staged = session.StagedDownloads.ToArray();
+            session.StagedDownloads.Clear();
+            pending = session.PendingDownloads.ToArray();
+            session.PendingDownloads.Clear();
+        }
+
+        if (staged.Length == 0 && pending.Length == 0)
+        {
+            return [];
+        }
+
+        var results = new List<BrowserDownload>(staged.Length + pending.Length);
+        results.AddRange(staged);
+        foreach (var download in pending)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            results.Add(await ReadDownloadAsync(download, cancellationToken).ConfigureAwait(false));
+        }
+
+        return results;
+    }
+
+    private static async Task<BrowserDownload> ReadDownloadAsync(IDownload download, CancellationToken cancellationToken)
+    {
+        var fileName = BrowserDownloadPolicy.SanitizeFileName(download.SuggestedFilename);
+        try
+        {
+            await using var stream = await download.CreateReadStreamAsync().ConfigureAwait(false);
+            using var buffer = new MemoryStream();
+            var chunk = new byte[81920];
+            var limit = BrowserToolLimits.MaxDownloadBytes + 1;
+            while (true)
+            {
+                var read = await stream.ReadAsync(chunk.AsMemory(0, chunk.Length), cancellationToken).ConfigureAwait(false);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                if (buffer.Length + read > limit)
+                {
+                    try
+                    {
+                        await download.CancelAsync().ConfigureAwait(false);
+                    }
+                    catch (PlaywrightException)
+                    {
+                    }
+
+                    return new BrowserDownload("download_too_large", fileName, null, null);
+                }
+
+                buffer.Write(chunk, 0, read);
+            }
+
+            var classified = BrowserDownloadPolicy.Classify(fileName, buffer.GetBuffer().AsSpan(0, (int)buffer.Length));
+            try
+            {
+                await download.DeleteAsync().ConfigureAwait(false);
+            }
+            catch (PlaywrightException)
+            {
+            }
+
+            return classified;
+        }
+        catch (PlaywrightException)
+        {
+            return new BrowserDownload("download_rejected", fileName, null, null);
         }
     }
 
@@ -2955,6 +3320,10 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         public SemaphoreSlim Gate { get; } = new(1, 1);
 
         public List<PageBinding> Pages { get; } = [];
+
+        public List<BrowserDownload> StagedDownloads { get; } = [];
+
+        public List<IDownload> PendingDownloads { get; } = [];
     }
 
     private sealed class PageBinding(string id, IPage page)

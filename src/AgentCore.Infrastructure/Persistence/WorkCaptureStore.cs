@@ -39,7 +39,7 @@ public sealed class InMemoryWorkCaptureStore(TimeProvider time) : IWorkCaptureSt
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (bytes.Length == 0 || bytes.Length > BrowserToolLimits.MaxCaptureBytes)
+        if (bytes.Length == 0 || bytes.Length > BrowserToolLimits.MaxDownloadBytes)
         {
             return new(new WorkCaptureSaveResult(null, "capture_too_large"));
         }
@@ -112,7 +112,7 @@ public sealed class SqliteWorkCaptureStore(
         ReadOnlyMemory<byte> bytes,
         CancellationToken cancellationToken = default)
     {
-        if (bytes.Length == 0 || bytes.Length > BrowserToolLimits.MaxCaptureBytes)
+        if (bytes.Length == 0 || bytes.Length > BrowserToolLimits.MaxDownloadBytes)
         {
             return new WorkCaptureSaveResult(null, "capture_too_large");
         }
@@ -152,7 +152,10 @@ public sealed class SqliteWorkCaptureStore(
             Convert.ToHexString(SHA256.HashData(bytes.Span)).ToLowerInvariant(),
             created,
             WorkCaptureRetention.Until(created, null));
-        var relative = Path.Combine("work-captures", workItemId.ToString("N"), capture.CaptureId.ToString("N") + ".png");
+        var relative = Path.Combine(
+            "work-captures",
+            workItemId.ToString("N"),
+            capture.CaptureId.ToString("N") + ExtensionFor(capture.ContentType));
         var full = Path.Combine(blobRoot, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
         await File.WriteAllBytesAsync(full, bytes.ToArray(), cancellationToken).ConfigureAwait(false);
@@ -202,6 +205,15 @@ public sealed class SqliteWorkCaptureStore(
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    private static string ExtensionFor(string contentType) => contentType switch
+    {
+        "application/pdf" => ".pdf",
+        "image/png" => ".png",
+        "text/csv" => ".csv",
+        "text/plain" => ".txt",
+        _ => ".bin"
+    };
 
     private static void TryDelete(string path)
     {

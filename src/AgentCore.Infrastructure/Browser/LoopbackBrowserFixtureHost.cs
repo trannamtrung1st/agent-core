@@ -337,6 +337,32 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
                 return;
             }
 
+            if (string.Equals(path, "/files/notes.csv", StringComparison.Ordinal))
+            {
+                await WriteAttachmentAsync(
+                    context,
+                    "text/csv; charset=utf-8",
+                    "notes.csv",
+                    "sku,name\r\nAC-1042,Keyboard\r\n").ConfigureAwait(false);
+                return;
+            }
+
+            if (string.Equals(path, "/files/payload.exe", StringComparison.Ordinal))
+            {
+                await WriteAttachmentAsync(
+                    context,
+                    "application/octet-stream",
+                    "payload.exe",
+                    "MZ-not-allowed").ConfigureAwait(false);
+                return;
+            }
+
+            if (string.Equals(path, "/files/oversized.pdf", StringComparison.Ordinal))
+            {
+                await WriteChunkedOversizedAsync(context).ConfigureAwait(false);
+                return;
+            }
+
             if (string.Equals(path, "/bounce", StringComparison.Ordinal))
             {
                 var bytes = Encoding.UTF8.GetBytes(
@@ -400,6 +426,70 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
         context.Response.ContentType = "text/plain; charset=utf-8";
         context.Response.ContentLength64 = bytes.Length;
         await context.Response.OutputStream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal const int ChunkedOversizedTailBytes = 2 * 1024 * 1024;
+
+    internal const int ChunkedOversizedTotalBytes = (5 * 1024 * 1024) + ChunkedOversizedTailBytes;
+
+    internal long ChunkedAttachmentBytesWritten { get; private set; }
+
+    internal int ChunkedAttachmentRequests { get; private set; }
+
+    private async Task WriteChunkedOversizedAsync(HttpListenerContext context)
+    {
+        var total = ChunkedOversizedTotalBytes;
+        var written = 0;
+        ChunkedAttachmentRequests++;
+        try
+        {
+            context.Response.SendChunked = true;
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "application/pdf";
+            context.Response.Headers["Content-Disposition"] = "attachment; filename=\"oversized.pdf\"";
+            var chunk = new byte[64 * 1024];
+            chunk[0] = (byte)'%';
+            chunk[1] = (byte)'P';
+            chunk[2] = (byte)'D';
+            chunk[3] = (byte)'F';
+            chunk[4] = (byte)'-';
+            var paused = false;
+            var pauseAt = (5 * 1024 * 1024) + chunk.Length;
+            while (written < total)
+            {
+                if (!paused && written >= pauseAt)
+                {
+                    paused = true;
+                    await Task.Delay(500).ConfigureAwait(false);
+                }
+
+                var count = Math.Min(chunk.Length, total - written);
+                await context.Response.OutputStream.WriteAsync(chunk.AsMemory(0, count)).ConfigureAwait(false);
+                await context.Response.OutputStream.FlushAsync().ConfigureAwait(false);
+                written += count;
+            }
+        }
+        catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or IOException)
+        {
+        }
+        finally
+        {
+            ChunkedAttachmentBytesWritten = written;
+        }
+    }
+
+    private static async Task WriteAttachmentAsync(
+        HttpListenerContext context,
+        string contentType,
+        string fileName,
+        string body)
+    {
+        var bytes = Encoding.UTF8.GetBytes(body);
+        context.Response.StatusCode = 200;
+        context.Response.ContentType = contentType;
+        context.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{fileName}\"";
+        context.Response.ContentLength64 = bytes.Length;
+        await context.Response.OutputStream.WriteAsync(bytes).ConfigureAwait(false);
     }
 
     private async Task WriteResourceAsync(HttpListenerContext context, string resourceName, int statusCode)

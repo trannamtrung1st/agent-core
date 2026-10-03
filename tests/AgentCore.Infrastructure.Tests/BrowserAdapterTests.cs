@@ -133,6 +133,51 @@ public sealed class LoopbackBrowserFixtureHostTests
     }
 
     [Fact]
+    public async Task Attachment_downloads_are_returned_without_their_bytes_in_the_page_text()
+    {
+        var session = new PlaywrightBrowserSession(DemoOptions(headless: true), loggerFactory: null);
+        await session.StartAsync(CancellationToken.None);
+        try
+        {
+            var origin = session.Fixture.Origin!;
+            var id = Guid.NewGuid();
+            var home = await session.NavigateAsync(new BrowserNavigateRequest(id, new Uri(origin + "/")));
+            Assert.Null(home.ErrorCode);
+            var csv = await session.NavigateAsync(new BrowserNavigateRequest(id, new Uri(origin + "/files/notes.csv")));
+            Assert.Null(csv.ErrorCode);
+            var accepted = Assert.Single(csv.Downloads!);
+            Assert.Null(accepted.ErrorCode);
+            Assert.Equal("notes.csv", accepted.FileName);
+            Assert.Equal("text/csv", accepted.ContentType);
+            Assert.Contains("sku,name", System.Text.Encoding.UTF8.GetString(accepted.Bytes!), StringComparison.Ordinal);
+            Assert.DoesNotContain("sku,name", csv.Observation!.VisibleText, StringComparison.Ordinal);
+            var rejected = await session.NavigateAsync(new BrowserNavigateRequest(id, new Uri(origin + "/files/payload.exe")));
+            Assert.Null(rejected.ErrorCode);
+            var blocked = Assert.Single(rejected.Downloads!);
+            Assert.Equal("download_rejected", blocked.ErrorCode);
+            Assert.Null(blocked.Bytes);
+            Assert.DoesNotContain("MZ-not-allowed", rejected.Observation!.VisibleText, StringComparison.Ordinal);
+            var oversized = await session.NavigateAsync(new BrowserNavigateRequest(id, new Uri(origin + "/files/oversized.pdf")));
+            Assert.Null(oversized.ErrorCode);
+            var tooLarge = Assert.Single(oversized.Downloads!);
+            Assert.Equal("download_too_large", tooLarge.ErrorCode);
+            Assert.Null(tooLarge.Bytes);
+            Assert.DoesNotContain("%PDF", oversized.Observation!.VisibleText, StringComparison.Ordinal);
+            var written = session.Fixture.ChunkedAttachmentBytesWritten;
+            Assert.Equal(
+                BrowserToolLimits.MaxDownloadBytes + LoopbackBrowserFixtureHost.ChunkedOversizedTailBytes,
+                LoopbackBrowserFixtureHost.ChunkedOversizedTotalBytes);
+            Assert.True(
+                written is > 0 and < LoopbackBrowserFixtureHost.ChunkedOversizedTotalBytes,
+                $"written={written} requests={session.Fixture.ChunkedAttachmentRequests}");
+        }
+        finally
+        {
+            await session.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
     public async Task Denied_url_does_not_launch_the_browser()
     {
         var session = new PlaywrightBrowserSession(DemoOptions(headless: true), loggerFactory: null);

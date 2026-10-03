@@ -220,6 +220,7 @@ public static class DurableToolCallCheckpoint
                 message.ToolCallId,
                 message.Name,
                 message.ToolCalls?.Select(call => new ToolCallDto(call.Id, call.Name, call.ArgumentsJson)).ToArray());
+        // Parts are omitted on purpose. A capture image stays on the in-memory message for the next model call and is not checkpointed.
 
         public ModelMessage ToMessage() =>
             new(

@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Connections;
@@ -26,10 +28,14 @@ public sealed partial class SessionToolExecutor
         "last_page",
         "no_popup",
         "capture_too_large",
-        "capture_limit"
+        "capture_limit",
+        "download_rejected",
+        "download_too_large",
+        "download_limit"
     };
 
     private readonly Dictionary<string, int> _captureCounts = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> _downloadCounts = new(StringComparer.Ordinal);
     private readonly object _captureGate = new();
 
     private async Task<string?> DenyBrowserUnlessConnectedAsync(
@@ -160,7 +166,10 @@ public sealed partial class SessionToolExecutor
             var result = await browser
                 .NavigateAsync(new BrowserNavigateRequest(sessionId, destination, operation), cancellationToken)
                 .ConfigureAwait(false);
-            return FinishBrowser(ToolCatalog.BrowserNavigate, started, FromBrowserProvider(result));
+            return FinishBrowser(
+                ToolCatalog.BrowserNavigate,
+                started,
+                await PresentBrowserAsync(sessionId, admission, result, cancellationToken).ConfigureAwait(false));
         }
         catch (OperationCanceledException)
         {
@@ -200,7 +209,10 @@ public sealed partial class SessionToolExecutor
             var result = observeOptions is null
                 ? await browser.ObserveAsync(sessionId, cancellationToken).ConfigureAwait(false)
                 : await browser.ObserveAsync(sessionId, observeOptions, cancellationToken).ConfigureAwait(false);
-            return FinishBrowser(ToolCatalog.BrowserObserve, started, FromBrowserProvider(result));
+            return FinishBrowser(
+                ToolCatalog.BrowserObserve,
+                started,
+                await PresentBrowserAsync(sessionId, admission, result, cancellationToken).ConfigureAwait(false));
         }
         catch (OperationCanceledException)
         {
@@ -319,7 +331,10 @@ public sealed partial class SessionToolExecutor
                     new BrowserActRequest(sessionId, operation, reference, value, upload, direction, delta, targetRef),
                     cancellationToken)
                 .ConfigureAwait(false);
-            return FinishBrowser(ToolCatalog.BrowserAct, started, FromBrowserProvider(result));
+            return FinishBrowser(
+                ToolCatalog.BrowserAct,
+                started,
+                await PresentBrowserAsync(sessionId, admission, result, cancellationToken).ConfigureAwait(false));
         }
         catch (OperationCanceledException)
         {
@@ -660,10 +675,117 @@ public sealed partial class SessionToolExecutor
     private static string CaptureKey(ToolExecutionAdmission? admission, Guid sessionId) =>
         admission?.CaptureScope ?? sessionId.ToString("D");
 
-    private async ValueTask<(string? ArtifactId, string? Error)> StoreCaptureAsync(
+    private ValueTask<(string? ArtifactId, string? Error)> StoreCaptureAsync(
         Guid sessionId,
         ToolExecutionAdmission? admission,
         byte[] png,
+        CancellationToken cancellationToken) =>
+        StoreBrowserBytesAsync(sessionId, admission, "capture.png", "image/png", png, cancellationToken);
+
+    private async Task<string> PresentBrowserAsync(
+        Guid sessionId,
+        ToolExecutionAdmission? admission,
+        BrowserOperationResult result,
+        CancellationToken cancellationToken)
+    {
+        var json = FromBrowserProvider(result);
+        if (result.Downloads is not { Count: > 0 } downloads)
+        {
+            return json;
+        }
+
+        var reports = new List<DownloadReceipt>(downloads.Count);
+        foreach (var download in downloads)
+        {
+            reports.Add(await ReportDownloadAsync(sessionId, admission, download, cancellationToken).ConfigureAwait(false));
+        }
+
+        return MergeDownloads(json, reports);
+    }
+
+    private async Task<DownloadReceipt> ReportDownloadAsync(
+        Guid sessionId,
+        ToolExecutionAdmission? admission,
+        BrowserDownload download,
+        CancellationToken cancellationToken)
+    {
+        var fileName = BrowserDownloadPolicy.SanitizeFileName(download.FileName);
+        if (!string.IsNullOrEmpty(download.ErrorCode) || download.Bytes is not { Length: > 0 } bytes)
+        {
+            return new DownloadReceipt(download.ErrorCode ?? "download_rejected", fileName, null, null, null);
+        }
+
+        if (!BrowserDownloadPolicy.TryAccept(fileName, bytes, out var contentType, out var error))
+        {
+            return new DownloadReceipt(error, fileName, null, null, null);
+        }
+
+        if (!TryConsumeDownload(admission, sessionId))
+        {
+            return new DownloadReceipt("download_limit", fileName, null, null, null);
+        }
+
+        var stored = await StoreBrowserBytesAsync(
+                sessionId,
+                admission,
+                fileName,
+                contentType,
+                bytes,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (stored.Error is not null)
+        {
+            ReleaseDownload(admission, sessionId);
+            return new DownloadReceipt(
+                stored.Error.Contains("capture_limit", StringComparison.Ordinal) ? "capture_limit" : "download_rejected",
+                fileName,
+                null,
+                null,
+                null);
+        }
+
+        return new DownloadReceipt(null, fileName, contentType, bytes.Length, stored.ArtifactId);
+    }
+
+    private bool TryConsumeDownload(ToolExecutionAdmission? admission, Guid sessionId)
+    {
+        var key = CaptureKey(admission, sessionId);
+        lock (_captureGate)
+        {
+            if (_downloadCounts.Count > 1024)
+            {
+                _downloadCounts.Clear();
+            }
+
+            var count = _downloadCounts.GetValueOrDefault(key);
+            if (count >= BrowserToolLimits.MaxDownloadsPerScope)
+            {
+                return false;
+            }
+
+            _downloadCounts[key] = count + 1;
+            return true;
+        }
+    }
+
+    private void ReleaseDownload(ToolExecutionAdmission? admission, Guid sessionId)
+    {
+        var key = CaptureKey(admission, sessionId);
+        lock (_captureGate)
+        {
+            if (_downloadCounts.TryGetValue(key, out var count) && count > 0)
+            {
+                _downloadCounts[key] = count - 1;
+            }
+        }
+    }
+
+    private async ValueTask<(string? ArtifactId, string? Error)> StoreBrowserBytesAsync(
+        Guid sessionId,
+        ToolExecutionAdmission? admission,
+        string fileName,
+        string contentType,
+        byte[] bytes,
         CancellationToken cancellationToken)
     {
         if (admission is { Detached: true, WorkItemId: Guid workItemId }
@@ -671,7 +793,7 @@ public sealed partial class SessionToolExecutor
             && admission.AgentInstanceId is Guid agentInstanceId)
         {
             var saved = await workCaptures
-                .SaveAsync(workItemId, agentInstanceId, "image/png", png, cancellationToken)
+                .SaveAsync(workItemId, agentInstanceId, contentType, bytes, cancellationToken)
                 .ConfigureAwait(false);
             return saved.ErrorCode is null
                 ? (saved.Capture?.CaptureId.ToString("D"), null)
@@ -684,10 +806,47 @@ public sealed partial class SessionToolExecutor
         }
 
         var record = await artifacts
-            .CreateAsync(sessionId, "capture.png", "image/png", png, null, null, cancellationToken)
+            .CreateAsync(sessionId, fileName, contentType, bytes, null, null, cancellationToken)
             .ConfigureAwait(false);
         return (record.ArtifactId.ToString("D"), null);
     }
+
+    private static string MergeDownloads(string json, IReadOnlyList<DownloadReceipt> downloads)
+    {
+        using var document = JsonDocument.Parse(json);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            return json;
+        }
+
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                property.WriteTo(writer);
+            }
+
+            writer.WritePropertyName("downloads");
+            JsonSerializer.Serialize(writer, downloads, DownloadJson);
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private static readonly JsonSerializerOptions DownloadJson = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
+    private sealed record DownloadReceipt(
+        string? error,
+        string? fileName,
+        string? contentType,
+        int? byteSize,
+        string? artifactId);
 
     private static string FromBrowserProvider(BrowserOperationResult result)
     {

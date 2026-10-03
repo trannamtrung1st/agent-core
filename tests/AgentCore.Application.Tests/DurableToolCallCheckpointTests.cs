@@ -172,5 +172,26 @@ public sealed class DurableToolCallCheckpointTests
             null));
     }
 
+    [Fact]
+    public void Write_keeps_capture_text_and_drops_image_bytes()
+    {
+        var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x53, 0x45, 0x43, 0x52, 0x45, 0x54 };
+        var payload = DurableToolCallCheckpoint.Write(
+        [
+            new ModelMessage(
+                ModelRole.Tool,
+                """{"artifactId":"abc","byteSize":10}""",
+                Parts: [new ModelImageContent("image/png", png, "capture.png")],
+                ToolCallId: "cap",
+                Name: ToolCatalog.BrowserCapture)
+        ]);
+
+        Assert.Contains("artifactId", payload, StringComparison.Ordinal);
+        Assert.DoesNotContain("SECRET", payload, StringComparison.Ordinal);
+        Assert.DoesNotContain(Convert.ToBase64String(png), payload, StringComparison.Ordinal);
+        Assert.True(DurableToolCallCheckpoint.TryRead(new WorkCheckpoint(payload, 0, 0, 1), out var messages));
+        Assert.Null(Assert.Single(messages!).Parts);
+    }
+
     private static ModelToolCall Call(string id) => new(id, "http.request", """{"method":"GET","url":"https://example.com"}""");
 }

@@ -175,6 +175,127 @@ public sealed class UnattendedBrowserTests
     }
 
     [Fact]
+    public async Task Durable_vision_capture_reaches_the_next_model_call_and_not_the_checkpoint()
+    {
+        var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x53, 0x45, 0x43, 0x52, 0x45, 0x54 };
+        var browser = new RecordingBrowser { CapturePng = png };
+        var connections = await ConnectedStoreAsync(OwnerId);
+        var captures = new InMemoryWorkCaptureStore(TimeProvider.System);
+        var model = new RecordingScriptModel(
+            true,
+            () => ToolRound(Call(ToolCatalog.BrowserCapture, "{}")),
+            () => TextRound("saw the page"));
+        var now = DateTimeOffset.Parse("2026-10-03T00:00:00Z");
+        var generation = Guid.Parse("019944af-00e6-7000-8000-000000000001");
+        var store = new InMemoryWorkItemStore();
+        await store.CreateAsync(WorkItem.Create(
+            WorkId,
+            new WorkOwner(OwnerId, ProfileId),
+            Provenance(now),
+            new WorkModelPin("synthetic-default", "synthetic", "synthetic-small", "minimal"),
+            3,
+            now));
+        var claimed = (await store.TryClaimAsync(WorkId, generation, now, now.AddMinutes(5)))!;
+        string? checkpoint = null;
+        var outcome = await new DurableOccurrenceExecution(
+            new SessionToolExecutor(
+                browser: browser,
+                configurationGate: ToolConfigurationGates.AllowAll,
+                applicationConnections: connections,
+                workCaptures: captures),
+            TimeProvider.System).RunAsync(
+            claimed,
+            new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "look")]),
+            model,
+            Definition(),
+            TriggerKind.ScheduledOccurrence,
+            (current, body, token) =>
+            {
+                checkpoint = body.PayloadJson;
+                return store.CheckpointAsync(current.WorkItemId, current.Revision, generation, body, null, now, token);
+            },
+            store,
+            generation,
+            now,
+            Ids(),
+            CancellationToken.None,
+            trustedConnection: true);
+
+        Assert.IsType<DurableOccurrenceCompleted>(outcome);
+        var followUp = model.Requests[1];
+        var tool = Assert.Single(followUp.Messages, message => message.Role == ModelRole.Tool);
+        var image = Assert.IsType<ModelImageContent>(Assert.Single(tool.Parts!));
+        Assert.Equal(png, image.Bytes);
+        Assert.NotNull(checkpoint);
+        Assert.Contains("artifactId", checkpoint, StringComparison.Ordinal);
+        Assert.DoesNotContain("SECRET", checkpoint, StringComparison.Ordinal);
+        Assert.DoesNotContain(Convert.ToBase64String(png), checkpoint, StringComparison.Ordinal);
+        Assert.True(DurableToolCallCheckpoint.TryRead(new WorkCheckpoint(checkpoint, 0, 0, 1), out var resumed));
+        Assert.All(resumed!, message => Assert.Null(message.Parts));
+    }
+
+    [Fact]
+    public async Task Scheduled_downloads_share_the_work_item_owner_and_stop_at_two()
+    {
+        var csv = "sku,name\nAC-1042,Keyboard\n"u8.ToArray();
+        var pdf = "%PDF-1.4\n1 0 obj\n"u8.ToArray();
+        var browser = new RecordingBrowser();
+        var connections = await ConnectedStoreAsync(OwnerId);
+        var captures = new InMemoryWorkCaptureStore(TimeProvider.System);
+        var executor = new SessionToolExecutor(
+            browser: browser,
+            configurationGate: ToolConfigurationGates.AllowAll,
+            applicationConnections: connections,
+            workCaptures: captures);
+        var admission = Admission() with { CaptureScope = WorkId.ToString("D"), WorkItemId = WorkId };
+        browser.Downloads =
+        [
+            new BrowserDownload(null, "notes.csv", "text/csv", csv)
+        ];
+        var first = await executor.ExecuteAsync(
+            Definition(),
+            WorkId,
+            Call(ToolCatalog.BrowserNavigate, $$"""{"url":"{{Store}}/admin"}"""),
+            ToolLimits.MaxOutputBytes,
+            admission: admission);
+        browser.Downloads =
+        [
+            new BrowserDownload(null, "sheet.pdf", "application/pdf", pdf),
+            new BrowserDownload(null, "payload.exe", null, "MZ-not-allowed"u8.ToArray()),
+            new BrowserDownload(null, "extra.csv", "text/csv", csv)
+        ];
+        var second = await executor.ExecuteAsync(
+            Definition(),
+            WorkId,
+            Call(ToolCatalog.BrowserNavigate, $$"""{"url":"{{Store}}/files"}"""),
+            ToolLimits.MaxOutputBytes,
+            admission: admission);
+
+        Assert.Contains("text/csv", first.Text, StringComparison.Ordinal);
+        Assert.Contains("notes.csv", first.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("AC-1042", first.Text, StringComparison.Ordinal);
+        Assert.Contains("application/pdf", second.Text, StringComparison.Ordinal);
+        Assert.Contains("download_rejected", second.Text, StringComparison.Ordinal);
+        Assert.Contains("download_limit", second.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("%PDF", second.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("MZ-not-allowed", second.Text, StringComparison.Ordinal);
+        Assert.Equal(2, CountOf(first.Text, "artifactId") + CountOf(second.Text, "artifactId"));
+    }
+
+    private static int CountOf(string text, string token)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = text.IndexOf(token, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += token.Length;
+        }
+
+        return count;
+    }
+
+    [Fact]
     public async Task Uncertain_browser_act_is_not_replayed_until_observe()
     {
         var browser = new RecordingBrowser();
@@ -484,6 +605,7 @@ public sealed class UnattendedBrowserTests
                 ToolCatalog.BrowserNavigate,
                 ToolCatalog.BrowserObserve,
                 ToolCatalog.BrowserAct,
+                ToolCatalog.BrowserCapture,
                 ToolCatalog.AppMessageSend
             ]));
 
@@ -536,6 +658,27 @@ public sealed class UnattendedBrowserTests
         }
     }
 
+    private sealed class RecordingScriptModel(bool vision, params Func<IReadOnlyList<ModelGenerationEvent>>[] rounds) : ILanguageModel
+    {
+        private readonly Queue<Func<IReadOnlyList<ModelGenerationEvent>>> _rounds = new(rounds);
+
+        public List<ModelRequest> Requests { get; } = [];
+
+        public ModelCapabilities Capabilities { get; } = new(true, true, Vision: vision, Tools: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            await Task.Yield();
+            foreach (var item in _rounds.Dequeue()())
+            {
+                yield return item;
+            }
+        }
+    }
+
     private sealed class ScriptModel(params Func<IReadOnlyList<ModelGenerationEvent>>[] rounds) : ILanguageModel
     {
         private readonly Queue<Func<IReadOnlyList<ModelGenerationEvent>>> _rounds = new(rounds);
@@ -561,6 +704,10 @@ public sealed class UnattendedBrowserTests
         public string? ErrorCode { get; set; }
 
         public bool Intervention { get; set; }
+
+        public byte[]? CapturePng { get; init; }
+
+        public IReadOnlyList<BrowserDownload>? Downloads { get; set; }
 
         public int NavigateCalls { get; private set; }
 
@@ -618,7 +765,19 @@ public sealed class UnattendedBrowserTests
             cancellationToken.ThrowIfCancellationRequested();
             NavigateCalls++;
             Navigated.Add(request.Url!.GetLeftPart(UriPartial.Authority) + request.Url.AbsolutePath);
-            return new(Result(request.Url!.AbsoluteUri, "Admin"));
+            var downloads = Downloads;
+            Downloads = null;
+            return new(Result(request.Url!.AbsoluteUri, "Admin", downloads));
+        }
+
+        public ValueTask<BrowserCaptureResult> CaptureViewportAsync(
+            BrowserCaptureRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return new(CapturePng is { Length: > 0 } png
+                ? new BrowserCaptureResult(null, png, 1, 8, 8)
+                : new BrowserCaptureResult("provider_unavailable", null, 0));
         }
 
         public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default)
@@ -638,7 +797,7 @@ public sealed class UnattendedBrowserTests
             return new(Result(Store + "/admin", "Saved"));
         }
 
-        private BrowserOperationResult Result(string url, string text)
+        private BrowserOperationResult Result(string url, string text, IReadOnlyList<BrowserDownload>? downloads = null)
         {
             if (ErrorCode is not null)
             {
@@ -653,7 +812,8 @@ public sealed class UnattendedBrowserTests
                     text,
                     false,
                     [],
-                    Intervention ? BrowserInterventionKind.HumanVerificationRequired : BrowserInterventionKind.None));
+                    Intervention ? BrowserInterventionKind.HumanVerificationRequired : BrowserInterventionKind.None),
+                Downloads: downloads);
         }
     }
 }

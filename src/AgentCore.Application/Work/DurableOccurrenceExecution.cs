@@ -533,7 +533,12 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                 return new DurableOccurrenceFailed(running, "tool-output-limit", "Tool output limit reached.");
             }
 
-            messages.Add(new ModelMessage(ModelRole.Tool, execution.Text, ToolCallId: call.Id, Name: call.Name));
+            messages.Add(new ModelMessage(
+                ModelRole.Tool,
+                execution.Text,
+                Parts: execution.Parts,
+                ToolCallId: call.Id,
+                Name: call.Name));
             remaining = deadline - time.GetUtcNow();
             if (remaining < TimeSpan.Zero)
             {
