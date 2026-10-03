@@ -90,6 +90,8 @@ Observed P9 Chat behavior, not a new visual system: while a browser tool runs, t
 
 P9.5 (closed on `1012653`) connection and result behavior: one application connection belongs to the Agent Instance. Admin configures it and names nopCommerce as the supported application type. Chat projects its display name and status only when a row exists. Background Work labels attention results in text and counts only those results. Quiet completions stay in the list. nopCommerce is the first concrete application, not Core vocabulary. `/docs` remains the product specification.
 
+Observed P9.6 operator behavior, not a phase closure: Admin Memory & automation saves an unattended model and a registration override, and names the effective source. The application connection can create, rotate, or revoke a webhook credential that is shown once and then cleared. Background Work names the source (`Scheduled reminder` or `Order placed`) and shows the updated time in the viewer locale. It does not render webhook evidence. P9 stays frozen on `bba1de4`. P10 and P11 were not started. `/docs` remains the product specification.
+
 ## Accessibility & Inclusion
 
 Labeled controls, keyboard access, visible focus, and actionable errors are required ([docs/13-frontend-implementation-spec.md](../../docs/13-frontend-implementation-spec.md)). Status must not rely on color or animation alone. Honor `prefers-reduced-motion`. Contrast follows Ant Design defaults and DESIGN.md. Primary supported demo browser is Chromium desktop; do not depend on Chromium-only APIs when standard APIs suffice.

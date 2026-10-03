@@ -301,6 +301,10 @@ Owners: [Protocol](14-api-and-realtime-protocol.md) (capability, leases vs Attac
 
 **Decision:** The post-P9.5 browser and store-review follow-up is recorded on `6f6ff42`. Hosted Synthetic [`37128161642`](https://github.com/trannamtrung1st/agent-core/actions/runs/37128161642) is green. It covers bounded browser settle, observation-repeat termination, compacted page receipts, daily-review activation, and store-review evidence that trusts a filter only when the observed rows support it. P9.5 stays closed on `1012653`. This record does not move `bba1de4` or `1012653`.
 
+## P9.6 execution model, browser v1, and order.placed (observed)
+
+**Decision:** Model intent is pinned before live-versus-durable routing. Precedence is the trigger override, then the Agent Instance unattended default, then the conversation or catalog default. The pin is immutable after admission. A user Chat model selection is not an unattended input. Browser Capability v1 adds history navigation, richer actions, page lifecycle, bounded waits, and an explicit viewport capture. `browser.capture` is offered only to a vision-capable pin. `POST /api/v1/hooks/{webhookKey}/order-placed` checks one SHA-256 bearer, admits an allowlisted occurrence, and returns before the agent or browser runs. A trusted application event uses the same unattended browser lease and 32-step/240-second budget as a scheduled WorkItem. A succeeded side effect whose tool result was not checkpointed is not replayed. `secretary` v2 is additive; v1 and `general-assistant` v1–v12 stay unchanged. P9 stays frozen on `bba1de4`. P9.5 stays closed on `1012653`. P10 and P11 were not started. This record is observed behavior, not a phase closure.
+
 ## What may still be measured
 
 Provider selection within independently configured speech ports, VAD thresholds, frame size within the allowed range, TTS phrase segmentation and latency optimization are tuning variables. The default behavior and degraded paths are specified; measurement must not reopen project ownership, transport, storage or response identity decisions. No guaranteed provider-dependent SLA is implied.

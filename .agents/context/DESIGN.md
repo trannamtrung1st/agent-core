@@ -267,6 +267,8 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 - **Do** reuse the operational drawer language for Background Work and Schedules: two-line headers, open List rows, semantic filled icon-and-text status chips, elevated 8px detail insets, and trailing actions only where the row exposes an operation.
 - **Do** show an application connection under the agent name only when a connection row exists, as display name, status, and Manage. Admin owns connect, revoke, and reset, and names nopCommerce as the supported application type. Attention results use the words Needs attention plus an icon. Quiet completions do not change the header count.
 - **Do** format schedule occurrences for the viewer locale in the schedule’s named time zone; keep the zone identifier visible beside the readable time.
+- **Do** show Background Work’s updated time with the shared chat time formatter and a `time` element. Keep the origin as text (`Scheduled reminder`, `Order placed`, or `Application event`).
+- **Do** keep the unattended model and its effective-source sentence in Memory & automation. Show a webhook credential once in a dialog, then clear it on Done or Escape. The resting connection section keeps the public key and status only.
 
 ### Don't:
 - **Don't** reproduce Pixel Dialogue Field, Obsidian Mint, Martian Mono, field textures, presence plates, or a custom Select.
