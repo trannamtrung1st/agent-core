@@ -79,6 +79,44 @@ export function BackgroundWorkDrawer({
       return;
     }
 
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.isComposing || event.defaultPrevented) {
+        return;
+      }
+
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      const panel = document.querySelector(".background-work-drawer");
+      if (panel?.contains(target)) {
+        return;
+      }
+
+      if (
+        target instanceof Element &&
+        target.closest(".ant-modal, .ant-select-dropdown, .ant-dropdown, .ant-popover")
+      ) {
+        return;
+      }
+
+      if (document.querySelector(".ant-modal-wrap")) {
+        return;
+      }
+
+      onClose();
+    };
+
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
     let generation = 0;
     let timer: number | undefined;
 

@@ -125,6 +125,31 @@ describe("BackgroundWorkDrawer", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it("closes when Escape is pressed while focus stays outside the drawer", async () => {
+    const onClose = vi.fn();
+    render(
+      <AntApp>
+        <BackgroundWorkDrawer
+          sessionId="session-1"
+          open
+          wide
+          refreshKey={0}
+          pollIntervalMs={60_000}
+          onClose={onClose}
+          load={async () => []}
+          loadResult={async () => ({ workItemId: "", text: "", completedAt: "" })}
+          cancel={vi.fn()}
+          approve={vi.fn()}
+          reject={vi.fn()}
+        />
+      </AntApp>
+    );
+    expect(await screen.findByText("No background work yet")).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    // The capture listener and Ant Design's portal Escape handler both close.
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
   it("shows a load error", async () => {
     renderDrawer(async () => {
       throw new Error("Unable to load background work.");
