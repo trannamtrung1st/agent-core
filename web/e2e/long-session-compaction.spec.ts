@@ -15,7 +15,7 @@ test("long session recalls an early fact after compaction", async ({ page }) => 
     page.locator(".conversation-scroll").getByText("Please remember P4A_LONG_FACT for later.", { exact: true })
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "End" }).click();
+  await page.getByRole("button", { name: "End", exact: true }).click();
   await page.getByRole("dialog").filter({ hasText: "End this conversation?" })
     .getByRole("button", { name: "End", exact: true })
     .click();

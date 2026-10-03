@@ -21,7 +21,7 @@ async function renameFirstRow(page: Page, title: string): Promise<void> {
 }
 
 async function endConversation(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "End" }).click();
+  await page.getByRole("button", { name: "End", exact: true }).click();
   await page.getByRole("dialog").filter({ hasText: "End this conversation?" })
     .getByRole("button", { name: "End", exact: true })
     .click();

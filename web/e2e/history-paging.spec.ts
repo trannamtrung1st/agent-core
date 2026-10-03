@@ -211,7 +211,7 @@ test("switching session ignores a delayed older-history page", async ({ page }) 
 
 test("terminal read-only sessions load older pages", async ({ page }) => {
   const sessionId = await createSession(page);
-  await page.getByRole("button", { name: "End" }).click();
+  await page.getByRole("button", { name: "End", exact: true }).click();
   await page.getByRole("dialog").filter({ hasText: "End this conversation?" })
     .getByRole("button", { name: "End", exact: true })
     .click();

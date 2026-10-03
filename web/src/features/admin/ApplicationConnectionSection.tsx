@@ -94,7 +94,7 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
       <div className="admin-definition-panel-heading">
         <Typography.Title level={4}>Application connection</Typography.Title>
         <Typography.Text type="secondary">
-          Connect an external application to this agent. Authentication stays in this agent&apos;s browser profile.
+          Connect the supported nopCommerce application to this agent. Authentication stays in this agent&apos;s browser profile.
         </Typography.Text>
       </div>
       <div className="admin-definition-panel-body">
@@ -104,6 +104,10 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
           {!loading ? (
             <>
               <Typography.Text strong>{connectionStatusLabel(status)}</Typography.Text>
+              <Flex vertical>
+                <Typography.Text type="secondary">Application type</Typography.Text>
+                <Typography.Text>nopCommerce</Typography.Text>
+              </Flex>
               {connection ? (
                 <Flex vertical>
                   <Typography.Text>{connection.displayName}</Typography.Text>

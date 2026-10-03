@@ -55,7 +55,11 @@ describe("ApplicationConnectionSection", () => {
     expect(await screen.findByRole("heading", { name: "Application connection" })).toBeInTheDocument();
     expect(screen.getByLabelText("Display name")).toHaveValue("");
     expect(screen.getByLabelText("Base URL")).toHaveValue("");
-    expect(screen.queryByText(/store|nopCommerce/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Connect the supported nopCommerce application to this agent. Authentication stays in this agent's browser profile.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Application type")).toBeInTheDocument();
+    expect(screen.getByText("nopCommerce")).toBeInTheDocument();
     expect(await screen.findByText("Not connected")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "Example CRM" } });
     fireEvent.change(screen.getByLabelText("Base URL"), { target: { value: "https://crm.example" } });

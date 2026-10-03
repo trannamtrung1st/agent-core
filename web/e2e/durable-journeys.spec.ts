@@ -254,7 +254,7 @@ test("a detached reminder completes in Background work and cancel survives reloa
 
   await waitForResponseSettled(page);
 
-  await page.getByRole("button", { name: "End" }).click();
+  await page.getByRole("button", { name: "End", exact: true }).click();
   await page.getByRole("dialog").filter({ hasText: "End this conversation?" })
     .getByRole("button", { name: "End", exact: true })
     .click();
