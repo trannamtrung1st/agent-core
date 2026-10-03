@@ -285,9 +285,9 @@ Owners: [Protocol](14-api-and-realtime-protocol.md) (capability, leases vs Attac
 
 **Decision:** The first browser provider is direct `Microsoft.Playwright` 1.63.0 inside Infrastructure. It is not Playwright MCP, a Node sidecar, or a second tool host. The shipped definition for new general-assistant instances is v12, which adds `browser.close`. `general-assistant` v11 remains the P9 browser allowlist (`browser.navigate`, `browser.observe`, `browser.act`) and is unchanged. Versions v1–v10 stay unchanged. At the P9 freeze, browser state was ephemeral and was not a SQLite snapshot. A later `ProfileMode` `PersistentAgent` stores an Agent Instance browser profile on disk under `ProfileRoot`. That profile is not memory, not a Skill, and not the human user's Chrome profile. Closure evidence: [p9-freeze-candidate.md](reports/p9-freeze-candidate.md).
 
-## P9.5 connection and attention (observed, not closed)
+## P9.5 connection and attention (closed)
 
-**Decision:** The secretary store stays a direct Playwright profile plus one application connection row. There is no second scheduler, no browser panel, and no Chromium package in the Agent Core image. Attention is a result flag and one durable alert, not a new notification product. Closure evidence is [p9.5-freeze-candidate.md](reports/p9.5-freeze-candidate.md) and is not accepted yet.
+**Decision:** The secretary store stays a direct Playwright profile plus one application connection row. There is no second scheduler, no browser panel, and no Chromium package in the Agent Core image. Attention is a result flag and one durable alert, not a new notification product. P9.5 is closed on `1012653`. Closure evidence is [p9.5-freeze-candidate.md](reports/p9.5-freeze-candidate.md). Hosted Synthetic [`37111979501`](https://github.com/trannamtrung1st/agent-core/actions/runs/37111979501) is green.
 
 ## What may still be measured
 

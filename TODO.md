@@ -68,7 +68,7 @@ Clients cannot supply trusted diagnostic, correlation, or causation identity. JS
 1. **P0–P8 — frozen.** P7.5 is frozen on `70a5720`; P7.6 on `17d89ae`; P7.7 on `40a1d92`; and P8 on `ca3eb23`. Post-P7.7 / pre-P8 bounded follow-up is closed on `1cadf46`. Post-freeze P8 follow-up is **closed** on `c9aec29` (hosted Synthetic **`36745126226`** green).
 2. **P8.5 — Application Messaging & Dynamic Skill Activation — closed** on `1461567` (post-closure corrections **closed** on **`aedea70`**, hosted Synthetic [**`36851267423`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36851267423) green).
 3. **P9 — Visible browser — closed** on `bba1de4`. Post-closure browser runtime hardening is **closed** on **`3400d64`** (hosted Synthetic [**`36981513602`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36981513602) green); that chain does not move the P9 freeze SHA.
-4. **P9.5 — Proactive Secretary / Real Assistant Demo — next.** Validate the existing architecture through one durable Secretary identity, bounded proactive work, trusted-owner delivery, and visible authenticated participation in self-hosted nopCommerce.
+4. **P9.5 — Proactive Secretary / Real Assistant Demo — closed** on `1012653` (hosted Synthetic [`37111979501`](https://github.com/trannamtrung1st/agent-core/actions/runs/37111979501) green).
 5. **P10 — Sandbox Evolution — requirement-triggered when the current sandbox is insufficient.**
 6. **P11 — Multi-user + Production Infrastructure — requirement-triggered when a real hosting or pilot requirement appears.**
 
@@ -243,7 +243,7 @@ Properties that already belong in the current stack: durable source of truth whe
 
 # Product / Architecture North Star
 
-**Status: long-term direction. P8 is the frozen bounded slice on `ca3eb23`. P8.5 is closed on `1461567`. P9 visible browser is closed on `bba1de4`. P9.5 is the next bounded product-validation phase. The rest is future guidance.**
+**Status: long-term direction. P8 is the frozen bounded slice on `ca3eb23`. P8.5 is closed on `1461567`. P9 visible browser is closed on `bba1de4`. P9.5 is closed on `1012653`. The rest is future guidance.**
 
 This section says why later phases exist. P8, P8.5, and P9 record what those phases implemented and verified. It does not reopen closed phases, widen P8 past its stop condition, or pull P10 or P11 forward.
 
@@ -867,7 +867,7 @@ P9 is not a plugin marketplace, a prepared-worker package system, a visual workf
 
 # P9.5 — Proactive Secretary / Real Assistant Demo
 
-**Status: implemented locally, not closed.** This is a vertical product-validation phase, not a new general platform-abstraction phase. P9 remains closed/frozen on `bba1de4`; post-P9 browser enhancements and hardening remain post-closure evidence and do not create a new P9 freeze. Local Journey A session `fcd46bb2-d1fb-4ea1-9560-4b39b0873281` established the storefront postcondition. Closure still waits on the hosted Synthetic workflow. Journey D is accepted on the recovery result in the freeze report. See [docs/reports/p9.5-freeze-candidate.md](docs/reports/p9.5-freeze-candidate.md).
+**Status: closed** on `1012653`. Hosted Synthetic [`37111979501`](https://github.com/trannamtrung1st/agent-core/actions/runs/37111979501) is green. This is a vertical product-validation phase, not a new general platform-abstraction phase. P9 remains closed/frozen on `bba1de4`; post-P9 browser enhancements and hardening remain post-closure evidence and do not create a new P9 freeze. Local Journey A session `fcd46bb2-d1fb-4ea1-9560-4b39b0873281` established the storefront postcondition. Journey D is accepted on the recovery result in the freeze report. See [docs/reports/p9.5-freeze-candidate.md](docs/reports/p9.5-freeze-candidate.md).
 
 ## Goal
 
@@ -1150,4 +1150,4 @@ Orientation for what later work can build on. Detail and gate history are in `/d
 
 # Next implementation item
 
-**P9.5 — Proactive Secretary / Real Assistant Demo.** Prepare one durable Secretary identity and validate existing Agent Core contracts through general assistance, bounded proactive WorkItems, trusted-owner result delivery, and visible authenticated participation in self-hosted nopCommerce. P9 remains closed on `bba1de4`; P10 and P11 remain requirement-triggered.
+**P9.5 — Proactive Secretary / Real Assistant Demo — closed** on `1012653`. P9 remains closed on `bba1de4`. P10 and P11 remain requirement-triggered.
