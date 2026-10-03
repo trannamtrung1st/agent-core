@@ -6,6 +6,7 @@ using AgentCore.Application.Work;
 using AgentCore.Domain.Connections;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Work;
+using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 
@@ -17,6 +18,120 @@ public sealed class UnattendedBrowserTests
     private const string Other = "http://127.0.0.1:5099";
     private const string PublishRef = "el_0123456789abcdefghijkl";
     private const string RepairRef = "el_abcdefghijklmnopqrstuv";
+
+    [Fact]
+    public async Task Four_secretary_modes_share_one_instance_profile_and_definition()
+    {
+        var secretary = await LoadSecretaryV2Async();
+        var instanceId = Guid.Parse("019944af-00f1-7000-8000-000000000001");
+        var profileId = Guid.Parse("019944af-00f1-7000-8000-000000000002");
+        var sessionId = Guid.Parse("019944af-00f1-7000-8000-000000000003");
+        var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x53, 0x45, 0x43, 0x52 };
+        var browser = new RecordingBrowser { CapturePng = png };
+        var connections = await ConnectedStoreAsync(instanceId);
+        var executor = new SessionToolExecutor(
+            artifacts: new InMemoryArtifactStore(TimeProvider.System),
+            configurationGate: ToolConfigurationGates.AllowAll,
+            browser: browser,
+            applicationConnections: connections);
+        var interactive = new ToolExecutionAdmission(
+            false,
+            TriggerKind.UserTurn,
+            AgentInstanceId: instanceId,
+            TrustedConnection: true);
+
+        var navigated = await executor.ExecuteAsync(
+            secretary,
+            sessionId,
+            Call(ToolCatalog.BrowserNavigate, $$"""{"url":"{{Store}}/admin"}"""),
+            ToolLimits.MaxOutputBytes,
+            admission: interactive);
+        var observed = await executor.ExecuteAsync(
+            secretary,
+            sessionId,
+            Call(ToolCatalog.BrowserObserve, "{}"),
+            ToolLimits.MaxOutputBytes,
+            admission: interactive);
+        Assert.DoesNotContain("error", navigated.Text, StringComparison.Ordinal);
+        Assert.Contains("Published", observed.Text, StringComparison.Ordinal);
+        Assert.Equal(1, browser.NavigateCalls);
+        Assert.Equal(1, browser.ObserveCalls);
+        Assert.Equal(0, browser.CaptureCalls);
+        Assert.Equal([instanceId], browser.BoundAgents.Distinct());
+        Assert.Empty(browser.UnattendedAgents);
+
+        var acted = await executor.ExecuteAsync(
+            secretary,
+            sessionId,
+            Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}"""),
+            ToolLimits.MaxOutputBytes,
+            admission: interactive);
+        Assert.DoesNotContain("error", acted.Text, StringComparison.Ordinal);
+        Assert.Equal(1, browser.ActCalls);
+        Assert.Equal(0, browser.CaptureCalls);
+
+        var textOnly = await executor.ExecuteAsync(
+            secretary,
+            sessionId,
+            Call(ToolCatalog.BrowserCapture, "{}"),
+            ToolLimits.MaxOutputBytes,
+            admission: interactive);
+        Assert.Contains("model-capability-unsupported", textOnly.Text, StringComparison.Ordinal);
+        Assert.Equal(0, browser.CaptureCalls);
+
+        var captured = await executor.ExecuteAsync(
+            secretary,
+            sessionId,
+            Call(ToolCatalog.BrowserCapture, "{}"),
+            ToolLimits.MaxOutputBytes,
+            admission: interactive with { SupportsVision = true });
+        var image = Assert.IsType<ModelImageContent>(Assert.Single(captured.Parts!));
+        Assert.Equal(png, image.Bytes);
+        Assert.Equal(1, browser.CaptureCalls);
+        Assert.Equal(1, browser.ActCalls);
+
+        var scheduled = await RunSecretaryModeAsync(
+            browser,
+            connections,
+            secretary,
+            instanceId,
+            profileId,
+            Guid.Parse("019944af-00f1-7000-8000-000000000011"),
+            Guid.Parse("019944af-00f1-7000-8000-000000000021"),
+            "schedule|store-review",
+            TriggerKind.ScheduledOccurrence,
+            new ScriptModel(
+                () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
+                () => ToolRound(Call(ToolCatalog.WorkComplete, """{"summary":"No store changes need attention.","attentionRequired":false}"""))));
+        Assert.False(scheduled.AttentionRequired);
+        Assert.Equal("No store changes need attention.", scheduled.Text);
+        Assert.Equal("Scheduled reminder", scheduled.Running.OriginLabel);
+
+        var reactive = await RunSecretaryModeAsync(
+            browser,
+            connections,
+            secretary,
+            instanceId,
+            profileId,
+            Guid.Parse("019944af-00f1-7000-8000-000000000012"),
+            Guid.Parse("019944af-00f1-7000-8000-000000000022"),
+            "order.placed:evt-four-mode",
+            TriggerKind.ApplicationEvent,
+            new ScriptModel(
+                () => ToolRound(Call(ToolCatalog.BrowserNavigate, $$"""{"url":"{{Store}}/admin/orders"}""")),
+                () => ToolRound(Call(ToolCatalog.WorkComplete, """{"summary":"One pending order needs review.","attentionRequired":true}"""))));
+        Assert.True(reactive.AttentionRequired);
+        Assert.Equal("One pending order needs review.", reactive.Text);
+        Assert.Equal("Order placed", reactive.Running.OriginLabel);
+        Assert.Equal(secretary.Id, scheduled.Running.Provenance.DefinitionId);
+        Assert.Equal(2, scheduled.Running.Provenance.DefinitionVersion);
+        Assert.Equal(scheduled.Running.Owner, reactive.Running.Owner);
+        Assert.Equal(2, reactive.Running.Provenance.DefinitionVersion);
+        Assert.Equal([instanceId], browser.UnattendedAgents.Distinct());
+        Assert.Equal([instanceId], browser.BoundAgents.Distinct());
+        Assert.Equal(2, browser.NavigateCalls);
+        Assert.Equal(1, browser.CaptureCalls);
+    }
 
     [Fact]
     public async Task Scheduled_connection_navigates_only_the_trusted_origin_and_its_own_profile()
@@ -633,6 +748,73 @@ public sealed class UnattendedBrowserTests
         Assert.Equal("Order placed", succeeded.OriginLabel);
     }
 
+    private static async Task<DurableOccurrenceCompleted> RunSecretaryModeAsync(
+        RecordingBrowser browser,
+        InMemoryApplicationConnectionStore connections,
+        AgentDefinition definition,
+        Guid instanceId,
+        Guid profileId,
+        Guid workId,
+        Guid generation,
+        string dedupeKey,
+        TriggerKind kind,
+        ILanguageModel model)
+    {
+        var now = DateTimeOffset.Parse("2026-10-04T02:00:00Z");
+        var store = new InMemoryWorkItemStore();
+        await store.CreateAsync(WorkItem.Create(
+            workId,
+            new WorkOwner(instanceId, profileId),
+            new WorkProvenance(
+                workId,
+                kind == TriggerKind.ApplicationEvent ? WorkSourceKind.ApplicationEvent : WorkSourceKind.Schedule,
+                null,
+                null,
+                null,
+                dedupeKey,
+                now,
+                now,
+                """{"instruction":"synthetic"}""",
+                definition.Id,
+                definition.Version,
+                definition.Identity.Name),
+            new WorkModelPin("scripted-vision", "primary-llm", "scripted-vision", null),
+            3,
+            now));
+        var claimed = (await store.TryClaimAsync(workId, generation, now, now.AddMinutes(5)))!;
+        var outcome = await new DurableOccurrenceExecution(Executor(browser, connections), TimeProvider.System).RunAsync(
+            claimed,
+            new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "review the store")]),
+            model,
+            definition,
+            kind,
+            (current, body, token) => store.CheckpointAsync(current.WorkItemId, current.Revision, generation, body, null, now, token),
+            store,
+            generation,
+            now,
+            Ids(),
+            CancellationToken.None,
+            trustedConnection: true);
+        return Assert.IsType<DurableOccurrenceCompleted>(outcome);
+    }
+
+    private static async Task<AgentDefinition> LoadSecretaryV2Async()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "agents", "secretary-v2.json")))
+        {
+            directory = directory.Parent;
+        }
+
+        if (directory is null)
+        {
+            throw new DirectoryNotFoundException("agents/secretary-v2.json");
+        }
+
+        var store = new FileAgentDefinitionStore(Path.Combine(directory.FullName, "agents"), SyntheticProviderAliases.Default);
+        return (await store.GetAsync("secretary", 2))!;
+    }
+
     private static async Task<DurableOccurrenceOutcome> RunAsync(
         RecordingBrowser browser,
         InMemoryApplicationConnectionStore connections,
@@ -863,6 +1045,8 @@ public sealed class UnattendedBrowserTests
 
         public int ActCalls { get; private set; }
 
+        public int CaptureCalls { get; private set; }
+
         public string? LastActRef { get; private set; }
 
         public List<string> Navigated { get; } = [];
@@ -931,6 +1115,7 @@ public sealed class UnattendedBrowserTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            CaptureCalls++;
             return new(CapturePng is { Length: > 0 } png
                 ? new BrowserCaptureResult(null, png, 1, 8, 8)
                 : new BrowserCaptureResult("provider_unavailable", null, 0));
