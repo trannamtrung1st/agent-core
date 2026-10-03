@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
 using AgentCore.Infrastructure.Browser;
 
 namespace AgentCore.Infrastructure.Tests;
@@ -69,7 +70,9 @@ public sealed class BrowserSettleTests(BrowserHostFixture fixture) : IClassFixtu
         var home = await fixture.Session.NavigateAsync(new BrowserNavigateRequest(id, new Uri(origin + "/")));
         var search = Assert.Single(home.Observation!.Elements, element => element.Name == "Search");
 
-        var again = await fixture.Session.ObserveAsync(id, new BrowserObserveOptions("stable", 1000));
+        var again = await fixture.Session.ObserveAsync(
+            id,
+            new BrowserObserveOptions("stable", BrowserToolLimits.DefaultObserveTimeoutMs));
 
         Assert.Null(again.ErrorCode);
         Assert.Equal(true, again.Observation!.Settled);

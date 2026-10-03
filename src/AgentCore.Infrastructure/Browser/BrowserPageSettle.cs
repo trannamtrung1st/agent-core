@@ -83,6 +83,7 @@ internal static class BrowserPageSettle
             var now = Environment.TickCount64;
             var elapsed = now - started;
             var (generation, inflight) = await ReadAsync(page, cancellationToken).ConfigureAwait(false);
+            var observedAt = Environment.TickCount64;
             var unstable = inflight > 0 || seen is null || generation != seen.Value;
             seen = generation;
             if (unstable || elapsed < MinimumOpportunityMs)
@@ -93,7 +94,7 @@ internal static class BrowserPageSettle
             {
                 quietSince = now;
             }
-            else if (now - quietSince >= QuietIntervalMs)
+            else if (observedAt - quietSince >= QuietIntervalMs)
             {
                 return true;
             }
