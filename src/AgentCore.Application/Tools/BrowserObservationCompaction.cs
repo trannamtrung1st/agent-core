@@ -6,7 +6,8 @@ namespace AgentCore.Application.Tools;
 internal static class BrowserObservationCompaction
 {
     internal const int RecentFullObservations = 1;
-    internal const int ReceiptVisibleText = 240;
+    internal const int DuplicateReceiptChars = 240;
+    internal const int PageEvidenceChars = 1200;
 
     internal static void Compact(List<ModelMessage> messages)
     {
@@ -25,11 +26,20 @@ internal static class BrowserObservationCompaction
         }
 
         var keepFrom = full.Count - RecentFullObservations;
+        var latestByUrl = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var ordinal = 0; ordinal < keepFrom; ordinal++)
+        {
+            var index = full[ordinal];
+            latestByUrl[PageUrl(messages[index].Text, index)] = index;
+        }
+
         for (var ordinal = 0; ordinal < keepFrom; ordinal++)
         {
             var index = full[ordinal];
             var message = messages[index];
-            messages[index] = message with { Text = Receipt(message.Text), Parts = null };
+            var urlKey = PageUrl(message.Text, index);
+            var rich = latestByUrl[urlKey] == index;
+            messages[index] = message with { Text = Receipt(message.Text, rich), Parts = null };
         }
     }
 
@@ -59,11 +69,26 @@ internal static class BrowserObservationCompaction
         }
     }
 
-    private static string Receipt(string text)
+    private static string PageUrl(string text, int index)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(text);
+            var url = Read(document.RootElement, "url");
+            return url.Length == 0 ? $"missing:{index}" : url;
+        }
+        catch (JsonException)
+        {
+            return $"missing:{index}";
+        }
+    }
+
+    private static string Receipt(string text, bool rich)
     {
         var url = string.Empty;
         var title = string.Empty;
         var visible = string.Empty;
+        bool? settled = null;
         try
         {
             using var document = JsonDocument.Parse(text);
@@ -71,24 +96,53 @@ internal static class BrowserObservationCompaction
             url = Read(root, "url");
             title = Read(root, "title");
             visible = Read(root, "visibleText");
+            if (root.TryGetProperty("settled", out var settledProperty)
+                && settledProperty.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            {
+                settled = settledProperty.GetBoolean();
+            }
         }
         catch (JsonException)
         {
         }
 
-        if (visible.Length > ReceiptVisibleText)
+        var excerpt = Excerpt(visible, rich);
+        return settled is bool settledValue
+            ? JsonSerializer.Serialize(new
+            {
+                untrustedBrowserContent = true,
+                compacted = true,
+                url,
+                title,
+                settled = settledValue,
+                visibleTextExcerpt = excerpt
+            })
+            : JsonSerializer.Serialize(new
+            {
+                untrustedBrowserContent = true,
+                compacted = true,
+                url,
+                title,
+                visibleTextExcerpt = excerpt
+            });
+    }
+
+    private static string Excerpt(string visible, bool rich)
+    {
+        var budget = rich ? PageEvidenceChars : DuplicateReceiptChars;
+        if (visible.Length <= budget)
         {
-            visible = visible[..ReceiptVisibleText];
+            return visible;
         }
 
-        return JsonSerializer.Serialize(new
+        if (!rich)
         {
-            untrustedBrowserContent = true,
-            compacted = true,
-            url,
-            title,
-            visibleText = visible
-        });
+            return visible[..budget];
+        }
+
+        const string marker = "\n…\n";
+        var edge = (budget - marker.Length) / 2;
+        return visible[..edge] + marker + visible[^edge..];
     }
 
     private static string Read(JsonElement root, string name) =>

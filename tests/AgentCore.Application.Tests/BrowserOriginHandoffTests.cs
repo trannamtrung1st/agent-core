@@ -352,6 +352,42 @@ public sealed class BrowserOriginHandoffTests
             Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
     }
 
+    [Fact]
+    public async Task Repeated_identical_observations_answer_instead_of_reaching_the_step_limit()
+    {
+        var browser = new StablePageBrowser();
+        var model = new SequencedModel(
+            Navigate("open", "https://store.test/orders"),
+            [
+                new ModelToolCallEvent(new ModelToolCall("see-1", ToolCatalog.BrowserObserve, """{"waitFor":"stable"}""")),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ],
+            [
+                new ModelToolCallEvent(new ModelToolCall("see-2", ToolCatalog.BrowserObserve, "{}")),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ],
+            Answer("Orders are listed. Low stock and products are unknown."));
+        await using var runtime = Create(model, browser);
+        await runtime.AttachAsync();
+
+        Assert.True(await runtime.SubmitUserTextAsync("check the store"));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(2, browser.ObserveCalls);
+        Assert.Equal(4, model.Requests.Count);
+        Assert.Null(model.Requests[3].Tools);
+        Assert.Contains(
+            model.Requests[3].Messages,
+            message => message.Role == ModelRole.System
+                && message.Text.Contains("No new browser evidence was obtained", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            runtime.Snapshot.Entries,
+            entry => entry.Text.Contains("No new browser evidence", StringComparison.Ordinal));
+        Assert.Equal(
+            EntryStatus.Completed,
+            Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
+    }
+
     private static ModelGenerationEvent[] Navigate(string id, string url) =>
     [
         new ModelToolCallEvent(new ModelToolCall(
@@ -455,6 +491,50 @@ public sealed class BrowserOriginHandoffTests
                 yield return evt;
             }
         }
+    }
+
+    private sealed class StablePageBrowser : IBrowserSession
+    {
+        public int ObserveCalls { get; private set; }
+
+        public bool IsAvailable => true;
+
+        public BrowserHostPolicy HostPolicy { get; } = new(
+            true,
+            true,
+            BrowserInteractionMode.InteractiveDemo,
+            ["https://store.test"]);
+
+        public ValueTask<Uri?> GetCurrentUrlAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+            new(new Uri("https://store.test/orders"));
+
+        public ValueTask<BrowserOperationResult> NavigateAsync(
+            BrowserNavigateRequest request,
+            CancellationToken cancellationToken = default) =>
+            new(Page($"el_nav_{request.Url.AbsoluteUri.Length}"));
+
+        public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        {
+            ObserveCalls++;
+            return new(Page($"el_obs_{ObserveCalls}"));
+        }
+
+        public ValueTask<BrowserOperationResult> ActAsync(BrowserActRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        private static BrowserOperationResult Page(string reference) =>
+            new(
+                null,
+                new BrowserObservation(
+                    "https://store.test/orders",
+                    "Orders",
+                    "Orders grid",
+                    false,
+                    [new BrowserElement(reference, "link", "Order")],
+                    Settled: true));
     }
 
     private sealed class TwoSiteBrowser(string closeStatus = "closed") : IBrowserSession

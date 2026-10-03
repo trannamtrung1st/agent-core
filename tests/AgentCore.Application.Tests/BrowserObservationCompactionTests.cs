@@ -27,16 +27,18 @@ public sealed class BrowserObservationCompactionTests
         Assert.Equal(8, messages.Count(message => message.Role == ModelRole.Tool));
         var observations = messages.Where(message => message.Role == ModelRole.Tool).ToArray();
         Assert.Equal(1, observations.Count(message => message.Text.Contains("\"elements\"", StringComparison.Ordinal)));
-        Assert.All(observations.Take(7), message =>
+        for (var index = 0; index < 7; index++)
         {
+            var message = observations[index];
             using var document = JsonDocument.Parse(message.Text);
             Assert.True(document.RootElement.GetProperty("untrustedBrowserContent").GetBoolean());
             Assert.True(document.RootElement.GetProperty("compacted").GetBoolean());
             Assert.False(document.RootElement.TryGetProperty("elements", out _));
+            Assert.Contains($"TAIL-{index}", document.RootElement.GetProperty("visibleTextExcerpt").GetString(), StringComparison.Ordinal);
             Assert.DoesNotContain("el_round_", message.Text, StringComparison.Ordinal);
             Assert.DoesNotContain("\"ref\"", message.Text, StringComparison.Ordinal);
             Assert.DoesNotContain("\"state\"", message.Text, StringComparison.Ordinal);
-        });
+        }
         Assert.Contains("el_round_7", observations[7].Text, StringComparison.Ordinal);
         Assert.Contains("\"state\"", observations[7].Text, StringComparison.Ordinal);
         Assert.Contains("\"elements\"", observations[7].Text, StringComparison.Ordinal);
@@ -77,6 +79,58 @@ public sealed class BrowserObservationCompactionTests
         Assert.Contains("el_latest", elements[0].GetProperty("ref").GetString(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Latest_receipt_per_page_keeps_both_ends_and_older_duplicates_stay_short()
+    {
+        var messages = new List<ModelMessage>
+        {
+            Page("http://store.test/orders", "ORDER-EARLY", settled: false),
+            Page("http://store.test/orders", "ORDER-LATE", settled: true),
+            Page("http://store.test/products", "PRODUCT-GRID", settled: null)
+        };
+
+        BrowserObservationCompaction.Compact(messages);
+
+        var early = JsonDocument.Parse(messages[0].Text).RootElement;
+        var late = JsonDocument.Parse(messages[1].Text).RootElement;
+        var products = JsonDocument.Parse(messages[2].Text).RootElement;
+        Assert.True(early.GetProperty("compacted").GetBoolean());
+        Assert.DoesNotContain("ORDER-EARLY", early.GetProperty("visibleTextExcerpt").GetString(), StringComparison.Ordinal);
+        Assert.Equal(BrowserObservationCompaction.DuplicateReceiptChars, early.GetProperty("visibleTextExcerpt").GetString()!.Length);
+        var lateExcerpt = late.GetProperty("visibleTextExcerpt").GetString();
+        Assert.Contains("ORDER-LATE", lateExcerpt, StringComparison.Ordinal);
+        Assert.True(lateExcerpt!.Length <= BrowserObservationCompaction.PageEvidenceChars);
+        Assert.Contains("HEADER", late.GetProperty("visibleTextExcerpt").GetString(), StringComparison.Ordinal);
+        Assert.True(late.GetProperty("settled").GetBoolean());
+        Assert.False(late.TryGetProperty("elements", out _));
+        Assert.True(products.TryGetProperty("elements", out _));
+        Assert.Contains("PRODUCT-GRID", products.GetProperty("visibleText").GetString(), StringComparison.Ordinal);
+    }
+
+    private static ModelMessage Page(string url, string marker, bool? settled)
+    {
+        var visible = "HEADER-" + new string('h', 2000) + "-" + marker;
+        var json = settled is bool settledValue
+            ? JsonSerializer.Serialize(new
+            {
+                untrustedBrowserContent = true,
+                url,
+                title = "Store",
+                visibleText = visible,
+                settled = settledValue,
+                elements = new[] { new { @ref = "el_aaaaaaaaaaaaaaaaaaaaaa", role = "link", name = "Row" } }
+            })
+            : JsonSerializer.Serialize(new
+            {
+                untrustedBrowserContent = true,
+                url,
+                title = "Store",
+                visibleText = visible,
+                elements = new[] { new { @ref = "el_aaaaaaaaaaaaaaaaaaaaaa", role = "link", name = "Row" } }
+            });
+        return new ModelMessage(ModelRole.Tool, json, ToolCallId: marker, Name: "browser.observe");
+    }
+
     private static ModelMessage Observation(int round, string reference)
     {
         var elements = Enumerable.Range(0, 40)
@@ -89,7 +143,7 @@ public sealed class BrowserObservationCompactionTests
             untrustedBrowserContent = true,
             url = $"http://127.0.0.1:5088/Admin/Product/Create?round={round}",
             title = "Create product",
-            visibleText = new string('v', 4000) + reference,
+            visibleText = new string('v', 4000) + $"TAIL-{round}",
             textTruncated = false,
             elements
         });

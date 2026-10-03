@@ -63,6 +63,18 @@ public sealed class SecretaryIdentityTests
         Assert.Equal(
             ["store.product.manage", "store.order.review", "store.inventory.review", "store.promotion.manage", "store.daily.review"],
             secretary.SkillList.Select(skill => skill.Id).ToArray());
+        var daily = secretary.SkillList.Single(skill => skill.Id == "store.daily.review");
+        Assert.Contains("Visit each required review area at most once", daily.Procedure, StringComparison.Ordinal);
+        Assert.Contains("Do not restart the whole review", daily.Procedure, StringComparison.Ordinal);
+        Assert.Contains(
+            "store.daily.review",
+            DeterministicSkillSelector.SelectActiveIds(secretary, "check current state of our nopCommerce store"));
+        Assert.Contains(
+            "store.daily.review",
+            DeterministicSkillSelector.SelectActiveIds(secretary, "daily store review"));
+        Assert.DoesNotContain(
+            "store.daily.review",
+            DeterministicSkillSelector.SelectActiveIds(secretary, "improve my productivity"));
         Assert.All(secretary.SkillList, skill => Assert.NotEmpty(skill.RequiredCapabilities));
         Assert.DoesNotContain("demo.sensitive_action", RoleEnvironments.Of(secretary).ToolList);
     }

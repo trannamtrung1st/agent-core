@@ -2620,6 +2620,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         string? browserPageOrigin = null;
         var blockedNoProgress = 0;
         var terminalBrowserContinuation = false;
+        string? continuationInstruction = null;
+        var evidence = new BrowserEvidenceProgress();
         var budget = ToolExecutionBudget.Resolve(new ToolBudgetSignal(
             InteractiveBrowser: trigger.Kind == TriggerKind.UserTurn
                 && ToolCatalog.AuthorizesBrowser(
@@ -2663,7 +2665,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 else if (terminalBrowserContinuation)
                 {
                     prompt = messages.ToList();
-                    prompt.Add(new ModelMessage(ModelRole.System, TerminalBrowserContinuationInstruction));
+                    prompt.Add(new ModelMessage(ModelRole.System, continuationInstruction ?? TerminalBrowserContinuationInstruction));
                 }
                 else if (pageBlocked)
                 {
@@ -3148,6 +3150,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                         if (blockedNoProgress >= 2)
                                         {
                                             terminalBrowserContinuation = true;
+                                            continuationInstruction = TerminalBrowserContinuationInstruction;
                                         }
                                     }
                                     else
@@ -3253,6 +3256,19 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 blockedBrowserOrigins)))
                     {
                         blockedNoProgress = 0;
+                        if (closedPage)
+                        {
+                            evidence.Reset();
+                        }
+                        else
+                        {
+                            evidence.Note(call.Name, executionResult.Text);
+                            if (evidence.ShouldStop)
+                            {
+                                terminalBrowserContinuation = true;
+                                continuationInstruction = NoProgressBrowserContinuationInstruction;
+                            }
+                        }
                     }
                     outputBytes += ToolOutputBudget.TextByteCount(executionResult);
                     if (outputBytes > ToolLimits.MaxOutputBytes)
@@ -6116,6 +6132,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         Use the work already completed.
         Explain which site requires human intervention.
         Do not request more browser actions.
+        """;
+
+    private const string NoProgressBrowserContinuationInstruction =
+        """
+        No new browser evidence was obtained.
+        Use the observations already collected.
+        Report any unresolved part as uncertain.
+        Do not request another browser action solely to retry the same observation.
         """;
 
     private static bool IsJsonDocument(string text)
