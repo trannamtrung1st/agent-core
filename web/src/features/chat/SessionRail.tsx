@@ -378,6 +378,7 @@ export function SessionRail({
                         disabled={mutationBusy(mutation, item.sessionId, "rename")}
                         onKeyDown={(event) => {
                           if (event.key === "Escape" && !mutationBusy(mutation, item.sessionId, "rename")) {
+                            event.stopPropagation();
                             setRenamingId(null);
                           }
                         }}

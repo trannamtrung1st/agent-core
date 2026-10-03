@@ -210,6 +210,36 @@ describe("SessionRail", () => {
     expect(screen.queryByText("No chats yet.")).not.toBeInTheDocument();
   });
 
+  it("Escape cancels rename without bubbling to an ancestor", async () => {
+    const onAncestorKeyDown = vi.fn();
+    render(
+      <ConfigProvider theme={antdTheme}>
+        <App>
+          <div onKeyDown={onAncestorKeyDown}>
+            <SessionRail
+              items={[live]}
+              agents={agents}
+              activeSessionId="s1"
+              includeArchived={false}
+              hasMore={false}
+              capabilityLost={false}
+              error={null}
+              mutation={null}
+              onNewChat={vi.fn()}
+              onOpen={vi.fn()}
+            />
+          </div>
+        </App>
+      </ConfigProvider>
+    );
+
+    await openRowMenu("Planning notes", "Rename");
+    fireEvent.keyDown(screen.getByLabelText("Session title"), { key: "Escape" });
+
+    expect(screen.queryByLabelText("Session title")).not.toBeInTheDocument();
+    expect(onAncestorKeyDown).not.toHaveBeenCalled();
+  });
+
   it("rename save, archive, unarchive, and confirm delete call versioned catalog APIs", async () => {
     vi.mocked(renameCatalogItem).mockResolvedValue(true);
     vi.mocked(archiveCatalogItem).mockResolvedValue(true);
