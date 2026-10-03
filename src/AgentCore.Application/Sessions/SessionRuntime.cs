@@ -2411,6 +2411,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     InitiativeHeld: _initiativeHeld || _pendingUploadHold,
                     InactivityExceeded: InactivityExceeded(),
                     ModelSupportsTools: model.Capabilities.Tools,
+                    ModelSupportsVision: model.Capabilities.Vision,
                     UtcNow: _time.GetUtcNow(),
                     LastUserActivityAt: _snapshot.LastUserActivityAt,
                     LanguageModel: model,
@@ -3173,7 +3174,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                                 Detached: false,
                                                 trigger.Kind,
                                                 allowedIntermediate,
-                                                _snapshot.AgentInstanceId))
+                                                _snapshot.AgentInstanceId,
+                                                SupportsVision: model.Capabilities.Vision,
+                                                CaptureScope: request.ResponseId.ToString()))
                                         .ConfigureAwait(false);
                                     if (executionResult.ReplaceTriggerProposal)
                                     {

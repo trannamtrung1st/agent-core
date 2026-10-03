@@ -14,10 +14,33 @@ public static class BrowserToolLimits
     public const int MinObserveTimeoutMs = 100;
     public const int MaxObserveTimeoutMs = 5000;
     public const int DefaultObserveTimeoutMs = 2500;
+    public const int MaxCaptureBytes = 1_500_000;
+    public const int MaxCapturesPerScope = 4;
+    public const int MaxWorkCaptures = 8;
+    public const int MaxCaptureWidth = 1280;
+    public const int MaxCaptureHeight = 800;
+    public const int DefaultScrollDelta = 400;
+    public const int MaxScrollDelta = 2000;
 
-    public static readonly string[] Operations = ["click", "fill", "select", "press", "check", "uncheck", "upload"];
+    public static readonly string[] Operations =
+    [
+        "click", "fill", "select", "press", "check", "uncheck", "upload",
+        "doubleClick", "hover", "scroll", "drag"
+    ];
 
-    public static readonly string[] ObserveWaitModes = ["stable"];
+    public static readonly string[] ObserveWaitModes = ["stable", "navigation", "role"];
+
+    public static readonly string[] NavigateOperations = ["goto", "back", "forward", "reload"];
+
+    public static readonly string[] PageOperations = ["list", "adopt", "switch", "close"];
+
+    public static readonly string[] ScrollDirections = ["up", "down", "left", "right"];
+
+    public static readonly string[] ObserveRoles =
+    [
+        "button", "link", "textbox", "heading", "checkbox", "radio", "combobox",
+        "option", "tab", "menuitem", "searchbox", "switch", "img", "listitem"
+    ];
 
     public static readonly string[] PressKeys = ["Enter", "Tab", "Escape"];
 }

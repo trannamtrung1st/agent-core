@@ -60,10 +60,10 @@ public sealed record BrowserObservation(
     bool? Settled = null);
 
 /// <summary>
-/// Provider-neutral observe wait. <paramref name="WaitFor"/> is <c>stable</c>.
+/// Provider-neutral observe wait. <paramref name="WaitFor"/> is <c>stable</c>, <c>navigation</c>, or <c>role</c>.
 /// <paramref name="TimeoutMs"/> is optional and already bounded by Core.
 /// </summary>
-public sealed record BrowserObserveOptions(string WaitFor, int? TimeoutMs);
+public sealed record BrowserObserveOptions(string WaitFor, int? TimeoutMs, string? Role = null, string? Name = null);
 
 public enum BrowserInterventionKind
 {
@@ -78,7 +78,7 @@ public sealed record BrowserOperationResult(
     BrowserObservation? Observation,
     IReadOnlyList<string>? AllowedActions = null);
 
-public sealed record BrowserNavigateRequest(Guid SessionId, Uri Url);
+public sealed record BrowserNavigateRequest(Guid SessionId, Uri? Url, string Operation = "goto");
 
 public sealed record BrowserUpload(string FileName, string MediaType, ReadOnlyMemory<byte> Content);
 
@@ -87,7 +87,10 @@ public sealed record BrowserActRequest(
     string Operation,
     string Ref,
     string? Value,
-    BrowserUpload? Upload = null);
+    BrowserUpload? Upload = null,
+    string? Direction = null,
+    int Delta = 0,
+    string? TargetRef = null);
 
 public interface IBrowserSessionLease
 {
@@ -140,6 +143,34 @@ public interface IBrowserSession
 
     ValueTask ResetPersistentProfileAsync(Guid agentInstanceId, CancellationToken cancellationToken = default) =>
         ValueTask.CompletedTask;
+
+    ValueTask<BrowserPagesResult> PagesAsync(
+        BrowserPagesRequest request,
+        CancellationToken cancellationToken = default) =>
+        new(new BrowserPagesResult("provider_unavailable", []));
+
+    ValueTask<BrowserCaptureResult> CaptureViewportAsync(
+        BrowserCaptureRequest request,
+        CancellationToken cancellationToken = default) =>
+        new(new BrowserCaptureResult("provider_unavailable", null, 0));
 }
+
+public sealed record BrowserPagesRequest(Guid SessionId, string Operation, string? PageId = null);
+
+public sealed record BrowserPageInfo(string PageId, string Url, bool Active);
+
+public sealed record BrowserPagesResult(
+    string? ErrorCode,
+    IReadOnlyList<BrowserPageInfo> Pages,
+    BrowserObservation? Observation = null);
+
+public sealed record BrowserCaptureRequest(Guid SessionId);
+
+public sealed record BrowserCaptureResult(
+    string? ErrorCode,
+    byte[]? Png,
+    int RedactionCount,
+    int Width = 0,
+    int Height = 0);
 
 public sealed record BrowserCloseResult(string Status);

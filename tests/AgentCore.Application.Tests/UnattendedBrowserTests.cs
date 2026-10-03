@@ -617,8 +617,8 @@ public sealed class UnattendedBrowserTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             NavigateCalls++;
-            Navigated.Add(request.Url.GetLeftPart(UriPartial.Authority) + request.Url.AbsolutePath);
-            return new(Result(request.Url.AbsoluteUri, "Admin"));
+            Navigated.Add(request.Url!.GetLeftPart(UriPartial.Authority) + request.Url.AbsolutePath);
+            return new(Result(request.Url!.AbsoluteUri, "Admin"));
         }
 
         public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default)

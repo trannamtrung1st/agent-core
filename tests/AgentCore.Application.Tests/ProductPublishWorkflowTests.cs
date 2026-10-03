@@ -293,15 +293,15 @@ public sealed class ProductPublishWorkflowTests
             BrowserNavigateRequest request,
             CancellationToken cancellationToken = default)
         {
-            NavigatedUrls.Add(request.Url.AbsoluteUri);
-            Steps.Add(new ProductPublishStep(ToolCatalog.BrowserNavigate, request.Url.AbsoluteUri));
-            if (!string.Equals(request.Url.GetLeftPart(UriPartial.Authority), Origin, StringComparison.Ordinal)
+            NavigatedUrls.Add(request.Url!.AbsoluteUri);
+            Steps.Add(new ProductPublishStep(ToolCatalog.BrowserNavigate, request.Url!.AbsoluteUri));
+            if (!string.Equals(request.Url!.GetLeftPart(UriPartial.Authority), Origin, StringComparison.Ordinal)
                 || request.Url.AbsolutePath is not ("/" or "" or "/storefront" or "/login"))
             {
                 return new(new BrowserOperationResult("target_denied", null));
             }
 
-            _page = request.Url.AbsolutePath switch
+            _page = request.Url!.AbsolutePath switch
             {
                 "/storefront" => "storefront",
                 "/login" => "login",

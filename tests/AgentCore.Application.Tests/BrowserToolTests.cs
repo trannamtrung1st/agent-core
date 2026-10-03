@@ -92,7 +92,7 @@ public sealed class BrowserToolTests
         Assert.True(inside.Allowed);
         Assert.Equal("target_denied", outside.Code);
         Assert.Equal("target_denied", externalPopup.Code);
-        Assert.Equal("unsupported_operation", sameOriginPopup.Code);
+        Assert.True(sameOriginPopup.Allowed);
     }
 
     [Fact]
@@ -935,6 +935,63 @@ public sealed class BrowserToolTests
         }
     }
 
+    [Fact]
+    public async Task Capture_reaches_a_vision_model_and_stops_a_text_only_model()
+    {
+        var browser = new CapturingBrowser();
+        var store = new RecordingArtifacts();
+        var executor = new SessionToolExecutor(
+            artifacts: store,
+            browser: browser,
+            configurationGate: ToolConfigurationGates.AllowAll);
+        var definition = BrowserDefinition() with
+        {
+            Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.BrowserCapture])
+        };
+        var sessionId = Guid.NewGuid();
+        var call = Call(ToolCatalog.BrowserCapture, "{}");
+        var denied = await executor.ExecuteAsync(
+            definition,
+            sessionId,
+            call,
+            ToolLimits.MaxOutputBytes,
+            admission: UserTurn());
+        Assert.Contains("model-capability-unsupported", denied.Text, StringComparison.Ordinal);
+        Assert.Null(denied.Parts);
+        Assert.Equal(0, browser.Captures);
+
+        var scope = "turn-1";
+        for (var index = 0; index < 4; index++)
+        {
+            var seen = await executor.ExecuteAsync(
+                definition,
+                sessionId,
+                call,
+                ToolLimits.MaxOutputBytes,
+                admission: UserTurn() with { SupportsVision = true, CaptureScope = scope });
+            Assert.DoesNotContain("error", seen.Text, StringComparison.Ordinal);
+            var image = Assert.IsType<ModelImageContent>(Assert.Single(seen.Parts!));
+            Assert.Equal("image/png", image.ContentType);
+            Assert.True(image.Bytes.Length < BrowserToolLimits.MaxCaptureBytes);
+        }
+
+        Assert.Equal(4, browser.Captures);
+        Assert.Equal(4, store.Created);
+        var limited = await executor.ExecuteAsync(
+            definition,
+            sessionId,
+            call,
+            ToolLimits.MaxOutputBytes,
+            admission: UserTurn() with { SupportsVision = true, CaptureScope = scope });
+        Assert.Contains("capture_limit", limited.Text, StringComparison.Ordinal);
+        Assert.Null(limited.Parts);
+        Assert.Equal(4, browser.Captures);
+
+        var created = new DateTimeOffset(2026, 10, 3, 0, 0, 0, TimeSpan.Zero);
+        Assert.Equal(created.AddDays(7), WorkCaptureRetention.Until(created, created.AddHours(1)));
+        Assert.Equal(created.AddDays(8).AddHours(24), WorkCaptureRetention.Until(created, created.AddDays(8)));
+    }
+
     private static SessionToolExecutor Executor(FakeBrowser browser) =>
         new(browser: browser, configurationGate: ToolConfigurationGates.AllowAll);
 
@@ -1083,7 +1140,7 @@ public sealed class BrowserToolTests
             NavigateCalls++;
             LastSessionId = request.SessionId;
             CurrentUrl = request.Url;
-            return new(new BrowserOperationResult(null, Observation with { Url = request.Url.AbsoluteUri }));
+            return new(new BrowserOperationResult(null, Observation with { Url = request.Url!.AbsoluteUri }));
         }
 
         public ValueTask<BrowserOperationResult> ObserveAsync(
@@ -1138,5 +1195,62 @@ public sealed class BrowserToolTests
             LastSessionId = sessionId;
             return new(CloseResult);
         }
+    }
+
+    private sealed class CapturingBrowser : FakeBrowser, IBrowserSession
+    {
+        public int Captures { get; private set; }
+
+        public byte[] Png { get; set; } = [0x89, 0x50, 0x4E, 0x47, 1, 2, 3];
+
+        ValueTask<BrowserCaptureResult> IBrowserSession.CaptureViewportAsync(
+            BrowserCaptureRequest request,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Captures++;
+            return new(new BrowserCaptureResult(null, Png, 1, 8, 8));
+        }
+    }
+
+    private sealed class RecordingArtifacts : IArtifactStore
+    {
+        public int Created { get; private set; }
+
+        public bool Exists(Guid sessionId, Guid artifactId) => false;
+
+        public ValueTask<ArtifactRecord> CreateAsync(
+            Guid sessionId,
+            string displayName,
+            string contentType,
+            ReadOnlyMemory<byte> bytes,
+            Guid? sourceAttachmentId,
+            string? workspaceLogicalPath,
+            CancellationToken cancellationToken = default)
+        {
+            Created++;
+            return new(new ArtifactRecord(
+                Guid.CreateVersion7(),
+                sessionId,
+                displayName,
+                contentType,
+                bytes.Length,
+                "abc",
+                sourceAttachmentId,
+                workspaceLogicalPath,
+                DateTimeOffset.UtcNow));
+        }
+
+        public ValueTask<ArtifactRecord?> GetAsync(Guid sessionId, Guid artifactId, CancellationToken cancellationToken = default) =>
+            new((ArtifactRecord?)null);
+
+        public ValueTask<IReadOnlyList<ArtifactRecord>> ListAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+            new(Array.Empty<ArtifactRecord>());
+
+        public ValueTask<Stream> OpenContentAsync(Guid sessionId, Guid artifactId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+            ValueTask.CompletedTask;
     }
 }

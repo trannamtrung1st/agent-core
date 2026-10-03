@@ -30,7 +30,8 @@ public sealed partial class SessionToolExecutor(
     IMemoryStore? profiles = null,
     IBrowserSession? browser = null,
     IApplicationConnectionStore? applicationConnections = null,
-    IAgentDefinitionResourceAdminStore? definitionResources = null)
+    IAgentDefinitionResourceAdminStore? definitionResources = null,
+    IWorkCaptureStore? workCaptures = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -205,6 +206,14 @@ public sealed partial class SessionToolExecutor(
                 ToolCatalog.BrowserClose => FitResult(
                     remainingOutputBytes,
                     await CloseBrowserAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.BrowserPages => FitResult(
+                    remainingOutputBytes,
+                    await PagesBrowserAsync(sessionId, args, admission, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.BrowserCapture => await CaptureBrowserAsync(
+                    sessionId,
+                    args,
+                    admission,
+                    cancellationToken).ConfigureAwait(false),
                 ToolCatalog.DemoSensitiveAction => TextResult(
                     ExecuteDemoSensitiveAction(sessionId, args, approvalGrant)),
                 ToolCatalog.EmailSearch => FitResult(

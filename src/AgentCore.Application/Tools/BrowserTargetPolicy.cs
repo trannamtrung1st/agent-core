@@ -42,13 +42,7 @@ public static class BrowserTargetPolicy
         IReadOnlyList<string>? targetOrigins,
         BrowserPolicyMode policyMode = BrowserPolicyMode.Restricted)
     {
-        var destination = EvaluateDestination(url, targetOrigins, policyMode);
-        if (!destination.Allowed || policyMode == BrowserPolicyMode.OpenWeb)
-        {
-            return destination;
-        }
-
-        return BrowserTargetDecision.Deny("unsupported_operation", "Popups are not a browser result surface.");
+        return EvaluateDestination(url, targetOrigins, policyMode);
     }
 
     public static BrowserTargetDecision EvaluateResource(

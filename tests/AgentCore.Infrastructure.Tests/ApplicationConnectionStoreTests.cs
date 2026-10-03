@@ -250,7 +250,7 @@ public sealed class ApplicationConnectionStoreTests
             CancellationToken cancellationToken = default)
         {
             Navigated = request.Url;
-            return ValueTask.FromResult(new BrowserOperationResult(null, Observed(request.Url)));
+            return ValueTask.FromResult(new BrowserOperationResult(null, Observed(request.Url!)));
         }
 
         public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
@@ -294,7 +294,7 @@ public sealed class ApplicationConnectionStoreTests
             NavigateCalls++;
             return ValueTask.FromResult(new BrowserOperationResult(
                 null,
-                new BrowserObservation(request.Url.AbsoluteUri, "admin", string.Empty, false, [])));
+                new BrowserObservation(request.Url!.AbsoluteUri, "admin", string.Empty, false, [])));
         }
 
         public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default)

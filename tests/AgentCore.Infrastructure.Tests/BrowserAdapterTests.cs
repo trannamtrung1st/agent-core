@@ -1142,10 +1142,22 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         var external = await session.ActAsync(new BrowserActRequest(id, "click", Ref(home.Observation!, "Open external"), null));
         Assert.Equal("target_denied", external.ErrorCode);
         var local = await session.ActAsync(new BrowserActRequest(id, "click", Ref(home.Observation!, "Open local"), null));
-        Assert.Equal("unsupported_operation", local.ErrorCode);
+        Assert.Null(local.ErrorCode);
         var current = await session.GetCurrentUrlAsync(id);
         Assert.DoesNotContain("example.invalid", current?.AbsoluteUri ?? string.Empty, StringComparison.Ordinal);
         Assert.EndsWith("/", current!.AbsolutePath, StringComparison.Ordinal);
+        Assert.Equal(2, session.ContextFor(id)!.Pages.Count);
+        var pages = await session.PagesAsync(new BrowserPagesRequest(id, "list"));
+        var popup = Assert.Single(pages.Pages, page => !page.Active);
+        var adopted = await session.PagesAsync(new BrowserPagesRequest(id, "adopt"));
+        Assert.Null(adopted.ErrorCode);
+        Assert.EndsWith("/records/AC-1042", new Uri(adopted.Observation!.Url).AbsolutePath, StringComparison.Ordinal);
+        var opener = Assert.Single(pages.Pages, page => page.Active);
+        var switched = await session.PagesAsync(new BrowserPagesRequest(id, "switch", opener.PageId));
+        Assert.Null(switched.ErrorCode);
+        Assert.EndsWith("/", new Uri(switched.Observation!.Url).AbsolutePath, StringComparison.Ordinal);
+        var closed = await session.PagesAsync(new BrowserPagesRequest(id, "close", popup.PageId));
+        Assert.Null(closed.ErrorCode);
         Assert.Single(session.ContextFor(id)!.Pages);
     }
 
@@ -1514,6 +1526,49 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
             session.CaptureProbe = null;
             await session.StopAsync(CancellationToken.None);
         }
+    }
+
+    [Fact]
+    public async Task History_pages_actions_and_capture_stay_inside_browser_v1()
+    {
+        var session = fixture.Session;
+        var id = Guid.NewGuid();
+        var home = await Navigate(session, id, "/");
+        Assert.Null(home.ErrorCode);
+        var record = await Navigate(session, id, "/records/AC-1042");
+        Assert.Null(record.ErrorCode);
+        var back = await session.NavigateAsync(new BrowserNavigateRequest(id, null, "back"));
+        Assert.Null(back.ErrorCode);
+        Assert.EndsWith("/", new Uri(back.Observation!.Url).AbsolutePath, StringComparison.Ordinal);
+        var reloaded = await session.NavigateAsync(new BrowserNavigateRequest(id, null, "reload"));
+        Assert.Null(reloaded.ErrorCode);
+        Assert.EndsWith("/", new Uri(reloaded.Observation!.Url).AbsolutePath, StringComparison.Ordinal);
+
+        var search = Ref(reloaded.Observation!, "Search");
+        var doubled = await session.ActAsync(new BrowserActRequest(id, "doubleClick", search, null));
+        Assert.Null(doubled.ErrorCode);
+        var scrolled = await session.ActAsync(new BrowserActRequest(id, "scroll", "", null, Direction: "down", Delta: 200));
+        Assert.Null(scrolled.ErrorCode);
+
+        var state = await Navigate(session, id, "/state");
+        Assert.Null(state.ErrorCode);
+        var captured = await session.CaptureViewportAsync(new BrowserCaptureRequest(id));
+        Assert.Null(captured.ErrorCode);
+        Assert.NotNull(captured.Png);
+        Assert.True(captured.RedactionCount >= 1);
+        Assert.Equal(0x89, captured.Png![0]);
+        Assert.True(captured.Png.Length < BrowserToolLimits.MaxCaptureBytes);
+
+        var listed = await session.PagesAsync(new BrowserPagesRequest(id, "list"));
+        Assert.Null(listed.ErrorCode);
+        var only = Assert.Single(listed.Pages);
+        Assert.True(only.Active);
+        var kept = await session.PagesAsync(new BrowserPagesRequest(id, "close", only.PageId));
+        Assert.Equal("last_page", kept.ErrorCode);
+        var stale = await session.PagesAsync(new BrowserPagesRequest(id, "switch", "pg_" + new string('a', 22)));
+        Assert.Equal("stale_page", stale.ErrorCode);
+        var none = await session.PagesAsync(new BrowserPagesRequest(id, "adopt"));
+        Assert.Equal("no_popup", none.ErrorCode);
     }
 
     private static async Task<PlaywrightBrowserSession> StartDemoSession()

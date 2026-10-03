@@ -193,6 +193,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<AttachmentRecordRow> Attachments => Set<AttachmentRecordRow>();
     public DbSet<MessageAttachmentRow> MessageAttachments => Set<MessageAttachmentRow>();
     public DbSet<ArtifactRecordRow> Artifacts => Set<ArtifactRecordRow>();
+    public DbSet<WorkCaptureRow> WorkCaptures => Set<WorkCaptureRow>();
     public DbSet<StructuredMemoryRecord> StructuredMemories => Set<StructuredMemoryRecord>();
     public DbSet<AgentInstanceRecord> AgentInstances => Set<AgentInstanceRecord>();
     public DbSet<TriggerRegistrationRecord> TriggerRegistrations => Set<TriggerRegistrationRecord>();
@@ -292,6 +293,19 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.DisplayName).HasMaxLength(200).IsRequired();
             entity.Property(row => row.Sha256Hex).HasMaxLength(64).IsRequired();
             entity.HasIndex(row => row.SessionId);
+        });
+        modelBuilder.Entity<WorkCaptureRow>(entity =>
+        {
+            entity.ToTable("WorkCaptures");
+            entity.HasKey(row => row.CaptureId);
+            entity.Property(row => row.CaptureId).HasMaxLength(36);
+            entity.Property(row => row.WorkItemId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.ContentType).HasMaxLength(80).IsRequired();
+            entity.Property(row => row.Sha256Hex).HasMaxLength(64).IsRequired();
+            entity.Property(row => row.RelativePath).HasMaxLength(240).IsRequired();
+            entity.HasIndex(row => row.WorkItemId);
+            entity.HasIndex(row => row.RetainUntilUtc);
         });
         modelBuilder.Entity<StructuredMemoryRecord>(entity =>
         {

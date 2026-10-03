@@ -515,7 +515,7 @@ public sealed class BrowserOriginHandoffTests
         public ValueTask<BrowserOperationResult> NavigateAsync(
             BrowserNavigateRequest request,
             CancellationToken cancellationToken = default) =>
-            new(Page($"el_nav_{request.Url.AbsoluteUri.Length}"));
+            new(Page($"el_nav_{request.Url!.AbsoluteUri.Length}"));
 
         public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
@@ -566,7 +566,7 @@ public sealed class BrowserOriginHandoffTests
             BrowserNavigateRequest request,
             CancellationToken cancellationToken = default)
         {
-            Navigated.Add(request.Url.AbsoluteUri);
+            Navigated.Add(request.Url!.AbsoluteUri);
             return new(Page(request.Url));
         }
 
@@ -624,8 +624,8 @@ public sealed class BrowserOriginHandoffTests
             BrowserNavigateRequest request,
             CancellationToken cancellationToken = default)
         {
-            Navigated.Add(request.Url.AbsoluteUri);
-            var challenged = request.Url.Host is "cars.test" or "www.cars.test";
+            Navigated.Add(request.Url!.AbsoluteUri);
+            var challenged = request.Url!.Host is "cars.test" or "www.cars.test";
             var final = challenged
                 ? new Uri("https://www.cars.test/page")
                 : request.Url;

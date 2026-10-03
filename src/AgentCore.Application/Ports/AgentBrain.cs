@@ -53,7 +53,8 @@ public sealed record AgentContext(
     IReadOnlyList<string>? ActiveSkillIds = null,
     bool IntermediateMessagingAllowed = false,
     string? ApplicationConnectionStatus = null,
-    bool TrustedConnection = false)
+    bool TrustedConnection = false,
+    bool ModelSupportsVision = false)
 {
     public AgentIdentity EffectiveIdentity => Persona ?? Definition.Identity;
 }

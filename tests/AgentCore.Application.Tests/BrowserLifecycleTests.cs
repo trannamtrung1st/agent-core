@@ -367,7 +367,7 @@ public sealed class BrowserLifecycleTests
 
             return new BrowserOperationResult(
                 null,
-                new BrowserObservation(request.Url.AbsoluteUri, LateTitle, "Search", false, []));
+                new BrowserObservation(request.Url!.AbsoluteUri, LateTitle, "Search", false, []));
         }
 
         public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default) =>

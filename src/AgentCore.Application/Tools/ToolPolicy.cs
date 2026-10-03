@@ -136,6 +136,12 @@ public static class ToolPolicy
             return false;
         }
 
+        if (string.Equals(descriptor.Name, ToolCatalog.BrowserCapture, StringComparison.Ordinal)
+            && context?.ModelSupportsVision != true)
+        {
+            return false;
+        }
+
         return descriptor.OfferRule switch
         {
             ToolOfferRule.RoleAllowlist => RoleEnvironments.Of(definition).ToolList.Contains(

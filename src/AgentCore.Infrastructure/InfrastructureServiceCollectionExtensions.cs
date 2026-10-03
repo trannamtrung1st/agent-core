@@ -257,6 +257,19 @@ public static class InfrastructureServiceCollectionExtensions
             services.TryAddSingleton<IArtifactStore>(provider =>
                 new InMemoryArtifactStore(provider.GetRequiredService<TimeProvider>()));
         }
+
+        if (string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
+        {
+            services.TryAddSingleton<IWorkCaptureStore>(provider => new SqliteWorkCaptureStore(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                provider.GetRequiredService<TimeProvider>(),
+                persistence.ArtifactRoot));
+        }
+        else
+        {
+            services.TryAddSingleton<IWorkCaptureStore>(provider =>
+                new InMemoryWorkCaptureStore(provider.GetRequiredService<TimeProvider>()));
+        }
         services.TryAddSingleton<IArtifactReferenceAuthorizer>(provider =>
             new SessionArtifactAuthorizer(provider.GetService<IArtifactStore>()));
         services.AddHttpClient(OpenAICompatibleLanguageModel.HttpClientName, client =>
@@ -369,7 +382,8 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<IMemoryStore>(),
             provider.GetService<IBrowserSession>(),
             provider.GetService<IApplicationConnectionStore>(),
-            provider.GetService<IAgentDefinitionResourceAdminStore>()));
+            provider.GetService<IAgentDefinitionResourceAdminStore>(),
+            provider.GetService<IWorkCaptureStore>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),

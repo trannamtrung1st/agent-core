@@ -15,7 +15,7 @@ public sealed class BrowserActContractTests
         Assert.Equal("object", root.GetProperty("type").GetString());
         Assert.False(root.TryGetProperty("required", out _));
         var branches = root.GetProperty("oneOf");
-        Assert.Equal(7, branches.GetArrayLength());
+        Assert.Equal(11, branches.GetArrayLength());
 
         AssertBranch(branches, "click", ["operation", "ref"]);
         AssertBranch(branches, "check", ["operation", "ref"]);
@@ -24,6 +24,10 @@ public sealed class BrowserActContractTests
         AssertBranch(branches, "select", ["operation", "ref", "value"], valueMaxLength: 200);
         AssertBranch(branches, "press", ["operation", "ref", "key"]);
         AssertBranch(branches, "upload", ["operation", "ref", "artifactId"]);
+        AssertBranch(branches, "doubleClick", ["operation", "ref"]);
+        AssertBranch(branches, "hover", ["operation", "ref"]);
+        AssertBranch(branches, "scroll", ["operation", "direction"]);
+        AssertBranch(branches, "drag", ["operation", "ref", "targetRef"]);
     }
 
     [Fact]
@@ -40,6 +44,10 @@ public sealed class BrowserActContractTests
         AssertAccepted("uncheck", $$"""{"operation":"uncheck","ref":"{{Ref}}"}""");
         AssertRejected($$"""{"operation":"upload","ref":"{{Ref}}"}""", "missing_artifact_id");
         AssertAccepted("upload", $$"""{"operation":"upload","ref":"{{Ref}}","artifactId":"01a0fddd-23b7-7ee9-9fc0-3ab76e455421"}""");
+        AssertAccepted("doubleClick", $$"""{"operation":"doubleClick","ref":"{{Ref}}"}""");
+        AssertAccepted("hover", $$"""{"operation":"hover","ref":"{{Ref}}"}""");
+        AssertAccepted("scroll", """{"operation":"scroll","direction":"down","delta":400}""");
+        AssertAccepted("drag", $$"""{"operation":"drag","ref":"{{Ref}}","targetRef":"{{Ref}}"}""");
     }
 
     [Fact]

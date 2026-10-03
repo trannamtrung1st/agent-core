@@ -77,7 +77,10 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
             Detached: true,
             triggerKind,
             AgentInstanceId: running.Owner.AgentInstanceId,
-            TrustedConnection: trustedConnection);
+            TrustedConnection: trustedConnection,
+            SupportsVision: model.Capabilities.Vision,
+            CaptureScope: running.WorkItemId.ToString("D"),
+            WorkItemId: running.WorkItemId);
         var observationRequired = restoredObservation;
         string? blockedActionHash = restoredBlockedHash;
         var browserUnavailable = false;

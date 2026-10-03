@@ -10,6 +10,10 @@ public static class BrowserToolArguments
         "^el_[A-Za-z0-9_-]{22}$",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
+    private static readonly Regex PageRef = new(
+        "^pg_[A-Za-z0-9_-]{22}$",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
     private static readonly HashSet<string> AuthorityProperties = new(StringComparer.OrdinalIgnoreCase)
     {
         "headless",
@@ -38,29 +42,64 @@ public static class BrowserToolArguments
 
     public static bool TryNavigate(JsonElement args, out string url, out string errorJson)
     {
-        url = string.Empty;
+        if (!TryNavigate(args, out var operation, out var parsed, out errorJson)
+            || operation != "goto"
+            || parsed is null)
+        {
+            url = string.Empty;
+            return false;
+        }
+
+        url = parsed;
+        return true;
+    }
+
+    public static bool TryNavigate(JsonElement args, out string operation, out string? url, out string errorJson)
+    {
+        operation = "goto";
+        url = null;
         if (!TryRejectProperties(args, out errorJson))
         {
             return false;
         }
 
-        if (!HasOnly(args, "url", out errorJson))
+        if (args.TryGetProperty("operation", out var operationProperty))
+        {
+            if (operationProperty.ValueKind != JsonValueKind.String
+                || operationProperty.GetString() is not { Length: > 0 } named
+                || !BrowserToolLimits.NavigateOperations.Contains(named, StringComparer.Ordinal))
+            {
+                errorJson = Error("unsupported_operation", "Browser navigation is not supported.", "unsupported_operation");
+                return false;
+            }
+
+            operation = named;
+        }
+
+        var history = operation is "back" or "forward" or "reload";
+        if (!HasOnly(args, history ? ["operation"] : args.TryGetProperty("operation", out _) ? ["operation", "url"] : ["url"], out errorJson))
         {
             return false;
         }
 
-        if (!TryString(args, "url", out url))
+        if (history)
+        {
+            return true;
+        }
+
+        if (!TryString(args, "url", out var parsedUrl))
         {
             errorJson = Error("invalid", "url is required.");
             return false;
         }
 
-        if (url.Length > BrowserToolLimits.MaxUrlLength)
+        if (parsedUrl.Length > BrowserToolLimits.MaxUrlLength)
         {
             errorJson = Error("invalid", "url must be at most 2048 characters.");
             return false;
         }
 
+        url = parsedUrl;
         return true;
     }
 
@@ -72,7 +111,7 @@ public static class BrowserToolArguments
             return false;
         }
 
-        if (!HasOnly(args, ["waitFor", "timeoutMs"], out errorJson))
+        if (!HasOnly(args, ["waitFor", "timeoutMs", "role", "name"], out errorJson))
         {
             return false;
         }
@@ -112,9 +151,40 @@ public static class BrowserToolArguments
             timeout = parsed;
         }
 
+        string? role = null;
+        string? name = null;
+        if (string.Equals(waitFor, "role", StringComparison.Ordinal))
+        {
+            if (!TryString(args, "role", out var parsedRole)
+                || parsedRole.Length > BrowserToolLimits.MaxRoleLength
+                || !BrowserToolLimits.ObserveRoles.Contains(parsedRole, StringComparer.Ordinal))
+            {
+                errorJson = Error("invalid", "role is required for this wait.", "missing_role");
+                return false;
+            }
+
+            role = parsedRole;
+            if (args.TryGetProperty("name", out _))
+            {
+                if (!TryString(args, "name", out var parsedName)
+                    || parsedName.Length > BrowserToolLimits.MaxAccessibleNameLength)
+                {
+                    errorJson = Error("invalid", "name must be a bounded accessible name.", "invalid_name");
+                    return false;
+                }
+
+                name = parsedName;
+            }
+        }
+        else if (args.TryGetProperty("role", out _) || args.TryGetProperty("name", out _))
+        {
+            errorJson = Error("invalid", "role is only valid when waitFor is role.", "unsupported_property");
+            return false;
+        }
+
         if (waitFor is not null)
         {
-            options = new BrowserObserveOptions(waitFor, timeout);
+            options = new BrowserObserveOptions(waitFor, timeout, role, name);
         }
 
         return true;
@@ -173,11 +243,25 @@ public static class BrowserToolArguments
         out string operation,
         out string reference,
         out string? value,
+        out string errorJson) =>
+        TryAct(args, out operation, out reference, out value, out _, out _, out _, out errorJson);
+
+    public static bool TryAct(
+        JsonElement args,
+        out string operation,
+        out string reference,
+        out string? value,
+        out string? direction,
+        out int delta,
+        out string? targetRef,
         out string errorJson)
     {
         operation = string.Empty;
         reference = string.Empty;
         value = null;
+        direction = null;
+        delta = 0;
+        targetRef = null;
         if (!TryRejectProperties(args, out errorJson))
         {
             return false;
@@ -195,11 +279,44 @@ public static class BrowserToolArguments
             "fill" or "select" => new[] { "operation", "ref", "value" },
             "press" => new[] { "operation", "ref", "key" },
             "upload" => new[] { "operation", "ref", "artifactId" },
+            "scroll" => new[] { "operation", "direction", "delta", "ref" },
+            "drag" => new[] { "operation", "ref", "targetRef" },
             _ => new[] { "operation", "ref" }
         };
         if (!HasOnly(args, allowed, out errorJson))
         {
             return false;
+        }
+
+        if (operation == "scroll")
+        {
+            if (!TryString(args, "direction", out var parsedDirection)
+                || !BrowserToolLimits.ScrollDirections.Contains(parsedDirection, StringComparer.Ordinal))
+            {
+                errorJson = Error("invalid", "direction is required.", "missing_direction");
+                return false;
+            }
+
+            direction = parsedDirection;
+            delta = BrowserToolLimits.DefaultScrollDelta;
+            if (args.TryGetProperty("delta", out var deltaProperty))
+            {
+                if (deltaProperty.ValueKind != JsonValueKind.Number
+                    || !deltaProperty.TryGetInt32(out var parsedDelta)
+                    || parsedDelta < 1
+                    || parsedDelta > BrowserToolLimits.MaxScrollDelta)
+                {
+                    errorJson = Error("invalid", "delta must be from 1 to 2000.", "delta_out_of_range");
+                    return false;
+                }
+
+                delta = parsedDelta;
+            }
+
+            if (!args.TryGetProperty("ref", out _))
+            {
+                return true;
+            }
         }
 
         if (!TryString(args, "ref", out reference))
@@ -273,8 +390,69 @@ public static class BrowserToolArguments
 
             value = artifactId;
         }
+        else if (operation == "drag")
+        {
+            if (!TryString(args, "targetRef", out var parsedTarget)
+                || parsedTarget.Length > BrowserToolLimits.MaxRefLength
+                || LooksLikeSelector(parsedTarget)
+                || !OpaqueRef.IsMatch(parsedTarget))
+            {
+                errorJson = Error("invalid", "targetRef must be an opaque element reference.", "invalid_ref");
+                return false;
+            }
+
+            targetRef = parsedTarget;
+        }
 
         return true;
+    }
+
+    public static bool TryPages(JsonElement args, out string operation, out string? pageId, out string errorJson)
+    {
+        operation = string.Empty;
+        pageId = null;
+        if (!TryRejectProperties(args, out errorJson))
+        {
+            return false;
+        }
+
+        if (!TryString(args, "operation", out operation)
+            || !BrowserToolLimits.PageOperations.Contains(operation, StringComparer.Ordinal))
+        {
+            errorJson = Error("unsupported_operation", "Browser page operation is not supported.", "unsupported_operation");
+            return false;
+        }
+
+        var needsId = operation is "switch" or "close";
+        if (!HasOnly(args, needsId ? ["operation", "pageId"] : ["operation"], out errorJson))
+        {
+            return false;
+        }
+
+        if (!needsId)
+        {
+            return true;
+        }
+
+        if (!TryString(args, "pageId", out var parsed)
+            || !PageRef.IsMatch(parsed))
+        {
+            errorJson = Error("invalid", "pageId must be an opaque page reference.", "invalid_page");
+            return false;
+        }
+
+        pageId = parsed;
+        return true;
+    }
+
+    public static bool TryCapture(JsonElement args, out string errorJson)
+    {
+        if (!TryRejectProperties(args, out errorJson))
+        {
+            return false;
+        }
+
+        return HasOnly(args, [], out errorJson);
     }
 
     private static bool TryRejectProperties(JsonElement args, out string errorJson)

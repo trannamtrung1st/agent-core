@@ -627,10 +627,10 @@ public sealed class TerminalDisplayRepairTests
             BrowserNavigateRequest request,
             CancellationToken cancellationToken = default)
         {
-            Navigated.Add(request.Url.AbsoluteUri);
+            Navigated.Add(request.Url!.AbsoluteUri);
             return new(new BrowserOperationResult(
                 null,
-                new BrowserObservation(request.Url.AbsoluteUri, "Zigwheels", "Open", false, [])));
+                new BrowserObservation(request.Url!.AbsoluteUri, "Zigwheels", "Open", false, [])));
         }
 
         public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default)

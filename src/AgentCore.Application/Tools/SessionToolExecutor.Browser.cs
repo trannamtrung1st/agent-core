@@ -21,8 +21,16 @@ public sealed partial class SessionToolExecutor
         "profile_busy",
         "profile_unavailable",
         "user_intervention_required",
-        "target_unreachable"
+        "target_unreachable",
+        "stale_page",
+        "last_page",
+        "no_popup",
+        "capture_too_large",
+        "capture_limit"
     };
+
+    private readonly Dictionary<string, int> _captureCounts = new(StringComparer.Ordinal);
+    private readonly object _captureGate = new();
 
     private async Task<string?> DenyBrowserUnlessConnectedAsync(
         Guid sessionId,
@@ -83,7 +91,7 @@ public sealed partial class SessionToolExecutor
             return FinishBrowser(ToolCatalog.BrowserNavigate, started, denied);
         }
 
-        if (!BrowserToolArguments.TryNavigate(args, out var url, out var errorJson))
+        if (!BrowserToolArguments.TryNavigate(args, out var operation, out var url, out var errorJson))
         {
             return FinishBrowser(ToolCatalog.BrowserNavigate, started, errorJson);
         }
@@ -96,34 +104,46 @@ public sealed partial class SessionToolExecutor
                 Error("provider_unavailable", "Browser is unavailable."));
         }
 
-        var decision = BrowserTargetPolicy.EvaluateDestination(
-            url,
-            browser.HostPolicy.NavigationOrigins,
-            browser.HostPolicy.PolicyMode);
-        if (!decision.Allowed)
+        Uri? destination = null;
+        if (operation == "goto")
         {
-            return FinishBrowser(
-                ToolCatalog.BrowserNavigate,
-                started,
-                Error(decision.Code ?? "target_denied", decision.Message ?? "Browser target is not allowed."));
-        }
-
-        if (admission is { Detached: true, TriggerKind: TriggerKind.ScheduledOccurrence, TrustedConnection: true }
-            && applicationConnections is not null
-            && admission.AgentInstanceId is Guid connectedAgent)
-        {
-            var connected = await applicationConnections.GetByAgentAsync(connectedAgent, cancellationToken)
-                .ConfigureAwait(false);
-            var leased = BrowserTargetPolicy.EvaluateDestination(
+            var decision = BrowserTargetPolicy.EvaluateDestination(
                 url,
-                connected?.TrustedOrigins,
-                BrowserPolicyMode.Restricted);
-            if (!leased.Allowed)
+                browser.HostPolicy.NavigationOrigins,
+                browser.HostPolicy.PolicyMode);
+            if (!decision.Allowed)
             {
                 return FinishBrowser(
                     ToolCatalog.BrowserNavigate,
                     started,
-                    Error(leased.Code ?? "target_denied", leased.Message ?? "Browser target is not allowed."));
+                    Error(decision.Code ?? "target_denied", decision.Message ?? "Browser target is not allowed."));
+            }
+
+            if (admission is { Detached: true, TriggerKind: TriggerKind.ScheduledOccurrence, TrustedConnection: true }
+                && applicationConnections is not null
+                && admission.AgentInstanceId is Guid connectedAgent)
+            {
+                var connected = await applicationConnections.GetByAgentAsync(connectedAgent, cancellationToken)
+                    .ConfigureAwait(false);
+                var leased = BrowserTargetPolicy.EvaluateDestination(
+                    url,
+                    connected?.TrustedOrigins,
+                    BrowserPolicyMode.Restricted);
+                if (!leased.Allowed)
+                {
+                    return FinishBrowser(
+                        ToolCatalog.BrowserNavigate,
+                        started,
+                        Error(leased.Code ?? "target_denied", leased.Message ?? "Browser target is not allowed."));
+                }
+            }
+
+            if (!Uri.TryCreate(url, UriKind.Absolute, out destination))
+            {
+                return FinishBrowser(
+                    ToolCatalog.BrowserNavigate,
+                    started,
+                    Error("invalid", "url must be an absolute http or https URL."));
             }
         }
 
@@ -135,18 +155,10 @@ public sealed partial class SessionToolExecutor
                 Error("provider_unavailable", "Browser is unavailable."));
         }
 
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var destination))
-        {
-            return FinishBrowser(
-                ToolCatalog.BrowserNavigate,
-                started,
-                Error("invalid", "url must be an absolute http or https URL."));
-        }
-
         try
         {
             var result = await browser
-                .NavigateAsync(new BrowserNavigateRequest(sessionId, destination), cancellationToken)
+                .NavigateAsync(new BrowserNavigateRequest(sessionId, destination, operation), cancellationToken)
                 .ConfigureAwait(false);
             return FinishBrowser(ToolCatalog.BrowserNavigate, started, FromBrowserProvider(result));
         }
@@ -213,7 +225,15 @@ public sealed partial class SessionToolExecutor
             return FinishBrowser(ToolCatalog.BrowserAct, started, denied);
         }
 
-        if (!BrowserToolArguments.TryAct(args, out var operation, out var reference, out var value, out var errorJson))
+        if (!BrowserToolArguments.TryAct(
+                args,
+                out var operation,
+                out var reference,
+                out var value,
+                out var direction,
+                out var delta,
+                out var targetRef,
+                out var errorJson))
         {
             return FinishBrowser(ToolCatalog.BrowserAct, started, errorJson);
         }
@@ -295,7 +315,9 @@ public sealed partial class SessionToolExecutor
             }
 
             var result = await browser
-                .ActAsync(new BrowserActRequest(sessionId, operation, reference, value, upload), cancellationToken)
+                .ActAsync(
+                    new BrowserActRequest(sessionId, operation, reference, value, upload, direction, delta, targetRef),
+                    cancellationToken)
                 .ConfigureAwait(false);
             return FinishBrowser(ToolCatalog.BrowserAct, started, FromBrowserProvider(result));
         }
@@ -454,6 +476,217 @@ public sealed partial class SessionToolExecutor
             RecordBrowser(ToolCatalog.BrowserClose, started, "canceled");
             throw;
         }
+    }
+
+    private async Task<string> PagesBrowserAsync(
+        Guid sessionId,
+        JsonElement args,
+        ToolExecutionAdmission? admission,
+        CancellationToken cancellationToken)
+    {
+        var started = Stopwatch.GetTimestamp();
+        var denied = await DenyBrowserUnlessConnectedAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
+        if (denied is not null)
+        {
+            return FinishBrowser(ToolCatalog.BrowserPages, started, denied);
+        }
+
+        if (!BrowserToolArguments.TryPages(args, out var operation, out var pageId, out var errorJson))
+        {
+            return FinishBrowser(ToolCatalog.BrowserPages, started, errorJson);
+        }
+
+        if (browser is null || !browser.IsAvailable)
+        {
+            return FinishBrowser(ToolCatalog.BrowserPages, started, Error("provider_unavailable", "Browser is unavailable."));
+        }
+
+        try
+        {
+            var result = await browser
+                .PagesAsync(new BrowserPagesRequest(sessionId, operation, pageId), cancellationToken)
+                .ConfigureAwait(false);
+            if (!string.IsNullOrEmpty(result.ErrorCode))
+            {
+                var code = BrowserErrorCodes.Contains(result.ErrorCode) ? result.ErrorCode : "provider_unavailable";
+                return FinishBrowser(ToolCatalog.BrowserPages, started, Error(code, "Browser page operation failed."));
+            }
+
+            var payload = JsonSerializer.Serialize(new
+            {
+                pages = result.Pages.Select(page => new { pageId = page.PageId, url = page.Url, active = page.Active }),
+                observation = result.Observation is null ? null : new
+                {
+                    url = result.Observation.Url,
+                    title = result.Observation.Title
+                }
+            });
+            return FinishBrowser(ToolCatalog.BrowserPages, started, payload);
+        }
+        catch (OperationCanceledException)
+        {
+            RecordBrowser(ToolCatalog.BrowserPages, started, "canceled");
+            throw;
+        }
+    }
+
+    private async Task<ToolExecutionResult> CaptureBrowserAsync(
+        Guid sessionId,
+        JsonElement args,
+        ToolExecutionAdmission? admission,
+        CancellationToken cancellationToken)
+    {
+        var started = Stopwatch.GetTimestamp();
+        if (admission?.SupportsVision != true)
+        {
+            return TextResult(FinishBrowser(
+                ToolCatalog.BrowserCapture,
+                started,
+                Error("model-capability-unsupported", "This model cannot receive a browser image.")));
+        }
+
+        var denied = await DenyBrowserUnlessConnectedAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
+        if (denied is not null)
+        {
+            return TextResult(FinishBrowser(ToolCatalog.BrowserCapture, started, denied));
+        }
+
+        if (!BrowserToolArguments.TryCapture(args, out var errorJson))
+        {
+            return TextResult(FinishBrowser(ToolCatalog.BrowserCapture, started, errorJson));
+        }
+
+        if (!TryConsumeCapture(admission, sessionId))
+        {
+            return TextResult(FinishBrowser(
+                ToolCatalog.BrowserCapture,
+                started,
+                Error("capture_limit", "This turn already captured the maximum number of images.")));
+        }
+
+        if (browser is null || !browser.IsAvailable)
+        {
+            ReleaseCapture(admission, sessionId);
+            return TextResult(FinishBrowser(
+                ToolCatalog.BrowserCapture,
+                started,
+                Error("provider_unavailable", "Browser is unavailable.")));
+        }
+
+        try
+        {
+            var captured = await browser
+                .CaptureViewportAsync(new BrowserCaptureRequest(sessionId), cancellationToken)
+                .ConfigureAwait(false);
+            if (!string.IsNullOrEmpty(captured.ErrorCode) || captured.Png is not { Length: > 0 })
+            {
+                ReleaseCapture(admission, sessionId);
+                var code = captured.ErrorCode is not null && BrowserErrorCodes.Contains(captured.ErrorCode)
+                    ? captured.ErrorCode
+                    : "provider_unavailable";
+                return TextResult(FinishBrowser(ToolCatalog.BrowserCapture, started, Error(code, "Browser capture failed.")));
+            }
+
+            if (captured.Png.Length > BrowserToolLimits.MaxCaptureBytes)
+            {
+                ReleaseCapture(admission, sessionId);
+                return TextResult(FinishBrowser(
+                    ToolCatalog.BrowserCapture,
+                    started,
+                    Error("capture_too_large", "The captured image exceeds the byte cap.")));
+            }
+
+            var stored = await StoreCaptureAsync(sessionId, admission, captured.Png, cancellationToken).ConfigureAwait(false);
+            if (stored.Error is not null)
+            {
+                ReleaseCapture(admission, sessionId);
+                return TextResult(FinishBrowser(ToolCatalog.BrowserCapture, started, stored.Error));
+            }
+
+            var text = JsonSerializer.Serialize(new
+            {
+                contentType = "image/png",
+                byteSize = captured.Png.Length,
+                width = captured.Width,
+                height = captured.Height,
+                redactions = captured.RedactionCount,
+                artifactId = stored.ArtifactId
+            });
+            return new ToolExecutionResult(
+                FinishBrowser(ToolCatalog.BrowserCapture, started, text),
+                [new ModelImageContent("image/png", captured.Png, "capture.png")]);
+        }
+        catch (OperationCanceledException)
+        {
+            ReleaseCapture(admission, sessionId);
+            RecordBrowser(ToolCatalog.BrowserCapture, started, "canceled");
+            throw;
+        }
+    }
+
+    private bool TryConsumeCapture(ToolExecutionAdmission? admission, Guid sessionId)
+    {
+        var key = CaptureKey(admission, sessionId);
+        lock (_captureGate)
+        {
+            if (_captureCounts.Count > 1024)
+            {
+                _captureCounts.Clear();
+            }
+
+            var count = _captureCounts.GetValueOrDefault(key);
+            if (count >= BrowserToolLimits.MaxCapturesPerScope)
+            {
+                return false;
+            }
+
+            _captureCounts[key] = count + 1;
+            return true;
+        }
+    }
+
+    private void ReleaseCapture(ToolExecutionAdmission? admission, Guid sessionId)
+    {
+        var key = CaptureKey(admission, sessionId);
+        lock (_captureGate)
+        {
+            if (_captureCounts.TryGetValue(key, out var count) && count > 0)
+            {
+                _captureCounts[key] = count - 1;
+            }
+        }
+    }
+
+    private static string CaptureKey(ToolExecutionAdmission? admission, Guid sessionId) =>
+        admission?.CaptureScope ?? sessionId.ToString("D");
+
+    private async ValueTask<(string? ArtifactId, string? Error)> StoreCaptureAsync(
+        Guid sessionId,
+        ToolExecutionAdmission? admission,
+        byte[] png,
+        CancellationToken cancellationToken)
+    {
+        if (admission is { Detached: true, WorkItemId: Guid workItemId }
+            && workCaptures is not null
+            && admission.AgentInstanceId is Guid agentInstanceId)
+        {
+            var saved = await workCaptures
+                .SaveAsync(workItemId, agentInstanceId, "image/png", png, cancellationToken)
+                .ConfigureAwait(false);
+            return saved.ErrorCode is null
+                ? (saved.Capture?.CaptureId.ToString("D"), null)
+                : (null, Error(saved.ErrorCode, "The work item cannot store another capture."));
+        }
+
+        if (artifacts is null)
+        {
+            return (null, Error("provider_unavailable", "Capture storage is unavailable."));
+        }
+
+        var record = await artifacts
+            .CreateAsync(sessionId, "capture.png", "image/png", png, null, null, cancellationToken)
+            .ConfigureAwait(false);
+        return (record.ArtifactId.ToString("D"), null);
     }
 
     private static string FromBrowserProvider(BrowserOperationResult result)

@@ -402,19 +402,28 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             return Unavailable();
         }
 
-        var leasedOrigins = LeaseOrigins(request.SessionId);
-        var decision = leasedOrigins is null
-            ? BrowserTargetPolicy.EvaluateDestination(
-                request.Url.AbsoluteUri,
-                _policy.NavigationOrigins,
-                _policy.PolicyMode)
-            : BrowserTargetPolicy.EvaluateDestination(
-                request.Url.AbsoluteUri,
-                leasedOrigins,
-                BrowserPolicyMode.Restricted);
-        if (!decision.Allowed)
+        var operation = request.Operation is "back" or "forward" or "reload" ? request.Operation : "goto";
+        if (operation == "goto")
         {
-            return Result(decision.Code ?? "target_denied");
+            if (request.Url is null)
+            {
+                return Result("invalid");
+            }
+
+            var leasedOrigins = LeaseOrigins(request.SessionId);
+            var decision = leasedOrigins is null
+                ? BrowserTargetPolicy.EvaluateDestination(
+                    request.Url.AbsoluteUri,
+                    _policy.NavigationOrigins,
+                    _policy.PolicyMode)
+                : BrowserTargetPolicy.EvaluateDestination(
+                    request.Url.AbsoluteUri,
+                    leasedOrigins,
+                    BrowserPolicyMode.Restricted);
+            if (!decision.Allowed)
+            {
+                return Result(decision.Code ?? "target_denied");
+            }
         }
 
         SessionBrowser? session = null;
@@ -431,15 +440,48 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             using var registration = cancellationToken.Register(() => CancelCall(session, call));
             try
             {
-                await session.Page.GotoAsync(
-                        request.Url.AbsoluteUri,
-                        new PageGotoOptions
+                if (operation == "back")
+                {
+                    await session.Page.GoBackAsync(new PageGoBackOptions
                         {
                             Timeout = TimeoutMs(),
                             WaitUntil = WaitUntilState.DOMContentLoaded
                         })
-                    .WaitAsync(cancellationToken)
-                    .ConfigureAwait(false);
+                        .WaitAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                else if (operation == "forward")
+                {
+                    await session.Page.GoForwardAsync(new PageGoForwardOptions
+                        {
+                            Timeout = TimeoutMs(),
+                            WaitUntil = WaitUntilState.DOMContentLoaded
+                        })
+                        .WaitAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                else if (operation == "reload")
+                {
+                    await session.Page.ReloadAsync(new PageReloadOptions
+                        {
+                            Timeout = TimeoutMs(),
+                            WaitUntil = WaitUntilState.DOMContentLoaded
+                        })
+                        .WaitAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                else
+                {
+                    await session.Page.GotoAsync(
+                            request.Url!.AbsoluteUri,
+                            new PageGotoOptions
+                            {
+                                Timeout = TimeoutMs(),
+                                WaitUntil = WaitUntilState.DOMContentLoaded
+                            })
+                        .WaitAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                }
             }
             catch (PlaywrightException) when (session.DeniedNavigation || session.PopupCode is not null || session.TimedOut)
             {
@@ -558,6 +600,39 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 return Result("target_denied");
             }
 
+            if (options?.WaitFor is "navigation" or "role")
+            {
+                var budget = Math.Clamp(
+                    options.TimeoutMs ?? BrowserToolLimits.DefaultObserveTimeoutMs,
+                    BrowserToolLimits.MinObserveTimeoutMs,
+                    BrowserToolLimits.MaxObserveTimeoutMs);
+                if (options.WaitFor == "navigation")
+                {
+                    await session.Page.WaitForLoadStateAsync(
+                            LoadState.Load,
+                            new PageWaitForLoadStateOptions { Timeout = budget })
+                        .WaitAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                else if (!Enum.TryParse<AriaRole>(options.Role, true, out var role))
+                {
+                    return Result("invalid");
+                }
+                else
+                {
+                    var locator = string.IsNullOrWhiteSpace(options.Name)
+                        ? session.Page.GetByRole(role)
+                        : session.Page.GetByRole(role, new PageGetByRoleOptions { Name = options.Name });
+                    await locator.First.WaitForAsync(new LocatorWaitForOptions
+                        {
+                            Timeout = budget,
+                            State = WaitForSelectorState.Visible
+                        })
+                        .WaitAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            }
+
             var settle = options is { WaitFor: "stable" }
                 ? BrowserCaptureSettle.Stable
                 : BrowserCaptureSettle.None;
@@ -605,19 +680,33 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             return Unavailable();
         }
 
-        if (!_refs.TryGetValue(request.Ref, out var live))
+        var pageScroll = request.Operation == "scroll" && string.IsNullOrEmpty(request.Ref);
+        LiveElement? live = null;
+        SessionBrowser? session;
+        if (pageScroll)
         {
-            return Result("stale_reference");
+            if (!_sessions.TryGetValue(request.SessionId, out session))
+            {
+                return Result("stale_reference");
+            }
         }
-
-        if (live.SessionId != request.SessionId)
+        else
         {
-            return Result("forbidden");
-        }
+            if (!_refs.TryGetValue(request.Ref, out var found))
+            {
+                return Result("stale_reference");
+            }
 
-        if (!_sessions.TryGetValue(request.SessionId, out var session) || live.Generation != session.Generation)
-        {
-            return Result("stale_reference");
+            live = found;
+            if (live.SessionId != request.SessionId)
+            {
+                return Result("forbidden");
+            }
+
+            if (!_sessions.TryGetValue(request.SessionId, out session) || live.Generation != session.Generation)
+            {
+                return Result("stale_reference");
+            }
         }
 
         if (!IsAllowed(session, session.Page.Url))
@@ -646,7 +735,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         {
             await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             entered = true;
-            if (live.Generation != session.Generation)
+            if (live is not null && live.Generation != session.Generation)
             {
                 return Result("stale_reference");
             }
@@ -661,16 +750,34 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 return Result("invalid");
             }
 
-            if (!await IsAttachedAsync(live.Handle).ConfigureAwait(false))
+            IElementHandle? dragTarget = null;
+            if (live is not null)
             {
-                return Result("stale_reference");
+                if (!await IsAttachedAsync(live.Handle).ConfigureAwait(false))
+                {
+                    return Result("stale_reference");
+                }
+
+                if (live.Actions.Count > 0 && !ActionOffered(live.Actions, request.Operation))
+                {
+                    LogBrowserFailure("act", "interaction", "actionNotOffered");
+                    return Result("unsupported_operation", live.Actions);
+                }
             }
 
-            if (live.Actions.Count > 0
-                && !live.Actions.Contains(request.Operation, StringComparer.Ordinal))
+            if (request.Operation == "drag")
             {
-                LogBrowserFailure("act", "interaction", "actionNotOffered");
-                return Result("unsupported_operation", live.Actions);
+                if (live is null
+                    || string.IsNullOrEmpty(request.TargetRef)
+                    || !_refs.TryGetValue(request.TargetRef, out var target)
+                    || target.SessionId != request.SessionId
+                    || target.Generation != session.Generation
+                    || !await IsAttachedAsync(target.Handle).ConfigureAwait(false))
+                {
+                    return Result("stale_reference");
+                }
+
+                dragTarget = target.Handle;
             }
 
             var before = session.Page.Url;
@@ -681,7 +788,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             using var registration = cancellationToken.Register(() => CancelCall(session, call));
             try
             {
-                await PerformActAsync(live.Handle, request, cancellationToken).ConfigureAwait(false);
+                await PerformActAsync(session.Page, live?.Handle, dragTarget, request, cancellationToken).ConfigureAwait(false);
             }
             catch (PlaywrightException) when (session.PopupCode is not null || session.DeniedNavigation || session.TimedOut)
             {
@@ -712,7 +819,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 session.LastAllowedUrl = session.Page.Url;
             }
 
-            var settle = request.Operation is "click" or "press" or "select" or "check" or "uncheck"
+            var settle = request.Operation is "click" or "doubleClick" or "drag" or "press" or "select" or "check" or "uncheck"
                 ? BrowserCaptureSettle.Automatic
                 : BrowserCaptureSettle.None;
             return await CaptureWithRetryAsync(
@@ -745,6 +852,174 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         finally
         {
             await SettlePopupsAsync(session).ConfigureAwait(false);
+            if (entered)
+            {
+                session.Gate.Release();
+            }
+        }
+    }
+
+    public async ValueTask<BrowserPagesResult> PagesAsync(
+        BrowserPagesRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        await using var interactive = await EnterInteractiveAsync(request.SessionId, cancellationToken).ConfigureAwait(false);
+        if (!IsAvailable || !_sessions.TryGetValue(request.SessionId, out var session))
+        {
+            return new BrowserPagesResult("provider_unavailable", []);
+        }
+
+        var entered = false;
+        try
+        {
+            await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            entered = true;
+            RememberOpenPages(session);
+            if (request.Operation == "list")
+            {
+                return new BrowserPagesResult(null, DescribePages(session));
+            }
+
+            if (request.Operation == "adopt")
+            {
+                var candidate = DescribePages(session).LastOrDefault(page => !page.Active);
+                if (candidate is null)
+                {
+                    return new BrowserPagesResult("no_popup", DescribePages(session));
+                }
+
+                return await ActivatePageAsync(session, request.SessionId, candidate.PageId, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            if (request.Operation is "switch" or "close")
+            {
+                var binding = FindPage(session, request.PageId);
+                if (binding is null || PageClosed(binding.Page))
+                {
+                    return new BrowserPagesResult("stale_page", DescribePages(session));
+                }
+
+                if (request.Operation == "switch")
+                {
+                    return await ActivatePageAsync(session, request.SessionId, binding.Id, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
+                var open = OpenPages(session);
+                if (open.Count <= 1)
+                {
+                    return new BrowserPagesResult("last_page", DescribePages(session));
+                }
+
+                var closingActive = ReferenceEquals(binding.Page, session.Page);
+                ForgetPage(session, binding.Page);
+                await CloseQuietlyAsync(binding.Page).ConfigureAwait(false);
+                if (closingActive)
+                {
+                    var next = OpenPages(session).FirstOrDefault();
+                    if (next is not null)
+                    {
+                        session.Page = next.Page;
+                    }
+                }
+
+                session.Generation++;
+                return new BrowserPagesResult(null, DescribePages(session));
+            }
+
+            return new BrowserPagesResult("unsupported_operation", DescribePages(session));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (PlaywrightException ex)
+        {
+            return new BrowserPagesResult((await FailAsync(session, "pages", "lifecycle", ex).ConfigureAwait(false)).ErrorCode, []);
+        }
+        finally
+        {
+            if (entered)
+            {
+                session.Gate.Release();
+            }
+        }
+    }
+
+    public async ValueTask<BrowserCaptureResult> CaptureViewportAsync(
+        BrowserCaptureRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        await using var interactive = await EnterInteractiveAsync(request.SessionId, cancellationToken).ConfigureAwait(false);
+        if (!IsAvailable || !_sessions.TryGetValue(request.SessionId, out var session))
+        {
+            return new BrowserCaptureResult("provider_unavailable", null, 0);
+        }
+
+        var entered = false;
+        try
+        {
+            await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            entered = true;
+            if (!IsAllowed(session, session.Page.Url))
+            {
+                return new BrowserCaptureResult("target_denied", null, 0);
+            }
+
+            var redactions = await session.Page.EvaluateAsync<int>(MaskSensitiveScript)
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            var size = session.Page.ViewportSize;
+            var width = Math.Min(size?.Width ?? BrowserToolLimits.MaxCaptureWidth, BrowserToolLimits.MaxCaptureWidth);
+            var height = Math.Min(size?.Height ?? BrowserToolLimits.MaxCaptureHeight, BrowserToolLimits.MaxCaptureHeight);
+            byte[] png;
+            try
+            {
+                png = await session.Page.ScreenshotAsync(new PageScreenshotOptions
+                    {
+                        Type = ScreenshotType.Png,
+                        FullPage = false,
+                        Scale = ScreenshotScale.Css,
+                        Caret = ScreenshotCaret.Hide,
+                        Clip = new Clip { X = 0, Y = 0, Width = width, Height = height }
+                    })
+                    .WaitAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                await session.Page.EvaluateAsync(ClearMaskScript).ConfigureAwait(false);
+            }
+
+            _logger.LogInformation(
+                "browser.capture redactions={RedactionCount} bytes={ByteSize} width={Width} height={Height}",
+                redactions,
+                png.Length,
+                width,
+                height);
+            if (png.Length > BrowserToolLimits.MaxCaptureBytes)
+            {
+                return new BrowserCaptureResult("capture_too_large", null, redactions, width, height);
+            }
+
+            return new BrowserCaptureResult(null, png, redactions, width, height);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsTimeout(ex))
+        {
+            return new BrowserCaptureResult("timeout", null, 0);
+        }
+        catch (PlaywrightException ex)
+        {
+            var failed = await FailAsync(session, "capture", "capture", ex).ConfigureAwait(false);
+            return new BrowserCaptureResult(failed.ErrorCode, null, 0);
+        }
+        finally
+        {
             if (entered)
             {
                 session.Gate.Release();
@@ -1056,6 +1331,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         page.SetDefaultTimeout(TimeoutMs());
         page.SetDefaultNavigationTimeout(TimeoutMs());
         var session = new SessionBrowser(context, page);
+        RememberPage(session, page);
         context.Close += (_, _) => ForgetClosed(session);
         context.Page += (_, opened) => OnContextPage(session, opened);
         await context.RouteAsync("**/*", route => RouteAsync(session, route)).ConfigureAwait(false);
@@ -1155,6 +1431,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                     PlaywrightDriver = playwright,
                     AgentInstanceId = agentInstanceId
                 };
+                RememberPage(session, page);
                 context.Close += (_, _) => ForgetClosed(session);
                 context.Page += (_, opened) => OnContextPage(session, opened);
                 await context.RouteAsync("**/*", route => RouteAsync(session, route)).ConfigureAwait(false);
@@ -1250,10 +1527,9 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             var lease = LeaseOrigins(session);
             if (!ReferenceEquals(page, session.Page))
             {
-                if (lease is null
-                    && _policy.PolicyMode == BrowserPolicyMode.OpenWeb
-                    && (url.StartsWith("about:", StringComparison.OrdinalIgnoreCase) || Allows(session, url, true)))
+                if (url.StartsWith("about:", StringComparison.OrdinalIgnoreCase))
                 {
+                    RememberPage(session, page);
                     await route.ContinueAsync().ConfigureAwait(false);
                     return;
                 }
@@ -1265,12 +1541,24 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                         url,
                         lease ?? _policy.NavigationOrigins,
                         lease is null ? _policy.PolicyMode : BrowserPolicyMode.Restricted);
-                    session.PopupCode ??= popup.Code ?? "unsupported_operation";
+                    if (popup.Allowed)
+                    {
+                        RememberPage(session, page);
+                        await route.ContinueAsync().ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (string.Equals(route.Request.ResourceType, "document", StringComparison.OrdinalIgnoreCase))
+                    {
+                        session.PopupCode ??= popup.Code ?? "target_denied";
+                    }
                 }
 
                 await route.AbortAsync().ConfigureAwait(false);
-                if (page is not null)
+                if (page is not null
+                    && string.Equals(route.Request.ResourceType, "document", StringComparison.OrdinalIgnoreCase))
                 {
+                    ForgetPage(session, page);
                     await CloseQuietlyAsync(page).ConfigureAwait(false);
                 }
 
@@ -1415,10 +1703,84 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         }
     }
 
-    private async Task PerformActAsync(IElementHandle handle, BrowserActRequest request, CancellationToken cancellationToken)
+    private static bool ActionOffered(IReadOnlyList<string> actions, string operation) =>
+        actions.Contains(operation, StringComparer.Ordinal)
+        || (operation is "doubleClick" or "hover" or "drag" or "scroll"
+            && actions.Contains("click", StringComparer.Ordinal));
+
+    private async Task PerformActAsync(
+        IPage page,
+        IElementHandle? handle,
+        IElementHandle? dragTarget,
+        BrowserActRequest request,
+        CancellationToken cancellationToken)
     {
         var timeout = TimeoutMs();
         var operation = request.Operation;
+        if (operation == "scroll")
+        {
+            var delta = request.Delta is > 0 and <= BrowserToolLimits.MaxScrollDelta
+                ? request.Delta
+                : BrowserToolLimits.DefaultScrollDelta;
+            var (dx, dy) = request.Direction switch
+            {
+                "up" => (0, -delta),
+                "left" => (-delta, 0),
+                "right" => (delta, 0),
+                _ => (0, delta)
+            };
+            if (handle is not null)
+            {
+                await handle.HoverAsync(new ElementHandleHoverOptions { Timeout = timeout })
+                    .WaitAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            await page.Mouse.WheelAsync(dx, dy).WaitAsync(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (handle is null)
+        {
+            return;
+        }
+
+        if (operation == "doubleClick")
+        {
+            await handle.DblClickAsync(new ElementHandleDblClickOptions { Timeout = timeout })
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        if (operation == "hover")
+        {
+            await handle.HoverAsync(new ElementHandleHoverOptions { Timeout = timeout })
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        if (operation == "drag" && dragTarget is not null)
+        {
+            var sourceBox = await handle.BoundingBoxAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+            var targetBox = await dragTarget.BoundingBoxAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+            if (sourceBox is null || targetBox is null)
+            {
+                return;
+            }
+
+            await page.Mouse.MoveAsync(sourceBox.X + (sourceBox.Width / 2), sourceBox.Y + (sourceBox.Height / 2))
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            await page.Mouse.DownAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+            await page.Mouse.MoveAsync(targetBox.X + (targetBox.Width / 2), targetBox.Y + (targetBox.Height / 2))
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            await page.Mouse.UpAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         if (operation == "click")
         {
             await handle.ClickAsync(new ElementHandleClickOptions { Timeout = timeout })
@@ -1814,16 +2176,10 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             return;
         }
 
+        RememberPage(session, opened);
         if (LeaseOrigins(session) is null && _policy.PolicyMode == BrowserPolicyMode.OpenWeb)
         {
             session.PendingOpenedPage = opened;
-            return;
-        }
-
-        var close = CloseQuietlyAsync(opened);
-        lock (session.PopupGate)
-        {
-            session.PopupCloses.Add(close);
         }
     }
 
@@ -1929,7 +2285,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                     await Task.WhenAll(pending).ConfigureAwait(false);
                 }
 
-                var extras = session.Context.Pages.Count(page => !ReferenceEquals(page, session.Page));
+                var extras = session.Context.Pages.Count(page => !ReferenceEquals(page, session.Page) && !KeepPopup(session, page));
                 var stillClosing = false;
                 lock (session.PopupGate)
                 {
@@ -1947,17 +2303,38 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         }
     }
 
-    private static async Task ClosePopupsAsync(SessionBrowser session)
+    private async Task ClosePopupsAsync(SessionBrowser session)
     {
         foreach (var page in session.Context.Pages.ToArray())
         {
-            if (ReferenceEquals(page, session.Page))
+            if (ReferenceEquals(page, session.Page) || KeepPopup(session, page))
             {
                 continue;
             }
 
+            ForgetPage(session, page);
             await CloseQuietlyAsync(page).ConfigureAwait(false);
         }
+    }
+
+    private bool KeepPopup(SessionBrowser session, IPage page)
+    {
+        string url;
+        try
+        {
+            if (page.IsClosed)
+            {
+                return false;
+            }
+
+            url = page.Url;
+        }
+        catch (PlaywrightException)
+        {
+            return false;
+        }
+
+        return url.StartsWith("about:", StringComparison.OrdinalIgnoreCase) || IsAllowed(session, url);
     }
 
     private static async Task<bool> IsAttachedAsync(IElementHandle handle)
@@ -2217,6 +2594,155 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
     private static string Clip(string text, int max) =>
         text.Length <= max ? text : text[..max];
 
+    private const string MaskSensitiveScript = """
+        () => {
+          const nodes = document.querySelectorAll("input[type='password'], input[autocomplete='username'], input[autocomplete='current-password'], input[autocomplete^='cc-'], [data-sensitive]");
+          let count = 0;
+          for (const node of nodes) {
+            const rect = node.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) continue;
+            const mask = document.createElement("div");
+            mask.setAttribute("data-agent-mask", "1");
+            mask.style.position = "fixed";
+            mask.style.left = rect.left + "px";
+            mask.style.top = rect.top + "px";
+            mask.style.width = rect.width + "px";
+            mask.style.height = rect.height + "px";
+            mask.style.background = "#111111";
+            mask.style.zIndex = "2147483647";
+            document.documentElement.appendChild(mask);
+            count += 1;
+          }
+          return count;
+        }
+        """;
+
+    private const string ClearMaskScript = """
+        () => { for (const node of document.querySelectorAll("[data-agent-mask]")) node.remove(); }
+        """;
+
+    private async Task<BrowserPagesResult> ActivatePageAsync(
+        SessionBrowser session,
+        Guid sessionId,
+        string pageId,
+        CancellationToken cancellationToken)
+    {
+        var binding = FindPage(session, pageId);
+        if (binding is null || PageClosed(binding.Page))
+        {
+            return new BrowserPagesResult("stale_page", DescribePages(session));
+        }
+
+        session.Page = binding.Page;
+        session.Generation++;
+        session.LastAllowedUrl = session.Page.Url;
+        var captured = await CaptureWithRetryAsync(
+            session,
+            sessionId,
+            "pages",
+            BrowserCaptureSettle.None,
+            timeoutMs: null,
+            cancellationToken).ConfigureAwait(false);
+        return new BrowserPagesResult(captured.ErrorCode, DescribePages(session), captured.Observation);
+    }
+
+    private static void RememberOpenPages(SessionBrowser session)
+    {
+        foreach (var page in session.Context.Pages.ToArray())
+        {
+            RememberPage(session, page);
+        }
+    }
+
+    private static List<PageBinding> OpenPages(SessionBrowser session)
+    {
+        lock (session.PopupGate)
+        {
+            session.Pages.RemoveAll(item => PageClosed(item.Page));
+            return session.Pages.ToList();
+        }
+    }
+
+    private static IReadOnlyList<BrowserPageInfo> DescribePages(SessionBrowser session)
+    {
+        var active = session.Page;
+        return OpenPages(session)
+            .Select(item => new BrowserPageInfo(item.Id, SafePageUrl(item.Page), ReferenceEquals(item.Page, active)))
+            .ToArray();
+    }
+
+    private static PageBinding? FindPage(SessionBrowser session, string? pageId)
+    {
+        if (string.IsNullOrWhiteSpace(pageId))
+        {
+            return null;
+        }
+
+        lock (session.PopupGate)
+        {
+            return session.Pages.FirstOrDefault(item => string.Equals(item.Id, pageId, StringComparison.Ordinal));
+        }
+    }
+
+    private static void RememberPage(SessionBrowser session, IPage? page)
+    {
+        if (page is null || PageClosed(page))
+        {
+            return;
+        }
+
+        lock (session.PopupGate)
+        {
+            if (session.Pages.Any(item => ReferenceEquals(item.Page, page)))
+            {
+                return;
+            }
+
+            session.Pages.Add(new PageBinding(MintPageToken(), page));
+        }
+    }
+
+    private static void ForgetPage(SessionBrowser session, IPage page)
+    {
+        lock (session.PopupGate)
+        {
+            session.Pages.RemoveAll(item => ReferenceEquals(item.Page, page));
+        }
+    }
+
+    private static bool PageClosed(IPage page)
+    {
+        try
+        {
+            return page.IsClosed;
+        }
+        catch (PlaywrightException)
+        {
+            return true;
+        }
+    }
+
+    private static string SafePageUrl(IPage page)
+    {
+        try
+        {
+            return page.Url;
+        }
+        catch (PlaywrightException)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string MintPageToken()
+    {
+        var encoded = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+        return "pg_" + encoded;
+    }
+
     private static string MintToken()
     {
         var encoded = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16))
@@ -2427,6 +2953,15 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         public List<Task> PopupCloses { get; } = [];
 
         public SemaphoreSlim Gate { get; } = new(1, 1);
+
+        public List<PageBinding> Pages { get; } = [];
+    }
+
+    private sealed class PageBinding(string id, IPage page)
+    {
+        public string Id { get; } = id;
+
+        public IPage Page { get; } = page;
     }
 
     private sealed record LiveElement(

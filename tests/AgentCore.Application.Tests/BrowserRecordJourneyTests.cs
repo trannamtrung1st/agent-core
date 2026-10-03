@@ -330,14 +330,14 @@ public sealed class BrowserRecordJourneyTests
             BrowserNavigateRequest request,
             CancellationToken cancellationToken = default)
         {
-            NavigatedUrls.Add(request.Url.AbsoluteUri);
-            if (!string.Equals(request.Url.GetLeftPart(UriPartial.Authority), Origin, StringComparison.Ordinal)
+            NavigatedUrls.Add(request.Url!.AbsoluteUri);
+            if (!string.Equals(request.Url!.GetLeftPart(UriPartial.Authority), Origin, StringComparison.Ordinal)
                 || request.Url.AbsolutePath is not ("/" or "" or "/challenge" or "/signup" or "/account"))
             {
                 return new(new BrowserOperationResult("target_denied", null));
             }
 
-            _page = request.Url.AbsolutePath switch
+            _page = request.Url!.AbsolutePath switch
             {
                 "/challenge" => "challenge",
                 "/signup" => "signup",

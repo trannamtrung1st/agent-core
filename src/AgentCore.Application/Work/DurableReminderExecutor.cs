@@ -17,7 +17,8 @@ public sealed class DurableReminderExecutor(
     TimeProvider time,
     WorkCancellationRegistry cancellation,
     SessionToolExecutor tools,
-    ILogger<DurableReminderExecutor>? logger = null)
+    ILogger<DurableReminderExecutor>? logger = null,
+    IWorkCaptureStore? captures = null)
 {
     private readonly DurableOccurrenceExecution occurrence = new(tools, time);
     public const string BeforeModelCheckpoint = """{"phase":"before-model"}""";
@@ -284,6 +285,7 @@ public sealed class DurableReminderExecutor(
 
             await work.CompleteAsync(running.WorkItemId, running.Revision, generation, result, asOfUtc, CancellationToken.None)
                 .ConfigureAwait(false);
+            await NoteTerminalAsync(running.WorkItemId, asOfUtc).ConfigureAwait(false);
             RuntimeTelemetry.RecordWork("completed");
             return true;
         }
@@ -368,6 +370,7 @@ public sealed class DurableReminderExecutor(
                     asOfUtc,
                     CancellationToken.None,
                     completed.AttentionRequired).ConfigureAwait(false);
+                await NoteTerminalAsync(completed.Running.WorkItemId, asOfUtc).ConfigureAwait(false);
                 RuntimeTelemetry.RecordWork("completed");
                 break;
             case DurableOccurrenceRetry retry:
@@ -427,6 +430,7 @@ public sealed class DurableReminderExecutor(
             WorkCancellationSemantics.MergeKnownEffectSummary(current, current.KnownEffectSummary),
             time.GetUtcNow(),
             CancellationToken.None).ConfigureAwait(false);
+        await NoteTerminalAsync(current.WorkItemId, time.GetUtcNow()).ConfigureAwait(false);
         RuntimeTelemetry.RecordWork("cancelled");
         return true;
     }
@@ -470,9 +474,17 @@ public sealed class DurableReminderExecutor(
                     ErrorCode: failed.Failure.Code));
         }
 
+        if (failed.Status is WorkItemStatus.Failed or WorkItemStatus.Cancelled)
+        {
+            await NoteTerminalAsync(failed.WorkItemId, asOfUtc).ConfigureAwait(false);
+        }
+
         RuntimeTelemetry.RecordWork(failed.Status == WorkItemStatus.WaitingToRetry ? "retry" : "failed");
         return failed;
     }
+
+    private ValueTask NoteTerminalAsync(Guid workItemId, DateTimeOffset terminalAt) =>
+        captures?.ExtendRetentionAsync(workItemId, terminalAt) ?? ValueTask.CompletedTask;
 
     private void LogRecoveredTerminalFailures(ExpiredClaimRecovery recovery)
     {

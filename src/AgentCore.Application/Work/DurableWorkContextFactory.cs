@@ -101,6 +101,7 @@ public sealed class DurableWorkContextFactory(
             LearnedMemories: learned,
             Persona: item.Provenance.ResolvePersona(definition),
             ModelSupportsTools: descriptor.Tools,
+            ModelSupportsVision: descriptor.Vision,
             DetachedExecution: true,
             ApplicationConnectionStatus: applicationConnectionStatus,
             TrustedConnection: trustedConnection);

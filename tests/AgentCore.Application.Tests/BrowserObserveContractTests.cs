@@ -15,7 +15,9 @@ public sealed class BrowserObserveContractTests
         Assert.False(root.GetProperty("additionalProperties").GetBoolean());
         var properties = root.GetProperty("properties");
         Assert.Equal("stable", properties.GetProperty("waitFor").GetProperty("enum")[0].GetString());
-        Assert.Equal(1, properties.GetProperty("waitFor").GetProperty("enum").GetArrayLength());
+        Assert.Equal(
+            new[] { "stable", "navigation", "role" },
+            properties.GetProperty("waitFor").GetProperty("enum").EnumerateArray().Select(item => item.GetString()!).ToArray());
         Assert.Equal(100, properties.GetProperty("timeoutMs").GetProperty("minimum").GetInt32());
         Assert.Equal(5000, properties.GetProperty("timeoutMs").GetProperty("maximum").GetInt32());
         Assert.Contains(
@@ -34,6 +36,8 @@ public sealed class BrowserObserveContractTests
     [InlineData("""{"waitFor":"stable","timeoutMs":100}""")]
     [InlineData("""{"waitFor":"stable","timeoutMs":2500}""")]
     [InlineData("""{"waitFor":"stable","timeoutMs":5000}""")]
+    [InlineData("""{"waitFor":"navigation","timeoutMs":1000}""")]
+    [InlineData("""{"waitFor":"role","role":"button","name":"Search"}""")]
     public void Supported_observe_arguments_are_accepted(string json)
     {
         using var document = JsonDocument.Parse(json);
@@ -44,7 +48,7 @@ public sealed class BrowserObserveContractTests
             return;
         }
 
-        Assert.Equal("stable", options!.WaitFor);
+        Assert.Contains(options!.WaitFor, BrowserToolLimits.ObserveWaitModes);
         if (json.Contains("timeoutMs", StringComparison.Ordinal))
         {
             Assert.InRange(options.TimeoutMs!.Value, 100, 5000);

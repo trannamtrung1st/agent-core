@@ -37,10 +37,12 @@ public static class ToolCatalog
     public const string BrowserObserve = "browser.observe";
     public const string BrowserAct = "browser.act";
     public const string BrowserClose = "browser.close";
+    public const string BrowserPages = "browser.pages";
+    public const string BrowserCapture = "browser.capture";
     public const string WorkComplete = "work.complete";
 
     public static bool IsBrowserTool(string toolName) =>
-        toolName is BrowserNavigate or BrowserObserve or BrowserAct or BrowserClose;
+        toolName is BrowserNavigate or BrowserObserve or BrowserAct or BrowserClose or BrowserPages or BrowserCapture;
 
     public static bool AuthorizesBrowser(IReadOnlyList<ModelToolDefinition>? tools) =>
         tools?.Any(tool => IsBrowserTool(tool.Name)) == true;
