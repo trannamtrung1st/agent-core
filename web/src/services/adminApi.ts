@@ -101,6 +101,8 @@ export type AdminEffectiveConfiguration = {
     allowsApplicationEventSource: boolean;
     canAcceptNewTriggeredWork: boolean;
   };
+  unattendedModelCatalogKey?: string | null;
+  unattendedReasoningEffort?: string | null;
 };
 
 export async function listAdminDefinitions(): Promise<AdminDefinitionInventoryItem[]> {
@@ -508,6 +510,8 @@ export type AdminAgentInstance = {
   revision: number;
   personaRevision: number;
   persona?: { name: string; role: string; description: string; tone: string };
+  unattendedModelCatalogKey?: string | null;
+  unattendedReasoningEffort?: string | null;
 };
 
 export type AdminCreateInstancePersona = {
@@ -841,6 +845,9 @@ export type AdminAutomationRegistration = {
     createdAt: string;
     updatedAt: string;
   };
+  modelOverrideCatalogKey?: string | null;
+  modelOverrideReasoningEffort?: string | null;
+  modelSource?: string;
 };
 
 export async function listAdminLearnedMemory(
@@ -909,6 +916,14 @@ export type ApplicationConnection = {
   createdAtUtc: string;
   updatedAtUtc: string;
   statusDetail?: string | null;
+  webhookKey?: string | null;
+  webhookStatus?: string | null;
+};
+
+export type ApplicationWebhookCredential = {
+  webhookKey: string;
+  token: string;
+  status: string;
 };
 
 export async function getApplicationConnection(instanceId: string): Promise<ApplicationConnection | null> {
@@ -955,6 +970,37 @@ export function resetApplicationProfile(instanceId: string) {
   return postApplicationConnection(instanceId, "reset-profile");
 }
 
+export async function issueApplicationWebhook(instanceId: string): Promise<ApplicationWebhookCredential> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/connection/webhook`, {
+    method: "POST"
+  });
+  if (!response.ok) {
+    throw await adminProblemMessage(response, `Application webhook failed (${response.status})`);
+  }
+  return (await response.json()) as ApplicationWebhookCredential;
+}
+
+export function revokeApplicationWebhook(instanceId: string) {
+  return postApplicationConnection(instanceId, "webhook/revoke");
+}
+
+export async function setAdminUnattendedModel(
+  instanceId: string,
+  expectedRevision: number,
+  catalogKey: string | null,
+  reasoningEffort: string | null
+): Promise<AdminAgentInstance> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/unattended-model`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expectedRevision, catalogKey, reasoningEffort })
+  });
+  if (!response.ok) {
+    throw await adminProblemMessage(response, `Unattended model update failed (${response.status})`);
+  }
+  return (await response.json()) as AdminAgentInstance;
+}
+
 export async function listAdminAutomationRegistrations(
   instanceId: string
 ): Promise<AdminAutomationRegistration[]> {
@@ -987,6 +1033,27 @@ export async function cancelAdminAutomationRegistration(
   }
   if (!response.ok) {
     throw await adminProblemMessage(response, `Admin automation cancel failed (${response.status})`);
+  }
+  return (await response.json()) as AdminAutomationRegistration;
+}
+
+export async function setAdminRegistrationModel(
+  instanceId: string,
+  registrationId: string,
+  expectedRevision: number,
+  catalogKey: string | null,
+  reasoningEffort: string | null
+): Promise<AdminAutomationRegistration> {
+  const response = await ownerFetch(
+    `/api/v2/admin/agent-instances/${instanceId}/automation/registrations/${registrationId}/model`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedRevision, catalogKey, reasoningEffort })
+    }
+  );
+  if (!response.ok) {
+    throw await adminProblemMessage(response, `Registration model update failed (${response.status})`);
   }
   return (await response.json()) as AdminAutomationRegistration;
 }

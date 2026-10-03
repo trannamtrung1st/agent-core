@@ -192,9 +192,12 @@ export function BackgroundWorkDrawer({
       <List.Item className="background-work-item">
         <Flex vertical gap={token.paddingSM} className="background-work-item-content">
           <Flex align="flex-start" justify="space-between" gap={token.paddingSM}>
-            <Typography.Text strong className="background-work-origin">
-              {item.origin}
-            </Typography.Text>
+            <Flex vertical>
+              <Typography.Text strong className="background-work-origin" aria-label={`Source: ${item.origin}`}>
+                {item.origin}
+              </Typography.Text>
+              <Typography.Text type="secondary">{item.updatedAt.replace("T", " ").slice(0, 16)} UTC</Typography.Text>
+            </Flex>
             <Tag
               variant="filled"
               color={status.color}

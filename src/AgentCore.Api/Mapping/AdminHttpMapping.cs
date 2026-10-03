@@ -51,7 +51,9 @@ internal static class AdminHttpMapping
             instance.Lifecycle.ToString(),
             instance.Revision,
             instance.PersonaRevision,
-            ToPersona(instance.Persona));
+            ToPersona(instance.Persona),
+            instance.UnattendedModelCatalogKey,
+            instance.UnattendedReasoningEffort);
 
     public static AdminEffectiveConfigurationResponse ToEffectiveConfiguration(AdminEffectiveConfiguration config) =>
         new(
@@ -85,7 +87,9 @@ internal static class AdminHttpMapping
                 config.DurableExecutionEligibility.TriggerPolicyEnabled,
                 config.DurableExecutionEligibility.AllowsScheduleSource,
                 config.DurableExecutionEligibility.AllowsApplicationEventSource,
-                config.DurableExecutionEligibility.CanAcceptNewTriggeredWork));
+                config.DurableExecutionEligibility.CanAcceptNewTriggeredWork),
+            config.UnattendedModelCatalogKey,
+            config.UnattendedReasoningEffort);
 
     private static AdminPersonaResponse ToPersona(AgentIdentity persona) =>
         new(persona.Name, persona.Role, persona.Description, persona.Tone);
@@ -271,7 +275,10 @@ internal static class AdminHttpMapping
                 item.Provenance.AuthorizationOrigin,
                 item.Provenance.SourceSessionId,
                 item.Provenance.CreatedAt.ToString("o"),
-                item.Provenance.UpdatedAt.ToString("o")));
+                item.Provenance.UpdatedAt.ToString("o")),
+            item.ModelOverrideCatalogKey,
+            item.ModelOverrideReasoningEffort,
+            item.ModelSource);
 
     private static string ToAutomationStatus(TriggerRegistrationStatus status) => status switch
     {

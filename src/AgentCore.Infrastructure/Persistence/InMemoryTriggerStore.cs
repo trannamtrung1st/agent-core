@@ -149,6 +149,29 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         }
     }
 
+    public ValueTask<TriggerRegistration> SetModelOverrideAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedRevision,
+        string? catalogKey,
+        string? reasoningEffort,
+        DateTimeOffset updatedAt,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_state.Gate)
+        {
+            var current = Find(owner, registrationId) ?? throw AgentCoreErrors.NotFound("Trigger registration was not found.");
+            var updated = TriggerRegistrationMutations.SetModelOverride(
+                current,
+                expectedRevision,
+                catalogKey,
+                reasoningEffort,
+                updatedAt);
+            _state.Registrations[registrationId] = updated;
+            return ValueTask.FromResult(updated);
+        }
+    }
+
     public ValueTask<TriggerRegistration> CancelAsync(
         TriggerOwner owner,
         Guid registrationId,

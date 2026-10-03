@@ -59,6 +59,25 @@ public sealed class AdminAutomationServiceTests
     }
 
     [Fact]
+    public async Task Active_registration_can_store_and_clear_a_model_override()
+    {
+        var (admin, instanceId, registrationId, revision) = await CreateListedRegistrationAsync(
+            TriggerRegistrationStatus.Active,
+            suspensionReason: null,
+            catalog: new SingleModelCatalog("synthetic-default"));
+        var overridden = await admin.SetModelOverrideAsync(instanceId, registrationId, revision, "synthetic-default", null);
+        Assert.Equal("Trigger override", overridden.ModelSource);
+        Assert.Equal("synthetic-default", overridden.ModelOverrideCatalogKey);
+        Assert.Equal(revision + 1, overridden.Revision);
+
+        var cleared = await admin.SetModelOverrideAsync(instanceId, registrationId, overridden.Revision, null, null);
+        Assert.Equal("Conversation default", cleared.ModelSource);
+        Assert.Null(cleared.ModelOverrideCatalogKey);
+        await Assert.ThrowsAsync<AgentCoreException>(() =>
+            admin.SetModelOverrideAsync(instanceId, registrationId, cleared.Revision, "missing-model", null).AsTask());
+    }
+
+    [Fact]
     public async Task Cancel_active_registration_succeeds()
     {
         var (admin, instanceId, registrationId, revision) = await CreateListedRegistrationAsync(
@@ -131,7 +150,7 @@ public sealed class AdminAutomationServiceTests
     }
 
     private static async Task<(AdminAutomationService Admin, Guid InstanceId, Guid RegistrationId, long Revision)>
-        CreateListedRegistrationAsync(TriggerRegistrationStatus status, string? suspensionReason)
+        CreateListedRegistrationAsync(TriggerRegistrationStatus status, string? suspensionReason, IModelCatalog? catalog = null)
     {
         var clock = new FakeTimeProvider(Now);
         var instances = new InMemoryAgentInstanceStore();
@@ -162,8 +181,23 @@ public sealed class AdminAutomationServiceTests
             new TriggerProvenance(TriggerAuthorizationOrigin.CurrentUserTurn, SourceSessionId, null, Now, Now),
             suspensionReason));
 
-        var admin = new AdminAutomationService(instances, triggers, new FixedLocalProfile(ProfileId, clock));
+        var admin = new AdminAutomationService(instances, triggers, new FixedLocalProfile(ProfileId, clock), catalog);
         return (admin, managed.InstanceId, registrationId, 1);
+    }
+
+    private sealed class SingleModelCatalog(string key) : IModelCatalog
+    {
+        public string DefaultKey => key;
+
+        public IReadOnlyList<ModelDescriptor> Models { get; } =
+        [
+            new(key, key, "synthetic", "small", true, false, true, false, [], null)
+        ];
+
+        public ModelDescriptor Default => Models[0];
+
+        public ModelDescriptor? Get(string candidate) =>
+            string.Equals(candidate, key, StringComparison.Ordinal) ? Default : null;
     }
 
     private static TriggerPolicy SchedulingPolicy() =>

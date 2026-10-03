@@ -1,7 +1,8 @@
-import { useCallback, useRef, useState } from "react";
-import { App, Button, Descriptions, Flex, Input, Select, Table, Tabs, Typography } from "antd";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Alert, App, Button, Descriptions, Flex, Input, Select, Table, Tabs, Typography } from "antd";
 import { confirmAction } from "../../app/confirmAction";
 import type { ColumnsType } from "antd/es/table";
+import { listModels, type ModelDescriptor } from "../../services/api";
 import {
   type AdminAutomationRegistration,
   type AdminEffectiveConfiguration,
@@ -11,7 +12,9 @@ import {
   deleteAdminLearnedMemory,
   listAdminAutomationRegistrations,
   listAdminLearnedMemory,
-  resetAdminLearnedMemoryScope
+  resetAdminLearnedMemoryScope,
+  setAdminRegistrationModel,
+  setAdminUnattendedModel
 } from "../../services/adminApi";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 import { AdminErrorNotice, showAdminFailure } from "./adminFailure";
@@ -23,6 +26,138 @@ import {
 } from "./instanceMemoryAutomationLogic";
 
 const MEMORY_SCOPES: AdminLearnedMemoryScope[] = ["Session", "IdentityUser", "User"];
+
+function modelOptions(models: ModelDescriptor[]) {
+  return [
+    { value: "", label: "Use conversation or unattended default" },
+    ...models.map((model) => ({ value: model.key, label: model.displayName }))
+  ];
+}
+
+function UnattendedModelForm({
+  config,
+  models
+}: {
+  config: AdminEffectiveConfiguration;
+  models: ModelDescriptor[];
+}) {
+  const [catalogKey, setCatalogKey] = useState(config.unattendedModelCatalogKey ?? "");
+  const [effort, setEffort] = useState(config.unattendedReasoningEffort ?? "");
+  const [revision, setRevision] = useState(config.instanceRevision);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const selected = models.find((model) => model.key === catalogKey);
+  const source = catalogKey
+    ? `Effective source: Unattended default (${selected?.displayName ?? catalogKey})`
+    : `Effective source: Conversation default (${config.effectiveModel.displayName})`;
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await setAdminUnattendedModel(
+        config.instanceId,
+        revision,
+        catalogKey || null,
+        effort || null
+      );
+      setRevision(updated.revision);
+      setCatalogKey(updated.unattendedModelCatalogKey ?? "");
+      setEffort(updated.unattendedReasoningEffort ?? "");
+    } catch (reason: unknown) {
+      setError(describeAdminError(reason, "The unattended model could not be saved.").message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Flex vertical gap={8} aria-label="Unattended model">
+      <Typography.Text>{source}</Typography.Text>
+      <Typography.Text type="secondary">
+        Conversation default is {config.effectiveModel.displayName}. An unattended default applies to scheduled and
+        reactive work unless a registration sets its own model.
+      </Typography.Text>
+      {error ? <Alert type="error" showIcon title={error} /> : null}
+      <Select
+        aria-label="Unattended model"
+        value={catalogKey}
+        disabled={busy}
+        showSearch
+        optionFilterProp="label"
+        options={[{ value: "", label: "Conversation default" }, ...models.map((model) => ({ value: model.key, label: model.displayName }))]}
+        optionRender={(option) => option.label}
+        onChange={(value) => {
+          setCatalogKey(value);
+          setEffort("");
+        }}
+      />
+      {selected && selected.supportedReasoningEfforts.length > 0 ? (
+        <Select
+          aria-label="Unattended reasoning effort"
+          value={effort}
+          disabled={busy}
+          options={[
+            { value: "", label: "Model default" },
+            ...selected.supportedReasoningEfforts.map((value) => ({ value, label: value }))
+          ]}
+          onChange={setEffort}
+        />
+      ) : null}
+      <Button type="primary" disabled={busy} onClick={() => void save()}>
+        Save unattended model
+      </Button>
+    </Flex>
+  );
+}
+
+function RegistrationModelControl({
+  instanceId,
+  row,
+  models,
+  onSaved
+}: {
+  instanceId: string;
+  row: AdminAutomationRegistration;
+  models: ModelDescriptor[];
+  onSaved: (updated: AdminAutomationRegistration) => void;
+}) {
+  const [catalogKey, setCatalogKey] = useState(row.modelOverrideCatalogKey ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      onSaved(await setAdminRegistrationModel(instanceId, row.registrationId, row.revision, catalogKey || null, null));
+    } catch (reason: unknown) {
+      setError(describeAdminError(reason, "The registration model could not be saved.").message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Flex vertical gap={8}>
+      <Typography.Text>{row.modelSource ?? "Conversation default"}</Typography.Text>
+      <Select
+        aria-label={`Model for ${row.intent}`}
+        value={catalogKey}
+        disabled={busy || row.status !== "active"}
+        options={modelOptions(models)}
+        optionRender={(option) => option.label}
+        onChange={setCatalogKey}
+      />
+      {error ? <Alert type="error" showIcon title={error} /> : null}
+      {row.status === "active" ? (
+        <Button size="small" disabled={busy} aria-label={`Save model for ${row.intent}`} onClick={() => void save()}>
+          Save model
+        </Button>
+      ) : null}
+    </Flex>
+  );
+}
 
 function memoryPolicySummary(config: AdminEffectiveConfiguration): string {
   const p = config.memoryPolicy;
@@ -53,7 +188,26 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
   const [automationItems, setAutomationItems] = useState<AdminAutomationRegistration[] | null>(null);
   const [automationError, setAutomationError] = useState<AdminFailureNotice | null>(null);
   const [automationBusy, setAutomationBusy] = useState(false);
+  const [models, setModels] = useState<ModelDescriptor[]>([]);
   const memoryLoadGenRef = useRef(0);
+
+  useEffect(() => {
+    let current = true;
+    void listModels()
+      .then((catalog) => {
+        if (current) {
+          setModels(catalog.models);
+        }
+      })
+      .catch(() => {
+        if (current) {
+          setModels([]);
+        }
+      });
+    return () => {
+      current = false;
+    };
+  }, []);
 
   const scopePermitted = isMemoryScopePermitted(config.memoryPolicy, memoryScope);
   const selectionReady = isMemorySelectionReady(memoryScope, sessionId);
@@ -259,6 +413,22 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
       render: (_, row) => row.provenance.authorizationOrigin
     },
     {
+      title: "Model",
+      key: "model",
+      render: (_, row) => (
+        <RegistrationModelControl
+          instanceId={config.instanceId}
+          row={row}
+          models={models}
+          onSaved={(updated) =>
+            setAutomationItems((current) =>
+              current?.map((item) => (item.registrationId === updated.registrationId ? updated : item)) ?? null
+            )
+          }
+        />
+      )
+    },
+    {
       title: "",
       key: "actions",
       width: 100,
@@ -380,6 +550,7 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
               <Descriptions size="small" column={1} bordered>
                 <Descriptions.Item label="Effective trigger policy">{triggerPolicySummary(config)}</Descriptions.Item>
               </Descriptions>
+              <UnattendedModelForm config={config} models={models} />
               <Button onClick={() => void loadAutomation()} loading={automationBusy}>
                 Load registrations
               </Button>

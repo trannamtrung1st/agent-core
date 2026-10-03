@@ -39,6 +39,22 @@ public sealed class TriggerRegistrationService(
         CancellationToken cancellationToken = default) =>
         ObserveAsync("update", () => UpdateCoreAsync(owner, registrationId, expectedRevision, change, cancellationToken));
 
+    public ValueTask<TriggerRegistration> SetModelOverrideAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedRevision,
+        string? catalogKey,
+        string? reasoningEffort,
+        CancellationToken cancellationToken = default) =>
+        store.SetModelOverrideAsync(
+            owner,
+            registrationId,
+            expectedRevision,
+            catalogKey,
+            reasoningEffort,
+            UtcNow(),
+            cancellationToken);
+
     public ValueTask<TriggerRegistration> CancelAsync(
         TriggerOwner owner,
         Guid registrationId,

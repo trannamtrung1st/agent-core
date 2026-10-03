@@ -1,3 +1,4 @@
+using AgentCore.Application.Models;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
@@ -21,12 +22,16 @@ public sealed record AdminAutomationRegistration(
     DateTimeOffset? NextOccurrenceAtUtc,
     long Revision,
     string? SuspensionReason,
-    AdminAutomationProvenance Provenance);
+    AdminAutomationProvenance Provenance,
+    string? ModelOverrideCatalogKey,
+    string? ModelOverrideReasoningEffort,
+    string ModelSource);
 
 public sealed class AdminAutomationService(
     IAgentInstanceStore instances,
     ITriggerRegistrationService triggers,
-    ILocalUserProfileService localProfiles)
+    ILocalUserProfileService localProfiles,
+    IModelCatalog? modelCatalog = null)
 {
     public const int MaxRegistrations = 256;
 
@@ -35,7 +40,6 @@ public sealed class AdminAutomationService(
         CancellationToken cancellationToken = default)
     {
         var instance = await RequireManagedInstanceAsync(instanceId, cancellationToken).ConfigureAwait(false);
-        _ = instance;
         var profile = await localProfiles.GetLocalProfileAsync(cancellationToken).ConfigureAwait(false);
         var owner = new TriggerOwner(instanceId, profile.ProfileId);
         var rows = await triggers.ListAsync(owner, status: null, cancellationToken).ConfigureAwait(false);
@@ -44,8 +48,35 @@ public sealed class AdminAutomationService(
             .OrderByDescending(row => row.Provenance.CreatedAt)
             .ThenByDescending(row => row.RegistrationId)
             .Take(MaxRegistrations)
-            .Select(Map)
+            .Select(row => Map(instance, row))
             .ToArray();
+    }
+
+    public async ValueTask<AdminAutomationRegistration> SetModelOverrideAsync(
+        Guid instanceId,
+        Guid registrationId,
+        long expectedRevision,
+        string? catalogKey,
+        string? reasoningEffort,
+        CancellationToken cancellationToken = default)
+    {
+        var instance = await RequireManagedInstanceAsync(instanceId, cancellationToken).ConfigureAwait(false);
+        if (modelCatalog is null)
+        {
+            throw AgentCoreErrors.Validation("The model catalog is not available.");
+        }
+
+        ExecutionModelPolicy.RequireSelectable(modelCatalog, catalogKey, reasoningEffort);
+        var profile = await localProfiles.GetLocalProfileAsync(cancellationToken).ConfigureAwait(false);
+        var owner = new TriggerOwner(instanceId, profile.ProfileId);
+        var updated = await triggers.SetModelOverrideAsync(
+            owner,
+            registrationId,
+            expectedRevision,
+            catalogKey,
+            reasoningEffort,
+            cancellationToken).ConfigureAwait(false);
+        return Map(instance, updated);
     }
 
     public async ValueTask<AdminAutomationRegistration> GetRegistrationAsync(
@@ -53,12 +84,12 @@ public sealed class AdminAutomationService(
         Guid registrationId,
         CancellationToken cancellationToken = default)
     {
-        await RequireManagedInstanceAsync(instanceId, cancellationToken).ConfigureAwait(false);
+        var instance = await RequireManagedInstanceAsync(instanceId, cancellationToken).ConfigureAwait(false);
         var profile = await localProfiles.GetLocalProfileAsync(cancellationToken).ConfigureAwait(false);
         var owner = new TriggerOwner(instanceId, profile.ProfileId);
         var existing = await triggers.GetAsync(owner, registrationId, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound("Trigger registration was not found.");
-        return Map(existing);
+        return Map(instance, existing);
     }
 
     public async ValueTask<AdminAutomationRegistration> CancelRegistrationAsync(
@@ -67,7 +98,7 @@ public sealed class AdminAutomationService(
         long expectedRevision,
         CancellationToken cancellationToken = default)
     {
-        await RequireManagedInstanceAsync(instanceId, cancellationToken).ConfigureAwait(false);
+        var instance = await RequireManagedInstanceAsync(instanceId, cancellationToken).ConfigureAwait(false);
         var profile = await localProfiles.GetLocalProfileAsync(cancellationToken).ConfigureAwait(false);
         var owner = new TriggerOwner(instanceId, profile.ProfileId);
         var existing = await triggers.GetAsync(owner, registrationId, cancellationToken).ConfigureAwait(false)
@@ -80,7 +111,7 @@ public sealed class AdminAutomationService(
         var cancelled = await triggers
             .CancelAsync(owner, registrationId, expectedRevision, cancellationToken)
             .ConfigureAwait(false);
-        return Map(cancelled);
+        return Map(instance, cancelled);
     }
 
     private async ValueTask<AgentInstance> RequireManagedInstanceAsync(Guid instanceId, CancellationToken cancellationToken)
@@ -95,9 +126,14 @@ public sealed class AdminAutomationService(
         return instance;
     }
 
-    private static AdminAutomationRegistration Map(TriggerRegistration registration)
+    private static AdminAutomationRegistration Map(AgentInstance instance, TriggerRegistration registration)
     {
         var (kind, zone, summary) = DescribeSchedule(registration.Schedule);
+        var source = !string.IsNullOrWhiteSpace(registration.ModelOverrideCatalogKey)
+            ? "Trigger override"
+            : !string.IsNullOrWhiteSpace(instance.UnattendedModelCatalogKey)
+                ? "Unattended default"
+                : "Conversation default";
         return new AdminAutomationRegistration(
             registration.RegistrationId,
             registration.Intent,
@@ -112,7 +148,10 @@ public sealed class AdminAutomationService(
                 registration.Provenance.AuthorizationOrigin.ToString(),
                 registration.Provenance.SourceSessionId?.ToString("D"),
                 registration.Provenance.CreatedAt,
-                registration.Provenance.UpdatedAt));
+                registration.Provenance.UpdatedAt),
+            registration.ModelOverrideCatalogKey,
+            registration.ModelOverrideReasoningEffort,
+            source);
     }
 
     private static (string Kind, string TimeZoneId, string Summary) DescribeSchedule(TriggerSchedule schedule) =>

@@ -174,6 +174,60 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
             .ConfigureAwait(false);
     }
 
+    public async ValueTask<TriggerRegistration> SetModelOverrideAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedRevision,
+        string? catalogKey,
+        string? reasoningEffort,
+        DateTimeOffset updatedAt,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var currentRow = await FindRowAsync(db, owner, registrationId, cancellationToken).ConfigureAwait(false);
+        if (currentRow is null)
+        {
+            throw AgentCoreErrors.NotFound("Trigger registration was not found.");
+        }
+
+        var current = TriggerStoreMapping.ToRegistration(currentRow);
+        var updated = TriggerRegistrationMutations.SetModelOverride(
+            current,
+            expectedRevision,
+            catalogKey,
+            reasoningEffort,
+            updatedAt);
+        if (updated.Revision == current.Revision)
+        {
+            return current;
+        }
+
+        var id = registrationId.ToString("D");
+        var instanceId = owner.AgentInstanceId.ToString("D");
+        var profileId = owner.ProfileId.ToString("D");
+        var rows = await db.TriggerRegistrations
+            .Where(row => row.RegistrationId == id
+                && row.AgentInstanceId == instanceId
+                && row.ProfileId == profileId
+                && row.Revision == expectedRevision
+                && row.Status == (int)TriggerRegistrationStatus.Active)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(row => row.ModelOverrideCatalogKey, updated.ModelOverrideCatalogKey)
+                    .SetProperty(row => row.ModelOverrideReasoningEffort, updated.ModelOverrideReasoningEffort)
+                    .SetProperty(row => row.Revision, updated.Revision)
+                    .SetProperty(row => row.UpdatedAtUtc, updated.Provenance.UpdatedAt.ToUnixTimeMilliseconds()),
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (rows == 1)
+        {
+            return updated;
+        }
+
+        return await RejectStaleUpdateAsync(db, owner, registrationId, expectedRevision, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async ValueTask<TriggerRegistration> CancelAsync(
         TriggerOwner owner,
         Guid registrationId,

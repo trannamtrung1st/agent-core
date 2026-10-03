@@ -64,18 +64,39 @@ const config: AdminEffectiveConfiguration = {
   }
 };
 
+vi.mock("../../services/api", () => ({
+  listModels: vi.fn(async () => ({
+    defaultKey: "synthetic-default",
+    models: [
+      {
+        key: "synthetic-default",
+        displayName: "Synthetic",
+        tools: true,
+        vision: false,
+        structuredOutput: true,
+        reasoning: true,
+        supportedReasoningEfforts: ["low", "medium"]
+      }
+    ]
+  }))
+}));
+
 vi.mock("../../services/adminApi", () => ({
   listAdminLearnedMemory: vi.fn(),
   deleteAdminLearnedMemory: vi.fn(),
   resetAdminLearnedMemoryScope: vi.fn(),
   listAdminAutomationRegistrations: vi.fn(),
-  cancelAdminAutomationRegistration: vi.fn()
+  cancelAdminAutomationRegistration: vi.fn(),
+  setAdminUnattendedModel: vi.fn(),
+  setAdminRegistrationModel: vi.fn()
 }));
 
 import {
   deleteAdminLearnedMemory,
   listAdminAutomationRegistrations,
-  listAdminLearnedMemory
+  listAdminLearnedMemory,
+  setAdminRegistrationModel,
+  setAdminUnattendedModel
 } from "../../services/adminApi";
 
 const memoryRow = {
@@ -104,6 +125,20 @@ function renderPanel() {
       <InstanceMemoryAutomationPanel config={config} />
     </App>
   );
+}
+
+async function chooseSelectOption(name: string, label: string) {
+  await screen.findByRole("combobox", { name });
+  await waitFor(() => {
+    fireEvent.mouseDown(screen.getByRole("combobox", { name }));
+    const dropdown = document.querySelector(".ant-select-dropdown:not(.ant-select-dropdown-hidden)");
+    const options = dropdown?.querySelectorAll(".ant-select-item-option-content") ?? [];
+    const match = Array.from(options).find((node) => node.textContent === label);
+    if (!match) {
+      throw new Error(`${name} option not found: ${label}`);
+    }
+    fireEvent.click(match);
+  });
 }
 
 async function chooseMemoryScope(label: string) {
@@ -152,6 +187,123 @@ describe("InstanceMemoryAutomationPanel", () => {
     await waitFor(() => expect(screen.getByText("Reminder")).toBeInTheDocument());
     expect(screen.getByText("CurrentUserTurn")).toBeInTheDocument();
     expect(screen.getByText(/UTC · next/i)).toBeInTheDocument();
+    expect(await screen.findByText("Effective source: Conversation default (Synthetic)")).toBeInTheDocument();
+  });
+
+  it("saves an unattended model and a registration override", async () => {
+    vi.mocked(setAdminUnattendedModel).mockResolvedValue({
+      instanceId: config.instanceId,
+      definitionId: config.definitionId,
+      activeVersion: 1,
+      compatibility: false,
+      lifecycle: "Active",
+      revision: 2,
+      personaRevision: 1,
+      unattendedModelCatalogKey: "synthetic-default",
+      unattendedReasoningEffort: "low"
+    });
+    vi.mocked(listAdminAutomationRegistrations).mockResolvedValue([
+      {
+        registrationId: "019944af-00e5-7000-8000-000000000002",
+        intent: "Reminder",
+        status: "active",
+        scheduleKind: "oneShot",
+        timeZoneId: "UTC",
+        scheduleSummary: "Once tomorrow",
+        nextOccurrenceAtUtc: "2026-09-26T09:00:00.000Z",
+        revision: 1,
+        suspensionReason: null,
+        provenance: {
+          authorizationOrigin: "CurrentUserTurn",
+          sourceSessionId: null,
+          createdAt: "2026-09-25T00:00:00.000Z",
+          updatedAt: "2026-09-25T00:00:00.000Z"
+        },
+        modelSource: "Conversation default"
+      }
+    ]);
+    vi.mocked(setAdminRegistrationModel).mockResolvedValue({
+      registrationId: "019944af-00e5-7000-8000-000000000002",
+      intent: "Reminder",
+      status: "active",
+      scheduleKind: "oneShot",
+      timeZoneId: "UTC",
+      scheduleSummary: "Once tomorrow",
+      nextOccurrenceAtUtc: "2026-09-26T09:00:00.000Z",
+      revision: 2,
+      suspensionReason: null,
+      provenance: {
+        authorizationOrigin: "CurrentUserTurn",
+        sourceSessionId: null,
+        createdAt: "2026-09-25T00:00:00.000Z",
+        updatedAt: "2026-09-25T00:00:00.000Z"
+      },
+      modelOverrideCatalogKey: "synthetic-default",
+      modelSource: "Trigger override"
+    });
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: "Automation" }));
+    await chooseSelectOption("Unattended model", "Synthetic");
+    await chooseSelectOption("Unattended reasoning effort", "low");
+    fireEvent.click(screen.getByRole("button", { name: "Save unattended model" }));
+    await waitFor(() => expect(setAdminUnattendedModel).toHaveBeenCalledWith(
+      config.instanceId,
+      1,
+      "synthetic-default",
+      "low"
+    ));
+    expect(screen.getByText("Effective source: Unattended default (Synthetic)")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load registrations" }));
+    await chooseSelectOption("Model for Reminder", "Synthetic");
+    fireEvent.click(screen.getByRole("button", { name: "Save model for Reminder" }));
+    await waitFor(() => expect(setAdminRegistrationModel).toHaveBeenCalledWith(
+      config.instanceId,
+      "019944af-00e5-7000-8000-000000000002",
+      1,
+      "synthetic-default",
+      null
+    ));
+    expect(await screen.findByText("Trigger override")).toBeInTheDocument();
+  });
+
+  it("loads a stored unattended model and clears it only from the visible conversation default", async () => {
+    vi.mocked(setAdminUnattendedModel).mockResolvedValue({
+      instanceId: config.instanceId,
+      definitionId: config.definitionId,
+      activeVersion: 1,
+      compatibility: false,
+      lifecycle: "Active",
+      revision: 2,
+      personaRevision: 1,
+      unattendedModelCatalogKey: null,
+      unattendedReasoningEffort: null
+    });
+
+    render(
+      <App>
+        <InstanceMemoryAutomationPanel
+          config={{
+            ...config,
+            unattendedModelCatalogKey: "synthetic-default",
+            unattendedReasoningEffort: "low"
+          }}
+        />
+      </App>
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Automation" }));
+    expect(await screen.findByText("Effective source: Unattended default (Synthetic)")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Unattended reasoning effort" })).toBeInTheDocument();
+
+    await chooseSelectOption("Unattended model", "Conversation default");
+    fireEvent.click(screen.getByRole("button", { name: "Save unattended model" }));
+    await waitFor(() => expect(setAdminUnattendedModel).toHaveBeenCalledWith(
+      config.instanceId,
+      1,
+      null,
+      null
+    ));
+    expect(screen.getByText("Effective source: Conversation default (Synthetic)")).toBeInTheDocument();
   });
 
   it("ignores stale memory responses after scope change", async () => {

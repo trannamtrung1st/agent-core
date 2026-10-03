@@ -153,6 +153,16 @@ public interface ITriggerStore
         DateTimeOffset cancelledAt,
         CancellationToken cancellationToken = default);
 
+    ValueTask<TriggerRegistration> SetModelOverrideAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedRevision,
+        string? catalogKey,
+        string? reasoningEffort,
+        DateTimeOffset updatedAt,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException();
+
     ValueTask<TriggerOccurrenceAdmitResult> AdmitOccurrenceAsync(
         TriggerOccurrence occurrence,
         CancellationToken cancellationToken = default);
@@ -293,6 +303,14 @@ public interface ITriggerRegistrationService
         TriggerOwner owner,
         Guid registrationId,
         long expectedRevision,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerRegistration> SetModelOverrideAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedRevision,
+        string? catalogKey,
+        string? reasoningEffort,
         CancellationToken cancellationToken = default);
 
     ValueTask<TriggerOccurrenceAdmitResult> AdmitOccurrenceAsync(

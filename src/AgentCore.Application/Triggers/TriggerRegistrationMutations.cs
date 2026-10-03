@@ -63,6 +63,43 @@ public static class TriggerRegistrationMutations
         }
     }
 
+    public static TriggerRegistration SetModelOverride(
+        TriggerRegistration current,
+        long expectedRevision,
+        string? catalogKey,
+        string? reasoningEffort,
+        DateTimeOffset updatedAt)
+    {
+        ArgumentNullException.ThrowIfNull(current);
+        if (current.Revision != expectedRevision)
+        {
+            throw AgentCoreErrors.Conflict("Registration revision is stale.");
+        }
+
+        if (current.Status != TriggerRegistrationStatus.Active)
+        {
+            throw AgentCoreErrors.Validation("Only an active registration can change its model.");
+        }
+
+        TriggerRegistration updated;
+        try
+        {
+            updated = current.WithModelOverride(catalogKey, reasoningEffort, current.Revision, updatedAt);
+        }
+        catch (ArgumentException exception)
+        {
+            throw AgentCoreErrors.Validation(exception.Message);
+        }
+
+        if (string.Equals(updated.ModelOverrideCatalogKey, current.ModelOverrideCatalogKey, StringComparison.Ordinal)
+            && string.Equals(updated.ModelOverrideReasoningEffort, current.ModelOverrideReasoningEffort, StringComparison.Ordinal))
+        {
+            return current;
+        }
+
+        return current.WithModelOverride(catalogKey, reasoningEffort, current.Revision + 1, updatedAt);
+    }
+
     public static TriggerRegistration Cancel(
         TriggerRegistration current,
         long expectedRevision,

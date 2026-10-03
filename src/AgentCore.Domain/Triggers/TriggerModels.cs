@@ -692,6 +692,28 @@ public sealed class TriggerRegistration
             ModelOverrideReasoningEffort,
             RequiresVision);
 
+    public TriggerRegistration WithModelOverride(
+        string? catalogKey,
+        string? reasoningEffort,
+        long revision,
+        DateTimeOffset updatedAt) =>
+        new(
+            RegistrationId,
+            Owner,
+            Status,
+            Intent,
+            Schedule,
+            NextOccurrenceAtUtc,
+            ExpiresAtUtc,
+            OccurrenceCount,
+            revision,
+            ScheduleRevision,
+            Provenance.WithUpdated(updatedAt),
+            SuspensionReason,
+            catalogKey,
+            reasoningEffort,
+            RequiresVision);
+
     private static string? OptionalModelToken(string? value, int max, string name)
     {
         if (string.IsNullOrWhiteSpace(value))

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using AgentCore.Application.Models;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -15,7 +16,8 @@ public sealed class AdminAgentInstanceService(
     TimeProvider time,
     ITriggerInstancePolicyReconciliationService? policyReconciliation = null,
     IAdminLifecycleDeletion? deletion = null,
-    AdminLifecycleCoordinator? lifecycleGate = null)
+    AdminLifecycleCoordinator? lifecycleGate = null,
+    IModelCatalog? modelCatalog = null)
 {
     public ValueTask<AgentInstance> CreateManagedAsync(
         string definitionId,
@@ -254,6 +256,44 @@ public sealed class AdminAgentInstanceService(
             updatedPersona.InstanceId,
             "none");
         return updatedPersona;
+    }
+
+    public async ValueTask<AgentInstance> SetUnattendedModelAsync(
+        Guid instanceId,
+        long expectedRevision,
+        string? catalogKey,
+        string? reasoningEffort,
+        CancellationToken cancellationToken = default)
+    {
+        var instance = await RequireManagedAsync(instanceId, cancellationToken).ConfigureAwait(false);
+        if (instance.Revision != expectedRevision)
+        {
+            throw AgentCoreErrors.Conflict("Agent instance revision is stale.");
+        }
+
+        if (modelCatalog is null)
+        {
+            throw AgentCoreErrors.Validation("The model catalog is not available.");
+        }
+
+        ExecutionModelPolicy.RequireSelectable(modelCatalog, catalogKey, reasoningEffort);
+        var key = string.IsNullOrWhiteSpace(catalogKey) ? null : catalogKey.Trim();
+        var effort = string.IsNullOrWhiteSpace(reasoningEffort) ? null : reasoningEffort.Trim();
+        if (string.Equals(instance.UnattendedModelCatalogKey, key, StringComparison.Ordinal)
+            && string.Equals(instance.UnattendedReasoningEffort, effort, StringComparison.Ordinal))
+        {
+            return instance;
+        }
+
+        return await instances.UpdateWithExpectedRevisionAsync(
+            new AgentInstanceRevisionUpdate(
+                instance.InstanceId,
+                expectedRevision,
+                SetUnattendedModel: true,
+                UnattendedModelCatalogKey: key,
+                UnattendedReasoningEffort: effort),
+            time.GetUtcNow(),
+            cancellationToken).ConfigureAwait(false);
     }
 
     public ValueTask<AgentInstance> SetLifecycleAsync(

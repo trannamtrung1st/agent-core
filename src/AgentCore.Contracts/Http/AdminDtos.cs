@@ -43,7 +43,9 @@ public sealed record AdminEffectiveConfigurationResponse(
     IReadOnlyList<AdminKnowledgeSourceResponse> KnowledgeSources,
     AdminMemoryPolicyResponse MemoryPolicy,
     AdminTriggerPolicyResponse? TriggerPolicy,
-    AdminDurableExecutionEligibilityResponse DurableExecutionEligibility);
+    AdminDurableExecutionEligibilityResponse DurableExecutionEligibility,
+    string? UnattendedModelCatalogKey = null,
+    string? UnattendedReasoningEffort = null);
 
 public sealed record AdminPersonaResponse(string Name, string Role, string Description, string Tone);
 
@@ -297,7 +299,14 @@ public sealed record AdminAgentInstanceResponse(
     string Lifecycle,
     long Revision,
     long PersonaRevision,
-    AdminPersonaResponse Persona);
+    AdminPersonaResponse Persona,
+    string? UnattendedModelCatalogKey = null,
+    string? UnattendedReasoningEffort = null);
+
+public sealed record AdminSetUnattendedModelRequest(
+    long ExpectedRevision,
+    string? CatalogKey,
+    string? ReasoningEffort);
 
 public sealed record AdminUpdateAgentInstancePersonaRequest(
     long ExpectedRevision,
@@ -352,7 +361,15 @@ public sealed record AdminAutomationRegistrationResponse(
     string? NextOccurrenceAtUtc,
     long Revision,
     string? SuspensionReason,
-    AdminAutomationProvenanceResponse Provenance);
+    AdminAutomationProvenanceResponse Provenance,
+    string? ModelOverrideCatalogKey = null,
+    string? ModelOverrideReasoningEffort = null,
+    string ModelSource = "Conversation default");
+
+public sealed record AdminSetRegistrationModelRequest(
+    long ExpectedRevision,
+    string? CatalogKey,
+    string? ReasoningEffort);
 
 public sealed record AdminCancelAutomationRegistrationRequest(long ExpectedRevision, bool Confirm);
 

@@ -100,6 +100,31 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
             $"/api/v2/admin/instances/{compatibility.InstanceId:D}/effective-config");
         Assert.NotNull(compatibilityConfig);
         Assert.True(compatibilityConfig!.Compatibility);
+        Assert.Null(managedConfig.UnattendedModelCatalogKey);
+        Assert.Null(managedConfig.UnattendedReasoningEffort);
+    }
+
+    [Fact]
+    public async Task Admin_effective_config_returns_the_stored_unattended_model()
+    {
+        var client = OwnerClient();
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/agent-instances",
+            new AdminCreateAgentInstanceRequest("examiner", 1));
+        create.EnsureSuccessStatusCode();
+        var instance = await create.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        Assert.NotNull(instance);
+
+        var save = await client.PostAsJsonAsync(
+            $"/api/v2/admin/agent-instances/{instance!.InstanceId}/unattended-model",
+            new AdminSetUnattendedModelRequest(instance.Revision, "scripted-alpha", "low"));
+        save.EnsureSuccessStatusCode();
+
+        var config = await client.GetFromJsonAsync<AdminEffectiveConfigurationResponse>(
+            $"/api/v2/admin/instances/{instance.InstanceId}/effective-config");
+        Assert.NotNull(config);
+        Assert.Equal("scripted-alpha", config!.UnattendedModelCatalogKey);
+        Assert.Equal("low", config.UnattendedReasoningEffort);
     }
 
     [Fact]

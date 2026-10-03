@@ -267,4 +267,6 @@ public sealed record AdminEffectiveConfiguration(
     IReadOnlyList<AdminKnowledgeSource> KnowledgeSources,
     MemoryPolicy MemoryPolicy,
     TriggerPolicy? TriggerPolicy,
-    AdminDurableExecutionEligibility DurableExecutionEligibility);
+    AdminDurableExecutionEligibility DurableExecutionEligibility,
+    string? UnattendedModelCatalogKey = null,
+    string? UnattendedReasoningEffort = null);

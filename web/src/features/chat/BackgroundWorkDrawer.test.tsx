@@ -263,4 +263,20 @@ describe("BackgroundWorkDrawer", () => {
     expect(screen.getByText("Two orders need review.")).toBeInTheDocument();
     expect(screen.getByText("Nothing to report.")).toBeInTheDocument();
   });
+
+  it("shows scheduled and order-placed sources without webhook evidence", async () => {
+    const placed = {
+      ...completed,
+      workItemId: "work-placed",
+      origin: "Order placed",
+      updatedAt: "2026-10-04T01:00:00.000Z"
+    };
+    renderDrawer(async () => [queued, placed], {
+      loadResult: async () => ({ workItemId: "", text: "", completedAt: "" })
+    });
+    expect(await screen.findByText("Scheduled reminder")).toBeInTheDocument();
+    expect(screen.getByText("Order placed")).toBeInTheDocument();
+    expect(screen.getByLabelText("Source: Order placed")).toBeInTheDocument();
+    expect(screen.queryByText(/sourceEventId|orderReference|\{/)).not.toBeInTheDocument();
+  });
 });

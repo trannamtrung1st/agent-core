@@ -88,6 +88,8 @@ internal static class EffectiveConfigurationComposer
                 TriggerPolicyEnabled: trigger?.Enabled == true,
                 AllowsScheduleSource: scheduleAllowed,
                 AllowsApplicationEventSource: applicationEventAllowed,
-                CanAcceptNewTriggeredWork: instanceActive && (scheduleAllowed || applicationEventAllowed)));
+                CanAcceptNewTriggeredWork: instanceActive && (scheduleAllowed || applicationEventAllowed)),
+            UnattendedModelCatalogKey: instance.UnattendedModelCatalogKey,
+            UnattendedReasoningEffort: instance.UnattendedReasoningEffort);
     }
 }

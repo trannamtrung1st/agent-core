@@ -16,6 +16,37 @@ public static class ExecutionModelPolicy
     public const string UnavailableCode = "model-unavailable";
     public const string CapabilityCode = "model-capability-unsupported";
 
+    public static void RequireSelectable(IModelCatalog catalog, string? catalogKey, string? reasoningEffort)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        if (string.IsNullOrWhiteSpace(catalogKey))
+        {
+            if (!string.IsNullOrWhiteSpace(reasoningEffort))
+            {
+                throw AgentCoreErrors.Validation("Reasoning effort requires a model.");
+            }
+
+            return;
+        }
+
+        var descriptor = catalog.Get(catalogKey.Trim());
+        if (descriptor is null)
+        {
+            throw AgentCoreErrors.Validation("The selected model is not available.");
+        }
+
+        if (string.IsNullOrWhiteSpace(reasoningEffort))
+        {
+            return;
+        }
+
+        if (!descriptor.Reasoning
+            || !descriptor.SupportedReasoningEfforts.Contains(reasoningEffort.Trim(), StringComparer.OrdinalIgnoreCase))
+        {
+            throw AgentCoreErrors.Validation("The selected reasoning effort is not available for this model.");
+        }
+    }
+
     public static ExecutionModelDecision Resolve(
         IModelCatalog catalog,
         AgentDefinition definition,
