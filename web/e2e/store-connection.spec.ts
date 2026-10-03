@@ -45,7 +45,9 @@ test("store connection and quiet background work stay labeled", async ({ page })
   const drawer = page.getByRole("dialog", { name: "Background work" });
   await expect(drawer).toBeVisible({ timeout: 15_000 });
   await expect(drawer.getByText("No background work yet")).toBeVisible({ timeout: 15_000 });
-  await drawer.getByRole("button", { name: "Close" }).focus();
+  const close = drawer.getByRole("button", { name: "Close" });
+  await close.focus();
+  await expect(close).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden({ timeout: 15_000 });
   await page.unroute("**/work-items**");
@@ -104,7 +106,9 @@ test("store connection and quiet background work stay labeled", async ({ page })
   const quietRow = drawer.getByRole("listitem").filter({ hasText: "Stock is unchanged." });
   await expect(quietRow).toBeVisible();
   await expect(quietRow.getByText("Needs attention")).toHaveCount(0);
-  await drawer.getByRole("button", { name: "Close" }).focus();
+  const closeAgain = drawer.getByRole("button", { name: "Close" });
+  await closeAgain.focus();
+  await expect(closeAgain).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden({ timeout: 15_000 });
 

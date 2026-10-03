@@ -353,6 +353,13 @@ export function BackgroundWorkDrawer({
       size={wide ? 400 : 320}
       open={open}
       onClose={onClose}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") {
+          return;
+        }
+        event.stopPropagation();
+        onClose();
+      }}
       className="background-work-drawer"
     >
       <Flex vertical gap={token.paddingSM}>

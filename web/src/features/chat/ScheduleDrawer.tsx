@@ -201,6 +201,13 @@ export function ScheduleDrawer({
       size={wide ? 400 : 320}
       open={open}
       onClose={onClose}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") {
+          return;
+        }
+        event.stopPropagation();
+        onClose();
+      }}
       className="schedule-drawer"
     >
       <Flex vertical gap={token.paddingSM}>

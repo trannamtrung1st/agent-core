@@ -558,6 +558,13 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
             size={320}
             open={sessionsOpen}
             onClose={() => setSessionsOpen(false)}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") {
+                return;
+              }
+              event.stopPropagation();
+              setSessionsOpen(false);
+            }}
             extra={
               <Button
                 type="text"
