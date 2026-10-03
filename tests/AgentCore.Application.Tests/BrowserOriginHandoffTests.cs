@@ -366,6 +366,10 @@ public sealed class BrowserOriginHandoffTests
                 new ModelToolCallEvent(new ModelToolCall("see-2", ToolCatalog.BrowserObserve, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
+            [
+                new ModelToolCallEvent(new ModelToolCall("see-3", ToolCatalog.BrowserObserve, "{}")),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ],
             Answer("Orders are listed. Low stock and products are unknown."));
         await using var runtime = Create(model, browser);
         await runtime.AttachAsync();
@@ -373,11 +377,11 @@ public sealed class BrowserOriginHandoffTests
         Assert.True(await runtime.SubmitUserTextAsync("check the store"));
         await runtime.WaitUntilIdleAsync();
 
-        Assert.Equal(2, browser.ObserveCalls);
-        Assert.Equal(4, model.Requests.Count);
-        Assert.Null(model.Requests[3].Tools);
+        Assert.Equal(3, browser.ObserveCalls);
+        Assert.Equal(5, model.Requests.Count);
+        Assert.Null(model.Requests[4].Tools);
         Assert.Contains(
-            model.Requests[3].Messages,
+            model.Requests[4].Messages,
             message => message.Role == ModelRole.System
                 && message.Text.Contains("No new browser evidence was obtained", StringComparison.Ordinal));
         Assert.DoesNotContain(

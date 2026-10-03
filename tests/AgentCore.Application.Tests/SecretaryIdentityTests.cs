@@ -74,6 +74,12 @@ public sealed class SecretaryIdentityTests
             DeterministicSkillSelector.SelectActiveIds(secretary, "daily store review"));
         Assert.DoesNotContain(
             "store.daily.review",
+            DeterministicSkillSelector.SelectActiveIds(secretary, "publish a product to our nopCommerce store"));
+        Assert.Contains(
+            "store.product.manage",
+            DeterministicSkillSelector.SelectActiveIds(secretary, "publish a product to our nopCommerce store"));
+        Assert.DoesNotContain(
+            "store.daily.review",
             DeterministicSkillSelector.SelectActiveIds(secretary, "improve my productivity"));
         Assert.All(secretary.SkillList, skill => Assert.NotEmpty(skill.RequiredCapabilities));
         Assert.DoesNotContain("demo.sensitive_action", RoleEnvironments.Of(secretary).ToolList);

@@ -1,17 +1,17 @@
+using System.Text;
 using System.Text.Json;
 
 namespace AgentCore.Application.Tools;
 
 /// <summary>
-/// Counts successful browser results that repeat the same page URL and visible text.
-/// Element refs are ignored because every observation regenerates them.
+/// Counts consecutive successful observations that repeat the same page evidence.
+/// Navigation and browser actions reset the streak. Element refs are ignored.
 /// </summary>
 internal sealed class BrowserEvidenceProgress
 {
     internal const int StopAfterRepeatedEvidence = 2;
 
-    private string? _url;
-    private string? _visible;
+    private string? _fingerprint;
 
     internal int Repeated { get; private set; }
 
@@ -19,40 +19,42 @@ internal sealed class BrowserEvidenceProgress
 
     internal void Reset()
     {
-        _url = null;
-        _visible = null;
+        _fingerprint = null;
         Repeated = 0;
     }
 
     internal void Note(string tool, string? json)
     {
-        if (tool is not (ToolCatalog.BrowserNavigate or ToolCatalog.BrowserObserve or ToolCatalog.BrowserAct))
+        if (tool is ToolCatalog.BrowserNavigate or ToolCatalog.BrowserAct)
+        {
+            if (IsSuccess(json))
+            {
+                Reset();
+            }
+
+            return;
+        }
+
+        if (tool != ToolCatalog.BrowserObserve || !TryFingerprint(json, out var fingerprint))
         {
             return;
         }
 
-        if (!TryRead(json, out var url, out var visible))
-        {
-            return;
-        }
-
-        if (_url is not null
-            && string.Equals(_url, url, StringComparison.Ordinal)
-            && string.Equals(_visible, visible, StringComparison.Ordinal))
+        if (_fingerprint is not null && string.Equals(_fingerprint, fingerprint, StringComparison.Ordinal))
         {
             Repeated++;
             return;
         }
 
-        _url = url;
-        _visible = visible;
+        _fingerprint = fingerprint;
         Repeated = 0;
     }
 
-    private static bool TryRead(string? json, out string url, out string visible)
+    private static bool IsSuccess(string? json) => TryFingerprint(json, out _);
+
+    private static bool TryFingerprint(string? json, out string fingerprint)
     {
-        url = string.Empty;
-        visible = string.Empty;
+        fingerprint = string.Empty;
         if (string.IsNullOrWhiteSpace(json))
         {
             return false;
@@ -74,17 +76,100 @@ internal sealed class BrowserEvidenceProgress
                 return false;
             }
 
-            url = root.TryGetProperty("url", out var urlProperty) && urlProperty.ValueKind == JsonValueKind.String
-                ? urlProperty.GetString() ?? string.Empty
-                : string.Empty;
-            visible = root.TryGetProperty("visibleText", out var textProperty) && textProperty.ValueKind == JsonValueKind.String
-                ? textProperty.GetString() ?? string.Empty
-                : string.Empty;
-            return url.Length > 0;
+            if (!root.TryGetProperty("url", out var urlProperty)
+                || urlProperty.ValueKind != JsonValueKind.String
+                || string.IsNullOrEmpty(urlProperty.GetString()))
+            {
+                return false;
+            }
+
+            var settled = root.TryGetProperty("settled", out var settledProperty)
+                && settledProperty.ValueKind is JsonValueKind.True or JsonValueKind.False
+                    ? settledProperty.GetBoolean() ? "true" : "false"
+                    : string.Empty;
+            var visible = Read(root, "visibleText");
+            var builder = new StringBuilder();
+            builder.Append(urlProperty.GetString()).Append('\n').Append(settled).Append('\n').Append(visible).Append('\n');
+            if (root.TryGetProperty("elements", out var elements) && elements.ValueKind == JsonValueKind.Array)
+            {
+                var lines = new List<string>();
+                foreach (var element in elements.EnumerateArray())
+                {
+                    if (element.ValueKind != JsonValueKind.Object)
+                    {
+                        continue;
+                    }
+
+                    lines.Add(string.Join(
+                        "|",
+                        Read(element, "role"),
+                        Read(element, "name"),
+                        Actions(element),
+                        State(element, "value"),
+                        State(element, "checked"),
+                        State(element, "selectedText")));
+                }
+
+                lines.Sort(StringComparer.Ordinal);
+                foreach (var line in lines)
+                {
+                    builder.Append(line).Append('\n');
+                }
+            }
+
+            fingerprint = builder.ToString();
+            return true;
         }
         catch (JsonException)
         {
             return false;
         }
     }
+
+    private static string Actions(JsonElement element)
+    {
+        if (!element.TryGetProperty("actions", out var actions) || actions.ValueKind != JsonValueKind.Array)
+        {
+            return string.Empty;
+        }
+
+        var names = new List<string>();
+        foreach (var action in actions.EnumerateArray())
+        {
+            if (action.ValueKind == JsonValueKind.String && action.GetString() is { Length: > 0 } name)
+            {
+                names.Add(name);
+            }
+        }
+
+        names.Sort(StringComparer.Ordinal);
+        return string.Join(",", names);
+    }
+
+    private static string State(JsonElement element, string name)
+    {
+        if (!element.TryGetProperty("state", out var state) || state.ValueKind != JsonValueKind.Object)
+        {
+            return string.Empty;
+        }
+
+        if (!state.TryGetProperty(name, out var property))
+        {
+            return string.Empty;
+        }
+
+        return property.ValueKind switch
+        {
+            JsonValueKind.String => property.GetString() ?? string.Empty,
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            JsonValueKind.Number => property.GetRawText(),
+            _ => string.Empty
+        };
+    }
+
+    private static string Read(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString() ?? string.Empty
+            : string.Empty;
 }
