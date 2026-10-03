@@ -14,6 +14,7 @@ import {
 import { Alert, App, Button, Drawer, Empty, Flex, List, Spin, Tag, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
 import type { WorkItem, WorkItemResult } from "../../services/api";
+import { formatChatTime } from "./chatTime";
 import { DiagnosticDetails } from "./DiagnosticDetails";
 
 const statusPresentation: Record<string, { label: string; color?: string; icon: ReactNode }> = {
@@ -196,7 +197,9 @@ export function BackgroundWorkDrawer({
               <Typography.Text strong className="background-work-origin" aria-label={`Source: ${item.origin}`}>
                 {item.origin}
               </Typography.Text>
-              <Typography.Text type="secondary">{item.updatedAt.replace("T", " ").slice(0, 16)} UTC</Typography.Text>
+              <Typography.Text type="secondary">
+                <time dateTime={item.updatedAt}>{formatChatTime(item.updatedAt) ?? item.updatedAt}</time>
+              </Typography.Text>
             </Flex>
             <Tag
               variant="filled"

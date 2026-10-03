@@ -3,6 +3,7 @@ import { App as AntApp } from "antd";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WorkItem, WorkItemResult } from "../../services/api";
 import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
+import { formatChatTime } from "./chatTime";
 
 const queued: WorkItem = {
   workItemId: "work-queued",
@@ -276,7 +277,10 @@ describe("BackgroundWorkDrawer", () => {
     });
     expect(await screen.findByText("Scheduled reminder")).toBeInTheDocument();
     expect(screen.getByText("Order placed")).toBeInTheDocument();
-    expect(screen.getByLabelText("Source: Order placed")).toBeInTheDocument();
+    const source = screen.getByLabelText("Source: Order placed");
+    const updated = source.parentElement?.querySelector("time");
+    expect(updated).toHaveAttribute("dateTime", placed.updatedAt);
+    expect(updated).toHaveTextContent(formatChatTime(placed.updatedAt) ?? placed.updatedAt);
     expect(screen.queryByText(/sourceEventId|orderReference|\{/)).not.toBeInTheDocument();
   });
 });
