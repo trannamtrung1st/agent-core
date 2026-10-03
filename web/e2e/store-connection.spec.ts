@@ -157,6 +157,9 @@ test("store connection and quiet background work stay labeled", async ({ page })
   await expect(page).toHaveURL(/\/admin\/instances\/[0-9a-f-]{36}$/i);
   const section = page.getByRole("region", { name: "Application connection" });
   await expect(section.getByRole("heading", { name: "Application connection" })).toBeVisible();
+  await expect(section.getByText("Connect the supported nopCommerce application to this agent. Authentication stays in this agent's browser profile.")).toBeVisible();
+  await expect(section.getByText("Application type")).toBeVisible();
+  await expect(section.getByText("nopCommerce", { exact: true })).toBeVisible();
   const existingRevoke = section.getByRole("button", { name: "Revoke connection" });
   if (await existingRevoke.isVisible()) {
     await existingRevoke.click();

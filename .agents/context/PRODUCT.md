@@ -88,7 +88,7 @@ Stack (existing codebase, not a greenfield choice): React SPA, Vite, pnpm, stric
 
 Observed P9 Chat behavior, not a new visual system: while a browser tool runs, the existing activity row shows the server progress message `Using browser…`. There is no page panel, screenshot, or click log. `/docs` remains the product specification.
 
-P9.5 (closed on `1012653`) connection and result behavior: one application connection belongs to the Agent Instance. Admin configures it. Chat projects its display name and status only when a row exists. Background Work labels attention results in text and counts only those results. Quiet completions stay in the list. nopCommerce is the first concrete application, not Core vocabulary. `/docs` remains the product specification.
+P9.5 (closed on `1012653`) connection and result behavior: one application connection belongs to the Agent Instance. Admin configures it and names nopCommerce as the supported application type. Chat projects its display name and status only when a row exists. Background Work labels attention results in text and counts only those results. Quiet completions stay in the list. nopCommerce is the first concrete application, not Core vocabulary. `/docs` remains the product specification.
 
 ## Accessibility & Inclusion
 
