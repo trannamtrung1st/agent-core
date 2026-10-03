@@ -1367,8 +1367,11 @@ These items are recorded decisions. P9.5 and P9.6 take only the narrow exception
 Always keep this section.
 
 - [ ] Admin assistant agent remains a future idea.
-
 - [ ] Allow self-learning, self skill management, and self-improvement (configurable, on/off) [TBD].
+- [ ] sessions retrospection, feedback, etc ...
+- [ ] team work, agent communication, workflow, orchestration, etc .... like grok bot
+- [ ] autonomous, unattended, background work ...
+- [ ] extra/optimization/enhancements: more tools, sandbox, security, smart routing, monitoring etc ...
 
 ---
 
