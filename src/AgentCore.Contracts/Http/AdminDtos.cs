@@ -371,7 +371,14 @@ public sealed record AdminApplicationConnectionResponse(
     long Revision,
     string CreatedAtUtc,
     string UpdatedAtUtc,
-    string? StatusDetail);
+    string? StatusDetail,
+    string? WebhookKey,
+    string WebhookStatus);
+
+public sealed record AdminWebhookCredentialResponse(
+    string WebhookKey,
+    string Token,
+    string Status);
 
 public sealed record AdminEventResponse(
     string EventId,

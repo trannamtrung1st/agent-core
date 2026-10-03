@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgentCore.Application.Admin;
+using AgentCore.Application.Connections;
 using AgentCore.Domain.Connections;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Definitions;
@@ -325,5 +326,18 @@ internal static class AdminHttpMapping
             connection.Revision,
             connection.CreatedAtUtc.ToString("o"),
             connection.UpdatedAtUtc.ToString("o"),
-            connection.StatusDetail);
+            connection.StatusDetail,
+            connection.WebhookKey?.ToString("D"),
+            WebhookStatusLabel(connection.WebhookStatus));
+
+    public static AdminWebhookCredentialResponse ToWebhookCredential(WebhookCredential credential) =>
+        new(credential.WebhookKey.ToString("D"), credential.Token, WebhookStatusLabel(credential.Status));
+
+    private static string WebhookStatusLabel(WebhookCredentialStatus status) =>
+        status switch
+        {
+            WebhookCredentialStatus.Active => "Active",
+            WebhookCredentialStatus.Revoked => "Revoked",
+            _ => "Not configured"
+        };
 }

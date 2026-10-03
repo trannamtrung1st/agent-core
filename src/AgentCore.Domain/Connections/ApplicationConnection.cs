@@ -5,6 +5,13 @@ public static class ApplicationConnectionKinds
     public const string NopCommerce = "nopCommerce";
 }
 
+public enum WebhookCredentialStatus
+{
+    NotConfigured = 0,
+    Active = 1,
+    Revoked = 2
+}
+
 public enum ApplicationConnectionStatus
 {
     NotConnected = 0,
@@ -45,4 +52,7 @@ public sealed record ApplicationConnection(
     long Revision,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc,
-    string? StatusDetail);
+    string? StatusDetail,
+    Guid? WebhookKey = null,
+    string? WebhookTokenHash = null,
+    WebhookCredentialStatus WebhookStatus = WebhookCredentialStatus.NotConfigured);

@@ -485,6 +485,40 @@ internal static class AdminEndpoints
             }
         });
 
+        group.MapPost("/agent-instances/{instanceId:guid}/connection/webhook", async (
+            Guid instanceId,
+            ApplicationConnectionService connections,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var credential = await connections.IssueWebhookAsync(instanceId, cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToWebhookCredential(credential));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapPost("/agent-instances/{instanceId:guid}/connection/webhook/revoke", async (
+            Guid instanceId,
+            ApplicationConnectionService connections,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var connection = await connections.RevokeWebhookAsync(instanceId, cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToApplicationConnection(connection));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
         group.MapPost("/agent-instances/{instanceId:guid}/connection/reset-profile", async (
             Guid instanceId,
             ApplicationConnectionService connections,

@@ -33,6 +33,7 @@ public sealed class InMemoryApplicationConnectionStore : IApplicationConnectionS
                     throw AgentCoreErrors.Conflict("Application connection revision is stale.");
                 }
 
+                RejectDuplicateWebhookKey(connection);
                 if (_rows.TryAdd(connection.AgentInstanceId, connection))
                 {
                     return ValueTask.FromResult(connection);
@@ -46,10 +47,38 @@ public sealed class InMemoryApplicationConnectionStore : IApplicationConnectionS
                 throw AgentCoreErrors.Conflict("Application connection revision is stale.");
             }
 
+            RejectDuplicateWebhookKey(connection);
             if (_rows.TryUpdate(connection.AgentInstanceId, connection, current))
             {
                 return ValueTask.FromResult(connection);
             }
+        }
+    }
+
+    public ValueTask<ApplicationConnection?> GetByWebhookKeyAsync(
+        Guid webhookKey,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (webhookKey == Guid.Empty)
+        {
+            return ValueTask.FromResult<ApplicationConnection?>(null);
+        }
+
+        var match = _rows.Values.FirstOrDefault(row => row.WebhookKey == webhookKey);
+        return ValueTask.FromResult(match);
+    }
+
+    private void RejectDuplicateWebhookKey(ApplicationConnection connection)
+    {
+        if (connection.WebhookKey is not Guid key)
+        {
+            return;
+        }
+
+        if (_rows.Values.Any(row => row.AgentInstanceId != connection.AgentInstanceId && row.WebhookKey == key))
+        {
+            throw AgentCoreErrors.Conflict("Application connection revision is stale.");
         }
     }
 }

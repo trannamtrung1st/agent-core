@@ -570,7 +570,10 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.Status).HasMaxLength(32).IsRequired();
             entity.Property(row => row.ProfileKey).HasMaxLength(36).IsRequired();
             entity.Property(row => row.StatusDetail).HasMaxLength(80);
+            entity.Property(row => row.WebhookKey).HasMaxLength(36);
+            entity.Property(row => row.WebhookTokenHash).HasMaxLength(64);
             entity.HasIndex(row => row.AgentInstanceId).IsUnique();
+            entity.HasIndex(row => row.WebhookKey).IsUnique();
         });
     }
 

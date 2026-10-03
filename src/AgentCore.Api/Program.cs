@@ -120,6 +120,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapHub<SessionHub>("/hubs/session");
 AdminEndpoints.Map(app);
+HookEndpoints.Map(app);
 SessionCatalogEndpoints.Map(app);
 TriggerScheduleEndpoints.Map(app);
 WorkItemEndpoints.Map(app);

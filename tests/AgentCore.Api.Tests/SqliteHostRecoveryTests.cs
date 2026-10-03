@@ -717,6 +717,14 @@ internal sealed class DurableSqliteHostFactory(string dbPath, bool runScheduler 
             services.AddSingleton<IWorkItemStore>(provider => new SqliteWorkItemStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
 
+            foreach (var store in services.Where(item => item.ServiceType == typeof(IApplicationConnectionStore)).ToArray())
+            {
+                services.Remove(store);
+            }
+
+            services.AddSingleton<IApplicationConnectionStore>(provider => new SqliteApplicationConnectionStore(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+
             foreach (var handoff in services.Where(item => item.ServiceType == typeof(IDurableWorkHandoff)).ToArray())
             {
                 services.Remove(handoff);
