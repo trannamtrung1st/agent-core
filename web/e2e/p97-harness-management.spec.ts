@@ -65,7 +65,7 @@ test('Managed Chat learns a Skill and normal skills.load activates it in a new S
   const id=await create(page,'Skill learning','Managed','Skills');
   await send(page,'Learn this order-review procedure for future conversations: Check payment, then shipping, then fraud notes.');
   await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible({timeout:30000});
-  expect((await review(page,id)).skills.some((s:{id:string})=>s.id==='orders.review')).toBe(true);
+  expect((await review(page,id)).skills.some((s:{id:string})=>s.id==='order-review')).toBe(true);
   await fresh(page,'Skill learning');await send(page,'Use the learned order-review procedure.');
   await expect(page.getByText('Using the learned procedure: check payment, then shipping, then fraud notes. Stop before production actions.',{exact:true})).toBeVisible();
 });

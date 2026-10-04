@@ -32,6 +32,9 @@ public sealed class HarnessChatAuthoringTests
         var skill = Assert.Single(future.SkillList);
         Assert.Equal("operations-review", skill.Id);
         Assert.Contains("\"skillId\":\"operations-review\"", result.Text);
+        Assert.DoesNotContain(updated.HarnessManagement!.Preparation!.Evidence, evidence => evidence.Actor == "Agent");
+        Assert.Contains(updated.HarnessManagement.Preparation.Evidence, evidence => evidence.Actor == "Core"
+            && evidence.Check == "Candidate Skill activation" && evidence.Status == HarnessEvidenceStatus.Verified);
         var plan = SkillLoadAdmission.Plan(future, [], 0, [skill.Id]);
         Assert.Contains(skill.Id, plan.Admitted);
         Assert.Contains(example.GetProperty("skill").GetProperty("procedure").GetString()!, PromptContextBuilder.BuildActiveSkillSystem(future, plan.Admitted));
@@ -89,6 +92,83 @@ public sealed class HarnessChatAuthoringTests
         var updated = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
         var future = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(updated.DefinitionId, updated.ActiveVersion))!;
         Assert.Contains("kubernetes-learning", SkillLoadAdmission.Plan(future, [], 0, ["kubernetes-learning"]).Admitted);
+    }
+
+    [Fact]
+    public async Task Omitted_id_updates_a_unique_matching_skill_and_identical_retry_does_not_publish()
+    {
+        await using var factory = new AgentCoreApiFactory();
+        var services = factory.Services;
+        var authoring = services.GetRequiredService<HarnessManagementService>();
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
+            new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []));
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+        var executor = services.GetRequiredService<SessionToolExecutor>();
+        var context = (await authoring.ChatContextAsync(instance.InstanceId, default))!;
+        var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId);
+        string Payload(int version, string procedure) => JsonSerializer.Serialize(new { expectedVersion = version,
+            policyRevision = context.PolicyRevision, skill = new { name = "Kubernetes Learning and Cluster Support",
+                description = "Review cluster work safely.", procedure } });
+        var firstPayload = JsonSerializer.Serialize(new { expectedVersion = 7, policyRevision = context.PolicyRevision,
+            skill = new { name = "Kubernetes Learning and Cluster Support", description = "Review cluster work safely.",
+                procedure = "Confirm context before each change.", activationKeywords = new[] { "cluster review" },
+                requiredCapabilities = new[] { "chat.respond" } } });
+        var first = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("first", "harness.skill.upsert",
+            firstPayload), 100000, admission: admission);
+        Assert.Contains("\"skillId\":\"kubernetes-learning-and-cluster-support\"", first.Text);
+        var afterFirst = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        var second = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("second", "harness.skill.upsert",
+            Payload(afterFirst.ActiveVersion, "Confirm context, then check namespace before each change.")), 100000, admission: admission);
+        Assert.Contains("\"changed\":true", second.Text);
+        Assert.Contains("\"skillId\":\"kubernetes-learning-and-cluster-support\"", second.Text);
+        var afterSecond = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        var retry = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("retry", "harness.skill.upsert",
+            Payload(afterSecond.ActiveVersion, "Confirm context, then check namespace before each change.")), 100000, admission: admission);
+        Assert.Contains("\"saved\":true", retry.Text);
+        Assert.Contains("\"changed\":false", retry.Text);
+        var unchanged = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        Assert.Equal(afterSecond.ActiveVersion, unchanged.ActiveVersion);
+        Assert.Equal(afterSecond.Revision, unchanged.Revision);
+        var future = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(unchanged.DefinitionId, unchanged.ActiveVersion))!;
+        var skill = Assert.Single(future.SkillList);
+        Assert.Equal("Confirm context, then check namespace before each change.", skill.Procedure);
+        Assert.Equal(["cluster review"], skill.ActivationKeywords);
+        Assert.Equal(["chat.respond"], skill.RequiredCapabilities);
+    }
+
+    [Fact]
+    public async Task Omitted_id_with_ambiguous_existing_skill_names_requires_an_explicit_id()
+    {
+        await using var factory = new AgentCoreApiFactory();
+        var services = factory.Services;
+        var authoring = services.GetRequiredService<HarnessManagementService>();
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
+            new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []));
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+        var executor = services.GetRequiredService<SessionToolExecutor>();
+        var context = (await authoring.ChatContextAsync(instance.InstanceId, default))!;
+        var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId);
+        string Payload(int version, string? id) => JsonSerializer.Serialize(new { expectedVersion = version,
+            policyRevision = context.PolicyRevision, skill = new { id, name = "Cluster Review",
+                description = "Review a cluster change.", procedure = "Check context and namespace." } });
+        var first = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("one", "harness.skill.upsert", Payload(7, "cluster-review-a")), 100000,
+            admission: admission);
+        Assert.Contains("\"saved\":true", first.Text);
+        var afterFirst = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        var second = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("two", "harness.skill.upsert", Payload(afterFirst.ActiveVersion, "cluster-review-b")), 100000,
+            admission: admission);
+        Assert.Contains("\"saved\":true", second.Text);
+        var afterSecond = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        var omitted = JsonSerializer.Serialize(new { expectedVersion = afterSecond.ActiveVersion, policyRevision = context.PolicyRevision,
+            skill = new { name = " cluster   review ", description = "Review a cluster change.", procedure = "Check context and namespace." } });
+        var rejected = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("ambiguous", "harness.skill.upsert", omitted), 100000,
+            admission: admission);
+        Assert.Contains("More than one existing Skill has this name", rejected.Text);
+        var unchanged = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        Assert.Equal(afterSecond.ActiveVersion, unchanged.ActiveVersion);
+        Assert.Equal(afterSecond.Revision, unchanged.Revision);
     }
 
     [Fact]
@@ -178,6 +258,15 @@ public sealed class HarnessChatAuthoringTests
         Assert.Contains(future.Environment!.KnowledgeList, k => k.Identity == "owner-policy");
         Assert.Equal(HarnessPreparationStatus.Published, updated.HarnessManagement!.Preparation!.Status);
         Assert.Contains(updated.HarnessManagement.Preparation.Evidence, e => e.Actor == "Core" && e.Check == "Candidate knowledge readback" && e.Status == HarnessEvidenceStatus.Verified);
+        var repeatedArgs = JsonSerializer.Serialize(new { expectedVersion = updated.ActiveVersion, policyRevision = context.PolicyRevision,
+            id = "owner-policy", content = "Orders need payment, shipping and fraud review.", source = "conversation:user",
+            expected = "Reusable order policy can be retained.", observed = "Owner supplied enduring role knowledge." });
+        var repeated = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("repeat", "harness.knowledge.upsert", repeatedArgs), 100000,
+            admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId, OwnerTurnText: "Orders need payment, shipping and fraud review."));
+        Assert.Contains("\"changed\":false", repeated.Text);
+        var unchanged = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        Assert.Equal(updated.ActiveVersion, unchanged.ActiveVersion);
+        Assert.Equal(updated.Revision, unchanged.Revision);
     }
     [Theory]
     [InlineData(HarnessManagementMode.Assisted, "harness.knowledge.upsert", HarnessManagementScope.KnowledgeResources)]

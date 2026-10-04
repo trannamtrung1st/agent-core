@@ -36,7 +36,7 @@ internal static class HarnessChatScript
             if (results.Any(m => m.Name == ToolCatalog.SkillsLoad))
                 return Answer(request.Messages.Any(m => m.Role == ModelRole.System && m.Text.Contains("Check payment, then shipping, then fraud notes.", StringComparison.Ordinal))
                     ? "Using the learned procedure: check payment, then shipping, then fraud notes. Stop before production actions." : "The learned procedure did not activate.");
-            return Offered(ToolCatalog.SkillsLoad) ? Call(ToolCatalog.SkillsLoad, new { ids = new[] { "orders.review" } }) : Answer("No learned Skill is available in this Session.");
+            return Offered(ToolCatalog.SkillsLoad) ? Call(ToolCatalog.SkillsLoad, new { ids = new[] { "order-review" } }) : Answer("No learned Skill is available in this Session.");
         }
         var name = knowledge ? "harness.knowledge.upsert" : skill ? "harness.skill.upsert" : tool ? "harness.tool.select" : "harness.instructions.update";
         if (!Offered(name)) return Answer("I can discuss that here, but I cannot save a durable harness change with the current policy or model. Nothing was saved.");
@@ -61,17 +61,20 @@ internal static class HarnessChatScript
         }
         var args = new Dictionary<string, object?>
         {
-            ["expectedVersion"] = version.GetInt32(), ["policyRevision"] = policyRevision,
-            ["expected"] = "Reusable role knowledge or procedure should persist for future Sessions.",
-            ["observed"] = "The current owner supplied reusable material or it was read by the ordinary authorized web tool.",
-            ["limitation"] = "Production actions and subjective procedure quality remain external evidence."
+            ["expectedVersion"] = version.GetInt32(), ["policyRevision"] = policyRevision
         };
+        if (!skill)
+        {
+            args["expected"] = "Reusable role knowledge or procedure should persist for future Sessions.";
+            args["observed"] = "The current owner supplied reusable material or it was read by the ordinary authorized web tool.";
+            args["limitation"] = "Production actions and subjective procedure quality remain external evidence.";
+        }
         if (knowledge)
         {
             args["id"] = "learned-orders"; args["content"] = "Check payment, shipping and fraud notes before acting on an order.";
             args["source"] = user.Contains("https://", StringComparison.Ordinal) ? "https://example.test/p97/order-policy" : "conversation:user";
         }
-        if (skill) args["skill"] = new { id = "orders.review", name = "Order review", description = "Review orders in the owner's required sequence.", procedure = "Check payment, then shipping, then fraud notes. Stop before production actions.", activationKeywords = new[] { "order-review" }, requiredCapabilities = new[] { "chat.respond" }, resourcePaths = Array.Empty<string>() };
+        if (skill) args["skill"] = new { name = "Order review", description = "Review orders in the owner's required sequence.", procedure = "Check payment, then shipping, then fraud notes. Stop before production actions." };
         if (tool) { args["id"] = "http.request"; args["enabled"] = false; }
         if (instruction) args["content"] = "Use concise order-review summaries and stop before production actions.";
         return Call(name, args);

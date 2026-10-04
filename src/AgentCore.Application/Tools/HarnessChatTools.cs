@@ -36,23 +36,23 @@ public static class HarnessChatTools
         foreach (var (name, operation) in Operations)
         {
             yield return new(new(name,
-                $"Author {operation.Kind} for future conversations only. {OperationHelp(operation.Kind)} Inspect for expectedVersion/policyRevision. Retain enduring role knowledge or repeatable procedures, never credentials. Core validates and adopts an immutable version; the current Session pin is unchanged. Assisted edits, instructions and every tool change require exact approval.",
+                $"Author {operation.Kind} for future conversations only. {OperationHelp(operation.Kind)} Inspect for expectedVersion/policyRevision. Retain enduring role knowledge or repeatable procedures, never credentials. Core verifies changes before adopting a new immutable version; an identical write returns changed=false. The current Session pin is unchanged. Assisted edits, instructions and every tool change require exact approval.",
                 AuthoringSchema(operation.Kind)), ToolEffect.Write, ToolOfferRule.HarnessAuthority, ToolResourceScope.Session, ToolReplaySafety.NonReplayable);
         }
     }
 
-    public static readonly string SkillPayloadHelp = "Send a nested skill object with name, description and procedure. Core assigns an id on create; send the existing id from harness.inspect only to update. "
+    public static readonly string SkillPayloadHelp = "Send a nested skill object with name, description and procedure. Core assigns an id on create and reuses the id of a unique existing Skill with the same name; supply the exact id from harness.inspect when needed to choose an existing Skill. "
         + "A supplied skill.id must match " + SkillIds.Pattern + ". "
         + "name is 1..80 characters, description 1..240, procedure 1..4000; use procedural text without fenced code or script blocks. "
         + "activationKeywords is an optional array of up to 8 unique, trimmed, nonblank strings of at most 64 characters. "
-        + "requiredCapabilities is an array of up to 8 unique capability ids, limited to chat.respond or already selected tools; requirements do not grant tools. "
+        + "requiredCapabilities is an optional array of up to 8 unique capability ids, limited to chat.respond or already selected tools; requirements do not grant tools. "
         + "knowledgeIds is an optional array of up to 4 identities from harness.inspect knowledge; Core resolves them to definition resources. "
         + "resourcePaths is a legacy optional array of up to 4 unique existing definition resource paths (max 240 characters, relative forward-slash paths without dot segments); do not combine it with knowledgeIds. Workspace files are not definition resources. "
-        + "The resulting definition may have at most 16 Skills and 12000 total procedure characters.";
+        + "Omitted optional metadata stays unchanged when updating an existing Skill and defaults to empty on creation. The resulting definition may have at most 16 Skills and 12000 total procedure characters.";
 
     private static string OperationHelp(string kind) => kind switch
     {
-        "skill.upsert" => SkillPayloadHelp + " Read source material through ordinary tools first. activationKeywords, requiredCapabilities and knowledgeIds may be omitted.",
+        "skill.upsert" => SkillPayloadHelp + " Owner-provided procedures may be authored directly. Read external source material through authorized ordinary tools first. activationKeywords, requiredCapabilities and knowledgeIds may be omitted.",
         "skill.remove" => "id is the exact Skill id from harness.inspect.",
         "knowledge.upsert" => "id is a simple alphanumeric name (hyphens/underscores allowed). content is the retained text. source must name material actually read in this turn (for example workspace:playbook.md), or conversation:user for current owner-provided material.",
         "knowledge.remove" => "id is the exact knowledge identity from harness.inspect.",
