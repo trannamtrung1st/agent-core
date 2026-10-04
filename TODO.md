@@ -69,7 +69,7 @@ Clients cannot supply trusted diagnostic, correlation, or causation identity. JS
 2. **P8.5 — Application Messaging & Dynamic Skill Activation — closed** on `1461567` (post-closure corrections **closed** on **`aedea70`**, hosted Synthetic [**`36851267423`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36851267423) green).
 3. **P9 — Visible browser — closed** on `bba1de4`. Post-closure browser runtime hardening is **closed** on **`3400d64`** (hosted Synthetic [**`36981513602`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36981513602) green); that chain does not move the P9 freeze SHA.
 4. **P9.5 — Proactive Secretary / Real Assistant Demo — closed** on `1012653` (hosted Synthetic [`37111979501`](https://github.com/trannamtrung1st/agent-core/actions/runs/37111979501) green). Post-closure follow-ups project one application connection by display name and add a bounded browser settle. Neither moves the P9 or P9.5 SHAs. The post-P9.5 browser and store-review enhancement is recorded on `6f6ff42` (hosted Synthetic [`37128161642`](https://github.com/trannamtrung1st/agent-core/actions/runs/37128161642) green) and does not move `1012653`.
-5. **P9.6 — Visual Browser, Reactive Triggers & Deterministic Unattended Execution — implemented, not closed.** Broaden the provider-neutral browser capability, admit one authenticated `order.placed` event from a source-owned webhook through the existing occurrence pipeline, extend the shipped unattended baseline, and make model choice independent of live-versus-durable routing. A local storefront order was admitted once and investigated in the authenticated browser. The phase is still not frozen.
+5. **P9.6 — Visual Browser, Reactive Triggers & Deterministic Unattended Execution — frozen** on `fb69ae56` (hosted Synthetic [`37185534714`](https://github.com/trannamtrung1st/agent-core/actions/runs/37185534714) green). Source-owned `order.placed` ingress, delivery-ledger fan-out, Browser v1, execution-model pin, and real storefront order **12** plus unattended browser completion are recorded in [p9.6-freeze-candidate.md](docs/reports/p9.6-freeze-candidate.md).
 6. **P10 — Sandbox Evolution — requirement-triggered when the current sandbox is insufficient.**
 7. **P11 — Multi-user + Production Infrastructure — requirement-triggered when a real hosting or pilot requirement appears.**
 
@@ -1062,7 +1062,7 @@ P9.5 closes when a developer can use one simple documented workflow to bring up 
 
 # P9.6 — Visual Browser, Reactive Triggers & Deterministic Unattended Execution
 
-**Status: implemented; not closed.** P9 remains closed on `bba1de4` and P9.5 remains closed on `1012653`. P9.6 does not move either closure SHA and does not start P10. Local key-free gates passed. Hosted Synthetic [`37152788171`](https://github.com/trannamtrung1st/agent-core/actions/runs/37152788171) is green on `24e2281`. The candidate report is [p9.6-freeze-candidate.md](docs/reports/p9.6-freeze-candidate.md). A later local run started the nopCommerce demo, admitted order 9 once, and the Secretary completed a quiet browser investigation. The phase stays open.
+**Status: frozen** on `fb69ae56`. P9 remains closed on `bba1de4` and P9.5 remains closed on `1012653`. P9.6 does not move either closure SHA and does not start P10. Hosted Synthetic [`37185534714`](https://github.com/trannamtrung1st/agent-core/actions/runs/37185534714) is green on `fb69ae56`. Closure evidence is [p9.6-freeze-candidate.md](docs/reports/p9.6-freeze-candidate.md), including guest checkout **order 12**, delivery-ledger admission, duplicate-webhook dedupe, and a completed unattended browser investigation on the connected demo store.
 
 ## Verified starting point
 
@@ -1401,6 +1401,6 @@ Orientation for what later work can build on. Detail and gate history are in `/d
 
 # Next implementation item
 
-**P9.6 closure.** The execution-model pin, Browser Capability v1, authenticated `order.placed` ingress, unattended browser parity, `tool-result-lost` reconciliation, Admin and Background Work, and the four-mode Secretary proof are implemented. Hosted Synthetic [`37152788171`](https://github.com/trannamtrung1st/agent-core/actions/runs/37152788171) is green on `24e2281` and named in `docs/reports/p9.6-freeze-candidate.md`. The phase stays open. A later local run admitted storefront order 9 once and the Secretary finished that investigation quietly in the authenticated browser.
+**P9.6 closure.** Frozen on `fb69ae56` with hosted Synthetic [`37185534714`](https://github.com/trannamtrung1st/agent-core/actions/runs/37185534714) green. See `docs/reports/p9.6-freeze-candidate.md` for source-owned webhook architecture, restart-safe fan-out, real storefront order 12, duplicate delivery proof, and the completed real-model unattended browser path.
 
 P9 remains closed on `bba1de4`; P9.5 remains closed on `1012653`; the post-P9.5 enhancement remains recorded on `6f6ff42`. P10 and P11 remain requirement-triggered.
