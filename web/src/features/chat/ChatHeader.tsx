@@ -14,8 +14,7 @@ export function ChatHeader({
   onBackgroundWork,
   attentionCount = 0,
   onEnd,
-  inSession,
-  applicationConnection
+  inSession
 }: {
   title: string;
   subtitle?: string | null;
@@ -27,7 +26,6 @@ export function ChatHeader({
   attentionCount?: number;
   onEnd: () => void;
   inSession: boolean;
-  applicationConnection?: ReactNode;
 }) {
   const { modal } = AntApp.useApp();
   const timeLabel = timestamp ? formatChatTime(timestamp) : null;
@@ -52,7 +50,6 @@ export function ChatHeader({
               {subtitle}
             </Typography.Text>
           ) : null}
-          {applicationConnection}
         </div>
       </Flex>
       {speechLocale || inSession || onBackgroundWork ? (

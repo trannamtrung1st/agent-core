@@ -291,7 +291,7 @@ Owners: [Protocol](14-api-and-realtime-protocol.md) (capability, leases vs Attac
 
 ## Post-P9.5 application connection projection
 
-**Decision:** Chat projects the one application connection on an Agent Instance by its display name and status. Admin uses the same connection nouns and shows a read-only Application type of nopCommerce, because connection establishment still opens that store's admin sign-in. The model context uses the display name and stored kind. nopCommerce remains the first concrete kind and is not Core vocabulary. This follow-up does not add a second connection, a provider registry, or a persistence migration, and it does not move `1012653`.
+**Decision:** Admin projects the one application connection on an Agent Instance by its display name and status. Chat does not duplicate that row in the header. Admin shows a read-only Application type of nopCommerce, because connection establishment still opens that store's admin sign-in. The model context uses the display name and stored kind. nopCommerce remains the first concrete kind and is not Core vocabulary. This follow-up does not add a second connection, a provider registry, or a persistence migration, and it does not move `1012653`.
 
 ## Post-P9.5 bounded browser settle
 

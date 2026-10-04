@@ -126,37 +126,7 @@ test("store connection and quiet background work stay labeled", async ({ page })
     return session.agentInstanceId ?? null;
   }, sessionId!);
   expect(instanceId).toBeTruthy();
-  const prior = await page.evaluate(async (id) => {
-    const capability = window.localStorage.getItem("agent-core.owner-capability");
-    const response = await fetch(`/api/v2/admin/agent-instances/${id}/connection`, {
-      headers: capability ? { "X-AgentCore-Owner-Capability": capability } : {}
-    });
-    if (response.status === 404) {
-      return null;
-    }
-    if (!response.ok) {
-      throw new Error(`connection lookup failed: ${response.status}`);
-    }
-    const body = (await response.json()) as {
-      connectionId?: string;
-      displayName?: string;
-      status?: string;
-    } | null;
-    return body?.connectionId ? body : null;
-  }, instanceId);
-  const chatStatus: Record<string, string> = {
-    Connecting: "Connecting",
-    Connected: "Connected",
-    NeedsReauthentication: "Needs reauthentication",
-    Unavailable: "Unavailable",
-    NotConnected: "Not connected"
-  };
-  if (prior?.displayName && prior.status) {
-    const label = chatStatus[prior.status] ?? prior.status;
-    await expect(page.getByLabel(`Application connection: ${prior.displayName}, ${label}`)).toBeVisible();
-  } else {
-    await expect(page.getByLabel(/Application connection:/)).toHaveCount(0);
-  }
+  await expect(page.getByLabel(/Application connection:/)).toHaveCount(0);
   await page.goto(`/admin/instances/${instanceId}`);
   await expect(page).toHaveURL(/\/admin\/instances\/[0-9a-f-]{36}$/i);
   const section = page.getByRole("region", { name: "Application connection" });
@@ -191,13 +161,11 @@ test("store connection and quiet background work stay labeled", async ({ page })
   await expect(section.getByText(/cookie|token|profile path/i)).toHaveCount(0);
 
   await page.goto(`/c/${sessionId}`);
-  const projection = page.getByLabel("Application connection: nopCommerce, Not connected");
-  await expect(projection).toBeVisible({ timeout: 15_000 });
-  await expect(projection).toHaveText("nopCommerce · Not connected");
-  await page.getByRole("button", { name: "Manage application connection" }).click();
-  await expect(page).toHaveURL(new RegExp(`/admin/instances/${instanceId}$`, "i"));
-  await expect(page.getByRole("heading", { name: "Application connection" })).toBeVisible();
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(page.getByLabel(/Application connection:/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Manage application connection" })).toHaveCount(0);
 
+  await page.goto(`/admin/instances/${instanceId}`);
   await page.setViewportSize({ width: 390, height: 800 });
   await expect(section.getByRole("heading", { name: "Application connection" })).toBeVisible();
   await expect(section.getByRole("button", { name: "Connect" })).toBeVisible();

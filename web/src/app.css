@@ -136,39 +136,6 @@ body,
   font-size: 12px;
 }
 
-.chat-application-connection {
-  min-width: 0;
-  max-width: 100%;
-}
-
-.chat-application-connection-icon {
-  flex: 0 0 auto;
-  font-size: 12px;
-  color: var(--ac-color-text-secondary);
-}
-
-.chat-application-connection .chat-application-connection-label.ant-typography {
-  flex: 1 1 auto;
-  width: auto;
-  min-width: 0;
-  max-width: 100%;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--ac-color-text-secondary) !important;
-}
-
-.chat-application-connection-manage.ant-btn {
-  flex: 0 0 auto;
-  height: auto;
-  font-size: 12px;
-  color: var(--ac-color-text-secondary);
-}
-
-.chat-application-connection-manage.ant-btn:not(:disabled):hover,
-.chat-application-connection-manage.ant-btn:not(:disabled):focus-visible {
-  color: var(--ac-color-text);
-}
-
 .chat-header-actions {
   flex: 0 1 auto;
   min-width: 0;
