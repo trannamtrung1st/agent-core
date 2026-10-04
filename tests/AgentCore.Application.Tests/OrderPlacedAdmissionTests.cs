@@ -78,6 +78,11 @@ public sealed class OrderPlacedAdmissionTests
             pending.Select(item => item.Owner.AgentInstanceId).Order());
         Assert.All(pending, item => Assert.NotNull(item.ModelPin));
         Assert.All(pending, item => Assert.Equal(1, item.ScheduleRevision));
+        Assert.All(
+            pending,
+            item => Assert.Equal(
+                ExternalEventIngress.OccurrenceDedupeKey(issued.SourceId, "order-105-created"),
+                item.DedupeKey));
         Assert.All(pending, item => Assert.Null(item.DurableWorkItemId));
         var saved = await secretary.Events.GetEventAsync(issued.SourceId, "order-105-created");
         Assert.Equal(first.EventId, saved!.EventId);
@@ -181,6 +186,70 @@ public sealed class OrderPlacedAdmissionTests
         Assert.NotNull(await secretary.Events.GetEventAsync(issued.SourceId, "evt-unmatched"));
     }
 
+    [Fact]
+    public async Task The_same_source_event_id_from_two_sources_wakes_one_agent_twice()
+    {
+        var secretary = await FixtureAsync("secretary", 2);
+        var first = await secretary.Sources.CreateAsync("Store A");
+        var second = await secretary.Sources.CreateAsync("Store B");
+        await secretary.Sources.SubscribeAsync(secretary.InstanceId, first.SourceId, ExternalEventTypes.OrderPlaced);
+        await secretary.Sources.SubscribeAsync(secretary.InstanceId, second.SourceId, ExternalEventTypes.OrderPlaced);
+        var body = Encoding.UTF8.GetBytes(ExternalEventEnvelope.Build("order-123-placed", "123"));
+        Assert.Equal(ExternalEventIngressKind.Admitted, (await secretary.Ingress.AdmitAsync(first.SourceKey, first.Token, body)).Kind);
+        Assert.Equal(ExternalEventIngressKind.Admitted, (await secretary.Ingress.AdmitAsync(second.SourceKey, second.Token, body)).Kind);
+        var pending = await secretary.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10);
+        Assert.Equal(2, pending.Count);
+        Assert.Equal(
+            new[]
+            {
+                ExternalEventIngress.OccurrenceDedupeKey(first.SourceId, "order-123-placed"),
+                ExternalEventIngress.OccurrenceDedupeKey(second.SourceId, "order-123-placed")
+            }.Order(),
+            pending.Select(item => item.DedupeKey).Order());
+    }
+
+    [Fact]
+    public async Task A_duplicate_delivery_finishes_fan_out_that_stopped_early()
+    {
+        var ids = new FailOnceIdGenerator(7);
+        var secretary = await FixtureAsync("secretary", 2, ids: ids);
+        var monitor = await FixtureAsync(
+            "secretary",
+            2,
+            secretary.Events,
+            secretary.Logs,
+            instances: secretary.Instances,
+            triggers: secretary.Triggers,
+            ids: ids);
+        var issued = await secretary.Sources.CreateAsync("Demo Store");
+        await secretary.Sources.SubscribeAsync(secretary.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
+        await monitor.Sources.SubscribeAsync(monitor.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
+        var body = Encoding.UTF8.GetBytes(ExternalEventEnvelope.Build("order-106-created", "106"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => secretary.Ingress.AdmitAsync(issued.SourceKey, issued.Token, body).AsTask());
+        Assert.NotNull(await secretary.Events.GetEventAsync(issued.SourceId, "order-106-created"));
+        Assert.Single(await secretary.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
+
+        var repaired = await secretary.Ingress.AdmitAsync(issued.SourceKey, issued.Token, body);
+        Assert.Equal(ExternalEventIngressKind.Duplicate, repaired.Kind);
+        var pending = await secretary.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10);
+        Assert.Equal(2, pending.Count);
+        Assert.Equal(
+            new[] { secretary.InstanceId, monitor.InstanceId }.Order(),
+            pending.Select(item => item.Owner.AgentInstanceId).Order());
+    }
+
+    [Fact]
+    public async Task A_revoked_source_cannot_gain_a_new_subscription()
+    {
+        var secretary = await FixtureAsync("secretary", 2);
+        var issued = await secretary.Sources.CreateAsync("Demo Store");
+        await secretary.Sources.RevokeAsync(issued.SourceId);
+        var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
+            secretary.Sources.SubscribeAsync(secretary.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced).AsTask());
+        Assert.Contains("active", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await secretary.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
+    }
+
     private static async Task<Fixture> FixtureAsync(
         string definitionId,
         int version,
@@ -189,7 +258,8 @@ public sealed class OrderPlacedAdmissionTests
         IModelCatalog? catalog = null,
         InMemoryAgentInstanceStore? instances = null,
         InMemoryTriggerStore? triggers = null,
-        string? unattendedModel = null)
+        string? unattendedModel = null,
+        IIdGenerator? ids = null)
     {
         var definitions = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         var definition = (await definitions.GetAsync(definitionId, version))!;
@@ -212,7 +282,7 @@ public sealed class OrderPlacedAdmissionTests
         triggers ??= new InMemoryTriggerStore();
         events ??= new InMemoryExternalEventStore();
         logs ??= new ListLogger();
-        var ids = new SystemIdGenerator(TimeProvider.System);
+        ids ??= new SystemIdGenerator(TimeProvider.System);
         var guard = new TriggerAdmissionGuard(instances, definitions, memory);
         var ingress = new ExternalEventIngress(
             events,
@@ -251,6 +321,24 @@ public sealed class OrderPlacedAdmissionTests
         }
 
         throw new DirectoryNotFoundException("agents/");
+    }
+
+    private sealed class FailOnceIdGenerator(int failOnCall) : IIdGenerator
+    {
+        private int _calls;
+
+        public Guid NewId()
+        {
+            var call = Interlocked.Increment(ref _calls);
+            if (call == failOnCall)
+            {
+                throw new InvalidOperationException("fan-out stopped");
+            }
+
+            return Guid.CreateVersion7();
+        }
+
+        public Guid NewSessionId() => Guid.CreateVersion7();
     }
 
     private sealed record Fixture(

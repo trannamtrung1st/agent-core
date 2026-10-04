@@ -77,30 +77,49 @@ public sealed class ExternalEventIngress(
             now,
             evidence);
         var admitted = await events.AdmitAsync(candidate, cancellationToken).ConfigureAwait(false);
-        if (admitted.Kind == ExternalEventAdmitKind.Duplicate)
-        {
-            Log(ExternalEventIngressKind.Duplicate, sourceKey, admitted.Event.EventId, 0);
-            return new ExternalEventIngressResult(ExternalEventIngressKind.Duplicate, admitted.Event.EventId, null);
-        }
+        var created = await FanOutAsync(
+            source,
+            admitted.Event.SourceEventId,
+            admitted.Event.EventType,
+            admitted.Event.EvidenceJson,
+            now,
+            cancellationToken).ConfigureAwait(false);
+        var kind = admitted.Kind == ExternalEventAdmitKind.Duplicate
+            ? ExternalEventIngressKind.Duplicate
+            : ExternalEventIngressKind.Admitted;
+        Log(kind, sourceKey, admitted.Event.EventId, created);
+        return new ExternalEventIngressResult(kind, admitted.Event.EventId, null);
+    }
 
+    internal static string OccurrenceDedupeKey(Guid sourceId, string sourceEventId) =>
+        $"order.placed:{sourceId:D}:{sourceEventId}";
+
+    private async ValueTask<int> FanOutAsync(
+        ExternalEventSource source,
+        string sourceEventId,
+        string eventType,
+        string evidence,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
         var subscribers = await triggers.ListEventSubscriptionsAsync(source.SourceId, eventType, cancellationToken)
             .ConfigureAwait(false);
         var created = 0;
         foreach (var registration in subscribers)
         {
-            if (await TryCreateOccurrenceAsync(registration, sourceEventId, evidence, now, cancellationToken)
+            if (await TryCreateOccurrenceAsync(registration, source.SourceId, sourceEventId, evidence, now, cancellationToken)
                     .ConfigureAwait(false))
             {
                 created++;
             }
         }
 
-        Log(ExternalEventIngressKind.Admitted, sourceKey, admitted.Event.EventId, created);
-        return new ExternalEventIngressResult(ExternalEventIngressKind.Admitted, admitted.Event.EventId, null);
+        return created;
     }
 
     private async ValueTask<bool> TryCreateOccurrenceAsync(
         TriggerRegistration registration,
+        Guid sourceId,
         string sourceEventId,
         string evidence,
         DateTimeOffset now,
@@ -128,7 +147,7 @@ public sealed class ExternalEventIngress(
 
         var occurrence = new TriggerOccurrence(
             ids.NewId(),
-            $"order.placed:{sourceEventId}",
+            OccurrenceDedupeKey(sourceId, sourceEventId),
             registration.RegistrationId,
             registration.Owner,
             TriggerSourceKind.ApplicationEvent,
@@ -146,8 +165,8 @@ public sealed class ExternalEventIngress(
             null,
             null,
             pin?.Pin);
-        await triggers.AdmitOccurrenceAsync(occurrence, cancellationToken).ConfigureAwait(false);
-        return true;
+        var admitted = await triggers.AdmitOccurrenceAsync(occurrence, cancellationToken).ConfigureAwait(false);
+        return admitted.Kind == TriggerOccurrenceAdmitKind.Admitted;
     }
 
     private static bool Authorized(ExternalEventSource? source, string presentedToken) =>

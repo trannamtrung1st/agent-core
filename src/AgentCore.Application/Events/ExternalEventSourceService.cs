@@ -113,7 +113,11 @@ public sealed class ExternalEventSourceService(
         }
 
         await RequireInstanceAsync(agentInstanceId, cancellationToken).ConfigureAwait(false);
-        _ = await RequireAsync(sourceId, cancellationToken).ConfigureAwait(false);
+        var source = await RequireAsync(sourceId, cancellationToken).ConfigureAwait(false);
+        if (source.Status != ExternalEventSourceStatus.Active)
+        {
+            throw AgentCoreErrors.Validation("Only an active event source can accept a subscription.");
+        }
         var profile = await profiles.GetLocalProfileAsync(cancellationToken).ConfigureAwait(false);
         var owner = new TriggerOwner(agentInstanceId, profile.ProfileId);
         var decision = await guard.EvaluateAsync(owner, TriggerSourceKind.ApplicationEvent, cancellationToken)

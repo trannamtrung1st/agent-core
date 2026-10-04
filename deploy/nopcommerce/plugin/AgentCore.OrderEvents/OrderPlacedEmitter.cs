@@ -81,6 +81,8 @@ public static class OrderPlacedEmitter
             {
                 return false;
             }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(500 << (attempt - 1)), cancellationToken).ConfigureAwait(false);
         }
 
         return false;

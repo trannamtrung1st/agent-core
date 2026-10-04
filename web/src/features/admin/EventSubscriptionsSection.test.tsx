@@ -54,4 +54,25 @@ describe("EventSubscriptionsSection", () => {
     expect(await screen.findByText("order.placed")).toBeInTheDocument();
     expect(screen.queryByText("No order.placed subscription yet.")).not.toBeInTheDocument();
   });
+
+  it("does not offer a revoked event source", async () => {
+    vi.mocked(listEventSources).mockResolvedValue([
+      {
+        sourceId,
+        displayName: "Demo Store",
+        kind: "Webhook",
+        sourceKey: "11111111-1111-1111-1111-111111111111",
+        status: "Revoked",
+        revision: 2
+      }
+    ]);
+    vi.mocked(listEventSubscriptions).mockResolvedValue([]);
+    render(
+      <AntApp>
+        <EventSubscriptionsSection instanceId={instanceId} />
+      </AntApp>
+    );
+    expect(await screen.findByText("No active event source.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Subscribe to order.placed" })).not.toBeInTheDocument();
+  });
 });

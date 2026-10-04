@@ -353,6 +353,16 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             && lastUser.Contains(SensitiveApprovalMarker, StringComparison.OrdinalIgnoreCase)
             && lastTool.Contains("completed", StringComparison.OrdinalIgnoreCase))
         {
+            if (Offers(request, ToolCatalog.WorkComplete))
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall(
+                    "call-sensitive-complete",
+                    ToolCatalog.WorkComplete,
+                    """{"summary":"Sensitive action completed after approval.","attentionRequired":false}"""));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
             yield return new ModelTextDelta("Sensitive action completed after approval.");
             yield return new ModelCompleted(ModelStopReason.Completed);
             yield break;

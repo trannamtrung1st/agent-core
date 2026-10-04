@@ -66,6 +66,7 @@ export function EventSubscriptionsSection({ instanceId }: { instanceId: string }
     }
   }
 
+  const activeSources = sources.filter((item) => item.status === "Active");
   const sourceName = (id: string) => sources.find((item) => item.sourceId === id)?.displayName ?? id;
 
   return (
@@ -84,6 +85,8 @@ export function EventSubscriptionsSection({ instanceId }: { instanceId: string }
             <>
               {sources.length === 0 ? (
                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Create an event source on Admin home first." />
+              ) : activeSources.length === 0 ? (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No active event source." />
               ) : (
                 <Flex gap={token.paddingXS} wrap="wrap" align="center">
                   <Select
@@ -92,7 +95,7 @@ export function EventSubscriptionsSection({ instanceId }: { instanceId: string }
                     value={sourceId ?? undefined}
                     disabled={busy}
                     style={{ minWidth: 220 }}
-                    options={sources.map((source) => ({
+                    options={activeSources.map((source) => ({
                       value: source.sourceId,
                       label: `${source.displayName} · ${source.status}`
                     }))}
