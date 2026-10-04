@@ -76,14 +76,13 @@ public sealed class ExternalEventIngress(
             occurred,
             now,
             evidence);
-        var admitted = await events.AdmitAsync(candidate, cancellationToken).ConfigureAwait(false);
-        var created = await FanOutAsync(
-            source,
-            admitted.Event.SourceEventId,
-            admitted.Event.EventType,
-            admitted.Event.EvidenceJson,
-            now,
-            cancellationToken).ConfigureAwait(false);
+        var subscribers = await triggers.ListEventSubscriptionsAsync(source.SourceId, eventType, cancellationToken)
+            .ConfigureAwait(false);
+        var targets = subscribers
+            .Select(item => new ExternalEventTarget(item.RegistrationId, item.Owner.AgentInstanceId, item.Owner.ProfileId))
+            .ToArray();
+        var admitted = await events.AdmitAsync(candidate, targets, cancellationToken).ConfigureAwait(false);
+        var created = await ResumeEventAsync(admitted.Event, now, cancellationToken).ConfigureAwait(false);
         var kind = admitted.Kind == ExternalEventAdmitKind.Duplicate
             ? ExternalEventIngressKind.Duplicate
             : ExternalEventIngressKind.Admitted;
@@ -91,24 +90,38 @@ public sealed class ExternalEventIngress(
         return new ExternalEventIngressResult(kind, admitted.Event.EventId, null);
     }
 
+    public async ValueTask<int> ResumePendingAsync(CancellationToken cancellationToken = default)
+    {
+        var pending = await events.ListPendingDeliveriesAsync(null, 32, cancellationToken).ConfigureAwait(false);
+        var created = 0;
+        var now = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
+        foreach (var eventId in pending.Select(item => item.EventId).Distinct())
+        {
+            var stored = await events.GetByEventIdAsync(eventId, cancellationToken).ConfigureAwait(false);
+            if (stored is null)
+            {
+                continue;
+            }
+
+            created += await ResumeEventAsync(stored, now, cancellationToken).ConfigureAwait(false);
+        }
+
+        return created;
+    }
+
     internal static string OccurrenceDedupeKey(Guid sourceId, string sourceEventId) =>
         $"order.placed:{sourceId:D}:{sourceEventId}";
 
-    private async ValueTask<int> FanOutAsync(
-        ExternalEventSource source,
-        string sourceEventId,
-        string eventType,
-        string evidence,
+    private async ValueTask<int> ResumeEventAsync(
+        ExternalEvent stored,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var subscribers = await triggers.ListEventSubscriptionsAsync(source.SourceId, eventType, cancellationToken)
-            .ConfigureAwait(false);
+        var pending = await events.ListPendingDeliveriesAsync(stored.EventId, 32, cancellationToken).ConfigureAwait(false);
         var created = 0;
-        foreach (var registration in subscribers)
+        foreach (var delivery in pending)
         {
-            if (await TryCreateOccurrenceAsync(registration, source.SourceId, sourceEventId, evidence, now, cancellationToken)
-                    .ConfigureAwait(false))
+            if (await TryDeliverAsync(stored, delivery, now, cancellationToken).ConfigureAwait(false))
             {
                 created++;
             }
@@ -117,7 +130,36 @@ public sealed class ExternalEventIngress(
         return created;
     }
 
-    private async ValueTask<bool> TryCreateOccurrenceAsync(
+    private async ValueTask<bool> TryDeliverAsync(
+        ExternalEvent stored,
+        ExternalEventDelivery delivery,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var owner = new TriggerOwner(delivery.AgentInstanceId, delivery.ProfileId);
+        var registration = await triggers.GetAsync(owner, delivery.RegistrationId, cancellationToken).ConfigureAwait(false);
+        if (registration is null)
+        {
+            await events.MarkDeliveryAsync(stored.EventId, delivery.RegistrationId, ExternalEventDeliveryStatus.Skipped, cancellationToken)
+                .ConfigureAwait(false);
+            return false;
+        }
+
+        var outcome = await TryCreateOccurrenceAsync(
+            registration,
+            stored.SourceId,
+            stored.SourceEventId,
+            stored.EvidenceJson,
+            now,
+            cancellationToken).ConfigureAwait(false);
+        await events.MarkDeliveryAsync(stored.EventId, delivery.RegistrationId, outcome.Status, cancellationToken)
+            .ConfigureAwait(false);
+        return outcome.Created;
+    }
+
+    private readonly record struct DeliveryOutcome(ExternalEventDeliveryStatus Status, bool Created);
+
+    private async ValueTask<DeliveryOutcome> TryCreateOccurrenceAsync(
         TriggerRegistration registration,
         Guid sourceId,
         string sourceEventId,
@@ -129,7 +171,7 @@ public sealed class ExternalEventIngress(
             .ConfigureAwait(false);
         if (decision.Kind == TriggerAdmissionDecisionKind.Suspend)
         {
-            return false;
+            return new DeliveryOutcome(ExternalEventDeliveryStatus.Skipped, false);
         }
 
         var pin = await ExecutionModelAdmission.ResolveAsync(
@@ -142,7 +184,7 @@ public sealed class ExternalEventIngress(
             cancellationToken).ConfigureAwait(false);
         if (pin is { FailureCode: not null })
         {
-            return false;
+            return new DeliveryOutcome(ExternalEventDeliveryStatus.Skipped, false);
         }
 
         var occurrence = new TriggerOccurrence(
@@ -166,7 +208,7 @@ public sealed class ExternalEventIngress(
             null,
             pin?.Pin);
         var admitted = await triggers.AdmitOccurrenceAsync(occurrence, cancellationToken).ConfigureAwait(false);
-        return admitted.Kind == TriggerOccurrenceAdmitKind.Admitted;
+        return new DeliveryOutcome(ExternalEventDeliveryStatus.Admitted, admitted.Kind == TriggerOccurrenceAdmitKind.Admitted);
     }
 
     private static bool Authorized(ExternalEventSource? source, string presentedToken) =>

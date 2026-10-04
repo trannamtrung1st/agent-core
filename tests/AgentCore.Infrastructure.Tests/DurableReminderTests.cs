@@ -218,7 +218,7 @@ public sealed class DurableReminderTests
             var completed = await reopened.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
             Assert.Equal(WorkItemStatus.Completed, completed!.Status);
             Assert.Equal("Oven is ready.", completed.Result!.Text);
-            Assert.Contains(ToolCatalog.WorkComplete, completed.Checkpoint!.PayloadJson, StringComparison.Ordinal);
+            Assert.Equal(DurableReminderExecutor.BeforeModelCheckpoint, completed.Checkpoint!.PayloadJson);
         }, () => new GateModel());
     }
 
@@ -305,7 +305,7 @@ public sealed class DurableReminderTests
             var waiting = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
             Assert.Equal(WorkItemStatus.WaitingToRetry, waiting!.Status);
             Assert.Equal("model-unavailable", waiting.Failure!.Code);
-            Assert.Equal("The model did not complete the occurrence.", waiting.Failure.Summary);
+            Assert.Equal("The model did not complete the reminder.", waiting.Failure.Summary);
             Assert.Equal(Now.Add(DurableReminderExecutor.RetryDelay(1)), waiting.NextRetryAtUtc);
             Assert.Equal(0, await harness.Executor.ExecuteDueAsync(Now, 10));
 
@@ -316,7 +316,7 @@ public sealed class DurableReminderTests
             Assert.Equal(WorkItemStatus.Failed, failed!.Status);
             Assert.Equal("attempts-exhausted", failed.Failure!.Code);
             Assert.Equal(
-                "Retry budget is exhausted. Last attempt: The model did not complete the occurrence.",
+                "Retry budget is exhausted. Last attempt: The model did not complete the reminder.",
                 failed.Failure.Summary);
             Assert.NotEqual(Guid.Empty, failed.Failure.DiagnosticId);
             Assert.DoesNotContain("stack", failed.Failure.Summary, StringComparison.OrdinalIgnoreCase);

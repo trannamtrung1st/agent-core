@@ -34,6 +34,22 @@ public interface IExternalEventStore
 
     ValueTask<ExternalEventAdmit> AdmitAsync(
         ExternalEvent candidate,
+        IReadOnlyList<ExternalEventTarget> targets,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<IReadOnlyList<ExternalEventDelivery>> ListPendingDeliveriesAsync(
+        Guid? eventId,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    ValueTask MarkDeliveryAsync(
+        Guid eventId,
+        Guid registrationId,
+        ExternalEventDeliveryStatus status,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<ExternalEvent?> GetByEventIdAsync(
+        Guid eventId,
         CancellationToken cancellationToken = default);
 
     ValueTask<ExternalEvent?> GetEventAsync(

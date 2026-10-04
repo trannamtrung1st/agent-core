@@ -229,13 +229,22 @@ public sealed class OrderPlacedAdmissionTests
         Assert.NotNull(await secretary.Events.GetEventAsync(issued.SourceId, "order-106-created"));
         Assert.Single(await secretary.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
 
-        var repaired = await secretary.Ingress.AdmitAsync(issued.SourceKey, issued.Token, body);
-        Assert.Equal(ExternalEventIngressKind.Duplicate, repaired.Kind);
+        var late = await FixtureAsync(
+            "secretary",
+            2,
+            secretary.Events,
+            secretary.Logs,
+            instances: secretary.Instances,
+            triggers: secretary.Triggers,
+            ids: ids);
+        await late.Sources.SubscribeAsync(late.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
+        Assert.Equal(1, await secretary.Ingress.ResumePendingAsync());
         var pending = await secretary.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10);
         Assert.Equal(2, pending.Count);
         Assert.Equal(
             new[] { secretary.InstanceId, monitor.InstanceId }.Order(),
             pending.Select(item => item.Owner.AgentInstanceId).Order());
+        Assert.DoesNotContain(pending, item => item.Owner.AgentInstanceId == late.InstanceId);
     }
 
     [Fact]

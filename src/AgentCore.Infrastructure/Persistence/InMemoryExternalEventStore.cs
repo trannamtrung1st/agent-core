@@ -9,6 +9,7 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
     private readonly Lock _gate = new();
     private readonly Dictionary<Guid, ExternalEventSource> _sources = [];
     private readonly Dictionary<(Guid SourceId, string SourceEventId), ExternalEvent> _events = [];
+    private readonly Dictionary<(Guid EventId, Guid RegistrationId), ExternalEventDelivery> _deliveries = [];
 
     public ValueTask<ExternalEventSource> CreateAsync(
         ExternalEventSource source,
@@ -68,7 +69,10 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
         }
     }
 
-    public ValueTask<ExternalEventAdmit> AdmitAsync(ExternalEvent candidate, CancellationToken cancellationToken = default)
+    public ValueTask<ExternalEventAdmit> AdmitAsync(
+        ExternalEvent candidate,
+        IReadOnlyList<ExternalEventTarget> targets,
+        CancellationToken cancellationToken = default)
     {
         lock (_gate)
         {
@@ -79,7 +83,62 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
             }
 
             _events[key] = candidate;
+            foreach (var target in targets)
+            {
+                var deliveryKey = (candidate.EventId, target.RegistrationId);
+                _deliveries[deliveryKey] = new ExternalEventDelivery(
+                    candidate.EventId,
+                    target.RegistrationId,
+                    target.AgentInstanceId,
+                    target.ProfileId,
+                    ExternalEventDeliveryStatus.Pending);
+            }
+
             return ValueTask.FromResult(new ExternalEventAdmit(ExternalEventAdmitKind.Admitted, candidate));
+        }
+    }
+
+    public ValueTask<IReadOnlyList<ExternalEventDelivery>> ListPendingDeliveriesAsync(
+        Guid? eventId,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            var rows = _deliveries.Values
+                .Where(item => item.Status == ExternalEventDeliveryStatus.Pending
+                    && (eventId is null || item.EventId == eventId))
+                .OrderBy(item => item.EventId)
+                .ThenBy(item => item.RegistrationId)
+                .Take(Math.Max(1, limit))
+                .ToArray();
+            return ValueTask.FromResult<IReadOnlyList<ExternalEventDelivery>>(rows);
+        }
+    }
+
+    public ValueTask MarkDeliveryAsync(
+        Guid eventId,
+        Guid registrationId,
+        ExternalEventDeliveryStatus status,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            if (_deliveries.TryGetValue((eventId, registrationId), out var current)
+                && current.Status == ExternalEventDeliveryStatus.Pending)
+            {
+                _deliveries[(eventId, registrationId)] = current with { Status = status };
+            }
+
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    public ValueTask<ExternalEvent?> GetByEventIdAsync(Guid eventId, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            return ValueTask.FromResult(_events.Values.FirstOrDefault(item => item.EventId == eventId));
         }
     }
 

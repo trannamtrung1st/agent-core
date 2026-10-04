@@ -1376,6 +1376,16 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 """,
                 cancellationToken).ConfigureAwait(false);
         }
+
+        if (await TableExistsAsync(connection, "ExternalEventDeliveries", cancellationToken).ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20261004065312_P96ExternalEventDelivery', '10.0.12');
+                """,
+                cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private static async Task RepairEnsureCreatedP7SchemaGapsAsync(

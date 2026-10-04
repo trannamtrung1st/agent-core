@@ -199,6 +199,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<TriggerRegistrationRecord> TriggerRegistrations => Set<TriggerRegistrationRecord>();
     public DbSet<ExternalEventSourceRecord> ExternalEventSources => Set<ExternalEventSourceRecord>();
     public DbSet<ExternalEventRecord> ExternalEvents => Set<ExternalEventRecord>();
+    public DbSet<ExternalEventDeliveryRecord> ExternalEventDeliveries => Set<ExternalEventDeliveryRecord>();
     public DbSet<TriggerOccurrenceRecord> TriggerOccurrences => Set<TriggerOccurrenceRecord>();
     public DbSet<WorkItemRecord> WorkItems => Set<WorkItemRecord>();
 
@@ -394,6 +395,16 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.EventType).HasMaxLength(64).IsRequired();
             entity.Property(row => row.EvidenceJson).HasMaxLength(4096).IsRequired();
             entity.HasIndex(row => new { row.SourceId, row.SourceEventId }).IsUnique();
+        });
+        modelBuilder.Entity<ExternalEventDeliveryRecord>(entity =>
+        {
+            entity.ToTable("ExternalEventDeliveries");
+            entity.HasKey(row => new { row.EventId, row.RegistrationId });
+            entity.Property(row => row.EventId).HasMaxLength(36);
+            entity.Property(row => row.RegistrationId).HasMaxLength(36);
+            entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.ProfileId).HasMaxLength(36).IsRequired();
+            entity.HasIndex(row => new { row.Status, row.EventId, row.RegistrationId });
         });
         modelBuilder.Entity<TriggerOccurrenceRecord>(entity =>
         {

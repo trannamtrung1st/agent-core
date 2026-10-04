@@ -75,7 +75,10 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         return source;
     }
 
-    public async ValueTask<ExternalEventAdmit> AdmitAsync(ExternalEvent candidate, CancellationToken cancellationToken = default)
+    public async ValueTask<ExternalEventAdmit> AdmitAsync(
+        ExternalEvent candidate,
+        IReadOnlyList<ExternalEventTarget> targets,
+        CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var sourceId = candidate.SourceId.ToString("D");
@@ -90,6 +93,11 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         }
 
         db.ExternalEvents.Add(ToRecord(candidate));
+        foreach (var target in targets)
+        {
+            db.ExternalEventDeliveries.Add(ToDelivery(candidate.EventId, target));
+        }
+
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -97,6 +105,7 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         }
         catch (DbUpdateException)
         {
+            db.ChangeTracker.Clear();
             var raced = await db.ExternalEvents.AsNoTracking()
                 .FirstAsync(
                     item => item.SourceId == sourceId && item.SourceEventId == candidate.SourceEventId,
@@ -104,6 +113,61 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
                 .ConfigureAwait(false);
             return new ExternalEventAdmit(ExternalEventAdmitKind.Duplicate, ToEvent(raced));
         }
+    }
+
+    public async ValueTask<IReadOnlyList<ExternalEventDelivery>> ListPendingDeliveriesAsync(
+        Guid? eventId,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var query = db.ExternalEventDeliveries.AsNoTracking()
+            .Where(item => item.Status == (int)ExternalEventDeliveryStatus.Pending);
+        if (eventId is Guid id)
+        {
+            var eventKey = id.ToString("D");
+            query = query.Where(item => item.EventId == eventKey);
+        }
+
+        var rows = await query
+            .OrderBy(item => item.EventId)
+            .ThenBy(item => item.RegistrationId)
+            .Take(Math.Clamp(limit, 1, 64))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return rows.Select(ToDelivery).ToArray();
+    }
+
+    public async ValueTask MarkDeliveryAsync(
+        Guid eventId,
+        Guid registrationId,
+        ExternalEventDeliveryStatus status,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var eventKey = eventId.ToString("D");
+        var registrationKey = registrationId.ToString("D");
+        var row = await db.ExternalEventDeliveries
+            .FirstOrDefaultAsync(
+                item => item.EventId == eventKey && item.RegistrationId == registrationKey,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (row is null || row.Status != (int)ExternalEventDeliveryStatus.Pending)
+        {
+            return;
+        }
+
+        row.Status = (int)status;
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async ValueTask<ExternalEvent?> GetByEventIdAsync(Guid eventId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var row = await db.ExternalEvents.AsNoTracking()
+            .FirstOrDefaultAsync(item => item.EventId == eventId.ToString("D"), cancellationToken)
+            .ConfigureAwait(false);
+        return row is null ? null : ToEvent(row);
     }
 
     public async ValueTask<ExternalEvent?> GetEventAsync(
@@ -163,6 +227,22 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         AdmittedAtUtc = item.AdmittedAtUtc.ToUnixTimeMilliseconds(),
         EvidenceJson = item.EvidenceJson
     };
+
+    private static ExternalEventDeliveryRecord ToDelivery(Guid eventId, ExternalEventTarget target) => new()
+    {
+        EventId = eventId.ToString("D"),
+        RegistrationId = target.RegistrationId.ToString("D"),
+        AgentInstanceId = target.AgentInstanceId.ToString("D"),
+        ProfileId = target.ProfileId.ToString("D"),
+        Status = (int)ExternalEventDeliveryStatus.Pending
+    };
+
+    private static ExternalEventDelivery ToDelivery(ExternalEventDeliveryRecord row) => new(
+        Guid.Parse(row.EventId),
+        Guid.Parse(row.RegistrationId),
+        Guid.Parse(row.AgentInstanceId),
+        Guid.Parse(row.ProfileId),
+        (ExternalEventDeliveryStatus)row.Status);
 
     private static ExternalEvent ToEvent(ExternalEventRecord row) => new(
         Guid.Parse(row.EventId),

@@ -111,6 +111,22 @@ public sealed class ExternalEventSource
     }
 }
 
+public enum ExternalEventDeliveryStatus
+{
+    Pending = 0,
+    Admitted = 1,
+    Skipped = 2
+}
+
+public sealed record ExternalEventTarget(Guid RegistrationId, Guid AgentInstanceId, Guid ProfileId);
+
+public sealed record ExternalEventDelivery(
+    Guid EventId,
+    Guid RegistrationId,
+    Guid AgentInstanceId,
+    Guid ProfileId,
+    ExternalEventDeliveryStatus Status);
+
 public sealed class ExternalEvent
 {
     public ExternalEvent(

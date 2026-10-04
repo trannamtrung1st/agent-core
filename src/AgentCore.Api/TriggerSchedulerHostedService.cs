@@ -1,3 +1,4 @@
+using AgentCore.Application.Events;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Triggers;
@@ -18,11 +19,12 @@ public sealed class TriggerSchedulerHostedService : BackgroundService
     public TriggerSchedulerHostedService(
         TriggerScheduler scheduler,
         TriggerOccurrenceRouter router,
+        ExternalEventIngress events,
         TimeProvider time,
         ILogger<TriggerSchedulerHostedService> logger,
         IDiagnosticIdSource diagnostics)
         : this(
-            cancellationToken => RunProductionAsync(scheduler, router, time, cancellationToken),
+            cancellationToken => RunProductionAsync(scheduler, router, events, time, cancellationToken),
             time,
             logger,
             diagnostics)
@@ -90,9 +92,11 @@ public sealed class TriggerSchedulerHostedService : BackgroundService
     private static async Task RunProductionAsync(
         TriggerScheduler scheduler,
         TriggerOccurrenceRouter router,
+        ExternalEventIngress events,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
+        await events.ResumePendingAsync(cancellationToken).ConfigureAwait(false);
         var now = time.GetUtcNow();
         await scheduler.RunOnceAsync(now, cancellationToken).ConfigureAwait(false);
         await router.RouteOnceAsync(cancellationToken).ConfigureAwait(false);
