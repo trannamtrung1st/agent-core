@@ -55,4 +55,4 @@ Phases A–H are observed in [Implementation Plan](18-implementation-plan.md#pos
 
 ## P9.7 handoff
 
-Bounded agent-assisted harness Authoring is implemented. [The closure report](reports/p9.7-freeze-candidate.md) owns the acceptance matrix, final candidate and hosted gate. Existing closed phases retain their freeze identities. P10/P11 remain requirement-triggered; after P9.7 acceptance, the next work is investor-demo stabilization and polish.
+P9.7 bounded agent-assisted harness Authoring is closed on `11a3d25cfe9fcfddb3f59ff1b117e14d7186c609` (hosted Synthetic [37197037373](https://github.com/trannamtrung1st/agent-core/actions/runs/37197037373) green). [The closure report](reports/p9.7-freeze-candidate.md) owns the acceptance matrix, final candidate and hosted gate. Existing closed phases retain their freeze identities. P10/P11 remain requirement-triggered; after P9.7 acceptance, the next work is investor-demo stabilization and polish.
