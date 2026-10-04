@@ -11,6 +11,61 @@ namespace AgentCore.Api.Tests;
 public sealed class HarnessChatAuthoringTests
 {
     [Fact]
+    public async Task Inspection_example_can_save_a_skill_and_activate_its_exact_procedure()
+    {
+        await using var factory = new AgentCoreApiFactory();
+        var services = factory.Services;
+        var authoring = services.GetRequiredService<HarnessManagementService>();
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
+            new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []));
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+        var executor = services.GetRequiredService<SessionToolExecutor>();
+        var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId);
+        var inspection = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("inspect", "harness.inspect", "{}"), 100000, admission: admission);
+        using var json = JsonDocument.Parse(inspection.Text);
+        var example = json.RootElement.GetProperty("skillUpsertExample");
+        var result = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("save", "harness.skill.upsert", example.GetRawText()), 100000, admission: admission);
+        Assert.Contains("\"saved\":true", result.Text);
+        var updated = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        var future = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(updated.DefinitionId, updated.ActiveVersion))!;
+        var skill = Assert.Single(future.SkillList);
+        var plan = SkillLoadAdmission.Plan(future, [], 0, [skill.Id]);
+        Assert.Contains(skill.Id, plan.Admitted);
+        Assert.Contains(example.GetProperty("skill").GetProperty("procedure").GetString()!, PromptContextBuilder.BuildActiveSkillSystem(future, plan.Admitted));
+        Assert.Empty(pinned.SkillList);
+    }
+
+    [Theory]
+    [InlineData("{\"id\":\"kubernetes-operations\"}", "skill id")]
+    [InlineData("{\"description\":null}", "Skill description")]
+    [InlineData("{\"activationKeywords\":null}", "activationKeywords")]
+    [InlineData("{\"activationKeywords\":[\"cluster\",\"cluster\"]}", "activationKeywords")]
+    [InlineData("{\"activationKeywords\":{\"keywords\":[\"cluster\"]}}", "Payload field types")]
+    public async Task Invalid_skill_payload_has_actionable_guidance_and_a_fresh_corrected_call_succeeds(string patch, string expectedError)
+    {
+        await using var factory = new AgentCoreApiFactory();
+        var services = factory.Services;
+        var authoring = services.GetRequiredService<HarnessManagementService>();
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
+            new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []));
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+        var executor = services.GetRequiredService<SessionToolExecutor>();
+        var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId);
+        var inspection = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("inspect", "harness.inspect", "{}"), 100000, admission: admission);
+        var example = System.Text.Json.Nodes.JsonNode.Parse(inspection.Text)!["skillUpsertExample"]!;
+        var invalid = example.DeepClone();
+        foreach (var field in System.Text.Json.Nodes.JsonNode.Parse(patch)!.AsObject()) invalid["skill"]![field.Key] = field.Value?.DeepClone();
+        var rejected = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("bad", "harness.skill.upsert", invalid.ToJsonString()), 100000, admission: admission);
+        Assert.Contains(expectedError, rejected.Text);
+        Assert.Contains("resourcePaths", rejected.Text);
+        Assert.Equal(7, (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!.ActiveVersion);
+        var corrected = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("fixed", "harness.skill.upsert", example.ToJsonString()), 100000, admission: admission);
+        Assert.Contains("\"saved\":true", corrected.Text);
+    }
+
+    [Fact]
     public async Task Managed_chat_publishes_knowledge_for_future_sessions_without_source_configuration()
     {
         await using var factory = new AgentCoreApiFactory();

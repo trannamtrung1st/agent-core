@@ -357,7 +357,22 @@ public sealed class HarnessManagementService(
             eligibleTools = state.Policy.EligibleTools.Where(t => toolConfiguration.IsConfigured(t)),
             instructions = active.SystemInstructions, knowledge = RoleEnvironments.Of(active).KnowledgeList,
             skills = active.SkillList, selectedTools = RoleEnvironments.Of(active).ToolList,
-            activation = "Changes apply to future Sessions. The current Session keeps its pinned Definition."
+            activation = "Changes apply to future Sessions. The current Session keeps its pinned Definition.",
+            authoringGuide = "Inspect, read relevant source material using ordinary tools, then call the offered operation with its required fields. On validation failure, correct the named field using the tool schema and example; do not blindly retry or ask the owner to invent the schema. Reinspect on version/policy conflict. Report saved only after a successful tool result.",
+            skillPayloadHelp = state.Policy.Allows(HarnessManagementScope.Skills) ? HarnessChatTools.SkillPayloadHelp : null,
+            skillUpsertExample = state.Policy.Allows(HarnessManagementScope.Skills) ? new
+            {
+                expectedVersion = instance.ActiveVersion, policyRevision = state.PolicyRevision,
+                skill = new
+                {
+                    id = "operations.review", name = "Operations review", description = "Review an operational change before acting.",
+                    procedure = "Confirm the target and current state. Explain the proposed change and rollback. Ask before destructive actions. Verify the result and report limitations.",
+                    activationKeywords = new[] { "operational change" }, requiredCapabilities = new[] { "chat.respond" }, resourcePaths = Array.Empty<string>()
+                },
+                expected = "A reusable procedure can guide future conversations.",
+                observed = "Example only: replace with the material and checks actually performed.",
+                limitation = "Example only: no production action has been verified."
+            } : null
         };
     }
 
@@ -376,9 +391,20 @@ public sealed class HarnessManagementService(
             if (HarnessChatTools.NeedsApproval(toolName, context) && (approval is null || approval.ToolName != toolName
                 || approval.ActionHash != ToolActionHash.Compute(toolName, args)))
                 throw AgentCoreErrors.Conflict("This exact harness change requires owner approval in Chat.");
-            var operation = JsonSerializer.Deserialize<HarnessAuthoringOperation>(args.GetRawText(), Json)
-                ?? throw AgentCoreErrors.Validation("A semantic operation is required.");
+            HarnessAuthoringOperation operation;
+            try
+            {
+                operation = JsonSerializer.Deserialize<HarnessAuthoringOperation>(args.GetRawText(), Json)
+                    ?? throw AgentCoreErrors.Validation("A semantic operation is required.");
+            }
+            catch (JsonException)
+            {
+                throw AgentCoreErrors.Validation("Payload field types do not match the tool schema. "
+                    + (toolName == "harness.skill.upsert" ? HarnessChatTools.SkillPayloadHelp : "Use the required fields and types shown by this tool."));
+            }
             operation = operation with { Kind = HarnessChatTools.Operations[toolName].Kind };
+            if (operation.Kind == "skill.upsert" && operation.Skill is null)
+                throw AgentCoreErrors.Validation("A declarative Skill is required. " + HarnessChatTools.SkillPayloadHelp);
             string Read(string name) => args.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
                 ? value.GetString()! : throw AgentCoreErrors.Validation($"{name} is required.");
             var expected = Read("expected"); var observed = Read("observed");
@@ -592,13 +618,17 @@ public sealed class HarnessManagementService(
         }
         if (op.Kind == "skill.upsert")
         {
-            if (op.Skill is null) throw AgentCoreErrors.Validation("A declarative Skill is required.");
-            ValidateText(op.Skill.Id, 80, "Skill identity");
-            ValidateText(op.Skill.Name, 80, "Skill name");
-            ValidateText(op.Skill.Description, 240, "Skill description");
-            ValidateText(op.Skill.Procedure, 4000, "procedure");
+            if (op.Skill is null) throw AgentCoreErrors.Validation("A declarative Skill is required. " + HarnessChatTools.SkillPayloadHelp);
+            try
+            {
+                ValidateText(op.Skill.Id, 64, "Skill identity");
+                ValidateText(op.Skill.Name, 80, "Skill name");
+                ValidateText(op.Skill.Description, 240, "Skill description");
+                ValidateText(op.Skill.Procedure, 4000, "procedure");
+            }
+            catch (AgentCoreException exception) { throw AgentCoreErrors.Validation(exception.Message + " " + HarnessChatTools.SkillPayloadHelp); }
             try { AgentDefinitionValidator.Validate((draft.Candidate with { Skills = [.. draft.Candidate.SkillList.Where(s => s.Id != op.Skill.Id), op.Skill] }).ToPublished(1)); }
-            catch (ArgumentException exception) { throw AgentCoreErrors.Validation(exception.Message); }
+            catch (ArgumentException exception) { throw AgentCoreErrors.Validation(exception.Message + " " + HarnessChatTools.SkillPayloadHelp); }
             if (op.Skill.Procedure.Contains("```", StringComparison.Ordinal)
                 || op.Skill.Procedure.Contains("<script", StringComparison.OrdinalIgnoreCase))
                 throw AgentCoreErrors.Validation("Self-authored Skills must be procedural; executable blocks are unsupported.");

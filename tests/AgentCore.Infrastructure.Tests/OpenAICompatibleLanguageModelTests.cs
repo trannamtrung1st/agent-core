@@ -406,14 +406,22 @@ public sealed class OpenAICompatibleLanguageModelTests
                 ApiKey = "test-key",
                 Tools = true
             });
-        var tools = new[]
-        {
-            new ModelToolDefinition(name, "Retrieve knowledge.", """{"type":"object"}""")
-        };
+        Assert.True(ToolRegistry.TryGet(name, out var descriptor));
+        var tools = new[] { descriptor.ModelDefinition };
         var events = await CollectAsync(model, new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Hi")], Tools: tools));
         Assert.Contains("\"tools\"", handler.LastBody, StringComparison.Ordinal);
         Assert.Contains(OpenAiCompatibleToolNames.ToWireName(name), handler.LastBody, StringComparison.Ordinal);
         Assert.DoesNotContain(name, handler.LastBody, StringComparison.Ordinal);
+        if (name == "harness.skill.upsert")
+        {
+            using var request = JsonDocument.Parse(handler.LastBody!);
+            var schema = request.RootElement.GetProperty("tools")[0].GetProperty("function").GetProperty("parameters");
+            Assert.Contains(schema.GetProperty("required").EnumerateArray(), field => field.GetString() == "skill");
+            var skill = schema.GetProperty("properties").GetProperty("skill").GetProperty("properties");
+            Assert.Equal("^[a-z][a-z0-9._]{0,63}$", skill.GetProperty("id").GetProperty("pattern").GetString());
+            Assert.Equal(8, skill.GetProperty("activationKeywords").GetProperty("maxItems").GetInt32());
+            Assert.True(skill.GetProperty("activationKeywords").GetProperty("uniqueItems").GetBoolean());
+        }
         var call = Assert.IsType<ModelToolCallEvent>(events[0]).Call;
         Assert.Equal("call_1", call.Id);
         Assert.Equal(name, call.Name);

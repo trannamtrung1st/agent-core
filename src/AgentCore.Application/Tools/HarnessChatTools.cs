@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Definitions;
 
@@ -34,11 +35,95 @@ public static class HarnessChatTools
         yield return new(new(Inspect, "Inspect current instance authority and active version before a durable harness change. No provider configuration or credentials are exposed.", """{"type":"object","properties":{},"additionalProperties":false}"""), ToolEffect.ReadOnly, ToolOfferRule.HarnessAuthority);
         foreach (var (name, operation) in Operations)
         {
-            var properties = """{"expectedVersion":{"type":"integer"},"policyRevision":{"type":"integer"},"id":{"type":"string"},"content":{"type":"string"},"source":{"type":"string"},"enabled":{"type":"boolean"},"allowUnreadUnsupportedTypes":{"type":"boolean"},"skill":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"description":{"type":"string"},"procedure":{"type":"string"},"activationKeywords":{"type":"array","items":{"type":"string"}},"requiredCapabilities":{"type":"array","items":{"type":"string"}},"resourcePaths":{"type":"array","items":{"type":"string"}}},"required":["id","name","description","procedure","activationKeywords","requiredCapabilities","resourcePaths"]},"expected":{"type":"string"},"observed":{"type":"string"},"limitation":{"type":"string"}}""";
             yield return new(new(name,
-                $"Author {operation.Kind} for future conversations only. Inspect for expectedVersion/policyRevision. Retain only enduring role knowledge or repeatable procedures, not temporary facts or credentials. Source must be actually read by an ordinary tool in this turn, or conversation:user for current owner-provided material. Record expected/observed assessment and honest limitations. Assisted edits, instructions and every tool change require exact approval. Core validates and adopts an immutable version; the current Session pin is unchanged.",
-                "{\"type\":\"object\",\"additionalProperties\":false,\"properties\":" + properties + ",\"required\":[\"expectedVersion\",\"policyRevision\",\"expected\",\"observed\"]}"), ToolEffect.Write, ToolOfferRule.HarnessAuthority, ToolResourceScope.Session, ToolReplaySafety.NonReplayable);
+                $"Author {operation.Kind} for future conversations only. {OperationHelp(operation.Kind)} Inspect for expectedVersion/policyRevision. Retain enduring role knowledge or repeatable procedures, never credentials. Record expected/observed assessment and honest limitations. Assisted edits, instructions and every tool change require exact approval. Core validates and adopts an immutable version; the current Session pin is unchanged.",
+                AuthoringSchema(operation.Kind)), ToolEffect.Write, ToolOfferRule.HarnessAuthority, ToolResourceScope.Session, ToolReplaySafety.NonReplayable);
         }
+    }
+
+    public const string SkillPayloadHelp = "Send a nested skill object with id, name, description, procedure, activationKeywords, requiredCapabilities and resourcePaths. "
+        + "skill.id must match ^[a-z][a-z0-9._]{0,63}$ (for example kubernetes.operations; hyphens are invalid). "
+        + "name is 1..80 characters, description 1..240, procedure 1..4000; use procedural text without fenced code or script blocks. "
+        + "activationKeywords is an array of up to 8 unique, trimmed, nonblank strings of at most 64 characters; use [] when none. "
+        + "requiredCapabilities is an array of up to 8 unique capability ids, limited to chat.respond or already selected tools; requirements do not grant tools. "
+        + "resourcePaths is an array of up to 4 unique existing definition resource paths (max 240 characters, relative forward-slash paths without dot segments); use [] when none. Workspace files are not definition resources. "
+        + "The resulting definition may have at most 16 Skills and 12000 total procedure characters.";
+
+    private static string OperationHelp(string kind) => kind switch
+    {
+        "skill.upsert" => SkillPayloadHelp + " Read source material through ordinary tools first. Adapt the example returned by harness.inspect; never guess an activation object.",
+        "skill.remove" => "id is the exact Skill id from harness.inspect.",
+        "knowledge.upsert" => "id is a simple alphanumeric name (hyphens/underscores allowed). content is the retained text. source must name material actually read in this turn (for example workspace:playbook.md), or conversation:user for current owner-provided material.",
+        "knowledge.remove" => "id is the exact knowledge identity from harness.inspect.",
+        "instructions.update" => "content replaces the complete operating instructions; preserve other intended instructions from harness.inspect.",
+        "tool.select" => "id must be an eligible configured tool from harness.inspect; enabled adds or removes it. attachments.read uses harness.tool.configure instead.",
+        "tool.configure" => "Only id=attachments.read is supported; allowUnreadUnsupportedTypes sets its readability policy.",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind))
+    };
+
+    private static string AuthoringSchema(string kind)
+    {
+        static JsonObject Text(int max, string description, string? pattern = null)
+        {
+            var field = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = max, ["description"] = description };
+            if (pattern is not null) field["pattern"] = pattern;
+            return field;
+        }
+        static JsonObject List(int max, JsonObject item) => new()
+        {
+            ["type"] = "array", ["maxItems"] = max, ["uniqueItems"] = true, ["items"] = item
+        };
+        const string identifier = "^[a-z][a-z0-9._]{0,63}$";
+        var fields = new JsonObject
+        {
+            ["expectedVersion"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["description"] = "Use the latest harness.inspect expectedVersion." },
+            ["policyRevision"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["description"] = "Use the latest harness.inspect policyRevision." },
+            ["expected"] = Text(2000, "Intended reusable behavior or validation outcome."),
+            ["observed"] = Text(2000, "What was actually read or checked; do not claim unperformed checks."),
+            ["limitation"] = Text(2000, "Optional honest verification limits.")
+        };
+        var required = new JsonArray("expectedVersion", "policyRevision", "expected", "observed");
+        void Add(string key, JsonObject field) { fields[key] = field; required.Add(key); }
+        switch (kind)
+        {
+            case "skill.upsert":
+                Add("skill", new JsonObject
+                {
+                    ["type"] = "object", ["additionalProperties"] = false,
+                    ["required"] = new JsonArray("id", "name", "description", "procedure", "activationKeywords", "requiredCapabilities", "resourcePaths"),
+                    ["properties"] = new JsonObject
+                    {
+                        ["id"] = Text(64, "Stable lowercase id, e.g. kubernetes.operations. No hyphens.", identifier),
+                        ["name"] = Text(80, "Human-readable name."),
+                        ["description"] = Text(240, "When and why this Skill is useful."),
+                        ["procedure"] = Text(4000, "Reusable procedural text; no fenced code or script blocks."),
+                        ["activationKeywords"] = List(8, Text(64, "Unique trimmed activation phrase; [] is allowed.")),
+                        ["requiredCapabilities"] = List(8, Text(64, "chat.respond or a tool already selected in harness.inspect; [] is allowed.", identifier)),
+                        ["resourcePaths"] = List(4, Text(240, "Existing definition-relative resource path, never a workspace path; [] is allowed."))
+                    }
+                });
+                break;
+            case "skill.remove": Add("id", Text(64, "Existing Skill id.", identifier)); break;
+            case "knowledge.upsert":
+            case "knowledge.remove":
+                Add("id", Text(80, "Knowledge identity.", "^[a-zA-Z0-9_-]+$"));
+                if (kind == "knowledge.upsert")
+                {
+                    Add("content", Text(32000, "Enduring knowledge to retain."));
+                    Add("source", Text(2048, "Source actually read this turn, or conversation:user."));
+                }
+                break;
+            case "instructions.update": Add("content", Text(32000, "Complete replacement operating instructions.")); break;
+            case "tool.select":
+                Add("id", Text(64, "Eligible configured tool, excluding attachments.read.", identifier));
+                Add("enabled", new JsonObject { ["type"] = "boolean" });
+                break;
+            case "tool.configure":
+                Add("id", new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("attachments.read") });
+                Add("allowUnreadUnsupportedTypes", new JsonObject { ["type"] = "boolean" });
+                break;
+        }
+        return new JsonObject { ["type"] = "object", ["additionalProperties"] = false, ["properties"] = fields, ["required"] = required }.ToJsonString();
     }
 
     // Receipts come from successful admitted tools in this execution, not from model claims.
