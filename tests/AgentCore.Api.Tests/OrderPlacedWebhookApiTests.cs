@@ -9,6 +9,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Connections;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Events;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Triggers;
 using AgentCore.Domain.Work;
@@ -102,6 +103,87 @@ public sealed class OrderPlacedWebhookApiTests
             Assert.Equal(2, (await reopened.Services.GetRequiredService<ITriggerStore>()
                 .ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10)).Count);
             _ = secondId;
+        }
+        finally
+        {
+            DeleteDb(db);
+        }
+    }
+
+    [Fact]
+    public async Task Pending_delivery_survives_sqlite_reopen_and_ignores_a_later_subscriber()
+    {
+        var db = TempDb();
+        try
+        {
+            Guid sourceId;
+            Guid firstId;
+            Guid secondId;
+            Guid eventId;
+            await using (var host = new DurableSqliteHostFactory(db, runScheduler: false))
+            {
+                var owner = OwnerClient(host);
+                (sourceId, _, _) = await CreateSourceAsync(owner, "Demo Store");
+                firstId = await InsertInstanceAsync(host, "secretary", 2);
+                secondId = await InsertInstanceAsync(host, "secretary", 2);
+                await SubscribeAsync(owner, firstId, sourceId);
+                await SubscribeAsync(owner, secondId, sourceId);
+
+                var events = host.Services.GetRequiredService<IExternalEventStore>();
+                var triggers = host.Services.GetRequiredService<ITriggerStore>();
+                var subscriptions = await triggers.ListEventSubscriptionsAsync(sourceId, ExternalEventTypes.OrderPlaced);
+                Assert.Equal(2, subscriptions.Count);
+                var raw = Encoding.UTF8.GetBytes(ExternalEventEnvelope.Build("order-200-placed", "200"));
+                Assert.True(ExternalEventEnvelope.TryNormalize(raw, out var evidence, out var sourceEventId, out var eventType, out var occurred, out var error), error);
+                var now = DateTimeOffset.UtcNow;
+                eventId = Guid.NewGuid();
+                var external = new ExternalEvent(eventId, sourceId, sourceEventId, eventType, occurred, now, evidence);
+                var admitted = await events.AdmitAsync(
+                    external,
+                    subscriptions.Select(item => new ExternalEventTarget(item.RegistrationId, item.Owner.AgentInstanceId, item.Owner.ProfileId)).ToArray());
+                Assert.Equal(ExternalEventAdmitKind.Admitted, admitted.Kind);
+                Assert.Equal(2, (await events.ListPendingDeliveriesAsync(eventId, 10)).Count);
+
+                var first = subscriptions.Single(item => item.Owner.AgentInstanceId == firstId);
+                await triggers.AdmitOccurrenceAsync(new TriggerOccurrence(
+                    Guid.NewGuid(),
+                    ExternalEventIngress.OccurrenceDedupeKey(sourceId, sourceEventId),
+                    first.RegistrationId,
+                    first.Owner,
+                    TriggerSourceKind.ApplicationEvent,
+                    null,
+                    now,
+                    now,
+                    evidence,
+                    null,
+                    first.ScheduleRevision,
+                    OccurrenceRoutingDisposition.Pending,
+                    null,
+                    0,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null));
+                await events.MarkDeliveryAsync(eventId, first.RegistrationId, ExternalEventDeliveryStatus.Admitted);
+                var stillPending = Assert.Single(await events.ListPendingDeliveriesAsync(eventId, 10));
+                Assert.Equal(secondId, stillPending.AgentInstanceId);
+            }
+
+            await using var reopened = new DurableSqliteHostFactory(db, runScheduler: false);
+            var client = OwnerClient(reopened);
+            var lateId = await InsertInstanceAsync(reopened, "secretary", 2);
+            await SubscribeAsync(client, lateId, sourceId);
+            var created = await reopened.Services.GetRequiredService<ExternalEventIngress>().ResumePendingAsync();
+            Assert.Equal(1, created);
+            var pending = await reopened.Services.GetRequiredService<ITriggerStore>()
+                .ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10);
+            Assert.Equal(2, pending.Count);
+            Assert.Equal(
+                new[] { firstId, secondId }.Order(),
+                pending.Select(item => item.Owner.AgentInstanceId).Order());
+            Assert.DoesNotContain(pending, item => item.Owner.AgentInstanceId == lateId);
+            Assert.Empty(await reopened.Services.GetRequiredService<IExternalEventStore>().ListPendingDeliveriesAsync(eventId, 10));
         }
         finally
         {
