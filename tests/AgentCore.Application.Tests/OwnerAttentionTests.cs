@@ -135,8 +135,7 @@ public sealed class OwnerAttentionTests
             StringComparison.OrdinalIgnoreCase);
         Assert.Contains(speak.Request.Tools!, tool => tool.Name == ToolCatalog.BrowserNavigate);
         var unconnected = Assert.IsType<Speak>(await brain.DecideAsync(Context(trusted: false), Guid.NewGuid()));
-        Assert.Contains(unconnected.Request.Tools!, tool => tool.Name == ToolCatalog.WorkComplete);
-        Assert.DoesNotContain(unconnected.Request.Tools!, tool => ToolCatalog.IsBrowserTool(tool.Name));
+        Assert.Null(unconnected.Request.Tools);
     }
 
     [Fact]
