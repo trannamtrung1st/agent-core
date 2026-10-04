@@ -70,9 +70,11 @@ Clients cannot supply trusted diagnostic, correlation, or causation identity. JS
 3. **P9 — Visible browser — closed** on `bba1de4`. Post-closure browser runtime hardening is **closed** on **`3400d64`** (hosted Synthetic [**`36981513602`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36981513602) green); that chain does not move the P9 freeze SHA.
 4. **P9.5 — Proactive Secretary / Real Assistant Demo — closed** on `1012653` (hosted Synthetic [`37111979501`](https://github.com/trannamtrung1st/agent-core/actions/runs/37111979501) green). Post-closure follow-ups project one application connection by display name and add a bounded browser settle. Neither moves the P9 or P9.5 SHAs. The post-P9.5 browser and store-review enhancement is recorded on `6f6ff42` (hosted Synthetic [`37128161642`](https://github.com/trannamtrung1st/agent-core/actions/runs/37128161642) green) and does not move `1012653`.
 5. **P9.6 — Visual Browser, Reactive Triggers & Deterministic Unattended Execution — closed** on `d033bc61` ([closure report](docs/reports/p9.6-freeze-candidate.md); hosted Synthetic [`37187663286`](https://github.com/trannamtrung1st/agent-core/actions/runs/37187663286) green). Includes source-owned `order.placed` ingress, subscriber-snapshot delivery-ledger fan-out and recovery, Browser v1, execution-model pin, unattended browser parity, four Secretary modes, and nopCommerce `INopStartup` consumer registration. Native guest checkout **order 14** proved automatic plugin → webhook → delivery → WorkItem with dedupe; unattended completion on the connected profile was proved on an earlier opt-in path in the same report. Optional: one more native order-to-**Completed** on the same chain for investor demo evidence only.
-6. **P9.7 — Conversational harness learning — first gate passed on `f739de25`; final refinement/current-head verification underway.** Final planned major product capability before investor-demo stabilization and polish.
-7. **P10 — Sandbox Evolution — requirement-triggered when the current sandbox is insufficient.**
-8. **P11 — Multi-user + Production Infrastructure — requirement-triggered when a real hosting or pilot requirement appears.**
+6. **P9.7 — Conversational harness learning — first gate passed on `f739de25`; final refinement/current-head verification underway.** Current active gate before the planned P9.8 and P9.9 capabilities.
+7. **P9.8 — Session Retrospection / Agent Experience — planned after P9.7.**
+8. **P9.9 — Autonomous Thought Activation / Agent Initiative — planned after P9.8.**
+9. **P10 — Sandbox Evolution — requirement-triggered when the current sandbox is insufficient.**
+10. **P11 — Multi-user + Production Infrastructure — requirement-triggered when a real hosting or pilot requirement appears.**
 
 ---
 
@@ -1302,6 +1304,69 @@ P9.6 closes when Browser Capability v1 provides the bounded semantic, visual, or
 
 ---
 
+# P9.8 — Session Retrospection / Agent Experience
+
+**Status: planned after P9.7 and before P9.9.** The purpose is durable work continuity: an Agent Instance should be able to understand what it has experienced while working, as well as what it knows.
+
+- Derive bounded retrospection from completed or recent Sessions and meaningful executions. Capture useful experience such as goal/purpose, meaningful actions attempted, important decisions, successes/failures, user corrections or feedback, unresolved work, relevant tool/environment difficulties, and useful lessons or follow-up observations.
+- Keep experience/retrospection distinct from raw conversation history, semantic compaction/session summaries, learned memory, trusted persona, instructions, and authoritative knowledge. Retrospection may inform later memory promotion, but observations do not automatically become durable learned memory.
+- Preserve provenance to the relevant Session/execution where practical. Keep the first version bounded and understandable; do not introduce a general cognitive or learning framework.
+
+```text
+session / execution
+        ↓
+retrospection
+        ↓
+experience / learnings
+        ↓
+optional existing memory admission
+```
+
+**Intended outcome:** useful, inspectable experience can carry across work while existing memory admission remains the only route to durable learned memory.
+
+---
+
+# P9.9 — Autonomous Thought Activation / Agent Initiative
+
+**Status: planned after P9.8.** Add a bounded decision step so an Agent Instance can be activated periodically to think and decide whether useful action exists. The first primitive is a configurable interval/time-based activation with a user-configured thinking prompt. For example: periodically review recent Sessions and retrospectives, investigate a meaningful recurring harness problem when justified, or do nothing.
+
+```text
+scheduled task = trigger → predetermined work
+thought activation = trigger → agent reasons → decides whether / what to do
+```
+
+- No-op / do nothing is a normal successful outcome. Activation must not incentivize manufacturing work.
+- Reuse existing execution, tools, WorkItem/background execution, diagnostics, approval, and authorization primitives where they fit. P9.6 already provides deterministic Trigger → Occurrence → WorkItem unattended execution; P9.9 adds the decision step and does not duplicate the scheduler, create another background-work model, or introduce a separate autonomous-agent runtime.
+- Compose with P9.7 Harness Management when useful, such as investigating a repeated issue found in retrospection. Do not add a separate autonomous self-improvement policy system. The model's decision is not authorization: existing capability, policy, approval, and execution-time checks still govern actions.
+- Make activation/execution origin available as policy context where needed (conceptually UserTurn, ThoughtActivation, ScheduledWork, ApplicationEvent, and Webhook/Event). Exact naming is for later proposals. Existing policy must be able to decide whether the Agent Instance may perform an operation in an autonomous activation context; do not create another policy engine.
+- Preserve P9.7's authority boundary. Thought activation cannot self-grant capabilities, expand tool authorization, weaken approvals, alter owner/trust/security policy, expose/create credentials, increase its own management/autonomy authority, or bypass execution-time policy because work is unattended. Already-authorized inspection, diagnostics, verification, and Skill/knowledge refinement may be allowed/configured under normal P9.7 policy. Authority-changing operations require existing authorization/approval or remain denied.
+
+```text
+Trigger
+   ↓
+Thought activation
+   ↓
+Normal agent reasoning/execution
+   ↓
+Agent chooses capabilities if useful
+   ↓
+Existing capability + policy + approval boundary
+   ↓
+action / approval-needed / denied / no-op
+```
+
+P9.9 should consume P9.8 retrospection plus existing memory, Session, and harness context. The intended progression is:
+
+```text
+experience → reflection → initiative → permitted action → new experience
+```
+
+The simple interval plus thinking-prompt model is the first primitive. Richer schedules, webhook/application-event or condition/state-driven activation, internal events such as Session completion or retrospection creation, longer-lived goals, adaptive initiative, and agent/team triggers or coordination remain future directions, not this phase's design. Do not introduce unrestricted permanent reasoning loops, model-driven scheduler mutation without policy, a general planner or goal hierarchy engine, multi-agent orchestration, reinforcement-learning machinery, another Session Runtime, WorkItem implementation, memory subsystem, or Harness Management subsystem.
+
+**Intended outcome:** an Agent Instance can wake, consider bounded context, choose a permitted action or a successful no-op, and leave experience for later retrospection, using existing execution and authority boundaries.
+
+---
+
 # P10 — Sandbox evolution
 
 **Status: requirement-triggered.**
@@ -1339,15 +1404,15 @@ Examples: owner Chat may manage knowledge/Skills; employee Chat gets operational
 
 # Deferred / requirement-triggered work
 
-These items are recorded decisions. P9.5, P9.6, and P9.7 take only the narrow exceptions named in their scopes. The remaining items are not reasons to reopen those phases or start P10 or P11 early. Each waits for a concrete requirement.
+These items are recorded decisions. P9.5–P9.9 take only the narrow exceptions named in their scopes. The remaining items are not reasons to reopen those phases or start P10 or P11 early. Each waits for a concrete requirement.
 
 **Production infrastructure and distributed scheduling.** The P11 stack, plus Hangfire, Quartz, or another job framework. If a scheduler is ever justified, it implements wake-up and dispatch under Trigger → Occurrence → WorkItem. It does not replace that model. Misfire policies beyond current coalesce-to-latest (`SkipMissed`, `CatchUp`) wait for a workflow that needs them.
 
 **Platform and packaging.** A universal plugin framework, plugin marketplace, Skill marketplace, application marketplace, prepared-worker marketplace, generic webhook marketplace, ZIP or package import/export, Git resource sync, remote filesystem or object-storage browsing, live folder sync, and FTP/SFTP. P9.5 owns only the narrow nopCommerce connection/binding behavior its workflow proved. P9.6 owns only authenticated `order.placed` ingress and a tiny emitting adapter. Neither phase absorbs this list.
 
-**Bindings, messaging, and skills beyond P9.7.** Full/universal Application Binding persistence remains deferred; P9.5 owns only a minimal Agent-Instance-owned nopCommerce relationship. Cross-application and arbitrary-recipient messaging remains deferred; P9.5 owns only narrow trusted-owner proactive delivery. P9.7 owns Definition-versioned Skill authoring only. An independently versioned Skill shared across many Definitions, Skill/plugin marketplaces, embeddings/vector Skill retrieval, and a dedicated Skill-router model remain deferred.
+**Bindings, messaging, and skills beyond P9.9.** Full/universal Application Binding persistence remains deferred; P9.5 owns only a minimal Agent-Instance-owned nopCommerce relationship. Cross-application and arbitrary-recipient messaging remains deferred; P9.5 owns only narrow trusted-owner proactive delivery. P9.7 owns Definition-versioned Skill authoring only. An independently versioned Skill shared across many Definitions, Skill/plugin marketplaces, embeddings/vector Skill retrieval, and a dedicated Skill-router model remain deferred.
 
-**Agent scope.** Multi-agent coordination or an agent swarm. A visual workflow builder. An arbitrary autonomous loop; P9.5/P9.6 proactivity is bounded Trigger → Occurrence → WorkItem execution only. A persistent general Agent Instance filesystem. An Admin assistant agent.
+**Agent scope.** Multi-agent coordination or an agent swarm, a visual workflow builder, a persistent general Agent Instance filesystem, and an Admin assistant agent remain deferred. P9.5/P9.6 provide bounded Trigger → Occurrence → WorkItem execution; P9.9 is the later narrow, policy-governed thought-activation exception that adds a decision step. Unrestricted/arbitrary autonomous loops remain deferred.
 
 **Voice and hosted providers.** The known Real/OpenRouter historical-image reread gap: bounded, credential-gated, outside default CI. HOSTED-04, one non-Synthetic voice smoke on an explicitly selected hosted configuration. Replacing realtime `OpenAiSpeechRecognizer` only when a concrete need exists. Native speech-to-speech only if measured latency or quality shows that `STT → text model → TTS` is insufficient.
 
@@ -1370,9 +1435,9 @@ Always keep this section.
 
 - [ ] Admin assistant agent remains a future idea.
 - [x] P9.7 owns bounded, configurable agent-assisted/self-managed harness authoring; do not track a second generic “self-improvement” runtime here.
-- [ ] sessions retrospection, feedback, etc ...
+- [ ] P9.8 — Session Retrospection / Agent Experience (bounded experience with provenance; optional existing memory admission).
 - [ ] team work, agent communication, workflow, orchestration, etc .... like grok bot
-- [ ] autonomous, unattended, background work ...
+- [ ] P9.9 — Autonomous Thought Activation / Agent Initiative (interval + thinking prompt; decision step over existing Trigger → Occurrence → WorkItem and policy boundaries).
 - [ ] extra/optimization/enhancements: more tools, sandbox, security, smart routing, monitoring etc ...
 
 ---
@@ -1403,4 +1468,4 @@ Orientation for what later work can build on. Detail and gate history are in `/d
 
 # Next implementation item
 
-**P9.7 — Agent-Assisted / Self-Managed Harness Authoring.** P9.6 is **closed** on `d033bc61` (hosted Synthetic [`37187663286`](https://github.com/trannamtrung1st/agent-core/actions/runs/37187663286) green; [closure report](docs/reports/p9.6-freeze-candidate.md)). P9 remains closed on `bba1de4`; P9.5 remains closed on `1012653`; the post-P9.5 enhancement remains recorded on `6f6ff42`. P10 and P11 remain requirement-triggered.
+**P9.7 — Agent-Assisted / Self-Managed Harness Authoring.** P9.6 is **closed** on `d033bc61` (hosted Synthetic [`37187663286`](https://github.com/trannamtrung1st/agent-core/actions/runs/37187663286) green; [closure report](docs/reports/p9.6-freeze-candidate.md)). P9 remains closed on `bba1de4`; P9.5 remains closed on `1012653`; the post-P9.5 enhancement remains recorded on `6f6ff42`. P9.8 and P9.9 are planned next; P10 and P11 remain requirement-triggered.
