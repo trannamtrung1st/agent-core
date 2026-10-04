@@ -1,4 +1,5 @@
 using AgentCore.Domain.Definitions;
+using AgentCore.Application.Admin;
 
 namespace AgentCore.Application.Ports;
 
@@ -53,7 +54,8 @@ public sealed record AgentDefinitionDraftResourceUpsert(
     string MediaType,
     string ContentSha256,
     long ByteLength,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    AdminEventAppend? History = null);
 
 public sealed record AgentDefinitionDraftResourceBatchItem(
     Guid? ResourceId,
@@ -77,4 +79,5 @@ public sealed record AgentDefinitionDraftResourceRemove(
     Guid DraftId,
     long ExpectedDraftRevision,
     Guid ResourceId,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    AdminEventAppend? History = null);

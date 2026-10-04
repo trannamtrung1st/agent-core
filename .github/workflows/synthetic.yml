@@ -103,6 +103,14 @@ jobs:
           PLAYWRIGHT_SQLITE_PATH=../data/playwright/p76-admin.db \
             pnpm exec playwright test --project=p76-admin
 
+      - name: P9.7 harness management Playwright
+        working-directory: web
+        run: |
+          rm -f ../data/playwright/p97-harness.db
+          PLAYWRIGHT_SQLITE_PATH=../data/playwright/p97-harness.db \
+          PLAYWRIGHT_FAITHFUL_MANUAL=1 \
+            pnpm exec playwright test --project=p97-harness
+
       - name: Upload Playwright failure
         if: failure()
         uses: actions/upload-artifact@v4

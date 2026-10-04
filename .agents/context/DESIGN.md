@@ -204,6 +204,14 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 
 ## Components
 
+### Harness preparation review
+- Reuse the existing Admin definition panel for instance-owned policy and candidate review. Manual is the creation default; enabled policy fields stay in a collapsed optional section.
+- Keep active version, mode/frozen state and preparation status together; purpose and tested candidate revision precede the review sections.
+- Use direct Ant Design Collapse sections for diff, provenance, Skills, instructions/tools and evidence. Pair every check with Core check or Agent assessment, its outcome, and tested revision; stale evidence stays visibly labeled.
+- Exact proposals show the operation and revision before shared `confirmAction` decisions. Publication and freeze each have a separately named confirmation. Preserve published evidence/diff after freeze.
+- Use established 8/12/16 spacing, 72ch evidence measure, wrapping action groups and 40px narrow action targets. Long source/Skill text wraps inside the panel. Loading, Stop, Reload and DiagnosticId use existing product primitives.
+
+
 ### Buttons
 - **Shape:** 6px radius; header icon actions are 32×32px. Composer Send/Attach/Voice are 32×32px and become 44px below 768px.
 - **Primary:** Send/Queue and Voice-on use `{colors.primary}`.

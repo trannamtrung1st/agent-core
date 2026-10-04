@@ -1117,3 +1117,34 @@ export async function setAdminRegistrationModel(
   }
   return (await response.json()) as AdminAutomationRegistration;
 }
+
+export type HarnessMode = "Disabled" | "Assisted" | "Managed";
+export type HarnessScope = "KnowledgeResources" | "Skills" | "Instructions" | "ToolSelection";
+export type HarnessPolicy = { mode: HarnessMode; scopes: HarnessScope[]; sources: string[]; eligibleTools: string[]; frozen: boolean };
+export type HarnessSkill = { id: string; name: string; description: string; procedure: string; requiredCapabilities: string[]; resourcePaths: string[] };
+export type HarnessOperation = { kind: string; draftRevision: number; id: string | null; content: string | null; source: string | null;
+  skill: HarnessSkill | null; enabled: boolean | null; allowUnreadUnsupportedTypes: boolean | null };
+export type HarnessApproval = { approvalId: string; actionHash: string; operation: HarnessOperation; status: string };
+export type HarnessEvidence = { actor: string; draftRevision: number; check: string; status: string; expected: string; observed: string; limitation: string | null };
+export type HarnessReview = {
+  instanceId: string; instanceRevision: number; activeVersion: number; policy: HarnessPolicy; policyRevision: number;
+  preparation: { preparationId: string; draftId: string; baseVersion: number; purpose: string; status: string;
+    approvals: HarnessApproval[]; evidence: HarnessEvidence[]; publishedVersion: number | null; diagnosticId: string | null; publishedDraftRevision: number | null } | null;
+  draftRevision: number | null; instructions: string | null; skills: HarnessSkill[];
+  knowledge: { identity: string; title: string; citation: string; resourcePath: string | null }[]; selectedTools: string[];
+  diff: AdminDefinitionDraftDiff | null; resources: AdminDefinitionDraftResource[];
+};
+
+export async function getHarnessReview(instanceId: string): Promise<HarnessReview> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/harness`);
+  if (!response.ok) throw await adminProblemMessage(response, "Harness management could not be loaded.");
+  return await response.json() as HarnessReview;
+}
+
+export async function updateHarness(instanceId: string, action: string, body: unknown, signal?: AbortSignal): Promise<HarnessReview> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/harness/${action}`, {
+    method: action === "policy" ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), ...(signal ? { signal } : {})
+  });
+  if (!response.ok) throw await adminProblemMessage(response, "Harness operation failed. Reload the candidate before retrying.");
+  return await response.json() as HarnessReview;
+}

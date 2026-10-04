@@ -2369,3 +2369,16 @@ body,
     display: inline;
   }
 }
+
+/* Harness review shares Admin panel insets; the stack owns section gaps. */
+.harness-management-content { min-width: 0; overflow-wrap: anywhere; }
+.harness-management-content .ant-select { width: 100%; min-width: 0; }
+.harness-management-content .ant-checkbox-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.harness-procedure { white-space: pre-wrap; overflow-wrap: anywhere; }
+.harness-approval { border-inline-start: 2px solid var(--ant-color-primary); padding-inline-start: 12px; }
+
+.harness-management-content > .ant-typography { margin-block-end: 0; }
+.harness-evidence > .ant-typography { max-width: 72ch; }
+@media (max-width: 767px) {
+  .harness-management-content .ant-btn { min-height: 40px; }
+}

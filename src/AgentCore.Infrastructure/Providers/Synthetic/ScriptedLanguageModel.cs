@@ -94,6 +94,12 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         ModelRequest request,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        if (HarnessPreparationScript.Generate(request) is { } preparationEvents)
+        {
+            foreach (var item in preparationEvents) yield return item;
+            yield break;
+        }
+
         if (IsCompactionRequest(request))
         {
             await foreach (var item in GenerateCompactionAsync(request, cancellationToken).ConfigureAwait(false))

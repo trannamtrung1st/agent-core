@@ -143,3 +143,7 @@ A successful build should demonstrate all of the following:
 The baseline is a modular monolith with SQLite and a React SPA. [Technology Decisions](10-technology-decisions.md) owns the complete non-goal list. Proactivity operates only during an attached active session; push notifications, SMS, email, and background mobile services are excluded. Authentication and public multi-user hosting are deferred.
 
 **Historical MVP wording above remains the MVP acceptance record.** Observed post-MVP trusted-local owner capability ([R1](10-technology-decisions.md#decision-trusted-local-owner-capability-r1)) is a local-owner check (loopback, plus Compose published-port gateway when configured) for catalog, hub attach, uploads, and content. It is not tenant isolation, OAuth, or public multi-user hosting, and it does not rewrite this MVP exclusion.
+
+## P9.7 — Bounded harness preparation
+
+P9.7 extends trusted-owner Authoring with instance-owned Disabled, Assisted, and Managed policies. Knowledge/resources, Skills, operating instructions, and tool proposals are separately grantable. Preparation always targets a candidate draft; owner publication and instance adoption select an immutable version. Every tool selection/configuration change requires exact owner approval in both enabled modes. Freeze revokes Authoring while ordinary conversation continues on the active version. P10 and P11 remain requirement-triggered. See [implementation and closure evidence](reports/p9.7-freeze-candidate.md).

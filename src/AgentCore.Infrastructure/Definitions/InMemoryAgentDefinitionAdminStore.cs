@@ -182,6 +182,11 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
                 throw AgentCoreErrors.Conflict("Draft revision is stale.");
             }
 
+            if (bump.History is not null)
+            {
+                try { (EventStore ?? throw AgentCoreErrors.Persistence("Admin history is unavailable.")).AppendWithinLock(bump.History); }
+                catch { _drafts.TryUpdate(bump.DraftId, current, next); throw; }
+            }
             return ValueTask.FromResult(AgentDefinitionAdminSnapshots.Freeze(next));
         }
     }
@@ -222,6 +227,11 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
                 throw AgentCoreErrors.Conflict("Draft revision is stale.");
             }
 
+            if (update.History is not null)
+            {
+                try { (EventStore ?? throw AgentCoreErrors.Persistence("Admin history is unavailable.")).AppendWithinLock(update.History); }
+                catch { _drafts.TryUpdate(update.DraftId, current, next); throw; }
+            }
             return ValueTask.FromResult(AgentDefinitionAdminSnapshots.Freeze(next));
         }
     }

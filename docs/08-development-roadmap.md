@@ -52,3 +52,7 @@ Trusted catalog, system default, persisted per-session resolved choice, session-
 ## Post-MVP planned until verified
 
 Phases A–H are observed in [Implementation Plan](18-implementation-plan.md#post-mvp-phases-planned-until-verified). Phase I is recorded not-applicable with a future trigger there and in [Technology Decisions](10-technology-decisions.md#post-mvp-planned-until-verified).
+
+## P9.7 handoff
+
+Bounded agent-assisted harness Authoring is implemented. [The closure report](reports/p9.7-freeze-candidate.md) owns the acceptance matrix, final candidate and hosted gate. Existing closed phases retain their freeze identities. P10/P11 remain requirement-triggered; after P9.7 acceptance, the next work is investor-demo stabilization and polish.

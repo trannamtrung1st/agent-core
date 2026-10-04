@@ -3,7 +3,8 @@ namespace AgentCore.Application.Admin;
 public enum AdminEventActorKind
 {
     LocalOwner,
-    System
+    System,
+    Agent
 }
 
 public enum AdminEventOperationKind
@@ -21,7 +22,9 @@ public enum AdminEventOperationKind
     InstanceArchived,
     InstanceUnarchived,
     InstanceDeleted,
-    DefinitionDeleted
+    DefinitionDeleted,
+    HarnessPolicyChanged,
+    HarnessPreparationChanged
 }
 
 public sealed record AdminEvent(

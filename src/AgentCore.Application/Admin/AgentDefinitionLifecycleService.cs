@@ -127,7 +127,8 @@ public sealed class AgentDefinitionLifecycleService(
         Guid draftId,
         long expectedRevision,
         AgentDefinitionCandidate candidate,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken = default,
+        AdminEventAppend? history = null) =>
         WithDraftDefinitionGateAsync(
             draftId,
             async (draft, innerToken) =>
@@ -149,7 +150,7 @@ public sealed class AgentDefinitionLifecycleService(
 
                 AgentDefinitionCandidateValidator.ValidateForPersistence(candidate, aliases);
                 var updated = await admin.UpdateDraftAsync(
-                    new AgentDefinitionDraftUpdate(draftId, expectedRevision, candidate, time.GetUtcNow()),
+                    new AgentDefinitionDraftUpdate(draftId, expectedRevision, candidate, time.GetUtcNow(), history),
                     innerToken).ConfigureAwait(false);
                 OperationalDiagnostics.RecordAdmin(
                     "draftUpdate", "completed", "completed", started, updated.DefinitionId, null, null, "none");

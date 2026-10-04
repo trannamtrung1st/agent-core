@@ -48,7 +48,8 @@ public sealed class AgentDefinitionResourceService(
         string mediaType,
         string contentSha256,
         long byteLength,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken = default,
+        AdminEventAppend? history = null) =>
         lifecycle.WithDraftDefinitionGateAsync(
             draftId,
             async (draft, innerToken) =>
@@ -69,7 +70,7 @@ public sealed class AgentDefinitionResourceService(
                         mediaType,
                         contentSha256,
                         byteLength,
-                        now),
+                        now, history),
                     innerToken).ConfigureAwait(false);
             },
             cancellationToken);
@@ -99,7 +100,8 @@ public sealed class AgentDefinitionResourceService(
         Guid draftId,
         long expectedRevision,
         Guid resourceId,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken = default,
+        AdminEventAppend? history = null) =>
         lifecycle.WithDraftDefinitionGateAsync(
             draftId,
             async (draft, innerToken) =>
@@ -111,7 +113,7 @@ public sealed class AgentDefinitionResourceService(
 
                 var now = time.GetUtcNow();
                 return await resources.RemoveDraftResourceAsync(
-                    new AgentDefinitionDraftResourceRemove(draftId, expectedRevision, resourceId, now),
+                    new AgentDefinitionDraftResourceRemove(draftId, expectedRevision, resourceId, now, history),
                     innerToken).ConfigureAwait(false);
             },
             cancellationToken);

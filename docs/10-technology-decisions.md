@@ -308,3 +308,11 @@ Owners: [Protocol](14-api-and-realtime-protocol.md) (capability, leases vs Attac
 ## What may still be measured
 
 Provider selection within independently configured speech ports, VAD thresholds, frame size within the allowed range, TTS phrase segmentation and latency optimization are tuning variables. The default behavior and degraded paths are specified; measurement must not reopen project ownership, transport, storage or response identity decisions. No guaranteed provider-dependent SLA is implied.
+
+## P9.7 — Extend Authoring for bounded agent preparation
+
+**Decision:** keep policy on Agent Instance and target ordinary Definition drafts through existing Application owners. Use existing normalized model/tool contracts and Core limits. Assisted requires exact approval for every edit; Managed permits scoped non-tool draft writes. All tool changes and publication/adoption remain owner decisions. Tool eligibility is an explicit subset of previously authorized/configured tools; it does not authorize subsequent runtime actions.
+
+**Decision:** reuse SQLite instance JSON for preparation metadata and the existing resource/draft stores for content, with optimistic concurrency and atomic mutation/audit records. Keep append-only summaries bounded and free of procedures, source bodies, credentials and raw reasoning. Recovery resumes committed candidate work and pending approvals; uncertain consumed actions are not replayed.
+
+**Decision:** Core checks and model assessments have separate evidence ownership. Candidate knowledge readback and Skill activation can be verified mechanically; fictional dry-run quality remains partial and production effects require external evidence. Reuse Ant Design v6 primitives, Admin panels, shared confirmation dialogs and established spacing. P10/P11, brokers, vector databases, microservices, multi-agent features, and another UI kit remain unopened.

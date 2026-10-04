@@ -1,0 +1,119 @@
+using AgentCore.Application.Admin;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Sessions;
+using AgentCore.Domain.Definitions;
+using AgentCore.Infrastructure.Persistence;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
+using AgentCore.Infrastructure.Definitions;
+
+namespace AgentCore.Api.Tests;
+
+public sealed class HarnessManagementRecoveryTests
+{
+    [Fact]
+    public async Task Sqlite_reopen_preserves_exact_pending_approval_candidate_and_audit_then_freeze_requires_another_fork()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "p97-reopen-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        Guid id;
+        Guid preparationId;
+        Guid draftId;
+        Guid approvalId;
+        string actionHash;
+        long revision;
+        try
+        {
+            await using (var first = new HarnessSqliteFactory(root))
+            {
+                Assert.IsType<SqliteAgentInstanceStore>(first.Services.GetRequiredService<IAgentInstanceStore>());
+                var instance = await first.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+                id = instance.InstanceId;
+                var service = first.Services.GetRequiredService<HarnessManagementService>();
+                instance = await service.ConfigureAsync(id, instance.Revision,
+                    new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources, HarnessManagementScope.Skills, HarnessManagementScope.ToolSelection],
+                        ["knowledge:support-order-policy"], ["web.fetch"]));
+                instance = await service.StartAsync(id, instance.Revision, "Prepare operations review.");
+                preparationId = instance.HarnessManagement!.Preparation!.PreparationId;
+                var review = await first.Services.GetRequiredService<HarnessPreparationExecution>().RunAsync(id, preparationId);
+                draftId = review.Draft!.DraftId;
+                var approval = Assert.Single(review.State.Preparation!.Approvals);
+                approvalId = approval.ApprovalId;
+                actionHash = approval.ActionHash;
+                revision = review.InstanceRevision;
+            }
+            await using (var reopened = new HarnessSqliteFactory(root))
+            {
+                var service = reopened.Services.GetRequiredService<HarnessManagementService>();
+                var review = await service.ReviewAsync(id);
+                Assert.Equal(draftId, review.Draft!.DraftId);
+                Assert.Equal("Pending", Assert.Single(review.State.Preparation!.Approvals).Status);
+                Assert.Contains(review.Draft.Candidate.SkillList, s => s.Id == "operations.review");
+                var instance = await service.DecideApprovalAsync(id, revision, approvalId, actionHash, true);
+                review = await reopened.Services.GetRequiredService<HarnessPreparationExecution>().RunAsync(id, preparationId);
+                Assert.Equal(HarnessPreparationStatus.Ready, review.State.Preparation!.Status);
+                instance = await service.PromoteAsync(id, review.InstanceRevision, review.Draft!.Revision);
+                var publishedVersion = instance.ActiveVersion;
+                var published = await reopened.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync(instance.DefinitionId, publishedVersion);
+                instance = await service.ConfigureAsync(id, instance.Revision, instance.HarnessManagement!.Policy with { Mode = HarnessManagementMode.Disabled, Frozen = true });
+                Assert.Equal(HarnessPreparationStatus.Published, instance.HarnessManagement!.Preparation!.Status);
+                await Assert.ThrowsAsync<AgentCoreException>(async () => await service.RequestOperationAsync(id, preparationId,
+                    new("skill.remove", review.Draft.Revision, Id: "operations.review")));
+                instance = await service.ConfigureAsync(id, instance.Revision, instance.HarnessManagement.Policy with { Mode = HarnessManagementMode.Managed, Frozen = false });
+                instance = await service.StartAsync(id, instance.Revision, "Improve the next candidate.");
+                Assert.NotEqual(draftId, instance.HarnessManagement!.Preparation!.DraftId);
+                Assert.Equal(publishedVersion, instance.ActiveVersion);
+                var same = await reopened.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync(instance.DefinitionId, publishedVersion);
+                Assert.Equal(published!.SystemInstructions, same!.SystemInstructions);
+                Assert.Equal(published.SkillList.Select(s => s.Id), same.SkillList.Select(s => s.Id));
+                var history = await reopened.Services.GetRequiredService<IAdminEventStore>().ListAsync(new(TargetId: id.ToString("D")));
+                Assert.Contains(history, e => e.ActorKind == AdminEventActorKind.Agent && e.SummaryJson.Contains("CandidateCommitted"));
+                Assert.Contains(history, e => e.SummaryJson.Contains("Approved"));
+                Assert.Contains(history, e => e.SummaryJson.Contains("Frozen"));
+                Assert.DoesNotContain(history, e => e.SummaryJson.Contains("customer messages"));
+            }
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+}
+
+internal sealed class HarnessSqliteFactory(string root) : AgentCoreApiFactory
+{
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        base.ConfigureWebHost(builder);
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddDbContextFactory<AgentCoreDbContext>(options => options.UseSqlite($"Data Source={Path.Combine(root, "synthetic.db")}"));
+            services.RemoveAll<IAgentInstanceStore>();
+            services.AddSingleton<IAgentInstanceStore>(provider =>
+            {
+                var contexts = provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>();
+                using var db = contexts.CreateDbContext();
+                db.Database.Migrate();
+                return new SqliteAgentInstanceStore(contexts, provider.GetRequiredService<IIdGenerator>());
+            });
+            services.RemoveAll<IDefinitionResourceContentStore>();
+            services.AddSingleton<IDefinitionResourceContentStore>(new FileDefinitionResourceContentStore(Path.Combine(root, "resources")));
+            services.RemoveAll<IAgentDefinitionAdminStore>();
+            services.AddSingleton<IAgentDefinitionAdminStore, SqliteAgentDefinitionAdminStore>();
+            services.RemoveAll<IAgentDefinitionResourceAdminStore>();
+            services.AddSingleton<IAgentDefinitionResourceAdminStore, SqliteAgentDefinitionResourceAdminStore>();
+            services.RemoveAll<IDefinitionDraftEvaluationStore>();
+            services.AddSingleton<IDefinitionDraftEvaluationStore, SqliteDefinitionDraftEvaluationStore>();
+            services.RemoveAll<IAdminEventStore>();
+            services.AddSingleton<IAdminEventStore, SqliteAdminEventStore>();
+        });
+    }
+
+    protected override IReadOnlyDictionary<string, string?> ExtraConfiguration => new Dictionary<string, string?>
+    {
+        ["Persistence:Provider"] = "Sqlite", ["Persistence:ConnectionString"] = $"Data Source={Path.Combine(root, "synthetic.db")}",
+        ["Persistence:DefinitionResourceRoot"] = Path.Combine(root, "resources"),
+        ["Persistence:WorkspaceRoot"] = Path.Combine(root, "workspaces"), ["Persistence:AttachmentRoot"] = Path.Combine(root, "attachments"),
+        ["Persistence:ArtifactRoot"] = Path.Combine(root, "artifacts")
+    };
+}

@@ -66,6 +66,8 @@ builder.Services.AddSingleton<AdminMemoryHistoryService>();
 builder.Services.AddSingleton<AdminAutomationService>();
 builder.Services.AddSingleton<AdminAutomationHistoryService>();
 builder.Services.AddSingleton<AdminAgentInstanceService>();
+builder.Services.AddSingleton<HarnessManagementService>();
+builder.Services.AddSingleton<HarnessPreparationExecution>();
 builder.Services.AddSingleton<AgentDefinitionLifecycleService>();
 builder.Services.AddSingleton<AgentDefinitionDraftValidationService>();
 builder.Services.AddSingleton<AgentDefinitionDraftPublishService>();

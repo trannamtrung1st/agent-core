@@ -176,3 +176,11 @@ A managed or compatibility instance shows one application connection on Admin. A
 ## Post-MVP planned until verified
 
 Observed later demos: durable multi-chat Support and Compliance flows with attachments, bounded work, artifacts, rich presentation, deactivation, and reopen (`SupportComplianceWorkflowTests`). Docker `sandbox.run` is a runtime capability, not a separate UI demo. Examiner MVP conversational demos above remain.
+
+## P9.7 — Prepare and freeze a store-operations assistant
+
+Use the Synthetic profile for the repeatable investor-demo journey. Open Admin from a normal conversation, create a managed instance of General Assistant v7 with a Store Operations persona, and expand the optional Harness management section. Select Managed, Knowledge & resources and Skills. In instance policy, add Tool proposals, exact source `knowledge:support-order-policy`, and eligible `web.fetch`.
+
+Enter a bounded purpose such as preparing knowledge and safe order-review procedures. Prepare authors a candidate with inherited knowledge, provenance-bearing curated material and `operations.review`, then visibly waits for the exact tool-change approval. The active version remains v7. Review/approve that exact proposal and Continue. Expand What changed, Knowledge, Skills, and Verification: actual resource readback and Skill activation are Core checks; the fictional refund-request dry run is a partial Agent assessment with an explicit production limitation. No refund or customer message is executed.
+
+Use Publish & adopt, confirm the tested candidate revision, and observe a new immutable active version. Freeze self-management and confirm the Published & adopted state/evidence remains visible; ordinary Chat still returns a Synthetic answer. A further improvement requires deliberate re-enable and another fork. For recovery evidence, concurrently edit the draft, attempt the old promotion, observe rejection with active v7 unchanged, then Continue to refresh evidence or Cancel. See [closure report](reports/p9.7-freeze-candidate.md) for executed evidence. Real nopCommerce/model demonstration is optional and cannot turn partial quality evidence into a production success claim.

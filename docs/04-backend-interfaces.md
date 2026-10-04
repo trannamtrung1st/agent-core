@@ -441,3 +441,13 @@ Observed email port: Application `IEmailProvider` (`email.search`/`read`/`create
 Observed rich envelope: parent `ResponseId` owns validated `displayText` (stored as entry `Text`), optional public `speechText` only when `speech.mode` is `custom` and it differs from display (same-mode derived playback coordinates are internal and never projected as public `speechText`), Markdown/attachment/artifact/unknown blocks, optional controller `memoryReceipts` persisted in envelope JSON apart from display and speech text, independent display vs speech-coordinate receipts, attachment authorization from bound conversation attachment ids plus `fixture-attachment-1`, and fixture-only artifact authorization (`fixture-artifact-1`). Unknown and unauthorized attachment/artifact refs persist a safe fallback without leaking the id. Legacy rows that stored marker-era speech still project through the same public `speechText` field.
 
 Quota numbers: [resource table](10-technology-decisions.md#planned-resource-limits).
+
+## P9.7 semantic Authoring contracts
+
+Domain `HarnessManagementState` is an optional field on `AgentInstance`; missing state means Disabled. `HarnessManagementPolicy` carries mode, independently selected scopes, exact source boundaries, eligible tools, and frozen status. `HarnessPreparation` carries a policy revision, purpose, base version, draft identity, cumulative budgets, approvals, revision-bound evidence, and publication evidence.
+
+`HarnessAuthoringOperation` supports `knowledge.upsert/remove`, `skill.upsert/remove`, `instructions.update`, `tool.select`, and the existing attachment-readability `tool.configure` setting. It carries an expected draft revision. It cannot express credentials, provider/model authority, policy, arbitrary configuration patches, publication, adoption, or executable plugins. Required Skill capabilities never grant authority.
+
+`AgentInstanceRevisionUpdate`, draft updates/revision bumps, and resource upsert/removal can carry an `AdminEventAppend` for an atomic mutation/audit commit. These extend the existing stores rather than adding another state owner. Both in-memory and SQLite implementations preserve CAS and audit failure behavior.
+
+Model-offered functions are `harness.inspect`, `harness.source.read`, scoped `harness.author`, `harness.evidence`, `harness.test`, scoped `harness.skill.test`, and `harness.verify`. They exist only in an enabled preparation. The model projection omits exact approval hashes/grants, persona persistence records, provider DTOs, credentials and host paths. Owner review uses separate Contracts DTOs and receives the exact proposal/hash for an explicit decision.

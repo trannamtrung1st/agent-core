@@ -59,7 +59,9 @@ public sealed record AgentInstanceRevisionUpdate(
     long? ExpectedPersonaRevision = null,
     bool SetUnattendedModel = false,
     string? UnattendedModelCatalogKey = null,
-    string? UnattendedReasoningEffort = null);
+    string? UnattendedReasoningEffort = null,
+    HarnessManagementState? HarnessManagement = null,
+    AdminEventAppend? History = null);
 
 public interface IAgentInstanceService
 {

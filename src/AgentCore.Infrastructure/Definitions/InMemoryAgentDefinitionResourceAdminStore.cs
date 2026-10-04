@@ -168,7 +168,7 @@ public sealed class InMemoryAgentDefinitionResourceAdminStore(
             }
 
             _ = drafts.BumpDraftRevisionAsync(
-                new AgentDefinitionDraftRevisionBump(upsert.DraftId, upsert.ExpectedDraftRevision, upsert.UpdatedAt),
+                new AgentDefinitionDraftRevisionBump(upsert.DraftId, upsert.ExpectedDraftRevision, upsert.UpdatedAt, upsert.History),
                 cancellationToken).AsTask().GetAwaiter().GetResult();
 
             var resource = new AgentDefinitionDraftResource(
@@ -260,7 +260,7 @@ public sealed class InMemoryAgentDefinitionResourceAdminStore(
             }
 
             _ = drafts.BumpDraftRevisionAsync(
-                new AgentDefinitionDraftRevisionBump(remove.DraftId, remove.ExpectedDraftRevision, remove.UpdatedAt),
+                new AgentDefinitionDraftRevisionBump(remove.DraftId, remove.ExpectedDraftRevision, remove.UpdatedAt, remove.History),
                 cancellationToken).AsTask().GetAwaiter().GetResult();
 
             var removed = list[index];

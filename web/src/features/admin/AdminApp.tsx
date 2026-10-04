@@ -1,8 +1,10 @@
+import { updateHarness } from "../../services/adminApi";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   App,
   Button,
+  Collapse,
   Descriptions,
   Empty,
   Flex,
@@ -38,6 +40,7 @@ import {
   type DefinitionCandidate
 } from "./definitionCandidate";
 import { DefinitionCandidateEditor, PublishedSkillList, type DefinitionEditorView } from "./definitionCandidateEditor";
+import { HarnessManagementSection, HarnessPolicyModeScopes } from "./HarnessManagementSection";
 import { ApplicationConnectionSection } from "./ApplicationConnectionSection";
 import { EventSourcesSection } from "./EventSourcesSection";
 import { EventSubscriptionsSection } from "./EventSubscriptionsSection";
@@ -540,6 +543,8 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
   const [definitionId, setDefinitionId] = useState("");
   const [version, setVersion] = useState<number | null>(null);
   const [personaMode, setPersonaMode] = useState<"default" | "custom">("default");
+  const [harnessMode, setHarnessMode] = useState<import("../../services/adminApi").HarnessMode>("Disabled");
+  const [harnessAreas, setHarnessAreas] = useState<import("../../services/adminApi").HarnessScope[]>(["KnowledgeResources", "Skills"]);
   const [persona, setPersona] = useState<AdminCreateInstancePersona>({
     name: "",
     role: "",
@@ -562,6 +567,8 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
       setVersion(null);
     }
     setPersonaMode("default");
+    setHarnessMode("Disabled");
+    setHarnessAreas(["KnowledgeResources", "Skills"]);
     setPersona({ name: "", role: "", description: "", tone: "" });
     setOpen(true);
   };
@@ -577,6 +584,12 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
         version,
         personaMode === "custom" ? trimmedPersona(persona) : null
       );
+      if (harnessMode !== "Disabled") {
+        try {
+          await updateHarness(created.instanceId, "policy", { expectedRevision: created.revision, mode: harnessMode,
+            scopes: harnessAreas, sources: [], eligibleTools: [], frozen: false });
+        } catch (error) { showAdminFailure(message, error, "Instance created; configure its authoring policy in the detail view."); }
+      }
       setOpen(false);
       navigateToAppPath(adminInstancePath(created.instanceId));
     } catch (error) {
@@ -646,6 +659,12 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
                 message={`v${selectedVersion.version} is deprecated. New instances normally use the latest active publication.`}
               />
             ) : null}
+            <Collapse items={[{ key: "harness", label: "Harness management (optional)", children:
+              <Form layout="vertical"><HarnessPolicyModeScopes mode={harnessMode} scopes={harnessAreas} busy={busy}
+                onMode={setHarnessMode} onScopes={setHarnessAreas} />
+                <Typography.Text type="secondary">Configure permitted sources and prepare a candidate in the instance detail. Tool changes and publication always require your approval.</Typography.Text>
+              </Form>
+            }]} />
             <Radio.Group
               aria-label="Persona"
               value={personaMode}
@@ -2319,6 +2338,9 @@ function InstanceDetail({
           onUpdated={onInstanceChanged}
           onDeleted={onInstanceDeleted}
         />
+      ) : null}
+      {effective.kind === "ready" && !effective.data.compatibility && effective.data.instanceLifecycle === "Active" ? (
+        <HarnessManagementSection instanceId={instanceId} eligibleTools={effective.data.effectiveToolAllowlist} onUpdated={onInstanceChanged} />
       ) : null}
       <ApplicationConnectionSection instanceId={instanceId} />
       <EventSubscriptionsSection instanceId={instanceId} />

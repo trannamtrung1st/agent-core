@@ -56,10 +56,11 @@ export default defineConfig({
     {
       name: "synthetic",
       testIgnore:
-        /browser-stt\.spec\.ts|browser-browser\.spec\.ts|manual-a-faithful-wall-clock\.spec\.ts|admin-lifecycle\.spec\.ts|p76-admin-journey\.spec\.ts/
+        /browser-stt\.spec\.ts|browser-browser\.spec\.ts|manual-a-faithful-wall-clock\.spec\.ts|admin-lifecycle\.spec\.ts|p76-admin-journey\.spec\.ts|p97-harness-management\.spec\.ts/
     },
     { name: "faithful-manual", testMatch: /manual-a-faithful-wall-clock\.spec\.ts/ },
     { name: "admin-lifecycle", testMatch: /admin-lifecycle\.spec\.ts/ },
+    { name: "p97-harness", testMatch: /p97-harness-management\.spec\.ts/ },
     { name: "p76-admin", testMatch: /p76-admin-journey\.spec\.ts/ },
     { name: "browser-stt", testMatch: /browser-stt\.spec\.ts/, use: { baseURL: browserSttWebUrl } },
     { name: "browser-browser", testMatch: /browser-browser\.spec\.ts/, use: { baseURL: browserBrowserWebUrl } }

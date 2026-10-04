@@ -21,7 +21,8 @@ public sealed record AgentInstance(
     long Revision = 1,
     long PersonaRevision = 1,
     string? UnattendedModelCatalogKey = null,
-    string? UnattendedReasoningEffort = null)
+    string? UnattendedReasoningEffort = null,
+    HarnessManagementState? HarnessManagement = null)
 {
     public static Guid CompatibilityFor(string definitionId)
     {

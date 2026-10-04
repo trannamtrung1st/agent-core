@@ -156,6 +156,7 @@ public sealed class SqliteAgentDefinitionAdminStore(
         row.Revision = mapped.Revision;
         row.CandidateJson = mapped.CandidateJson;
         row.UpdatedAtUtc = mapped.UpdatedAtUtc;
+        if (update.History is not null) AdminEventPersistence.StageAppend(db, update.History, ids.NewId());
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -241,6 +242,7 @@ public sealed class SqliteAgentDefinitionAdminStore(
 
         row.Revision += 1;
         row.UpdatedAtUtc = bump.UpdatedAt.ToUnixTimeMilliseconds();
+        if (bump.History is not null) AdminEventPersistence.StageAppend(db, bump.History, ids.NewId());
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

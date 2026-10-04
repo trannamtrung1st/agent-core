@@ -332,3 +332,20 @@ Ended rows: reopen/rename/archive/unarchive fail closed or no-op without resurre
 **Rich envelope (observed).** Parent `ResponseId` carries `reply.text`, optional `reply.speech`, Markdown, attachment/artifact reference blocks, independent display and speech receipts. Unknown blocks fallback. Artifact refs in C use fixtures (`fixture-artifact-1`). Reconnect history uses the received display prefix while streaming or interrupted, the full durable display text after Completed/Failed, and display-delivered blocks only.
 
 **Uploads (observed store).** HTTP multipart/streaming only under `/api/v2/sessions/{id}/attachments` (POST pending, GET collection, GET metadata, GET `/content`, DELETE pending, POST `/stage` for the next speech turn). Unread storage of types outside the supported processor set follows the pinned role `environment.attachments.allowUnreadUnsupportedTypes` (shipped fixtures reject-at-upload). Client headers cannot widen that policy. `user.text` may include `attachmentIds` (UUIDs, max 10); empty text is allowed only with at least one bindable id. Bind runs in the runtime persist callback after the user entry is durable. Processors then extract off the mailbox; `session.state.changed` may emit `outputState=processingAttachments` while that work runs. Typed tools may emit `outputState=runningTools` while bounded tool steps run. Caps in the [resource table](10-technology-decisions.md#planned-resource-limits). OCR and Office readers remain out of scope.
+
+## P9.7 owner HTTP surface
+
+All routes below inherit the existing local trusted-owner capability filter and live under `/api/v2/admin/agent-instances/{instanceId}/harness`. Authoring is not added to SignalR or ordinary Chat tool offers.
+
+| Method / suffix | Request | Effect |
+| --- | --- | --- |
+| GET (root) | none | Safe owner policy/candidate/diff/evidence review. |
+| PUT `/policy` | `expectedRevision`, `mode`, `scopes`, `sources`, `eligibleTools`, `frozen` | Owner grant/revoke; invalidates prior preparation. |
+| POST `/prepare` | `expectedRevision`, `purpose` | Create a fork and preparation; returns before model work. |
+| POST `/continue` | `preparationId` | Run bounded model preparation against its grant and cumulative budget. |
+| POST `/verify` | `preparationId` | Refresh Core checks for the current candidate. |
+| POST `/cancel` | `expectedRevision` | Cancel preparation and pending approvals. |
+| POST `/approvals/{approvalId}` | `expectedRevision`, `actionHash`, `approve` | Exact owner decision; stale/altered proposals fail. |
+| POST `/publish-adopt` | `expectedRevision`, `draftRevision` | Validate/evaluate/diff/publish via existing lifecycle, then explicit CAS adoption. |
+
+Responses use explicit string modes/statuses and typed review DTOs. Evidence includes actor, tested draft revision, check, status, expected, observed, and limitation. Outcomes are Verified, PartiallyVerified, CannotVerify, RequiresExternalEvidence, Failed. Publication returns both new published version and tested `publishedDraftRevision`; diff/evidence stay associated with that revision. Validation uses 400, stale revisions/exact approval mismatch use 409, and unexpected failures reuse a safe server `diagnosticId`. Owner review contains approval hashes; the model projection never does.
