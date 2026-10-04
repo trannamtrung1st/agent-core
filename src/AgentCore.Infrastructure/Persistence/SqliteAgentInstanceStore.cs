@@ -184,6 +184,8 @@ public sealed class SqliteAgentInstanceStore(
         }
 
         row.ActiveVersion = activeVersion;
+        if (update.HarnessManagement is not null)
+            row.HarnessManagementJson = JsonSerializer.Serialize(update.HarnessManagement, Json);
         row.UpdatedAtUtc = updatedAt.ToUnixTimeMilliseconds();
         row.Revision++;
         AdminEventPersistence.StageAppend(db, historyAppend, ids.NewId());

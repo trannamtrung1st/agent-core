@@ -245,6 +245,7 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                 var next = instance with
                 {
                     ActiveVersion = activeVersion,
+                    HarnessManagement = update.HarnessManagement ?? instance.HarnessManagement,
                     UpdatedAt = updatedAt,
                     Revision = instance.Revision + 1
                 };

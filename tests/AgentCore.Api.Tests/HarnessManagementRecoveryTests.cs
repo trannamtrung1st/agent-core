@@ -15,6 +15,48 @@ namespace AgentCore.Api.Tests;
 public sealed class HarnessManagementRecoveryTests
 {
     [Fact]
+    public async Task Failed_adoption_transaction_preserves_active_version_and_preparation_then_fresh_verification_recovers()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "p97-adoption-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            await using var factory = new HarnessSqliteFactory(root);
+            var instance = await factory.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+            var service = factory.Services.GetRequiredService<HarnessManagementService>();
+            instance = await service.ConfigureAsync(instance.InstanceId, instance.Revision,
+                new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []));
+            instance = await service.StartAsync(instance.InstanceId, instance.Revision, "Prepare a safe review procedure.");
+            var prepId = instance.HarnessManagement!.Preparation!.PreparationId;
+            var execution = factory.Services.GetRequiredService<HarnessPreparationExecution>();
+            var review = await execution.RunAsync(instance.InstanceId, prepId);
+            Assert.Equal(HarnessPreparationStatus.Ready, review.State.Preparation!.Status);
+            var contexts = factory.Services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>();
+            await using (var db = await contexts.CreateDbContextAsync())
+                await db.Database.ExecuteSqlRawAsync("""
+                    CREATE TRIGGER P97FailAdoption BEFORE UPDATE OF ActiveVersion ON AgentInstances
+                    WHEN NEW.ActiveVersion != OLD.ActiveVersion
+                    BEGIN SELECT RAISE(ABORT, 'injected adoption failure'); END;
+                    """);
+            await Assert.ThrowsAsync<AgentCoreException>(async () => await service.PromoteAsync(instance.InstanceId, review.InstanceRevision, review.Draft!.Revision));
+            var unchanged = await service.ReviewAsync(instance.InstanceId);
+            Assert.Equal(7, unchanged.ActiveVersion);
+            Assert.Equal(review.InstanceRevision, unchanged.InstanceRevision);
+            Assert.Equal(HarnessPreparationStatus.Ready, unchanged.State.Preparation!.Status);
+            Assert.Null(unchanged.State.Preparation.PublishedVersion);
+            await using (var db = await contexts.CreateDbContextAsync())
+                await db.Database.ExecuteSqlRawAsync("DROP TRIGGER P97FailAdoption;");
+            review = await execution.RunAsync(instance.InstanceId, prepId);
+            instance = await service.PromoteAsync(instance.InstanceId, review.InstanceRevision, review.Draft!.Revision);
+            Assert.True(instance.ActiveVersion > 7);
+            Assert.Equal(HarnessPreparationStatus.Published, instance.HarnessManagement!.Preparation!.Status);
+            Assert.Equal(instance.ActiveVersion, instance.HarnessManagement.Preparation.PublishedVersion);
+            Assert.Equal(review.InstanceRevision + 1, instance.Revision);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public async Task Sqlite_reopen_preserves_exact_pending_approval_candidate_and_audit_then_freeze_requires_another_fork()
     {
         var root = Path.Combine(Path.GetTempPath(), "p97-reopen-" + Guid.NewGuid().ToString("N"));

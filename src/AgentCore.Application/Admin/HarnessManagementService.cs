@@ -301,11 +301,16 @@ public sealed class HarnessManagementService(
             await RequireContextAsync(instance, prep.PreparationId, draftRevision, token);
             var reviewedDiff = await diff.GetDraftDiffAsync(prep.DraftId, token);
             var publication = await publisher.PublishDraftAsync(prep.DraftId, draftRevision, token);
-            // CAS adoption is the sole active-version transition. A failure leaves the current association untouched.
-            instance = await adminInstances.ReassociateActiveVersionAsync(instanceId, publication.Version, instance.Revision, token);
-            return await SaveAsync(instance, state with { Preparation = prep with { Status = HarnessPreparationStatus.Published, PublishedVersion = publication.Version, PublishedDraftRevision = draftRevision,
-                PublishedChanges = reviewedDiff.Sections.Select(s => new HarnessPublishedChange(s.SectionId, s.Label, s.ChangeKind.ToString(), s.BeforeSummary, s.AfterSummary)).ToArray() } },
-                "publishAdopt", "Published", false, token);
+            // Existing adoption commits the active version, preparation result and owner history together.
+            // A failure can leave an unused immutable publication, but the instance stays on its old version/state.
+            var publishedState = state with { Preparation = prep with
+            {
+                Status = HarnessPreparationStatus.Published, PublishedVersion = publication.Version,
+                PublishedDraftRevision = draftRevision,
+                PublishedChanges = reviewedDiff.Sections.Select(s => new HarnessPublishedChange(s.SectionId, s.Label,
+                    s.ChangeKind.ToString(), s.BeforeSummary, s.AfterSummary)).ToArray()
+            } };
+            return await adminInstances.ReassociateActiveVersionAsync(instanceId, publication.Version, instance.Revision, token, publishedState);
         }, ct);
 
     public async ValueTask<object> InspectAsync(Guid instanceId, Guid preparationId, CancellationToken ct = default)

@@ -123,7 +123,8 @@ public sealed class AdminAgentInstanceService(
         Guid instanceId,
         int version,
         long expectedRevision,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        HarnessManagementState? harnessManagement = null)
     {
         var started = Stopwatch.GetTimestamp();
         var instance = await RequireManagedAsync(instanceId, cancellationToken).ConfigureAwait(false);
@@ -173,7 +174,7 @@ public sealed class AdminAgentInstanceService(
             instance.ActiveVersion,
             definition.Version);
         var updated = await instances.UpdateActiveVersionWithHistoryAsync(
-                new AgentInstanceRevisionUpdate(instance.InstanceId, expectedRevision, ActiveVersion: definition.Version),
+                new AgentInstanceRevisionUpdate(instance.InstanceId, expectedRevision, ActiveVersion: definition.Version, HarnessManagement: harnessManagement),
                 now,
                 append,
                 cancellationToken)
