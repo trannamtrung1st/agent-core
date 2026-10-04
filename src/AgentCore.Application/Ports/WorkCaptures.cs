@@ -12,6 +12,8 @@ public sealed record WorkCapture(
 
 public sealed record WorkCaptureSaveResult(WorkCapture? Capture, string? ErrorCode);
 
+public sealed record WorkCaptureContent(WorkCapture Capture, byte[] Bytes);
+
 public interface IWorkCaptureStore
 {
     ValueTask<WorkCaptureSaveResult> SaveAsync(
@@ -21,10 +23,16 @@ public interface IWorkCaptureStore
         ReadOnlyMemory<byte> bytes,
         CancellationToken cancellationToken = default);
 
+    ValueTask<WorkCaptureContent?> ReadAsync(
+        Guid captureId,
+        CancellationToken cancellationToken = default);
+
     ValueTask ExtendRetentionAsync(
         Guid workItemId,
         DateTimeOffset terminalAt,
         CancellationToken cancellationToken = default);
+
+    ValueTask<int> PurgeExpiredAsync(CancellationToken cancellationToken = default);
 }
 
 public static class WorkCaptureRetention

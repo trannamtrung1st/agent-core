@@ -152,7 +152,7 @@ public static class ToolRegistry
                 ToolReplaySafety.NonReplayable),
             [ToolCatalog.WorkComplete] = Descriptor(
                 ToolCatalog.WorkComplete,
-                "Record the owner-facing completion for this occurrence. summary is the bounded result. Set attentionRequired true only when the owner should be notified. The owner is fixed by the system. Do not include a recipient, session, channel, or destination. A plain final answer without this tool stays quiet.",
+                "Record the owner-facing completion for this occurrence. summary is the bounded result. Set attentionRequired true only when the owner should be notified. attentionRequired false is a quiet completion. The owner is fixed by the system. Do not include a recipient, session, channel, or destination. A plain final answer does not finish the work.",
                 """{"type":"object","additionalProperties":false,"properties":{"summary":{"type":"string","minLength":1,"maxLength":16000},"attentionRequired":{"type":"boolean"}},"required":["summary","attentionRequired"]}""",
                 ToolEffect.ReadOnly,
                 ToolOfferRule.OccurrenceCapability,

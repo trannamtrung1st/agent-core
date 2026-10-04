@@ -18,7 +18,10 @@ public sealed record DurableOccurrenceFailed(WorkItem Running, string Code, stri
 
 public sealed record DurableOccurrenceSuspended(WorkItem Running) : DurableOccurrenceOutcome(Running);
 
-public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimeProvider time)
+public sealed class DurableOccurrenceExecution(
+    SessionToolExecutor tools,
+    TimeProvider time,
+    IWorkCaptureStore? captures = null)
 {
     public async ValueTask<DurableOccurrenceOutcome> RunAsync(
         WorkItem running,
@@ -115,6 +118,7 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
             var text = new StringBuilder();
             var finished = false;
             var failed = false;
+            messages = await WorkCaptureRehydration.ApplyAsync(messages, captures, overallCts.Token).ConfigureAwait(false);
             var working = request with { Messages = messages };
             try
             {
@@ -188,10 +192,13 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                 var result = text.ToString().Trim();
                 if (!finished || result.Length == 0)
                 {
-                    return new DurableOccurrenceRetry(running, "empty-result", "Application event produced no result.");
+                    return new DurableOccurrenceRetry(running, "empty-result", "The model returned no result.");
                 }
 
-                return new DurableOccurrenceCompleted(running, result);
+                return new DurableOccurrenceRetry(
+                    running,
+                    "completion-required",
+                    "Unattended work must finish by calling work.complete.");
             }
 
             if (steps + pending.Count > budget.MaxSteps)
@@ -250,12 +257,16 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                         observationRequired = true;
                     }
 
+                    var fencedName = running.SideEffect.ToolCallId is string toolCallId
+                        ? ToolNameFor(messages, toolCallId) ?? call.Name
+                        : call.Name;
                     running = await store.ClearSideEffectAsync(
                         running.WorkItemId,
                         running.Revision,
                         generation,
                         asOfUtc,
-                        cancellationToken).ConfigureAwait(false);
+                        cancellationToken,
+                        ToolCatalog.RecordsOwnerVisibleEffect(fencedName)).ConfigureAwait(false);
                 }
             }
 
@@ -580,7 +591,8 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                     running.Revision,
                     generation,
                     asOfUtc,
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken,
+                    ToolCatalog.RecordsOwnerVisibleEffect(call.Name)).ConfigureAwait(false);
             }
 
             if (remaining <= TimeSpan.Zero)

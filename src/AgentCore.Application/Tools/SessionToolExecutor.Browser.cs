@@ -642,11 +642,6 @@ public sealed partial class SessionToolExecutor
         var key = CaptureKey(admission, sessionId);
         lock (_captureGate)
         {
-            if (_captureCounts.Count > 1024)
-            {
-                _captureCounts.Clear();
-            }
-
             var count = _captureCounts.GetValueOrDefault(key);
             if (count >= BrowserToolLimits.MaxCapturesPerScope)
             {
@@ -663,10 +658,7 @@ public sealed partial class SessionToolExecutor
         var key = CaptureKey(admission, sessionId);
         lock (_captureGate)
         {
-            if (_captureCounts.TryGetValue(key, out var count) && count > 0)
-            {
-                _captureCounts[key] = count - 1;
-            }
+            ReleaseScope(_captureCounts, key);
         }
     }
 
@@ -750,11 +742,6 @@ public sealed partial class SessionToolExecutor
         var key = CaptureKey(admission, sessionId);
         lock (_captureGate)
         {
-            if (_downloadCounts.Count > 1024)
-            {
-                _downloadCounts.Clear();
-            }
-
             var count = _downloadCounts.GetValueOrDefault(key);
             if (count >= BrowserToolLimits.MaxDownloadsPerScope)
             {
@@ -771,11 +758,19 @@ public sealed partial class SessionToolExecutor
         var key = CaptureKey(admission, sessionId);
         lock (_captureGate)
         {
-            if (_downloadCounts.TryGetValue(key, out var count) && count > 0)
-            {
-                _downloadCounts[key] = count - 1;
-            }
+            ReleaseScope(_downloadCounts, key);
         }
+    }
+
+    private static void ReleaseScope(Dictionary<string, int> counts, string key)
+    {
+        if (!counts.TryGetValue(key, out var count) || count <= 1)
+        {
+            counts.Remove(key);
+            return;
+        }
+
+        counts[key] = count - 1;
     }
 
     private async ValueTask<(string? ArtifactId, string? Error)> StoreBrowserBytesAsync(

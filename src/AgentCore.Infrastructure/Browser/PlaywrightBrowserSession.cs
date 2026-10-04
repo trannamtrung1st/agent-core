@@ -2847,9 +2847,22 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
     private const string MaskSensitiveScript = """
         () => {
-          const nodes = document.querySelectorAll("input[type='password'], input[autocomplete='username'], input[autocomplete='current-password'], input[autocomplete^='cc-'], [data-sensitive]");
+          const sensitiveTerms = ["password", "passwd", "passcode", "secret", "token", "api key", "apikey", "access key", "private key", "client secret", "authorization", "one-time-code", "otp"];
+          const nodes = document.querySelectorAll("input, textarea, select, [data-sensitive]");
           let count = 0;
           for (const node of nodes) {
+            const sourceType = (node.getAttribute("type") || "").toLowerCase();
+            const autocomplete = (node.getAttribute("autocomplete") || "").toLowerCase();
+            const haystack = [node.id, node.getAttribute("name"), autocomplete, node.getAttribute("aria-label"), node.getAttribute("placeholder")]
+              .filter(Boolean).join(" ").toLowerCase();
+            const sensitive = node.hasAttribute("data-sensitive")
+              || sourceType === "password"
+              || autocomplete.includes("one-time-code")
+              || autocomplete === "username"
+              || autocomplete === "current-password"
+              || autocomplete.startsWith("cc-")
+              || sensitiveTerms.some(term => haystack.includes(term));
+            if (!sensitive) continue;
             const rect = node.getBoundingClientRect();
             if (rect.width <= 0 || rect.height <= 0) continue;
             const mask = document.createElement("div");

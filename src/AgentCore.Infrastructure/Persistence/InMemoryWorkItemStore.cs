@@ -418,7 +418,8 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
         long expectedRevision,
         Guid generation,
         DateTimeOffset clearedAtUtc,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool recordExternalEffect = true)
     {
         if (CrashOnNextClearSideEffect)
         {
@@ -426,7 +427,7 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
             throw new InvalidOperationException("Simulated crash before side-effect clear.");
         }
 
-        return Mutate(workItemId, item => item.ClearSideEffect(expectedRevision, generation, clearedAtUtc));
+        return Mutate(workItemId, item => item.ClearSideEffect(expectedRevision, generation, clearedAtUtc, recordExternalEffect));
     }
 
     public ValueTask<WorkItem> AcceptBrowserObservationAsync(

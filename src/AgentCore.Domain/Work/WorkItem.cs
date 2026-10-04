@@ -101,9 +101,9 @@ public sealed class WorkItem
                 throw new ArgumentException("Failed work requires a failure and no result.");
             }
         }
-        else if (result is not null || failure is not null)
+        else if (result is not null)
         {
-            throw new ArgumentException("Only terminal success or failure may store a result boundary.");
+            throw new ArgumentException("Only completed work may store a result.");
         }
 
         if (status == WorkItemStatus.Cancelled && !cancellationRequested)
@@ -416,8 +416,10 @@ public sealed class WorkItem
         if (Status == WorkItemStatus.Failed
             && failureCode is not null
             && failureSummary is not null
-            && Failure!.Code == failureCode.Trim()
-            && Failure.Summary == failureSummary.Trim())
+            && Failure is not null
+            && ((Failure.Code == failureCode.Trim() && Failure.Summary == failureSummary.Trim())
+                || (Failure.Code == "attempts-exhausted"
+                    && Failure.Summary == WorkKnownEffects.Exhausted(failureSummary))))
         {
             return this;
         }
@@ -425,7 +427,7 @@ public sealed class WorkItem
         RequireOperational(expectedRevision, generation);
         var unsafeEffect = SideEffect.Disposition is WorkSideEffectDisposition.InFlight or WorkSideEffectDisposition.Indeterminate;
         var observationRequired = IsObservationRequiredCheckpoint(Checkpoint);
-        if (!replaySafe || unsafeEffect || AttemptCount >= MaxAttempts)
+        if (!replaySafe || unsafeEffect)
         {
             var effect = unsafeEffect ? AsIndeterminate(failedAtUtc) : SideEffect;
             var code = unsafeEffect
@@ -437,6 +439,16 @@ public sealed class WorkItem
                     : "External effect outcome is unknown and was not replayed."
                 : failureSummary ?? throw new ArgumentException("Failure is required.");
             return AsFailed(failedAtUtc, code, summary, effect, RequireDiagnosticId(allocateDiagnosticId));
+        }
+
+        if (AttemptCount >= MaxAttempts)
+        {
+            return AsFailed(
+                failedAtUtc,
+                "attempts-exhausted",
+                WorkKnownEffects.Exhausted(failureSummary ?? throw new ArgumentException("Failure is required.")),
+                SideEffect,
+                RequireDiagnosticId(allocateDiagnosticId));
         }
 
         if (nextRetryAtUtc is null || nextRetryAtUtc < failedAtUtc)
@@ -456,7 +468,7 @@ public sealed class WorkItem
             Progress,
             Checkpoint,
             Result,
-            Failure,
+            new WorkFailure(failureCode!, failureSummary!, failedAtUtc, DiagnosticIdOrNull(allocateDiagnosticId)),
             SideEffect,
             Approval,
             failedAtUtc);
@@ -585,10 +597,13 @@ public sealed class WorkItem
 
         if (AttemptCount >= MaxAttempts)
         {
+            var summary = Failure is null
+                ? "Retry budget is exhausted."
+                : WorkKnownEffects.Exhausted(Failure.Summary);
             return AsFailed(
                 asOfUtc,
                 "attempts-exhausted",
-                "Retry budget is exhausted.",
+                summary,
                 SideEffect,
                 RequireDiagnosticId(allocateDiagnosticId));
         }
@@ -846,7 +861,11 @@ public sealed class WorkItem
             updatedAtUtc);
     }
 
-    public WorkItem ClearSideEffect(long expectedRevision, Guid generation, DateTimeOffset updatedAtUtc)
+    public WorkItem ClearSideEffect(
+        long expectedRevision,
+        Guid generation,
+        DateTimeOffset updatedAtUtc,
+        bool recordExternalEffect = true)
     {
         if (SideEffect.Disposition == WorkSideEffectDisposition.None)
         {
@@ -862,7 +881,7 @@ public sealed class WorkItem
         }
 
         var approval = Approval is { Decision: WorkApprovalDecision.Approved } ? null : Approval;
-        var knownEffect = SideEffect.Disposition == WorkSideEffectDisposition.Succeeded
+        var knownEffect = recordExternalEffect && SideEffect.Disposition == WorkSideEffectDisposition.Succeeded
             ? WorkKnownEffects.PreserveCompletedExternalEffect(KnownEffectSummary)
             : KnownEffectSummary;
         return Copy(
@@ -953,6 +972,12 @@ public sealed class WorkItem
             sideEffect,
             Approval,
             failedAtUtc);
+
+    private static Guid? DiagnosticIdOrNull(Func<Guid>? allocateDiagnosticId)
+    {
+        var diagnosticId = allocateDiagnosticId?.Invoke() ?? Guid.Empty;
+        return diagnosticId == Guid.Empty ? null : diagnosticId;
+    }
 
     private static Guid RequireDiagnosticId(Func<Guid>? allocateDiagnosticId)
     {

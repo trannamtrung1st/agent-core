@@ -88,6 +88,20 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
     }
   }
 
+  async function copyWebhookUrl(webhookKey: string) {
+    const url = `${window.location.origin}/api/v1/hooks/${webhookKey}/order-placed`;
+    await copyText(url, "Webhook URL copied.");
+  }
+
+  async function copyText(value: string, success: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      message.success(success);
+    } catch {
+      setError("Copy failed. Select the value and copy it manually.");
+    }
+  }
+
   async function createWebhook() {
     setBusy(true);
     setError(null);
@@ -230,10 +244,39 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
                   <Typography.Text type="secondary">Webhook</Typography.Text>
                   <Typography.Text strong>{connection.webhookStatus ?? "Not configured"}</Typography.Text>
                   {connection.webhookKey ? (
-                    <Typography.Text aria-label="Webhook key">{connection.webhookKey}</Typography.Text>
+                    <Flex align="center" gap={token.paddingXS} wrap="wrap">
+                      <Typography.Text aria-label="Webhook key">{connection.webhookKey}</Typography.Text>
+                      <Button
+                        type="link"
+                        size="small"
+                        disabled={busy}
+                        aria-label="Copy webhook URL"
+                        onClick={() => void copyWebhookUrl(connection.webhookKey)}
+                      >
+                        Copy webhook URL
+                      </Button>
+                    </Flex>
                   ) : null}
                   <Flex gap={token.paddingXS} wrap="wrap">
-                    <Button disabled={busy} aria-label={connection.webhookStatus === "Active" ? "Rotate webhook" : "Create webhook"} onClick={() => void createWebhook()}>
+                    <Button
+                      disabled={busy}
+                      aria-label={connection.webhookStatus === "Active" ? "Rotate webhook" : "Create webhook"}
+                      onClick={() => {
+                        if (connection.webhookStatus === "Active") {
+                          confirmAction(modal, {
+                            title: "Rotate this webhook?",
+                            content: "The current credential stops working immediately. Copy the new one before you leave.",
+                            okText: "Rotate webhook",
+                            cancelText: "Keep",
+                            danger: true,
+                            onOk: () => createWebhook()
+                          });
+                          return;
+                        }
+
+                        void createWebhook();
+                      }}
+                    >
                       {connection.webhookStatus === "Active" ? "Rotate webhook" : "Create webhook"}
                     </Button>
                     {connection.webhookStatus === "Active" ? (
@@ -272,6 +315,9 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
                     Copy this credential now. It will not be shown again.
                   </Typography.Paragraph>
                   <Input.TextArea readOnly aria-label="Webhook credential" value={credential ?? ""} autoSize />
+                  <Button aria-label="Copy webhook credential" onClick={() => void copyText(credential ?? "", "Webhook credential copied.")}>
+                    Copy credential
+                  </Button>
                 </Flex>
               </Modal>
             </>

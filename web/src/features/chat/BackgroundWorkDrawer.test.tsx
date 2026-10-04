@@ -48,6 +48,17 @@ const completed: WorkItem = {
   cancellationAvailable: false
 };
 
+const retrying: WorkItem = {
+  ...queued,
+  workItemId: "work-retry",
+  status: "retrying",
+  progress: null,
+  failureCode: "empty-result",
+  failureSummary: "The model returned no result.",
+  attemptCount: 2,
+  maxAttempts: 3
+};
+
 const failed: WorkItem = {
   ...queued,
   workItemId: "work-failed",
@@ -99,6 +110,12 @@ describe("BackgroundWorkDrawer", () => {
     renderDrawer(async () => []);
     expect(await screen.findByText("No background work yet")).toBeInTheDocument();
     expect(screen.getByText("Tasks outside this conversation")).toBeInTheDocument();
+  });
+
+  it("shows the retry attempt and the last safe reason", async () => {
+    renderDrawer(async () => [retrying]);
+    expect(await screen.findByText("Retrying · attempt 2 of 3")).toBeInTheDocument();
+    expect(screen.getByText("The model returned no result.")).toBeInTheDocument();
   });
 
   it("closes when Escape is pressed inside the drawer", async () => {

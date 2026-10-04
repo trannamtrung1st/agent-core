@@ -20,12 +20,17 @@ public sealed class DurableReminderExecutor(
     ILogger<DurableReminderExecutor>? logger = null,
     IWorkCaptureStore? captures = null)
 {
-    private readonly DurableOccurrenceExecution occurrence = new(tools, time);
+    private readonly DurableOccurrenceExecution occurrence = new(tools, time, captures);
     public const string BeforeModelCheckpoint = """{"phase":"before-model"}""";
     public const int DefaultParallelism = 2;
 
     public async ValueTask<int> ExecuteDueAsync(DateTimeOffset asOfUtc, int limit, CancellationToken cancellationToken = default)
     {
+        if (captures is not null)
+        {
+            await captures.PurgeExpiredAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         var recovery = await work.RecoverExpiredClaimsAsync(asOfUtc, cancellationToken).ConfigureAwait(false);
         LogRecoveredTerminalFailures(recovery);
         foreach (var resumed in recovery.ObservationResumes)
@@ -276,7 +281,7 @@ public sealed class DurableReminderExecutor(
                     generation,
                     asOfUtc,
                     "empty-result",
-                    "Scheduled reminder produced no result.",
+                    "The model returned no result.",
                     true,
                     asOfUtc.Add(RetryDelay(running.AttemptCount)),
                     CancellationToken.None).ConfigureAwait(false);
@@ -456,22 +461,40 @@ public sealed class DurableReminderExecutor(
             asOfUtc,
             nextRetryAtUtc,
             cancellationToken).ConfigureAwait(false);
-        if (failed.Status == WorkItemStatus.Failed
-            && failed.Failure?.DiagnosticId is Guid diagnosticId
+        if (failed.Failure?.DiagnosticId is Guid diagnosticId
+            && diagnosticId != Guid.Empty
             && logger is not null)
         {
-            DiagnosticLog.Error(
-                logger,
-                error,
-                diagnosticId,
-                "Work item failed.",
-                new DiagnosticContext(
-                    SessionId: failed.Provenance.SourceSessionId,
-                    TriggerRegistrationId: failed.Provenance.RegistrationId,
-                    TriggerOccurrenceId: failed.Provenance.SourceOccurrenceId,
-                    WorkItemId: failed.WorkItemId,
-                    ErrorCategory: "work",
-                    ErrorCode: failed.Failure.Code));
+            if (failed.Status == WorkItemStatus.WaitingToRetry)
+            {
+                DiagnosticLog.Warning(
+                    logger,
+                    error ?? new InvalidOperationException(failed.Failure.Summary),
+                    diagnosticId,
+                    $"Work item will retry. Attempt {failed.AttemptCount} of {failed.MaxAttempts}.",
+                    new DiagnosticContext(
+                        SessionId: failed.Provenance.SourceSessionId,
+                        TriggerRegistrationId: failed.Provenance.RegistrationId,
+                        TriggerOccurrenceId: failed.Provenance.SourceOccurrenceId,
+                        WorkItemId: failed.WorkItemId,
+                        ErrorCategory: "work",
+                        ErrorCode: failed.Failure.Code));
+            }
+            else if (failed.Status == WorkItemStatus.Failed)
+            {
+                DiagnosticLog.Error(
+                    logger,
+                    error,
+                    diagnosticId,
+                    "Work item failed.",
+                    new DiagnosticContext(
+                        SessionId: failed.Provenance.SourceSessionId,
+                        TriggerRegistrationId: failed.Provenance.RegistrationId,
+                        TriggerOccurrenceId: failed.Provenance.SourceOccurrenceId,
+                        WorkItemId: failed.WorkItemId,
+                        ErrorCategory: "work",
+                        ErrorCode: failed.Failure.Code));
+            }
         }
 
         if (failed.Status is WorkItemStatus.Failed or WorkItemStatus.Cancelled)

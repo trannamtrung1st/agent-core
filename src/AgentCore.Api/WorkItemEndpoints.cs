@@ -256,7 +256,9 @@ public static class WorkItemEndpoints
             HttpMapping.Format(summary.CreatedAtUtc),
             HttpMapping.Format(summary.UpdatedAtUtc),
             summary.FailureDiagnosticId?.ToString("D"),
-            item.Result?.AttentionRequired ?? false);
+            item.Result?.AttentionRequired ?? false,
+            item.AttemptCount,
+            item.MaxAttempts);
     }
 
     private static string ToStatus(WorkItemStatus status) => status switch

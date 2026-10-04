@@ -9,6 +9,7 @@ using AgentCore.Domain.Work;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
+using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Application.Tests;
 
@@ -254,7 +255,7 @@ public sealed class UnattendedBrowserTests
             new ScriptModel(
                 () => ToolRound(Call(ToolCatalog.BrowserNavigate, $$"""{"url":"{{Store}}/admin"}""")),
                 () => ToolRound(Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""")),
-                () => TextRound("stopped")));
+                () => CompleteRound("stopped")));
         Assert.IsType<DurableOccurrenceCompleted>(outcome);
         Assert.Equal(1, browser.NavigateCalls);
         Assert.Equal(0, browser.ActCalls);
@@ -302,7 +303,7 @@ public sealed class UnattendedBrowserTests
         var model = new RecordingScriptModel(
             true,
             () => ToolRound(Call(ToolCatalog.BrowserCapture, "{}")),
-            () => TextRound("saw the page"));
+            () => CompleteRound("saw the page"));
         var now = DateTimeOffset.Parse("2026-10-03T00:00:00Z");
         var generation = Guid.Parse("019944af-00e6-7000-8000-000000000001");
         var store = new InMemoryWorkItemStore();
@@ -351,6 +352,227 @@ public sealed class UnattendedBrowserTests
         Assert.True(DurableToolCallCheckpoint.TryRead(new WorkCheckpoint(checkpoint, 0, 0, 1), out var resumed));
         Assert.All(resumed!, message => Assert.Null(message.Parts));
     }
+
+    [Fact]
+    public async Task Restarted_capture_is_reloaded_for_the_next_model_call()
+    {
+        var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x52, 0x45, 0x53, 0x54 };
+        var captures = new InMemoryWorkCaptureStore(TimeProvider.System);
+        var saved = await captures.SaveAsync(WorkId, OwnerId, "image/png", png);
+        var artifactId = saved.Capture!.CaptureId;
+        var call = Call(ToolCatalog.BrowserCapture, "{}");
+        var payload = DurableToolCallCheckpoint.Write(
+        [
+            new ModelMessage(ModelRole.User, "look"),
+            new ModelMessage(ModelRole.Assistant, "", ToolCalls: [call]),
+            new ModelMessage(
+                ModelRole.Tool,
+                $$"""{"contentType":"image/png","byteSize":{{png.Length}},"artifactId":"{{artifactId}}"}""",
+                ToolCallId: call.Id,
+                Name: ToolCatalog.BrowserCapture)
+        ]);
+        var now = DateTimeOffset.Parse("2026-10-03T00:00:00Z");
+        var generation = Guid.Parse("019944af-00e6-7000-8000-000000000002");
+        var store = new InMemoryWorkItemStore();
+        await store.CreateAsync(WorkItem.Create(
+            WorkId,
+            new WorkOwner(OwnerId, ProfileId),
+            Provenance(now, "source|capture-restart"),
+            new WorkModelPin("synthetic-default", "synthetic", "synthetic-small", "minimal"),
+            3,
+            now));
+        var claimed = (await store.TryClaimAsync(WorkId, generation, now, now.AddMinutes(5)))!;
+        var checkpoint = new WorkCheckpoint(payload, 1, png.Length, (int)ToolLimits.Overall.TotalMilliseconds);
+        var running = await store.CheckpointAsync(WorkId, claimed.Revision, generation, checkpoint, null, now);
+        var model = new RecordingScriptModel(true, () => CompleteRound("saw the restored image"));
+        var outcome = await new DurableOccurrenceExecution(
+            Executor(new RecordingBrowser(), await ConnectedStoreAsync(OwnerId)),
+            TimeProvider.System,
+            captures).RunAsync(
+            running,
+            new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "look")]),
+            model,
+            Definition(),
+            TriggerKind.ScheduledOccurrence,
+            (current, body, token) => store.CheckpointAsync(current.WorkItemId, current.Revision, generation, body, null, now, token),
+            store,
+            generation,
+            now,
+            Ids(),
+            CancellationToken.None,
+            trustedConnection: true);
+
+        Assert.IsType<DurableOccurrenceCompleted>(outcome);
+        var tool = Assert.Single(model.Requests[0].Messages, message => message.Role == ModelRole.Tool);
+        var image = Assert.IsType<ModelImageContent>(Assert.Single(tool.Parts!));
+        Assert.Equal(png, image.Bytes);
+    }
+
+    [Fact]
+    public async Task Missing_capture_bytes_force_a_fresh_capture_before_the_model_continues()
+    {
+        var call = Call(ToolCatalog.BrowserCapture, "{}");
+        var missing = Guid.Parse("019944af-00e6-7000-8000-000000000099");
+        var payload = DurableToolCallCheckpoint.Write(
+        [
+            new ModelMessage(ModelRole.User, "look"),
+            new ModelMessage(ModelRole.Assistant, "", ToolCalls: [call]),
+            new ModelMessage(
+                ModelRole.Tool,
+                $$"""{"artifactId":"{{missing}}"}""",
+                ToolCallId: call.Id,
+                Name: ToolCatalog.BrowserCapture)
+        ]);
+        var now = DateTimeOffset.Parse("2026-10-03T00:00:00Z");
+        var generation = Guid.Parse("019944af-00e6-7000-8000-000000000003");
+        var store = new InMemoryWorkItemStore();
+        await store.CreateAsync(WorkItem.Create(
+            WorkId,
+            new WorkOwner(OwnerId, ProfileId),
+            Provenance(now, "source|capture-missing"),
+            new WorkModelPin("synthetic-default", "synthetic", "synthetic-small", "minimal"),
+            3,
+            now));
+        var claimed = (await store.TryClaimAsync(WorkId, generation, now, now.AddMinutes(5)))!;
+        var running = await store.CheckpointAsync(
+            WorkId,
+            claimed.Revision,
+            generation,
+            new WorkCheckpoint(payload, 1, 0, (int)ToolLimits.Overall.TotalMilliseconds),
+            null,
+            now);
+        var model = new RecordingScriptModel(true, () => CompleteRound("the picture was missing"));
+        var outcome = await new DurableOccurrenceExecution(
+            Executor(new RecordingBrowser(), await ConnectedStoreAsync(OwnerId)),
+            TimeProvider.System,
+            new InMemoryWorkCaptureStore(TimeProvider.System)).RunAsync(
+            running,
+            new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "look")]),
+            model,
+            Definition(),
+            TriggerKind.ScheduledOccurrence,
+            (current, body, token) => store.CheckpointAsync(current.WorkItemId, current.Revision, generation, body, null, now, token),
+            store,
+            generation,
+            now,
+            Ids(),
+            CancellationToken.None,
+            trustedConnection: true);
+
+        Assert.IsType<DurableOccurrenceCompleted>(outcome);
+        var tool = Assert.Single(model.Requests[0].Messages, message => message.Role == ModelRole.Tool);
+        Assert.Null(tool.Parts);
+        Assert.Equal(WorkCaptureRehydration.Unavailable, tool.Text);
+    }
+
+    [Fact]
+    public async Task Empty_model_continuation_after_a_browser_tool_retries_with_that_reason()
+    {
+        var browser = new RecordingBrowser();
+        var connections = await ConnectedStoreAsync(OwnerId);
+        var outcome = await RunAsync(
+            browser,
+            connections,
+            new ScriptModel(
+                () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
+                () => [new ModelCompleted(ModelStopReason.Completed)]));
+        var retry = Assert.IsType<DurableOccurrenceRetry>(outcome);
+        Assert.Equal("empty-result", retry.Code);
+        Assert.Equal("The model returned no result.", retry.Summary);
+        Assert.Null(retry.Running.KnownEffectSummary);
+        Assert.Equal(1, browser.ObserveCalls);
+    }
+
+    [Fact]
+    public async Task Plain_text_does_not_finish_unattended_work()
+    {
+        var outcome = await RunAsync(
+            new RecordingBrowser(),
+            await ConnectedStoreAsync(OwnerId),
+            new ScriptModel(
+                () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
+                () => TextRound("I looked at the page.")));
+        var retry = Assert.IsType<DurableOccurrenceRetry>(outcome);
+        Assert.Equal("completion-required", retry.Code);
+    }
+
+    [Fact]
+    public async Task A_browser_change_is_the_visible_external_action()
+    {
+        var outcome = await RunAsync(
+            new RecordingBrowser(),
+            await ConnectedStoreAsync(OwnerId),
+            new ScriptModel(
+                () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
+                () => ToolRound(Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""")),
+                () => CompleteRound("The product was updated.")));
+        var completed = Assert.IsType<DurableOccurrenceCompleted>(outcome);
+        Assert.Equal(WorkKnownEffects.ExternalActionCompleted, completed.Running.KnownEffectSummary);
+    }
+
+    [Fact]
+    public async Task Capture_limits_survive_a_large_scope_map()
+    {
+        var browser = new RecordingBrowser
+        {
+            CapturePng = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x01]
+        };
+        var executor = new SessionToolExecutor(
+            browser: browser,
+            configurationGate: ToolConfigurationGates.AllowAll,
+            applicationConnections: await ConnectedStoreAsync(OwnerId),
+            workCaptures: new InMemoryWorkCaptureStore(TimeProvider.System));
+        var limited = Guid.Parse("019944af-00e7-7000-8000-000000000001");
+        for (var attempt = 0; attempt < BrowserToolLimits.MaxCapturesPerScope; attempt++)
+        {
+            var accepted = await CaptureOnce(executor, limited);
+            Assert.Contains("artifactId", accepted.Text, StringComparison.Ordinal);
+        }
+
+        var blocked = await CaptureOnce(executor, limited);
+        Assert.Contains("capture_limit", blocked.Text, StringComparison.Ordinal);
+
+        var scopeBytes = new byte[16];
+        scopeBytes[0] = 0x19;
+        for (var index = 0; index < 1025; index++)
+        {
+            scopeBytes[1] = (byte)(index >> 8);
+            scopeBytes[2] = (byte)index;
+            var scope = new Guid(scopeBytes);
+            var accepted = await CaptureOnce(executor, scope);
+            Assert.Contains("artifactId", accepted.Text, StringComparison.Ordinal);
+        }
+
+        var stillBlocked = await CaptureOnce(executor, limited);
+        Assert.Contains("capture_limit", stillBlocked.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Expired_captures_are_deleted_without_another_save()
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-03T00:00:00Z"));
+        var captures = new InMemoryWorkCaptureStore(clock);
+        var saved = await captures.SaveAsync(WorkId, OwnerId, "image/png", new byte[] { 0x89, 0x50 });
+        clock.Advance(TimeSpan.FromDays(8));
+        Assert.Equal(1, await captures.PurgeExpiredAsync());
+        Assert.Null(await captures.ReadAsync(saved.Capture!.CaptureId));
+    }
+
+    private static Task<ToolExecutionResult> CaptureOnce(SessionToolExecutor executor, Guid scope) =>
+        executor.ExecuteAsync(
+            Definition(),
+            Guid.NewGuid(),
+            Call(ToolCatalog.BrowserCapture, "{}"),
+            10_000,
+            CancellationToken.None,
+            admission: new ToolExecutionAdmission(
+                true,
+                TriggerKind.ScheduledOccurrence,
+                AgentInstanceId: OwnerId,
+                TrustedConnection: true,
+                SupportsVision: true,
+                CaptureScope: scope.ToString("D"),
+                WorkItemId: scope));
 
     [Fact]
     public async Task Scheduled_downloads_share_the_work_item_owner_and_stop_at_two()
@@ -445,7 +667,7 @@ public sealed class UnattendedBrowserTests
                 () => ToolRound(act),
                 () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
                 () => ToolRound(Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{RepairRef}}"}""")),
-                () => TextRound("observed")),
+                () => CompleteRound("observed")),
             Definition(),
             TriggerKind.ApplicationEvent,
             (current, body, token) => store.CheckpointAsync(current.WorkItemId, current.Revision, generation, body, null, now, token),
@@ -519,7 +741,7 @@ public sealed class UnattendedBrowserTests
             new ScriptModel(
                 () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
                 () => ToolRound(Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{RepairRef}}"}""")),
-                () => TextRound("observed")),
+                () => CompleteRound("observed")),
             Definition(),
             TriggerKind.ScheduledOccurrence,
             (current, body, token) => store.CheckpointAsync(
@@ -586,7 +808,7 @@ public sealed class UnattendedBrowserTests
                 () => ToolRound(act),
                 () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
                 () => ToolRound(Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{RepairRef}}"}""")),
-                () => TextRound("observed")),
+                () => CompleteRound("observed")),
             Definition(),
             TriggerKind.ScheduledOccurrence,
             (current, body, token) => store.CheckpointAsync(
@@ -862,6 +1084,9 @@ public sealed class UnattendedBrowserTests
         new ModelCompleted(ModelStopReason.ToolCalls)
     ];
 
+    private static IReadOnlyList<ModelGenerationEvent> CompleteRound(string summary) =>
+        ToolRound(Call(ToolCatalog.WorkComplete, $$"""{"summary":"{{summary}}","attentionRequired":false}"""));
+
     private static IReadOnlyList<ModelGenerationEvent> TextRound(string text) =>
     [
         new ModelTextDelta(text),
@@ -983,8 +1208,11 @@ public sealed class UnattendedBrowserTests
                 yield break;
             }
 
-            yield return new ModelTextDelta("observed");
-            yield return new ModelCompleted(ModelStopReason.Completed);
+            yield return new ModelToolCallEvent(new ModelToolCall(
+                "done",
+                ToolCatalog.WorkComplete,
+                """{"summary":"observed","attentionRequired":false}"""));
+            yield return new ModelCompleted(ModelStopReason.ToolCalls);
         }
     }
 

@@ -41,6 +41,9 @@ public static class ToolCatalog
     public const string BrowserCapture = "browser.capture";
     public const string WorkComplete = "work.complete";
 
+    public static bool RecordsOwnerVisibleEffect(string toolName) =>
+        toolName is not (BrowserNavigate or BrowserObserve or BrowserPages or BrowserCapture or BrowserClose);
+
     public static bool IsBrowserTool(string toolName) =>
         toolName is BrowserNavigate or BrowserObserve or BrowserAct or BrowserClose or BrowserPages or BrowserCapture;
 

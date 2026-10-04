@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text;
+using System.Text.Json;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Testing;
@@ -216,7 +218,7 @@ public sealed class DurableReminderTests
             var completed = await reopened.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
             Assert.Equal(WorkItemStatus.Completed, completed!.Status);
             Assert.Equal("Oven is ready.", completed.Result!.Text);
-            Assert.Equal(DurableReminderExecutor.BeforeModelCheckpoint, completed.Checkpoint!.PayloadJson);
+            Assert.Contains(ToolCatalog.WorkComplete, completed.Checkpoint!.PayloadJson, StringComparison.Ordinal);
         }, () => new GateModel());
     }
 
@@ -302,7 +304,8 @@ public sealed class DurableReminderTests
             Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
             var waiting = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
             Assert.Equal(WorkItemStatus.WaitingToRetry, waiting!.Status);
-            Assert.Null(waiting.Failure);
+            Assert.Equal("model-unavailable", waiting.Failure!.Code);
+            Assert.Equal("The model did not complete the occurrence.", waiting.Failure.Summary);
             Assert.Equal(Now.Add(DurableReminderExecutor.RetryDelay(1)), waiting.NextRetryAtUtc);
             Assert.Equal(0, await harness.Executor.ExecuteDueAsync(Now, 10));
 
@@ -311,7 +314,10 @@ public sealed class DurableReminderTests
             Assert.Equal(1, await harness.Executor.ExecuteDueAsync(due, 10));
             var failed = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
             Assert.Equal(WorkItemStatus.Failed, failed!.Status);
-            Assert.Equal("model-unavailable", failed.Failure!.Code);
+            Assert.Equal("attempts-exhausted", failed.Failure!.Code);
+            Assert.Equal(
+                "Retry budget is exhausted. Last attempt: The model did not complete the occurrence.",
+                failed.Failure.Summary);
             Assert.NotEqual(Guid.Empty, failed.Failure.DiagnosticId);
             Assert.DoesNotContain("stack", failed.Failure.Summary, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(0, await harness.Executor.ExecuteDueAsync(due.AddHours(1), 10));
@@ -370,8 +376,10 @@ public sealed class DurableReminderTests
             Assert.Equal(1, await execute);
             var failed = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
             Assert.Equal(WorkItemStatus.Failed, failed!.Status);
-            Assert.Equal("model-timeout", failed.Failure!.Code);
-            Assert.Equal("The model did not finish within the reminder budget.", failed.Failure.Summary);
+            Assert.Equal("attempts-exhausted", failed.Failure!.Code);
+            Assert.Equal(
+                "Retry budget is exhausted. Last attempt: The model did not finish within the reminder budget.",
+                failed.Failure.Summary);
             var diagnosticId = failed.Failure.DiagnosticId;
             Assert.NotNull(diagnosticId);
             var matches = logs.Entries
@@ -1053,7 +1061,8 @@ public sealed class DurableReminderTests
             Assert.Equal(1, await execute);
             var waiting = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
             Assert.Equal(WorkItemStatus.WaitingToRetry, waiting!.Status);
-            Assert.Null(waiting.Failure);
+            Assert.Equal("model-timeout", waiting.Failure!.Code);
+            Assert.Equal("The model did not finish within the reminder budget.", waiting.Failure.Summary);
             Assert.Equal(timedOutAt.Add(DurableReminderExecutor.RetryDelay(1)), waiting.NextRetryAtUtc);
             Assert.Null(waiting.Claim);
         }, () => new TimeoutReminderModel());
@@ -2404,7 +2413,56 @@ public sealed class DurableReminderTests
             Interlocked.Increment(ref calls);
             Volatile.Write(ref lastRequest, request);
             Requests.Enqueue(request);
-            await foreach (var update in Inner.GenerateAsync(request, cancellationToken))
+            var completeWhenTextOnly = request.Tools?.Any(tool => tool.Name == ToolCatalog.WorkComplete) == true;
+            if (!completeWhenTextOnly)
+            {
+                await foreach (var update in Inner.GenerateAsync(request, cancellationToken).ConfigureAwait(false))
+                {
+                    yield return update;
+                }
+
+                yield break;
+            }
+
+            var buffered = new List<ModelGenerationEvent>();
+            var text = new StringBuilder();
+            var sawTool = false;
+            var failed = false;
+            await foreach (var update in Inner.GenerateAsync(request, cancellationToken).ConfigureAwait(false))
+            {
+                switch (update)
+                {
+                    case ModelTextDelta delta:
+                        text.Append(delta.Text);
+                        buffered.Add(update);
+                        break;
+                    case ModelDisplayDelta display:
+                        text.Append(display.Text);
+                        buffered.Add(update);
+                        break;
+                    case ModelToolCallEvent:
+                        sawTool = true;
+                        buffered.Add(update);
+                        break;
+                    case ModelFailed:
+                        failed = true;
+                        buffered.Add(update);
+                        break;
+                    case ModelCompleted when !sawTool && !failed && text.ToString().Trim().Length > 0:
+                        var summary = text.ToString().Trim();
+                        yield return new ModelToolCallEvent(new ModelToolCall(
+                            "complete-scripted",
+                            ToolCatalog.WorkComplete,
+                            JsonSerializer.Serialize(new { summary, attentionRequired = false })));
+                        yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                        yield break;
+                    default:
+                        buffered.Add(update);
+                        break;
+                }
+            }
+
+            foreach (var update in buffered)
             {
                 yield return update;
             }

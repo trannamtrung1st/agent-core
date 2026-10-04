@@ -83,6 +83,8 @@ export type WorkItem = {
   createdAt: string;
   updatedAt: string;
   attentionRequired?: boolean;
+  attemptCount?: number | null;
+  maxAttempts?: number | null;
 };
 
 export type WorkItemResult = {

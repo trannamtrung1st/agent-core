@@ -46,13 +46,13 @@ public sealed class InMemoryWorkCaptureStore(TimeProvider time) : IWorkCaptureSt
 
         lock (_gate)
         {
-            var now = time.GetUtcNow();
-            _items.RemoveAll(item => item.Capture.RetainUntil <= now);
+            PurgeExpired();
             if (_items.Count(item => item.Capture.WorkItemId == workItemId) >= BrowserToolLimits.MaxWorkCaptures)
             {
                 return new(new WorkCaptureSaveResult(null, "capture_limit"));
             }
 
+            var now = time.GetUtcNow();
             var capture = new WorkCapture(
                 Guid.CreateVersion7(),
                 workItemId,
@@ -64,6 +64,17 @@ public sealed class InMemoryWorkCaptureStore(TimeProvider time) : IWorkCaptureSt
                 WorkCaptureRetention.Until(now, null));
             _items.Add(new Stored(capture, bytes.ToArray()));
             return new(new WorkCaptureSaveResult(capture, null));
+        }
+    }
+
+    public ValueTask<WorkCaptureContent?> ReadAsync(Guid captureId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            PurgeExpired();
+            var stored = _items.FirstOrDefault(item => item.Capture.CaptureId == captureId);
+            return new(stored is null ? null : new WorkCaptureContent(stored.Capture, stored.Bytes.ToArray()));
         }
     }
 
@@ -97,6 +108,21 @@ public sealed class InMemoryWorkCaptureStore(TimeProvider time) : IWorkCaptureSt
         return ValueTask.CompletedTask;
     }
 
+    public ValueTask<int> PurgeExpiredAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            return new(PurgeExpired());
+        }
+    }
+
+    private int PurgeExpired()
+    {
+        var now = time.GetUtcNow();
+        return _items.RemoveAll(item => item.Capture.RetainUntil <= now);
+    }
+
     private sealed record Stored(WorkCapture Capture, byte[] Bytes);
 }
 
@@ -118,23 +144,9 @@ public sealed class SqliteWorkCaptureStore(
         }
 
         Directory.CreateDirectory(blobRoot);
+        await PurgeExpiredAsync(cancellationToken).ConfigureAwait(false);
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var now = time.GetUtcNow().ToUnixTimeMilliseconds();
         var owner = workItemId.ToString("D");
-        var expired = await db.WorkCaptures
-            .Where(row => row.RetainUntilUtc <= now)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-        if (expired.Count > 0)
-        {
-            db.WorkCaptures.RemoveRange(expired);
-            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            foreach (var row in expired)
-            {
-                TryDelete(Path.Combine(blobRoot, row.RelativePath));
-            }
-        }
-
         var count = await db.WorkCaptures.CountAsync(row => row.WorkItemId == owner, cancellationToken)
             .ConfigureAwait(false);
         if (count >= BrowserToolLimits.MaxWorkCaptures)
@@ -184,6 +196,27 @@ public sealed class SqliteWorkCaptureStore(
         return new WorkCaptureSaveResult(capture, null);
     }
 
+    public async ValueTask<WorkCaptureContent?> ReadAsync(Guid captureId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var id = captureId.ToString("D");
+        var row = await db.WorkCaptures.AsNoTracking().FirstOrDefaultAsync(item => item.CaptureId == id, cancellationToken)
+            .ConfigureAwait(false);
+        if (row is null || row.RetainUntilUtc <= time.GetUtcNow().ToUnixTimeMilliseconds())
+        {
+            return null;
+        }
+
+        var full = Path.Combine(blobRoot, row.RelativePath);
+        if (!File.Exists(full))
+        {
+            return null;
+        }
+
+        var bytes = await File.ReadAllBytesAsync(full, cancellationToken).ConfigureAwait(false);
+        return new WorkCaptureContent(ToCapture(row), bytes);
+    }
+
     public async ValueTask ExtendRetentionAsync(
         Guid workItemId,
         DateTimeOffset terminalAt,
@@ -205,6 +238,40 @@ public sealed class SqliteWorkCaptureStore(
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    public async ValueTask<int> PurgeExpiredAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var now = time.GetUtcNow().ToUnixTimeMilliseconds();
+        var expired = await db.WorkCaptures
+            .Where(row => row.RetainUntilUtc <= now)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (expired.Count == 0)
+        {
+            return 0;
+        }
+
+        db.WorkCaptures.RemoveRange(expired);
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var row in expired)
+        {
+            TryDelete(Path.Combine(blobRoot, row.RelativePath));
+        }
+
+        return expired.Count;
+    }
+
+    private static WorkCapture ToCapture(WorkCaptureRow row) =>
+        new(
+            Guid.Parse(row.CaptureId),
+            Guid.Parse(row.WorkItemId),
+            Guid.Parse(row.AgentInstanceId),
+            row.ContentType,
+            row.ByteSize,
+            row.Sha256Hex,
+            DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc),
+            DateTimeOffset.FromUnixTimeMilliseconds(row.RetainUntilUtc));
 
     private static string ExtensionFor(string contentType) => contentType switch
     {

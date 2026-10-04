@@ -146,7 +146,8 @@ public interface IWorkItemStore
         long expectedRevision,
         Guid generation,
         DateTimeOffset clearedAtUtc,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool recordExternalEffect = true);
 
     ValueTask<WorkItem> AcceptBrowserObservationAsync(
         Guid workItemId,

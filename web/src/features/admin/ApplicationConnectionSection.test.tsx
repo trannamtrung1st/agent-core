@@ -150,6 +150,23 @@ describe("ApplicationConnectionSection", () => {
     await waitFor(() => expect(screen.queryByLabelText("Webhook credential")).not.toBeInTheDocument());
     expect(screen.queryByText("secret-credential-value")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Webhook key")).toHaveTextContent("11111111-1111-1111-1111-111111111111");
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    fireEvent.click(screen.getByRole("button", { name: "Copy webhook URL" }));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(
+        `${window.location.origin}/api/v1/hooks/11111111-1111-1111-1111-111111111111/order-placed`
+      );
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Rotate webhook" }));
+    const rotate = await screen.findByRole("dialog", { name: "Rotate this webhook?" });
+    fireEvent.click(within(rotate).getByRole("button", { name: "Keep" }));
+    expect(issueApplicationWebhook).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Rotate webhook" }));
+    fireEvent.click(within(await screen.findByRole("dialog", { name: "Rotate this webhook?" })).getByRole("button", { name: "Rotate webhook" }));
+    await waitFor(() => expect(issueApplicationWebhook).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.queryByLabelText("Webhook credential")).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Revoke webhook" }));
     const dialog = await screen.findByRole("dialog", { name: "Revoke this webhook?" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Revoke webhook" }));

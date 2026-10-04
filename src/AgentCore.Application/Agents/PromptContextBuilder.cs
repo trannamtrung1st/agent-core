@@ -1068,8 +1068,8 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder, IInitiativeE
                 messages.Add(new ModelMessage(
                     ModelRole.System,
                     browser
-                        ? "This connected occurrence may use the offered browser tools and work.complete. work.complete records the owner-facing result. Set attentionRequired only when the owner should be notified. Do not choose a recipient. A plain final answer stays quiet."
-                        : "This occurrence may call work.complete to record the owner-facing result. Set attentionRequired only when the owner should be notified. Do not choose a recipient. A plain final answer stays quiet."));
+                        ? "This connected occurrence may use the offered browser tools. Finish only by calling work.complete with the owner-facing summary. Set attentionRequired only when the owner should be notified. attentionRequired false is a quiet completion. Do not choose a recipient. A plain final answer does not finish the work."
+                        : "Finish only by calling work.complete with the owner-facing summary. Set attentionRequired only when the owner should be notified. attentionRequired false is a quiet completion. Do not choose a recipient. A plain final answer does not finish the work."));
             }
 
             request = request with { Messages = messages, Tools = tools };

@@ -17,6 +17,14 @@ import type { WorkItem, WorkItemResult } from "../../services/api";
 import { formatChatTime } from "./chatTime";
 import { DiagnosticDetails } from "./DiagnosticDetails";
 
+function retryLabel(item: WorkItem, fallback: string) {
+  if (item.status === "retrying" && item.attemptCount && item.maxAttempts) {
+    return `Retrying · attempt ${item.attemptCount} of ${item.maxAttempts}`;
+  }
+
+  return fallback;
+}
+
 const statusPresentation: Record<string, { label: string; color?: string; icon: ReactNode }> = {
   queued: { label: "Queued", icon: <ClockCircleOutlined /> },
   running: { label: "Running", color: "processing", icon: <LoadingOutlined /> },
@@ -245,7 +253,7 @@ export function BackgroundWorkDrawer({
               icon={status.icon}
               className="background-work-status"
             >
-              {status.label}
+              {retryLabel(item, status.label)}
             </Tag>
           </Flex>
 
@@ -260,6 +268,10 @@ export function BackgroundWorkDrawer({
               <InfoCircleOutlined aria-hidden />
               <Typography.Text type="secondary">{item.knownEffect}</Typography.Text>
             </Flex>
+          ) : null}
+
+          {item.status === "retrying" && item.failureSummary ? (
+            <Typography.Text type="secondary">{item.failureSummary}</Typography.Text>
           ) : null}
 
           {item.status === "failed" ? (

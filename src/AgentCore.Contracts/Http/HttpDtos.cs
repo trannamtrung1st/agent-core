@@ -292,7 +292,9 @@ public sealed record WorkItemResponse(
     string CreatedAt,
     string UpdatedAt,
     string? DiagnosticId = null,
-    bool AttentionRequired = false);
+    bool AttentionRequired = false,
+    int? AttemptCount = null,
+    int? MaxAttempts = null);
 
 public sealed record WorkItemListResponse(IReadOnlyList<WorkItemResponse> Items);
 

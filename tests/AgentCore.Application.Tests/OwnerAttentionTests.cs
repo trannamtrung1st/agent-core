@@ -17,7 +17,9 @@ public sealed class OwnerAttentionTests
     public async Task Quiet_text_completion_stores_no_alert()
     {
         var store = new InMemoryWorkItemStore();
-        var outcome = await RunAsync(store, TextRound("Nothing needs attention."));
+        var outcome = await RunAsync(
+            store,
+            ToolRound(Call(ToolCatalog.WorkComplete, """{"summary":"Nothing needs attention.","attentionRequired":false}""")));
         var completed = Assert.IsType<DurableOccurrenceCompleted>(outcome);
         Assert.False(completed.AttentionRequired);
         var saved = await store.CompleteAsync(

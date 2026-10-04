@@ -141,8 +141,74 @@ public sealed class WorkItemContractTests
         Assert.Equal("attempts-exhausted", exhausted.Failure!.Code);
         Assert.Equal(exhaustedId, exhausted.Failure.DiagnosticId);
         Assert.Null(recovered.Failure);
+        Assert.Equal("Retry budget is exhausted.", exhausted.Failure.Summary);
         Assert.True(exhausted.IsTerminal);
         Assert.Throws<WorkItemTransitionException>(() => exhausted.TakeClaim(GenerationA, Now.AddMinutes(3), Now.AddMinutes(4)));
+    }
+
+    [Fact]
+    public void Retry_keeps_the_last_attempt_reason_until_the_budget_is_exhausted()
+    {
+        var claimed = NewItem(maxAttempts: 2).TakeClaim(GenerationA, Now, Now.AddMinutes(1));
+        var retryId = Guid.Parse("019944af-0008-7000-8000-0000000000e1");
+        var retry = claimed.Fail(
+            claimed.Revision,
+            GenerationA,
+            "empty-result",
+            "The model returned no result.",
+            true,
+            Now.AddSeconds(1),
+            Now.AddMinutes(1),
+            () => retryId);
+        Assert.Equal(WorkItemStatus.WaitingToRetry, retry.Status);
+        Assert.Equal("empty-result", retry.Failure!.Code);
+        Assert.Equal(retryId, retry.Failure.DiagnosticId);
+
+        var second = retry.TakeClaim(GenerationB, Now.AddMinutes(1), Now.AddMinutes(2));
+        var exhaustedId = Guid.Parse("019944af-0008-7000-8000-0000000000e2");
+        var exhausted = second.Fail(
+            second.Revision,
+            GenerationB,
+            "empty-result",
+            "The model returned no result.",
+            true,
+            Now.AddMinutes(1).AddSeconds(1),
+            null,
+            () => exhaustedId);
+        Assert.Equal(WorkItemStatus.Failed, exhausted.Status);
+        Assert.Equal("attempts-exhausted", exhausted.Failure!.Code);
+        Assert.Equal(
+            "Retry budget is exhausted. Last attempt: The model returned no result.",
+            exhausted.Failure.Summary);
+        Assert.Equal(exhaustedId, exhausted.Failure.DiagnosticId);
+
+        var lost = second.RecoverExpiredClaim(Now.AddMinutes(2), () => Guid.Parse("019944af-0008-7000-8000-0000000000e3"));
+        Assert.Equal("attempts-exhausted", lost.Failure!.Code);
+        Assert.Contains("The model returned no result.", lost.Failure.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exhausted_summary_stays_inside_the_failure_line_limit()
+    {
+        var last = new string('a', WorkLimits.MaxFailureSummaryCharacters);
+        var text = WorkKnownEffects.Exhausted(last);
+        Assert.True(text.Length <= WorkLimits.MaxFailureSummaryCharacters);
+        Assert.StartsWith("Retry budget is exhausted. Last attempt: ", text, StringComparison.Ordinal);
+        Assert.EndsWith(".", text, StringComparison.Ordinal);
+        _ = new WorkFailure("attempts-exhausted", text, Now, Guid.NewGuid());
+    }
+
+    [Fact]
+    public void Clearing_a_read_only_fence_does_not_claim_an_external_action()
+    {
+        var cleared = NewItem()
+            .TakeClaim(GenerationA, Now, Now.AddMinutes(1))
+            .MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ToolCallId, ActionHash, Now.AddSeconds(1))
+            .MarkSideEffect(3, GenerationA, WorkSideEffectDisposition.InFlight, ToolCallId, ActionHash, Now.AddSeconds(2))
+            .MarkSideEffect(4, GenerationA, WorkSideEffectDisposition.Succeeded, ToolCallId, ActionHash, Now.AddSeconds(3))
+            .ClearSideEffect(5, GenerationA, Now.AddSeconds(4), recordExternalEffect: false);
+        Assert.Equal(WorkSideEffectDisposition.None, cleared.SideEffect.Disposition);
+        Assert.Null(cleared.KnownEffectSummary);
     }
 
     [Fact]
@@ -424,7 +490,8 @@ public sealed class WorkItemContractTests
         var retrying = claimed.Fail(2, GenerationA, "model-unavailable", "Model timed out.", true, Now.AddSeconds(1), Now.AddSeconds(2));
         Assert.Equal(WorkItemStatus.WaitingToRetry, retrying.Status);
         Assert.False(retrying.HasLiveClaim);
-        Assert.Null(retrying.Failure);
+        Assert.Equal("model-unavailable", retrying.Failure!.Code);
+        Assert.Equal("Model timed out.", retrying.Failure.Summary);
         var again = retrying.TakeClaim(GenerationB, Now.AddSeconds(2), Now.AddMinutes(2));
         var failedId = Guid.Parse("019944af-0008-7000-8000-0000000000d3");
         var failed = again.Fail(
@@ -437,7 +504,8 @@ public sealed class WorkItemContractTests
             Now.AddSeconds(4),
             () => failedId);
         Assert.Equal(WorkItemStatus.Failed, failed.Status);
-        Assert.Equal("model-unavailable", failed.Failure!.Code);
+        Assert.Equal("attempts-exhausted", failed.Failure!.Code);
+        Assert.Equal("Retry budget is exhausted. Last attempt: Model timed out.", failed.Failure.Summary);
         Assert.Equal(failedId, failed.Failure.DiagnosticId);
         Assert.DoesNotContain("stack", failed.Failure.Summary, StringComparison.OrdinalIgnoreCase);
         var repeated = failed.Fail(

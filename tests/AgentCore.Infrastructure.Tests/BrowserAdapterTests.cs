@@ -1600,7 +1600,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         var captured = await session.CaptureViewportAsync(new BrowserCaptureRequest(id));
         Assert.Null(captured.ErrorCode);
         Assert.NotNull(captured.Png);
-        Assert.True(captured.RedactionCount >= 1);
+        Assert.Equal(4, captured.RedactionCount);
         Assert.Equal(0x89, captured.Png![0]);
         Assert.True(captured.Png.Length < BrowserToolLimits.MaxCaptureBytes);
 
