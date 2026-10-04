@@ -418,7 +418,11 @@ public sealed class OpenAICompatibleLanguageModelTests
             var schema = request.RootElement.GetProperty("tools")[0].GetProperty("function").GetProperty("parameters");
             Assert.Contains(schema.GetProperty("required").EnumerateArray(), field => field.GetString() == "skill");
             var skill = schema.GetProperty("properties").GetProperty("skill").GetProperty("properties");
-            Assert.Equal("^[a-z][a-z0-9._]{0,63}$", skill.GetProperty("id").GetProperty("pattern").GetString());
+            Assert.Equal(SkillIds.Pattern, skill.GetProperty("id").GetProperty("pattern").GetString());
+            Assert.DoesNotContain(schema.GetProperty("required").EnumerateArray(), field => field.GetString() == "expected");
+            var skillRequired = schema.GetProperty("properties").GetProperty("skill").GetProperty("required");
+            Assert.DoesNotContain(skillRequired.EnumerateArray(), field => field.GetString() == "id");
+            Assert.Contains(skillRequired.EnumerateArray(), field => field.GetString() == "procedure");
             Assert.Equal(8, skill.GetProperty("activationKeywords").GetProperty("maxItems").GetInt32());
             Assert.True(skill.GetProperty("activationKeywords").GetProperty("uniqueItems").GetBoolean());
         }

@@ -674,7 +674,7 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
             <Collapse items={[{ key: "harness", label: "Harness management (optional)", children:
               <Form layout="vertical"><HarnessPolicyModeScopes mode={harnessMode} scopes={harnessAreas} busy={busy}
                 onMode={setHarnessMode} onScopes={setHarnessAreas} />
-                <Typography.Text type="secondary">Configure permitted sources and prepare a candidate in the instance detail. Tool changes and publication always require your approval.</Typography.Text>
+                <Typography.Text type="secondary">Configure which harness areas the agent may manage in Chat. Knowledge and Skills can be saved after Core verification; instruction and tool changes require your approval.</Typography.Text>
               </Form>
             }]} />
             <Radio.Group

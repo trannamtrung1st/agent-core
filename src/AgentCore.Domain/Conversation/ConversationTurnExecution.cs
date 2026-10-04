@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Work;
 
@@ -17,8 +16,6 @@ public enum ConversationTurnExecutionStatus
 public sealed class ConversationTurnExecution
 {
     public const int MaxPinnedActiveSkills = 4;
-
-    private static readonly Regex SkillIdPattern = new("^[a-z][a-z0-9._]{0,63}$", RegexOptions.Compiled);
 
     private ConversationTurnExecution(
         Guid executionId,
@@ -162,7 +159,7 @@ public sealed class ConversationTurnExecution
     public int SkillLoadCount { get; }
 
     public static bool IsPinnedSkillId(string? id) =>
-        !string.IsNullOrWhiteSpace(id) && SkillIdPattern.IsMatch(id);
+        SkillIds.IsValid(id);
 
     public bool IsOpen => Status is ConversationTurnExecutionStatus.Queued
         or ConversationTurnExecutionStatus.Running
@@ -578,7 +575,7 @@ public sealed class ConversationTurnExecution
 
         if (ids.Count > MaxPinnedActiveSkills
             || ids.Distinct(StringComparer.Ordinal).Count() != ids.Count
-            || ids.Any(id => string.IsNullOrWhiteSpace(id) || !SkillIdPattern.IsMatch(id)))
+            || ids.Any(id => !SkillIds.IsValid(id)))
         {
             throw new ArgumentException("Pinned active skill ids are invalid.");
         }

@@ -30,6 +30,8 @@ public sealed class HarnessChatAuthoringTests
         var updated = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
         var future = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(updated.DefinitionId, updated.ActiveVersion))!;
         var skill = Assert.Single(future.SkillList);
+        Assert.Equal("operations-review", skill.Id);
+        Assert.Contains("\"skillId\":\"operations-review\"", result.Text);
         var plan = SkillLoadAdmission.Plan(future, [], 0, [skill.Id]);
         Assert.Contains(skill.Id, plan.Admitted);
         Assert.Contains(example.GetProperty("skill").GetProperty("procedure").GetString()!, PromptContextBuilder.BuildActiveSkillSystem(future, plan.Admitted));
@@ -37,7 +39,7 @@ public sealed class HarnessChatAuthoringTests
     }
 
     [Theory]
-    [InlineData("{\"id\":\"kubernetes-operations\"}", "skill id")]
+    [InlineData("{\"id\":\"INVALID ID\"}", "skill id")]
     [InlineData("{\"description\":null}", "Skill description")]
     [InlineData("{\"activationKeywords\":null}", "activationKeywords")]
     [InlineData("{\"activationKeywords\":[\"cluster\",\"cluster\"]}", "activationKeywords")]
@@ -59,10 +61,90 @@ public sealed class HarnessChatAuthoringTests
         foreach (var field in System.Text.Json.Nodes.JsonNode.Parse(patch)!.AsObject()) invalid["skill"]![field.Key] = field.Value?.DeepClone();
         var rejected = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("bad", "harness.skill.upsert", invalid.ToJsonString()), 100000, admission: admission);
         Assert.Contains(expectedError, rejected.Text);
-        Assert.Contains("resourcePaths", rejected.Text);
-        Assert.Equal(7, (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!.ActiveVersion);
+        var afterRejection = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        Assert.Equal(7, afterRejection.ActiveVersion);
+        Assert.Null(afterRejection.HarnessManagement!.Preparation);
         var corrected = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("fixed", "harness.skill.upsert", example.ToJsonString()), 100000, admission: admission);
         Assert.Contains("\"saved\":true", corrected.Text);
+    }
+
+    [Fact]
+    public async Task Explicit_hyphenated_skill_id_remains_loadable_after_publication()
+    {
+        await using var factory = new AgentCoreApiFactory();
+        var services = factory.Services;
+        var authoring = services.GetRequiredService<HarnessManagementService>();
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
+            new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []));
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+        var executor = services.GetRequiredService<SessionToolExecutor>();
+        var inspection = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("inspect", "harness.inspect", "{}"), 100000,
+            admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId));
+        var example = System.Text.Json.Nodes.JsonNode.Parse(inspection.Text)!["skillUpsertExample"]!;
+        example["skill"]!["id"] = "kubernetes-learning";
+        var result = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("save", "harness.skill.upsert", example.ToJsonString()), 100000,
+            admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId));
+        Assert.Contains("\"skillId\":\"kubernetes-learning\"", result.Text);
+        var updated = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        var future = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(updated.DefinitionId, updated.ActiveVersion))!;
+        Assert.Contains("kubernetes-learning", SkillLoadAdmission.Plan(future, [], 0, ["kubernetes-learning"]).Admitted);
+    }
+
+    [Fact]
+    public async Task Missing_skill_resource_returns_a_field_specific_verification_failure_without_adoption()
+    {
+        await using var factory = new AgentCoreApiFactory();
+        var services = factory.Services;
+        var authoring = services.GetRequiredService<HarnessManagementService>();
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
+            new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []));
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+        var executor = services.GetRequiredService<SessionToolExecutor>();
+        var inspection = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("inspect", "harness.inspect", "{}"), 100000,
+            admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId));
+        var example = System.Text.Json.Nodes.JsonNode.Parse(inspection.Text)!["skillUpsertExample"]!;
+        example["skill"]!["resourcePaths"] = new System.Text.Json.Nodes.JsonArray("knowledge/missing.md");
+        var result = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("save", "harness.skill.upsert", example.ToJsonString()), 100000,
+            admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId));
+        Assert.Contains("\"saved\":false", result.Text);
+        Assert.Contains("missing_skill_resource", result.Text);
+        Assert.Contains("skills[0].resourcePaths[0]", result.Text);
+        var unchanged = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        Assert.Equal(7, unchanged.ActiveVersion);
+        Assert.Equal(HarnessPreparationStatus.Failed, unchanged.HarnessManagement!.Preparation!.Status);
+    }
+
+    [Fact]
+    public async Task Skill_knowledge_ids_resolve_from_active_knowledge_without_a_resource_path()
+    {
+        await using var factory = new AgentCoreApiFactory();
+        var services = factory.Services;
+        var authoring = services.GetRequiredService<HarnessManagementService>();
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
+            new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources, HarnessManagementScope.Skills], [], []));
+        var executor = services.GetRequiredService<SessionToolExecutor>();
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+        var context = (await authoring.ChatContextAsync(instance.InstanceId, default))!;
+        var knowledge = JsonSerializer.Serialize(new { expectedVersion = 7, policyRevision = context.PolicyRevision,
+            id = "cluster-guide", content = "Confirm context and namespace before any change.", source = "conversation:user",
+            expected = "Retain safe cluster guidance.", observed = "Owner supplied the guidance." });
+        var savedKnowledge = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("learn", "harness.knowledge.upsert", knowledge), 100000,
+            admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId, OwnerTurnText: "Confirm context and namespace before any change."));
+        Assert.Contains("\"saved\":true", savedKnowledge.Text);
+        var updated = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        var args = JsonSerializer.Serialize(new { expectedVersion = updated.ActiveVersion, policyRevision = context.PolicyRevision,
+            skill = new { name = "Cluster review", description = "Review safe cluster changes.",
+                procedure = "Read cluster guidance and review the target before proposing changes.", knowledgeIds = new[] { "cluster-guide" } } });
+        var savedSkill = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("skill", "harness.skill.upsert", args), 100000,
+            admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId));
+        Assert.Contains("\"saved\":true", savedSkill.Text);
+        updated = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        var future = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(updated.DefinitionId, updated.ActiveVersion))!;
+        Assert.Equal(KnowledgeSourcePaths.ResolveBackingPath(future.Environment!.KnowledgeList.Single(k => k.Identity == "cluster-guide")),
+            Assert.Single(Assert.Single(future.SkillList).ResourcePaths));
     }
 
     [Fact]
