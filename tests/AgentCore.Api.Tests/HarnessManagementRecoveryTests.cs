@@ -111,7 +111,7 @@ public sealed class HarnessManagementRecoveryTests
                 var same = await reopened.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync(instance.DefinitionId, publishedVersion);
                 Assert.Equal(published!.SystemInstructions, same!.SystemInstructions);
                 Assert.Equal(published.SkillList.Select(s => s.Id), same.SkillList.Select(s => s.Id));
-                var history = await reopened.Services.GetRequiredService<IAdminEventStore>().ListAsync(new(TargetId: id.ToString("D")));
+                var history = await reopened.Services.GetRequiredService<IAdminEventStore>().ListAsync(new(TargetType: "agent.instance", TargetId: id.ToString("D")));
                 Assert.Contains(history, e => e.ActorKind == AdminEventActorKind.Agent && e.SummaryJson.Contains("CandidateCommitted"));
                 Assert.Contains(history, e => e.SummaryJson.Contains("Approved"));
                 Assert.Contains(history, e => e.SummaryJson.Contains("Frozen"));

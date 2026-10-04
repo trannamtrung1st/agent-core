@@ -519,7 +519,7 @@ public sealed class HarnessManagementService(
 
     private AdminEventAppend DraftEvent(AgentInstance instance, AgentDefinitionDraft draft, string operation, string outcome) =>
         new(ids.NewId(), time.GetUtcNow(), AdminEventActorKind.Agent, AdminEventOperationKind.HarnessPreparationChanged,
-            "agentInstance", instance.InstanceId.ToString("D"), draft.Revision + 1, instance.ActiveVersion,
+            "agent.instance", instance.InstanceId.ToString("D"), draft.Revision + 1, instance.ActiveVersion,
             JsonSerializer.Serialize(new { instanceId = instance.InstanceId, draftId = draft.DraftId, draftRevision = draft.Revision + 1,
                 operation, outcome, policyRevision = instance.HarnessManagement!.PolicyRevision }, Json));
 
@@ -529,7 +529,7 @@ public sealed class HarnessManagementService(
         var now = time.GetUtcNow();
         var history = new AdminEventAppend(ids.NewId(), now, agent ? AdminEventActorKind.Agent : AdminEventActorKind.LocalOwner,
             operation == "policy" ? AdminEventOperationKind.HarnessPolicyChanged : AdminEventOperationKind.HarnessPreparationChanged,
-            "agentInstance", instance.InstanceId.ToString("D"), instance.Revision + 1, instance.ActiveVersion,
+            "agent.instance", instance.InstanceId.ToString("D"), instance.Revision + 1, instance.ActiveVersion,
             JsonSerializer.Serialize(new { instanceId = instance.InstanceId, draftId = state.Preparation?.DraftId,
                 operation, outcome, policyRevision = state.PolicyRevision }, Json));
         return instances.UpdateWithExpectedRevisionAsync(new(instance.InstanceId, instance.Revision, HarnessManagement: state, History: history), now, ct);
