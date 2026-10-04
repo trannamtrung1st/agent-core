@@ -138,6 +138,7 @@ import * as antd from "antd";
 import {
   createNewAdminDefinitionDraft,
   createAdminAgentInstance,
+  forkAdminDefinitionDraft,
   getAdminDefinitionDraft,
   getAdminEffectiveConfig,
   deleteAdminDefinitionDraft,
@@ -1312,6 +1313,45 @@ describe("AdminApp", () => {
       { timeout: 10_000 }
     );
   }, 15_000);
+
+  it("keeps built-in and durable fork sources distinct when version numbers overlap", async () => {
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      { definitionId: "examiner", version: 2, source: "builtIn", status: "published", displayName: "Built-in" },
+      { definitionId: "examiner", version: 2, source: "durable", status: "published", displayName: "Durable" }
+    ]);
+    vi.mocked(listAdminDefinitionDrafts).mockResolvedValue([]);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+    vi.mocked(forkAdminDefinitionDraft).mockRejectedValue(new Error("Fixture fork refused"));
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
+    });
+    fireEvent.mouseDown(await screen.findByLabelText("Base version"));
+    fireEvent.click(await screen.findByText("v2 · Durable · Published"));
+    fireEvent.click(screen.getByRole("button", { name: "Fork v2 (durable)" }));
+    await waitFor(() => expect(forkAdminDefinitionDraft).toHaveBeenCalledWith("examiner", 2, "ForkDurable"));
+    await screen.findByText("Fixture fork refused");
+    fireEvent.mouseDown(screen.getByLabelText("Base version"));
+    fireEvent.click(await screen.findByText("v2 · Built-in · Published"));
+    fireEvent.click(screen.getByRole("button", { name: "Fork v2 (builtIn)" }));
+    await waitFor(() => expect(forkAdminDefinitionDraft).toHaveBeenCalledWith("examiner", 2, "ForkBuiltIn"));
+  });
+
+  it("shows one effective published version per number when creating an instance", async () => {
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      { definitionId: "examiner", version: 2, source: "durable", status: "deprecated", displayName: "Durable" },
+      { definitionId: "examiner", version: 2, source: "builtIn", status: "published", displayName: "Built-in" }
+    ]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "home" }} />);
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "New instance" }));
+    fireEvent.mouseDown(screen.getByLabelText("Published version"));
+    await waitFor(() => {
+      const options = document.querySelectorAll(".ant-select-item-option-content");
+      expect([...options].map(option => option.textContent)).toEqual(["v2 · Built-in · Published"]);
+    });
+  });
 
   it("defaults fork source to the highest non-deprecated version on definition detail", async () => {
     vi.mocked(listAdminDefinitions).mockResolvedValue([

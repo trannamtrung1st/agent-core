@@ -216,6 +216,17 @@ export function formatForkSourceOptionLabel(row: AdminDefinitionInventoryItem) {
   return `v${row.version} · ${formatInventorySource(row.source)} · ${formatInventoryStatus(row.status)}`;
 }
 
+function forkSourceKey(row: AdminDefinitionInventoryItem) {
+  return `${row.source}:${row.version}`;
+}
+
+function instanceVersionRows(versions: AdminDefinitionInventoryItem[]) {
+  // Exact-version resolution prefers a built-in definition over a durable publication.
+  return [...new Map([...versions]
+    .sort((a, b) => Number(a.source === "builtIn") - Number(b.source === "builtIn"))
+    .map(row => [row.version, row])).values()];
+}
+
 export function groupDefinitionInventory(
   items: AdminDefinitionInventoryItem[]
 ): DefinitionInventoryGroup[] {
@@ -553,7 +564,8 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
   });
   const [busy, setBusy] = useState(false);
   const selectedGroup = groups.find((group) => group.definitionId === definitionId) ?? null;
-  const selectedVersion = selectedGroup?.versions.find((row) => row.version === version) ?? null;
+  const instanceVersions = instanceVersionRows(selectedGroup?.versions ?? []);
+  const selectedVersion = instanceVersions.find((row) => row.version === version) ?? null;
   const customPersonaReady = personaFieldsReady(persona);
   const canCreate = Boolean(selectedGroup && selectedVersion) && (personaMode === "default" || customPersonaReady);
 
@@ -561,7 +573,7 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
     const first = groups[0];
     if (first) {
       setDefinitionId(first.definitionId);
-      setVersion(latestActiveVersion(first.versions) ?? first.latestVersion);
+      setVersion(latestActiveVersion(instanceVersionRows(first.versions)) ?? first.latestVersion);
     } else {
       setDefinitionId("");
       setVersion(null);
@@ -633,7 +645,7 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
                   setDefinitionId(nextId);
                   const next = groups.find((group) => group.definitionId === nextId);
                   if (next) {
-                    setVersion(latestActiveVersion(next.versions) ?? next.latestVersion);
+                    setVersion(latestActiveVersion(instanceVersionRows(next.versions)) ?? next.latestVersion);
                   }
                 }}
                 disabled={busy}
@@ -644,7 +656,7 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
               <Select
                 aria-label="Published version"
                 value={version ?? undefined}
-                options={(selectedGroup?.versions ?? []).map((row) => ({
+                options={instanceVersions.map((row) => ({
                   value: row.version,
                   label: formatForkSourceOptionLabel(row)
                 }))}
@@ -849,7 +861,7 @@ function DefinitionDetail({
   const [draftSummaries, setDraftSummaries] = useState<AdminDefinitionDraftSummary[]>([]);
   const [publications, setPublications] = useState<AdminDefinitionPublicationSummary[]>([]);
   const [activeDraft, setActiveDraft] = useState<AdminDefinitionDraft | null>(null);
-  const [forkSourceVersion, setForkSourceVersion] = useState<number | null>(null);
+  const [forkSource, setForkSource] = useState<string | null>(null);
   const [candidate, setCandidate] = useState<DefinitionCandidate>({});
   const [jsonText, setJsonText] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
@@ -927,13 +939,14 @@ function DefinitionDetail({
 
   useEffect(() => {
     if (!group) {
-      setForkSourceVersion(null);
+      setForkSource(null);
       return;
     }
-    setForkSourceVersion((current) =>
-      current !== null && group.versions.some((item) => item.version === current)
+    const defaultRow = group.versions.find(item => item.version === defaultForkSourceVersion(group.versions));
+    setForkSource((current) =>
+      current !== null && group.versions.some((item) => forkSourceKey(item) === current)
         ? current
-        : defaultForkSourceVersion(group.versions)
+        : defaultRow ? forkSourceKey(defaultRow) : null
     );
   }, [definitionId, group?.latestVersion, group?.versions.length]);
 
@@ -1180,7 +1193,7 @@ function DefinitionDetail({
       setBusy(false);
     }
   };
-  const selectedForkRow = group?.versions.find((row) => row.version === forkSourceVersion)
+  const selectedForkRow = group?.versions.find((row) => forkSourceKey(row) === forkSource)
     ?? group?.versions[0]
     ?? null;
 
@@ -1317,7 +1330,7 @@ function DefinitionDetail({
             <div className="admin-definition-panel-body">
               <Descriptions bordered size="small" column={1}>
                 {group.versions.map((row) => (
-                  <Descriptions.Item key={`${row.definitionId}:${row.version}`} label={`v${row.version}`}>
+                  <Descriptions.Item key={`${row.definitionId}:${forkSourceKey(row)}`} label={`v${row.version}`}>
                     <Flex gap={8} wrap="wrap" align="center">
                       <Typography.Text>{row.displayName} · {row.source} · {row.status}</Typography.Text>
                       {row.version === group.latestVersion ? <Tag color="blue">Latest</Tag> : null}
@@ -1344,14 +1357,14 @@ function DefinitionDetail({
               <Flex gap={8} wrap="wrap" align="center" className="admin-draft-create">
                 <Select
                   aria-label="Base version"
-                  value={forkSourceVersion}
-                  onChange={setForkSourceVersion}
+                  value={forkSource}
+                  onChange={setForkSource}
                   options={group.versions.map((row) => ({
-                    value: row.version,
+                    value: forkSourceKey(row),
                     label: `v${row.version} · ${formatInventorySource(row.source)}`
                   }))}
                   optionRender={(option) => {
-                    const row = group.versions.find((item) => item.version === option.value);
+                    const row = group.versions.find((item) => forkSourceKey(item) === option.value);
                     return row ? formatForkSourceOptionLabel(row) : option.label;
                   }}
                   disabled={busy}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { InfoCircleOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Checkbox, Collapse, Flex, Form, Select, Spin, Tag, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
 import { getHarnessReview, updateHarness, type HarnessReview, type HarnessMode, type HarnessScope } from "../../services/adminApi";
@@ -71,9 +72,15 @@ export function HarnessManagementSection({ instanceId, onUpdated }: {
         {review.policy.frozen ? <Alert type="info" showIcon title="Self-management is frozen" description="Chat continues normally. Save an enabled policy to allow new durable improvements." />
           : !enabled ? <Typography.Text type="secondary">Manual mode: Chat can discuss material without saving it to the harness.</Typography.Text> : null}
         {prep ? <Collapse items={[{ key: "recent", label: "Recent harness change & verification", children: <Flex vertical gap={token.padding}>
-          <Typography.Text strong>{prep.status === "Published" ? `Saved for future conversations · version ${prep.publishedVersion}` : prep.status}</Typography.Text>
-          <Typography.Text type="secondary">Tested candidate revision {testedRevision} · based on version {prep.baseVersion}</Typography.Text>
-          {prep.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: prep.diagnosticId }} /> : null}
+          <Flex vertical gap={token.paddingXS}>
+            <Flex align="center" wrap gap={token.paddingXS}>
+              <Typography.Text strong>{prep.status === "Published" ? `Saved for future conversations · version ${prep.publishedVersion}` : prep.status}</Typography.Text>
+              {prep.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: prep.diagnosticId }} trigger={
+                <Button type="text" icon={<InfoCircleOutlined />} aria-label="Error details">Error details</Button>
+              } /> : null}
+            </Flex>
+            <Typography.Text type="secondary">Tested candidate revision {testedRevision} · based on version {prep.baseVersion}</Typography.Text>
+          </Flex>
           {review.diff?.sections.filter(s => s.changeKind !== "Unchanged").map(s => <div key={s.sectionId}>
             <Typography.Text strong>{s.label}</Typography.Text><Typography.Paragraph>{s.beforeSummary ?? "No previous value"} → {s.afterSummary ?? "Removed"}</Typography.Paragraph>
           </div>)}
