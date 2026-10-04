@@ -381,14 +381,20 @@ public sealed class OpenAICompatibleLanguageModelTests
         Assert.Equal(2, handler.PostCount);
     }
 
-    [Fact]
-    public async Task Maps_tool_call_fragments_when_tools_are_offered()
+    [Theory]
+    [InlineData("knowledge.retrieve")]
+    [InlineData("harness.inspect")]
+    [InlineData("harness.knowledge.upsert")]
+    [InlineData("harness.skill.upsert")]
+    [InlineData("harness.tool.select")]
+    public async Task Maps_tool_call_fragments_when_tools_are_offered(string name)
     {
         var body =
             "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"knowledge_retrieve\",\"arguments\":\"\"}}]}}]}\n\n" +
             "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"identity\\\":\\\"support-order-policy\\\"}\"}}]}}]}\n\n" +
             "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n" +
             "data: [DONE]\n\n";
+        body = body.Replace("knowledge_retrieve", OpenAiCompatibleToolNames.ToWireName(name), StringComparison.Ordinal);
         var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
         var model = new OpenAICompatibleLanguageModel(
             new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
@@ -402,15 +408,15 @@ public sealed class OpenAICompatibleLanguageModelTests
             });
         var tools = new[]
         {
-            new ModelToolDefinition(ToolCatalog.KnowledgeRetrieve, "Retrieve knowledge.", """{"type":"object"}""")
+            new ModelToolDefinition(name, "Retrieve knowledge.", """{"type":"object"}""")
         };
         var events = await CollectAsync(model, new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Hi")], Tools: tools));
         Assert.Contains("\"tools\"", handler.LastBody, StringComparison.Ordinal);
-        Assert.Contains("knowledge_retrieve", handler.LastBody, StringComparison.Ordinal);
-        Assert.DoesNotContain("knowledge.retrieve", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains(OpenAiCompatibleToolNames.ToWireName(name), handler.LastBody, StringComparison.Ordinal);
+        Assert.DoesNotContain(name, handler.LastBody, StringComparison.Ordinal);
         var call = Assert.IsType<ModelToolCallEvent>(events[0]).Call;
         Assert.Equal("call_1", call.Id);
-        Assert.Equal(ToolCatalog.KnowledgeRetrieve, call.Name);
+        Assert.Equal(name, call.Name);
         Assert.Contains("support-order-policy", call.ArgumentsJson, StringComparison.Ordinal);
         Assert.Equal(ModelStopReason.ToolCalls, Assert.IsType<ModelCompleted>(events[^1]).Reason);
         Assert.Equal(1, handler.PostCount);
@@ -419,7 +425,7 @@ public sealed class OpenAICompatibleLanguageModelTests
     [Fact]
     public void ToolCatalog_wire_names_are_openai_compatible()
     {
-        foreach (var name in ToolCatalog.AllKnownNames())
+        foreach (var name in ToolRegistry.All.Select(d => d.Name))
         {
             var wire = OpenAiCompatibleToolNames.ToWireName(name);
             Assert.True(OpenAiCompatibleToolNames.IsWireSafe(wire), wire);
