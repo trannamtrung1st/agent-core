@@ -26,6 +26,16 @@ public sealed class AgentDefinitionLifecycleService(
         await admin.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false)
         ?? throw AgentCoreErrors.NotFound("Definition draft was not found.");
 
+    public async ValueTask<AgentDefinition?> GetDraftSourceAsync(AgentDefinitionDraft draft,
+        CancellationToken cancellationToken = default) => draft.SourceKind switch
+    {
+        DefinitionDraftSourceKind.ForkBuiltIn when draft.SourceVersion is { } version =>
+            await builtIns.GetAsync(draft.DefinitionId, version, cancellationToken).ConfigureAwait(false),
+        DefinitionDraftSourceKind.ForkDurable when draft.SourceVersion is { } version =>
+            (await admin.GetPublicationAsync(draft.DefinitionId, version, cancellationToken).ConfigureAwait(false))?.Payload,
+        _ => null
+    };
+
     public async ValueTask<AgentDefinitionDraft> CreateDraftAsync(
         string definitionId,
         AgentDefinitionCandidate candidate,

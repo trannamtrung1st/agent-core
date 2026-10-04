@@ -98,6 +98,43 @@ public sealed class AdminDefinitionDraftValidationServiceTests
                 && finding.Message.Contains(ToolCatalog.AttachmentsRead, StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task Fork_retains_unconfigured_source_tools_but_cannot_add_another_unconfigured_tool()
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-25T12:00:00Z"));
+        var ids = new SystemIdGenerator(clock);
+        var admin = new InMemoryAgentDefinitionAdminStore(ids);
+        var content = new InMemoryDefinitionResourceContentStore();
+        var resourcesStore = new InMemoryAgentDefinitionResourceAdminStore(admin, content, ids);
+        var source = SampleDefinitions.Support with
+        {
+            Environment = RoleEnvironment.Empty with { ToolAllowlist = [ToolCatalog.EmailSearch] }
+        };
+        var builtIns = new VersionedBuiltInDefinitions(source);
+        var lifecycle = new AgentDefinitionLifecycleService(builtIns, admin, SyntheticProviderAliases.Default, clock, ids);
+        var resources = new AgentDefinitionResourceService(admin, resourcesStore, content, clock, lifecycle);
+        var validation = new AgentDefinitionDraftValidationService(lifecycle, resources, SyntheticProviderAliases.Default,
+            TestModelCatalogs.Synthetic(), ToolConfigurationGates.Unconfigured);
+        var draft = await admin.CreateDraftAsync(new AgentDefinitionDraftCreate(source.Id,
+            AgentDefinitionCandidate.FromDefinition(source), DefinitionDraftSourceKind.ForkBuiltIn,
+            source.Version, clock.GetUtcNow()));
+
+        var retained = await validation.ValidateDraftAsync(draft.DraftId);
+        Assert.DoesNotContain(retained.Findings, finding => finding.Code == "unconfigured_tool");
+
+        var updated = draft.Candidate with { Environment = draft.Candidate.Environment! with
+        {
+            ToolAllowlist = [ToolCatalog.EmailSearch, ToolCatalog.WebSearch]
+        } };
+        draft = await admin.UpdateDraftAsync(new AgentDefinitionDraftUpdate(draft.DraftId, draft.Revision, updated,
+            clock.GetUtcNow()));
+        var added = await validation.ValidateDraftAsync(draft.DraftId);
+        Assert.Contains(added.Findings, finding => finding.Code == "unconfigured_tool"
+            && finding.Message.Contains(ToolCatalog.WebSearch, StringComparison.Ordinal));
+        Assert.DoesNotContain(added.Findings, finding => finding.Code == "unconfigured_tool"
+            && finding.Message.Contains(ToolCatalog.EmailSearch, StringComparison.Ordinal));
+    }
+
     private static AgentDefinitionDraftValidationService CreateValidationService(
         IAgentDefinitionAdminStore admin,
         IAgentDefinitionResourceAdminStore resourcesStore,
