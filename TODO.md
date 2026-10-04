@@ -4,7 +4,7 @@ Living roadmap: current status, active requirements, future dependency order, an
 
 Detailed architecture and behavior live in `/docs`. Historical implementation and freeze evidence live in `docs/reports/`. This file does not duplicate either.
 
-Reviewed against `main` through **`6f6ff42`** on **2026-10-03**. Pre-P8 bounded follow-up after P7.7 is **closed** (hosted Synthetic [**`36667172857`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green on **`1cadf46`**). **P8** remains **frozen** on **`ca3eb23`** (hosted Synthetic [**`36696902928`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). **Post-freeze P8 follow-up is closed** on **`c9aec29`** (provider-contract **`6fda4c5`**, CI stabilization **`c9aec29`**, hosted Synthetic [**`36745126226`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green). That closure does not move or reopen the P8 freeze. **P8.5** is **closed** on **`1461567`** (hosted Synthetic [**`36770385588`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green). Bounded post-closure corrections through **`0d1cfdd`** (assistant routing, truncation budgets, Playwright sync) are **closed** on hosted Synthetic [**`36807383922`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36807383922) green. A second bounded post-closure chain through **`fff7761`** (SSE idle at `ReadAsync`, Skill editor comma draft, no-chat Agent Step admission and execution state, response-function `displayText`) is **closed** on hosted Synthetic [**`36818061198`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36818061198) green. A third bounded post-closure stabilization chain through **`aedea70`** (realtime and history convergence, durable `session.ready` paging with live streaming overlay, direct-user response contract and inspectable failures, gated and budgeted `app.message.send`, test and CI synchronization) is **closed** on hosted Synthetic [**`36851267423`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36851267423) green; [appendix](docs/reports/p8.5-freeze-candidate.md). Real probes on DeepSeek V4.1 Flash and GPT-4o mini showed substantive work, intermediate application messages, and terminal `chat.respond`. None of these chains moves the P8 or P8.5 freeze SHAs. **P9 — Visible browser** is **closed** on `bba1de4` ([closure report](docs/reports/p9-freeze-candidate.md); hosted Synthetic [`36890525463`](https://github.com/trannamtrung1st/agent-core/actions/runs/36890525463) green). **Post-closure browser runtime hardening** is **closed** on **`3400d64`** (hosted Synthetic [**`36981513602`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36981513602) green); that chain does not move the P9 freeze SHA. **P9.5 — Proactive Secretary / Real Assistant Demo** remains **closed** on `1012653`; post-closure enhancements through the reviewed HEAD do not move or reopen P9 or P9.5.
+Reviewed against `main` through **`671602145d0cf5034be09f65548ec0f45225a323`** on **2026-10-04**. Pre-P8 bounded follow-up after P7.7 is **closed** (hosted Synthetic [**`36667172857`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green on **`1cadf46`**). **P8** remains **frozen** on **`ca3eb23`** (hosted Synthetic [**`36696902928`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). **Post-freeze P8 follow-up is closed** on **`c9aec29`** (provider-contract **`6fda4c5`**, CI stabilization **`c9aec29`**, hosted Synthetic [**`36745126226`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green). That closure does not move or reopen the P8 freeze. **P8.5** is **closed** on **`1461567`** (hosted Synthetic [**`36770385588`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green). Bounded post-closure corrections through **`0d1cfdd`** (assistant routing, truncation budgets, Playwright sync) are **closed** on hosted Synthetic [**`36807383922`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36807383922) green. A second bounded post-closure chain through **`fff7761`** (SSE idle at `ReadAsync`, Skill editor comma draft, no-chat Agent Step admission and execution state, response-function `displayText`) is **closed** on hosted Synthetic [**`36818061198`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36818061198) green. A third bounded post-closure stabilization chain through **`aedea70`** (realtime and history convergence, durable `session.ready` paging with live streaming overlay, direct-user response contract and inspectable failures, gated and budgeted `app.message.send`, test and CI synchronization) is **closed** on hosted Synthetic [**`36851267423`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36851267423) green; [appendix](docs/reports/p8.5-freeze-candidate.md). Real probes on DeepSeek V4.1 Flash and GPT-4o mini showed substantive work, intermediate application messages, and terminal `chat.respond`. None of these chains moves the P8 or P8.5 freeze SHAs. **P9 — Visible browser** is **closed** on `bba1de4` ([closure report](docs/reports/p9-freeze-candidate.md); hosted Synthetic [`36890525463`](https://github.com/trannamtrung1st/agent-core/actions/runs/36890525463) green). **Post-closure browser runtime hardening** is **closed** on **`3400d64`** (hosted Synthetic [**`36981513602`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36981513602) green); that chain does not move the P9 freeze SHA. **P9.5 — Proactive Secretary / Real Assistant Demo** remains **closed** on `1012653`; post-closure enhancements through the reviewed HEAD do not move or reopen P9 or P9.5. **P9.6** behavior is implemented through `fb69ae56`, including the source-owned Event Source credential model, restart-safe subscriber-snapshot delivery fan-out, Browser Capability v1, deterministic execution-model pin, unattended browser parity, and the four Secretary modes. The phase remains open for closure evidence. Hosted Synthetic [`37185534714`](https://github.com/trannamtrung1st/agent-core/actions/runs/37185534714) is green on `fb69ae56`; the current-HEAD run [`37186852987`](https://github.com/trannamtrung1st/agent-core/actions/runs/37186852987) was still in progress when this review was performed and is not claimed green.
 
 Closure reports through P7.7 still say the next phase was P8. That sentence records the handoff at freeze time, when P8 meant harness/platform extensibility. Those reports were not rewritten. In this TODO that work is P9.
 
@@ -59,7 +59,7 @@ Clients cannot supply trusted diagnostic, correlation, or causation identity. JS
 
 **P8 — Agent Execution Contract, Application Actions & Skills** is **frozen** on `ca3eb23` (workflow [`36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). Post-freeze bounded follow-up (provider contract **`6fda4c5`**, CI stabilization **`c9aec29`**) is **closed** on hosted Synthetic [**`36745126226`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green. See `docs/reports/p8-freeze-candidate.md` (freeze narrative + appendix).
 
-**P8.5 — Application Messaging & Dynamic Skill Activation** is **closed** on `1461567` ([closure report](docs/reports/p8.5-freeze-candidate.md); hosted Synthetic [`36770385588`](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green). `app.message.send` and `skills.load` continue the same bounded user-turn execution. They do not change the P8 freeze. Post-closure corrections through **`aedea70`** are recorded in that report's appendix (truncation **`36807383922`** on **`0d1cfdd`**, SSE/no-chat/editor **`36818061198`** on **`fff7761`**, stabilization **`36851267423`** on **`aedea70`**); they do not move the P8.5 closure SHA. **P9 — Visible browser** is **closed** on `bba1de4` ([closure report](docs/reports/p9-freeze-candidate.md); hosted Synthetic [`36890525463`](https://github.com/trannamtrung1st/agent-core/actions/runs/36890525463) green). **Post-closure browser runtime hardening** is **closed** on **`3400d64`** (hosted Synthetic [**`36981513602`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36981513602) green); that chain does not move the P9 freeze SHA. Browser navigation, interaction, and subresource origins are separate host lists. The Record Lookup site is an optional fixture. `target_denied` stays a normal tool result. **P9.5 — Proactive Secretary / Real Assistant Demo** is **closed** on `1012653`. Two post-P9.5 follow-ups stay on that closure: Chat and Admin project one application connection by display name, and browser observations use a bounded settle with `browser.observe` `waitFor` `stable`. Neither follow-up moves the P9 or P9.5 SHAs. The post-P9.5 browser and store-review enhancement is recorded on `6f6ff42` (hosted Synthetic [`37128161642`](https://github.com/trannamtrung1st/agent-core/actions/runs/37128161642) green) and does not move `1012653`. **P9.6 — Visual Browser, Reactive Triggers & Deterministic Unattended Execution** is implemented and not closed. P10 and P11 stay requirement-triggered.
+**P8.5 — Application Messaging & Dynamic Skill Activation** is **closed** on `1461567` ([closure report](docs/reports/p8.5-freeze-candidate.md); hosted Synthetic [`36770385588`](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green). `app.message.send` and `skills.load` continue the same bounded user-turn execution. They do not change the P8 freeze. Post-closure corrections through **`aedea70`** are recorded in that report's appendix (truncation **`36807383922`** on **`0d1cfdd`**, SSE/no-chat/editor **`36818061198`** on **`fff7761`**, stabilization **`36851267423`** on **`aedea70`**); they do not move the P8.5 closure SHA. **P9 — Visible browser** is **closed** on `bba1de4` ([closure report](docs/reports/p9-freeze-candidate.md); hosted Synthetic [`36890525463`](https://github.com/trannamtrung1st/agent-core/actions/runs/36890525463) green). **Post-closure browser runtime hardening** is **closed** on **`3400d64`** (hosted Synthetic [**`36981513602`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36981513602) green); that chain does not move the P9 freeze SHA. Browser navigation, interaction, and subresource origins are separate host lists. The Record Lookup site is an optional fixture. `target_denied` stays a normal tool result. **P9.5 — Proactive Secretary / Real Assistant Demo** is **closed** on `1012653`. Two post-P9.5 follow-ups stay on that closure: Chat and Admin project one application connection by display name, and browser observations use a bounded settle with `browser.observe` `waitFor` `stable`. Neither follow-up moves the P9 or P9.5 SHAs. The post-P9.5 browser and store-review enhancement is recorded on `6f6ff42` (hosted Synthetic [`37128161642`](https://github.com/trannamtrung1st/agent-core/actions/runs/37128161642) green) and does not move `1012653`. **P9.6 — Visual Browser, Reactive Triggers & Deterministic Unattended Execution** is implemented through `fb69ae56` and remains open for closure. The bounded follow-up adds source-owned webhook credentials, subscriber-snapshot delivery fan-out with restart recovery, durable failure/capture retention, and regression coverage for the four Secretary modes. P10 and P11 stay requirement-triggered.
 
 ---
 
@@ -69,9 +69,10 @@ Clients cannot supply trusted diagnostic, correlation, or causation identity. JS
 2. **P8.5 — Application Messaging & Dynamic Skill Activation — closed** on `1461567` (post-closure corrections **closed** on **`aedea70`**, hosted Synthetic [**`36851267423`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36851267423) green).
 3. **P9 — Visible browser — closed** on `bba1de4`. Post-closure browser runtime hardening is **closed** on **`3400d64`** (hosted Synthetic [**`36981513602`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36981513602) green); that chain does not move the P9 freeze SHA.
 4. **P9.5 — Proactive Secretary / Real Assistant Demo — closed** on `1012653` (hosted Synthetic [`37111979501`](https://github.com/trannamtrung1st/agent-core/actions/runs/37111979501) green). Post-closure follow-ups project one application connection by display name and add a bounded browser settle. Neither moves the P9 or P9.5 SHAs. The post-P9.5 browser and store-review enhancement is recorded on `6f6ff42` (hosted Synthetic [`37128161642`](https://github.com/trannamtrung1st/agent-core/actions/runs/37128161642) green) and does not move `1012653`.
-5. **P9.6 — Visual Browser, Reactive Triggers & Deterministic Unattended Execution — frozen** on `fb69ae56` (hosted Synthetic [`37185534714`](https://github.com/trannamtrung1st/agent-core/actions/runs/37185534714) green). Source-owned `order.placed` ingress, delivery-ledger fan-out, Browser v1, execution-model pin, and real storefront order **12** plus unattended browser completion are recorded in [p9.6-freeze-candidate.md](docs/reports/p9.6-freeze-candidate.md).
-6. **P10 — Sandbox Evolution — requirement-triggered when the current sandbox is insufficient.**
-7. **P11 — Multi-user + Production Infrastructure — requirement-triggered when a real hosting or pilot requirement appears.**
+5. **P9.6 — Visual Browser, Reactive Triggers & Deterministic Unattended Execution — implemented, not closed.** Behavior through `fb69ae56` includes source-owned `order.placed` ingress, subscriber-snapshot delivery-ledger fan-out and recovery, Browser v1, execution-model pin, unattended browser parity, and the four Secretary modes. Hosted Synthetic [`37185534714`](https://github.com/trannamtrung1st/agent-core/actions/runs/37185534714) is green on `fb69ae56`. The current real-store evidence does not yet prove one native plugin-emitted order completing the matching unattended browser investigation, so the historical P9.6 candidate report does not by itself close the phase.
+6. **P9.7 — Agent-Assisted / Self-Managed Harness Authoring — planned.** Final planned major product capability before investor-demo stabilization and polish.
+7. **P10 — Sandbox Evolution — requirement-triggered when the current sandbox is insufficient.**
+8. **P11 — Multi-user + Production Infrastructure — requirement-triggered when a real hosting or pilot requirement appears.**
 
 ---
 
@@ -1062,44 +1063,28 @@ P9.5 closes when a developer can use one simple documented workflow to bring up 
 
 # P9.6 — Visual Browser, Reactive Triggers & Deterministic Unattended Execution
 
-**Status: frozen** on `fb69ae56`. P9 remains closed on `bba1de4` and P9.5 remains closed on `1012653`. P9.6 does not move either closure SHA and does not start P10. Hosted Synthetic [`37185534714`](https://github.com/trannamtrung1st/agent-core/actions/runs/37185534714) is green on `fb69ae56`. Closure evidence is [p9.6-freeze-candidate.md](docs/reports/p9.6-freeze-candidate.md), including guest checkout **order 12**, delivery-ledger admission, duplicate-webhook dedupe, and a completed unattended browser investigation on the connected demo store.
+**Status: implemented; not closed.** P9 remains closed on `bba1de4` and P9.5 remains closed on `1012653`. P9.6 does not move either closure SHA and does not start P10. Hosted Synthetic [`37185534714`](https://github.com/trannamtrung1st/agent-core/actions/runs/37185534714) is green on implementation SHA `fb69ae56`. The later [P9.6 candidate report](docs/reports/p9.6-freeze-candidate.md) records guest checkout order **12**, manual delivery-ledger admission and dedupe, and a separate completed unattended browser investigation. It also records that the plugin did not emit order 12, order-12 work exhausted retries, and manually admitted order 13 completed by observing order 12. That evidence does not yet establish the matching native order → webhook → unattended investigation closure journey. Hosted run [`37186852987`](https://github.com/trannamtrung1st/agent-core/actions/runs/37186852987) on reviewed HEAD `67160214` was still in progress at review time and is not claimed green.
 
-## Verified starting point
+## Implemented state at the reviewed HEAD
 
-Do not rebuild or describe these shipped capabilities as new:
+Do not rebuild or describe these implemented capabilities as future work:
 
 - durable `TriggerRegistration → TriggerOccurrence → WorkItem` admission, routing, deduplication, execution, cancellation, approval, retry, restart recovery, and side-effect fencing;
-- one narrow durable `ApplicationEvent` order-status ingress;
-- scheduled unattended browser execution with bounded budgets and execution-time authorization;
+- source-owned authenticated `order.placed` webhook ingress with hashed Event Source credentials;
+- admission-time subscriber snapshots, one `ExternalEventDelivery` per matching registration, and restart-safe pending-delivery fan-out;
+- scheduled and application-event unattended browser execution with bounded budgets and execution-time authorization;
 - one persistent authenticated browser profile owned by an Agent Instance, with trusted application-connection scope;
-- trusted-owner attention results, idempotent delivery state, inspectable completion, and quiet completion;
-- `WorkModelPin` persisted on durable WorkItems;
+- trusted-owner attention results, idempotent delivery state, inspectable completion, quiet completion, and retained failure/capture evidence;
+- deterministic execution-model policy resolved before live-versus-durable routing, with `WorkModelPin` persisted on durable WorkItems;
 - a provider-neutral Agent Core browser port implemented by Playwright, not raw Playwright exposed to the model;
-- model-facing `browser.navigate`, `browser.observe`, `browser.act`, and `browser.close`;
-- `browser.act` operations `click`, `fill`, `select`, `press`, `check`, `uncheck`, and `upload`;
-- bounded visible text, role/name/action elements, opaque session-scoped refs, stale-reference rejection, and stable-settle observation.
+- model-facing `browser.navigate`, `browser.observe`, `browser.act`, `browser.capture`, `browser.pages`, and `browser.close`;
+- bounded navigation history, multi-page lifecycle, semantic observation, explicit viewport capture, download ownership, and stale page/ref rejection;
+- ordinary typed browser actions including click, double-click, fill, select, press, check/uncheck, upload, hover, scroll, and drag;
+- deterministic Synthetic coverage for Browser v1, event admission/fan-out, model pinning, unattended parity, and the four Secretary modes.
 
-Screenshot/visual capture, navigation history operations, multi-page lifecycle, authenticated webhook HTTP ingress, and the broader interaction set below are not implemented at the reviewed HEAD.
+The remaining P9.6 work is closure evidence, not a new architecture slice: run one correctly prepared nopCommerce checkout whose installed plugin emits the matching source event, whose admitted occurrence completes the corresponding authenticated unattended browser investigation with a supported pinned model, and whose resulting history/dedupe evidence is inspectable. Record a green hosted gate on the reviewed closure HEAD before freezing.
 
-There is also a routing-dependent model inconsistency:
-
-```text
-scheduled occurrence
-       ↓
-compatible live SessionRuntime
-       ↓
-current SessionModelSelection (Initiative)
-
-versus
-
-scheduled occurrence
-       ↓
-durable WorkItem
-       ↓
-Agent Definition default, then system/catalog default
-```
-
-The durable path pins that default through `WorkModelPin`, but the intended model is chosen differently before the pin exists. The same occurrence can therefore use a different model merely because a compatible live Session Runtime happened to exist.
+The subsections below preserve the reviewed P9.6 requirements and stop condition. Their imperative or future-tense wording is the acceptance contract, not a claim that the listed behavior remains unimplemented.
 
 ## P9.6A — Browser Capability v1
 
@@ -1305,6 +1290,327 @@ P9.6 closes when Browser Capability v1 provides the bounded semantic, visual, or
 
 ---
 
+# P9.7 — Agent-Assisted / Self-Managed Harness Authoring
+
+**Status: planned after P9.6 closure.** This is the final planned major product capability before investor-demo stabilization and polish. It does not reopen P8, P8.5, P9, P9.5, or P9.6, and it does not start requirement-triggered P10 or P11.
+
+## Goal and existing authoring boundary
+
+Allow a user to describe what an Agent Instance should be good at and, only when explicitly permitted, let the agent inspect and help construct or refine its own harness. This removes the requirement that every user already know the ideal knowledge, Skills, and active tools without creating a second self-modification runtime.
+
+Preserve the existing lifecycle:
+
+```text
+Agent Definition draft
+        ↓ validate / evaluate / diff
+immutable published Definition version
+        ↓
+Agent Instance
+```
+
+Published Definition versions and their resources remain immutable. Ordinary Session Runtime must not gain a hidden mutation path to published Definition state or rewrite the version pinned underneath an execution.
+
+Self-management operates through controlled Authoring capabilities over the existing Application/Domain ownership:
+
+```text
+active immutable Definition version
+        ↓
+agent identifies an improvement
+        ↓
+controlled harness-authoring capability
+        ↓
+new or forked draft
+        ↓
+knowledge / Skill / allowed configuration changes
+        ↓
+validation + verification evidence
+        ↓
+approval where required
+        ↓
+publish next immutable version
+        ↓
+explicit Agent Instance adoption / upgrade
+```
+
+Reuse `AgentDefinitionLifecycleService` for draft/version lifecycle, `AgentDefinitionResourceService` for draft resources, `AgentDefinitionDraftPublishService` for validation/evaluation/diff-gated publication, and the existing managed Agent Instance version-association path. If those services evolve before implementation, follow their current successors while preserving ownership and immutability. Do not add a mutable `agent.json`, direct persistence writes, a parallel publish flow, or a Session Runtime path around these services.
+
+## Self-management policy
+
+Add an explicit Agent-Instance policy with modes conceptually equivalent to:
+
+- **Disabled / manual:** only the user/Admin authors the harness.
+- **Propose-only / agent-assisted:** the agent may inspect and prepare proposed changes, but cannot commit the relevant mutation without approval.
+- **Allowed within configured scopes:** the agent may perform permitted Authoring operations within explicitly granted areas, still subject to normal authorization, policy, and approval.
+
+The detailed proposal will choose names and schema. Management scopes must be independently grantable, initially:
+
+- knowledge and Definition resources;
+- Skills;
+- selected operating instructions/configuration only where they fit the Definition lifecycle cleanly;
+- proposals to activate, deactivate, or configure eligible harness tools.
+
+Credentials, secrets, provider credentials, security policy, approval policy, owner/trust relationships, and authorization boundaries remain outside agent control. An agent cannot grant itself another management scope, change its management mode, disable a required approval, or expand the identity/context in which a grant applies.
+
+## Controlled harness inspection
+
+Provide one trusted, bounded projection with enough information to identify harness deficiencies:
+
+- current Definition id/version and Agent Instance association;
+- relevant instructions and safe operating configuration;
+- Definition knowledge/resources and provenance available to the active version or target draft;
+- published Skill catalog and active/pinned Skill behavior;
+- tools currently available/active for the execution;
+- tools/capabilities the owner or platform has already authorized for the identity/context;
+- safe effective-configuration values already exposed through server-owned projections.
+
+Do not expose secrets, credentials, raw persistence records, provider DTOs, internal host paths, approval grants, or mutable runtime internals. Reuse `AdminReadService` / effective-configuration resolution and other trusted server-side projections where they fit; a stale projection never authorizes execution.
+
+## Semantic Authoring capabilities
+
+Do not expose generic database CRUD, arbitrary configuration patches, direct stores, or persistence transactions to the model. Offer coarse semantic operations conceptually equivalent to:
+
+```text
+harness.inspect
+
+knowledge/resources:
+  inspect
+  add/attach
+  replace/update
+  remove
+
+skills:
+  inspect
+  create
+  update
+  remove
+
+tools:
+  inspect_authorized
+  request_enable
+  request_disable
+  request_configuration_change
+```
+
+Exact names remain a proposal decision. Each operation must call the same Application/Domain owner used by trusted user/Admin authoring, carry target draft/revision identity, enforce optimistic concurrency, and return a bounded result or safe `DiagnosticId`. The LLM requests an operation; Core validates and owns the state transition.
+
+These Authoring capabilities are not ordinary unrestricted Session tools. The proposal must define the bounded execution context in which they are offered, how target draft ownership is established, and how work stops or returns to the user without adding another permanent agent loop.
+
+## Knowledge and Definition-resource authoring
+
+Within an authorized scope, the agent may:
+
+- discover only knowledge sources/resources the owner or platform permits it to inspect;
+- inspect or search candidate material through already-authorized capabilities;
+- select material relevant to the stated purpose;
+- attach, add, update/replace, or remove resources on a target draft through existing Definition resource semantics;
+- retain source, provenance, hash, media type, and other safe evidence needed to understand what was published;
+- treat external text and browser/tool observations as untrusted candidate material rather than instructions or automatic authority;
+- verify after publication/adoption that indexed or bound knowledge is actually retrievable.
+
+Preserve:
+
+```text
+Knowledge ≠ learned memory
+Knowledge ≠ instructions
+```
+
+Self-learning must not silently promote conversation observations or learned memory into authoritative Definition knowledge. Promotion requires an explicit Authoring operation allowed by policy, with provenance and any required approval. Existing resource size/type/path/secret checks and immutable publication bindings remain authoritative.
+
+## Skill authoring
+
+Within an authorized scope, the agent may inspect the target draft/version Skill catalog, create a draft Skill, refine/update it, remove an obsolete draft Skill, validate capability and resource requirements, and test representative use before promotion.
+
+Preserve:
+
+```text
+Skill requires capability
+≠
+Skill grants capability
+```
+
+A self-authored Skill cannot create credentials, approval, owner scope, application access, tool authority, or management authority. Skill instructions remain below Core policy. Prefer declarative/procedural Skills; arbitrary executable-code generation, plugin installation, independently versioned shared Skills, and a Skill/plugin marketplace remain out of scope.
+
+Keep runtime Skill activation separate from Authoring:
+
+```text
+skills.load
+= select/use an already published Skill during one execution
+
+P9.7 Skill authoring
+= prepare/change Skills for a future immutable Definition version
+```
+
+Do not merge these semantics or let `skills.load` mutate a Definition.
+
+## Tool management, authorization, and approval
+
+Keep the current chain authoritative:
+
+```text
+registered capability
+        ↓
+contextual availability
+        ↓
+policy / authorization
+        ↓
+exact-action approval when required
+        ↓
+execution
+```
+
+Distinguish:
+
+```text
+authorized capabilities
+= controlled by user / Admin / platform policy
+
+active or selected harness tools
+= eligible subset the agent may propose or configure for its role
+```
+
+The agent may inspect tools/capabilities already authorized for the identity/context and propose enabling, disabling, or configuring an eligible tool in a future harness. It cannot discover an unauthorized registered capability and grant it to itself. Credentials remain outside model-visible configuration.
+
+Tool/capability changes are higher risk than knowledge or Skill edits. Authority-affecting changes require explicit user/Admin approval by default. Reuse `ToolRegistry`, contextual offering, `ToolPolicy`, action-bound approval grants, and the existing live/durable approval machinery where they fit. Do not add a separate self-management approval engine unless the detailed proposal proves a concrete gap. Approval of one exact change does not approve future tool use or widen the authorization boundary.
+
+## Bootstrap and preparation workflow
+
+Support a simple creation experience approximately like:
+
+```text
+Create Agent
+Purpose:
+  "Operate and help maintain my nopCommerce store."
+
+Harness authoring:
+  Agent-assisted / Agent-managed
+
+Allowed management scopes/resources:
+  Knowledge
+  Skills
+  approved tool catalog
+```
+
+Within one or more bounded executions, the agent may:
+
+1. inspect the current effective harness;
+2. explore explicitly permitted sources with already-authorized capabilities;
+3. identify missing knowledge or procedures;
+4. curate draft knowledge/resources;
+5. create or refine draft Skills;
+6. propose necessary eligible tool changes;
+7. run representative verification;
+8. present the proposed harness/revision and limitations;
+9. obtain required approvals;
+10. publish and explicitly adopt the next immutable version through the existing lifecycle.
+
+Do not turn preparation into a permanent `while(true)` self-improvement loop. Each run has an explicit purpose, scope, budget, owner, target draft, and terminal result.
+
+## Verification and evidence
+
+Verification is first-class but has three distinct layers.
+
+**Agent verification.** The agent should attempt checks reasonably available to it, such as retrieving newly published knowledge, exercising a representative Skill scenario, checking Skill resource/capability references, and confirming that the adopted version/configuration is visible. Its claim is evidence, not authority.
+
+**System-enforced verification.** Core remains authoritative for draft/resource structure, revision concurrency, validation/evaluation gates, capability requirements, authorization, exact-action approval, immutable publication, deterministic indexing/retrieval health where available, disabled/frozen enforcement, safe Agent Instance adoption, and audit/history consistency.
+
+**Human or external verification.** Record rather than conceal cases involving destructive or irreversible production actions, payments/refunds, real external communication solely for testing, inaccessible systems, insufficient permission, subjective quality, nondeterministic model behavior, long-term correctness, or evidence that only another person/system can provide.
+
+Represent outcomes honestly, conceptually:
+
+```text
+verified
+partially verified
+cannot verify with current capabilities
+requires approval or external evidence
+```
+
+Do not force `verified=true` when evidence is incomplete. Require an attempt when reasonable, store the evidence and remaining limitations, and reuse current draft evaluation/evidence infrastructure where it naturally fits. Do not create a generic verification platform solely for P9.7.
+
+## Audit and Admin history
+
+Harness-authoring operations must remain inspectable. Record enough safe evidence to determine:
+
+- what changed and the target draft/version/Agent Instance;
+- before/after or bounded diff where appropriate;
+- whether the actor was a user/Admin or the agent through an authorized Authoring capability;
+- requested management scope and effective policy mode;
+- approval requirement and result;
+- verification/evaluation evidence and unresolved limitations;
+- publication and explicit adoption result;
+- failure `DiagnosticId` where applicable.
+
+Extend the existing append-only `AdminEvents` / Admin history model where it can correctly represent these harness mutations. Keep events atomic with the owning mutation where required, idempotent by operation identity, and safely summarized. Do not create a second audit log merely because the actor is an agent. Do not put secrets, resource bodies, Skill bodies, or raw model reasoning into history summaries.
+
+## Freeze / lock behavior
+
+Support:
+
+```text
+bootstrap
+→ inspect
+→ author/refine
+→ verify
+→ approve where required
+→ publish/adopt
+→ freeze
+```
+
+Freeze primarily disables the Agent Instance's harness-authoring authority. The active published Definition is already immutable and continues to run normally. A frozen agent cannot create, commit, publish, or request further harness changes through self-management unless the user deliberately re-enables an allowed mode/scope.
+
+Future improvement follows the same boundary:
+
+```text
+current immutable active version
+        ↓
+new draft / fork
+        ↓
+proposed improvements
+        ↓
+verify
+        ↓
+approve
+        ↓
+publish and explicitly adopt next version
+```
+
+Do not invent another generic versioning system.
+
+## UX and polish
+
+Keep creation and configuration understandable for non-experts. The eventual UI must clearly show purpose, self-management mode, independently allowed harness areas, explorable resources, owner/platform-authorized tools versus agent-selected/proposed active tools, approval requirements, proposed and applied changes, verification status/evidence, active immutable Definition version, adoption status, and the control to disable/freeze self-management.
+
+Do not design an “AI configuration IDE.” Reuse the existing Admin creation, Definition editor, Test & Publish, diff, effective configuration, instance version-association, approval, and history patterns. Include a later UI/UX polish pass using the existing Ant Design v6 product language and synchronize durable patterns with design-system documentation.
+
+## P9.7 non-goals
+
+P9.7 does not include continuous unrestricted autonomous self-optimization; arbitrary code or plugin generation/installation; capability self-granting; credential generation or exposure; changing owner, trust, security, authorization, or approval policy; rewriting published Definition versions/resources; a second Agent or Session Runtime; generic workflow orchestration; multi-agent teams/swarms; a plugin/Skill marketplace; P10 sandbox expansion; or P11 production/multi-user infrastructure.
+
+P10 and P11 remain requirement-triggered.
+
+## P9.7 stop condition
+
+P9.7 closes when a user can explicitly grant one Agent Instance bounded harness-authoring authority; the agent can safely inspect its effective harness; knowledge/resource and Skill changes use existing Authoring ownership and a draft rather than mutate a publication; eligible tool changes cannot exceed pre-existing authorization and require approval by default when authority changes; self-authored Skills cannot grant capabilities; agent verification, system validation, and unavailable/external verification are represented distinctly; changes are visible in append-only Admin history; the resulting Definition can be validated, evaluated, diffed, published, and explicitly adopted; self-management can then be disabled/frozen; ordinary runtime behavior is unchanged while self-management is disabled; P8/P8.5/P9/P9.5/P9.6 closure boundaries remain intact; P10 and P11 remain requirement-triggered; and Synthetic/offline regressions are green.
+
+Keep the phase proportional:
+
+```text
+existing immutable harness/version model
+        +
+controlled Authoring capabilities
+        +
+existing policy / approval
+        +
+existing validation / evaluation
+        +
+existing Admin history
+        =
+agent-assisted / self-managed harness authoring
+```
+
+If implementation would require redesigning Session Runtime, adding a parallel self-modification engine, or making published Definitions mutable, stop and revisit the design.
+
+---
+
 # P10 — Sandbox evolution
 
 **Status: requirement-triggered.**
@@ -1337,13 +1643,13 @@ Start when Agent Core leaves trusted single-owner local development or begins a 
 
 # Deferred / requirement-triggered work
 
-These items are recorded decisions. P9.5 and P9.6 take only the narrow exceptions named in their scopes. The remaining items are not reasons to reopen those phases or start P10 or P11 early. Each waits for a concrete requirement.
+These items are recorded decisions. P9.5, P9.6, and planned P9.7 take only the narrow exceptions named in their scopes. The remaining items are not reasons to reopen those phases or start P10 or P11 early. Each waits for a concrete requirement.
 
 **Production infrastructure and distributed scheduling.** The P11 stack, plus Hangfire, Quartz, or another job framework. If a scheduler is ever justified, it implements wake-up and dispatch under Trigger → Occurrence → WorkItem. It does not replace that model. Misfire policies beyond current coalesce-to-latest (`SkipMissed`, `CatchUp`) wait for a workflow that needs them.
 
 **Platform and packaging.** A universal plugin framework, plugin marketplace, Skill marketplace, application marketplace, prepared-worker marketplace, generic webhook marketplace, ZIP or package import/export, Git resource sync, remote filesystem or object-storage browsing, live folder sync, and FTP/SFTP. P9.5 owns only the narrow nopCommerce connection/binding behavior its workflow proved. P9.6 owns only authenticated `order.placed` ingress and a tiny emitting adapter. Neither phase absorbs this list.
 
-**Bindings, messaging, and skills beyond P9.5.** Full/universal Application Binding persistence remains deferred; P9.5 owns only a minimal Agent-Instance-owned nopCommerce relationship. Cross-application and arbitrary-recipient messaging remains deferred; P9.5 owns only narrow trusted-owner proactive delivery. An independently versioned Skill shared across many Definitions, Skill/plugin marketplaces, embeddings/vector Skill retrieval, and a dedicated Skill-router model remain deferred.
+**Bindings, messaging, and skills beyond P9.7.** Full/universal Application Binding persistence remains deferred; P9.5 owns only a minimal Agent-Instance-owned nopCommerce relationship. Cross-application and arbitrary-recipient messaging remains deferred; P9.5 owns only narrow trusted-owner proactive delivery. P9.7 owns Definition-versioned Skill authoring only. An independently versioned Skill shared across many Definitions, Skill/plugin marketplaces, embeddings/vector Skill retrieval, and a dedicated Skill-router model remain deferred.
 
 **Agent scope.** Multi-agent coordination or an agent swarm. A visual workflow builder. An arbitrary autonomous loop; P9.5/P9.6 proactivity is bounded Trigger → Occurrence → WorkItem execution only. A persistent general Agent Instance filesystem. An Admin assistant agent.
 
@@ -1367,7 +1673,7 @@ These items are recorded decisions. P9.5 and P9.6 take only the narrow exception
 Always keep this section.
 
 - [ ] Admin assistant agent remains a future idea.
-- [ ] Allow self-learning, self skill management, and self-improvement (configurable, on/off) [TBD].
+- [ ] P9.7 owns bounded, configurable agent-assisted/self-managed harness authoring; do not track a second generic “self-improvement” runtime here.
 - [ ] sessions retrospection, feedback, etc ...
 - [ ] team work, agent communication, workflow, orchestration, etc .... like grok bot
 - [ ] autonomous, unattended, background work ...
@@ -1383,13 +1689,13 @@ Orientation for what later work can build on. Detail and gate history are in `/d
 
 **Identity and memory.** Reusable Definition versus durable Agent Instance, persona separate from learned memory, trusted owner profile, Identity and User memory scopes, and layered prompt composition. Provider reasoning stays out of assistant output.
 
-**Tools and capabilities.** Typed tools for workspace, knowledge, attachments, artifacts, sandbox, web, HTTP, email, and a provider-neutral Agent Core browser capability backed by Playwright. The current browser surface is `navigate`, `observe`, `act`, and `close`; current ordinary actions are click, fill, select, press, check/uncheck, and upload. It retains opaque refs and stable-settle observations but does not expose screenshots. Execution-time policy, exact-action approval, and detached-execution restrictions remain authoritative. The trusted model catalog supports per-session model and reasoning selection.
+**Tools and capabilities.** Typed tools for workspace, knowledge, attachments, artifacts, sandbox, web, HTTP, email, and a provider-neutral Agent Core browser capability backed by Playwright. The current browser surface is `navigate`, `observe`, `act`, `capture`, `pages`, and `close`; ordinary actions include click, double-click, fill, select, press, check/uncheck, upload, hover, scroll, and drag. It retains opaque refs, bounded page identity, stale-observation rejection, stable-settle observations, explicit bounded viewport capture, and download ownership without exposing raw Playwright. Execution-time policy, exact-action approval, and detached-execution restrictions remain authoritative. The trusted model catalog supports per-session model and reasoning selection.
 
 **Voice and realtime.** SignalR with MessagePack as the default transport, optional JSON diagnostic mode with the same contract, independently replaceable STT and TTS, voice interruption, and heard versus received tracking. Synthetic speech requires no provider credentials.
 
 **Workspace and resources.** Session-owned workspaces, attachments and artifacts, current and historical images, and versioned definition resources.
 
-**Triggers and background work.** Durable trigger registration and occurrences, and durable `WorkModelPin`-carrying WorkItems for work that must outlive the Session Runtime. Schedule and narrow application-event sources use the same routing model. Scheduled background browser execution can reuse an Agent-Instance-owned persistent authenticated profile. Attention-worthy results have idempotent trusted-owner delivery; ordinary completion can remain quiet. One process schedules and executes this work.
+**Triggers and background work.** Durable trigger registration and occurrences, and durable `WorkModelPin`-carrying WorkItems for work that must outlive the Session Runtime. Schedules and source-owned authenticated `order.placed` events use the same occurrence routing model. Event admission snapshots matching subscribers into a delivery ledger so fan-out can resume after restart without adding later subscribers. Scheduled and application-event background browser execution can reuse an Agent-Instance-owned persistent authenticated profile. Attention-worthy results have idempotent trusted-owner delivery; ordinary completion can remain quiet. One process schedules and executes this work.
 
 **Admin.** Draft, Form and JSON authoring, validation, evaluation, immutable publish, instances, persona, memory and automation administration, effective configuration, and history. P7.6 authoring closure is frozen.
 
@@ -1401,6 +1707,6 @@ Orientation for what later work can build on. Detail and gate history are in `/d
 
 # Next implementation item
 
-**P9.6 closure.** Frozen on `fb69ae56` with hosted Synthetic [`37185534714`](https://github.com/trannamtrung1st/agent-core/actions/runs/37185534714) green. See `docs/reports/p9.6-freeze-candidate.md` for source-owned webhook architecture, restart-safe fan-out, real storefront order 12, duplicate delivery proof, and the completed real-model unattended browser path.
+**P9.6 closure.** The implementation through `fb69ae56` has a green hosted Synthetic run [`37185534714`](https://github.com/trannamtrung1st/agent-core/actions/runs/37185534714), but P9.6 remains open. Complete and record one matching real journey in which the installed nopCommerce plugin emits an actual order event, the resulting admitted occurrence uses a supported pinned unattended model, and that same work completes the authenticated browser investigation with inspectable dedupe/history evidence. Record a green hosted Synthetic gate on the closure HEAD; reviewed-HEAD run [`37186852987`](https://github.com/trannamtrung1st/agent-core/actions/runs/37186852987) was still in progress during this review and is not claimed green.
 
-P9 remains closed on `bba1de4`; P9.5 remains closed on `1012653`; the post-P9.5 enhancement remains recorded on `6f6ff42`. P10 and P11 remain requirement-triggered.
+P9 remains closed on `bba1de4`; P9.5 remains closed on `1012653`; the post-P9.5 enhancement remains recorded on `6f6ff42`. P9.7 follows P9.6 closure. P10 and P11 remain requirement-triggered.
