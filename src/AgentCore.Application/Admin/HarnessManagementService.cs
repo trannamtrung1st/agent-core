@@ -137,6 +137,8 @@ public sealed class HarnessManagementService(
             RequireRevision(instance, expectedRevision);
             var state = instance.HarnessManagement ?? throw AgentCoreErrors.Validation("No preparation exists.");
             var prep = state.Preparation ?? throw AgentCoreErrors.Validation("No preparation exists.");
+            if (prep.Status == HarnessPreparationStatus.Published)
+                throw AgentCoreErrors.Conflict("A published preparation cannot be cancelled; start another fork for further work.");
             return await SaveAsync(instance, state with { Preparation = prep with
             {
                 Status = HarnessPreparationStatus.Cancelled,
@@ -217,7 +219,8 @@ public sealed class HarnessManagementService(
             if (prep.Evidence.Count >= 64) throw AgentCoreErrors.Validation("Evidence budget exhausted.");
             return await SaveAsync(instance, state with { Preparation = prep with
             {
-                Evidence = [.. prep.Evidence, evidence with { Actor = "Agent" }]
+                Evidence = [.. prep.Evidence, evidence with { Actor = "Agent" }],
+                Status = StatusAfterEvidence(prep, evidence)
             } }, "agentEvidence", evidence.Status.ToString(), true, token);
         }, ct);
 
@@ -234,7 +237,7 @@ public sealed class HarnessManagementService(
             var matched = bytes is not null && Encoding.UTF8.GetString(bytes).Contains(expectedText, StringComparison.Ordinal);
             var check = new HarnessVerificationEvidence("Core", draft.Revision, "Candidate knowledge readback", matched ? HarnessEvidenceStatus.Verified : HarnessEvidenceStatus.Failed,
                 "Read bound candidate knowledge and find the expected excerpt.", matched ? "Content readback matched the expected excerpt and source binding." : "Expected content was unavailable or did not match.");
-            return await SaveAsync(instance, state with { Preparation = prep with { Evidence = [.. prep.Evidence.TakeLast(63), check] } },
+            return await SaveAsync(instance, state with { Preparation = prep with { Evidence = [.. prep.Evidence.TakeLast(63), check], Status = StatusAfterEvidence(prep, check) } },
                 "knowledgeReadback", check.Status.ToString(), true, token);
         }, ct);
 
@@ -253,7 +256,7 @@ public sealed class HarnessManagementService(
                 "The candidate procedure passes existing Skill activation admission and enters the active Skill prompt.",
                 passed ? $"Skill {skillId} was admitted and its exact procedure injected." : "Skill activation or procedure injection failed.",
                 "Activation verifies the runtime prerequisite; procedure quality and production outcomes need separate evidence.");
-            return await SaveAsync(instance, state with { Preparation = prep with { Evidence = [.. prep.Evidence.TakeLast(63), check] } },
+            return await SaveAsync(instance, state with { Preparation = prep with { Evidence = [.. prep.Evidence.TakeLast(63), check], Status = StatusAfterEvidence(prep, check) } },
                 "skillTest", check.Status.ToString(), true, token);
         }, ct);
 
@@ -279,7 +282,7 @@ public sealed class HarnessManagementService(
                 evidence.Add(new("Core", draft.Revision, scenario.Title, result.Passed ? HarnessEvidenceStatus.Verified : HarnessEvidenceStatus.Failed,
                     scenario.Prompt, result.Passed ? "Synthetic representative scenario passed." : string.Join("; ", result.Findings)));
             }
-            var status = checks.HasBlockingFindings || evidence.Any(e => e.DraftRevision == draft.Revision && e.Actor == "Core" && e.Status == HarnessEvidenceStatus.Failed)
+            var status = checks.HasBlockingFindings || evidence.Any(e => e.DraftRevision == draft.Revision && e.Status == HarnessEvidenceStatus.Failed)
                 ? HarnessPreparationStatus.Failed : prep.Approvals.Any(a => a.Status is "Pending" or "Consumed")
                     ? HarnessPreparationStatus.AwaitingApproval : evidence.Any(e => e.Actor == "Agent" && e.DraftRevision == draft.Revision)
                         ? HarnessPreparationStatus.Ready : HarnessPreparationStatus.Preparing;
@@ -294,7 +297,9 @@ public sealed class HarnessManagementService(
             RequireRevision(instance, expectedRevision);
             var state = RequireEnabled(instance);
             var prep = state.Preparation ?? throw AgentCoreErrors.Validation("No candidate exists.");
-            if (prep.Status != HarnessPreparationStatus.Ready || prep.Approvals.Any(a => a.Status is "Pending" or "Consumed")
+            if (prep.Status != HarnessPreparationStatus.Ready
+                || prep.Evidence.Any(e => e.DraftRevision == draftRevision && e.Status == HarnessEvidenceStatus.Failed)
+                || prep.Approvals.Any(a => a.Status is "Pending" or "Consumed")
                 || !prep.Evidence.Any(e => e.Actor == "Agent" && e.DraftRevision == draftRevision)
                 || !prep.Evidence.Any(e => e.Actor == "Core" && e.DraftRevision == draftRevision && e.Check == "Structure and resource policy" && e.Status == HarnessEvidenceStatus.Verified))
                 throw AgentCoreErrors.Validation("Review current verification and resolve approvals before promotion.");
@@ -378,6 +383,8 @@ public sealed class HarnessManagementService(
                 await resources.UpsertDraftResourceAsync(draft.DraftId, draft.Revision, existing?.ResourceId, path,
                     AgentDefinitionResourceKind.Knowledge, stored.MediaType, stored.ContentSha256, stored.ByteLength, ct, history: DraftEvent(instance, draft, operation.Kind, "ResourceCommitted"));
                 var current = await lifecycle.GetDraftAsync(draft.DraftId, ct);
+                if (current.Revision != draft.Revision + 1)
+                    throw AgentCoreErrors.Conflict("Candidate changed during the resource update; inspect again.");
                 await lifecycle.UpdateDraftAsync(draft.DraftId, current.Revision, current.Candidate with { Environment = environment with
                 {
                     KnowledgeSources = [.. environment.KnowledgeList.Where(k => k.Identity != operation.Id),
@@ -390,6 +397,8 @@ public sealed class HarnessManagementService(
                 var resource = (await resources.ListDraftResourcesAsync(draft.DraftId, ct)).SingleOrDefault(r => r.LogicalPath == reference.ResourcePath);
                 if (resource is not null) await resources.RemoveDraftResourceAsync(draft.DraftId, draft.Revision, resource.ResourceId, ct, history: DraftEvent(instance, draft, operation.Kind, "ResourceRemoved"));
                 var afterRemove = await lifecycle.GetDraftAsync(draft.DraftId, ct);
+                if (afterRemove.Revision != draft.Revision + (resource is null ? 0 : 1))
+                    throw AgentCoreErrors.Conflict("Candidate changed during the resource removal; inspect again.");
                 await lifecycle.UpdateDraftAsync(draft.DraftId, afterRemove.Revision, afterRemove.Candidate with { Environment = environment with
                     { KnowledgeSources = environment.KnowledgeList.Where(k => k.Identity != operation.Id).ToArray() } }, ct, history: DraftEvent(instance, afterRemove, operation.Kind, "CandidateCommitted"));
                 break;
@@ -418,6 +427,10 @@ public sealed class HarnessManagementService(
             default: throw AgentCoreErrors.Validation("Unknown semantic authoring operation.");
         }
     }
+
+    private static HarnessPreparationStatus StatusAfterEvidence(HarnessPreparation prep, HarnessVerificationEvidence evidence) =>
+        evidence.Status == HarnessEvidenceStatus.Failed ? HarnessPreparationStatus.Failed
+            : prep.Status == HarnessPreparationStatus.Ready ? HarnessPreparationStatus.Preparing : prep.Status;
 
     private static void ValidateOperation(HarnessManagementPolicy policy, AgentDefinitionDraft draft, HarnessAuthoringOperation op)
     {

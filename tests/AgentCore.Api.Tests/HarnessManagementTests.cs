@@ -52,6 +52,12 @@ public sealed class HarnessManagementTests
         Assert.True(promoted.IsSuccessStatusCode, await promoted.Content.ReadAsStringAsync());
         review = (await promoted.Content.ReadFromJsonAsync<HarnessReviewResponse>())!;
         Assert.True(review.ActiveVersion > 7);
+        var cancelledPublication = await client.PostAsJsonAsync(prefix + "/cancel", new HarnessRevisionRequest(review.InstanceRevision));
+        Assert.Equal(HttpStatusCode.Conflict, cancelledPublication.StatusCode);
+        var preserved = await client.GetFromJsonAsync<HarnessReviewResponse>(prefix);
+        Assert.Equal("Published", preserved!.Preparation!.Status);
+        Assert.Equal(review.InstanceRevision, preserved.InstanceRevision);
+        Assert.Equal(review.ActiveVersion, preserved.ActiveVersion);
         var freeze = await client.PutAsJsonAsync(prefix + "/policy", new HarnessPolicyRequest(review.InstanceRevision, "Disabled", [], [], [], Frozen: true));
         freeze.EnsureSuccessStatusCode();
         var frozen = (await freeze.Content.ReadFromJsonAsync<HarnessReviewResponse>())!;

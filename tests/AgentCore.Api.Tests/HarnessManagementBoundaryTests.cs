@@ -150,6 +150,36 @@ public sealed class HarnessManagementBoundaryTests
     }
 
     [Theory]
+    [InlineData("Agent")]
+    [InlineData("Knowledge")]
+    [InlineData("Skill")]
+    public async Task Failed_evidence_after_ready_revokes_promotion_without_another_verify(string failure)
+    {
+        await using var factory = new AgentCoreApiFactory();
+        var (instance, review) = await Start(factory, HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources, HarnessManagementScope.Skills]);
+        var service = factory.Services.GetRequiredService<HarnessManagementService>();
+        var prepId = review.State.Preparation!.PreparationId;
+        await service.RecordAgentEvidenceAsync(instance.InstanceId, prepId,
+            new("Agent", review.Draft!.Revision, "Initial assessment", HarnessEvidenceStatus.PartiallyVerified, "Expected", "Observed", "External effects untested."));
+        instance = await service.VerifyAsync(instance.InstanceId, prepId);
+        Assert.Equal(HarnessPreparationStatus.Ready, instance.HarnessManagement!.Preparation!.Status);
+        instance = failure switch
+        {
+            "Agent" => await service.RecordAgentEvidenceAsync(instance.InstanceId, prepId,
+                new("Agent", review.Draft.Revision, "Failed assessment", HarnessEvidenceStatus.Failed, "Expected", "Failed")),
+            "Knowledge" => await service.TestKnowledgeAsync(instance.InstanceId, prepId, "missing", "Expected content"),
+            _ => await service.TestSkillActivationAsync(instance.InstanceId, prepId, "missing", default)
+        };
+        Assert.Equal(HarnessPreparationStatus.Failed, instance.HarnessManagement!.Preparation!.Status);
+        await Assert.ThrowsAsync<AgentCoreException>(async () => await service.PromoteAsync(instance.InstanceId, instance.Revision, review.Draft.Revision));
+        instance = await service.VerifyAsync(instance.InstanceId, prepId);
+        Assert.Equal(HarnessPreparationStatus.Failed, instance.HarnessManagement!.Preparation!.Status);
+        Assert.Equal(7, instance.ActiveVersion);
+        instance = await service.StartAsync(instance.InstanceId, instance.Revision, "Prepare a corrected candidate.");
+        Assert.NotEqual(prepId, instance.HarnessManagement!.Preparation!.PreparationId);
+    }
+
+    [Theory]
     [InlineData("tool.select", true, null, HarnessManagementMode.Managed)]
     [InlineData("tool.select", true, null, HarnessManagementMode.Assisted)]
     [InlineData("tool.select", false, null, HarnessManagementMode.Managed)]
