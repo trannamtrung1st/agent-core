@@ -382,6 +382,38 @@ public sealed class OpenAICompatibleLanguageModelTests
     }
 
     [Theory]
+    [InlineData("browser.navigate", false)]
+    [InlineData("browser.act", true)]
+    [InlineData("browser.pages", true)]
+    public async Task Browser_object_unions_map_to_provider_compatible_function_parameters(string name, bool operationRequired)
+    {
+        const string body = "data: {\"choices\":[{\"delta\":{\"content\":\"Ready\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
+        var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
+        var model = Create(handler, tools: true);
+        var definition = ToolRegistry.Get(name).ModelDefinition;
+        _ = await CollectAsync(model, new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Hi")], Tools: [definition]));
+        using var request = JsonDocument.Parse(handler.LastBody!);
+        var schema = request.RootElement.GetProperty("tools")[0].GetProperty("function").GetProperty("parameters");
+        Assert.Equal("object", schema.GetProperty("type").GetString());
+        Assert.False(schema.TryGetProperty("oneOf", out _));
+        Assert.False(schema.TryGetProperty("anyOf", out _));
+        Assert.False(schema.GetProperty("additionalProperties").GetBoolean());
+        var fields = schema.GetProperty("properties");
+        Assert.True(fields.TryGetProperty("operation", out _));
+        if (operationRequired)
+            Assert.Equal(["operation"], schema.GetProperty("required").EnumerateArray().Select(field => field.GetString()));
+        else Assert.False(schema.TryGetProperty("required", out _));
+        if (name == "browser.act")
+        {
+            Assert.Equal([200, 500], fields.GetProperty("value").GetProperty("anyOf").EnumerateArray()
+                .Select(field => field.GetProperty("maxLength").GetInt32()).Order());
+            Assert.Equal(128, fields.GetProperty("ref").GetProperty("maxLength").GetInt32());
+        }
+        using var original = JsonDocument.Parse(definition.ParametersJson);
+        Assert.True(original.RootElement.TryGetProperty("oneOf", out _));
+    }
+
+    [Theory]
     [InlineData("knowledge.retrieve")]
     [InlineData("harness.inspect")]
     [InlineData("harness.knowledge.upsert")]
@@ -420,10 +452,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             var skill = schema.GetProperty("properties").GetProperty("skill").GetProperty("properties");
             Assert.Equal(SkillIds.Pattern, skill.GetProperty("id").GetProperty("pattern").GetString());
             Assert.DoesNotContain(schema.GetProperty("required").EnumerateArray(), field => field.GetString() == "expected");
-            var skillRequired = schema.GetProperty("properties").GetProperty("skill").GetProperty("required");
-            Assert.DoesNotContain(skillRequired.EnumerateArray(), field => field.GetString() == "id");
-            Assert.DoesNotContain(skillRequired.EnumerateArray(), field => field.GetString() == "name");
-            Assert.DoesNotContain(skillRequired.EnumerateArray(), field => field.GetString() == "procedure");
+            Assert.False(schema.GetProperty("properties").GetProperty("skill").TryGetProperty("required", out _));
             Assert.Equal(8, skill.GetProperty("activationKeywords").GetProperty("maxItems").GetInt32());
             Assert.True(skill.GetProperty("activationKeywords").GetProperty("uniqueItems").GetBoolean());
         }
