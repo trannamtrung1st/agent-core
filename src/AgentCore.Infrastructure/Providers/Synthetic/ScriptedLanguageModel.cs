@@ -94,9 +94,9 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         ModelRequest request,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        if (HarnessPreparationScript.Generate(request) is { } preparationEvents)
+        if (HarnessChatScript.Generate(request) is { } chatEvents)
         {
-            foreach (var item in preparationEvents) yield return item;
+            foreach (var item in chatEvents) yield return item;
             yield break;
         }
 

@@ -97,7 +97,7 @@ public static class ToolCatalog
 
         foreach (var descriptor in ToolRegistry.All)
         {
-            if (descriptor.OfferRule != ToolOfferRule.CurrentExecutionCapability
+            if (descriptor.OfferRule is not (ToolOfferRule.CurrentExecutionCapability or ToolOfferRule.HarnessAuthority)
                 || !ToolPolicy.IsOffered(descriptor, definition, context, configurationGate)
                 || !seen.Add(descriptor.Name))
             {

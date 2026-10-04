@@ -14,7 +14,8 @@ export function ApprovalModal({ approval, onApprove, onReject }: ApprovalModalPr
   return (
     <Modal
       open={open}
-      title="Approve sensitive action"
+      className={approval?.toolName.startsWith("harness.") ? "harness-chat-approval" : undefined}
+      title={approval?.toolName.startsWith("harness.") ? "Save this harness change?" : "Approve sensitive action"}
       okText="Approve"
       cancelText="Reject"
       onOk={onApprove}
@@ -32,7 +33,7 @@ export function ApprovalModal({ approval, onApprove, onReject }: ApprovalModalPr
                 <li key={key}>
                   <Typography.Text strong>{key}</Typography.Text>
                   {": "}
-                  <Typography.Text>{value}</Typography.Text>
+                  {approval.toolName.startsWith("harness.") ? <Typography.Paragraph className="harness-procedure" style={{ maxHeight: "40vh", overflow: "auto", overflowWrap: "anywhere" }}>{value}</Typography.Paragraph> : <Typography.Text>{value}</Typography.Text>}
                 </li>
               ))}
             </ul>

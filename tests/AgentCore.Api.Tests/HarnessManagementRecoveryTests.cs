@@ -15,6 +15,55 @@ namespace AgentCore.Api.Tests;
 public sealed class HarnessManagementRecoveryTests
 {
     [Fact]
+    public async Task Chat_adoption_failure_preserves_active_version_and_fresh_change_survives_sqlite_reopen()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "p97-chat-recovery-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        Guid id; int published;
+        try
+        {
+            await using (var factory = new HarnessSqliteFactory(root))
+            {
+                var services = factory.Services;
+                var service = services.GetRequiredService<HarnessManagementService>();
+                var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+                id = instance.InstanceId;
+                instance = await service.ConfigureAsync(id, instance.Revision, new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources], [], []));
+                var contexts = services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>();
+                await using (var db = await contexts.CreateDbContextAsync())
+                    await db.Database.ExecuteSqlRawAsync("""
+                        CREATE TRIGGER P97ChatFail BEFORE UPDATE OF ActiveVersion ON AgentInstances
+                        WHEN NEW.ActiveVersion != OLD.ActiveVersion
+                        BEGIN SELECT RAISE(ABORT, 'private injected fault'); END;
+                        """);
+                var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+                var args = System.Text.Json.JsonSerializer.Serialize(new { expectedVersion = 7, policyRevision = instance.HarnessManagement!.PolicyRevision,
+                    id = "chat-recovered", content = "Durable order policy", source = "conversation:user", expected = "Retain policy", observed = "Owner supplied role knowledge" });
+                var call = new AgentCore.Application.Ports.ModelToolCall("chat", "harness.knowledge.upsert", args);
+                var executor = services.GetRequiredService<AgentCore.Application.Tools.SessionToolExecutor>();
+                var admission = new AgentCore.Application.Tools.ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: id, OwnerTurnText: "Durable order policy");
+                var failed = await executor.ExecuteAsync(pinned, Guid.NewGuid(), call, 100000, admission: admission);
+                Assert.DoesNotContain("private injected fault", failed.Text);
+                Assert.DoesNotContain("\"saved\":true", failed.Text);
+                var review = await service.ReviewAsync(id);
+                Assert.Equal(7, review.ActiveVersion);
+                Assert.Equal(HarnessPreparationStatus.Failed, review.State.Preparation!.Status);
+                await using (var db = await contexts.CreateDbContextAsync()) await db.Database.ExecuteSqlRawAsync("DROP TRIGGER P97ChatFail;");
+                var recovered = await executor.ExecuteAsync(pinned, Guid.NewGuid(), call, 100000, admission: admission);
+                Assert.Contains("\"saved\":true", recovered.Text);
+                published = (await service.ReviewAsync(id)).ActiveVersion;
+            }
+            await using var reopened = new HarnessSqliteFactory(root);
+            var durable = await reopened.Services.GetRequiredService<HarnessManagementService>().ReviewAsync(id);
+            Assert.Equal(published, durable.ActiveVersion);
+            Assert.Equal(HarnessPreparationStatus.Published, durable.State.Preparation!.Status);
+            var definition = (await reopened.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", published))!;
+            Assert.Contains(definition.Environment!.KnowledgeList, k => k.Identity == "chat-recovered");
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public async Task Failed_adoption_transaction_preserves_active_version_and_preparation_then_fresh_verification_recovers()
     {
         var root = Path.Combine(Path.GetTempPath(), "p97-adoption-" + Guid.NewGuid().ToString("N"));
@@ -28,8 +77,7 @@ public sealed class HarnessManagementRecoveryTests
                 new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []));
             instance = await service.StartAsync(instance.InstanceId, instance.Revision, "Prepare a safe review procedure.");
             var prepId = instance.HarnessManagement!.Preparation!.PreparationId;
-            var execution = factory.Services.GetRequiredService<HarnessPreparationExecution>();
-            var review = await execution.RunAsync(instance.InstanceId, prepId);
+            var review = await HarnessLegacyFixture.RunAsync(factory.Services, instance.InstanceId, prepId);
             Assert.Equal(HarnessPreparationStatus.Ready, review.State.Preparation!.Status);
             var contexts = factory.Services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>();
             await using (var db = await contexts.CreateDbContextAsync())
@@ -46,7 +94,7 @@ public sealed class HarnessManagementRecoveryTests
             Assert.Null(unchanged.State.Preparation.PublishedVersion);
             await using (var db = await contexts.CreateDbContextAsync())
                 await db.Database.ExecuteSqlRawAsync("DROP TRIGGER P97FailAdoption;");
-            review = await execution.RunAsync(instance.InstanceId, prepId);
+            review = await HarnessLegacyFixture.RunAsync(factory.Services, instance.InstanceId, prepId);
             instance = await service.PromoteAsync(instance.InstanceId, review.InstanceRevision, review.Draft!.Revision);
             Assert.True(instance.ActiveVersion > 7);
             Assert.Equal(HarnessPreparationStatus.Published, instance.HarnessManagement!.Preparation!.Status);
@@ -80,7 +128,7 @@ public sealed class HarnessManagementRecoveryTests
                         ["knowledge:support-order-policy"], ["web.fetch"]));
                 instance = await service.StartAsync(id, instance.Revision, "Prepare operations review.");
                 preparationId = instance.HarnessManagement!.Preparation!.PreparationId;
-                var review = await first.Services.GetRequiredService<HarnessPreparationExecution>().RunAsync(id, preparationId);
+                var review = await HarnessLegacyFixture.RunAsync(first.Services, id, preparationId);
                 draftId = review.Draft!.DraftId;
                 var approval = Assert.Single(review.State.Preparation!.Approvals);
                 approvalId = approval.ApprovalId;
@@ -95,7 +143,7 @@ public sealed class HarnessManagementRecoveryTests
                 Assert.Equal("Pending", Assert.Single(review.State.Preparation!.Approvals).Status);
                 Assert.Contains(review.Draft.Candidate.SkillList, s => s.Id == "operations.review");
                 var instance = await service.DecideApprovalAsync(id, revision, approvalId, actionHash, true);
-                review = await reopened.Services.GetRequiredService<HarnessPreparationExecution>().RunAsync(id, preparationId);
+                review = await HarnessLegacyFixture.RunAsync(reopened.Services, id, preparationId);
                 Assert.Equal(HarnessPreparationStatus.Ready, review.State.Preparation!.Status);
                 instance = await service.PromoteAsync(id, review.InstanceRevision, review.Draft!.Revision);
                 var publishedVersion = instance.ActiveVersion;

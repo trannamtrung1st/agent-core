@@ -335,19 +335,18 @@ Ended rows: reopen/rename/archive/unarchive fail closed or no-op without resurre
 
 ## P9.7 owner HTTP surface
 
-All routes below inherit the existing local trusted-owner capability filter and live under `/api/v2/admin/agent-instances/{instanceId}/harness`. Authoring is not added to SignalR or ordinary Chat tool offers.
+All governance/advanced owner routes retain the local trusted-owner filter under `/api/v2/admin/agent-instances/{instanceId}/harness`. Primary Chat authoring uses contextual fixed semantic tools through existing SignalR/runtime exact approval messages; no new realtime wire envelope is introduced.
 
 | Method / suffix | Request | Effect |
 | --- | --- | --- |
-| GET (root) | none | Safe owner policy/candidate/diff/evidence review. |
-| PUT `/policy` | `expectedRevision`, `mode`, `scopes`, `sources`, `eligibleTools`, `frozen` | Owner grant/revoke; invalidates prior preparation. |
-| POST `/prepare` | `expectedRevision`, `purpose` | Create a fork and preparation; returns before model work. |
-| POST `/continue` | `preparationId` | Run bounded model preparation against its grant and cumulative budget. |
-| POST `/verify` | `preparationId` | Refresh Core checks for the current candidate. |
-| POST `/cancel` | `expectedRevision` | Cancel preparation and pending approvals. |
-| POST `/approvals/{approvalId}` | `expectedRevision`, `actionHash`, `approve` | Exact owner decision; stale/altered proposals fail. |
-| POST `/publish-adopt` | `expectedRevision`, `draftRevision` | Validate/evaluate/diff/publish via existing lifecycle, then explicit CAS adoption. |
+| GET root | none | Policy, recent internal candidate/diff/evidence inspection. |
+| PUT `/policy` | expectedRevision, mode, scopes, sources, eligibleTools, frozen | Grant/revoke/freeze. Normal UI sends empty source/eligible arrays; server derives authorized configured eligibility. |
+| POST `/prepare` | expectedRevision, purpose | Advanced owner candidate fork; no model loop. |
+| POST `/verify` | preparationId | Advanced current candidate Core checks. |
+| POST `/cancel` | expectedRevision | Discard unfinished candidate/pending approvals; Published returns 409. |
+| POST `/approvals/{approvalId}` | expectedRevision, actionHash, approve | Legacy advanced exact candidate decision. |
+| POST `/publish-adopt` | expectedRevision, draftRevision | Advanced owner lifecycle publication/adoption. |
 
-Responses use explicit string modes/statuses and typed review DTOs. Evidence includes actor, tested draft revision, check, status, expected, observed, and limitation. Outcomes are Verified, PartiallyVerified, CannotVerify, RequiresExternalEvidence, Failed. Publication returns both new published version and tested `publishedDraftRevision`; diff/evidence stay associated with that revision. Validation uses 400, stale revisions/exact approval mismatch use 409, and unexpected failures reuse a safe server `diagnosticId`. Owner review contains approval hashes; the model projection never does.
+`POST /continue` was removed and returns 404. Normal tools are `harness.inspect`, `harness.knowledge.upsert/remove`, `harness.skill.upsert/remove`, `harness.instructions.update`, `harness.tool.select/configure`. Mutations carry expectedVersion/policyRevision, semantic payload and expected/observed/limitation. Exact runtime approval binds tool plus canonical arguments; authorization is rechecked after the wait. Success returns saved, activeVersion, appliesTo=future conversations, currentSessionUnchanged, verification and limitation. Errors use safe error/message and diagnosticId when available.
 
-P9.7 `POST .../harness/cancel` returns 409 for a Published preparation and preserves its result, instance revision and active version. Evidence added after Ready revokes promotion until verification runs again; current failed Agent or Core evidence blocks promotion. A concurrent draft change between a knowledge resource mutation and candidate reference update returns 409 and requires re-inspection.
+Typed owner review uses string modes/statuses and evidence actor, draft revision, check, status, expected/observed/limitation. Verified, PartiallyVerified, CannotVerify, RequiresExternalEvidence and Failed remain distinct. Published evidence retains tested publishedDraftRevision. Invalid requests use 400; stale revisions/grants use 409; unexpected failures use server diagnostics. No private credential or host-path projection enters model context.

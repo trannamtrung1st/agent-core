@@ -29,8 +29,6 @@ internal static class HarnessManagementEndpoints
                 var instance = await service.StartAsync(instanceId, request.ExpectedRevision, request.Purpose, ct);
                 return await service.ReviewAsync(instanceId, ct);
             }));
-        group.MapPost("/continue", (Guid instanceId, HarnessRunRequest request, HarnessPreparationExecution execution, CancellationToken ct) =>
-            Respond(() => execution.RunAsync(instanceId, ParseGuid(request.PreparationId), ct)));
         group.MapPost("/verify", (Guid instanceId, HarnessRunRequest request, HarnessManagementService service, CancellationToken ct) =>
             Respond(async () =>
             {

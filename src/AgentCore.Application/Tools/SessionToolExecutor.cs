@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using AgentCore.Domain.Conversation;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Admin;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -31,7 +32,8 @@ public sealed partial class SessionToolExecutor(
     IBrowserSession? browser = null,
     IApplicationConnectionStore? applicationConnections = null,
     IAgentDefinitionResourceAdminStore? definitionResources = null,
-    IWorkCaptureStore? workCaptures = null)
+    IWorkCaptureStore? workCaptures = null,
+    Func<HarnessManagementService>? harnessAuthoring = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -45,6 +47,15 @@ public sealed partial class SessionToolExecutor(
         triggerAuthorizer ?? new HeuristicTriggerCommandAuthorizer();
 
     public ITriggerCommandAuthorizer TriggerCommandAuthorizer => _triggerAuthorizer;
+
+    public async ValueTask<HarnessChatContext?> HarnessContextAsync(Guid? instanceId, CancellationToken ct)
+    {
+        if (instanceId is not Guid id || _agentInstances is null || harnessAuthoring is null) return null;
+        var instance = await _agentInstances.FindAsync(id, ct);
+        if (instance is null || instance.Compatibility || instance.Lifecycle != AgentInstanceLifecycle.Active
+            || instance.HarnessManagement is not { } state || state.Policy.Frozen || state.Policy.Mode == HarnessManagementMode.Disabled) return null;
+        return new(state.Policy, state.PolicyRevision, instance.ActiveVersion);
+    }
 
     public ToolPolicyDecision EvaluateExecutionPolicy(
         AgentDefinition definition,
@@ -96,6 +107,9 @@ public sealed partial class SessionToolExecutor(
         {
             return TextResult(Error("forbidden", "Trigger changes are not authorized from occurrence evidence."));
         }
+
+        if (HarnessChatTools.IsHarness(call.Name) && admission is not null)
+            admission = admission with { Harness = await HarnessContextAsync(admission.AgentInstanceId, cancellationToken) };
 
         var policy = ToolPolicy.EvaluateExecution(definition, call.Name, _configurationGate, approvalGrant, admission);
         if (policy == ToolPolicyDecision.Deny
@@ -156,6 +170,16 @@ public sealed partial class SessionToolExecutor(
 
         try
         {
+            if (HarnessChatTools.IsHarness(call.Name))
+            {
+                if (harnessAuthoring is null || admission?.AgentInstanceId is not Guid instanceId)
+                    return TextResult(Error("forbidden", "Harness authoring is unavailable in this execution."));
+                var result = call.Name == HarnessChatTools.Inspect
+                    ? await harnessAuthoring().InspectChatAsync(instanceId, cancellationToken)
+                    : await harnessAuthoring().AuthorChatAsync(instanceId, call.Name, args, approvalGrant,
+                        admission.HarnessSources ?? [], admission.OwnerTurnText, cancellationToken);
+                return FitResult(remainingOutputBytes, JsonSerializer.Serialize(result));
+            }
             return call.Name switch
             {
                 ToolCatalog.AttachmentsRead => await ReadAttachmentAsync(sessionId, args, remainingOutputBytes, cancellationToken)
@@ -248,7 +272,9 @@ public sealed partial class SessionToolExecutor(
         }
         catch (AgentCoreException ex)
         {
-            return FitResult(remainingOutputBytes, Error(ex.Code, ex.Message));
+            return FitResult(remainingOutputBytes, ex.DiagnosticId is { } diagnosticId
+                ? JsonSerializer.Serialize(new { error = ex.Code, message = ex.Message, diagnosticId })
+                : Error(ex.Code, ex.Message));
         }
     }
 

@@ -1,115 +1,124 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from '@playwright/test';
 
 async function select(page: Page, label: string, text: string) {
-  await page.getByLabel(label, { exact: true }).click();
-  await page.locator('.ant-select-item-option').filter({ hasText: text }).last().click();
+  await page.getByLabel(label, {exact:true}).click();
+  if (label === 'Identity') await page.getByLabel(label, {exact:true}).fill(text);
+  await page.locator('.ant-select-item-option').filter({hasText:text}).last().click();
 }
-async function createManaged(page: Page) {
+async function create(page: Page, name: string, mode = 'Managed', scope = 'Knowledge & resources') {
   await page.goto('/');
-  await page.getByLabel('Message', {exact:true}).fill('Hello');
-  await page.getByRole('button', {name:'Send',exact:true}).click();
-  await expect(page.getByText('Hello from synthetic.', {exact:true}).last()).toBeVisible({timeout:15000});
-  await page.getByRole('button', {name:'Open Admin'}).click();
-  await page.getByRole('button', {name:'New instance',exact:true}).click();
-  await select(page, 'Definition', 'General Assistant · general-assistant');
-  await select(page, 'Published version', 'v7 · Built-in · Published');
-  const dialog = page.getByRole('dialog', {name:'New instance',exact:true});
-  await dialog.getByText('Custom persona',{exact:true}).click();
-  await dialog.getByLabel('Persona name').fill('P97 Store Operations Assistant');
-  await dialog.getByLabel('Persona role').fill('Store operations');
-  await dialog.getByLabel('Persona description').fill('Review orders and flag owner attention.');
-  await dialog.getByLabel('Persona tone').fill('Clear');
-  await dialog.getByText('Harness management (optional)',{exact:true}).click();
-  await select(page, 'Authoring mode', 'Managed');
-  await dialog.getByRole('button', {name:'Create instance',exact:true}).click();
-  await expect(page.getByRole('heading', {name:'P97 Store Operations Assistant',exact:true})).toBeVisible();
-  const section = page.locator('section[aria-label="Harness management"]');
-  await expect(section.getByText('Managed',{exact:true})).toBeVisible();
-  await section.getByText('Configure authoring policy',{exact:true}).click();
-  await section.getByLabel('Tool proposals',{exact:true}).check();
-  await section.getByLabel('Permitted sources',{exact:true}).fill('knowledge:support-order-policy');
-  await section.getByLabel('Eligible tools',{exact:true}).fill('web.fetch');
-  await page.locator('.ant-select-item-option').filter({hasText:'web.fetch'}).last().click();
-  await section.getByLabel('Eligible tools',{exact:true}).press('Escape');
-  await section.getByRole('button',{name:'Save authoring policy'}).click();
-  await section.getByLabel('Preparation purpose').fill('Prepare knowledge and a safe order-review procedure for store operations.');
-  await section.getByRole('button',{name:'Prepare harness',exact:true}).click();
-  await expect(section.getByText('Awaiting approval',{exact:true})).toBeVisible({timeout:30000});
-  return section;
-}
-async function approveAndVerify(page: Page) {
-  const section = page.locator('section[aria-label="Harness management"]');
-  await expect(section.getByRole('button',{name:'Publish & adopt',exact:true})).toBeDisabled();
-  await section.getByRole('button',{name:'Review & approve change'}).click();
-  await page.getByRole('dialog').getByRole('button',{name:'Approve change',exact:true}).click();
-  await section.getByRole('button',{name:'Continue preparation',exact:true}).click();
-  await expect(section.getByText('Ready for review',{exact:true})).toBeVisible({timeout:30000});
-  await section.getByText(/Verification & limitations/).click();
-  await expect(section.getByText('Candidate knowledge readback',{exact:true})).toBeVisible();
-  await expect(section.getByText('Partially verified',{exact:true})).toBeVisible();
-  await expect(section.getByText(/Production refunds and customer messages require external owner evidence/)).toBeVisible();
-  return section;
-}
-
-test('P9.7 owner configures, prepares, verifies, approves, publishes, adopts and freezes', async ({ page }, info) => {
-  const errors: string[] = [];
-  const failures: string[] = [];
-  page.on('console', message => { if(message.type()==='error' && !message.text().includes('[antd:')) errors.push(message.text()); });
-  page.on('requestfailed', request => failures.push(request.url()));
-  const section = await createManaged(page);
-  await expect(section.getByText('Active version 7',{exact:true})).toBeVisible();
-  await approveAndVerify(page);
-  for (const width of [1440, 768, 390]) {
-    await page.setViewportSize({width, height:900});
-    await expect(section.getByRole('button',{name:'Publish & adopt',exact:true})).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await page.evaluate(async () => { await Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => {}))); });
-    await page.screenshot({path: info.outputPath(`p97-review-${width}.png`), fullPage:true});
+  await page.getByLabel('Message',{exact:true}).fill('Hello');
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(page.getByText('Hello from synthetic.',{exact:true}).last()).toBeVisible();
+  await page.getByRole('button',{name:'Open Admin'}).click();
+  await page.getByRole('button',{name:'New instance',exact:true}).click();
+  await select(page,'Definition','General Assistant · general-assistant');
+  await select(page,'Published version','v7 · Built-in · Published');
+  const d=page.getByRole('dialog',{name:'New instance',exact:true});
+  await d.getByText('Custom persona',{exact:true}).click();
+  await d.getByLabel('Persona name').fill(name);await d.getByLabel('Persona role').fill('Operations');
+  await d.getByLabel('Persona description').fill('Review orders safely.');await d.getByLabel('Persona tone').fill('Clear');
+  await d.getByText('Harness management (optional)',{exact:true}).click();
+  await select(page,'Authoring mode',mode);
+  if(mode !== 'Manual (off)') {
+    for(const label of ['Knowledge & resources','Skills']) await d.getByLabel(label,{exact:true}).uncheck();
+    await d.getByLabel(scope,{exact:true}).check();
   }
-  await section.getByRole('button',{name:'Publish & adopt',exact:true}).focus();
-  await page.keyboard.press('Enter');
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog')).toBeHidden();
-  await section.getByRole('button',{name:'Publish & adopt',exact:true}).click();
-  await page.getByRole('dialog').getByRole('button',{name:'Publish & adopt',exact:true}).click();
-  await expect(section.getByText('Published & adopted',{exact:true})).toBeVisible({timeout:15000});
-  await expect(section.getByText('Active version 7',{exact:true})).toBeHidden();
-  await section.getByRole('button',{name:'Freeze self-management',exact:true}).click();
-  await page.getByRole('dialog').getByRole('button',{name:'Freeze self-management',exact:true}).click();
-  await expect(section.getByText('Frozen',{exact:true})).toBeVisible();
-  await expect(section.getByText('Published & adopted',{exact:true})).toBeVisible();
-  await expect(section.getByRole('button',{name:'Prepare harness',exact:true})).toHaveCount(0);
-  await section.getByText(/Verification & limitations/).click();
-  await expect(section.getByText('Partially verified',{exact:true})).toBeVisible();
-  await page.screenshot({path:info.outputPath('p97-frozen-mobile.png'),fullPage:true});
-  expect(errors).toEqual([]); expect(failures).toEqual([]);
+  await d.getByRole('button',{name:'Create instance',exact:true}).click();
+  await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
+  const id=page.url().split('/').at(-1)!;
+  await page.locator('.admin-header').getByRole('button',{name:/Chat$/}).first().click();
+  await select(page,'Identity',name);
+  return id;
+}
+async function send(page: Page, message: string) {
+  await page.getByLabel('Message',{exact:true}).fill(message);
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+}
+async function review(page: Page, id: string) {
+  const owner=await page.evaluate(()=>localStorage.getItem('agent-core.owner-capability'));
+  const response=await page.request.get(`/api/v2/admin/agent-instances/${id}/harness`,{headers:{'X-AgentCore-Owner-Capability':owner!}});
+  expect(response.ok()).toBe(true);return response.json();
+}
+async function fresh(page: Page, name: string) {
+  if (!(await page.getByRole('button',{name:'Start a new chat'}).isVisible())) await page.getByRole('button',{name:'Open chats'}).click();
+  await page.getByRole('button',{name:'Start a new chat'}).click();
+  await select(page,'Identity',name);
+}
+const learn='Learn this order policy for future conversations: https://example.test/p97/order-policy';
+
+test('Managed Chat reads authorized public material, saves knowledge and retrieves it in a new Session',async({page})=>{
+  const id=await create(page,'Managed learning');
+  await send(page,learn);
+  await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible({timeout:30000});
+  const saved=await review(page,id);expect(saved.activeVersion).toBeGreaterThan(7);
+  expect(saved.policy.sources).toEqual([]);expect(saved.knowledge.some((k:{identity:string})=>k.identity==='learned-orders')).toBe(true);
+  const sessionId=page.url().split('/').at(-1)!;
+  const owner=await page.evaluate(()=>localStorage.getItem('agent-core.owner-capability'));
+  const currentResponse=await page.request.get(`/api/v2/sessions/${sessionId}`,{headers:{'X-AgentCore-Owner-Capability':owner!}});
+  expect(currentResponse.ok()).toBe(true);const current=await currentResponse.json();expect(current.agentVersion).toBe(7);
+  await fresh(page,'Managed learning');await send(page,'What is the learned order policy?');
+  await expect(page.getByText('The saved policy says to check payment, shipping and fraud notes.',{exact:true})).toBeVisible();
 });
 
-test('P9.7 stale review cannot promote and can recover with fresh evidence', async ({page}) => {
-  const section = await createManaged(page);
-  await approveAndVerify(page);
-  const id = page.url().split('/').at(-1)!;
-  const owner = await page.evaluate(() => localStorage.getItem('agent-core.owner-capability'));
-  const headers = { 'X-AgentCore-Owner-Capability': owner! };
-  // Concurrent owner edit exercises the real draft CAS path; it does not touch the active version.
-  const reviewResponse = await page.request.get(`/api/v2/admin/agent-instances/${id}/harness`, {headers});
-  expect(reviewResponse.ok()).toBe(true);
-  const review = await reviewResponse.json();
-  const draftResponse = await page.request.get(`/api/v2/admin/definition-drafts/${review.preparation.draftId}`, {headers});
-  const draft = await draftResponse.json();
-  const edited = await page.request.put(`/api/v2/admin/definition-drafts/${draft.draftId}`, {headers,
-    data: { expectedRevision: draft.revision, candidate: {...draft.candidate, systemInstructions: draft.candidate.systemInstructions + '\nUse concise operations summaries.'} } });
-  expect(edited.ok()).toBe(true);
-  await section.getByRole('button',{name:'Publish & adopt',exact:true}).click();
-  await page.getByRole('dialog').getByRole('button',{name:'Publish & adopt',exact:true}).click();
-  await expect(section.getByRole('alert').filter({hasText:/stale|revision|candidate/i})).toContainText(/stale|revision|candidate/i);
-  await expect(section.getByText('Active version 7',{exact:true})).toBeVisible();
-  await expect(section.getByRole('button',{name:'Publish & adopt',exact:true})).toBeDisabled();
-  await section.getByRole('button',{name:'Continue preparation',exact:true}).click();
-  await expect(section.getByRole('button',{name:'Publish & adopt',exact:true})).toBeEnabled({timeout:30000});
-  await expect(section.getByText('Active version 7',{exact:true})).toBeVisible();
-  await section.getByRole('button',{name:'Cancel preparation',exact:true}).click();
-  await page.getByRole('dialog').getByRole('button',{name:'Cancel preparation',exact:true}).click();
-  await expect(section.getByText('Cancelled',{exact:true})).toBeVisible();
+test('Managed Chat learns a Skill and normal skills.load activates it in a new Session',async({page})=>{
+  const id=await create(page,'Skill learning','Managed','Skills');
+  await send(page,'Learn this order-review procedure for future conversations: Check payment, then shipping, then fraud notes.');
+  await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible({timeout:30000});
+  expect((await review(page,id)).skills.some((s:{id:string})=>s.id==='orders.review')).toBe(true);
+  await fresh(page,'Skill learning');await send(page,'Use the learned order-review procedure.');
+  await expect(page.getByText('Using the learned procedure: check payment, then shipping, then fraud notes. Stop before production actions.',{exact:true})).toBeVisible();
+});
+
+test('Assisted Chat rejects once then approves a fresh exact knowledge change',async({page})=>{
+  const id=await create(page,'Assisted learning','Assisted');
+  await send(page,learn);const approval=page.getByRole('dialog',{name:'Save this harness change?'});
+  await expect(approval).toContainText('Check payment, shipping and fraud notes');
+  await approval.getByRole('button',{name:'Reject',exact:true}).click();
+  await expect(page.getByText(/Nothing was saved/).last()).toBeVisible();expect((await review(page,id)).activeVersion).toBe(7);
+  await send(page,learn);await expect(approval).toBeVisible();await approval.getByRole('button',{name:'Approve',exact:true}).click();
+  await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible();expect((await review(page,id)).activeVersion).toBeGreaterThan(7);
+});
+
+test('Managed tool and instruction proposals require exact Chat approval',async({page})=>{
+  const id=await create(page,'Tool learning','Managed','Tool proposals');
+  await send(page,'Propose disabling http.request for future conversations.');
+  const approval=page.getByRole('dialog',{name:'Save this harness change?'});await expect(approval).toContainText('http.request');
+  expect((await review(page,id)).activeVersion).toBe(7);await approval.getByRole('button',{name:'Approve',exact:true}).click();
+  await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible();expect((await review(page,id)).selectedTools).not.toContain('http.request');
+  await send(page,'Try a sensitive HTTP action now.');
+  const sensitive=page.getByRole('dialog',{name:'Approve sensitive action'});await expect(sensitive).toBeVisible();
+  await sensitive.getByRole('button',{name:'Reject',exact:true}).click();
+  await expect(page.getByText('The sensitive action was not executed.',{exact:true})).toBeVisible();
+});
+
+test('Freeze blocks durable Chat learning while normal Chat still works',async({page})=>{
+  const id=await create(page,'Frozen learning');
+  await page.getByRole('button',{name:'Open Admin'}).click();await page.goto(`/admin/instances/${id}`);
+  await page.getByRole('button',{name:'Freeze self-management',exact:true}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'Freeze self-management',exact:true}).click();
+  await expect(page.getByText('Frozen',{exact:true})).toBeVisible();await page.locator('.admin-header').getByRole('button',{name:/Chat$/}).first().click();await select(page,'Identity','Frozen learning');
+  await send(page,learn);await expect(page.getByText(/cannot save a durable harness change/).last()).toBeVisible();
+  expect((await review(page,id)).activeVersion).toBe(7);await send(page,'Hello');await expect(page.getByText('Hello from synthetic.',{exact:true}).last()).toBeVisible();
+});
+
+
+test('Managed instruction changes still require approval in Chat',async({page})=>{
+  const id=await create(page,'Instruction learning','Managed','Operating instructions');
+  await send(page,'Save these operating instructions for future conversations: Use concise summaries.');
+  const approval=page.getByRole('dialog',{name:'Save this harness change?'});await expect(approval).toContainText('Use concise order-review summaries');
+  expect((await review(page,id)).activeVersion).toBe(7);await approval.getByRole('button',{name:'Reject',exact:true}).click();
+  await expect(page.getByText(/Nothing was saved/).last()).toBeVisible();expect((await review(page,id)).activeVersion).toBe(7);
+});
+
+test('A stale Chat approval cannot adopt and a fresh operation recovers',async({page})=>{
+  const id=await create(page,'Conflict learning','Assisted');await send(page,learn);
+  const approval=page.getByRole('dialog',{name:'Save this harness change?'});await expect(approval).toBeVisible();
+  const before=await review(page,id);const owner=await page.evaluate(()=>localStorage.getItem('agent-core.owner-capability'));
+  const changed=await page.request.put(`/api/v2/admin/agent-instances/${id}/harness/policy`,{headers:{'X-AgentCore-Owner-Capability':owner!},
+    data:{expectedRevision:before.instanceRevision,...before.policy}});expect(changed.ok()).toBe(true);
+  await approval.getByRole('button',{name:'Approve',exact:true}).click();await expect(page.getByText(/Nothing was saved/).last()).toBeVisible();
+  expect((await review(page,id)).activeVersion).toBe(7);
+  await send(page,learn);await expect(approval).toBeVisible();await approval.getByRole('button',{name:'Approve',exact:true}).click();
+  await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible();expect((await review(page,id)).activeVersion).toBeGreaterThan(7);
 });

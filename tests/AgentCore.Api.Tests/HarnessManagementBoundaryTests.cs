@@ -23,7 +23,7 @@ public sealed class HarnessManagementBoundaryTests
     [Fact]
     public async Task Disabled_offers_nothing_and_policy_cannot_grant_registered_unauthorized_tools()
     {
-        Assert.Empty(HarnessPreparationExecution.Offered(HarnessManagementPolicy.Disabled));
+        Assert.False(HarnessChatTools.Allows(HarnessChatTools.Inspect, new(HarnessManagementPolicy.Disabled, 1, 7)));
         await using var factory = new AgentCoreApiFactory();
         var instance = await factory.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
         var service = factory.Services.GetRequiredService<HarnessManagementService>();

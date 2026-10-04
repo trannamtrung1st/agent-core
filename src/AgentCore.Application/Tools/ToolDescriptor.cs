@@ -32,7 +32,11 @@ public sealed record ToolExecutionAdmission(
     bool TrustedConnection = false,
     bool SupportsVision = false,
     string? CaptureScope = null,
-    Guid? WorkItemId = null);
+    Guid? WorkItemId = null,
+    HarnessChatContext? Harness = null,
+    IReadOnlyList<HarnessSourceReceipt>? HarnessSources = null,
+    string? OwnerTurnText = null,
+    bool SupportsTools = true);
 
 public sealed record ToolDescriptor(
     ModelToolDefinition ModelDefinition,

@@ -18,6 +18,14 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         }
 
+        if (descriptor.OfferRule == ToolOfferRule.HarnessAuthority)
+        {
+            if (admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn, AgentInstanceId: not null, SupportsTools: true }
+                || !HarnessChatTools.Allows(toolName, admission.Harness)) return ToolPolicyDecision.Deny;
+            return HarnessChatTools.NeedsApproval(toolName, admission.Harness!) && grant is null
+                ? ToolPolicyDecision.RequireApproval : ToolPolicyDecision.Allow;
+        }
+
         if (!RolePermissions.AllowsTool(definition, toolName))
         {
             return ToolPolicyDecision.Deny;
@@ -125,6 +133,10 @@ public static class ToolPolicy
         {
             return false;
         }
+
+        if (descriptor.OfferRule == ToolOfferRule.HarnessAuthority)
+            return context is { DetachedExecution: false, ModelSupportsTools: true, Trigger.Kind: TriggerKind.UserTurn }
+                && HarnessChatTools.Allows(descriptor.Name, context.Harness);
 
         if (!RolePermissions.AllowsTool(definition, descriptor.Name))
         {

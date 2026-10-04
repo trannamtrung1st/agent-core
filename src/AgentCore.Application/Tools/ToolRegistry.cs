@@ -237,13 +237,14 @@ public static class ToolRegistry
                 ToolEffect.Write)
         };
 
-    public static IEnumerable<ToolDescriptor> All => Registered.Values;
+    private static readonly IReadOnlyDictionary<string, ToolDescriptor> Contextual = HarnessChatTools.Descriptors().ToDictionary(d => d.Name, StringComparer.Ordinal);
+    public static IEnumerable<ToolDescriptor> All => Registered.Values.Concat(Contextual.Values);
 
     public static bool TryGet(string toolName, out ToolDescriptor descriptor) =>
-        Registered.TryGetValue(toolName, out descriptor!);
+        Registered.TryGetValue(toolName, out descriptor!) || Contextual.TryGetValue(toolName, out descriptor!);
 
     public static ToolDescriptor Get(string toolName) =>
-        Registered.TryGetValue(toolName, out var descriptor)
+        TryGet(toolName, out var descriptor)
             ? descriptor
             : throw new KeyNotFoundException($"Unknown tool '{toolName}'.");
 

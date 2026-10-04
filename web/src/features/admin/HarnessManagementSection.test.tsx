@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App as AntApp } from "antd";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HarnessManagementSection } from "./HarnessManagementSection";
@@ -19,61 +19,55 @@ const candidate: HarnessReview = { ...base, policy: { ...base.policy, mode: "Man
     ] } };
 function mount() { render(<AntApp><HarnessManagementSection instanceId="instance" eligibleTools={["http.request"]} onUpdated={vi.fn()} /></AntApp>); }
 
-describe("Harness management", () => {
+describe("Harness governance", () => {
   beforeEach(() => { vi.mocked(getHarnessReview).mockReset(); vi.mocked(updateHarness).mockReset(); });
-  it("keeps manual defaults and requires a purpose before preparation", async () => {
+  it("keeps Manual defaults and explains conversational teaching without preparation controls", async () => {
     vi.mocked(getHarnessReview).mockResolvedValue(base); mount();
     expect(await screen.findByText("Manual")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Prepare harness" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText("Configure authoring policy"));
-    expect(await screen.findByLabelText("Authoring mode")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Save authoring policy" })).toBeDisabled();
+    expect(screen.getByLabelText("Authoring mode")).toBeVisible();
+    expect(screen.getByRole("button", {name:"Save authoring policy"})).toBeDisabled();
+    for (const name of ["Prepare harness", "Continue preparation", "Verify candidate", "Publish & adopt"])
+      expect(screen.queryByRole("button", {name})).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Permitted sources")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Eligible tools")).not.toBeInTheDocument();
   });
-  it("separates agent assessments, Core checks, stale evidence, and external limits", async () => {
+  it("keeps evidence ownership, staleness and external limitations in operator inspection", async () => {
     vi.mocked(getHarnessReview).mockResolvedValue(candidate); mount();
-    fireEvent.click(await screen.findByText(/Verification & limitations/));
+    fireEvent.click(await screen.findByText("Recent harness change & verification"));
     expect(await screen.findByText("Partially verified")).toBeVisible();
     expect(screen.getByText("Cannot verify")).toBeVisible();
     expect(screen.getByText("Requires external evidence")).toBeVisible();
     expect(screen.getByText("Stale · revision 2")).toBeVisible();
     expect(screen.getByText("Refund execution requires owner evidence.")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Publish & adopt" })).toBeEnabled();
   });
-  it("requires an exact visible approval and submits the action hash after confirmation", async () => {
-    const pending: HarnessReview = { ...candidate, preparation: { ...candidate.preparation!, status: "AwaitingApproval", approvals: [
-      { approvalId: "approval", actionHash: "exact-hash", status: "Pending", operation: { kind: "tool.select", draftRevision: 3, id: "http.request", enabled: false,
-        content: null, source: null, skill: null, allowUnreadUnsupportedTypes: null } }
-    ] } };
-    vi.mocked(getHarnessReview).mockResolvedValue(pending); vi.mocked(updateHarness).mockResolvedValue(candidate); mount();
-    expect(await screen.findByText("Approval required: tool.select")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Publish & adopt" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Review & approve change" }));
+  it("discards an unfinished historical candidate only after confirmation", async () => {
+    vi.mocked(getHarnessReview).mockResolvedValue(candidate);vi.mocked(updateHarness).mockResolvedValue(base); mount();
+    fireEvent.click(await screen.findByText("Recent harness change & verification"));
+    fireEvent.click(await screen.findByRole("button", {name:"Discard unfinished candidate"}));
     expect(updateHarness).not.toHaveBeenCalled();
-    fireEvent.click(await screen.findByRole("button", { name: "Approve change" }));
-    await waitFor(() => expect(updateHarness).toHaveBeenCalledWith("instance", "approvals/approval", { expectedRevision: 1, actionHash: "exact-hash", approve: true }));
+    fireEvent.click(await screen.findByRole("button", {name:"Discard candidate"}));
+    await waitFor(() => expect(updateHarness).toHaveBeenCalledWith("instance", "cancel", {expectedRevision:1}));
   });
-  it("refreshes a conflict without replaying and preserves an actionable error", async () => {
-    vi.mocked(getHarnessReview).mockResolvedValue(candidate); vi.mocked(updateHarness).mockRejectedValue(new Error("Candidate revision is stale; reload.")); mount();
-    fireEvent.click(await screen.findByRole("button", { name: "Verify candidate" }));
-    expect(await screen.findByText("Candidate revision is stale; reload.")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Reload" })).toBeEnabled();
-    expect(updateHarness).toHaveBeenCalledTimes(1);
-    expect(getHarnessReview).toHaveBeenCalledTimes(2);
+  it("refreshes a policy conflict without replay and keeps the error actionable", async () => {
+    vi.mocked(getHarnessReview).mockResolvedValue(candidate);vi.mocked(updateHarness).mockRejectedValue(new Error("Policy revision is stale; reload."));mount();
+    fireEvent.click(await screen.findByRole("button", {name:"Freeze self-management"}));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", {name:/^Freeze self-management$/}));
+    expect(await screen.findByText("Policy revision is stale; reload.")).toBeVisible();
+    expect(screen.getByRole("button", {name:"Reload"})).toBeEnabled();
+    expect(updateHarness).toHaveBeenCalledTimes(1);expect(getHarnessReview).toHaveBeenCalledTimes(2);
   });
-  it("shows frozen publication and evidence for the tested revision", async () => {
-    vi.mocked(getHarnessReview).mockResolvedValue({ ...candidate, activeVersion: 13, draftRevision: 4,
-      policy: { ...candidate.policy, mode: "Disabled", frozen: true }, preparation: { ...candidate.preparation!, status: "Published", publishedVersion: 13, publishedDraftRevision: 3 } });
-    mount(); expect(await screen.findByText("Frozen")).toBeVisible(); expect(screen.getByText("Published & adopted")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Continue preparation" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText(/Verification & limitations/));
-    expect(await screen.findByText("Partially verified")).toBeVisible();
+  it("retains published evidence and the tested revision after freeze", async () => {
+    vi.mocked(getHarnessReview).mockResolvedValue({...candidate, activeVersion:13,draftRevision:4,policy:{...candidate.policy,mode:"Disabled",frozen:true},
+      preparation:{...candidate.preparation!,status:"Published",publishedVersion:13,publishedDraftRevision:3}}); mount();
+    expect(await screen.findByText("Frozen")).toBeVisible();
+    fireEvent.click(screen.getByText("Recent harness change & verification"));
+    expect(await screen.findByText("Saved for future conversations · version 13")).toBeVisible();
     expect(screen.queryByText("Stale · revision 3")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", {name:"Discard unfinished candidate"})).not.toBeInTheDocument();
   });
-  it("shows loading, failed checks and a retry after load failure", async () => {
-    vi.mocked(getHarnessReview).mockRejectedValueOnce(new Error("Load failed")).mockResolvedValueOnce({ ...candidate,
-      preparation: { ...candidate.preparation!, status: "Failed" } }); mount();
-    expect(await screen.findByText("Load failed")).toBeVisible(); fireEvent.click(screen.getByRole("button", { name: "Reload" }));
-    expect(await screen.findByText("Failed", {exact:true})).toBeVisible();
-    expect(screen.getByRole("button", { name: "Prepare harness" })).toBeDisabled();
+  it("offers a retry for a failed governance load", async () => {
+    vi.mocked(getHarnessReview).mockRejectedValueOnce(new Error("Load failed")).mockResolvedValueOnce(base);mount();
+    expect(await screen.findByText("Load failed")).toBeVisible();fireEvent.click(screen.getByRole("button", {name:"Reload"}));
+    expect(await screen.findByText("Manual")).toBeVisible();
   });
 });

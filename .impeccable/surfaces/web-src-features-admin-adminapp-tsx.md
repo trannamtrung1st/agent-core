@@ -8,24 +8,18 @@ related_targets:
   - web/src/app.css
 ---
 
-# Admin instance harness review
+# Admin harness governance
 
-Mode: Operate. Extend the shipped dark Ant Design Admin surface for bounded harness preparation.
+Mode: Operate. Preserve shipped dark Ant Design v6 Admin panels.
 
-## Direction contract
+THESIS: Make authority, active version and freeze clear while teaching happens in Chat.
 
-THESIS: Make the owner's grant, candidate changes, evidence and consequential decisions readable in the existing instance configuration flow.
+OWN-WORLD: Existing Admin panel insets, direct Ant Design controls, token spacing and shared confirmation; `/docs` owns behavior.
 
-OWN-WORLD: Reuse Admin definition panels, direct Ant Design controls, token spacing and shared confirmation. Product specifications in `/docs` own authority and behavior.
+STORY: Configure Manual/Assisted/Managed and allowed areas, inspect recent changes/evidence, freeze. No required preparation/source/eligible/publish sequence.
 
-STORY: Optional Manual/Assisted/Managed configuration, a bounded purpose, candidate preparation, exact proposals, visible evidence, explicit publication/adoption and freeze.
+FIRST VIEWPORT: Persona/version management precedes Harness management. Active version and mode lead a short policy form; detailed recent evidence is collapsed. Freeze remains separately named.
 
-FIRST VIEWPORT: Existing instance persona/version management precedes the Harness management panel. Active version, mode and preparation state lead the panel. Policy and detailed review are collapsible; publication is the primary action only after current checks and resolved approvals.
+FORM: Wrap scopes/actions and evidence; 40px narrow targets, 72ch evidence measure. Label Core checks, partial Agent assessments, tested revisions and external limitations. Preserve safe diagnostics and publication readback after freeze.
 
-FORM: Procedural text and provenance wrap. Core check and Agent assessment labels remain separate from evidence outcomes. External limitations are visible next to the observed result. Mobile actions wrap and use 40px targets; evidence measure is capped at 72ch.
-
-FINISH: A batched desktop/mobile Impeccable review and one confirmation pass retain the incumbent visual world. Preserve keyboard Enter/Escape, explicit dialogs, readable errors, stale evidence, frozen publication readback and shared diagnostic details.
-
-## Verified scope
-
-P9.7 configure → prepare → exact tool approval → knowledge readback/Skill activation/fictional sample → publish/adopt → freeze, plus stale publication rejection and recovery. Synthetic evidence does not prove production refunds, messages or subjective model quality. No new UI kit, color palette or token system.
+FINISH: Bounded desktop/768/390 inspection and one correction/confirmation pass. Verify no horizontal overflow and usable narrow actions. No new UI kit or tokens.

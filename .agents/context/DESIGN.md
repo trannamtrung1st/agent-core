@@ -204,13 +204,13 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 
 ## Components
 
-### Harness preparation review
-- Reuse the existing Admin definition panel for instance-owned policy and candidate review. Manual is the creation default; enabled policy fields stay in a collapsed optional section.
-- Keep active version, mode/frozen state and preparation status together; purpose and tested candidate revision precede the review sections.
-- Use direct Ant Design Collapse sections for diff, provenance, Skills, instructions/tools and evidence. Pair every check with Core check or Agent assessment, its outcome, and tested revision; stale evidence stays visibly labeled.
-- Exact proposals show the operation and revision before shared `confirmAction` decisions. Publication and freeze each have a separately named confirmation. Preserve published evidence/diff after freeze.
-- Use established 8/12/16 spacing, 72ch evidence measure, wrapping action groups and 40px narrow action targets. Long source/Skill text wraps inside the panel. Loading, Stop, Reload and DiagnosticId use existing product primitives.
+### Conversational harness learning
 
+- Teach durable knowledge and procedures in Chat. Automatic receipts say “saved for future conversations” and disclose relevant verification limits; current conversation pins remain unchanged.
+- Reuse the existing Chat approval Modal for Assisted changes, instructions and tool proposals. Use “Save this harness change?”, readable complete bounded semantic change, source, version/policy context and future-Session semantics. Preserve keyboard Enter/Escape and exact Approve/Reject decisions. Proposal text wraps and scrolls within 40vh; narrow footer buttons have 40px minimum targets.
+- Admin is governance and inspection: active version, Manual/Assisted/Managed, independent scopes, save policy and freeze. Keep recent changes/evidence collapsed. No primary purpose/source/eligible/preparation/publication form. An unfinished legacy candidate may be discarded through shared confirmation.
+- Distinguish Core checks, Agent assessments, tested revisions, stale evidence and external limitations in inspection. Preserve published evidence after freeze. Use existing safe errors/DiagnosticDetails and do not replay stale approvals.
+- Reuse established 8/12/16 spacing, 72ch evidence measure, wrapping action groups and incumbent dark Ant Design v6 tokens. Desktop, 768px and 390px cover approval, automatic receipt, failed/rejected change and frozen inspection.
 
 ### Buttons
 - **Shape:** 6px radius; header icon actions are 32×32px. Composer Send/Attach/Voice are 32×32px and become 44px below 768px.

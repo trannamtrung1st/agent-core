@@ -331,7 +331,8 @@ public sealed class AgentDefinitionLifecycleService(
         long expectedRevision,
         Guid operationId,
         IReadOnlyList<string> changedSectionIds,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner)
     {
         var draft = await GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
         return await WithDefinitionGateAsync(
@@ -341,7 +342,7 @@ public sealed class AgentDefinitionLifecycleService(
                 expectedRevision,
                 operationId,
                 changedSectionIds,
-                ct),
+                ct, actorKind),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -350,7 +351,8 @@ public sealed class AgentDefinitionLifecycleService(
         long expectedRevision,
         Guid operationId,
         IReadOnlyList<string> changedSectionIds,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner)
     {
         var started = Stopwatch.GetTimestamp();
         var draft = await GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
@@ -369,7 +371,7 @@ public sealed class AgentDefinitionLifecycleService(
                 occupied,
                 time.GetUtcNow(),
                 operationId,
-                ChangedSectionIds: changedSectionIds),
+                ActorKind: actorKind, ChangedSectionIds: changedSectionIds),
             cancellationToken).ConfigureAwait(false);
         OperationalDiagnostics.RecordAdmin(
             "publish",
