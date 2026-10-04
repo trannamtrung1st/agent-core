@@ -4,12 +4,108 @@ using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Definitions;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AgentCore.Api.Tests;
 
 public sealed class HarnessChatAuthoringTests
 {
+    [Fact]
+    public async Task Managed_chat_forks_the_runtime_effective_built_in_when_a_durable_version_collides()
+    {
+        await using var factory = new AgentCoreApiFactory();
+        var services = factory.Services;
+        var definitions = services.GetRequiredService<IAgentDefinitionStore>();
+        var builtIn = (await definitions.GetAsync("general-assistant", 7))!;
+        var adminStore = services.GetRequiredService<IAgentDefinitionAdminStore>();
+        var now = DateTimeOffset.UtcNow;
+        var collision = await adminStore.CreateDraftAsync(new AgentDefinitionDraftCreate(builtIn.Id,
+            AgentDefinitionCandidate.FromDefinition(builtIn) with { SystemInstructions = "Durable collision sentinel." },
+            DefinitionDraftSourceKind.New, null, now));
+        var durable = await adminStore.PublishDraftAsync(new AgentDefinitionDraftPublish(collision.DraftId,
+            collision.Revision, Enumerable.Range(1, 6).ToArray(), now));
+        Assert.Equal(7, durable.Version);
+        Assert.Equal(builtIn.SystemInstructions, (await definitions.GetAsync(builtIn.Id, 7))!.SystemInstructions);
+
+        var authoring = services.GetRequiredService<HarnessManagementService>();
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync(builtIn.Id, 7);
+        instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
+            new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []));
+        var context = (await authoring.ChatContextAsync(instance.InstanceId, default))!;
+        var payload = JsonSerializer.Serialize(new { expectedVersion = 7, policyRevision = context.PolicyRevision,
+            skill = new { name = "Kubernetes review", description = "Guide a safe cluster review.",
+                procedure = "Confirm context and namespace before proposing a change." } });
+        var result = await services.GetRequiredService<SessionToolExecutor>().ExecuteAsync(builtIn, Guid.NewGuid(),
+            new("save", "harness.skill.upsert", payload), 100000,
+            admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId));
+        Assert.True(result.Text.Contains("\"saved\":true", StringComparison.Ordinal), result.Text);
+        var updated = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        Assert.Equal(7, updated.HarnessManagement!.Preparation!.BaseVersion);
+        Assert.Equal(DefinitionDraftSourceKind.ForkBuiltIn,
+            (await adminStore.GetDraftAsync(updated.HarnessManagement.Preparation.DraftId))!.SourceKind);
+        var future = (await definitions.GetAsync(builtIn.Id, updated.ActiveVersion))!;
+        Assert.Equal(builtIn.SystemInstructions, future.SystemInstructions);
+        Assert.NotEqual(durable.Payload.SystemInstructions, future.SystemInstructions);
+        Assert.Contains(future.SkillList, skill => skill.Name == "Kubernetes review");
+    }
+
+    [Fact]
+    public async Task Managed_chat_can_save_twice_from_built_in_and_durable_sources_with_inherited_unavailable_browser_tool()
+    {
+        await using var factory = new BrowserUnavailableFactory();
+        var services = factory.Services;
+        Assert.False(services.GetRequiredService<IToolConfigurationGate>().IsConfigured(ToolCatalog.BrowserNavigate));
+        var definitions = services.GetRequiredService<IAgentDefinitionStore>();
+        var builtIn = (await definitions.GetAsync("general-assistant", 12))!;
+        Assert.Contains(ToolCatalog.BrowserNavigate, RoleEnvironments.Of(builtIn).ToolList);
+        var authoring = services.GetRequiredService<HarnessManagementService>();
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync(builtIn.Id, 12);
+        instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
+            new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []));
+        var context = (await authoring.ChatContextAsync(instance.InstanceId, default))!;
+        var executor = services.GetRequiredService<SessionToolExecutor>();
+        async Task<AgentInstance> SaveAsync(int version, string name)
+        {
+            var payload = JsonSerializer.Serialize(new { expectedVersion = version, policyRevision = context.PolicyRevision,
+                skill = new { name, description = "Guide a safe cluster review.",
+                    procedure = "Confirm context and namespace before proposing a change." } });
+            var result = await executor.ExecuteAsync(builtIn, Guid.NewGuid(),
+                new(name, "harness.skill.upsert", payload), 100000,
+                admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId));
+            Assert.Contains("\"saved\":true", result.Text);
+            return (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        }
+
+        var first = await SaveAsync(12, "Kubernetes review");
+        Assert.Equal(DefinitionDraftSourceKind.ForkBuiltIn,
+            (await services.GetRequiredService<IAgentDefinitionAdminStore>().GetDraftAsync(first.HarnessManagement!.Preparation!.DraftId))!.SourceKind);
+        var second = await SaveAsync(first.ActiveVersion, "Kubernetes study");
+        Assert.Equal(DefinitionDraftSourceKind.ForkDurable,
+            (await services.GetRequiredService<IAgentDefinitionAdminStore>().GetDraftAsync(second.HarnessManagement!.Preparation!.DraftId))!.SourceKind);
+        Assert.True(second.ActiveVersion > first.ActiveVersion);
+        var future = (await definitions.GetAsync(builtIn.Id, second.ActiveVersion))!;
+        Assert.Equal(builtIn.SkillList.Count + 2, future.SkillList.Count);
+        Assert.Contains(future.SkillList, skill => skill.Name == "Kubernetes review");
+        Assert.Contains(future.SkillList, skill => skill.Name == "Kubernetes study");
+        Assert.Contains(ToolCatalog.BrowserNavigate, RoleEnvironments.Of(future).ToolList);
+    }
+
+    private sealed class BrowserUnavailableFactory : AgentCoreApiFactory
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IToolConfigurationGate>();
+                services.AddSingleton(ToolConfigurationGates.Unconfigured);
+            });
+        }
+    }
+
     [Fact]
     public async Task Inspection_example_can_save_a_skill_and_activate_its_exact_procedure()
     {
@@ -43,6 +139,7 @@ public sealed class HarnessChatAuthoringTests
 
     [Theory]
     [InlineData("{\"id\":\"INVALID ID\"}", "skill id")]
+    [InlineData("{\"name\":null}", "Skill name")]
     [InlineData("{\"description\":null}", "Skill description")]
     [InlineData("{\"activationKeywords\":null}", "activationKeywords")]
     [InlineData("{\"activationKeywords\":[\"cluster\",\"cluster\"]}", "activationKeywords")]
@@ -123,17 +220,24 @@ public sealed class HarnessChatAuthoringTests
         Assert.Contains("\"changed\":true", second.Text);
         Assert.Contains("\"skillId\":\"kubernetes-learning-and-cluster-support\"", second.Text);
         var afterSecond = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        var metadataOnly = JsonSerializer.Serialize(new { expectedVersion = afterSecond.ActiveVersion,
+            policyRevision = context.PolicyRevision, skill = new { name = "Kubernetes Learning and Cluster Support",
+                activationKeywords = new[] { "cluster review", "payments" } } });
+        var partial = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("partial", "harness.skill.upsert",
+            metadataOnly), 100000, admission: admission);
+        Assert.Contains("\"changed\":true", partial.Text);
+        var afterPartial = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
         var retry = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("retry", "harness.skill.upsert",
-            Payload(afterSecond.ActiveVersion, "Confirm context, then check namespace before each change.")), 100000, admission: admission);
+            Payload(afterPartial.ActiveVersion, "Confirm context, then check namespace before each change.")), 100000, admission: admission);
         Assert.Contains("\"saved\":true", retry.Text);
         Assert.Contains("\"changed\":false", retry.Text);
         var unchanged = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
-        Assert.Equal(afterSecond.ActiveVersion, unchanged.ActiveVersion);
-        Assert.Equal(afterSecond.Revision, unchanged.Revision);
+        Assert.Equal(afterPartial.ActiveVersion, unchanged.ActiveVersion);
+        Assert.Equal(afterPartial.Revision, unchanged.Revision);
         var future = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(unchanged.DefinitionId, unchanged.ActiveVersion))!;
         var skill = Assert.Single(future.SkillList);
         Assert.Equal("Confirm context, then check namespace before each change.", skill.Procedure);
-        Assert.Equal(["cluster review"], skill.ActivationKeywords);
+        Assert.Equal(["cluster review", "payments"], skill.ActivationKeywords);
         Assert.Equal(["chat.respond"], skill.RequiredCapabilities);
     }
 
@@ -225,6 +329,55 @@ public sealed class HarnessChatAuthoringTests
         var future = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(updated.DefinitionId, updated.ActiveVersion))!;
         Assert.Equal(KnowledgeSourcePaths.ResolveBackingPath(future.Environment!.KnowledgeList.Single(k => k.Identity == "cluster-guide")),
             Assert.Single(Assert.Single(future.SkillList).ResourcePaths));
+    }
+
+    [Fact]
+    public async Task Invalid_knowledge_reference_can_be_repaired_without_rewriting_the_existing_skill()
+    {
+        await using var factory = new AgentCoreApiFactory();
+        var services = factory.Services;
+        var authoring = services.GetRequiredService<HarnessManagementService>();
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
+            new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources, HarnessManagementScope.Skills], [], []));
+        var context = (await authoring.ChatContextAsync(instance.InstanceId, default))!;
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+        var executor = services.GetRequiredService<SessionToolExecutor>();
+        var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId);
+        const string procedure = "Confirm cluster context, inspect current state, plan rollback, and verify the result.";
+        var create = JsonSerializer.Serialize(new { expectedVersion = 7, policyRevision = context.PolicyRevision,
+            skill = new { name = "Kubernetes safety", description = "Review cluster changes safely.", procedure } });
+        var created = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("create", "harness.skill.upsert", create),
+            100000, admission: admission);
+        Assert.Contains("\"saved\":true", created.Text);
+        var afterCreate = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        string Bind(int version) => JsonSerializer.Serialize(new { expectedVersion = version,
+            policyRevision = context.PolicyRevision, skill = new { id = "kubernetes-safety",
+                knowledgeIds = new[] { "cluster-guide" } } });
+        var rejected = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("invalid", "harness.skill.upsert",
+            Bind(afterCreate.ActiveVersion)), 100000, admission: admission);
+        Assert.Contains("A knowledgeIds entry is not in the active harness", rejected.Text);
+        var unchanged = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        Assert.Equal(afterCreate.ActiveVersion, unchanged.ActiveVersion);
+        Assert.Equal(afterCreate.Revision, unchanged.Revision);
+
+        var knowledge = JsonSerializer.Serialize(new { expectedVersion = unchanged.ActiveVersion,
+            policyRevision = context.PolicyRevision, id = "cluster-guide", content = procedure,
+            source = "conversation:user", expected = "Retain the cluster checklist.", observed = "Owner supplied it." });
+        var learned = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("learn", "harness.knowledge.upsert",
+            knowledge), 100000, admission: admission with { OwnerTurnText = procedure });
+        Assert.Contains("\"saved\":true", learned.Text);
+        var afterKnowledge = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        var repaired = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("repair", "harness.skill.upsert",
+            Bind(afterKnowledge.ActiveVersion)), 100000, admission: admission);
+        Assert.Contains("\"saved\":true", repaired.Text);
+        var afterRepair = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
+        var future = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(instance.DefinitionId,
+            afterRepair.ActiveVersion))!;
+        var skill = Assert.Single(future.SkillList);
+        Assert.Equal(procedure, skill.Procedure);
+        Assert.Equal("Review cluster changes safely.", skill.Description);
+        Assert.Equal(KnowledgeSourcePaths.ResolveBackingPath("cluster-guide", null), Assert.Single(skill.ResourcePaths));
     }
 
     [Fact]

@@ -117,11 +117,11 @@ public sealed class HarnessManagementService(
             ValidateText(purpose, 2000, "purpose");
             if (state.Preparation is { Status: HarnessPreparationStatus.Preparing or HarnessPreparationStatus.AwaitingApproval or HarnessPreparationStatus.Ready })
                 throw AgentCoreErrors.Conflict("Cancel or finish the current preparation before starting another.");
-            var durable = await definitionStore.GetPublicationAsync(instance.DefinitionId, instance.ActiveVersion, ct);
+            var effectiveSource = await lifecycle.GetEffectiveExactSourceAsync(instance.DefinitionId, instance.ActiveVersion, ct);
             var draft = await lifecycle.ForkDraftAsync(instance.DefinitionId, instance.ActiveVersion,
-                durable is null ? DefinitionDraftSourceKind.ForkBuiltIn : DefinitionDraftSourceKind.ForkDurable, ct);
-            var active = await RequireDefinitionAsync(instance, ct);
-            if (durable is not null)
+                effectiveSource.Kind, ct);
+            var active = effectiveSource.Definition;
+            if (effectiveSource.Kind == DefinitionDraftSourceKind.ForkDurable)
             {
                 var inherited = await resources.ListPublicationResourcesAsync(instance.DefinitionId, instance.ActiveVersion, ct);
                 if (inherited.Count > 0)
@@ -374,7 +374,7 @@ public sealed class HarnessManagementService(
             instructions = active.SystemInstructions, knowledge = RoleEnvironments.Of(active).KnowledgeList,
             skills = active.SkillList, selectedTools = RoleEnvironments.Of(active).ToolList,
             activation = "Changes apply to future Sessions. The current Session keeps its pinned Definition.",
-            authoringGuide = "Inspect, read relevant source material using ordinary tools, then call the offered operation. Skill creation needs name, description and procedure; Core supplies the id. On validation failure, correct the named field using the tool schema; do not blindly retry. Reinspect on version/policy conflict. Report saved only after a successful tool result.",
+            authoringGuide = "Inspect, read relevant external source material using ordinary tools, then call the offered operation. Skill creation needs name, description and procedure; Core supplies the id. For an existing Skill, provide its name or id and only changed fields; with an id, omitted name, procedure and description stay unchanged. After saving Knowledge, inspect the new active version and explicitly save the Skill binding before reporting it. On validation failure, correct the named field using the tool schema; do not blindly retry. Reinspect on version/policy conflict. Report saved only after a successful tool result.",
             skillPayloadHelp = state.Policy.Allows(HarnessManagementScope.Skills) ? HarnessChatTools.SkillPayloadHelp : null,
             skillUpsertExample = state.Policy.Allows(HarnessManagementScope.Skills) ? new
             {
@@ -445,10 +445,10 @@ public sealed class HarnessManagementService(
                         throw AgentCoreErrors.Validation("knowledgeIds must be unique.");
                     paths = references;
                 }
-                ValidateText(skill.Name, 80, "Skill name");
                 var id = skill.Id;
                 if (string.IsNullOrWhiteSpace(id))
                 {
+                    ValidateText(skill.Name, 80, "Skill name");
                     var name = ComparableSkillName(skill.Name);
                     var matches = active.SkillList.Where(existing => ComparableSkillName(existing.Name) == name).ToArray();
                     if (matches.Length > 1)
@@ -457,12 +457,24 @@ public sealed class HarnessManagementService(
                         : SkillIds.FromName(skill.Name, active.SkillList.Select(existing => existing.Id));
                 }
                 var previous = active.SkillList.SingleOrDefault(existing => existing.Id == id);
+                var nameToSave = skillArgs.TryGetProperty("name", out _)
+                    ? skill.Name : previous?.Name;
+                ValidateText(nameToSave, 80, "Skill name");
+                var description = skillArgs.TryGetProperty("description", out _)
+                    ? skill.Description : previous?.Description;
+                var procedure = skillArgs.TryGetProperty("procedure", out _)
+                    ? skill.Procedure : previous?.Procedure;
+                ValidateText(description, 240, "Skill description");
+                ValidateText(procedure, 4000, "Skill procedure");
                 if (previous is not null && !skillArgs.TryGetProperty("knowledgeIds", out _)
                     && !skillArgs.TryGetProperty("resourcePaths", out _))
                     paths = previous.ResourcePaths;
                 operation = operation with { Skill = skill with
                 {
                     Id = id,
+                    Name = nameToSave!,
+                    Description = description!,
+                    Procedure = procedure!,
                     ActivationKeywords = skillArgs.TryGetProperty("activationKeywords", out _)
                         ? skill.ActivationKeywords ?? [] : previous?.ActivationKeywords ?? [],
                     RequiredCapabilities = skillArgs.TryGetProperty("requiredCapabilities", out _)

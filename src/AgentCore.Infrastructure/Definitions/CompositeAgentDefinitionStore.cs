@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Admin;
 using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Infrastructure.Definitions;
@@ -35,14 +36,8 @@ public sealed class CompositeAgentDefinitionStore(
     {
         if (version is { } exact)
         {
-            var builtin = await builtIns.GetAsync(id, exact, cancellationToken).ConfigureAwait(false);
-            if (builtin is not null)
-            {
-                return builtin;
-            }
-
-            var durable = await admin.GetPublicationAsync(id, exact, cancellationToken).ConfigureAwait(false);
-            return durable?.Payload;
+            return (await AgentDefinitionExactSourceResolver.ResolveAsync(builtIns, admin, id, exact,
+                cancellationToken).ConfigureAwait(false))?.Definition;
         }
 
         var builtinLatest = await builtIns.GetAsync(id, version: null, cancellationToken).ConfigureAwait(false);

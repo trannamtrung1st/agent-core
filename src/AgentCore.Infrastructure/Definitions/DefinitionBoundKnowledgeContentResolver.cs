@@ -9,6 +9,7 @@ namespace AgentCore.Infrastructure.Definitions;
 
 public sealed class DefinitionBoundKnowledgeContentResolver(
     IApprovedKnowledgeCatalog fileCatalog,
+    IBuiltInAgentDefinitionStore builtIns,
     IAgentDefinitionAdminStore admin,
     DefinitionPublicationResourceReader publicationResources) : IRoleKnowledgeContentResolver
 {
@@ -17,9 +18,9 @@ public sealed class DefinitionBoundKnowledgeContentResolver(
         string identity,
         CancellationToken cancellationToken = default)
     {
-        var publication = await admin.GetPublicationAsync(definition.Id, definition.Version, cancellationToken)
-            .ConfigureAwait(false);
-        if (publication is null)
+        var effectiveSource = await AgentDefinitionExactSourceResolver.ResolveAsync(builtIns, admin,
+            definition.Id, definition.Version, cancellationToken).ConfigureAwait(false);
+        if (effectiveSource?.Kind != DefinitionDraftSourceKind.ForkDurable)
         {
             return await fileCatalog.ReadContentAsync(identity, cancellationToken).ConfigureAwait(false);
         }

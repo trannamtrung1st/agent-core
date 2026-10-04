@@ -26,6 +26,12 @@ public sealed class AgentDefinitionLifecycleService(
         await admin.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false)
         ?? throw AgentCoreErrors.NotFound("Definition draft was not found.");
 
+    public async ValueTask<AgentDefinitionExactSource> GetEffectiveExactSourceAsync(string definitionId,
+        int version, CancellationToken cancellationToken = default) =>
+        await AgentDefinitionExactSourceResolver.ResolveAsync(builtIns, admin, definitionId, version,
+            cancellationToken).ConfigureAwait(false)
+        ?? throw AgentCoreErrors.NotFound("Definition version was not found.");
+
     public async ValueTask<AgentDefinition?> GetDraftSourceAsync(AgentDefinitionDraft draft,
         CancellationToken cancellationToken = default) => draft.SourceKind switch
     {

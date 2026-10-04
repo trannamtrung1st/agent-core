@@ -303,6 +303,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IRoleKnowledgeContentResolver>(provider =>
             new DefinitionBoundKnowledgeContentResolver(
                 provider.GetRequiredService<IApprovedKnowledgeCatalog>(),
+                provider.GetRequiredService<IBuiltInAgentDefinitionStore>(),
                 provider.GetRequiredService<IAgentDefinitionAdminStore>(),
                 provider.GetRequiredService<DefinitionPublicationResourceReader>()));
         services.TryAddSingleton<RoleKnowledgeService>();

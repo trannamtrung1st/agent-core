@@ -422,7 +422,8 @@ public sealed class OpenAICompatibleLanguageModelTests
             Assert.DoesNotContain(schema.GetProperty("required").EnumerateArray(), field => field.GetString() == "expected");
             var skillRequired = schema.GetProperty("properties").GetProperty("skill").GetProperty("required");
             Assert.DoesNotContain(skillRequired.EnumerateArray(), field => field.GetString() == "id");
-            Assert.Contains(skillRequired.EnumerateArray(), field => field.GetString() == "procedure");
+            Assert.DoesNotContain(skillRequired.EnumerateArray(), field => field.GetString() == "name");
+            Assert.DoesNotContain(skillRequired.EnumerateArray(), field => field.GetString() == "procedure");
             Assert.Equal(8, skill.GetProperty("activationKeywords").GetProperty("maxItems").GetInt32());
             Assert.True(skill.GetProperty("activationKeywords").GetProperty("uniqueItems").GetBoolean());
         }

@@ -41,7 +41,7 @@ public static class HarnessChatTools
         }
     }
 
-    public static readonly string SkillPayloadHelp = "Send a nested skill object with name, description and procedure. Core assigns an id on create and reuses the id of a unique existing Skill with the same name; supply the exact id from harness.inspect when needed to choose an existing Skill. "
+    public static readonly string SkillPayloadHelp = "Send a nested skill object. Creation needs name, description and procedure. To update, supply an existing id plus only the fields to change, or use its unique name if id is omitted; omitted name, description, procedure and optional metadata stay unchanged. Core assigns an id on create and reuses the id of a unique existing Skill with the same name; use the exact id from harness.inspect for a metadata-only update. After creating Knowledge, inspect again for the new active version, then explicitly bind its identity with skill.knowledgeIds. Report a binding only after that Skill save succeeds. "
         + "A supplied skill.id must match " + SkillIds.Pattern + ". "
         + "name is 1..80 characters, description 1..240, procedure 1..4000; use procedural text without fenced code or script blocks. "
         + "activationKeywords is an optional array of up to 8 unique, trimmed, nonblank strings of at most 64 characters. "
@@ -93,13 +93,13 @@ public static class HarnessChatTools
                 Add("skill", new JsonObject
                 {
                     ["type"] = "object", ["additionalProperties"] = false,
-                    ["required"] = new JsonArray("name", "description", "procedure"),
+                    ["required"] = new JsonArray(),
                     ["properties"] = new JsonObject
                     {
                         ["id"] = Text(64, "Existing Skill id when updating; omit when creating.", SkillIds.Pattern),
-                        ["name"] = Text(80, "Human-readable name."),
-                        ["description"] = Text(240, "When and why this Skill is useful."),
-                        ["procedure"] = Text(4000, "Reusable procedural text; no fenced code or script blocks."),
+                        ["name"] = Text(80, "Required on creation or update without id; omit with an existing id to preserve its name."),
+                        ["description"] = Text(240, "Required on creation; omit on update to preserve the existing description."),
+                        ["procedure"] = Text(4000, "Required on creation; omit on update to preserve the existing procedure. No fenced code or script blocks."),
                         ["activationKeywords"] = List(8, Text(64, "Optional unique trimmed activation phrase.")),
                         ["requiredCapabilities"] = List(8, Text(64, "chat.respond or a tool already selected in harness.inspect; [] is allowed.", identifier)),
                         ["knowledgeIds"] = List(4, Text(80, "Optional identity from harness.inspect knowledge; Core resolves its resource.")),

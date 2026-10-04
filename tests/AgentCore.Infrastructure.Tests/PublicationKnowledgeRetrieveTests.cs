@@ -71,12 +71,13 @@ public sealed class PublicationKnowledgeRetrieveTests
             new AgentDefinitionDraftPublish(
                 draftAfterResource!.DraftId,
                 draftAfterResource.Revision,
-                [1],
+                [1, 2],
                 now.AddMinutes(2)),
             CancellationToken.None);
 
         var resolver = new DefinitionBoundKnowledgeContentResolver(
             new FileApprovedKnowledgeCatalog(agentsDir),
+            builtIns,
             admin,
             publicationReader);
         var knowledge = new RoleKnowledgeService(resolver, TimeProvider.System);
@@ -134,11 +135,12 @@ public sealed class PublicationKnowledgeRetrieveTests
         await BindAsync(content, resources, afterLegacy!, "knowledge/refund-policy.md", "Explicit refund body", now.AddMinutes(2));
         var ready = await admin.GetDraftAsync(draft.DraftId, CancellationToken.None);
         var published = await admin.PublishDraftAsync(
-            new AgentDefinitionDraftPublish(ready!.DraftId, ready.Revision, [1], now.AddMinutes(3)),
+            new AgentDefinitionDraftPublish(ready!.DraftId, ready.Revision, [1, 2], now.AddMinutes(3)),
             CancellationToken.None);
 
         var resolver = new DefinitionBoundKnowledgeContentResolver(
             new FileApprovedKnowledgeCatalog(agentsDir),
+            builtIns,
             admin,
             publicationReader);
         var document = await new RoleKnowledgeService(resolver, TimeProvider.System)
