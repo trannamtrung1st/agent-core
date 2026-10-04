@@ -26,7 +26,8 @@ public static class TriggerScheduleEndpoints
             {
                 var owner = await RequireOwnerAsync(sessions, profiles, sessionId, cancellationToken).ConfigureAwait(false);
                 var rows = await triggers.ListAsync(owner, status: null, cancellationToken).ConfigureAwait(false);
-                return Results.Json(new TriggerScheduleListResponse(rows.Select(ToResponse).ToArray()));
+                return Results.Json(new TriggerScheduleListResponse(
+                    rows.Where(item => item.EventSourceId is null).Select(ToResponse).ToArray()));
             }
             catch (AgentCoreException ex)
             {

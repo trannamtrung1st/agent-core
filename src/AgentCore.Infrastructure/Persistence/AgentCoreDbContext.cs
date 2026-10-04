@@ -197,6 +197,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<StructuredMemoryRecord> StructuredMemories => Set<StructuredMemoryRecord>();
     public DbSet<AgentInstanceRecord> AgentInstances => Set<AgentInstanceRecord>();
     public DbSet<TriggerRegistrationRecord> TriggerRegistrations => Set<TriggerRegistrationRecord>();
+    public DbSet<ExternalEventSourceRecord> ExternalEventSources => Set<ExternalEventSourceRecord>();
+    public DbSet<ExternalEventRecord> ExternalEvents => Set<ExternalEventRecord>();
     public DbSet<TriggerOccurrenceRecord> TriggerOccurrences => Set<TriggerOccurrenceRecord>();
     public DbSet<WorkItemRecord> WorkItems => Set<WorkItemRecord>();
 
@@ -365,8 +367,33 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.SuspensionReason).HasMaxLength(200);
             entity.Property(row => row.ModelOverrideCatalogKey).HasMaxLength(128);
             entity.Property(row => row.ModelOverrideReasoningEffort).HasMaxLength(64);
+            entity.Property(row => row.EventSourceId).HasMaxLength(36);
+            entity.Property(row => row.EventType).HasMaxLength(64);
+            entity.HasIndex(row => new { row.EventSourceId, row.EventType, row.Status });
             entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.Status });
             entity.HasIndex(row => new { row.Status, row.NextOccurrenceAtUtc, row.RegistrationId });
+        });
+        modelBuilder.Entity<ExternalEventSourceRecord>(entity =>
+        {
+            entity.ToTable("ExternalEventSources");
+            entity.HasKey(row => row.SourceId);
+            entity.Property(row => row.SourceId).HasMaxLength(36);
+            entity.Property(row => row.DisplayName).HasMaxLength(80).IsRequired();
+            entity.Property(row => row.SourceKey).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.CredentialHash).HasMaxLength(64);
+            entity.Property(row => row.Revision).IsConcurrencyToken();
+            entity.HasIndex(row => row.SourceKey).IsUnique();
+        });
+        modelBuilder.Entity<ExternalEventRecord>(entity =>
+        {
+            entity.ToTable("ExternalEvents");
+            entity.HasKey(row => row.EventId);
+            entity.Property(row => row.EventId).HasMaxLength(36);
+            entity.Property(row => row.SourceId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.SourceEventId).HasMaxLength(64).IsRequired();
+            entity.Property(row => row.EventType).HasMaxLength(64).IsRequired();
+            entity.Property(row => row.EvidenceJson).HasMaxLength(4096).IsRequired();
+            entity.HasIndex(row => new { row.SourceId, row.SourceEventId }).IsUnique();
         });
         modelBuilder.Entity<TriggerOccurrenceRecord>(entity =>
         {
@@ -570,10 +597,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.Status).HasMaxLength(32).IsRequired();
             entity.Property(row => row.ProfileKey).HasMaxLength(36).IsRequired();
             entity.Property(row => row.StatusDetail).HasMaxLength(80);
-            entity.Property(row => row.WebhookKey).HasMaxLength(36);
-            entity.Property(row => row.WebhookTokenHash).HasMaxLength(64);
             entity.HasIndex(row => row.AgentInstanceId).IsUnique();
-            entity.HasIndex(row => row.WebhookKey).IsUnique();
         });
     }
 

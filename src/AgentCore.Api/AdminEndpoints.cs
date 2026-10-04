@@ -3,6 +3,7 @@ using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Connections;
+using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
@@ -485,16 +486,24 @@ internal static class AdminEndpoints
             }
         });
 
-        group.MapPost("/agent-instances/{instanceId:guid}/connection/webhook", async (
-            Guid instanceId,
-            ApplicationConnectionService connections,
+        group.MapGet("/event-sources", async (
+            ExternalEventSourceService sources,
+            CancellationToken cancellationToken) =>
+            Results.Json(new AdminEventSourceListResponse(
+                (await sources.ListAsync(cancellationToken).ConfigureAwait(false))
+                .Select(AdminHttpMapping.ToEventSource)
+                .ToArray())));
+
+        group.MapPost("/event-sources", async (
+            AdminCreateEventSourceRequest? request,
+            ExternalEventSourceService sources,
             CancellationToken cancellationToken) =>
         {
             try
             {
-                var credential = await connections.IssueWebhookAsync(instanceId, cancellationToken)
+                var credential = await sources.CreateAsync(request?.DisplayName ?? "", cancellationToken)
                     .ConfigureAwait(false);
-                return Results.Json(AdminHttpMapping.ToWebhookCredential(credential));
+                return Results.Json(AdminHttpMapping.ToEventSourceCredential(credential));
             }
             catch (AgentCoreException ex)
             {
@@ -502,16 +511,70 @@ internal static class AdminEndpoints
             }
         });
 
-        group.MapPost("/agent-instances/{instanceId:guid}/connection/webhook/revoke", async (
-            Guid instanceId,
-            ApplicationConnectionService connections,
+        group.MapPost("/event-sources/{sourceId:guid}/rotate", async (
+            Guid sourceId,
+            ExternalEventSourceService sources,
             CancellationToken cancellationToken) =>
         {
             try
             {
-                var connection = await connections.RevokeWebhookAsync(instanceId, cancellationToken)
+                var credential = await sources.RotateAsync(sourceId, cancellationToken).ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToEventSourceCredential(credential));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapPost("/event-sources/{sourceId:guid}/revoke", async (
+            Guid sourceId,
+            ExternalEventSourceService sources,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var source = await sources.RevokeAsync(sourceId, cancellationToken).ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToEventSource(source));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapGet("/agent-instances/{instanceId:guid}/event-subscriptions", async (
+            Guid instanceId,
+            ExternalEventSourceService sources,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var rows = await sources.ListSubscriptionsAsync(instanceId, cancellationToken).ConfigureAwait(false);
+                return Results.Json(new AdminEventSubscriptionListResponse(rows.Select(AdminHttpMapping.ToEventSubscription).ToArray()));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapPost("/agent-instances/{instanceId:guid}/event-subscriptions", async (
+            Guid instanceId,
+            AdminCreateEventSubscriptionRequest? request,
+            ExternalEventSourceService sources,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                if (request is null || !Guid.TryParse(request.SourceId, out var sourceId))
+                {
+                    throw AgentCoreErrors.Validation("Event source id is required.");
+                }
+
+                var registration = await sources.SubscribeAsync(instanceId, sourceId, request.EventType, cancellationToken)
                     .ConfigureAwait(false);
-                return Results.Json(AdminHttpMapping.ToApplicationConnection(connection));
+                return Results.Json(AdminHttpMapping.ToEventSubscription(registration));
             }
             catch (AgentCoreException ex)
             {

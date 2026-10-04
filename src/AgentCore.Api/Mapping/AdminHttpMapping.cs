@@ -1,7 +1,8 @@
 using System.Text.Json;
 using AgentCore.Application.Admin;
-using AgentCore.Application.Connections;
+using AgentCore.Application.Events;
 using AgentCore.Domain.Connections;
+using AgentCore.Domain.Events;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Triggers;
@@ -333,18 +334,29 @@ internal static class AdminHttpMapping
             connection.Revision,
             connection.CreatedAtUtc.ToString("o"),
             connection.UpdatedAtUtc.ToString("o"),
-            connection.StatusDetail,
-            connection.WebhookKey?.ToString("D"),
-            WebhookStatusLabel(connection.WebhookStatus));
+            connection.StatusDetail);
 
-    public static AdminWebhookCredentialResponse ToWebhookCredential(WebhookCredential credential) =>
-        new(credential.WebhookKey.ToString("D"), credential.Token, WebhookStatusLabel(credential.Status));
+    public static AdminEventSourceResponse ToEventSource(ExternalEventSource source) =>
+        new(
+            source.SourceId.ToString("D"),
+            source.DisplayName,
+            source.Kind.ToString(),
+            source.SourceKey.ToString("D"),
+            source.Status.ToString(),
+            source.Revision);
 
-    private static string WebhookStatusLabel(WebhookCredentialStatus status) =>
-        status switch
-        {
-            WebhookCredentialStatus.Active => "Active",
-            WebhookCredentialStatus.Revoked => "Revoked",
-            _ => "Not configured"
-        };
+    public static AdminEventSourceCredentialResponse ToEventSourceCredential(ExternalEventCredential credential) =>
+        new(
+            credential.SourceId.ToString("D"),
+            credential.SourceKey.ToString("D"),
+            credential.Token,
+            credential.Status.ToString());
+
+    public static AdminEventSubscriptionResponse ToEventSubscription(TriggerRegistration registration) =>
+        new(
+            registration.RegistrationId.ToString("D"),
+            registration.EventSourceId?.ToString("D") ?? "",
+            registration.EventType ?? "",
+            registration.Status.ToString(),
+            registration.Revision);
 }

@@ -23,6 +23,8 @@ public sealed class TriggerRegistrationRecord
     public string? ModelOverrideCatalogKey { get; set; }
     public string? ModelOverrideReasoningEffort { get; set; }
     public bool RequiresVision { get; set; }
+    public string? EventSourceId { get; set; }
+    public string? EventType { get; set; }
 }
 
 public sealed class TriggerOccurrenceRecord

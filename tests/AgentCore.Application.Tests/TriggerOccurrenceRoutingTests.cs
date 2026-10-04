@@ -1049,6 +1049,12 @@ public sealed class TriggerOccurrenceRoutingTests
         public ValueTask<int> CountActiveAsync(TriggerOwner owner, CancellationToken cancellationToken = default) =>
             inner.CountActiveAsync(owner, cancellationToken);
 
+        public ValueTask<IReadOnlyList<TriggerRegistration>> ListEventSubscriptionsAsync(
+            Guid eventSourceId,
+            string eventType,
+            CancellationToken cancellationToken = default) =>
+            inner.ListEventSubscriptionsAsync(eventSourceId, eventType, cancellationToken);
+
         public ValueTask<TriggerRegistration> UpdateAsync(TriggerOwner owner, Guid registrationId, long expectedRevision, string intent, TriggerSchedule schedule, DateTimeOffset? nextOccurrenceAtUtc, DateTimeOffset? expiresAtUtc, DateTimeOffset updatedAt, CancellationToken cancellationToken = default) =>
             inner.UpdateAsync(owner, registrationId, expectedRevision, intent, schedule, nextOccurrenceAtUtc, expiresAtUtc, updatedAt, cancellationToken);
 
@@ -1188,6 +1194,12 @@ public sealed class TriggerOccurrenceRoutingTests
 
         public ValueTask<int> CountActiveAsync(TriggerOwner owner, CancellationToken cancellationToken = default) =>
             inner.CountActiveAsync(owner, cancellationToken);
+
+        public ValueTask<IReadOnlyList<TriggerRegistration>> ListEventSubscriptionsAsync(
+            Guid eventSourceId,
+            string eventType,
+            CancellationToken cancellationToken = default) =>
+            inner.ListEventSubscriptionsAsync(eventSourceId, eventType, cancellationToken);
 
         public ValueTask<TriggerRegistration> UpdateAsync(TriggerOwner owner, Guid registrationId, long expectedRevision, string intent, TriggerSchedule schedule, DateTimeOffset? nextOccurrenceAtUtc, DateTimeOffset? expiresAtUtc, DateTimeOffset updatedAt, CancellationToken cancellationToken = default) =>
             inner.UpdateAsync(owner, registrationId, expectedRevision, intent, schedule, nextOccurrenceAtUtc, expiresAtUtc, updatedAt, cancellationToken);

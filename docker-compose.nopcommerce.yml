@@ -44,6 +44,9 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:5088:80"
+    environment:
+      AGENTCORE_WEBHOOK_URL: ${AGENTCORE_WEBHOOK_URL:-}
+      AGENTCORE_WEBHOOK_TOKEN: ${AGENTCORE_WEBHOOK_TOKEN:-}
     volumes:
       - nopcommerce-web:/app/App_Data
 

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("admin unattended model and webhook stay operable at wide and narrow widths", async ({ page }) => {
+test("admin unattended model and event sources stay operable at wide and narrow widths", async ({ page }) => {
   test.setTimeout(90_000);
   const consoleErrors: string[] = [];
   page.on("console", (message) => {
@@ -30,10 +30,11 @@ test("admin unattended model and webhook stay operable at wide and narrow widths
     return body.instanceId;
   });
 
-  const webhookKey = "11111111-1111-4111-8111-111111111111";
-  let webhookStatus = "Not configured";
+  const sourceKey = "11111111-1111-4111-8111-111111111111";
+  const sourceId = "22222222-2222-4222-8222-222222222222";
+  let sourceStatus = "Active";
+  let sources: Array<Record<string, unknown>> = [];
   await page.route(`**/agent-instances/${instanceId}/connection**`, async (route) => {
-    const url = route.request().url();
     const method = route.request().method();
     if (method === "GET") {
       await route.fulfill({
@@ -48,38 +49,7 @@ test("admin unattended model and webhook stay operable at wide and narrow widths
           revision: 2,
           createdAtUtc: "2026-10-04T00:00:00Z",
           updatedAtUtc: "2026-10-04T00:00:00Z",
-          statusDetail: null,
-          webhookKey: webhookStatus === "Not configured" ? null : webhookKey,
-          webhookStatus
-        }
-      });
-      return;
-    }
-
-    if (method === "POST" && url.endsWith("/connection/webhook")) {
-      webhookStatus = "Active";
-      await route.fulfill({
-        json: { webhookKey, token: "once-secret-credential", status: "Active" }
-      });
-      return;
-    }
-
-    if (method === "POST" && url.endsWith("/connection/webhook/revoke")) {
-      webhookStatus = "Revoked";
-      await route.fulfill({
-        json: {
-          connectionId: "22222222-2222-4222-8222-222222222222",
-          agentInstanceId: instanceId,
-          kind: "nopCommerce",
-          displayName: "Demo Store",
-          baseUrl: "http://127.0.0.1:5091",
-          trustedOrigins: ["http://127.0.0.1:5091"],
-          status: "Connected",
-          revision: 3,
-          createdAtUtc: "2026-10-04T00:00:00Z",
-          updatedAtUtc: "2026-10-04T00:00:00Z",
-          webhookKey,
-          webhookStatus: "Revoked"
+          statusDetail: null
         }
       });
       return;
@@ -115,25 +85,63 @@ test("admin unattended model and webhook stay operable at wide and narrow widths
   await automation.getByRole("tab", { name: "Automation" }).click();
   await expect(automation.getByText("Effective source: Unattended default (Scripted Alpha)")).toBeVisible({ timeout: 15_000 });
 
-  const section = page.getByRole("region", { name: "Application connection" });
-  await expect(section.getByText("Not configured")).toBeVisible();
-  await section.getByRole("button", { name: "Create webhook" }).focus();
-  await expect(section.getByRole("button", { name: "Create webhook" })).toBeFocused();
+  const connection = page.getByRole("region", { name: "Application connection" });
+  await expect(connection.getByRole("button", { name: /webhook/i })).toHaveCount(0);
+
+  await page.route("**/api/v2/admin/event-sources**", async (route) => {
+    const url = route.request().url();
+    const method = route.request().method();
+    if (method === "GET") {
+      await route.fulfill({ json: { items: sources } });
+      return;
+    }
+
+    if (method === "POST" && url.endsWith("/event-sources")) {
+      sources = [{
+        sourceId,
+        displayName: "Demo Store",
+        kind: "Webhook",
+        sourceKey,
+        status: sourceStatus,
+        revision: 1
+      }];
+      await route.fulfill({
+        json: { sourceId, sourceKey, token: "once-secret-credential", status: "Active" }
+      });
+      return;
+    }
+
+    if (method === "POST" && url.endsWith("/revoke")) {
+      sourceStatus = "Revoked";
+      sources = sources.map((item) => ({ ...item, status: "Revoked", revision: 2 }));
+      await route.fulfill({ json: sources[0] });
+      return;
+    }
+
+    await route.continue();
+  });
+
+  await page.goto("/admin");
+  const sourcesRegion = page.getByRole("region", { name: "Event sources" });
+  await expect(sourcesRegion.getByText("No event sources yet.")).toBeVisible();
+  await sourcesRegion.getByLabel("Event source name").fill("Demo Store");
+  const create = sourcesRegion.getByRole("button", { name: "Create event source" });
+  await create.focus();
+  await expect(create).toBeFocused();
   await page.keyboard.press("Enter");
   const credential = page.getByRole("dialog", { name: "Copy this credential" });
-  await expect(credential.getByLabel("Webhook credential")).toHaveValue("once-secret-credential");
+  await expect(credential.getByRole("textbox", { name: "Event source credential" })).toHaveValue("once-secret-credential");
   await page.keyboard.press("Escape");
   await expect(credential).toBeHidden();
   await expect(page.getByText("once-secret-credential")).toHaveCount(0);
-  await expect(section.getByLabel("Webhook key")).toHaveText(webhookKey);
+  await expect(sourcesRegion.getByLabel("Source key")).toHaveText(sourceKey);
 
   await page.setViewportSize({ width: 390, height: 800 });
-  await expect(automation.getByRole("button", { name: "Save unattended model" })).toBeVisible();
-  await expect(section.getByRole("button", { name: "Rotate webhook" })).toBeVisible();
-  await section.getByRole("button", { name: "Revoke webhook" }).click();
-  const confirm = page.getByRole("dialog", { name: "Revoke this webhook?" });
-  await confirm.getByRole("button", { name: "Revoke webhook" }).click();
-  await expect(section.getByText("Revoked")).toBeVisible();
+  await expect(sourcesRegion.getByRole("button", { name: "Rotate credential for Demo Store" })).toBeVisible();
+  await sourcesRegion.getByRole("button", { name: "Revoke Demo Store" }).click();
+  const confirm = page.getByRole("dialog", { name: "Revoke this event source?" });
+  await confirm.getByRole("button", { name: "Revoke source" }).click();
+  await expect(sourcesRegion.getByText("Webhook · Revoked")).toBeVisible();
   await expect(page.getByText("once-secret-credential")).toHaveCount(0);
 
   expect(consoleErrors.filter((line) => !line.includes("[antd: List]"))).toEqual([]);

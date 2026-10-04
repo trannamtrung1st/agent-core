@@ -34,6 +34,9 @@ coverage/
 *.local
 .eslintcache
 
+# nopCommerce plugin build references copied from the demo image
+deploy/nopcommerce/plugin/AgentCore.OrderEvents/refs/
+
 # Local configuration and credentials
 .env
 .env.*

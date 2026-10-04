@@ -39,6 +39,8 @@ import {
 } from "./definitionCandidate";
 import { DefinitionCandidateEditor, PublishedSkillList, type DefinitionEditorView } from "./definitionCandidateEditor";
 import { ApplicationConnectionSection } from "./ApplicationConnectionSection";
+import { EventSourcesSection } from "./EventSourcesSection";
+import { EventSubscriptionsSection } from "./EventSubscriptionsSection";
 import { DefinitionDraftPublishGatePanel } from "./definitionDraftPublishGatePanel";
 import { ResourceImportPanel } from "./resourceImportPanel";
 import {
@@ -418,6 +420,9 @@ export function AdminApp({ route }: { route: AdminRoute }) {
                     : []
                 }
               />
+            </div>
+            <div className="admin-home-sources">
+              <EventSourcesSection />
             </div>
           </div>
         ) : null}
@@ -2316,6 +2321,7 @@ function InstanceDetail({
         />
       ) : null}
       <ApplicationConnectionSection instanceId={instanceId} />
+      <EventSubscriptionsSection instanceId={instanceId} />
       {effective.kind === "ready" && !effective.data.compatibility ? (
         <section className="admin-definition-panel" aria-label="Memory and automation">
           <div className="admin-definition-panel-heading">

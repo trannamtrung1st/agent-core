@@ -1,27 +1,27 @@
-using AgentCore.Application.Triggers;
+using AgentCore.Application.Events;
 
 namespace AgentCore.Api;
 
-internal static class HookEndpoints
+public static class HookEndpoints
 {
     public static void Map(WebApplication app)
     {
-        app.MapPost("/api/v1/hooks/{webhookKey:guid}/order-placed", ReceiveAsync);
+        app.MapPost("/api/v1/hooks/{sourceKey:guid}", ReceiveAsync);
     }
 
     private static async Task<IResult> ReceiveAsync(
-        Guid webhookKey,
+        Guid sourceKey,
         HttpRequest request,
-        OrderPlacedWebhook webhook,
+        ExternalEventIngress ingress,
         CancellationToken cancellationToken)
     {
-        var token = Bearer(request);
-        if (!await webhook.CredentialsMatchAsync(webhookKey, token, cancellationToken).ConfigureAwait(false))
+        if (!TryBearer(request, out var token)
+            || !await ingress.CredentialsMatchAsync(sourceKey, token, cancellationToken).ConfigureAwait(false))
         {
             return Error(StatusCodes.Status401Unauthorized, "unauthorized");
         }
 
-        if (request.ContentLength is > OrderPlacedPayload.MaxRawBytes)
+        if (request.ContentLength is > ExternalEventEnvelope.MaxRawBytes)
         {
             return Error(StatusCodes.Status400BadRequest, "payload_too_large");
         }
@@ -32,48 +32,43 @@ internal static class HookEndpoints
             return Error(StatusCodes.Status400BadRequest, "payload_too_large");
         }
 
-        var result = await webhook.AdmitAsync(webhookKey, token, body, cancellationToken).ConfigureAwait(false);
+        var result = await ingress.AdmitAsync(sourceKey, token, body, cancellationToken).ConfigureAwait(false);
         return result.Kind switch
         {
-            OrderPlacedAdmissionKind.Admitted => Accepted(StatusCodes.Status202Accepted, result.OccurrenceId),
-            OrderPlacedAdmissionKind.Duplicate => Accepted(StatusCodes.Status200OK, result.OccurrenceId),
-            OrderPlacedAdmissionKind.NotAdmitted => Error(StatusCodes.Status403Forbidden, "not_admitted"),
-            OrderPlacedAdmissionKind.ModelRejected => Error(
-                StatusCodes.Status409Conflict,
-                result.Code is "model-unavailable" or "model-capability-unsupported" ? result.Code : "model-unavailable"),
-            OrderPlacedAdmissionKind.Unauthorized => Error(StatusCodes.Status401Unauthorized, "unauthorized"),
-            _ => Error(StatusCodes.Status400BadRequest, "invalid_payload")
+            ExternalEventIngressKind.Admitted => Accepted(StatusCodes.Status202Accepted, result.EventId),
+            ExternalEventIngressKind.Duplicate => Accepted(StatusCodes.Status200OK, result.EventId),
+            ExternalEventIngressKind.Invalid => Error(StatusCodes.Status400BadRequest, result.Code ?? "invalid_payload"),
+            _ => Error(StatusCodes.Status401Unauthorized, "unauthorized")
         };
     }
 
-    private static IResult Accepted(int statusCode, Guid? occurrenceId) =>
-        Results.Json(new OrderPlacedAcceptedResponse(occurrenceId?.ToString("D") ?? ""), statusCode: statusCode);
+    private static IResult Accepted(int statusCode, Guid? eventId) =>
+        Results.Json(new ExternalEventAcceptedResponse(eventId?.ToString("D") ?? ""), statusCode: statusCode);
 
     private static IResult Error(int statusCode, string error) =>
-        Results.Json(new OrderPlacedErrorResponse(error), statusCode: statusCode);
+        Results.Json(new ExternalEventErrorResponse(error), statusCode: statusCode);
 
-    private static string Bearer(HttpRequest request)
+    private static bool TryBearer(HttpRequest request, out string token)
     {
-        if (!request.Headers.TryGetValue("Authorization", out var value))
+        token = "";
+        var header = request.Headers.Authorization.ToString();
+        const string prefix = "Bearer ";
+        if (!header.StartsWith(prefix, StringComparison.Ordinal) || header.Length == prefix.Length)
         {
-            return "";
+            return false;
         }
 
-        var header = value.ToString();
-        const string prefix = "Bearer ";
-        return header.StartsWith(prefix, StringComparison.Ordinal)
-            ? header[prefix.Length..].Trim()
-            : "";
+        token = header[prefix.Length..].Trim();
+        return token.Length > 0 && !token.Contains(' ', StringComparison.Ordinal);
     }
 
-    private static async ValueTask<byte[]?> ReadBoundedAsync(Stream body, CancellationToken cancellationToken)
+    private static async Task<byte[]?> ReadBoundedAsync(Stream body, CancellationToken cancellationToken)
     {
-        var buffer = new byte[OrderPlacedPayload.MaxRawBytes + 1];
+        var buffer = new byte[ExternalEventEnvelope.MaxRawBytes + 1];
         var read = 0;
         while (read < buffer.Length)
         {
-            var count = await body.ReadAsync(buffer.AsMemory(read, buffer.Length - read), cancellationToken)
-                .ConfigureAwait(false);
+            var count = await body.ReadAsync(buffer.AsMemory(read), cancellationToken).ConfigureAwait(false);
             if (count == 0)
             {
                 break;
@@ -82,10 +77,10 @@ internal static class HookEndpoints
             read += count;
         }
 
-        return read > OrderPlacedPayload.MaxRawBytes ? null : buffer[..read];
+        return read > ExternalEventEnvelope.MaxRawBytes ? null : buffer[..read];
     }
 
-    private sealed record OrderPlacedAcceptedResponse(string OccurrenceId);
+    private sealed record ExternalEventAcceptedResponse(string EventId);
 
-    private sealed record OrderPlacedErrorResponse(string Error);
+    private sealed record ExternalEventErrorResponse(string Error);
 }

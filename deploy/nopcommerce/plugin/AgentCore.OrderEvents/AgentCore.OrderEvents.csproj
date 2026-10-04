@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>AgentCore.OrderEvents</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Nop.Core">
+      <HintPath>refs/Nop.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="Nop.Services">
+      <HintPath>refs/Nop.Services.dll</HintPath>
+    </Reference>
+    <None Include="plugin.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

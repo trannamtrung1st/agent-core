@@ -1480,6 +1480,10 @@ body,
   gap: var(--ac-space-section);
 }
 
+.admin-home-sources {
+  margin-block-start: var(--ac-space-section);
+}
+
 .admin-inventory-section {
   min-width: 0;
   overflow: hidden;

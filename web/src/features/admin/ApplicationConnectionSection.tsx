@@ -1,15 +1,13 @@
 import { useEffect, useState } from "react";
-import { Alert, App, Button, Flex, Form, Input, Modal, Spin, Typography, theme } from "antd";
+import { Alert, App, Button, Flex, Form, Input, Spin, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
 import {
   connectApplication,
   getApplicationConnection,
-  issueApplicationWebhook,
   openApplicationBrowser,
   reauthenticateApplication,
   resetApplicationProfile,
   revokeApplication,
-  revokeApplicationWebhook,
   type ApplicationConnection
 } from "../../services/adminApi";
 import { describeAdminError } from "./adminErrors";
@@ -47,7 +45,6 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
   const [error, setError] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
-  const [credential, setCredential] = useState<string | null>(null);
 
   useEffect(() => {
     let current = true;
@@ -83,38 +80,6 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
       message.success(success);
     } catch (reason: unknown) {
       setError(describeAdminError(reason, "The application connection could not be updated.").message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function copyWebhookUrl(webhookKey: string) {
-    const url = `${window.location.origin}/api/v1/hooks/${webhookKey}/order-placed`;
-    await copyText(url, "Webhook URL copied.");
-  }
-
-  async function copyText(value: string, success: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      message.success(success);
-    } catch {
-      setError("Copy failed. Select the value and copy it manually.");
-    }
-  }
-
-  async function createWebhook() {
-    setBusy(true);
-    setError(null);
-    try {
-      const issued = await issueApplicationWebhook(instanceId);
-      setConnection((current) =>
-        current
-          ? { ...current, webhookKey: issued.webhookKey, webhookStatus: issued.status }
-          : current
-      );
-      setCredential(issued.token);
-    } catch (reason: unknown) {
-      setError(describeAdminError(reason, "The webhook could not be created.").message);
     } finally {
       setBusy(false);
     }
@@ -239,87 +204,6 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
                   </Button>
                 ) : null}
               </Flex>
-              {connection ? (
-                <Flex vertical gap={token.paddingXS} aria-label="Webhook">
-                  <Typography.Text type="secondary">Webhook</Typography.Text>
-                  <Typography.Text strong>{connection.webhookStatus ?? "Not configured"}</Typography.Text>
-                  {connection.webhookKey ? (
-                    <Flex align="center" gap={token.paddingXS} wrap="wrap">
-                      <Typography.Text aria-label="Webhook key">{connection.webhookKey}</Typography.Text>
-                      <Button
-                        type="link"
-                        size="small"
-                        disabled={busy}
-                        aria-label="Copy webhook URL"
-                        onClick={() => void copyWebhookUrl(connection.webhookKey)}
-                      >
-                        Copy webhook URL
-                      </Button>
-                    </Flex>
-                  ) : null}
-                  <Flex gap={token.paddingXS} wrap="wrap">
-                    <Button
-                      disabled={busy}
-                      aria-label={connection.webhookStatus === "Active" ? "Rotate webhook" : "Create webhook"}
-                      onClick={() => {
-                        if (connection.webhookStatus === "Active") {
-                          confirmAction(modal, {
-                            title: "Rotate this webhook?",
-                            content: "The current credential stops working immediately. Copy the new one before you leave.",
-                            okText: "Rotate webhook",
-                            cancelText: "Keep",
-                            danger: true,
-                            onOk: () => createWebhook()
-                          });
-                          return;
-                        }
-
-                        void createWebhook();
-                      }}
-                    >
-                      {connection.webhookStatus === "Active" ? "Rotate webhook" : "Create webhook"}
-                    </Button>
-                    {connection.webhookStatus === "Active" ? (
-                      <Button
-                        danger
-                        disabled={busy}
-                        aria-label="Revoke webhook"
-                        onClick={() =>
-                          confirmAction(modal, {
-                            title: "Revoke this webhook?",
-                            content: "The public key stays. The current credential stops working immediately.",
-                            okText: "Revoke webhook",
-                            cancelText: "Keep",
-                            danger: true,
-                            onOk: () => run(() => revokeApplicationWebhook(instanceId), "Webhook revoked.")
-                          })
-                        }
-                      >
-                        Revoke webhook
-                      </Button>
-                    ) : null}
-                  </Flex>
-                </Flex>
-              ) : null}
-              <Modal
-                open={credential !== null}
-                title="Copy this credential"
-                okText="Done"
-                cancelButtonProps={{ style: { display: "none" } }}
-                destroyOnHidden
-                onOk={() => setCredential(null)}
-                onCancel={() => setCredential(null)}
-              >
-                <Flex vertical gap={token.paddingXS}>
-                  <Typography.Paragraph>
-                    Copy this credential now. It will not be shown again.
-                  </Typography.Paragraph>
-                  <Input.TextArea readOnly aria-label="Webhook credential" value={credential ?? ""} autoSize />
-                  <Button aria-label="Copy webhook credential" onClick={() => void copyText(credential ?? "", "Webhook credential copied.")}>
-                    Copy credential
-                  </Button>
-                </Flex>
-              </Modal>
             </>
           ) : null}
         </Flex>

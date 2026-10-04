@@ -1,0 +1,11 @@
+{
+  "Group": "Agent Core",
+  "FriendlyName": "Agent Core order events",
+  "SystemName": "AgentCore.OrderEvents",
+  "Version": "1.0",
+  "SupportedVersions": [ "4.90" ],
+  "Author": "Agent Core",
+  "DisplayOrder": 1,
+  "FileName": "AgentCore.OrderEvents.dll",
+  "Description": "Emits a bounded order.placed webhook when a nopCommerce order is placed."
+}

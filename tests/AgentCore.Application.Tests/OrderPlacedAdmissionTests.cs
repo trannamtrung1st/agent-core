@@ -1,12 +1,14 @@
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Connections;
+using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Triggers;
 using AgentCore.Domain.Connections;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Events;
 using AgentCore.Domain.Triggers;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
@@ -21,131 +23,177 @@ public sealed class OrderPlacedAdmissionTests
     private static readonly DateTimeOffset Now = new(2026, 10, 4, 0, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void Payload_builder_keeps_only_allowlisted_fields()
+    public void Envelope_keeps_only_allowlisted_fields()
     {
-        var json = OrderPlacedPayload.Build("evt-1", "1001");
-        Assert.True(OrderPlacedPayload.TryNormalize(Encoding.UTF8.GetBytes(json), out var evidence, out var eventId, out var error), error);
+        var json = ExternalEventEnvelope.Build("evt-1", "1001");
+        Assert.True(
+            ExternalEventEnvelope.TryNormalize(Encoding.UTF8.GetBytes(json), out var evidence, out var eventId, out var eventType, out _, out var error),
+            error);
         Assert.Equal("evt-1", eventId);
-        Assert.Equal(json, evidence);
+        Assert.Equal(ExternalEventTypes.OrderPlaced, eventType);
         using var document = JsonDocument.Parse(evidence);
         Assert.Equal(["sourceEventId", "orderReference"], document.RootElement.EnumerateObject().Select(item => item.Name).ToArray());
 
-        var stamped = OrderPlacedPayload.Build("evt-2", "1002", Now);
-        Assert.True(OrderPlacedPayload.TryNormalize(Encoding.UTF8.GetBytes(stamped), out var stampedEvidence, out _, out error), error);
-        Assert.Equal(stamped, stampedEvidence);
-
-        Assert.False(OrderPlacedPayload.TryNormalize("{}"u8, out _, out _, out _));
-        Assert.False(OrderPlacedPayload.TryNormalize("{"u8, out _, out _, out _));
-        Assert.False(OrderPlacedPayload.TryNormalize(
-            """{"sourceEventId":"evt-1","orderReference":"1001","instructions":"do this"}"""u8,
+        Assert.False(ExternalEventEnvelope.TryNormalize("{}"u8, out _, out _, out _, out _, out _));
+        Assert.False(ExternalEventEnvelope.TryNormalize("{"u8, out _, out _, out _, out _, out _));
+        Assert.False(ExternalEventEnvelope.TryNormalize(
+            """{"eventId":"evt-1","type":"order.placed","data":{"orderReference":"1001"},"instructions":"do this"}"""u8,
+            out _,
+            out _,
             out _,
             out _,
             out _));
-        Assert.False(OrderPlacedPayload.TryNormalize(
-            """{"sourceEventId":"evt-1","orderReference":"1001","eventType":"order.refunded"}"""u8,
+        var unsupported = ExternalEventEnvelope.TryNormalize(
+            """{"eventId":"evt-1","type":"order.refunded","data":{"orderReference":"1001"}}"""u8,
             out _,
             out _,
-            out _));
-        Assert.False(OrderPlacedPayload.TryNormalize(
-            """{"sourceEventId":"evt 1","orderReference":"1001"}"""u8,
             out _,
             out _,
-            out _));
+            out error);
+        Assert.False(unsupported);
+        Assert.Equal("unsupported_event", error);
     }
 
     [Fact]
-    public async Task Secretary_v2_admits_once_and_a_duplicate_returns_the_same_occurrence()
-    {
-        var fixture = await FixtureAsync("secretary", 2);
-        var issued = await fixture.IssueAsync();
-        var body = Encoding.UTF8.GetBytes(OrderPlacedPayload.Build("evt-1", "1001"));
-        var first = await fixture.Webhook.AdmitAsync(issued.WebhookKey, issued.Token, body);
-        Assert.Equal(OrderPlacedAdmissionKind.Admitted, first.Kind);
-        var saved = await fixture.Triggers.GetOccurrenceAsync(fixture.Owner, first.OccurrenceId!.Value);
-        Assert.Equal(OccurrenceRoutingDisposition.Pending, saved!.Disposition);
-        Assert.Null(saved.DurableWorkItemId);
-        Assert.NotNull(saved.ModelPin);
-        using (var evidence = JsonDocument.Parse(saved.EvidenceJson))
-        {
-            Assert.Equal(["sourceEventId", "orderReference"], evidence.RootElement.EnumerateObject().Select(item => item.Name).ToArray());
-            Assert.Equal("evt-1", evidence.RootElement.GetProperty("sourceEventId").GetString());
-            Assert.Equal("1001", evidence.RootElement.GetProperty("orderReference").GetString());
-        }
-
-        var duplicate = await fixture.Webhook.AdmitAsync(issued.WebhookKey, issued.Token, body);
-        Assert.Equal(OrderPlacedAdmissionKind.Duplicate, duplicate.Kind);
-        Assert.Equal(first.OccurrenceId, duplicate.OccurrenceId);
-        Assert.Single(await fixture.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
-
-        var text = string.Join('\n', fixture.Logs.Lines);
-        Assert.DoesNotContain(issued.Token, text, StringComparison.Ordinal);
-        Assert.DoesNotContain(WebhookTokens.Hash(issued.Token), text, StringComparison.Ordinal);
-        var stored = await fixture.Connections.GetByAgentAsync(fixture.InstanceId);
-        Assert.Equal(WebhookCredentialStatus.Active, stored!.WebhookStatus);
-        Assert.NotEqual(issued.Token, stored.WebhookTokenHash);
-    }
-
-    [Fact]
-    public async Task Invalid_bearer_payload_and_disallowed_definitions_create_no_occurrence()
+    public async Task One_source_event_fans_out_once_per_subscriber()
     {
         var secretary = await FixtureAsync("secretary", 2);
-        var issued = await secretary.IssueAsync();
-        var valid = Encoding.UTF8.GetBytes(OrderPlacedPayload.Build("evt-1", "1001"));
-        Assert.Equal(OrderPlacedAdmissionKind.Unauthorized, (await secretary.Webhook.AdmitAsync(issued.WebhookKey, "wrong-token", valid)).Kind);
-        Assert.Equal(OrderPlacedAdmissionKind.Unauthorized, (await secretary.Webhook.AdmitAsync(Guid.NewGuid(), issued.Token, valid)).Kind);
+        var monitor = await FixtureAsync(
+            "secretary",
+            2,
+            secretary.Events,
+            secretary.Logs,
+            instances: secretary.Instances,
+            triggers: secretary.Triggers);
+        var issued = await secretary.Sources.CreateAsync("Demo Store");
+        await secretary.Sources.SubscribeAsync(secretary.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
+        await secretary.Sources.SubscribeAsync(monitor.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
+        var body = Encoding.UTF8.GetBytes(ExternalEventEnvelope.Build("order-105-created", "105"));
+        var first = await secretary.Ingress.AdmitAsync(issued.SourceKey, issued.Token, body);
+        Assert.Equal(ExternalEventIngressKind.Admitted, first.Kind);
+        var pending = await secretary.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10);
+        Assert.Equal(2, pending.Count);
         Assert.Equal(
-            OrderPlacedAdmissionKind.Invalid,
-            (await secretary.Webhook.AdmitAsync(
-                issued.WebhookKey,
-                issued.Token,
-                """{"sourceEventId":"evt-1","orderReference":"1001","tools":["browser.act"]}"""u8.ToArray())).Kind);
-        Assert.Empty(await secretary.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
+            new[] { secretary.InstanceId, monitor.InstanceId }.Order(),
+            pending.Select(item => item.Owner.AgentInstanceId).Order());
+        Assert.All(pending, item => Assert.NotNull(item.ModelPin));
+        Assert.All(pending, item => Assert.Equal(1, item.ScheduleRevision));
+        Assert.All(pending, item => Assert.Null(item.DurableWorkItemId));
+        var saved = await secretary.Events.GetEventAsync(issued.SourceId, "order-105-created");
+        Assert.Equal(first.EventId, saved!.EventId);
 
-        await secretary.Service.RevokeWebhookAsync(secretary.InstanceId);
-        Assert.Equal(OrderPlacedAdmissionKind.Unauthorized, (await secretary.Webhook.AdmitAsync(issued.WebhookKey, issued.Token, valid)).Kind);
-        var rotated = await secretary.IssueAsync();
-        Assert.Equal(issued.WebhookKey, rotated.WebhookKey);
-        Assert.NotEqual(issued.Token, rotated.Token);
-        Assert.Equal(OrderPlacedAdmissionKind.Unauthorized, (await secretary.Webhook.AdmitAsync(issued.WebhookKey, issued.Token, valid)).Kind);
-        Assert.Equal(OrderPlacedAdmissionKind.Admitted, (await secretary.Webhook.AdmitAsync(rotated.WebhookKey, rotated.Token, valid)).Kind);
+        var duplicate = await secretary.Ingress.AdmitAsync(issued.SourceKey, issued.Token, body);
+        Assert.Equal(ExternalEventIngressKind.Duplicate, duplicate.Kind);
+        Assert.Equal(first.EventId, duplicate.EventId);
+        Assert.Equal(2, (await secretary.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10)).Count);
 
-        var v1 = await FixtureAsync("secretary", 1);
-        var v1Token = await v1.IssueAsync();
-        Assert.Equal(OrderPlacedAdmissionKind.NotAdmitted, (await v1.Webhook.AdmitAsync(v1Token.WebhookKey, v1Token.Token, valid)).Kind);
-        Assert.Empty(await v1.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
-
-        var assistant = await FixtureAsync("general-assistant", 12);
-        var assistantToken = await assistant.IssueAsync();
-        Assert.Equal(
-            OrderPlacedAdmissionKind.NotAdmitted,
-            (await assistant.Webhook.AdmitAsync(assistantToken.WebhookKey, assistantToken.Token, valid)).Kind);
-        Assert.Empty(await assistant.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
+        var text = string.Join('\n', secretary.Logs.Lines);
+        Assert.DoesNotContain(issued.Token, text, StringComparison.Ordinal);
+        Assert.DoesNotContain(WebhookTokens.Hash(issued.Token), text, StringComparison.Ordinal);
+        Assert.Null(await secretary.Connections.GetByAgentAsync(secretary.InstanceId));
+        var stored = await secretary.Events.GetAsync(issued.SourceId);
+        Assert.Equal(ExternalEventSourceStatus.Active, stored!.Status);
+        Assert.NotEqual(issued.Token, stored.CredentialHash);
     }
 
     [Fact]
-    public async Task Pin_failure_creates_no_occurrence()
+    public async Task Invalid_credentials_and_ineligible_subscribers_do_not_create_occurrences()
     {
-        var missing = await FixtureAsync("secretary", 2, new MissingCatalog());
-        var missingToken = await missing.IssueAsync();
-        var body = Encoding.UTF8.GetBytes(OrderPlacedPayload.Build("evt-9", "1009"));
-        var unavailable = await missing.Webhook.AdmitAsync(missingToken.WebhookKey, missingToken.Token, body);
-        Assert.Equal(OrderPlacedAdmissionKind.ModelRejected, unavailable.Kind);
-        Assert.Equal("model-unavailable", unavailable.Code);
-        Assert.Empty(await missing.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
+        var secretary = await FixtureAsync("secretary", 2);
+        var issued = await secretary.Sources.CreateAsync("Demo Store");
+        await secretary.Sources.SubscribeAsync(secretary.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
+        var valid = Encoding.UTF8.GetBytes(ExternalEventEnvelope.Build("evt-1", "1001"));
+        Assert.Equal(ExternalEventIngressKind.Unauthorized, (await secretary.Ingress.AdmitAsync(issued.SourceKey, "wrong-token", valid)).Kind);
+        Assert.Equal(ExternalEventIngressKind.Unauthorized, (await secretary.Ingress.AdmitAsync(Guid.NewGuid(), issued.Token, valid)).Kind);
+        Assert.Equal(
+            ExternalEventIngressKind.Invalid,
+            (await secretary.Ingress.AdmitAsync(issued.SourceKey, issued.Token, """{"eventId":"evt-1"}"""u8.ToArray())).Kind);
+        Assert.Null(await secretary.Events.GetEventAsync(issued.SourceId, "evt-1"));
 
-        var textOnly = await FixtureAsync("secretary", 2, new ToolLessCatalog());
-        var textToken = await textOnly.IssueAsync();
-        var capability = await textOnly.Webhook.AdmitAsync(textToken.WebhookKey, textToken.Token, body);
-        Assert.Equal(OrderPlacedAdmissionKind.ModelRejected, capability.Kind);
-        Assert.Equal("model-capability-unsupported", capability.Code);
-        Assert.Empty(await textOnly.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
+        await secretary.Sources.RevokeAsync(issued.SourceId);
+        Assert.Equal(ExternalEventIngressKind.Unauthorized, (await secretary.Ingress.AdmitAsync(issued.SourceKey, issued.Token, valid)).Kind);
+        Assert.NotNull(await secretary.Events.GetAsync(issued.SourceId));
+        var rotated = await secretary.Sources.RotateAsync(issued.SourceId);
+        Assert.Equal(issued.SourceKey, rotated.SourceKey);
+        Assert.NotEqual(issued.Token, rotated.Token);
+        Assert.Equal(ExternalEventIngressKind.Unauthorized, (await secretary.Ingress.AdmitAsync(issued.SourceKey, issued.Token, valid)).Kind);
+        var admitted = await secretary.Ingress.AdmitAsync(rotated.SourceKey, rotated.Token, valid);
+        Assert.Equal(ExternalEventIngressKind.Admitted, admitted.Kind);
+        Assert.Single(await secretary.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
+
+        var v1 = await FixtureAsync("secretary", 1, secretary.Events, secretary.Logs);
+        await Assert.ThrowsAsync<AgentCoreException>(() =>
+            v1.Sources.SubscribeAsync(v1.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced).AsTask());
+        Assert.Empty(await v1.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
     }
 
-    private static async Task<Fixture> FixtureAsync(string definitionId, int version, IModelCatalog? catalog = null)
+    [Fact]
+    public async Task A_subscriber_without_a_usable_model_does_not_block_another_subscriber()
+    {
+        var blocked = await FixtureAsync("secretary", 2, unattendedModel: "missing-model");
+        var ready = await FixtureAsync(
+            "secretary",
+            2,
+            blocked.Events,
+            blocked.Logs,
+            instances: blocked.Instances,
+            triggers: blocked.Triggers);
+        var issued = await blocked.Sources.CreateAsync("Demo Store");
+        await blocked.Sources.SubscribeAsync(blocked.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
+        await blocked.Sources.SubscribeAsync(ready.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
+        var body = Encoding.UTF8.GetBytes(ExternalEventEnvelope.Build("evt-9", "1009"));
+        var result = await blocked.Ingress.AdmitAsync(issued.SourceKey, issued.Token, body);
+        Assert.Equal(ExternalEventIngressKind.Admitted, result.Kind);
+        var pending = Assert.Single(await blocked.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
+        Assert.Equal(ready.InstanceId, pending.Owner.AgentInstanceId);
+        Assert.NotNull(await blocked.Events.GetEventAsync(issued.SourceId, "evt-9"));
+    }
+
+    [Fact]
+    public async Task An_event_with_no_eligible_subscriber_is_still_admitted()
+    {
+        var secretary = await FixtureAsync("secretary", 2);
+        var other = await FixtureAsync(
+            "secretary",
+            2,
+            secretary.Events,
+            secretary.Logs,
+            instances: secretary.Instances,
+            triggers: secretary.Triggers);
+        var issued = await secretary.Sources.CreateAsync("Demo Store");
+        var body = Encoding.UTF8.GetBytes(ExternalEventEnvelope.Build("evt-empty", "1002"));
+        var alone = await secretary.Ingress.AdmitAsync(issued.SourceKey, issued.Token, body);
+        Assert.Equal(ExternalEventIngressKind.Admitted, alone.Kind);
+        Assert.Empty(await secretary.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
+
+        var otherSource = await secretary.Sources.CreateAsync("Other Store");
+        await other.Sources.SubscribeAsync(other.InstanceId, otherSource.SourceId, ExternalEventTypes.OrderPlaced);
+        var subscribed = await secretary.Sources.SubscribeAsync(secretary.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
+        await secretary.Triggers.CancelAsync(
+            subscribed.Owner,
+            subscribed.RegistrationId,
+            subscribed.Revision,
+            DateTimeOffset.UtcNow);
+        var unmatched = Encoding.UTF8.GetBytes(ExternalEventEnvelope.Build("evt-unmatched", "1003"));
+        var admitted = await secretary.Ingress.AdmitAsync(issued.SourceKey, issued.Token, unmatched);
+        Assert.Equal(ExternalEventIngressKind.Admitted, admitted.Kind);
+        Assert.Empty(await secretary.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
+        Assert.NotNull(await secretary.Events.GetEventAsync(issued.SourceId, "evt-unmatched"));
+    }
+
+    private static async Task<Fixture> FixtureAsync(
+        string definitionId,
+        int version,
+        InMemoryExternalEventStore? events = null,
+        ListLogger? logs = null,
+        IModelCatalog? catalog = null,
+        InMemoryAgentInstanceStore? instances = null,
+        InMemoryTriggerStore? triggers = null,
+        string? unattendedModel = null)
     {
         var definitions = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         var definition = (await definitions.GetAsync(definitionId, version))!;
-        var instances = new InMemoryAgentInstanceStore();
+        instances ??= new InMemoryAgentInstanceStore();
         var memory = new InMemoryMemoryStore();
         var instanceId = Guid.NewGuid();
         await instances.InsertAsync(new AgentInstance(
@@ -156,42 +204,36 @@ public sealed class OrderPlacedAdmissionTests
             AgentInstanceLifecycle.Active,
             Now,
             Now,
-            false));
+            false,
+            UnattendedModelCatalogKey: unattendedModel));
         var profiles = new LocalUserProfileService(memory, TimeProvider.System);
         var profile = await profiles.GetLocalProfileAsync();
         var connections = new InMemoryApplicationConnectionStore();
-        await connections.SaveAsync(new ApplicationConnection(
-            Guid.NewGuid(),
-            instanceId,
-            ApplicationConnectionKinds.NopCommerce,
-            "Store",
-            "http://127.0.0.1:5088",
-            ["http://127.0.0.1:5088"],
-            ApplicationConnectionStatus.Connected,
-            instanceId,
-            1,
-            Now,
-            Now,
-            null), 0);
-        var triggers = new InMemoryTriggerStore();
-        var logs = new ListLogger();
-        var webhook = new OrderPlacedWebhook(
-            connections,
+        triggers ??= new InMemoryTriggerStore();
+        events ??= new InMemoryExternalEventStore();
+        logs ??= new ListLogger();
+        var ids = new SystemIdGenerator(TimeProvider.System);
+        var guard = new TriggerAdmissionGuard(instances, definitions, memory);
+        var ingress = new ExternalEventIngress(
+            events,
             triggers,
-            new TriggerAdmissionGuard(instances, definitions, memory),
-            new SystemIdGenerator(TimeProvider.System),
+            guard,
+            ids,
             TimeProvider.System,
-            profiles,
             instances,
             definitions,
             catalog ?? ModelCatalogFactory.Synthetic(),
             logs);
-        var service = new ApplicationConnectionService(
-            connections,
-            new SystemIdGenerator(TimeProvider.System),
+        var sources = new ExternalEventSourceService(
+            events,
+            triggers,
+            guard,
+            ids,
             TimeProvider.System,
-            instances);
-        return new Fixture(instanceId, new TriggerOwner(instanceId, profile.ProfileId), connections, triggers, webhook, service, logs);
+            profiles,
+            instances,
+            logs);
+        return new Fixture(instanceId, instances, connections, triggers, events, ingress, sources, logs);
     }
 
     private static string FindAgents()
@@ -213,17 +255,15 @@ public sealed class OrderPlacedAdmissionTests
 
     private sealed record Fixture(
         Guid InstanceId,
-        TriggerOwner Owner,
+        InMemoryAgentInstanceStore Instances,
         InMemoryApplicationConnectionStore Connections,
         InMemoryTriggerStore Triggers,
-        OrderPlacedWebhook Webhook,
-        ApplicationConnectionService Service,
-        ListLogger Logs)
-    {
-        public Task<WebhookCredential> IssueAsync() => Service.IssueWebhookAsync(InstanceId).AsTask();
-    }
+        InMemoryExternalEventStore Events,
+        ExternalEventIngress Ingress,
+        ExternalEventSourceService Sources,
+        ListLogger Logs);
 
-    private sealed class ListLogger : ILogger<OrderPlacedWebhook>
+    private sealed class ListLogger : ILogger<ExternalEventIngress>, ILogger<ExternalEventSourceService>
     {
         public List<string> Lines { get; } = [];
 
@@ -249,37 +289,4 @@ public sealed class OrderPlacedAdmissionTests
         }
     }
 
-    private sealed class MissingCatalog : IModelCatalog
-    {
-        public string DefaultKey => "missing";
-
-        public IReadOnlyList<ModelDescriptor> Models { get; } = [];
-
-        public ModelDescriptor Default => throw new InvalidOperationException();
-
-        public ModelDescriptor? Get(string key) => null;
-    }
-
-    private sealed class ToolLessCatalog : IModelCatalog
-    {
-        private readonly ModelDescriptor _model = new(
-            "scripted-alpha",
-            "Scripted Alpha",
-            "primary-llm",
-            "scripted-alpha",
-            false,
-            false,
-            false,
-            false,
-            [],
-            null);
-
-        public string DefaultKey => _model.Key;
-
-        public IReadOnlyList<ModelDescriptor> Models => [_model];
-
-        public ModelDescriptor Default => _model;
-
-        public ModelDescriptor? Get(string key) => key == _model.Key ? _model : null;
-    }
 }

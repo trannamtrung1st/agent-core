@@ -67,23 +67,6 @@ public sealed class SqliteApplicationConnectionStore(IDbContextFactory<AgentCore
         return connection;
     }
 
-    public async ValueTask<ApplicationConnection?> GetByWebhookKeyAsync(
-        Guid webhookKey,
-        CancellationToken cancellationToken = default)
-    {
-        if (webhookKey == Guid.Empty)
-        {
-            return null;
-        }
-
-        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var key = webhookKey.ToString("D");
-        var row = await db.ApplicationConnections.AsNoTracking()
-            .SingleOrDefaultAsync(item => item.WebhookKey == key, cancellationToken)
-            .ConfigureAwait(false);
-        return row is null ? null : Map(row);
-    }
-
     private static ApplicationConnectionRecord ToRecord(ApplicationConnection connection) =>
         new()
         {
@@ -98,10 +81,7 @@ public sealed class SqliteApplicationConnectionStore(IDbContextFactory<AgentCore
             Revision = connection.Revision,
             CreatedAtUtc = connection.CreatedAtUtc.ToUnixTimeMilliseconds(),
             UpdatedAtUtc = connection.UpdatedAtUtc.ToUnixTimeMilliseconds(),
-            StatusDetail = connection.StatusDetail,
-            WebhookKey = connection.WebhookKey?.ToString("D"),
-            WebhookTokenHash = connection.WebhookTokenHash,
-            WebhookStatus = (int)connection.WebhookStatus
+            StatusDetail = connection.StatusDetail
         };
 
     private static void Copy(ApplicationConnection connection, ApplicationConnectionRecord row)
@@ -117,9 +97,6 @@ public sealed class SqliteApplicationConnectionStore(IDbContextFactory<AgentCore
         row.CreatedAtUtc = connection.CreatedAtUtc.ToUnixTimeMilliseconds();
         row.UpdatedAtUtc = connection.UpdatedAtUtc.ToUnixTimeMilliseconds();
         row.StatusDetail = connection.StatusDetail;
-        row.WebhookKey = connection.WebhookKey?.ToString("D");
-        row.WebhookTokenHash = connection.WebhookTokenHash;
-        row.WebhookStatus = (int)connection.WebhookStatus;
     }
 
     private static ApplicationConnection Map(ApplicationConnectionRecord row)
@@ -137,11 +114,6 @@ public sealed class SqliteApplicationConnectionStore(IDbContextFactory<AgentCore
             row.Revision,
             DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc),
             DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc),
-            row.StatusDetail,
-            string.IsNullOrWhiteSpace(row.WebhookKey) ? null : Guid.Parse(row.WebhookKey),
-            row.WebhookTokenHash,
-            Enum.IsDefined(typeof(WebhookCredentialStatus), row.WebhookStatus)
-                ? (WebhookCredentialStatus)row.WebhookStatus
-                : WebhookCredentialStatus.NotConfigured);
+            row.StatusDetail);
     }
 }

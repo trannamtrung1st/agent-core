@@ -117,8 +117,27 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         lock (_state.Gate)
         {
             var count = _state.Registrations.Values.Count(item =>
-                item.Owner.Equals(owner) && item.Status == TriggerRegistrationStatus.Active);
+                item.Owner.Equals(owner)
+                && item.Status == TriggerRegistrationStatus.Active
+                && item.EventSourceId is null);
             return ValueTask.FromResult(count);
+        }
+    }
+
+    public ValueTask<IReadOnlyList<TriggerRegistration>> ListEventSubscriptionsAsync(
+        Guid eventSourceId,
+        string eventType,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_state.Gate)
+        {
+            var items = _state.Registrations.Values
+                .Where(item =>
+                    item.Status == TriggerRegistrationStatus.Active
+                    && item.EventSourceId == eventSourceId
+                    && string.Equals(item.EventType, eventType, StringComparison.Ordinal))
+                .ToArray();
+            return ValueTask.FromResult<IReadOnlyList<TriggerRegistration>>(items);
         }
     }
 

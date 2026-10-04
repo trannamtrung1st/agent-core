@@ -12,9 +12,4 @@ public interface IApplicationConnectionStore
         ApplicationConnection connection,
         long expectedRevision,
         CancellationToken cancellationToken = default);
-
-    ValueTask<ApplicationConnection?> GetByWebhookKeyAsync(
-        Guid webhookKey,
-        CancellationToken cancellationToken = default) =>
-        ValueTask.FromResult<ApplicationConnection?>(null);
 }

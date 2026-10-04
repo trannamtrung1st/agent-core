@@ -69,7 +69,7 @@ Clients cannot supply trusted diagnostic, correlation, or causation identity. JS
 2. **P8.5 — Application Messaging & Dynamic Skill Activation — closed** on `1461567` (post-closure corrections **closed** on **`aedea70`**, hosted Synthetic [**`36851267423`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36851267423) green).
 3. **P9 — Visible browser — closed** on `bba1de4`. Post-closure browser runtime hardening is **closed** on **`3400d64`** (hosted Synthetic [**`36981513602`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36981513602) green); that chain does not move the P9 freeze SHA.
 4. **P9.5 — Proactive Secretary / Real Assistant Demo — closed** on `1012653` (hosted Synthetic [`37111979501`](https://github.com/trannamtrung1st/agent-core/actions/runs/37111979501) green). Post-closure follow-ups project one application connection by display name and add a bounded browser settle. Neither moves the P9 or P9.5 SHAs. The post-P9.5 browser and store-review enhancement is recorded on `6f6ff42` (hosted Synthetic [`37128161642`](https://github.com/trannamtrung1st/agent-core/actions/runs/37128161642) green) and does not move `1012653`.
-5. **P9.6 — Visual Browser, Reactive Triggers & Deterministic Unattended Execution — implemented, not closed.** Broaden the provider-neutral browser capability, add one authenticated `order.placed` webhook proof through the existing occurrence pipeline, extend the shipped unattended baseline, and make model choice independent of live-versus-durable routing.
+5. **P9.6 — Visual Browser, Reactive Triggers & Deterministic Unattended Execution — implemented, not closed.** Broaden the provider-neutral browser capability, admit one authenticated `order.placed` event from a source-owned webhook through the existing occurrence pipeline, extend the shipped unattended baseline, and make model choice independent of live-versus-durable routing. A local storefront order was admitted once and investigated in the authenticated browser. The phase is still not frozen.
 6. **P10 — Sandbox Evolution — requirement-triggered when the current sandbox is insufficient.**
 7. **P11 — Multi-user + Production Infrastructure — requirement-triggered when a real hosting or pilot requirement appears.**
 
@@ -1062,7 +1062,7 @@ P9.5 closes when a developer can use one simple documented workflow to bring up 
 
 # P9.6 — Visual Browser, Reactive Triggers & Deterministic Unattended Execution
 
-**Status: implemented; not closed.** P9 remains closed on `bba1de4` and P9.5 remains closed on `1012653`. P9.6 does not move either closure SHA and does not start P10. Local key-free gates passed. Hosted Synthetic [`37152788171`](https://github.com/trannamtrung1st/agent-core/actions/runs/37152788171) is green on `24e2281`. The candidate report is [p9.6-freeze-candidate.md](docs/reports/p9.6-freeze-candidate.md). `scripts/nopcommerce-demo.sh start` was not run, so AC-27 is not passed and the phase stays open.
+**Status: implemented; not closed.** P9 remains closed on `bba1de4` and P9.5 remains closed on `1012653`. P9.6 does not move either closure SHA and does not start P10. Local key-free gates passed. Hosted Synthetic [`37152788171`](https://github.com/trannamtrung1st/agent-core/actions/runs/37152788171) is green on `24e2281`. The candidate report is [p9.6-freeze-candidate.md](docs/reports/p9.6-freeze-candidate.md). A later local run started the nopCommerce demo, admitted order 9 once, and the Secretary completed a quiet browser investigation. The phase stays open.
 
 ## Verified starting point
 
@@ -1206,7 +1206,7 @@ live execution OR durable WorkItem
 Agent execution
 ```
 
-- Authenticate and validate before admitting an occurrence. The exact authentication mechanism and secret-rotation shape remain TBD until implementation design.
+- Authenticate the Event Source bearer before admitting an External Event. Agents subscribe with `eventSourceId` and `eventType`. Rotation and revocation belong to the source, not an application connection.
 - Require stable source-event identity and owner-scoped deduplication.
 - Normalize a bounded allowlisted payload into untrusted evidence. Webhook content is input, never authority, trusted instructions, policy, or a capability grant.
 - Persist/admit the occurrence before asynchronous work and return the HTTP response quickly; do not execute the agent in the request.
@@ -1401,6 +1401,6 @@ Orientation for what later work can build on. Detail and gate history are in `/d
 
 # Next implementation item
 
-**P9.6 closure.** The execution-model pin, Browser Capability v1, authenticated `order.placed` ingress, unattended browser parity, `tool-result-lost` reconciliation, Admin and Background Work, and the four-mode Secretary proof are implemented. Hosted Synthetic [`37152788171`](https://github.com/trannamtrung1st/agent-core/actions/runs/37152788171) is green on `24e2281` and named in `docs/reports/p9.6-freeze-candidate.md`. The phase stays open because `scripts/nopcommerce-demo.sh start` was not run.
+**P9.6 closure.** The execution-model pin, Browser Capability v1, authenticated `order.placed` ingress, unattended browser parity, `tool-result-lost` reconciliation, Admin and Background Work, and the four-mode Secretary proof are implemented. Hosted Synthetic [`37152788171`](https://github.com/trannamtrung1st/agent-core/actions/runs/37152788171) is green on `24e2281` and named in `docs/reports/p9.6-freeze-candidate.md`. The phase stays open. A later local run admitted storefront order 9 once and the Secretary finished that investigation quietly in the authenticated browser.
 
 P9 remains closed on `bba1de4`; P9.5 remains closed on `1012653`; the post-P9.5 enhancement remains recorded on `6f6ff42`. P10 and P11 remain requirement-triggered.

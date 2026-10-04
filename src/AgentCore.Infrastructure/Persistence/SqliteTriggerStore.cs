@@ -107,8 +107,25 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         return await db.TriggerRegistrations.CountAsync(
             row => row.AgentInstanceId == instanceId
                 && row.ProfileId == profileId
-                && row.Status == (int)TriggerRegistrationStatus.Active,
+                && row.Status == (int)TriggerRegistrationStatus.Active
+                && row.EventSourceId == null,
             cancellationToken).ConfigureAwait(false);
+    }
+
+    public async ValueTask<IReadOnlyList<TriggerRegistration>> ListEventSubscriptionsAsync(
+        Guid eventSourceId,
+        string eventType,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var sourceId = eventSourceId.ToString("D");
+        var rows = await db.TriggerRegistrations.AsNoTracking()
+            .Where(row => row.Status == (int)TriggerRegistrationStatus.Active
+                && row.EventSourceId == sourceId
+                && row.EventType == eventType)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return rows.Select(TriggerStoreMapping.ToRegistration).ToArray();
     }
 
     public async ValueTask<TriggerRegistration> UpdateAsync(
@@ -926,7 +943,9 @@ internal static class TriggerStoreMapping
         SuspensionReason = registration.SuspensionReason,
         ModelOverrideCatalogKey = registration.ModelOverrideCatalogKey,
         ModelOverrideReasoningEffort = registration.ModelOverrideReasoningEffort,
-        RequiresVision = registration.RequiresVision
+        RequiresVision = registration.RequiresVision,
+        EventSourceId = registration.EventSourceId?.ToString("D"),
+        EventType = registration.EventType
     };
 
     public static TriggerRegistration ToRegistration(TriggerRegistrationRecord row) => new(
@@ -949,7 +968,9 @@ internal static class TriggerStoreMapping
         row.SuspensionReason,
         row.ModelOverrideCatalogKey,
         row.ModelOverrideReasoningEffort,
-        row.RequiresVision);
+        row.RequiresVision,
+        string.IsNullOrWhiteSpace(row.EventSourceId) ? null : Guid.Parse(row.EventSourceId),
+        row.EventType);
 
     public static TriggerOccurrenceRecord ToRecord(TriggerOccurrence occurrence) => new()
     {

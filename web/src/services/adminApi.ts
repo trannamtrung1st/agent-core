@@ -916,14 +916,6 @@ export type ApplicationConnection = {
   createdAtUtc: string;
   updatedAtUtc: string;
   statusDetail?: string | null;
-  webhookKey?: string | null;
-  webhookStatus?: string | null;
-};
-
-export type ApplicationWebhookCredential = {
-  webhookKey: string;
-  token: string;
-  status: string;
 };
 
 export async function getApplicationConnection(instanceId: string): Promise<ApplicationConnection | null> {
@@ -970,18 +962,86 @@ export function resetApplicationProfile(instanceId: string) {
   return postApplicationConnection(instanceId, "reset-profile");
 }
 
-export async function issueApplicationWebhook(instanceId: string): Promise<ApplicationWebhookCredential> {
-  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/connection/webhook`, {
-    method: "POST"
-  });
+export type AdminEventSource = {
+  sourceId: string;
+  displayName: string;
+  kind: string;
+  sourceKey: string;
+  status: string;
+  revision: number;
+};
+
+export type AdminEventSourceCredential = {
+  sourceId: string;
+  sourceKey: string;
+  token: string;
+  status: string;
+};
+
+export type AdminEventSubscription = {
+  registrationId: string;
+  sourceId: string;
+  eventType: string;
+  status: string;
+  revision: number;
+};
+
+export async function listEventSources(): Promise<AdminEventSource[]> {
+  const response = await ownerFetch("/api/v2/admin/event-sources");
   if (!response.ok) {
-    throw await adminProblemMessage(response, `Application webhook failed (${response.status})`);
+    throw await adminProblemMessage(response, `Event sources failed (${response.status})`);
   }
-  return (await response.json()) as ApplicationWebhookCredential;
+  const payload = (await response.json()) as { items: AdminEventSource[] };
+  return payload.items;
 }
 
-export function revokeApplicationWebhook(instanceId: string) {
-  return postApplicationConnection(instanceId, "webhook/revoke");
+export async function createEventSource(displayName: string): Promise<AdminEventSourceCredential> {
+  const response = await ownerFetch("/api/v2/admin/event-sources", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ displayName })
+  });
+  if (!response.ok) {
+    throw await adminProblemMessage(response, `Event source create failed (${response.status})`);
+  }
+  return (await response.json()) as AdminEventSourceCredential;
+}
+
+export async function rotateEventSource(sourceId: string): Promise<AdminEventSourceCredential> {
+  const response = await ownerFetch(`/api/v2/admin/event-sources/${sourceId}/rotate`, { method: "POST" });
+  if (!response.ok) {
+    throw await adminProblemMessage(response, `Event source rotate failed (${response.status})`);
+  }
+  return (await response.json()) as AdminEventSourceCredential;
+}
+
+export async function revokeEventSource(sourceId: string): Promise<AdminEventSource> {
+  const response = await ownerFetch(`/api/v2/admin/event-sources/${sourceId}/revoke`, { method: "POST" });
+  if (!response.ok) {
+    throw await adminProblemMessage(response, `Event source revoke failed (${response.status})`);
+  }
+  return (await response.json()) as AdminEventSource;
+}
+
+export async function listEventSubscriptions(instanceId: string): Promise<AdminEventSubscription[]> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/event-subscriptions`);
+  if (!response.ok) {
+    throw await adminProblemMessage(response, `Event subscriptions failed (${response.status})`);
+  }
+  const payload = (await response.json()) as { items: AdminEventSubscription[] };
+  return payload.items;
+}
+
+export async function createEventSubscription(instanceId: string, sourceId: string): Promise<AdminEventSubscription> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/event-subscriptions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sourceId, eventType: "order.placed" })
+  });
+  if (!response.ok) {
+    throw await adminProblemMessage(response, `Event subscription failed (${response.status})`);
+  }
+  return (await response.json()) as AdminEventSubscription;
 }
 
 export async function setAdminUnattendedModel(

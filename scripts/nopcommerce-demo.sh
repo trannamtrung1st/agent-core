@@ -277,12 +277,44 @@ print("origins-ok")
 PY
 }
 
+install_order_events_plugin() {
+  local plugin="$root/deploy/nopcommerce/plugin/AgentCore.OrderEvents"
+  local refs="$plugin/refs"
+  mkdir -p "$refs"
+  docker cp nopcommerce-demo-web:/app/Nop.Core.dll "$refs/Nop.Core.dll"
+  docker cp nopcommerce-demo-web:/app/Nop.Services.dll "$refs/Nop.Services.dll"
+  dotnet build "$plugin/AgentCore.OrderEvents.csproj" -c Release --nologo
+  local out="$plugin/bin/Release/net9.0"
+  docker exec nopcommerce-demo-web mkdir -p /app/Plugins/AgentCore.OrderEvents
+  docker cp "$out/AgentCore.OrderEvents.dll" nopcommerce-demo-web:/app/Plugins/AgentCore.OrderEvents/AgentCore.OrderEvents.dll
+  docker cp "$out/AgentCore.OrderEvents.deps.json" nopcommerce-demo-web:/app/Plugins/AgentCore.OrderEvents/AgentCore.OrderEvents.deps.json
+  docker cp "$plugin/plugin.json" nopcommerce-demo-web:/app/Plugins/AgentCore.OrderEvents/plugin.json
+  local catalog
+  catalog="$(mktemp)"
+  if ! docker cp nopcommerce-demo-web:/app/App_Data/plugins.json "$catalog" 2>/dev/null; then
+    printf '%s\n' '{"InstalledPlugins":[]}' >"$catalog"
+  fi
+  python3 - "$catalog" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+raw = path.read_text(encoding="utf-8-sig") or "{}"
+data = json.loads(raw)
+installed = data.setdefault("InstalledPlugins", [])
+if not any(item.get("SystemName") == "AgentCore.OrderEvents" for item in installed if isinstance(item, dict)):
+    installed.append({"SystemName": "AgentCore.OrderEvents"})
+path.write_text(json.dumps(data, indent=2) + "\n")
+PY
+  docker cp "$catalog" nopcommerce-demo-web:/app/App_Data/plugins.json
+  rm -f "$catalog"
+}
+
 bring_up() {
   prepare_env
   "${compose[@]}" up -d
   wait_for_http
   install_if_needed
   apply_seed
+  install_order_events_plugin
   docker restart nopcommerce-demo-web >/dev/null
   wait_for_http
   assert_origins

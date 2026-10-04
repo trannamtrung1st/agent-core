@@ -4,8 +4,6 @@ using AgentCore.Domain.Connections;
 
 namespace AgentCore.Application.Connections;
 
-public sealed record WebhookCredential(Guid WebhookKey, string Token, WebhookCredentialStatus Status);
-
 public static class WebhookTokens
 {
     private static readonly byte[] DummyHash = new byte[32];

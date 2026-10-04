@@ -25,10 +25,4 @@ public sealed class ApplicationConnectionRecord
     public long UpdatedAtUtc { get; set; }
 
     public string? StatusDetail { get; set; }
-
-    public string? WebhookKey { get; set; }
-
-    public string? WebhookTokenHash { get; set; }
-
-    public int WebhookStatus { get; set; }
 }

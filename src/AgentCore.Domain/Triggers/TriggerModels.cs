@@ -546,7 +546,9 @@ public sealed class TriggerRegistration
         string? suspensionReason,
         string? modelOverrideCatalogKey = null,
         string? modelOverrideReasoningEffort = null,
-        bool requiresVision = false)
+        bool requiresVision = false,
+        Guid? eventSourceId = null,
+        string? eventType = null)
     {
         if (registrationId == Guid.Empty)
         {
@@ -593,6 +595,23 @@ public sealed class TriggerRegistration
             WorkLimits.MaxReasoningEffortCharacters,
             "Model override reasoning effort");
         RequiresVision = requiresVision;
+        if (eventSourceId == Guid.Empty)
+        {
+            throw new ArgumentException("Event source identifier is not valid.", nameof(eventSourceId));
+        }
+
+        if ((eventSourceId is null) != string.IsNullOrWhiteSpace(eventType))
+        {
+            throw new ArgumentException("An event subscription requires both a source and an event type.");
+        }
+
+        if (eventType is not null && !string.Equals(eventType, "order.placed", StringComparison.Ordinal))
+        {
+            throw new ArgumentException("Event type is not allowed.", nameof(eventType));
+        }
+
+        EventSourceId = eventSourceId;
+        EventType = eventType;
     }
 
     public Guid RegistrationId { get; }
@@ -625,6 +644,10 @@ public sealed class TriggerRegistration
 
     public bool RequiresVision { get; }
 
+    public Guid? EventSourceId { get; }
+
+    public string? EventType { get; }
+
     public TriggerRegistration WithUpdate(
         string intent,
         TriggerSchedule schedule,
@@ -648,7 +671,9 @@ public sealed class TriggerRegistration
             SuspensionReason,
             ModelOverrideCatalogKey,
             ModelOverrideReasoningEffort,
-            RequiresVision);
+            RequiresVision,
+            EventSourceId,
+            EventType);
 
     public TriggerRegistration WithScheduleAdvance(
         TriggerRegistrationStatus status,
@@ -672,7 +697,9 @@ public sealed class TriggerRegistration
             suspensionReason,
             ModelOverrideCatalogKey,
             ModelOverrideReasoningEffort,
-            RequiresVision);
+            RequiresVision,
+            EventSourceId,
+            EventType);
 
     public TriggerRegistration WithCancellation(long revision, DateTimeOffset cancelledAt) =>
         new(
@@ -690,7 +717,9 @@ public sealed class TriggerRegistration
             SuspensionReason,
             ModelOverrideCatalogKey,
             ModelOverrideReasoningEffort,
-            RequiresVision);
+            RequiresVision,
+            EventSourceId,
+            EventType);
 
     public TriggerRegistration WithModelOverride(
         string? catalogKey,
@@ -712,7 +741,9 @@ public sealed class TriggerRegistration
             SuspensionReason,
             catalogKey,
             reasoningEffort,
-            RequiresVision);
+            RequiresVision,
+            EventSourceId,
+            EventType);
 
     private static string? OptionalModelToken(string? value, int max, string name)
     {

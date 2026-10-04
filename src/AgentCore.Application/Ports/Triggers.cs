@@ -135,6 +135,11 @@ public interface ITriggerStore
         TriggerOwner owner,
         CancellationToken cancellationToken = default);
 
+    ValueTask<IReadOnlyList<TriggerRegistration>> ListEventSubscriptionsAsync(
+        Guid eventSourceId,
+        string eventType,
+        CancellationToken cancellationToken = default);
+
     ValueTask<TriggerRegistration> UpdateAsync(
         TriggerOwner owner,
         Guid registrationId,

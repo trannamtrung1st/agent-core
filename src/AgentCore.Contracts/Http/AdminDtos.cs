@@ -388,14 +388,36 @@ public sealed record AdminApplicationConnectionResponse(
     long Revision,
     string CreatedAtUtc,
     string UpdatedAtUtc,
-    string? StatusDetail,
-    string? WebhookKey,
-    string WebhookStatus);
+    string? StatusDetail);
 
-public sealed record AdminWebhookCredentialResponse(
-    string WebhookKey,
+public sealed record AdminEventSourceResponse(
+    string SourceId,
+    string DisplayName,
+    string Kind,
+    string SourceKey,
+    string Status,
+    long Revision);
+
+public sealed record AdminEventSourceListResponse(IReadOnlyList<AdminEventSourceResponse> Items);
+
+public sealed record AdminCreateEventSourceRequest(string DisplayName);
+
+public sealed record AdminEventSourceCredentialResponse(
+    string SourceId,
+    string SourceKey,
     string Token,
     string Status);
+
+public sealed record AdminEventSubscriptionResponse(
+    string RegistrationId,
+    string SourceId,
+    string EventType,
+    string Status,
+    long Revision);
+
+public sealed record AdminEventSubscriptionListResponse(IReadOnlyList<AdminEventSubscriptionResponse> Items);
+
+public sealed record AdminCreateEventSubscriptionRequest(string SourceId, string EventType);
 
 public sealed record AdminEventResponse(
     string EventId,

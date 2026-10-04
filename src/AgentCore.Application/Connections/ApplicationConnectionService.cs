@@ -418,52 +418,6 @@ public sealed class ApplicationConnectionService(
 
     private static Uri AdminSignInUrl(string baseUrl) => new(baseUrl.TrimEnd('/') + "/admin");
 
-    public async ValueTask<WebhookCredential> IssueWebhookAsync(
-        Guid agentInstanceId,
-        CancellationToken cancellationToken = default)
-    {
-        await RequireInstanceAsync(agentInstanceId, cancellationToken).ConfigureAwait(false);
-        var current = await store.GetByAgentAsync(agentInstanceId, cancellationToken).ConfigureAwait(false)
-            ?? throw AgentCoreErrors.NotFound("Application connection was not found.");
-        var token = WebhookTokens.Create();
-        var updated = current with
-        {
-            WebhookKey = current.WebhookKey ?? ids.NewId(),
-            WebhookTokenHash = WebhookTokens.Hash(token),
-            WebhookStatus = WebhookCredentialStatus.Active,
-            Revision = current.Revision + 1,
-            UpdatedAtUtc = time.GetUtcNow()
-        };
-        var saved = await store.SaveAsync(updated, current.Revision, cancellationToken).ConfigureAwait(false);
-        logger?.LogInformation(
-            "Webhook credential {WebhookStatus} for agent instance {AgentInstanceId}.",
-            saved.WebhookStatus,
-            saved.AgentInstanceId);
-        return new WebhookCredential(saved.WebhookKey!.Value, token, saved.WebhookStatus);
-    }
-
-    public async ValueTask<ApplicationConnection> RevokeWebhookAsync(
-        Guid agentInstanceId,
-        CancellationToken cancellationToken = default)
-    {
-        await RequireInstanceAsync(agentInstanceId, cancellationToken).ConfigureAwait(false);
-        var current = await store.GetByAgentAsync(agentInstanceId, cancellationToken).ConfigureAwait(false)
-            ?? throw AgentCoreErrors.NotFound("Application connection was not found.");
-        var updated = current with
-        {
-            WebhookTokenHash = null,
-            WebhookStatus = WebhookCredentialStatus.Revoked,
-            Revision = current.Revision + 1,
-            UpdatedAtUtc = time.GetUtcNow()
-        };
-        var saved = await store.SaveAsync(updated, current.Revision, cancellationToken).ConfigureAwait(false);
-        logger?.LogInformation(
-            "Webhook credential {WebhookStatus} for agent instance {AgentInstanceId}.",
-            saved.WebhookStatus,
-            saved.AgentInstanceId);
-        return saved;
-    }
-
     private void LogStatus(ApplicationConnection connection) =>
         logger?.LogInformation(
             "Application connection status {Status} for agent instance {AgentInstanceId}.",

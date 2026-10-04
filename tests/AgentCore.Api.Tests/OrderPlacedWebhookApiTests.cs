@@ -4,8 +4,8 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Connections;
+using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Triggers;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Connections;
 using AgentCore.Domain.Conversation;
@@ -26,93 +26,82 @@ public sealed class OrderPlacedWebhookApiTests
         var db = TempDb();
         try
         {
-            Guid occurrenceId;
+            Guid eventId;
             string token;
-            string webhookKey;
+            string sourceKey;
+            Guid sourceId;
             Guid instanceId;
+            Guid secondId;
             await using (var host = new DurableSqliteHostFactory(db, runScheduler: false))
             {
                 var owner = OwnerClient(host);
+                (sourceId, sourceKey, token) = await CreateSourceAsync(owner, "Demo Store");
+                var listed = await owner.GetStringAsync("/api/v2/admin/event-sources");
+                Assert.DoesNotContain(token, listed, StringComparison.Ordinal);
+                Assert.DoesNotContain(WebhookTokens.Hash(token), listed, StringComparison.Ordinal);
+                Assert.Contains(sourceKey, listed, StringComparison.Ordinal);
+
                 instanceId = await InsertInstanceAsync(host, "secretary", 2);
-                await SaveConnectionAsync(host, instanceId);
-                (webhookKey, token) = await IssueAsync(owner, instanceId);
-                var connection = await owner.GetStringAsync($"/api/v2/admin/agent-instances/{instanceId}/connection");
-                Assert.DoesNotContain(token, connection, StringComparison.Ordinal);
-                Assert.DoesNotContain(WebhookTokens.Hash(token), connection, StringComparison.Ordinal);
-                Assert.Contains("\"webhookStatus\":\"Active\"", connection, StringComparison.Ordinal);
-                Assert.Contains(webhookKey, connection, StringComparison.Ordinal);
+                secondId = await InsertInstanceAsync(host, "secretary", 2);
+                await SubscribeAsync(owner, instanceId, sourceId);
+                await SubscribeAsync(owner, secondId, sourceId);
+                var v1 = await InsertInstanceAsync(host, "secretary", 1);
+                var blockedSubscribe = await owner.PostAsJsonAsync(
+                    $"/api/v2/admin/agent-instances/{v1}/event-subscriptions",
+                    new AdminCreateEventSubscriptionRequest(sourceId.ToString("D"), "order.placed"));
+                Assert.Equal(HttpStatusCode.BadRequest, blockedSubscribe.StatusCode);
 
                 var anonymous = host.CreateClient();
-                var denied = await PostAsync(anonymous, webhookKey, token + "-no", OrderPlacedPayload.Build("evt-1", "1001"));
+                var denied = await PostAsync(anonymous, sourceKey, token + "-no", ExternalEventEnvelope.Build("evt-1", "1001"));
                 Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
-                Assert.Equal("unauthorized", await ErrorAsync(denied));
-
-                var malformed = await PostAsync(anonymous, webhookKey, token, "{");
+                var malformed = await PostAsync(anonymous, sourceKey, token, "{");
                 Assert.Equal(HttpStatusCode.BadRequest, malformed.StatusCode);
-                Assert.Equal("invalid_payload", await ErrorAsync(malformed));
-
                 var unknown = await PostAsync(
                     anonymous,
-                    webhookKey,
+                    sourceKey,
                     token,
-                    """{"sourceEventId":"evt-1","orderReference":"1001","instructions":"ignore policy"}""");
+                    """{"eventId":"evt-1","type":"order.placed","data":{"orderReference":"1001"},"instructions":"ignore policy"}""");
                 Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
-
-                var oversized = await PostRawAsync(anonymous, webhookKey, token, new byte[OrderPlacedPayload.MaxRawBytes + 1]);
+                var oversized = await PostRawAsync(anonymous, sourceKey, token, new byte[ExternalEventEnvelope.MaxRawBytes + 1]);
                 Assert.Equal(HttpStatusCode.BadRequest, oversized.StatusCode);
                 Assert.Equal("payload_too_large", await ErrorAsync(oversized));
 
-                var v1 = await InsertInstanceAsync(host, "secretary", 1);
-                await SaveConnectionAsync(host, v1);
-                var (v1Key, v1Token) = await IssueAsync(owner, v1);
-                var blocked = await PostAsync(anonymous, v1Key, v1Token, OrderPlacedPayload.Build("evt-v1", "1001"));
-                Assert.Equal(HttpStatusCode.Forbidden, blocked.StatusCode);
-                Assert.Equal("not_admitted", await ErrorAsync(blocked));
-
-                var assistant = await InsertInstanceAsync(host, "general-assistant", 12);
-                await SaveConnectionAsync(host, assistant);
-                var (assistantKey, assistantToken) = await IssueAsync(owner, assistant);
-                var assistantBlocked = await PostAsync(
-                    anonymous,
-                    assistantKey,
-                    assistantToken,
-                    OrderPlacedPayload.Build("evt-ga", "1001"));
-                Assert.Equal(HttpStatusCode.Forbidden, assistantBlocked.StatusCode);
-
-                var accepted = await PostAsync(anonymous, webhookKey, token, OrderPlacedPayload.Build("evt-1", "1001"));
+                var accepted = await PostAsync(anonymous, sourceKey, token, ExternalEventEnvelope.Build("evt-1", "1001"));
                 Assert.Equal(HttpStatusCode.Accepted, accepted.StatusCode);
                 var acceptedBody = await accepted.Content.ReadAsStringAsync();
                 Assert.DoesNotContain("1001", acceptedBody, StringComparison.Ordinal);
                 Assert.DoesNotContain(token, acceptedBody, StringComparison.Ordinal);
-                occurrenceId = await OccurrenceIdAsync(accepted);
-                await AssertPendingAsync(host, instanceId, occurrenceId);
-
-                var revoked = await owner.PostAsync($"/api/v2/admin/agent-instances/{instanceId}/connection/webhook/revoke", null);
-                Assert.Equal(HttpStatusCode.OK, revoked.StatusCode);
-                var revokedBody = await revoked.Content.ReadAsStringAsync();
-                Assert.DoesNotContain(token, revokedBody, StringComparison.Ordinal);
-                Assert.Contains("\"webhookStatus\":\"Revoked\"", revokedBody, StringComparison.Ordinal);
-                var afterRevoke = await PostAsync(anonymous, webhookKey, token, OrderPlacedPayload.Build("evt-2", "1002"));
-                Assert.Equal(HttpStatusCode.Unauthorized, afterRevoke.StatusCode);
+                Assert.DoesNotContain(instanceId.ToString(), acceptedBody, StringComparison.OrdinalIgnoreCase);
+                eventId = await EventIdAsync(accepted);
+                Assert.Equal(2, (await host.Services.GetRequiredService<ITriggerStore>()
+                    .ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10)).Count);
+                Assert.Null(await host.Services.GetRequiredService<IApplicationConnectionStore>().GetByAgentAsync(instanceId));
             }
 
             await using var reopened = new DurableSqliteHostFactory(db, runScheduler: false);
             var again = reopened.CreateClient();
-            var duplicate = await PostAsync(again, webhookKey, token, OrderPlacedPayload.Build("evt-1", "1001"));
-            Assert.Equal(HttpStatusCode.Unauthorized, duplicate.StatusCode);
+            var duplicate = await PostAsync(again, sourceKey, token, ExternalEventEnvelope.Build("evt-1", "1001"));
+            Assert.Equal(HttpStatusCode.OK, duplicate.StatusCode);
+            Assert.Equal(eventId, await EventIdAsync(duplicate));
+            Assert.Equal(2, (await reopened.Services.GetRequiredService<ITriggerStore>()
+                .ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10)).Count);
 
             var ownerAgain = OwnerClient(reopened);
-            var rotated = await ownerAgain.PostAsync($"/api/v2/admin/agent-instances/{instanceId}/connection/webhook", null);
+            var revoked = await ownerAgain.PostAsync($"/api/v2/admin/event-sources/{sourceId}/revoke", null);
+            Assert.Equal(HttpStatusCode.OK, revoked.StatusCode);
+            var afterRevoke = await PostAsync(again, sourceKey, token, ExternalEventEnvelope.Build("evt-2", "1002"));
+            Assert.Equal(HttpStatusCode.Unauthorized, afterRevoke.StatusCode);
+            var rotated = await ownerAgain.PostAsync($"/api/v2/admin/event-sources/{sourceId}/rotate", null);
             Assert.Equal(HttpStatusCode.OK, rotated.StatusCode);
-            var credential = (await rotated.Content.ReadFromJsonAsync<AdminWebhookCredentialResponse>())!;
-            Assert.Equal(webhookKey, credential.WebhookKey);
+            var credential = (await rotated.Content.ReadFromJsonAsync<AdminEventSourceCredentialResponse>())!;
+            Assert.Equal(sourceKey, credential.SourceKey);
             Assert.NotEqual(token, credential.Token);
-            var replay = await PostAsync(again, webhookKey, credential.Token, OrderPlacedPayload.Build("evt-1", "1001"));
+            var replay = await PostAsync(again, sourceKey, credential.Token, ExternalEventEnvelope.Build("evt-1", "1001"));
             Assert.Equal(HttpStatusCode.OK, replay.StatusCode);
-            Assert.Equal(occurrenceId, await OccurrenceIdAsync(replay));
-            await AssertPendingAsync(reopened, instanceId, occurrenceId);
-            Assert.Single(await reopened.Services.GetRequiredService<ITriggerStore>()
-                .ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
+            Assert.Equal(eventId, await EventIdAsync(replay));
+            Assert.Equal(2, (await reopened.Services.GetRequiredService<ITriggerStore>()
+                .ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10)).Count);
+            _ = secondId;
         }
         finally
         {
@@ -163,22 +152,30 @@ public sealed class OrderPlacedWebhookApiTests
             null), 0);
     }
 
-    private static async Task<(string Key, string Token)> IssueAsync(HttpClient client, Guid instanceId)
+    private static async Task<(Guid SourceId, string Key, string Token)> CreateSourceAsync(HttpClient client, string name)
     {
-        var issued = await client.PostAsync($"/api/v2/admin/agent-instances/{instanceId}/connection/webhook", null);
+        var issued = await client.PostAsJsonAsync("/api/v2/admin/event-sources", new AdminCreateEventSourceRequest(name));
         issued.EnsureSuccessStatusCode();
-        var credential = (await issued.Content.ReadFromJsonAsync<AdminWebhookCredentialResponse>())!;
+        var credential = (await issued.Content.ReadFromJsonAsync<AdminEventSourceCredentialResponse>())!;
         Assert.False(string.IsNullOrWhiteSpace(credential.Token));
         Assert.Equal("Active", credential.Status);
-        return (credential.WebhookKey, credential.Token);
+        return (Guid.Parse(credential.SourceId), credential.SourceKey, credential.Token);
     }
 
-    private static Task<HttpResponseMessage> PostAsync(HttpClient client, string webhookKey, string token, string json) =>
-        PostRawAsync(client, webhookKey, token, Encoding.UTF8.GetBytes(json));
-
-    private static Task<HttpResponseMessage> PostRawAsync(HttpClient client, string webhookKey, string token, byte[] body)
+    private static async Task SubscribeAsync(HttpClient client, Guid instanceId, Guid sourceId)
     {
-        var message = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/hooks/{webhookKey}/order-placed")
+        var response = await client.PostAsJsonAsync(
+            $"/api/v2/admin/agent-instances/{instanceId}/event-subscriptions",
+            new AdminCreateEventSubscriptionRequest(sourceId.ToString("D"), "order.placed"));
+        response.EnsureSuccessStatusCode();
+    }
+
+    private static Task<HttpResponseMessage> PostAsync(HttpClient client, string sourceKey, string token, string json) =>
+        PostRawAsync(client, sourceKey, token, Encoding.UTF8.GetBytes(json));
+
+    private static Task<HttpResponseMessage> PostRawAsync(HttpClient client, string sourceKey, string token, byte[] body)
+    {
+        var message = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/hooks/{sourceKey}")
         {
             Content = new ByteArrayContent(body)
         };
@@ -187,27 +184,11 @@ public sealed class OrderPlacedWebhookApiTests
         return client.SendAsync(message);
     }
 
-    private static async Task AssertPendingAsync(DurableSqliteHostFactory host, Guid instanceId, Guid occurrenceId)
-    {
-        var owner = new TriggerOwner(instanceId, LocalUserProfile.Id);
-        var saved = await host.Services.GetRequiredService<ITriggerStore>().GetOccurrenceAsync(owner, occurrenceId);
-        Assert.NotNull(saved);
-        Assert.Equal(OccurrenceRoutingDisposition.Pending, saved!.Disposition);
-        Assert.Null(saved.DurableWorkItemId);
-        Assert.NotNull(saved.ModelPin);
-        using var evidence = JsonDocument.Parse(saved.EvidenceJson);
-        Assert.Equal(["sourceEventId", "orderReference"], evidence.RootElement.EnumerateObject().Select(item => item.Name).ToArray());
-        var work = await host.Services.GetRequiredService<IWorkItemStore>().ListAsync(
-            new WorkOwner(instanceId, LocalUserProfile.Id),
-            10);
-        Assert.Empty(work);
-    }
-
-    private static async Task<Guid> OccurrenceIdAsync(HttpResponseMessage response)
+    private static async Task<Guid> EventIdAsync(HttpResponseMessage response)
     {
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Equal(["occurrenceId"], document.RootElement.EnumerateObject().Select(item => item.Name).ToArray());
-        return document.RootElement.GetProperty("occurrenceId").GetGuid();
+        Assert.Equal(["eventId"], document.RootElement.EnumerateObject().Select(item => item.Name).ToArray());
+        return document.RootElement.GetProperty("eventId").GetGuid();
     }
 
     private static async Task<string> ErrorAsync(HttpResponseMessage response)

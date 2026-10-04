@@ -160,6 +160,8 @@ public static class InfrastructureServiceCollectionExtensions
                     provider.GetRequiredService<TimeProvider>()));
             services.AddSingleton<IApplicationConnectionStore>(provider => new SqliteApplicationConnectionStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+            services.AddSingleton<IExternalEventStore>(provider => new SqliteExternalEventStore(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.TryAddSingleton<IOwnerCapabilityStore, SqliteOwnerCapabilityStore>();
             services.TryAddSingleton<IAttachmentStore>(provider => new SqliteAttachmentStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
@@ -193,6 +195,7 @@ public static class InfrastructureServiceCollectionExtensions
             services.TryAddSingleton<IDurableWorkHandoff>(provider =>
                 new InMemoryDurableWorkHandoff(provider.GetRequiredService<InMemoryDurableState>()));
             services.TryAddSingleton<IApplicationConnectionStore, InMemoryApplicationConnectionStore>();
+            services.TryAddSingleton<IExternalEventStore, InMemoryExternalEventStore>();
             services.TryAddSingleton<IOwnerCapabilityStore, InMemoryOwnerCapabilityStore>();
             services.TryAddSingleton<IAttachmentStore>(provider =>
                 new InMemoryAttachmentStore(provider.GetRequiredService<TimeProvider>()));
@@ -344,7 +347,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<ITriggerPolicyRecoveryService, TriggerPolicyRecoveryService>();
         services.TryAddSingleton<ITriggerInstancePolicyReconciliationService, TriggerInstancePolicyReconciliationService>();
         services.TryAddSingleton<IDurableApplicationEventIngress, DurableOrderEventIngress>();
-        services.TryAddSingleton<OrderPlacedWebhook>();
+        services.TryAddSingleton<ExternalEventIngress>();
+        services.TryAddSingleton<ExternalEventSourceService>();
         services.TryAddSingleton<TriggerOccurrenceRouter>();
         services.TryAddSingleton<IAgentInstanceService>(provider => new AgentInstanceService(
             provider.GetRequiredService<IAgentInstanceStore>(),
