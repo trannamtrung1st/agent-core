@@ -1302,7 +1302,7 @@ describe("AdminApp", () => {
 
     fireEvent.click(archiveButton);
     const confirmDialog = screen.getAllByRole("dialog").at(-1)!;
-    fireEvent.click(within(confirmDialog).getByRole("button", { name: "Archive", exact: true }));
+    fireEvent.click(within(confirmDialog).getByRole("button", { name: "Archive" }));
 
     await waitFor(
       () => {
