@@ -12,7 +12,7 @@ public sealed partial class SessionHost
         if (_live.TryGetValue(execution.SessionId, out var live))
         {
             return await live.Runtime
-                .DispatchConversationExecutionAsync(execution.ExecutionId, cancellationToken)
+                .DispatchConversationExecutionAsync(execution.ExecutionId, headless: false, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -25,7 +25,7 @@ public sealed partial class SessionHost
     {
         var snapshot = await _sessions.LoadRuntimeAsync(execution.SessionId, cancellationToken).ConfigureAwait(false);
         await using var runtime = _factory.Create(snapshot, SilentSessionOutput.Instance);
-        if (!await runtime.DispatchConversationExecutionAsync(execution.ExecutionId, cancellationToken).ConfigureAwait(false))
+        if (!await runtime.DispatchConversationExecutionAsync(execution.ExecutionId, headless: true, cancellationToken).ConfigureAwait(false))
         {
             return false;
         }

@@ -14,6 +14,7 @@ public sealed partial class SessionRuntime
 
     public async Task<bool> DispatchConversationExecutionAsync(
         Guid executionId,
+        bool headless,
         CancellationToken cancellationToken = default)
     {
         if (_turnExecutions is null)
@@ -32,7 +33,8 @@ public sealed partial class SessionRuntime
             return true;
         }
 
-        _headlessTransportDetached = true;
+        // A worker may dispatch into an already attached runtime. Preserve its transport state.
+        if (headless) _headlessTransportDetached = true;
         var cause = NewContext(execution.SourceEventId);
         return await TryStartPendingUserBatchAsync(cause, cancellationToken).ConfigureAwait(false);
     }
