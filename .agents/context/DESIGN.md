@@ -100,6 +100,13 @@ components:
     textColor: "{colors.text}"
     rounded: "{rounded.surface}"
     padding: "{spacing.default}"
+  admin-detail-label:
+    textColor: "{colors.textSecondary}"
+    width: "12rem"
+  admin-version-drawer:
+    backgroundColor: "{colors.elevated}"
+    textColor: "{colors.text}"
+    width: "52rem"
 ---
 
 # Design System: Agent Core
@@ -122,6 +129,7 @@ The shipped appearance is Ant Design `darkAlgorithm`: black layout, conversation
 - Model catalog rows expose enabled vision, reasoning, tools, and structured-output capabilities as compact named icons. Queued drafts remain a compact local work list above the composer.
 - Assistant display Markdown stays primary for reading; persisted public speech text is a quieter **Spoken** inset first on the same turn when it differs (the TTS projection).
 - Background Work and Schedules share an operational drawer language: two-line headers, open List rows, semantic filled icon-and-text status chips, elevated detail insets, and trailing actions where needed.
+- Admin collections use compact tables with local horizontal scrolling; Experience, Scheduled work and Thought activations expand one record at a time. Read-only details share aligned labels on wider screens and stacked labels on mobile.
 
 ## Colors
 
@@ -171,6 +179,8 @@ One session: black rail + conversation column + sticky composer. Column is `min(
 - Paused: Resume replaces the composer. Ended: quiet ended note only. Model selection lives only in the composer, so neither paused nor ended shows a header Model control.
 - Operational drawers are 400px wide when the host reports the wide layout and 320px otherwise. Their Ant Design List rows stay open rather than becoming nested cards; row and inset relationships use the same 8/12/16px rhythm. On narrow layouts, drawer action buttons have a 40px minimum height.
 - Admin: same header height, container background, and 8/12/16 rhythm as Chat. Inventory and definition panels are configuration layouts, not a chat column. Content uses the available viewport width with 16px desktop and 12px mobile outer insets. Definitions, Instances, and Event sources use collection tabs; names, identifiers, dates, status, and numeric metadata use separate table columns. Table rows keep one line with compact inline actions, right-aligned counts, and horizontal scrolling inside the table on narrower screens; long names/identifiers use ellipsis with full text available on hover. Definition lifecycle uses Versions and Drafts tabs with a shared base-version selector capped at 20rem and Create draft beside it, shrinking together on mobile. Immutable version inspection uses a right-side drawer with a persistent header, up to 52rem wide and full-width on mobile. Below 768px, admin grids collapse to one column, and the draft tabs wrap onto a second row with an underline on the active tab only. Skill cards use that same field grid after Instructions, with the requirements-not-grants line visible. At about 390px the definition form does not scroll sideways. Operator labels stay product words; do not copy Domain type names into the UI.
+- Admin collection spacing has one owner: inventory toolbars use 12px block / 16px inline insets; toolbars inside a padded configuration panel add no second inset. Search fields cap at 28rem. Ant Design owns compact table cell padding; product CSS owns single-line summaries, ellipsis, tabular numerals and table-local overflow. Pagination uses 10/20/50 rows; expanded record content wraps and stays within the visible table width, including while the columns scroll horizontally.
+- Admin detail labels use `{components.admin-detail-label.width}` at 768px and above, with top alignment and wrapping content. Below 768px labels stack above their values. The same layout applies to Experience observations/provenance, Schedule and Thought details, effective configuration, policy summaries, validation snapshots and version capabilities. Observation lists retain separate bullets and a 72ch maximum measure.
 
 **The Docs Win Rule.** This file does not own Voice availability, Send/Queue/Stop behavior, or speech persistence. `/docs` does.
 
@@ -178,7 +188,9 @@ One session: black rail + conversation column + sticky composer. Column is `min(
 
 **The Additive Inset Rule.** A padded shell owns the outer inset. Nested text controls keep their own inner padding (`{spacing.controlInner}` = 8px, Ant Design `paddingXS` via `theme.useToken()`, same as `.session-row-body`). Align labels by giving equivalent children the same inner padding. Example: composer `{spacing.compact}` (8px) + field/button `{spacing.controlInner}` (8px) so Message and Model text share one edge, while hover fill still has 8px around the glyph. Apply the same stack to the Model Dropdown overlay (shell 8px + 8px on title, catalog rows, and reasoning footer). Icon-only 32×32 toolbar hits stay padding 0.
 
-Audit: Message placeholder left edge equals the Model name left edge; Model hover fill matches session-row inset and does not overlap the next control. Never zero a text button’s padding to force alignment, and never use negative margin to grow a hover fill.
+Audit: Message placeholder left edge equals the Model name left edge; Model hover fill matches session-row inset and does not overlap the next control. Never zero a text button's padding to force alignment, and never use negative margin to grow a hover fill.
+
+Ownership: `AdminCollectionToolbar` and `useAdminCollectionSearch` share collection search/pagination; `useAdminDetailLayout` shares responsive label alignment. Product components compose Ant Design Table and Descriptions directly. These helpers are product layout policies, not a replacement component library.
 
 ## Elevation & Depth
 
@@ -237,6 +249,14 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 - Session row hover, keyboard focus-within, and active state fill the whole row including overflow (24px icon, inside row padding, common right edge).
 - Header: identity (agent name, 12px timestamp, and role), Speech locale, compact icon actions, and status metadata. The 32×32px actions use a 6px radius and `{colors.fill}` hover. Background Work uses an 18px inbox icon plus an attention badge; Schedules, Admin, and the direct confirmed End action use 16px icons. End opens the shared centered confirmation. Profile and conversation status remain visible. When an Agent Instance has an application connection, a 12px secondary row under the agent name shows its display name, status, and Manage. No row appears when there is no connection. Header actions stay on the identity row. No Model appears in the live header.
 
+### Admin collections and record details
+- Definitions, Instances, Event sources and versions use compact tables with searchable labels, column filters/sorting where offered, and shared pagination. Learned-memory and automation tables reuse the density and scrolling; their existing scope/load controls remain the entry point.
+- Experience, Scheduled work and Thought activations use a searchable summary table with one expanded record at a time. Goal/task/prompt links expose the full title and expanded state; long summaries ellipsize. The narrow search toolbar includes a horizontal-scroll hint. Its clear affordance and existing no-match/empty states remain visible.
+- Expanded records use bordered single-column Descriptions and wrapping trailing action groups, separated by the enclosing token gap. Observation bullets remain distinct. Provenance is a separate grid with the same label edge. Do not join observations into a dense punctuation-separated paragraph.
+- Version inspection stays in the right-side drawer (`{components.admin-version-drawer.width}` maximum; viewport width on mobile), with 16px body padding, its own scroll container and persistent close control. Read-only values remain readable and copyable; select/switch/number controls retain their disabled presentation. Closing returns focus to the version link.
+- Effective configuration and validation use the same responsive label/value layout. Long identifiers and fingerprints wrap inside their cells. Keep status names and diagnostics readable; semantic tags reinforce text rather than replacing it.
+- Preserve the established forms, revisioned actions and confirmations described in [Frontend Implementation](../../docs/13-frontend-implementation-spec.md). This section documents presentation, not operation eligibility or API limits.
+
 ### Operational drawers
 - Background Work and Schedules use a two-line title: a strong title above a 12px secondary subtitle.
 - Use open Ant Design List rows with 16px block padding and an 8px first-row top inset. The primary row heading and filled status chip share the top line and tolerate wrapped content.
@@ -269,6 +289,7 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 - **Do** honor `prefers-reduced-motion`; keep labeled errors, visible focus, and testids `connection` and `profile`.
 - **Do** keep the labeled composer available while voice is live until `/docs` and tests change together.
 - **Do** treat Admin as the same dark product: shared spacing tokens, configuration panels, and operator copy. Behavior stays in `/docs`.
+- **Do** reuse Admin collection search/pagination and responsive detail alignment; keep table summaries compact, expanded content contained, and mobile labels stacked.
 - **Do** use the shared centered Ant Design confirmation dialog (`confirmAction` in `web/src/app/confirmAction.ts`) for destructive or consequential actions across Chat, Admin, Background Work, and Schedules (session delete, Admin definition/instance delete, deprecation, work cancel, approval decisions, memory reset, automation revoke, and similar). Prefer a stable `dialog` surface for tests and keyboard focus.
 - **Do** keep header identity, Speech locale, compact icon actions, profile, and connection status visible. Use 32×32px, 6px-radius fill-hover actions; keep Background Work at an 18px inbox icon with attention badge and Schedules/Admin/End at 16px.
 - **Do** keep ended history on the same reading column with a quiet ended note, not a disabled input.
@@ -282,6 +303,7 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 - **Don't** reproduce Pixel Dialogue Field, Obsidian Mint, Martian Mono, field textures, presence plates, or a custom Select.
 - **Don't** add generic wrappers, Ant Design Pro/ProComponents/X, or another CSS framework.
 - **Don't** use Layout.Sider `theme="dark"` (navy admin sider) or restyle Admin as a separate enterprise dashboard.
+- **Don't** give equivalent Admin detail grids independent label widths, duplicate toolbar insets inside padded panels, or let wide tables expand the page.
 - **Don't** treat this file as behavioral authority over `/docs`.
 - **Don't** use a blocking Modal or a second Select/button for model or effort; keep one Dropdown anchored to the Model chip, with effort in the overlay footer.
 - **Don't** render queued drafts as transcript turns or move pending attachments into a separate dock.
