@@ -19,23 +19,26 @@ export function DefinitionVersionsTable({ rows, publications, busy, onChat, onDe
   const { search, setSearch, pagination } = useAdminCollectionSearch();
   const { token } = theme.useToken();
   const titleId = `definition-version-details-${useId()}`;
-  const triggerRef = useRef<HTMLElement | null>(null);
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const triggerLabelRef = useRef<string | null>(null);
   const [selected, setSelected] = useState<AdminDefinitionInventoryItem | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   useEffect(() => {
-    if (selected || !triggerRef.current) return;
+    if (drawerOpen || !triggerLabelRef.current) return;
     const frame = window.requestAnimationFrame(() => {
-      if (triggerRef.current?.isConnected) triggerRef.current.focus({ preventScroll: true });
+      const trigger = Array.from(sectionRef.current?.querySelectorAll("button") ?? [])
+        .find(button => button.getAttribute("aria-label") === triggerLabelRef.current);
+      trigger?.focus({ preventScroll: true });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [selected]);
+  }, [drawerOpen]);
   const query = search.trim().toLowerCase();
   const latest = Math.max(...rows.map(row => row.version));
   const latestActive = Math.max(...rows.filter(row => row.status.toLowerCase() !== "deprecated").map(row => row.version));
   const data = rows.map(row => ({ ...row, publication: row.source === "durable"
     ? publications.find(item => item.version === row.version) : undefined }));
   return (
-    <section aria-label="Definition versions" className="admin-versions-section">
+    <section ref={sectionRef} aria-label="Definition versions" className="admin-versions-section">
       <Typography.Title level={5}>Versions &amp; publications</Typography.Title>
       <AdminCollectionToolbar label="versions" value={search} onChange={setSearch} />
       <Table
@@ -51,7 +54,7 @@ export function DefinitionVersionsTable({ rows, publications, busy, onChat, onDe
             sorter: (a, b) => a.version - b.version,
             render: (version: number, row) => <Flex gap={token.paddingXS} align="center">
               <Button type="link" size="small" aria-label={`View v${version} (${row.source})`}
-                onClick={(event) => { triggerRef.current = event.currentTarget; setSelected(row); setDrawerOpen(true); }}>v{version}</Button>
+                onClick={(event) => { triggerLabelRef.current = event.currentTarget.getAttribute("aria-label"); setSelected(row); setDrawerOpen(true); }}>v{version}</Button>
               {version === latest ? <Tag color="blue">Latest</Tag>
                 : version === latestActive ? <Tag color="blue">Latest active</Tag> : null}
             </Flex> },
@@ -88,7 +91,7 @@ export function DefinitionVersionsTable({ rows, publications, busy, onChat, onDe
       />
       <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)}
         afterOpenChange={open => { if (!open) setSelected(null); }} size={832}
-        focusable={{ focusTriggerAfterClose: false }}
+        focusable={{ trap: drawerOpen, focusTriggerAfterClose: false }}
         styles={{ wrapper: { maxWidth: "100vw" } }}
         title={<Flex vertical gap={4}>
           <Typography.Text strong id={titleId}>Version details</Typography.Text>

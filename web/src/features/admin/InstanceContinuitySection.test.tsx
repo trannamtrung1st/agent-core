@@ -5,6 +5,7 @@ import { InstanceContinuitySection } from './InstanceContinuitySection';
 import { instanceContinuityRequest } from '../../services/adminApi';
 import { listModels } from '../../services/api';
 
+vi.mock('./InstanceSchedulesSection', () => ({ InstanceSchedulesSection: () => null }));
 vi.mock('../../services/adminApi', () => ({ instanceContinuityRequest: vi.fn() }));
 vi.mock('../../services/api', () => ({ listModels: vi.fn() }));
 const request = vi.mocked(instanceContinuityRequest);

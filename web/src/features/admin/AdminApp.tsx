@@ -673,6 +673,7 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
               <Typography.Text strong>Definition</Typography.Text>
               <Select
                 aria-label="Definition"
+                showSearch={{ optionFilterProp: "label" }}
                 value={definitionId}
                 options={groups.map((group) => ({
                   value: group.definitionId,

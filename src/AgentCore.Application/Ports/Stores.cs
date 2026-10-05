@@ -49,6 +49,10 @@ public interface IMemoryStore
 
     ValueTask RecoverCrashedSessionsAsync(CancellationToken cancellationToken = default);
 
+    ValueTask<IReadOnlyList<SessionSnapshot>> ListOwnedSessionsAsync(
+        Guid instanceId, Guid profileId, int limit, bool activeOnly = false,
+        CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<SessionSnapshot>>([]);
+
     ValueTask<SessionCatalogPage> ListCatalogAsync(
         string? cursor,
         int limit,

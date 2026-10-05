@@ -200,7 +200,7 @@ public static class AdminEventSummaryPolicy
                 throw AgentCoreErrors.Validation("Admin event summary metadata must be a JSON object.");
             }
 
-            if (append.Operation is AdminEventOperationKind.ExperienceChanged or AdminEventOperationKind.ThoughtRegistrationChanged)
+            if (append.Operation is AdminEventOperationKind.ExperienceChanged or AdminEventOperationKind.ThoughtRegistrationChanged or AdminEventOperationKind.ScheduleRegistrationChanged)
             {
                 var allowed = new HashSet<string>(StringComparer.Ordinal) { "instanceId", "recordId", "operation", "revision", "enabled", "intervalSeconds", "promptHash", "modelKey" };
                 foreach (var property in document.RootElement.EnumerateObject())

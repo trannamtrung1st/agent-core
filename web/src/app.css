@@ -2364,3 +2364,9 @@ body,
 .background-work-attention {
   flex-wrap: wrap;
 }
+
+@media (max-width: 767px) {
+  .admin-instance-continuity .ant-btn {
+    min-height: 40px;
+  }
+}

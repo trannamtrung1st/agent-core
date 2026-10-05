@@ -18,6 +18,7 @@ import { DrawerListFooter } from "./DrawerListFooter";
 
 const statusPresentation: Record<string, { label: string; color?: string; icon: ReactNode }> = {
   active: { label: "Active", color: "processing", icon: <ClockCircleOutlined /> },
+  disabled: { label: "Disabled", icon: <PauseCircleOutlined /> },
   completed: { label: "Completed", color: "success", icon: <CheckCircleOutlined /> },
   cancelled: { label: "Cancelled", icon: <StopOutlined /> },
   expired: { label: "Expired", color: "gold", icon: <HourglassOutlined /> },

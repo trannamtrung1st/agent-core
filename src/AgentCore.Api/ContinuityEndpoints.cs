@@ -20,6 +20,7 @@ internal static class ContinuityEndpoints
 {
     internal static void Map(RouteGroupBuilder admin)
     {
+        AdminScheduleEndpoints.Map(admin);
         var group = admin.MapGroup("/agent-instances/{instanceId:guid}");
         group.MapGet("/experience", (Guid instanceId, ExperienceService service, IExperienceStore store, IWorkItemStore work, CancellationToken ct) =>
             Respond(async () => await ExperienceReview(instanceId, service, store, work, ct)));

@@ -78,6 +78,7 @@ builder.Services.AddSingleton<IProfileLiveUpdateNotifier, LazyProfileLiveUpdateN
 builder.Services.AddHostedService<SessionShutdownHostedService>();
 builder.Services.AddHostedService<AttachmentTtlHostedService>();
 builder.Services.AddHostedService<TriggerSchedulerHostedService>();
+builder.Services.AddHostedService<ContinuityMaintenanceHostedService>();
 builder.Services.AddHostedService<DurableWorkIntakeHostedService>();
 builder.Services.AddHostedService<DurableWorkHostedService>();
 builder.Services.AddSingleton<IConversationTurnRunner, ConversationTurnRunner>();

@@ -17,7 +17,7 @@ internal static class ThoughtActivationScript
         {
             if (!Offers(HarnessChatTools.Inspect) || !Offers("harness.skill.upsert"))
                 return Complete("NoAction", "Harness management is unavailable; no change was made.", false);
-            if (!request.Messages.Any(m => m.Text.StartsWith("Historical Experience", StringComparison.Ordinal)))
+            if (!request.Messages.Any(m => (m.Text.StartsWith("Historical Experience", StringComparison.Ordinal) || m.Text.StartsWith("Historical Continuity", StringComparison.Ordinal) && m.Text.Contains("\"kind\":\"Experience\"", StringComparison.Ordinal))))
                 return Complete("NoAction", "No prior experience needs investigation.", false);
             var saved = results.LastOrDefault(m => m.Name == "harness.skill.upsert");
             if (saved is not null)

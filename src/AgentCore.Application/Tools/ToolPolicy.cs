@@ -18,6 +18,8 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         }
 
+        if (descriptor.OfferRule == ToolOfferRule.ContinuityAuthority)
+            return admission is { AgentInstanceId: not null, SupportsTools: true } ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (descriptor.OfferRule == ToolOfferRule.ExperienceAuthority)
             return admission is { AgentInstanceId: not null, SupportsTools: true } ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (descriptor.OfferRule == ToolOfferRule.HarnessAuthority)
@@ -142,6 +144,8 @@ public static class ToolPolicy
             return false;
         }
 
+        if (descriptor.OfferRule == ToolOfferRule.ContinuityAuthority)
+            return context is { ModelSupportsTools: true } && !string.IsNullOrEmpty(context.ContinuityContext);
         if (descriptor.OfferRule == ToolOfferRule.ExperienceAuthority)
             return context is { ModelSupportsTools: true } && !string.IsNullOrEmpty(context.ExperienceContext);
         if (descriptor.OfferRule == ToolOfferRule.HarnessAuthority)

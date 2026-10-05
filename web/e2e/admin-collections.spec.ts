@@ -309,6 +309,7 @@ test("Version inspection creates no draft and the shared actions publish from Te
   await page.getByRole("button", { name: "New instance", exact: true }).click();
   const instanceDialog = page.getByRole("dialog", { name: "New instance", exact: true });
   await instanceDialog.getByLabel("Definition", { exact: true }).click();
+  await instanceDialog.getByRole("combobox", { name: "Definition", exact: true }).fill(definitionId);
   await page.locator(".ant-select-item-option").filter({ hasText: definitionId }).last().click();
   await instanceDialog.getByRole("button", { name: "Create instance", exact: true }).click();
   const persona = page.getByLabel("Persona name", { exact: true });

@@ -1344,7 +1344,7 @@ describe("AdminApp", () => {
 
     await waitFor(
       () => {
-        expect(screen.getByText(/Unsaved persona edits stay in this editor/)).toBeInTheDocument();
+        expect(screen.getByText("Unsaved persona edits stay in this editor across lifecycle and version changes until you save or leave this instance.")).toBeInTheDocument();
       },
       { timeout: 10_000 }
     );

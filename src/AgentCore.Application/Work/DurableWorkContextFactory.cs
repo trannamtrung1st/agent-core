@@ -109,7 +109,7 @@ public sealed class DurableWorkContextFactory(
             TrustedConnection: trustedConnection,
             Harness: item.Provenance.SourceKind == WorkSourceKind.ThoughtActivation && tools is not null
                 ? await tools.HarnessContextAsync(instance.InstanceId, cancellationToken) : null,
-            ExperienceContext: tools is not null ? await tools.ExperienceContextAsync(instance.InstanceId, cancellationToken) : null);
+            ContinuityContext: tools is not null ? await tools.ContinuityContextAsync(instance.InstanceId, item.Provenance.EvidenceJson, null, definition, cancellationToken) : null);
     }
 
     private static TriggerKind SourceTrigger(WorkItem item) =>

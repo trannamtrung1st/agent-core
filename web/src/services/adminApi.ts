@@ -1191,3 +1191,16 @@ export async function instanceContinuityRequest<T>(instanceId: string, path: str
   if (!response.ok) throw await adminProblemMessage(response, "The instance update could not be completed.");
   return await response.json() as T;
 }
+
+export type ScheduleTiming = {
+  kind: "oneShot" | "fixedInterval" | "daily" | "weekly"; timeZone: string; atUtc?: string | null;
+  interval: number; localTime?: string | null; weekdays?: number[] | null; anchorAtUtc?: string | null;
+  endAtUtc?: string | null; startDate?: string | null; endDate?: string | null; maxOccurrences?: number | null;
+};
+export type OwnerScheduleDraft = { expectedRevision: number; enabled: boolean; intent: string; schedule: ScheduleTiming;
+  modelKey: string | null; reasoningEffort: string | null };
+export type OwnerSchedule = { registrationId: string; revision: number; intent: string; enabled: boolean; status: string;
+  schedule: ScheduleTiming; authorizationOrigin: string; sourceSessionId: string | null; sourceEventId: string | null;
+  createdAt: string; nextRunAt: string | null; modelKey: string | null; reasoningEffort: string | null;
+  effectiveModelKey: string | null; lastWorkItemId: string | null; executionStatus: string | null };
+export type OwnerScheduleReview = { items: OwnerSchedule[] };

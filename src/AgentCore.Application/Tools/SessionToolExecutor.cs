@@ -34,7 +34,8 @@ public sealed partial class SessionToolExecutor(
     IAgentDefinitionResourceAdminStore? definitionResources = null,
     IWorkCaptureStore? workCaptures = null,
     Func<HarnessManagementService>? harnessAuthoring = null,
-    AgentCore.Application.Experience.ExperienceService? experience = null)
+    AgentCore.Application.Experience.ExperienceService? experience = null,
+    AgentCore.Application.Continuity.ContinuityService? continuity = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -51,6 +52,8 @@ public sealed partial class SessionToolExecutor(
 
     public ValueTask<string> ExperienceContextAsync(Guid? instanceId, CancellationToken ct) =>
         experience?.RecallAsync(instanceId, ct) ?? ValueTask.FromResult("");
+    public ValueTask<string> ContinuityContextAsync(Guid? instanceId, string? query, Guid? sessionId, AgentDefinition definition, CancellationToken ct) =>
+        continuity?.ContextAsync(instanceId, query, sessionId, definition, ct) ?? ValueTask.FromResult("");
     public ValueTask ExperienceBoundaryAsync(Guid instanceId, Guid sessionId, CancellationToken ct) =>
         experience?.TrySessionBoundaryAsync(instanceId, sessionId, ct) ?? ValueTask.CompletedTask;
 
@@ -177,6 +180,37 @@ public sealed partial class SessionToolExecutor(
 
         try
         {
+            if (call.Name is ToolCatalog.ContinuitySearch or ToolCatalog.ContinuityGet)
+            {
+                if (continuity is null || admission?.AgentInstanceId is not Guid ownerId)
+                    return TextResult(Error("forbidden", "Continuity is unavailable."));
+                object result;
+                if (call.Name == ToolCatalog.ContinuitySearch)
+                {
+                    if (args.EnumerateObject().Any(p => p.Name is not ("query" or "limit")))
+                        return TextResult(Error("invalid", "Unsupported continuity argument."));
+                    var query = args.GetProperty("query").GetString();
+                    var limit = args.TryGetProperty("limit", out var l) ? l.GetInt32() : 10;
+                    result = await continuity.SearchAsync(ownerId, query, limit, admission.Detached ? null : sessionId, definition, cancellationToken);
+                }
+                else
+                {
+                    if (args.EnumerateObject().Any(p => p.Name is not ("kind" or "id" or "afterEntrySequence" or "limit"))
+                        || !Enum.TryParse<AgentCore.Application.Continuity.ContinuityKind>(args.GetProperty("kind").GetString(), out var kind)
+                        || !Guid.TryParse(args.GetProperty("id").GetString(), out var id))
+                        return TextResult(Error("invalid", "Continuity identity is invalid."));
+                    result = await continuity.GetAsync(ownerId, kind, id,
+                        args.TryGetProperty("afterEntrySequence", out var a) ? a.GetInt64() : 0,
+                        args.TryGetProperty("limit", out var l) ? l.GetInt32() : 10, definition, cancellationToken);
+                }
+                if (result is AgentCore.Application.Continuity.ContinuityDetail detail)
+                    return TextResult(ToolJsonResults.FitJsonWithContentField(Math.Min(remainingOutputBytes, 6000), detail.Content,
+                        (content, truncated) => AgentCore.Application.Continuity.ContinuityService.Serialize(new {
+                            trust = AgentCore.Application.Continuity.ContinuityService.TrustLabel,
+                            result = detail with { Content = content, HasMore = detail.HasMore || truncated } })));
+                return FitResult(Math.Min(remainingOutputBytes, 6000), AgentCore.Application.Continuity.ContinuityService.Serialize(new {
+                    trust = AgentCore.Application.Continuity.ContinuityService.TrustLabel, result }));
+            }
             if (call.Name == ToolCatalog.ExperienceRecent)
             {
                 if (experience is null || admission?.AgentInstanceId is not Guid ownerId)
@@ -295,6 +329,11 @@ public sealed partial class SessionToolExecutor(
         catch (OperationCanceledException)
         {
             throw;
+        }
+        catch (Exception ex) when (call.Name is ToolCatalog.ContinuitySearch or ToolCatalog.ContinuityGet
+            && ex is InvalidOperationException or KeyNotFoundException or FormatException or OverflowException)
+        {
+            return TextResult(Error("invalid", "Continuity arguments are invalid."));
         }
         catch (AgentCoreException ex)
         {

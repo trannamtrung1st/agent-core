@@ -2430,7 +2430,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ApplicationConnectionStatus: applicationConnectionStatus,
                     TrustedConnection: trustedConnection,
                     Harness: trigger.Kind == TriggerKind.UserTurn ? await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, evaluationToken) : null,
-                    ExperienceContext: await _tools.ExperienceContextAsync(_snapshot.AgentInstanceId, evaluationToken));
+                    ContinuityContext: await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, _snapshot.SessionId, _snapshot.Definition, evaluationToken));
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
                 AgentDecision? decision = null;

@@ -199,6 +199,7 @@ async function openDraft() {
   await act(async () => {
     render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
   });
+  fireEvent.click(await screen.findByRole("tab", { name: "Drafts" }));
   await waitFor(() => {
     expect(screen.getByRole("button", { name: /Draft rev 2/ })).toBeInTheDocument();
   });

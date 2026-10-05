@@ -8,5 +8,6 @@ public enum ToolOfferRule
     CurrentExecutionCapability,
     OccurrenceCapability,
     ExperienceAuthority,
+    ContinuityAuthority,
     HarnessAuthority
 }

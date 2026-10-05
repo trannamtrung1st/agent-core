@@ -7,6 +7,7 @@ import { BackgroundWorkDrawer } from "../chat/BackgroundWorkDrawer";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 
+import { InstanceSchedulesSection } from "./InstanceSchedulesSection";
 import { ExecutionModelFields } from "./ExecutionModelFields";
 
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : "Not yet";
@@ -31,8 +32,9 @@ export function InstanceContinuitySection({ instanceId }: { instanceId: string }
     const resize = () => setWide(window.innerWidth >= 768);
     window.addEventListener("resize", resize); return () => window.removeEventListener("resize", resize);
   }, []);
-  return <Flex vertical gap={token.padding}>
+  return <Flex vertical gap={token.padding} className="admin-instance-continuity">
     <ExperienceSection key={`experience-${instanceId}`} instanceId={instanceId} onWork={() => setWorkOpen(true)} />
+    <InstanceSchedulesSection key={`schedules-${instanceId}`} instanceId={instanceId} onWork={() => setWorkOpen(true)} />
     <ThoughtSection key={`thought-${instanceId}`} instanceId={instanceId} onWork={() => setWorkOpen(true)} />
     <BackgroundWorkDrawer sessionId={instanceId} open={workOpen} wide={wide} onClose={() => setWorkOpen(false)}
       load={loadInstanceWork}

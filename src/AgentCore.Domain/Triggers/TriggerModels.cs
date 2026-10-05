@@ -48,7 +48,9 @@ public enum TriggerSourceKind
 public enum TriggerAuthorizationOrigin
 {
     CurrentUserTurn = 0,
-    AdminThought = 1
+    AdminThought = 1,
+    AdminOwner = 2,
+    ApplicationEvent = 3
 }
 
 public enum OccurrenceRoutingDisposition

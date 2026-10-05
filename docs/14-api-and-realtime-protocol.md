@@ -378,3 +378,25 @@ All routes below are under `/api/v2/admin/agent-instances/{instanceId}` and requ
 | POST `/work-items/{workItemId}/approvals/{approvalId}/approve` or `/reject` | existing `{expectedRevision, expectedApprovalRevision, actionHash}` contract |
 
 `WorkItemResponse` adds optional `sourceId`, `registrationId`, `modelKey`, `thoughtOutcome`. `origin` is Core-projected `Thought activation` or `Retrospection`; work lifecycle status names and approval semantics remain unchanged. Thought outcomes are `NoAction`, `ActionCompleted`, `AttentionRequested`; approval pending/retry/failure/cancel remain normal work states. There is no new hub event or public chat endpoint. NoAction/ordinary success creates no proactive alert; attention reuses the existing owner delivery contract.
+
+## Admin Scheduled Work HTTP contract
+
+The existing owner-capability filter protects `/api/v2/admin/agent-instances/{instanceId}/schedules`. Active managed instance ownership is checked on every operation. These are the same registrations visible to owned Chat schedule queries; thoughts and application-event subscriptions are excluded from this schedule management surface.
+
+| Method | Suffix | Request / result |
+| --- | --- | --- |
+| GET | empty | `{ items: AdminScheduleResponse[] }` |
+| POST | empty | `AdminScheduleRequest`; new registration (expectedRevision 0) |
+| PUT | `/{registrationId}` | `AdminScheduleRequest`; revisioned edit |
+| POST | `/{registrationId}/cancel` | `{ expectedRevision }`; `{ cancelled: true }` |
+| POST | `/{registrationId}/run` | `{ expectedRevision }`; `{ occurrenceId }` |
+
+`AdminScheduleRequest` contains `expectedRevision`, `enabled`, `intent`, `schedule`, optional `modelKey` and `reasoningEffort`. `schedule.kind` is `oneShot`, `daily`, `weekly` or `fixedInterval`; timing fields are `timeZone` (default UTC), `atUtc`, `interval` (days/weeks/seconds), `localTime` (HH:mm), `weekdays` (0 Sunday through 6 Saturday), `anchorAtUtc`, `endAtUtc`, `startDate`/`endDate` (yyyy-MM-dd), and `maxOccurrences`. Irrelevant fields are ignored. Omitted/null timing is rejected. Existing timezone/DST/bounds validation applies.
+
+Response includes `registrationId`, `revision`, `intent`, `enabled`, lifecycle `status`, the structured `schedule`, `authorizationOrigin`, nullable `sourceSessionId`/`sourceEventId`, `createdAt`, nullable `nextRunAt`, model override/effort/effective model, and nullable latest `lastWorkItemId`/`executionStatus`. Lifecycle names use Domain casing on Admin responses; Chat schedule status remains lower camel case including `disabled`. Registration provenance preserves numeric compatibility: CurrentUserTurn=0, AdminThought=1, AdminOwner=2, ApplicationEvent=3. A Chat-authored registration retains CurrentUserTurn and its source Session through Admin edits. Source kind and event source identify application-event subscriptions separately from who authorized them.
+
+Validation returns 400, policy/owner refusal 403, missing owned resource 404, stale revision or busy/duplicate Run now 409 through existing safe ProblemDetails. Run now is admission acceptance, not model completion. Ordinary Background Work endpoints provide eventual execution/approval/results. No new hub method or event is added.
+
+### Model-facing Continuity contracts
+
+`continuity.search` accepts required `query` (up to 200 characters) and optional `limit` (1–10). `continuity.get` accepts `kind` (`Memory`, `Experience`, `Session`), UUID `id`, optional nonnegative `afterEntrySequence` and `limit` (1–20). Unknown arguments and owner overrides are rejected. Core obtains instance/profile from execution admission and uses the pinned Definition. Both tools are read-only and offered only to eligible managed, tool-capable executions with Continuity context. Responses include an explicit untrusted-history label and bounded result JSON. Result provenance records instance/profile, source kind/id, Definition/version when available, cursor, scope and observation time. Detail includes content, hasMore and nullable nextAfter. Sensitivity, deletion and suppression are rechecked during inspection. The legacy experience.recent executor remains compatible; automatic recall and offered unified inspection use Continuity.

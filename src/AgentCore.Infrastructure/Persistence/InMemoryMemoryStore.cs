@@ -203,6 +203,18 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         return ValueTask.CompletedTask;
     }
 
+    public ValueTask<IReadOnlyList<SessionSnapshot>> ListOwnedSessionsAsync(
+        Guid instanceId, Guid profileId, int limit, bool activeOnly = false, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_gate)
+            return ValueTask.FromResult<IReadOnlyList<SessionSnapshot>>(_sessions.Values
+                .Where(s => s.AgentInstanceId == instanceId && s.ProfileId == profileId && s.DurablyDeletedAt is null
+                    && (!activeOnly || s.Status == SessionStatus.Attached && s.LifecycleStatus == SessionLifecycleStatus.Active))
+                .OrderByDescending(s => s.UpdatedAt).ThenByDescending(s => s.SessionId)
+                .Take(Math.Clamp(limit, 1, 100)).Select(CloneMeta).ToArray());
+    }
+
     public ValueTask<SessionCatalogPage> ListCatalogAsync(
         string? cursor,
         int limit,

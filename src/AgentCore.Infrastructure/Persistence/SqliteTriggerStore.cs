@@ -9,37 +9,52 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> contexts) : ITriggerStore
 {
-    public async ValueTask<TriggerRegistration> SaveThoughtAsync(TriggerRegistration proposed, long expectedRevision,
-        AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default)
+    public ValueTask<TriggerRegistration> SaveThoughtAsync(TriggerRegistration proposed, long expectedRevision,
+        AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default) => SaveOwnerAsync(proposed, expectedRevision, history, true, ct);
+    public ValueTask<TriggerRegistration> SaveScheduleAsync(TriggerRegistration proposed, long expectedRevision,
+        AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default) => SaveOwnerAsync(proposed, expectedRevision, history, false, ct);
+    private async ValueTask<TriggerRegistration> SaveOwnerAsync(TriggerRegistration proposed, long expectedRevision,
+        AgentCore.Application.Admin.AdminEventAppend history, bool thought, CancellationToken ct)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         var row = await TrackRowAsync(db, proposed.Owner, proposed.RegistrationId, ct);
         var current = row is null ? null : TriggerStoreMapping.ToRegistration(row);
-        ThoughtRegistrationRules.ValidateSave(current, proposed, expectedRevision);
-        if (current is null && await db.TriggerRegistrations.CountAsync(r => r.AgentInstanceId == proposed.Owner.AgentInstanceId.ToString("D")
+        if (thought) ThoughtRegistrationRules.ValidateSave(current, proposed, expectedRevision);
+        else ScheduleRegistrationRules.ValidateSave(current, proposed, expectedRevision);
+        if (thought && current is null && await db.TriggerRegistrations.CountAsync(r => r.AgentInstanceId == proposed.Owner.AgentInstanceId.ToString("D")
             && r.AuthorizationOrigin == (int)TriggerAuthorizationOrigin.AdminThought && r.Status != (int)TriggerRegistrationStatus.Cancelled, ct) >= ThoughtIntent.MaxRegistrationsPerInstance)
             throw AgentCoreErrors.Validation("At most eight thought registrations are supported.");
+        if (!thought && proposed.Status == TriggerRegistrationStatus.Active && current?.Status != TriggerRegistrationStatus.Active && await db.TriggerRegistrations.CountAsync(r => r.AgentInstanceId == proposed.Owner.AgentInstanceId.ToString("D")
+            && r.ProfileId == proposed.Owner.ProfileId.ToString("D") && r.Status == (int)TriggerRegistrationStatus.Active, ct) >= 32)
+            throw AgentCoreErrors.Validation("At most 32 active registrations are supported.");
         if (row is null) db.TriggerRegistrations.Add(TriggerStoreMapping.ToRecord(proposed));
         else db.Entry(row).CurrentValues.SetValues(TriggerStoreMapping.ToRecord(proposed));
         AdminEventPersistence.StageAppend(db, history, history.OperationId);
         try { await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); }
-        catch (DbUpdateConcurrencyException) { throw AgentCoreErrors.Conflict("Thought registration revision is stale."); }
-        catch (DbUpdateException ex) when (IsConstraint(ex)) { throw AgentCoreErrors.Conflict("Thought registration already exists."); }
+        catch (DbUpdateConcurrencyException) { throw AgentCoreErrors.Conflict("Registration revision is stale."); }
+        catch (DbUpdateException ex) when (IsConstraint(ex)) { throw AgentCoreErrors.Conflict("Registration already exists."); }
         return proposed;
     }
-    public async ValueTask<ScheduledAdmitResult> AdmitThoughtNowAsync(TriggerRegistration registration, ExecutionModelPin pin,
-        DateTimeOffset asOf, CancellationToken ct = default)
+    public ValueTask<ScheduledAdmitResult> AdmitThoughtNowAsync(TriggerRegistration registration, ExecutionModelPin pin,
+        DateTimeOffset asOf, CancellationToken ct = default) => AdmitOwnerNowAsync(registration, pin, asOf, true, ct);
+    public ValueTask<ScheduledAdmitResult> AdmitScheduleNowAsync(TriggerRegistration registration, ExecutionModelPin pin,
+        DateTimeOffset asOf, CancellationToken ct = default) => AdmitOwnerNowAsync(registration, pin, asOf, false, ct);
+    private async ValueTask<ScheduledAdmitResult> AdmitOwnerNowAsync(TriggerRegistration registration, ExecutionModelPin pin,
+        DateTimeOffset asOf, bool thought, CancellationToken ct)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         var row = await TrackRowAsync(db, registration.Owner, registration.RegistrationId, ct);
         if (row?.Revision != registration.Revision || row.Status != (int)TriggerRegistrationStatus.Active)
             return new(ScheduledAdmitOutcome.Stale, row is null ? null : TriggerStoreMapping.ToRegistration(row), null, 0);
-        if (await ThoughtBusyAsync(db, registration.RegistrationId, ct))
+        if (thought != (registration.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought) || registration.EventSourceId is not null)
+            throw AgentCoreErrors.Forbidden("Manual registration source is invalid.");
+        if (await RegistrationBusyAsync(db, registration.RegistrationId, ct))
             return new(ScheduledAdmitOutcome.NotDue, registration, null, 0);
         var decision = ThoughtRegistrationRules.ManualAdmission(registration, asOf);
         var occurrence = TriggerScheduleAdmission.CreateOccurrence(registration, decision, asOf).WithModelPin(pin);
+        if (!thought) occurrence = ScheduleRegistrationRules.ManualOccurrence(occurrence);
         var existing = await FindByDedupeAsync(db, registration.Owner, occurrence.DedupeKey, ct);
         if (existing is not null) return new(ScheduledAdmitOutcome.Duplicate, registration, TriggerStoreMapping.ToOccurrence(existing), 0);
         db.TriggerOccurrences.Add(TriggerStoreMapping.ToRecord(occurrence));
@@ -50,11 +65,10 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         DateTimeOffset asOf, CancellationToken ct = default) => TryAdmitScheduledCoreAsync(registration.Owner,
             registration.RegistrationId, registration.ScheduleRevision, registration.NextOccurrenceAtUtc!.Value,
             asOf, ct, pin, registration.Revision);
-    private static Task<bool> ThoughtBusyAsync(AgentCoreDbContext db, Guid registrationId, CancellationToken ct)
+    private static Task<bool> RegistrationBusyAsync(AgentCoreDbContext db, Guid registrationId, CancellationToken ct)
     {
         var id = registrationId.ToString("D");
-        return db.TriggerOccurrences.AnyAsync(o => o.RegistrationId == id && o.SourceKind == (int)TriggerSourceKind.ThoughtActivation
-            && (o.Disposition == (int)OccurrenceRoutingDisposition.Pending || o.Disposition == (int)OccurrenceRoutingDisposition.Claimed
+        return db.TriggerOccurrences.AnyAsync(o => o.RegistrationId == id && (o.Disposition == (int)OccurrenceRoutingDisposition.Pending || o.Disposition == (int)OccurrenceRoutingDisposition.Claimed
                 || o.Disposition == (int)OccurrenceRoutingDisposition.AwaitingDurableWork
                 || db.WorkItems.Any(w => w.WorkItemId == o.DurableWorkItemId && w.Status < (int)AgentCore.Domain.Work.WorkItemStatus.Completed)), ct);
     }
@@ -493,7 +507,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         }
 
         if (currentRegistration.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought
-            && await ThoughtBusyAsync(db, registrationId, cancellationToken))
+            && await RegistrationBusyAsync(db, registrationId, cancellationToken))
         {
             var coalesced = TriggerScheduleAdmission.Advance(currentRegistration,
                 decision with { OccurrenceCount = currentRegistration.OccurrenceCount }, asOf);

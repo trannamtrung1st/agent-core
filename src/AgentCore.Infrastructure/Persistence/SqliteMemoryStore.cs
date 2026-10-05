@@ -644,6 +644,19 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         await SaveChangesOrThrowAsync(db, cancellationToken).ConfigureAwait(false);
     }
 
+    public async ValueTask<IReadOnlyList<SessionSnapshot>> ListOwnedSessionsAsync(
+        Guid instanceId, Guid profileId, int limit, bool activeOnly = false, CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var instance = instanceId.ToString("D"); var profile = profileId.ToString("D");
+        var query = db.Sessions.AsNoTracking().Include(s => s.Snapshot)
+            .Where(s => s.AgentInstanceId == instance && s.Snapshot!.ProfileId == profile && s.DurablyDeletedAtUtc == null);
+        if (activeOnly) query = query.Where(s => s.Status == "Attached" && (s.Snapshot!.LifecycleStatus == "Active" || s.Snapshot.LifecycleStatus == null));
+        var rows = await query.OrderByDescending(s => s.UpdatedAtUtc).ThenByDescending(s => s.SessionId)
+            .Take(Math.Clamp(limit, 1, 100)).ToArrayAsync(cancellationToken);
+        return rows.Select(s => ToSnapshot(s, [])).ToArray();
+    }
+
     public async ValueTask<SessionCatalogPage> ListCatalogAsync(
         string? cursor,
         int limit,

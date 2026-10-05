@@ -55,7 +55,9 @@ test("admin resource publish managed chat exposes publication under agent", asyn
   await page.getByRole("button", { name: "Open Admin" }).click();
   await expect(page).toHaveURL(/\/admin$/);
 
-  await page.locator('section[aria-label="Definitions"]').getByRole("button", { name: /examiner/i }).first().click();
+  const definitions = page.getByRole("region", { name: "Definitions", exact: true });
+  await definitions.getByLabel("Search definitions", { exact: true }).fill("examiner");
+  await definitions.getByRole("button", { name: /examiner/i }).first().click();
   const draftEditor = await forkBuiltInV1Draft(page);
 
   await draftEditor.getByLabel("System instructions").fill(instructionMarker);

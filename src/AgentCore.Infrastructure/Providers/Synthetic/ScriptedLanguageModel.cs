@@ -113,7 +113,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
         if (request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text == "Use my recent experience before acting."
-            && request.Messages.Any(m => m.Text.StartsWith("Historical Experience", StringComparison.Ordinal)))
+            && request.Messages.Any(m => (m.Text.StartsWith("Historical Experience", StringComparison.Ordinal) || m.Text.StartsWith("Historical Continuity", StringComparison.Ordinal) && m.Text.Contains("\"kind\":\"Experience\"", StringComparison.Ordinal))))
         {
             yield return new ModelTextDelta("I will observe current page state before acting, based on earlier experience. Current policy still controls every action.");
             yield return new ModelCompleted(ModelStopReason.Completed);

@@ -98,6 +98,8 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<PromptContextBuilder>(),
                 provider.GetRequiredService<IInitiativeEvaluator>()));
         services.TryAddSingleton<AgentCore.Application.Experience.ExperienceService>();
+        services.TryAddSingleton<AgentCore.Application.Continuity.ContinuityService>();
+        services.TryAddSingleton<AgentCore.Application.Continuity.ContinuityMaintenance>();
         services.TryAddSingleton<DurableWorkContextFactory>();
         services.TryAddSingleton<WorkCancellationRegistry>();
         services.TryAddSingleton<DurableReminderExecutor>();
@@ -348,6 +350,7 @@ public static class InfrastructureServiceCollectionExtensions
         }
         services.TryAddSingleton<ITriggerRegistrationService, TriggerRegistrationService>();
         services.TryAddSingleton<ThoughtRegistrationService>();
+        services.TryAddSingleton<AdminScheduleService>();
         services.TryAddSingleton<TriggerScheduler>();
         services.TryAddSingleton<ITriggerAdmissionGuard, TriggerAdmissionGuard>();
         services.TryAddSingleton<ITriggerPolicyRecoveryService, TriggerPolicyRecoveryService>();
@@ -396,7 +399,8 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetService<IAgentDefinitionResourceAdminStore>(),
             provider.GetService<IWorkCaptureStore>(),
             () => provider.GetRequiredService<HarnessManagementService>(),
-            provider.GetRequiredService<AgentCore.Application.Experience.ExperienceService>()));
+            provider.GetRequiredService<AgentCore.Application.Experience.ExperienceService>(),
+            provider.GetRequiredService<AgentCore.Application.Continuity.ContinuityService>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),

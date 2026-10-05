@@ -28,6 +28,7 @@ async function showAdvancedJson(editor: Locator) {
 
 async function selectOption(page: Page, combobox: Locator, optionText: string) {
   await combobox.click();
+  if (await combobox.getAttribute("aria-label") === "Definition") await combobox.fill(optionText);
   const option = page.locator(".ant-select-item-option").filter({ hasText: optionText }).last();
   await expect(option).toBeVisible({ timeout: 15_000 });
   await option.click();
@@ -171,7 +172,10 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
   await expect(effective.getByRole("switch")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Back to inventory" }).click();
-  await page.locator('section[aria-label="Definitions"]').getByRole("button", { name: new RegExp(definitionId) }).click();
+  const definitions = page.getByRole("region", { name: "Definitions", exact: true });
+  await page.getByRole("tab", { name: "Definitions", exact: true }).click();
+  await definitions.getByLabel("Search definitions", { exact: true }).fill(definitionId);
+  await definitions.getByRole("button", { name: new RegExp(definitionId) }).click();
   await expect(definitionDraftsSection(page).getByRole("button", { name: "Start managed chat for v1" })).toBeEnabled();
   await definitionDraftsSection(page).getByRole("button", { name: "Start managed chat for v1" }).click();
   await expect(page).toHaveURL(/\/c\/[0-9a-f-]+/i, { timeout: 20_000 });

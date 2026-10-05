@@ -11,16 +11,23 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     private readonly AgentCore.Infrastructure.Admin.InMemoryAdminEventStore? _admin;
 
     public ValueTask<TriggerRegistration> SaveThoughtAsync(TriggerRegistration proposed, long expectedRevision,
-        AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default)
+        AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default) => SaveOwnerAsync(proposed, expectedRevision, history, true, ct);
+    public ValueTask<TriggerRegistration> SaveScheduleAsync(TriggerRegistration proposed, long expectedRevision,
+        AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default) => SaveOwnerAsync(proposed, expectedRevision, history, false, ct);
+    private ValueTask<TriggerRegistration> SaveOwnerAsync(TriggerRegistration proposed, long expectedRevision,
+        AgentCore.Application.Admin.AdminEventAppend history, bool thought, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         lock (_state.Gate)
         {
             var current = Find(proposed.Owner, proposed.RegistrationId);
-            ThoughtRegistrationRules.ValidateSave(current, proposed, expectedRevision);
-            if (current is null && _state.Registrations.Values.Count(r => r.Owner.AgentInstanceId == proposed.Owner.AgentInstanceId
+            if (thought) ThoughtRegistrationRules.ValidateSave(current, proposed, expectedRevision);
+            else ScheduleRegistrationRules.ValidateSave(current, proposed, expectedRevision);
+            if (thought && current is null && _state.Registrations.Values.Count(r => r.Owner.AgentInstanceId == proposed.Owner.AgentInstanceId
                 && r.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought && r.Status != TriggerRegistrationStatus.Cancelled) >= ThoughtIntent.MaxRegistrationsPerInstance)
                 throw AgentCoreErrors.Validation("At most eight thought registrations are supported.");
+            if (!thought && proposed.Status == TriggerRegistrationStatus.Active && current?.Status != TriggerRegistrationStatus.Active && _state.Registrations.Values.Count(r => r.Owner == proposed.Owner && r.Status == TriggerRegistrationStatus.Active) >= 32)
+                throw AgentCoreErrors.Validation("At most 32 active registrations are supported.");
             AgentCore.Application.Admin.AdminEventSummaryPolicy.ValidateAppend(history);
             _admin?.AppendWithinLock(history);
             _state.Registrations[proposed.RegistrationId] = proposed;
@@ -28,17 +35,24 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         }
     }
     public ValueTask<ScheduledAdmitResult> AdmitThoughtNowAsync(TriggerRegistration registration, ExecutionModelPin pin,
-        DateTimeOffset asOf, CancellationToken ct = default)
+        DateTimeOffset asOf, CancellationToken ct = default) => AdmitOwnerNowAsync(registration, pin, asOf, true, ct);
+    public ValueTask<ScheduledAdmitResult> AdmitScheduleNowAsync(TriggerRegistration registration, ExecutionModelPin pin,
+        DateTimeOffset asOf, CancellationToken ct = default) => AdmitOwnerNowAsync(registration, pin, asOf, false, ct);
+    private ValueTask<ScheduledAdmitResult> AdmitOwnerNowAsync(TriggerRegistration registration, ExecutionModelPin pin,
+        DateTimeOffset asOf, bool thought, CancellationToken ct)
     {
         lock (_state.Gate)
         {
             var current = Find(registration.Owner, registration.RegistrationId);
             if (current?.Revision != registration.Revision || current.Status != TriggerRegistrationStatus.Active)
                 return ValueTask.FromResult(new ScheduledAdmitResult(ScheduledAdmitOutcome.Stale, current, null, 0));
-            if (ThoughtBusy(registration.RegistrationId))
+            if (thought != (registration.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought) || registration.EventSourceId is not null)
+                throw AgentCoreErrors.Forbidden("Manual registration source is invalid.");
+            if (RegistrationBusy(registration.RegistrationId))
                 return ValueTask.FromResult(new ScheduledAdmitResult(ScheduledAdmitOutcome.NotDue, current, null, 0));
             var decision = ThoughtRegistrationRules.ManualAdmission(current, asOf);
             var occurrence = TriggerScheduleAdmission.CreateOccurrence(current, decision, asOf).WithModelPin(pin);
+            if (!thought) occurrence = ScheduleRegistrationRules.ManualOccurrence(occurrence);
             var result = AdmitOccurrenceAsync(occurrence, ct).Result;
             return ValueTask.FromResult(new ScheduledAdmitResult(result.Kind == TriggerOccurrenceAdmitKind.Admitted
                 ? ScheduledAdmitOutcome.Admitted : ScheduledAdmitOutcome.Duplicate, current, result.Occurrence, 0));
@@ -56,8 +70,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
                 registration.NextOccurrenceAtUtc!.Value, asOf, ct, pin);
         }
     }
-    private bool ThoughtBusy(Guid registrationId) => _state.Occurrences.Values.Any(o => o.RegistrationId == registrationId
-        && o.SourceKind == TriggerSourceKind.ThoughtActivation
+    private bool RegistrationBusy(Guid registrationId) => _state.Occurrences.Values.Any(o => o.RegistrationId == registrationId
         && (o.Disposition is OccurrenceRoutingDisposition.Pending or OccurrenceRoutingDisposition.Claimed or OccurrenceRoutingDisposition.AwaitingDurableWork
             || o.DurableWorkItemId is Guid id && _state.WorkItems.TryGetValue(id, out var item) && !item.IsTerminal));
 
@@ -417,7 +430,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
                 return ValueTask.FromResult(new ScheduledAdmitResult(outcome, closed, null, 0));
             }
 
-            if (current!.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought && ThoughtBusy(registrationId))
+            if (current!.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought && RegistrationBusy(registrationId))
             {
                 var coalesced = TriggerScheduleAdmission.Advance(current, decision with { OccurrenceCount = current.OccurrenceCount }, asOf);
                 _state.Registrations[registrationId] = coalesced;

@@ -194,7 +194,7 @@ public sealed class TriggerOccurrenceRouter(
                 return;
             }
 
-            if (occurrence.SourceKind != TriggerSourceKind.ThoughtActivation && occurrence.ScheduleRevision != registration.ScheduleRevision)
+            if (!ScheduleRegistrationRules.IsManual(occurrence) && occurrence.SourceKind != TriggerSourceKind.ThoughtActivation && occurrence.ScheduleRevision != registration.ScheduleRevision)
             {
                 await store.TryRejectPendingAsync(occurrence.OccurrenceId, "Schedule was superseded.", now, cancellationToken)
                     .ConfigureAwait(false);
@@ -210,7 +210,7 @@ public sealed class TriggerOccurrenceRouter(
         }
 
         occurrence = pinned;
-        var targets = occurrence.SourceKind == TriggerSourceKind.ThoughtActivation
+        var targets = occurrence.SourceKind == TriggerSourceKind.ThoughtActivation || ScheduleRegistrationRules.IsManual(occurrence)
             ? (IReadOnlyList<LiveOccurrenceTarget>)[] : directory.ListCompatible(occurrence.Owner, occurrence.SourceKind);
         var claimId = ids.NewId();
         var claimed = await store.TryClaimOccurrenceAsync(
@@ -253,7 +253,7 @@ public sealed class TriggerOccurrenceRouter(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var targets = occurrence.SourceKind == TriggerSourceKind.ThoughtActivation
+        var targets = occurrence.SourceKind == TriggerSourceKind.ThoughtActivation || ScheduleRegistrationRules.IsManual(occurrence)
             ? (IReadOnlyList<LiveOccurrenceTarget>)[] : directory.ListCompatible(occurrence.Owner, occurrence.SourceKind);
         var leaseExpired = occurrence.ClaimLeaseExpiresAtUtc is DateTimeOffset lease && lease <= now;
         if (!leaseExpired)

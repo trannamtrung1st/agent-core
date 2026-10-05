@@ -37,8 +37,8 @@ async function openFirstInstanceEffectiveConfig(page: import("@playwright/test")
 
   await page.getByRole("tab", { name: "Instances", exact: true }).click();
   const instances = page.locator('section[aria-label="Instances"]');
-  const examinerLink = instances.locator("button", { hasText: /examiner/i });
-  const instanceLink = (await examinerLink.count()) > 0 ? examinerLink.first() : instances.locator("button").first();
+  await instances.getByLabel("Search instances", { exact: true }).fill("examiner");
+  const instanceLink = instances.getByRole("button", { name: /examiner/i }).first();
   await expect(instanceLink).toBeVisible({ timeout: 15_000 });
   await instanceLink.click();
   await expect(page).toHaveURL(/\/admin\/instances\/[0-9a-f-]{36}$/i);

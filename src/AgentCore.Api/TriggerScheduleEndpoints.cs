@@ -32,7 +32,7 @@ public static class TriggerScheduleEndpoints
                     ? await triggers.ListAsync(owner, status: null, cancellationToken).ConfigureAwait(false)
                     : await triggers.ListSchedulesPageAsync(owner, limit ?? 50, before, cancellationToken).ConfigureAwait(false);
                 return Results.Json(new TriggerScheduleListResponse(
-                    rows.Where(item => item.EventSourceId is null).Select(ToResponse).ToArray()));
+                    rows.Where(item => item.EventSourceId is null && item.Provenance.AuthorizationOrigin != TriggerAuthorizationOrigin.AdminThought).Select(ToResponse).ToArray()));
             }
             catch (AgentCoreException ex)
             {
@@ -84,7 +84,7 @@ public static class TriggerScheduleEndpoints
         return new TriggerOwner(instanceId, local.ProfileId);
     }
 
-    private static TriggerScheduleResponse ToResponse(TriggerRegistration registration)
+    internal static TriggerScheduleResponse ToResponse(TriggerRegistration registration)
     {
         var (kind, zone, summary) = Describe(registration.Schedule);
         return new TriggerScheduleResponse(
@@ -106,6 +106,7 @@ public static class TriggerScheduleEndpoints
         TriggerRegistrationStatus.Cancelled => "cancelled",
         TriggerRegistrationStatus.Expired => "expired",
         TriggerRegistrationStatus.SuspendedPolicy => "suspendedPolicy",
+        TriggerRegistrationStatus.Disabled => "disabled",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
     };
 

@@ -39,6 +39,8 @@ public static class ToolCatalog
     public const string BrowserClose = "browser.close";
     public const string BrowserPages = "browser.pages";
     public const string BrowserCapture = "browser.capture";
+    public const string ContinuitySearch = "continuity.search";
+    public const string ContinuityGet = "continuity.get";
     public const string ExperienceRecent = "experience.recent";
     public const string WorkComplete = "work.complete";
 
@@ -70,7 +72,7 @@ public static class ToolCatalog
 
             return context.Trigger.Kind == TriggerKind.ApplicationEvent
                 ? UnconnectedApplicationTools(definition, context, configurationGate)
-                : [];
+                : string.IsNullOrEmpty(context.ContinuityContext) ? [] : ContinuityOnly(definition, context, configurationGate);
         }
 
         var offered = new List<ModelToolDefinition>();
@@ -109,6 +111,13 @@ public static class ToolCatalog
         }
 
         AddWorkComplete(offered, seen, definition, context, configurationGate);
+        return offered;
+    }
+
+    private static List<ModelToolDefinition> ContinuityOnly(AgentDefinition definition, AgentContext context, IToolConfigurationGate gate)
+    {
+        var offered = new List<ModelToolDefinition>();
+        AddWorkComplete(offered, new(StringComparer.Ordinal), definition, context, gate);
         return offered;
     }
 
@@ -166,6 +175,10 @@ public static class ToolCatalog
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        foreach (var name in new[] { ContinuitySearch, ContinuityGet })
+            if (ToolRegistry.TryGet(name, out var continuityDescriptor)
+                && ToolPolicy.IsOffered(continuityDescriptor, definition, context, configurationGate) && seen.Add(name))
+                offered.Add(continuityDescriptor.ModelDefinition);
         if (!string.IsNullOrEmpty(context?.ExperienceContext) && ToolRegistry.TryGet(ExperienceRecent, out var experienceDescriptor)
             && ToolPolicy.IsOffered(experienceDescriptor, definition, context, configurationGate) && seen.Add(ExperienceRecent))
             offered.Add(experienceDescriptor.ModelDefinition);

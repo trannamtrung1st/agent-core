@@ -38,12 +38,18 @@ public sealed class ExperienceService(IExperienceStore experience, IWorkItemStor
         if (source is null || source.AgentInstanceId != instanceId || source.ProfileId != LocalUserProfile.Id || source.DurablyDeletedAt is not null)
             throw AgentCoreErrors.NotFound("Eligible source Session was not found.");
         var entries = await history.ReadHistoryAsync(sessionId, Math.Max(0, source.DurableLastEntrySequence - 100), 100, ct);
-        var firstStreaming = entries.FirstOrDefault(e => e.Status == EntryStatus.Streaming)?.Sequence ?? long.MaxValue;
-        var cutoff = entries.Where(e => e.Role == ConversationRole.Assistant && e.Status != EntryStatus.Streaming && e.Sequence < firstStreaming)
-            .Select(e => e.Sequence).DefaultIfEmpty(0).Max();
+        var cutoff = StableSessionCheckpoint(entries);
         if (cutoff == 0) throw AgentCoreErrors.Validation("There is no completed observable work to retrospect.");
         return await AdmitAsync(instanceId, ExperienceSourceKind.Session, sessionId, cutoff, source.CreatedAt,
             source.Definition.Id, source.Definition.Version, time.GetUtcNow(), ct);
+    }
+
+    public static long StableSessionCheckpoint(IReadOnlyList<ConversationEntry> entries)
+    {
+        var firstStreaming = entries.FirstOrDefault(e => e.Status == EntryStatus.Streaming)?.Sequence ?? long.MaxValue;
+        return entries.Where(e => e.Role == ConversationRole.Assistant && e.Status != EntryStatus.Streaming && e.Sequence < firstStreaming
+            && (!string.IsNullOrWhiteSpace(AssistantSemanticProjection.Text(e)) || EffectReceipts.ModelSafe(e.Envelope?.EffectReceipts).Count > 0))
+            .Select(e => e.Sequence).DefaultIfEmpty(0).Max();
     }
 
     public async ValueTask<AgentExperience> RequestWorkAsync(WorkItem source, CancellationToken ct = default)
