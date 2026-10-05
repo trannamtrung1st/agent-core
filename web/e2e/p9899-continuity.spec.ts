@@ -15,6 +15,7 @@ async function send(page: Page, text: string) {
 test('Experience informs an approved thought; next activation stays quiet; owner controls work at narrow width', async ({ page }) => {
   test.setTimeout(150_000);
   const errors: string[] = [];
+  const reviewerName = `Continuity reviewer ${Date.now()}`;
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error' && !message.text().startsWith('Warning: [antd: List]')) errors.push(message.text()); });
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -27,7 +28,7 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   await select(page, 'Published version', 'v9 · Built-in · Published');
   const dialog = page.getByRole('dialog', { name: 'New instance', exact: true });
   await dialog.getByText('Custom persona', { exact: true }).click();
-  await dialog.getByLabel('Persona name').fill('Continuity reviewer');
+  await dialog.getByLabel('Persona name').fill(reviewerName);
   await dialog.getByLabel('Persona role').fill('Store review');
   await dialog.getByLabel('Persona description').fill('Review observable outcomes.');
   await dialog.getByLabel('Persona tone').fill('Clear');
@@ -36,7 +37,7 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   await dialog.getByLabel('Knowledge & resources', { exact: true }).uncheck();
   await dialog.getByLabel('Skills', { exact: true }).check();
   await dialog.getByRole('button', { name: 'Create instance', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Continuity reviewer', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: reviewerName, exact: true })).toBeVisible();
   const id = page.url().split('/').at(-1)!;
   await page.getByRole("tab", { name: "Continuity", exact: true }).click();
   await page.getByRole("tab", { name: "Experience", exact: true }).click();
@@ -46,13 +47,15 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   await experience.getByRole('switch', { name: 'Enable experience', exact: true }).click();
   await expect(experience.getByText('Enabled · completed work may be retrospected')).toBeVisible();
   await page.locator('.admin-header').getByRole('button', { name: /Chat$/ }).first().click();
-  await select(page, 'Identity', 'Continuity reviewer');
+  await select(page, 'Identity', reviewerName);
   await send(page, 'synthetic-fail-turn');
   await expect(page.getByText(/Synthetic turn failure|could not complete|failed/i).last()).toBeVisible();
   await send(page, 'A correction: observe the current page before acting.');
   await expect(page.getByText('Hello from synthetic.', { exact: true }).last()).toBeVisible();
   const sessionId = page.url().split('/').at(-1)!;
   const ownerToken = await page.evaluate(() => localStorage.getItem('agent-core.owner-capability'));
+  const source = await page.request.get(`/api/v2/sessions/${sessionId}`, { headers: { 'X-AgentCore-Owner-Capability': ownerToken! } });
+  expect((await source.json()).agentInstanceId).toBe(id);
   const paused = await page.request.post(`/api/v2/sessions/${sessionId}/deactivate`, { headers: { 'X-AgentCore-Owner-Capability': ownerToken! } });
   expect(paused.ok()).toBe(true);
   await expect(page.getByRole('button', { name: 'Resume', exact: true })).toBeVisible();

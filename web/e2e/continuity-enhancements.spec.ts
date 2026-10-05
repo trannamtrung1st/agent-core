@@ -55,8 +55,16 @@ test('Admin authors scheduled work, runs through background execution, edits and
   expect(await work.getByRole('button', { name: /Create/ }).count()).toBe(0);
   const scheduledRun = page.locator('.background-work-selected');
   await expect(scheduledRun).toHaveAttribute('data-work-item-id', /.+/);
+  const schedulePath = `/api/v2/admin/agent-instances/${instanceId}/schedules`;
+  const currentSchedule = (await (await page.request.get(schedulePath, { headers })).json()).items[0];
+  const updatedIntent = 'Review pending store orders updated from another authoring surface';
+  const scheduleUpdate = await page.request.put(`${schedulePath}/${currentSchedule.registrationId}`, { headers, data: {
+    expectedRevision: currentSchedule.revision, enabled: currentSchedule.enabled, intent: updatedIntent,
+    schedule: currentSchedule.schedule, modelKey: currentSchedule.modelKey, reasoningEffort: currentSchedule.reasoningEffort
+  } });
+  expect(scheduleUpdate.ok()).toBe(true);
   await scheduledRun.getByRole('button', { name: 'View schedule', exact: true }).click();
-  await expect(schedules.getByRole('button', { name: 'View schedule: Review pending store orders', exact: true })).toBeFocused();
+  await expect(schedules.getByRole('button', { name: `View schedule: ${updatedIntent}`, exact: true })).toBeFocused();
   await page.getByRole('tab', { name: 'Thoughts', exact: true }).click();
   const thoughts = page.getByRole('region', { name: 'Thoughts', exact: true });
   await expect(thoughts.getByText(/No thoughts configured/)).toBeVisible();
@@ -70,8 +78,16 @@ test('Admin authors scheduled work, runs through background execution, edits and
   await expect(page.locator('.background-work-selected')).toHaveText(/Thought/);
   await expect(work.getByText('Schedule', { exact: true })).toBeVisible();
   await expect(work.getByText('Thought', { exact: true })).toBeVisible();
+  const thoughtPath = `/api/v2/admin/agent-instances/${instanceId}/thoughts`;
+  const currentThought = (await (await page.request.get(thoughtPath, { headers })).json()).items[0];
+  const updatedPrompt = 'Review current obligations updated from another authoring surface';
+  const thoughtUpdate = await page.request.put(`${thoughtPath}/${currentThought.registrationId}`, { headers, data: {
+    expectedRevision: currentThought.revision, enabled: currentThought.enabled, thinkingPrompt: updatedPrompt,
+    intervalSeconds: currentThought.intervalSeconds, modelKey: currentThought.modelKey, reasoningEffort: currentThought.reasoningEffort
+  } });
+  expect(thoughtUpdate.ok()).toBe(true);
   await page.locator('.background-work-selected').getByRole('button', { name: 'View thought', exact: true }).click();
-  await expect(thoughts.getByRole('button', { name: /^View thought: Review current/ })).toBeFocused();
+  await expect(thoughts.getByRole('button', { name: `View thought: ${updatedPrompt}`, exact: true })).toBeFocused();
   await page.getByRole('tab', { name: 'Schedules', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await schedules.getByRole('button', { name: 'View last run', exact: true }).click();

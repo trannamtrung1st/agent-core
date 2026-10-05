@@ -20,7 +20,7 @@ import { useDrawerPages } from "./useDrawerPages";
 import { DrawerListFooter } from "./DrawerListFooter";
 import { useWorkReadState } from "./workReadState";
 
-import { runOriginLabel, thoughtOutcomeLabel, runSource, type RunSource } from "./runPresentation";
+import { runOriginLabel, runStatusLabel, thoughtOutcomeLabel, runSource, type RunSource } from "./runPresentation";
 
 function retryLabel(item: WorkItem, fallback: string) {
   if (item.status === "retrying" && item.attemptCount && item.maxAttempts) {
@@ -30,14 +30,14 @@ function retryLabel(item: WorkItem, fallback: string) {
   return fallback;
 }
 
-const statusPresentation: Record<string, { label: string; color?: string; icon: ReactNode }> = {
-  queued: { label: "Queued", icon: <ClockCircleOutlined /> },
-  running: { label: "Running", color: "processing", icon: <LoadingOutlined /> },
-  needsApproval: { label: "Needs approval", color: "warning", icon: <ExclamationCircleOutlined /> },
-  retrying: { label: "Retrying", color: "gold", icon: <RedoOutlined /> },
-  completed: { label: "Completed", color: "success", icon: <CheckCircleOutlined /> },
-  failed: { label: "Failed", color: "error", icon: <CloseCircleOutlined /> },
-  cancelled: { label: "Cancelled", icon: <StopOutlined /> }
+const statusPresentation: Record<string, { color?: string; icon: ReactNode }> = {
+  queued: { icon: <ClockCircleOutlined /> },
+  running: { color: "processing", icon: <LoadingOutlined /> },
+  needsApproval: { color: "warning", icon: <ExclamationCircleOutlined /> },
+  retrying: { color: "gold", icon: <RedoOutlined /> },
+  completed: { color: "success", icon: <CheckCircleOutlined /> },
+  failed: { color: "error", icon: <CloseCircleOutlined /> },
+  cancelled: { icon: <StopOutlined /> }
 };
 
 export function BackgroundWorkDrawer({
@@ -316,7 +316,6 @@ export function BackgroundWorkDrawer({
 
   function renderItem(item: WorkItem) {
     const status = statusPresentation[item.status] ?? {
-      label: item.status,
       icon: <InfoCircleOutlined />
     };
     const busy = busyId !== null;
@@ -337,7 +336,7 @@ export function BackgroundWorkDrawer({
               icon={status.icon}
               className="background-work-status"
             >
-              {retryLabel(item, status.label)}
+              {retryLabel(item, runStatusLabel(item.status))}
             </Tag>
           </Flex>
 

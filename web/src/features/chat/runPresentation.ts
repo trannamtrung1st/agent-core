@@ -1,5 +1,10 @@
 import type { WorkItem } from "../../services/api";
 
+export function runStatusLabel(value: string | null | undefined) {
+  return ({ queued: "Queued", running: "Running", needsApproval: "Needs approval", WaitingForApproval: "Needs approval",
+    retrying: "Retrying", WaitingToRetry: "Retrying", completed: "Completed", failed: "Failed", cancelled: "Cancelled" } as Record<string, string>)[value ?? ""] ?? value ?? "Not yet";
+}
+
 export function thoughtOutcomeLabel(value: string | null | undefined) {
   return ({ NoAction: "No action", ActionCompleted: "Action completed", AttentionRequested: "Needs attention",
     ApprovalPending: "Needs approval", WaitingToRetry: "Retrying" } as Record<string, string>)[value ?? ""] ?? value ?? "Not yet";

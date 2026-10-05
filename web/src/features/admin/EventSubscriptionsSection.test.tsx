@@ -88,4 +88,16 @@ describe("EventSubscriptionsSection", () => {
     await waitFor(() => expect(row).toHaveFocus());
     expect(row).toHaveClass("admin-selected-source");
   });
+  it("offers retry after a source read fails without claiming the subscription disappeared", async () => {
+    vi.mocked(listEventSources).mockResolvedValue([]);
+    vi.mocked(listEventSubscriptions).mockRejectedValue(new Error("Network disconnected"));
+    render(<AntApp><EventSubscriptionsSection instanceId="instance" selection={{ registrationId: "target", request: 1 }} /></AntApp>);
+    const retry = await screen.findByRole("button", { name: "Retry subscriptions" });
+    expect(screen.queryByText("This event subscription is no longer available")).not.toBeInTheDocument();
+    vi.mocked(listEventSubscriptions).mockResolvedValue([{ registrationId: "target", sourceId: "store", eventType: "order.placed", status: "Active", revision: 1 }]);
+    fireEvent.click(retry);
+    await screen.findByText("order.placed");
+    await waitFor(() => expect(document.querySelector('[data-event-registration-id="target"]')).toHaveFocus());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });

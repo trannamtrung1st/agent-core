@@ -18,6 +18,28 @@ beforeEach(() => {
   request.mockResolvedValue({ items: [] });
 });
 describe("Owner schedule authoring", () => {
+  it.each([["WaitingForApproval", "Needs approval"], ["WaitingToRetry", "Retrying"]])("uses readable run state for %s", async (executionStatus, label) => {
+    request.mockResolvedValue({ items: [{ ...row, executionStatus, lastWorkItemId: "last-run" }] });
+    render(view());
+    await screen.findByRole("button", { name: `View schedule: ${row.intent}` });
+    fireEvent.click(screen.getByRole("button", { name: `View schedule: ${row.intent}` }));
+    expect(screen.getByRole("region", { name: "Schedule details" })).toHaveTextContent(label);
+    expect(screen.getByRole("button", { name: "Run schedule now" })).toBeDisabled();
+  });
+  it("refreshes a source created after the cached review when returning from Runs", async () => {
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
+    request.mockResolvedValue({ items: [] });
+    const ui = (selection?: { kind: "schedule"; registrationId: string; request: number }) => <ConfigProvider><App>
+      <InstanceSchedulesSection instanceId="instance" onWork={vi.fn()} selection={selection} /></App></ConfigProvider>;
+    const mounted = render(ui());
+    await screen.findByText(/No schedules yet/);
+    request.mockResolvedValue({ items: [row] });
+    mounted.rerender(ui({ kind: "schedule", registrationId: row.registrationId, request: 1 }));
+    const source = await screen.findByRole("button", { name: `View schedule: ${row.intent}` });
+    await waitFor(() => expect(source).toHaveFocus());
+    expect(source).toHaveAttribute("aria-expanded", "true");
+    expect(screen.queryByText("This source configuration is no longer available")).not.toBeInTheDocument();
+  });
   it.each(["Disabled", "Cancelled", "Completed", "Expired"])("does not advertise a future run for %s registrations", async status => {
     request.mockResolvedValue({ items: [{ ...row, enabled: status !== "Disabled", status }] });
     render(view());

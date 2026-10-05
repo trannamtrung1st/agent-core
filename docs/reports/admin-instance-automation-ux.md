@@ -88,3 +88,37 @@ Intentional concurrent workflow/test changes and the unrelated proposal deletion
 ## Limits and deferred work
 
 No requested UI workflow is deferred. A historical started-at timestamp is not recorded, so Runs accurately shows created/updated time and result completion time instead of inventing a start time. Experience source lookup remains the existing bounded review; deleted or older checkpoints receive clear guidance. Optional unified owner Continuity search and bundle splitting remain outside this request. Verification used Synthetic providers; this pass makes no new claim about hosted-model judgment or physical touch-device behavior.
+
+## Follow-up consistency review (2026-10-06)
+
+The second review found and corrected three presentation/recovery gaps:
+
+- Schedule and Thought navigation relied on the five-second poll rather than refreshing immediately. Two newly added component cases failed before the fix and pass afterward: a source created after the cached empty review becomes expanded and focused immediately. The browser journey additionally edits each source through the same owner API while Runs is open, then verifies its updated text and restored focus on return. Existing revision guards and draft preservation remain intact.
+- A source read failure could be presented as a deleted/unavailable source. Schedule, Thought, Experience and Event subscription notices now require a successful read. Event subscriptions adds Retry subscriptions; a regression failed before that control existed and now verifies recovery/focus. Experience also verifies failure → Reload → recovery. MCP injected a 503, observed the retry control without a false missing-source notice, removed the fault and confirmed recovery at 390px.
+- Schedule details/filters and retrying Thoughts exposed WaitingForApproval/WaitingToRetry rather than the labels used by Runs. Two Schedule regressions failed before the fix. Shared `runStatusLabel` now supplies Needs approval/Retrying across Schedule, Thought and the shared execution surface, retaining raw filter values and domain/wire states. A retrying Thought still overrides its earlier No action outcome and keeps Run now disabled.
+
+The first browser rerun passed 12 cases but failed retrospection because its reused catalog contained several instances named Continuity reviewer. The source Session was confirmed to belong to a different instance (`01a10d96-126c-7a09-9029-d1594d5a7d9a`) than the newly created fixture (`01a10da0-7609-7dd0-8ac1-b4898194950d`). The fixture now uses a unique persona name and asserts Session ownership. The original automatic-retrospection/approval/no-action assertions remain intact; the final rerun passed all five cases.
+
+Follow-up evidence, all under `local/admin-automation-ux/`:
+
+| Check | Result / log |
+| --- | --- |
+| Schedule, Thought/Experience, instance navigation and drawer component run | 45 passed, `review-components.log` |
+| Final shared labels, Schedule and drawer component run | 40 passed (Schedule 14, drawer 17, presentation 9), `review-labels.log` |
+| Event subscriptions | 4 passed, `review-subscriptions.log` |
+| Experience read recovery and retrying Thought | 2 passed, `review-extra-regressions.log` |
+| Final Thought/Experience file | 16 passed, `review-continuity-final.log` |
+| Final browser regression | 5 passed, `review-final-playwright.log`; Schedule/Thought journeys and Chat/Admin execution consumers |
+| Admin collection regression before the fixture correction | 8 passed in `review-playwright.log`; delayed reads, unsaved persona, lifecycle, publication and focus retained |
+| Owner run-read and Continuity/Thought API integration | 15 passed, `review-api-tests.log` |
+| Frontend build | Passed, `review-build-final.log`; existing bundle-size warning |
+
+The unique final component cases total 62 across six files (14 Schedule + 16 Thought/Experience + 2 navigation + 17 drawer + 9 presentation + 4 Event subscription). Counts above overlap between reruns and should not be added together. MCP separately observed exact Schedule/Thought return focus, disabled Thought Run now and no document overflow at 390px. A clean navigation interval had no console errors or failed HTTP responses; the intentional 503 recovery produced the expected failed request. Initial development-host startup refusal/delay was resolved with permitted local test hosts; no runtime verification remains blocked.
+
+Repeat the follow-up browser command with the ready Synthetic hosts described above:
+
+```sh
+PLAYWRIGHT_FAITHFUL_MANUAL=1 PLAYWRIGHT_API_PORT=5084 PLAYWRIGHT_WEB_PORT=5184 PLAYWRIGHT_SQLITE_PATH=../local/secretary-e2e/review-mcp.db pnpm --dir web exec playwright test continuity-enhancements.spec.ts p9899-continuity.spec.ts background-work.spec.ts p96-admin-background-work.spec.ts --project=p9899-continuity --project=synthetic --output=../local/admin-automation-ux/review-final-playwright --trace=retain-on-failure
+```
+
+Verdict remains **UI/UX READY** for the requested local enhancement. Backend admission/execution/storage behavior and historical milestone acceptance are unchanged. No new hosted-provider verification was requested or performed. Intentional concurrent changes remain excluded from this follow-up.

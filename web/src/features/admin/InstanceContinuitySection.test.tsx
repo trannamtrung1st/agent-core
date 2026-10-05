@@ -32,6 +32,49 @@ beforeEach(() => {
 });
 
 describe('Instance continuity owner controls', () => {
+  it('refreshes a Thought source created after the cached review when returning from Runs', async () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
+    request.mockResolvedValue(thoughts);
+    const ui = (selection?: { kind: 'thought'; registrationId: string; request: number }) => <ConfigProvider><App>
+      <ThoughtSection instanceId="owner-instance" onWork={vi.fn()} selection={selection} /></App></ConfigProvider>;
+    const mounted = render(ui());
+    await screen.findByText(/No thoughts configured/);
+    request.mockResolvedValue({ minIntervalSeconds: 15, items: [{ registrationId: 'new-thought', revision: 1,
+      enabled: true, status: 'Active', intervalSeconds: 3600, thinkingPrompt: 'Review new obligations',
+      modelKey: null, reasoningEffort: null, effectiveModelKey: null, nextRunAt: null, lastRunAt: null,
+      lastOutcome: 'NoAction', lastWorkItemId: 'run-new', executionStatus: 'Completed' }] });
+    mounted.rerender(ui({ kind: 'thought', registrationId: 'new-thought', request: 1 }));
+    const source = await screen.findByRole('button', { name: 'View thought: Review new obligations' });
+    await waitFor(() => expect(source).toHaveFocus());
+    expect(source).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.queryByText('This source configuration is no longer available')).not.toBeInTheDocument();
+  });
+  it('shows a retrying Thought instead of an older completed outcome and keeps Run now locked', async () => {
+    request.mockResolvedValue({ minIntervalSeconds: 15, items: [{ registrationId: 'retrying-thought', revision: 1,
+      enabled: true, status: 'Active', intervalSeconds: 3600, thinkingPrompt: 'Review obligations',
+      modelKey: null, reasoningEffort: null, effectiveModelKey: null, nextRunAt: null, lastRunAt: null,
+      lastOutcome: 'NoAction', lastWorkItemId: 'retrying-run', executionStatus: 'WaitingToRetry' }] });
+    render(view('owner-instance', 'thought'));
+    fireEvent.click(await screen.findByRole('button', { name: 'View thought: Review obligations' }));
+    expect(screen.getByRole('region', { name: 'Thought details' })).toHaveTextContent('Retrying');
+    expect(screen.queryByText('WaitingToRetry')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Run now' })).toBeDisabled();
+  });
+  it('does not claim a checkpoint disappeared when its source read fails and recovers on Reload', async () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
+    const ui = (selection?: { workItemId: string; request: number }) => <ConfigProvider><App>
+      <ExperienceSection instanceId="owner-instance" onWork={vi.fn()} selection={selection} /></App></ConfigProvider>;
+    const mounted = render(ui());
+    await screen.findByText(/No experience yet/);
+    request.mockRejectedValue(new Error('Network disconnected'));
+    mounted.rerender(ui({ workItemId: 'work-1', request: 1 }));
+    const retry = await screen.findByRole('button', { name: /^Reload$/ });
+    expect(screen.queryByText('This experience checkpoint is not available in the current records')).not.toBeInTheDocument();
+    request.mockResolvedValue({ ...experience(), items: [record(1)] });
+    fireEvent.click(retry);
+    await screen.findByRole('button', { name: 'View experience: Atlas review 1' });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
   it('paginates records and searches observation text across pages', async () => {
     const items = Array.from({ length: 21 }, (_, index) => record(index + 1));
     items[0].content!.lessons[0] = 'Unique Atlas preparation rule';

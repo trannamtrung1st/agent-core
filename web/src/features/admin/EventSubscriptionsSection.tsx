@@ -18,6 +18,7 @@ export function EventSubscriptionsSection({ instanceId, selection }: { instanceI
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     let current = true;
@@ -43,7 +44,7 @@ export function EventSubscriptionsSection({ instanceId, selection }: { instanceI
     return () => {
       current = false;
     };
-  }, [instanceId, selection?.request]);
+  }, [instanceId, selection?.request, retryKey]);
 
   const focusedSelection = useRef<typeof selection>(undefined);
   useEffect(() => {
@@ -91,8 +92,8 @@ export function EventSubscriptionsSection({ instanceId, selection }: { instanceI
       <div className="admin-definition-panel-body">
         <Flex vertical gap={token.paddingSM}>
           {loading ? <Spin aria-label="Loading event subscriptions" /> : null}
-          {selection && !loading && !subscriptions.some(item => item.registrationId === selection.registrationId) ? <Alert type="info" showIcon title="This event subscription is no longer available" /> : null}
-          {error ? <Alert type="error" showIcon title={error} /> : null}
+          {selection && !loading && !error && !subscriptions.some(item => item.registrationId === selection.registrationId) ? <Alert type="info" showIcon title="This event subscription is no longer available" /> : null}
+          {error ? <Alert type="error" showIcon title={error} action={<Button disabled={busy || loading} onClick={() => setRetryKey(value => value + 1)}>Retry subscriptions</Button>} /> : null}
           {!loading ? (
             <>
               {sources.length === 0 ? (

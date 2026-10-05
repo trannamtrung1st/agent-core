@@ -9,7 +9,7 @@ import { ExecutionModelFields } from "./ExecutionModelFields";
 import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 
-import type { AutomationSelection } from "../chat/runPresentation";
+import { runStatusLabel, type AutomationSelection } from "../chat/runPresentation";
 import { useAutomationSelection } from "./useAutomationSelection";
 
 const activeWork = ["Queued", "Running", "WaitingForApproval", "WaitingToRetry"];
@@ -57,6 +57,9 @@ export function InstanceSchedulesSection({ instanceId, onWork, selection }: { in
     if (loading) return;
     const timer = window.setInterval(() => { void reload(); }, 5000); return () => window.clearInterval(timer);
   }, [loading, reload]);
+  useEffect(() => {
+    if (selection?.kind === "schedule") void reload(true);
+  }, [selection, reload]);
   async function mutate(path: string, body: unknown, method = "POST") {
     const runId = /^schedules\/([^/]+)\/run$/.exec(path)?.[1];
     if (order.current.mutating || runId && runId in order.current.pending) return;
@@ -92,7 +95,7 @@ export function InstanceSchedulesSection({ instanceId, onWork, selection }: { in
       <Typography.Text type="secondary">Configure a known task for later. Chat and Admin use the same schedules; each run follows normal tools and approvals.</Typography.Text></div>
     <div className="admin-definition-panel-body"><Flex vertical gap={token.padding}>
       {loading ? <Spin aria-label="Loading schedules" /> : null}
-      {selection?.kind === "schedule" && review && !review.items.some(item => item.registrationId === selection.registrationId) ? <Alert type="info" showIcon title="This source configuration is no longer available" description="It may have been deleted or retired. Its run remains available in Runs." /> : null}
+      {selection?.kind === "schedule" && !loading && !error && review && !review.items.some(item => item.registrationId === selection.registrationId) ? <Alert type="info" showIcon title="This source configuration is no longer available" description="It may have been deleted or retired. Its run remains available in Runs." /> : null}
       {error ? <Alert type="error" showIcon title={error.message} action={<Button disabled={busy} onClick={() => void reload()}>Reload schedules</Button>}
         description={error.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: error.diagnosticId }} /> : undefined} /> : null}
       <Flex wrap gap={token.paddingXS}><Button disabled={busy} onClick={() => { setDraft(blank()); setEditor("new"); }}>New schedule</Button>
@@ -156,9 +159,9 @@ export function InstanceSchedulesSection({ instanceId, onWork, selection }: { in
               sorter: (a, b) => (a.enabled && !terminal.includes(a.status) ? a.nextRunAt ?? "" : "").localeCompare(b.enabled && !terminal.includes(b.status) ? b.nextRunAt ?? "" : ""),
               render: (_, item) => date(item.enabled && !terminal.includes(item.status) ? item.nextRunAt : null) },
             { title: "Last run", key: "execution", width: 180,
-              filters: [...new Set(review.items.map(item => item.executionStatus ?? "Not yet"))].map(value => ({ text: value, value })),
+              filters: [...new Set(review.items.map(item => item.executionStatus ?? "Not yet"))].map(value => ({ text: runStatusLabel(value), value })),
               onFilter: (value, item) => (item.executionStatus ?? "Not yet") === value,
-              render: (_, item) => item.lastWorkItemId ? <Button type="link" size="small" aria-label={`View last run: ${item.intent}`} onClick={() => onWork(item.lastWorkItemId!)}>{item.executionStatus ?? "View run"}</Button> : "Not yet" },
+              render: (_, item) => item.lastWorkItemId ? <Button type="link" size="small" aria-label={`View last run: ${item.intent}`} onClick={() => onWork(item.lastWorkItemId!)}>{runStatusLabel(item.executionStatus ?? "View run")}</Button> : "Not yet" },
             { title: "Model", key: "model", width: 180, ellipsis: true, render: (_, item) => item.effectiveModelKey ?? item.modelKey ?? "Unattended default" },
             { title: "Origin", key: "origin", width: 180,
               filters: [{ text: "Chat user request", value: "CurrentUserTurn" }, { text: "Admin owner", value: "AdminOwner" }],
@@ -176,7 +179,7 @@ export function InstanceSchedulesSection({ instanceId, onWork, selection }: { in
             {item.schedule.endAtUtc || item.schedule.endDate ? <Descriptions.Item label="End">{item.schedule.endAtUtc ? date(item.schedule.endAtUtc) : item.schedule.endDate}</Descriptions.Item> : null}
             {item.schedule.maxOccurrences ? <Descriptions.Item label="Maximum occurrences">{item.schedule.maxOccurrences}</Descriptions.Item> : null}
             <Descriptions.Item label="Model">{item.effectiveModelKey ?? item.modelKey ?? "Unattended default"}</Descriptions.Item>
-            <Descriptions.Item label="Last run">{item.executionStatus ?? "Not yet"}</Descriptions.Item></Descriptions>
+            <Descriptions.Item label="Last run">{runStatusLabel(item.executionStatus)}</Descriptions.Item></Descriptions>
             <Flex wrap gap={token.paddingXS}><Button aria-label="Run schedule now" aria-busy={item.registrationId in pending} loading={item.registrationId in pending}
               disabled={busy || !item.enabled || item.registrationId in pending || activeWork.includes(item.executionStatus ?? "")}
               onClick={() => void mutate(`schedules/${item.registrationId}/run`, { expectedRevision: item.revision })}>{item.registrationId in pending ? "Starting…" : "Run now"}</Button>

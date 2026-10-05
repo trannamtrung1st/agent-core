@@ -11,7 +11,7 @@ import { ExecutionModelFields } from "./ExecutionModelFields";
 import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 
-import { thoughtOutcomeLabel, type AutomationSelection, type RunSource } from "../chat/runPresentation";
+import { thoughtOutcomeLabel, runStatusLabel, type AutomationSelection, type RunSource } from "../chat/runPresentation";
 import { useAutomationSelection } from "./useAutomationSelection";
 
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : "Not yet";
@@ -115,7 +115,7 @@ export function ExperienceSection({ instanceId, onWork, selection }: { instanceI
       <Typography.Text type="secondary">Derived observations about past work, kept separately from learned memory.</Typography.Text></div>
     <div className="admin-definition-panel-body"><Flex vertical gap={token.padding}>
       {loading ? <Spin aria-label="Loading experience" /> : null}
-      {selection && !loading && review && !review.items.some(item => item.generationWorkItemId === selection.workItemId) ? <Alert type="info" showIcon title="This experience checkpoint is not available in the current records" description="It may have been deleted or be outside the bounded review. Its run remains available in Runs." /> : null}
+      {selection && !loading && !error && review && !review.items.some(item => item.generationWorkItemId === selection.workItemId) ? <Alert type="info" showIcon title="This experience checkpoint is not available in the current records" description="It may have been deleted or be outside the bounded review. Its run remains available in Runs." /> : null}
       <Failure error={error} reload={() => void reload()} />
       {review ? <>
         <Flex wrap align="center" gap={token.paddingXS}><Switch aria-label="Enable experience" checked={review.enabled} disabled={busy}
@@ -222,8 +222,7 @@ function thoughtIntervalLabel(seconds: number) {
   return `Every ${value} ${label}${value === 1 ? "" : "s"}`;
 }
 const blank: ThoughtDraft = { expectedRevision: 0, enabled: false, intervalSeconds: 3600, thinkingPrompt: "", modelKey: null, reasoningEffort: null };
-const thoughtOutcome = (item: ThoughtRegistration) => item.executionStatus === "WaitingForApproval" ? "Needs approval"
-  : ["Queued", "Running", "WaitingToRetry"].includes(item.executionStatus ?? "") ? item.executionStatus!
+const thoughtOutcome = (item: ThoughtRegistration) => ["Queued", "Running", "WaitingForApproval", "WaitingToRetry"].includes(item.executionStatus ?? "") ? runStatusLabel(item.executionStatus)
   : thoughtOutcomeLabel(item.lastOutcome ?? item.executionStatus);
 export function ThoughtSection({ instanceId, onWork, selection }: { instanceId: string; onWork: (workId?: string) => void; selection?: AutomationSelection }) {
   const { search, setSearch, pagination } = useAdminCollectionSearch();
@@ -264,6 +263,9 @@ export function ThoughtSection({ instanceId, onWork, selection }: { instanceId: 
     finally { if (generation === order.current.generation) setLoading(false); }
   }, [instanceId, order, applyReview]);
   useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => {
+    if (selection?.kind === "thought") void reload();
+  }, [selection, reload]);
   useEffect(() => {
     if (loading) return;
     const timer = window.setInterval(() => {
@@ -310,7 +312,7 @@ export function ThoughtSection({ instanceId, onWork, selection }: { instanceId: 
       <Typography.Text type="secondary">Periodically review current context and decide whether useful action exists. Doing nothing is a valid outcome.</Typography.Text></div>
     <div className="admin-definition-panel-body"><Flex vertical gap={token.padding}>
       {loading ? <Spin aria-label="Loading thoughts" /> : null}
-      {selection?.kind === "thought" && review && !review.items.some(item => item.registrationId === selection.registrationId) ? <Alert type="info" showIcon title="This source configuration is no longer available" description="It may have been deleted or retired. Its run remains available in Runs." /> : null}
+      {selection?.kind === "thought" && !loading && !error && review && !review.items.some(item => item.registrationId === selection.registrationId) ? <Alert type="info" showIcon title="This source configuration is no longer available" description="It may have been deleted or retired. Its run remains available in Runs." /> : null}
       <Failure error={error} reload={() => void reload()} />
       {review ? <>
         <Form layout="vertical" onFinish={() => void action(editing ? `thoughts/${editing}` : "thoughts", draft, editing ? "PUT" : "POST")}>
