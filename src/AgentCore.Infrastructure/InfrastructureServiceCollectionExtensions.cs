@@ -97,6 +97,7 @@ public static class InfrastructureServiceCollectionExtensions
             new DefaultAgentBrain(
                 provider.GetRequiredService<PromptContextBuilder>(),
                 provider.GetRequiredService<IInitiativeEvaluator>()));
+        services.TryAddSingleton<AgentCore.Application.Experience.ExperienceService>();
         services.TryAddSingleton<DurableWorkContextFactory>();
         services.TryAddSingleton<WorkCancellationRegistry>();
         services.TryAddSingleton<DurableReminderExecutor>();
@@ -122,6 +123,7 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IIdGenerator>()));
             services.AddSingleton<ITriggerStore>(provider => new SqliteTriggerStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+            services.AddSingleton<IExperienceStore, SqliteExperienceStore>();
             services.AddSingleton<IWorkItemStore>(provider => new SqliteWorkItemStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                 provider.GetRequiredService<IDiagnosticIdSource>()));
@@ -179,9 +181,10 @@ public static class InfrastructureServiceCollectionExtensions
                 instances.EventStore = provider.GetRequiredService<InMemoryAdminEventStore>();
                 return instances;
             });
+            services.TryAddSingleton<IExperienceStore, InMemoryExperienceStore>();
             services.TryAddSingleton<InMemoryDurableState>();
             services.TryAddSingleton(provider =>
-                new InMemoryTriggerStore(provider.GetRequiredService<InMemoryDurableState>()));
+                new InMemoryTriggerStore(provider.GetRequiredService<InMemoryDurableState>(), provider.GetRequiredService<InMemoryAdminEventStore>()));
             services.TryAddSingleton<ITriggerStore>(provider => provider.GetRequiredService<InMemoryTriggerStore>());
             services.TryAddSingleton(provider =>
                 new InMemoryWorkItemStore(
@@ -230,7 +233,8 @@ public static class InfrastructureServiceCollectionExtensions
                     provider.GetRequiredService<InMemoryWorkItemStore>(),
                     provider.GetRequiredService<InMemoryConversationTurnExecutionStore>(),
                     provider.GetRequiredService<InMemoryAgentDefinitionAdminStore>(),
-                    provider.GetRequiredService<InMemoryAdminEventStore>());
+                    provider.GetRequiredService<InMemoryAdminEventStore>(),
+                    (InMemoryExperienceStore)provider.GetRequiredService<IExperienceStore>());
             });
             services.TryAddSingleton<IAdminP7eHistoryMutator>(provider =>
                 new InMemoryAdminP7eHistoryMutator(
@@ -343,6 +347,7 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<ModelTriggerCommandAuthorizer>());
         }
         services.TryAddSingleton<ITriggerRegistrationService, TriggerRegistrationService>();
+        services.TryAddSingleton<ThoughtRegistrationService>();
         services.TryAddSingleton<TriggerScheduler>();
         services.TryAddSingleton<ITriggerAdmissionGuard, TriggerAdmissionGuard>();
         services.TryAddSingleton<ITriggerPolicyRecoveryService, TriggerPolicyRecoveryService>();
@@ -390,7 +395,8 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetService<IApplicationConnectionStore>(),
             provider.GetService<IAgentDefinitionResourceAdminStore>(),
             provider.GetService<IWorkCaptureStore>(),
-            () => provider.GetRequiredService<HarnessManagementService>()));
+            () => provider.GetRequiredService<HarnessManagementService>(),
+            provider.GetRequiredService<AgentCore.Application.Experience.ExperienceService>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),

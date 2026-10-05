@@ -1,0 +1,34 @@
+using System.Text.Json;
+using AgentCore.Domain.Work;
+using AgentCore.Domain.Definitions;
+
+namespace AgentCore.Domain.Experience;
+
+public enum ExperienceSourceKind { Session, WorkItem }
+public enum ExperienceVisibility { Eligible, Suppressed, Deleted }
+
+public sealed record ExperienceSettings(Guid AgentInstanceId, bool Enabled, long Revision);
+
+/// <summary>Derived observations, never learned memory, instructions or authorization.</summary>
+public sealed record ExperienceContent(string Goal, string[] Attempts, string[] Decisions,
+    string[] Outcomes, string[] Corrections, string[] Unresolved, string[] Difficulties, string[] Lessons)
+{
+    public const int MaxFieldCharacters = 600;
+    public const int MaxTotalCharacters = 6000;
+    public void Validate()
+    {
+        var sections = new[] { Attempts, Decisions, Outcomes, Corrections, Unresolved, Difficulties, Lessons };
+        if (string.IsNullOrWhiteSpace(Goal) || Goal.Length > MaxFieldCharacters
+            || sections.Any(s => s is null || s.Length > 6)
+            || sections.SelectMany(s => s).Any(s => string.IsNullOrWhiteSpace(s) || s.Length > MaxFieldCharacters)
+            || JsonSerializer.Serialize(this).Length > MaxTotalCharacters)
+            throw new ArgumentException("Retrospective output is malformed or exceeds its bounds.");
+    }
+}
+
+public sealed record AgentExperience(Guid ExperienceId, Guid AgentInstanceId, Guid ProfileId,
+    ExperienceSourceKind SourceKind, Guid SourceId, long ThroughCursor, DateTimeOffset SourceAtUtc,
+    string DefinitionId, int DefinitionVersion, Guid GenerationWorkItemId, WorkModelPin Model,
+    DateTimeOffset CreatedAtUtc, ExperienceContent? Content = null,
+    ExperienceVisibility Visibility = ExperienceVisibility.Eligible, long Revision = 1,
+    string? GenerationDefinitionId = null, int? GenerationDefinitionVersion = null, AgentIdentity? GenerationPersona = null);

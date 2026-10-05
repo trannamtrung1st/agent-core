@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function select(page: Page, label: string, text: string) {
   await page.getByLabel(label, {exact:true}).click();
-  if (label === 'Identity') await page.getByLabel(label, {exact:true}).fill(text);
+  if (label === 'Identity' || label === 'Published version') await page.getByLabel(label, {exact:true}).fill(text);
   await page.locator('.ant-select-item-option').filter({hasText:text}).last().click();
 }
 async function create(page: Page, name: string, mode = 'Managed', scope = 'Knowledge & resources') {

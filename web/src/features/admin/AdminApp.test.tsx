@@ -71,6 +71,7 @@ const sampleEffective: AdminEffectiveConfiguration = {
 };
 
 vi.mock("../../services/adminApi", () => ({
+  instanceContinuityRequest: vi.fn().mockImplementation((_id: string, path: string) => Promise.resolve(path === "thoughts" ? { minimumIntervalSeconds: 3600, items: [] } : { enabled: false, settingsRevision: 0, contextBudgetCharacters: 6000, items: [] })),
   listAdminDefinitions: vi.fn(),
   listAdminInstances: vi.fn(),
   getAdminEffectiveConfig: vi.fn(),

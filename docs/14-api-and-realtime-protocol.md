@@ -350,3 +350,26 @@ All governance/advanced owner routes retain the local trusted-owner filter under
 `POST /continue` was removed and returns 404. Normal tools are `harness.inspect`, `harness.knowledge.upsert/remove`, `harness.skill.upsert/remove`, `harness.instructions.update`, `harness.tool.select/configure`. Mutations carry expectedVersion/policyRevision and a semantic payload. Non-Skill mutations require expected/observed assessment. Skill creation requires `skill.name`, `skill.description`, and `skill.procedure`; an update requires an existing `skill.id` or unique `skill.name` and only changed fields, preserving omitted name, description, procedure and metadata when the ID is supplied. `skill.id` is optional: an omitted ID updates a unique existing Skill with the same normalized name or creates a Core-generated ID. Ambiguous matching names require an explicit ID. Optional activationKeywords, requiredCapabilities and knowledgeIds default to empty on creation; knowledgeIds refer to identities returned by inspect. Legacy resourcePaths is accepted separately. Skill IDs permit lowercase letters, digits, dots, underscores and hyphens after the initial letter. Exact runtime approval binds tool plus canonical arguments; authorization is rechecked after the wait. A changed save returns `saved=true`, `changed=true`, activeVersion, appliesTo=future conversations, currentSessionUnchanged, verification, limitation and skillId for Skill upsert. An identical Skill/knowledge/instruction/tool-state write returns `saved=true`, `changed=false` with unchanged activeVersion. Blocking verification returns `saved=false`, `error=verification_failed`, up to eight bounded findings with check/field/code/message, `activeVersionUnchanged=true` and `retryable=true`. Other errors use safe error/message and diagnosticId when available.
 
 Typed owner review uses string modes/statuses and evidence actor, draft revision, check, status, expected/observed/limitation. Verified, PartiallyVerified, CannotVerify, RequiresExternalEvidence and Failed remain distinct. Published evidence retains tested publishedDraftRevision. Invalid requests use 400; stale revisions/grants use 409; unexpected failures use server diagnostics. No private credential or host-path projection enters model context.
+
+## P9.8-P9.9 owner HTTP surface
+
+All routes below are under `/api/v2/admin/agent-instances/{instanceId}` and require the existing owner capability. Core derives the local profile and validates active managed instance ownership. No model/client origin, arbitrary profile or authority field is accepted as authorization. Successful responses are JSON; validation/conflict/not-found/forbidden use existing safe ProblemDetails.
+
+| Method / suffix | Request / result |
+| --- | --- |
+| GET `/experience` | enabled, settingsRevision, contextBudgetCharacters, bounded structured items with source/cursor/date/Definition/model/work/status/visibility/revision/eligibility and safe failure metadata |
+| PUT `/experience/configuration` | `{expectedRevision, enabled}` → review |
+| POST `/experience/checkpoints` | `{sessionId}` → review; Core chooses the stable cursor, same checkpoint deduplicates |
+| PUT `/experience/{experienceId}` | `{expectedRevision, visibility}` (`Eligible`, `Suppressed`, `Deleted`) → review |
+| POST `/experience/reset` | empty body → review; tombstones existing checkpoints without deleting source work |
+| GET `/thoughts` | minIntervalSeconds and owned registrations: revision, enabled/status, intervalSeconds, thinkingPrompt, optional model/effort, next/last run, outcome/work status and effective model |
+| POST `/thoughts` | `{expectedRevision:0, enabled, intervalSeconds, thinkingPrompt, modelKey?, reasoningEffort?}` → registration |
+| PUT `/thoughts/{registrationId}` | same shape with current expectedRevision → registration |
+| POST `/thoughts/{registrationId}/delete` | `{expectedRevision}` → `{deleted:true}` |
+| POST `/thoughts/{registrationId}/run` | `{expectedRevision}` → `{occurrenceId}`; conflict while a prior activation is nonterminal |
+| GET `/work-items` | normal WorkItem list for this trusted owner |
+| GET `/work-items/{workItemId}/result` | normal result DTO; thought text is the safe summary |
+| POST `/work-items/{workItemId}/cancel` | existing `{expectedRevision}` contract |
+| POST `/work-items/{workItemId}/approvals/{approvalId}/approve` or `/reject` | existing `{expectedRevision, expectedApprovalRevision, actionHash}` contract |
+
+`WorkItemResponse` adds optional `sourceId`, `registrationId`, `modelKey`, `thoughtOutcome`. `origin` is Core-projected `Thought activation` or `Retrospection`; work lifecycle status names and approval semantics remain unchanged. Thought outcomes are `NoAction`, `ActionCompleted`, `AttentionRequested`; approval pending/retry/failure/cancel remain normal work states. There is no new hub event or public chat endpoint. NoAction/ordinary success creates no proactive alert; attention reuses the existing owner delivery contract.

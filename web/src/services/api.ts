@@ -63,6 +63,10 @@ export type SessionResponse = {
 };
 
 export type WorkItem = {
+  sourceId?: string | null;
+  registrationId?: string | null;
+  modelKey?: string | null;
+  thoughtOutcome?: string | null;
   workItemId: string;
   status: string;
   revision: number;

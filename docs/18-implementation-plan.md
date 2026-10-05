@@ -338,3 +338,24 @@ Implementation begins with Milestone 1 in a separate task. Native realtime is no
 P9.6 remains closed. **P9.7 is frozen on behavior SHA `8f5afa00`** ([hosted Synthetic green](https://github.com/trannamtrung1st/agent-core/actions/runs/37224218680)); [final verification](reports/p9.7-final-verification.md) covers subsequent Skill, Admin and provider corrections. The Admin-first closure on `11a3d25c` is historical and superseded as the current contract. Implementation uses the ordinary Chat model/tool loop, contextual instance-authorized semantic capabilities, ordinary-source receipts, exact approvals, revision-bound Core checks, immutable internal publication and future-Session adoption. Managed knowledge/Skills may auto-promote; Assisted changes, instructions and all tool proposals remain approval-bound. Admin governs policy, inspection and freeze. Current Session pins stay immutable.
 
 [First-gate report](reports/p9.7-chat-first-freeze-candidate.md) owns the historical 20 correction acceptance criteria and journeys A–F. Final focused/full backend, frontend tests/build, P9.7 and existing browser/background/trigger regressions, runtime verification, docs consistency and exact-behavior-SHA hosted gates passed. The bounded Real DeepSeek Kubernetes create/use/update/use/repair sequence passed; GPT-4o mini wire compatibility was fixed but content fidelity was insufficient. Use DeepSeek for the harness-learning demo. Stop P9.7 architecture work and proceed to investor-demo stabilization. Existing P8/P8.5/P9/P9.5/P9.6 freezes stay closed; P10/P11 remain requirement-triggered.
+
+## P9.8-P9.9 continuity implementation
+
+P9.7's frozen behavior remains `8f5afa00`. P9.8 implements separate durable owned Experience, strict bounded retrospective generation, context/read-only inspection, existing stable lifecycle hooks, independent recoverable WorkItems, owner controls and Synthetic evidence. P9.9 builds on it through owner-only thought registrations in the existing scheduler/occurrence/work path, immutable admitted prompt/model snapshots, overlap coalescing, server-origin policy, exact approvals, structured quiet outcomes and instance Admin UX.
+
+| Slice | Acceptance owner |
+| --- | --- |
+| P9.8A contract/persistence | Domain record, IExperienceStore, InMemory/SQLite, migration/reopen/visibility CAS/tombstone |
+| P9.8B generation | stable visible projections, named native tool, strict validation, secrets/retry/source independence |
+| P9.8C recall | same-instance 6000-character layer and bounded experience.recent lookup; no memory/policy promotion |
+| P9.8D boundaries | explicit Session request, acknowledged pause/end, substantive terminal work, admission repair; no recursive retrospection |
+| P9.8E UI | instance enable/review/provenance/suppress/delete/reset and shared background inspection |
+| P9.8F evidence | owning docs, repeatable demo, full offline gates and direct runtime/visual review |
+| P9.9A origin | Core-assigned ThoughtActivation in normal ToolExecutionAdmission/ToolPolicy; client/model forgery denied |
+| P9.9B scheduling | owner revisions/interval/prompt/model; atomic occurrence snapshot/pin; Run now parity and coalescing |
+| P9.9C execution | existing bounded no-chat loop, Experience/memory/harness context, NoAction/action/attention and normal work failures |
+| P9.9D policy | P9.7 permitted/approval/deny/freeze; no authority or registration self-bootstrap |
+| P9.9E UI/operations | cadence/model/prompt, next/last/outcome, disabled/running/approval/error states, shared drawer |
+| P9.9F evidence | P9.8 → P9.9 → P9.7 Synthetic journey, restart/approvals/full regression and synchronized docs |
+
+All A-F slices are locally accepted with passing mandatory Synthetic gates. Exact gate outcomes and criterion mapping are owned by [the candidate report](reports/p9.8-p9.9-freeze-candidate.md). A local candidate does not create a frozen commit SHA or hosted CI result. Existing historical freeze reports are unchanged. P10/P11 and broader autonomous/multi-agent/tenant authority remain requirement-triggered.

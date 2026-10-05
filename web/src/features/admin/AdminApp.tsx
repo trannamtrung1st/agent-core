@@ -105,6 +105,7 @@ import { describeAdminError, formatAdminLoadError, reportAdminError, type AdminF
 import { AdminRetryAction, showAdminFailure } from "./adminFailure";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 import { startManagedPublicationChat } from "./adminManagedChat";
+import { InstanceContinuitySection } from "./InstanceContinuitySection";
 import { InstanceMemoryAutomationPanel } from "./instanceMemoryAutomation";
 
 const { Header, Content } = Layout;
@@ -655,6 +656,8 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
               <Typography.Text strong>Published version</Typography.Text>
               <Select
                 aria-label="Published version"
+                showSearch
+                optionFilterProp="label"
                 value={version ?? undefined}
                 options={instanceVersions.map((row) => ({
                   value: row.version,
@@ -2354,6 +2357,9 @@ function InstanceDetail({
       ) : null}
       {effective.kind === "ready" && !effective.data.compatibility && effective.data.instanceLifecycle === "Active" ? (
         <HarnessManagementSection instanceId={instanceId} eligibleTools={effective.data.effectiveToolAllowlist} onUpdated={onInstanceChanged} />
+      ) : null}
+      {effective.kind === "ready" && !effective.data.compatibility && effective.data.instanceLifecycle === "Active" ? (
+        <InstanceContinuitySection instanceId={instanceId} />
       ) : null}
       <ApplicationConnectionSection instanceId={instanceId} />
       <EventSubscriptionsSection instanceId={instanceId} />

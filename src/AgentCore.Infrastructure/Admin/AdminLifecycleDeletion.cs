@@ -16,7 +16,8 @@ public sealed class InMemoryAdminLifecycleDeletion(
     InMemoryWorkItemStore workItems,
     InMemoryConversationTurnExecutionStore executions,
     InMemoryAgentDefinitionAdminStore definitions,
-    InMemoryAdminEventStore events) : IAdminLifecycleDeletion
+    InMemoryAdminEventStore events,
+    InMemoryExperienceStore? experience = null) : IAdminLifecycleDeletion
 {
     internal Func<CancellationToken, ValueTask>? BeforeCommit { get; set; }
 
@@ -60,6 +61,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
             instances.Restore(removed);
             throw;
         }
+        experience?.Purge(command.InstanceId);
     }
 
     public async ValueTask DeleteDefinitionAsync(
@@ -172,6 +174,8 @@ public sealed class SqliteAdminLifecycleDeletion(
             throw AgentCoreErrors.Conflict(AdminDeletionMessages.InstanceBlocked(counts));
         }
 
+        await db.Experiences.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
+        await db.ExperienceSettings.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
         db.AgentInstances.Remove(row);
         AdminEventPersistence.StageAppend(
             db,

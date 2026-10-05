@@ -24,7 +24,9 @@ public enum AdminEventOperationKind
     InstanceDeleted,
     DefinitionDeleted,
     HarnessPolicyChanged,
-    HarnessPreparationChanged
+    HarnessPreparationChanged,
+    ExperienceChanged,
+    ThoughtRegistrationChanged
 }
 
 public sealed record AdminEvent(

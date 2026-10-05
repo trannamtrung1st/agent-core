@@ -3,6 +3,7 @@ using AgentCore.Application.Memory;
 using AgentCore.Application.Models;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Triggers;
@@ -18,12 +19,13 @@ public sealed class DurableWorkContextFactory(
     IModelCatalog catalog,
     ILanguageModelResolver models,
     TimeProvider time,
-    IApplicationConnectionStore? connections = null)
+    IApplicationConnectionStore? connections = null,
+    SessionToolExecutor? tools = null)
 {
     public async ValueTask<AgentContext> CreateAsync(WorkItem item, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(item);
-        if (item.Provenance.SourceKind is not (WorkSourceKind.Schedule or WorkSourceKind.ApplicationEvent))
+        if (item.Provenance.SourceKind is not (WorkSourceKind.Schedule or WorkSourceKind.ApplicationEvent or WorkSourceKind.ThoughtActivation))
         {
             throw AgentCoreErrors.Validation("Only scheduled reminders and application events can use this context.");
         }
@@ -104,10 +106,14 @@ public sealed class DurableWorkContextFactory(
             ModelSupportsVision: descriptor.Vision,
             DetachedExecution: true,
             ApplicationConnectionStatus: applicationConnectionStatus,
-            TrustedConnection: trustedConnection);
+            TrustedConnection: trustedConnection,
+            Harness: item.Provenance.SourceKind == WorkSourceKind.ThoughtActivation && tools is not null
+                ? await tools.HarnessContextAsync(instance.InstanceId, cancellationToken) : null,
+            ExperienceContext: tools is not null ? await tools.ExperienceContextAsync(instance.InstanceId, cancellationToken) : null);
     }
 
     private static TriggerKind SourceTrigger(WorkItem item) =>
+        item.Provenance.SourceKind == WorkSourceKind.ThoughtActivation ? TriggerKind.ThoughtActivation :
         item.Provenance.SourceKind == WorkSourceKind.ApplicationEvent
             ? TriggerKind.ApplicationEvent
             : TriggerKind.ScheduledOccurrence;

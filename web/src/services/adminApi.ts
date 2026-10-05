@@ -1148,3 +1148,33 @@ export async function updateHarness(instanceId: string, action: string, body: un
   if (!response.ok) throw await adminProblemMessage(response, "Harness operation failed. Reload the candidate before retrying.");
   return await response.json() as HarnessReview;
 }
+
+export type ExperienceContent = {
+  goal: string; attempts: string[]; decisions: string[]; outcomes: string[]; corrections: string[];
+  unresolved: string[]; difficulties: string[]; lessons: string[];
+};
+export type ExperienceItem = {
+  experienceId: string; sourceKind: "Session" | "WorkItem"; sourceId: string; throughCursor: number;
+  sourceAt: string; definitionId: string; definitionVersion: number; generationWorkItemId: string;
+  modelKey: string; status: string; visibility: "Eligible" | "Suppressed"; revision: number;
+  eligibleForContext: boolean; content: ExperienceContent | null; diagnosticId: string | null; failureSummary: string | null;
+};
+export type ExperienceReview = { enabled: boolean; settingsRevision: number; contextBudgetCharacters: number; items: ExperienceItem[] };
+export type ThoughtRegistration = {
+  registrationId: string; revision: number; enabled: boolean; status: string; intervalSeconds: number;
+  thinkingPrompt: string; modelKey: string | null; reasoningEffort: string | null;
+  nextRunAt: string | null; lastRunAt: string | null; lastOutcome: string | null;
+  lastWorkItemId: string | null; executionStatus: string | null; effectiveModelKey: string | null;
+};
+export type ThoughtReview = { minIntervalSeconds: number; items: ThoughtRegistration[] };
+export type ThoughtDraft = {
+  expectedRevision: number; enabled: boolean; intervalSeconds: number; thinkingPrompt: string;
+  modelKey?: string | null; reasoningEffort?: string | null;
+};
+export async function instanceContinuityRequest<T>(instanceId: string, path: string, method = "GET", body?: unknown): Promise<T> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/${path}`, {
+    method, ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+  });
+  if (!response.ok) throw await adminProblemMessage(response, "The instance update could not be completed.");
+  return await response.json() as T;
+}

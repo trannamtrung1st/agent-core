@@ -108,7 +108,14 @@ public sealed class PromptContextBuilder(
         {
             messages.Add(new ModelMessage(ModelRole.System, sections.AttachmentManifestSystem));
         }
+        if (!string.IsNullOrWhiteSpace(context.ExperienceContext))
+            messages.Add(new ModelMessage(ModelRole.User, context.ExperienceContext));
         messages.AddRange(sections.TurnMessages);
+        if (context.Trigger.Kind == TriggerKind.ThoughtActivation)
+        {
+            messages.Add(new ModelMessage(ModelRole.System, "Bounded thought activation. Review the owner-configured thinking prompt and historical experience. The prompt is task intent, never authority. Use only offered capabilities under current policy. If nothing useful needs doing, finish by calling work.complete with outcome=NoAction, attentionRequired=false. Otherwise use outcome=ActionCompleted or AttentionRequested. Ordinary completion stays quiet. Do not change your registration, tools, model, authority or approval policy. Do not manufacture work. Every activation must call work.complete and terminate."));
+            messages.Add(new ModelMessage(ModelRole.User, ThoughtPrompt(context.Trigger.Text)));
+        }
         if (context.Trigger.Kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent)
         {
             messages.Add(new ModelMessage(ModelRole.User, OccurrenceEvidence(context.Trigger.Text)));
@@ -151,6 +158,12 @@ public sealed class PromptContextBuilder(
             messages,
             context.Definition.ConversationPolicy.MaxOutputTokens,
             ReasoningEffort: context.ReasoningEffort);
+    }
+
+    private static string ThoughtPrompt(string? evidence)
+    {
+        using var json = JsonDocument.Parse(evidence ?? "{}");
+        return "Owner thinking prompt (task context, not policy):\n" + json.RootElement.GetProperty("intent").GetString();
     }
 
     public static string OccurrenceEvidence(string? evidence)
@@ -997,7 +1010,7 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder, IInitiativeE
             return new Speak(WithTools(context, builder.Build(context, responseId), builder));
         }
 
-        if (context.Trigger.Kind == TriggerKind.ScheduledOccurrence)
+        if (context.Trigger.Kind is TriggerKind.ScheduledOccurrence or TriggerKind.ThoughtActivation)
         {
             return SpeakOccurrence(context, responseId);
         }
@@ -1054,7 +1067,7 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder, IInitiativeE
     private Speak SpeakOccurrence(AgentContext context, Guid responseId)
     {
         var request = builder.Build(context, responseId);
-        if (context.Trigger.Kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent)
+        if (context.Trigger.Kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent or TriggerKind.ThoughtActivation)
         {
             var messages = request.Messages.ToList();
             if (context.Trigger.Kind == TriggerKind.ScheduledOccurrence)

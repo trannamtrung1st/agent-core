@@ -147,3 +147,9 @@ The baseline is a modular monolith with SQLite and a React SPA. [Technology Deci
 ## P9.7 — Conversational harness learning
 
 Normal trusted-local owner Chat is the primary interface for durable role knowledge and reusable Skills. Instance-owned Manual (Disabled), Assisted and Managed policy grants separate knowledge, Skill, instruction and tool-proposal scopes. User text expresses intent, never authority. Managed knowledge/Skills may auto-apply after Core verification; Assisted changes, operating instructions and every tool selection/configuration change need exact Chat approval. Admin governs policy, inspection and freeze. Internal candidates preserve immutable publication and future-Session adoption; existing Session pins stay unchanged. P10/P11 remain requirement-triggered. See [current evidence](reports/p9.7-chat-first-freeze-candidate.md).
+
+## P9.8-P9.9 accepted post-MVP scope
+
+Experience and thought activation are opt-in per managed Agent Instance; existing installations begin disabled. Experience supports explicit stable Session checkpoints, existing pause/end boundaries, and substantive terminal background work. Historical observations carry source/cursor/date/Definition/model provenance, can be suppressed/deleted/reset, and are supplied within a fixed context budget. There is no automatic learned-memory or harness promotion.
+
+Thought registration is owner-only: enabled state, fixed interval, thinking prompt and existing model selection, with optimistic revisions. Run now uses the same occurrence and background execution path. Thought outputs are `NoAction`, `ActionCompleted` or `AttentionRequested`; approval/retry/failure remain normal WorkItem states. No new scheduler, policy engine, tenant/security authority, vector store, persistent agent filesystem, generic workflow or multi-agent capability is introduced. See [architecture](03-system-architecture.md#p98-p99-experience-and-thought-activation).

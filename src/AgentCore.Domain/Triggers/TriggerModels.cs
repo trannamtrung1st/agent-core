@@ -26,7 +26,8 @@ public enum TriggerRegistrationStatus
     Completed = 1,
     Cancelled = 2,
     Expired = 3,
-    SuspendedPolicy = 4
+    SuspendedPolicy = 4,
+    Disabled = 5
 }
 
 public enum TriggerScheduleKind
@@ -40,12 +41,14 @@ public enum TriggerScheduleKind
 public enum TriggerSourceKind
 {
     Schedule = 0,
-    ApplicationEvent = 1
+    ApplicationEvent = 1,
+    ThoughtActivation = 2
 }
 
 public enum TriggerAuthorizationOrigin
 {
-    CurrentUserTurn = 0
+    CurrentUserTurn = 0,
+    AdminThought = 1
 }
 
 public enum OccurrenceRoutingDisposition
@@ -580,7 +583,8 @@ public sealed class TriggerRegistration
         RegistrationId = registrationId;
         Owner = new TriggerOwner(owner.AgentInstanceId, owner.ProfileId);
         Status = status;
-        Intent = TriggerText.RequireIntent(intent);
+        Intent = provenance?.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought
+            ? ThoughtIntent.Require(intent) : TriggerText.RequireIntent(intent);
         Schedule = schedule;
         NextOccurrenceAtUtc = nextOccurrenceAtUtc;
         ExpiresAtUtc = expiresAtUtc;

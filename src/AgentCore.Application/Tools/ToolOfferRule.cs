@@ -7,5 +7,6 @@ public enum ToolOfferRule
     ConfigurationWhenRoleAllows,
     CurrentExecutionCapability,
     OccurrenceCapability,
+    ExperienceAuthority,
     HarnessAuthority
 }

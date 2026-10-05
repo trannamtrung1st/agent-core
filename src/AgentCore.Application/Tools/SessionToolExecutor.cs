@@ -33,7 +33,8 @@ public sealed partial class SessionToolExecutor(
     IApplicationConnectionStore? applicationConnections = null,
     IAgentDefinitionResourceAdminStore? definitionResources = null,
     IWorkCaptureStore? workCaptures = null,
-    Func<HarnessManagementService>? harnessAuthoring = null)
+    Func<HarnessManagementService>? harnessAuthoring = null,
+    AgentCore.Application.Experience.ExperienceService? experience = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -47,6 +48,11 @@ public sealed partial class SessionToolExecutor(
         triggerAuthorizer ?? new HeuristicTriggerCommandAuthorizer();
 
     public ITriggerCommandAuthorizer TriggerCommandAuthorizer => _triggerAuthorizer;
+
+    public ValueTask<string> ExperienceContextAsync(Guid? instanceId, CancellationToken ct) =>
+        experience?.RecallAsync(instanceId, ct) ?? ValueTask.FromResult("");
+    public ValueTask ExperienceBoundaryAsync(Guid instanceId, Guid sessionId, CancellationToken ct) =>
+        experience?.TrySessionBoundaryAsync(instanceId, sessionId, ct) ?? ValueTask.CompletedTask;
 
     public async ValueTask<HarnessChatContext?> HarnessContextAsync(Guid? instanceId, CancellationToken ct)
     {
@@ -92,6 +98,7 @@ public sealed partial class SessionToolExecutor(
 
         if (admission?.Detached == true
             && ToolResources.IsSessionTool(call.Name)
+            && !(HarnessChatTools.IsHarness(call.Name) && admission.TriggerKind == TriggerKind.ThoughtActivation)
             && !(ToolCatalog.IsBrowserTool(call.Name)
                 && admission is { TrustedConnection: true }
                 && ToolResources.IsOccurrence(admission.TriggerKind)
@@ -170,6 +177,25 @@ public sealed partial class SessionToolExecutor(
 
         try
         {
+            if (call.Name == ToolCatalog.ExperienceRecent)
+            {
+                if (experience is null || admission?.AgentInstanceId is not Guid ownerId)
+                    return TextResult(Error("forbidden", "Experience is unavailable."));
+                if (args.EnumerateObject().Any(p => p.Name is not ("query" or "experienceId")))
+                    return TextResult(Error("invalid", "Experience lookup only accepts query or experienceId."));
+                var query = args.TryGetProperty("query", out var q) && q.ValueKind == JsonValueKind.String ? q.GetString() : null;
+                Guid? recordId = null;
+                if (query?.Length > 200) return TextResult(Error("invalid", "Experience query is oversized."));
+                if (args.TryGetProperty("experienceId", out var r))
+                {
+                    if (r.ValueKind != JsonValueKind.String || !Guid.TryParse(r.GetString(), out var id))
+                        return TextResult(Error("invalid", "Experience identity is invalid."));
+                    recordId = id;
+                }
+                await experience.RequireInstanceAsync(ownerId, cancellationToken);
+                var projection = await experience.RecallAsync(ownerId, cancellationToken, query, recordId);
+                return FitResult(remainingOutputBytes, JsonSerializer.Serialize(new { historicalExperience = projection }));
+            }
             if (HarnessChatTools.IsHarness(call.Name))
             {
                 if (harnessAuthoring is null || admission?.AgentInstanceId is not Guid instanceId)

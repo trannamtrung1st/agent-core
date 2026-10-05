@@ -200,6 +200,15 @@ public static class AdminEventSummaryPolicy
                 throw AgentCoreErrors.Validation("Admin event summary metadata must be a JSON object.");
             }
 
+            if (append.Operation is AdminEventOperationKind.ExperienceChanged or AdminEventOperationKind.ThoughtRegistrationChanged)
+            {
+                var allowed = new HashSet<string>(StringComparer.Ordinal) { "instanceId", "recordId", "operation", "revision", "enabled", "intervalSeconds", "promptHash", "modelKey" };
+                foreach (var property in document.RootElement.EnumerateObject())
+                    if (!allowed.Contains(property.Name)) throw AgentCoreErrors.Validation("Unsupported continuity history metadata.");
+                RequireString(document.RootElement, "instanceId");
+                RequireString(document.RootElement, "operation");
+                return;
+            }
             if (append.Operation is AdminEventOperationKind.HarnessPolicyChanged or AdminEventOperationKind.HarnessPreparationChanged)
             {
                 var allowed = new HashSet<string>(StringComparer.Ordinal) { "instanceId", "draftId", "operation", "outcome", "policyRevision", "draftRevision" };

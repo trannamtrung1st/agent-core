@@ -25,6 +25,8 @@ import {
   memoryResetConfirmTitle
 } from "./instanceMemoryAutomationLogic";
 
+import { ExecutionModelFields } from "./ExecutionModelFields";
+
 const MEMORY_SCOPES: AdminLearnedMemoryScope[] = ["Session", "IdentityUser", "User"];
 
 function modelOptions(models: ModelDescriptor[]) {
@@ -79,31 +81,9 @@ function UnattendedModelForm({
         reactive work unless a registration sets its own model.
       </Typography.Text>
       {error ? <Alert type="error" showIcon title={error} /> : null}
-      <Select
-        aria-label="Unattended model"
-        value={catalogKey}
-        disabled={busy}
-        showSearch
-        optionFilterProp="label"
-        options={[{ value: "", label: "Conversation default" }, ...models.map((model) => ({ value: model.key, label: model.displayName }))]}
-        optionRender={(option) => option.label}
-        onChange={(value) => {
-          setCatalogKey(value);
-          setEffort("");
-        }}
-      />
-      {selected && selected.supportedReasoningEfforts.length > 0 ? (
-        <Select
-          aria-label="Unattended reasoning effort"
-          value={effort}
-          disabled={busy}
-          options={[
-            { value: "", label: "Model default" },
-            ...selected.supportedReasoningEfforts.map((value) => ({ value, label: value }))
-          ]}
-          onChange={setEffort}
-        />
-      ) : null}
+      <ExecutionModelFields models={models} modelKey={catalogKey} reasoningEffort={effort} disabled={busy}
+        modelLabel="Unattended model" effortLabel="Unattended reasoning effort" defaultLabel="Conversation default"
+        onChange={(key, effort) => { setCatalogKey(key); setEffort(effort); }} />
       <Button type="primary" disabled={busy} onClick={() => void save()}>
         Save unattended model
       </Button>

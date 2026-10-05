@@ -220,8 +220,17 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
 
     public DbSet<WorkAttentionAlertRecord> WorkAttentionAlerts => Set<WorkAttentionAlertRecord>();
 
+    public DbSet<ExperienceRecord> Experiences => Set<ExperienceRecord>();
+    public DbSet<ExperienceSettingsRecord> ExperienceSettings => Set<ExperienceSettingsRecord>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<ExperienceSettingsRecord>().HasKey(r => r.AgentInstanceId);
+        var experience = modelBuilder.Entity<ExperienceRecord>();
+        experience.HasKey(r => r.ExperienceId);
+        experience.Property(r => r.Revision).IsConcurrencyToken();
+        experience.HasIndex(r => new { r.AgentInstanceId, r.SourceKind, r.SourceId, r.ThroughCursor }).IsUnique();
+        experience.HasIndex(r => new { r.AgentInstanceId, r.CreatedAtUtc });
         modelBuilder.Entity<SessionRecord>(entity =>
         {
             entity.ToTable("Sessions");

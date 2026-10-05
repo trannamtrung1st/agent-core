@@ -41,7 +41,9 @@ public enum WorkItemStatus
 public enum WorkSourceKind
 {
     Schedule = 0,
-    ApplicationEvent = 1
+    ApplicationEvent = 1,
+    Retrospection = 2,
+    ThoughtActivation = 3
 }
 
 public enum WorkSideEffectDisposition

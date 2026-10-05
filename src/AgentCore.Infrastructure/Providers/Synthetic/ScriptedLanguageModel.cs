@@ -94,6 +94,39 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         ModelRequest request,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        if (request.ToolChoiceName == AgentCore.Application.Experience.ExperienceService.RecordTool)
+        {
+            var source = request.Messages.Last(m => m.Role == ModelRole.User).Text;
+            var content = new AgentCore.Domain.Experience.ExperienceContent("Review observable completed work",
+                ["Worked through the recorded user request"], [], ["Completed observable source checkpoint"],
+                source.Contains("correction", StringComparison.OrdinalIgnoreCase) ? ["The user supplied a correction"] : [],
+                [], source.Contains("failed", StringComparison.OrdinalIgnoreCase) ? ["A recorded approach failed"] : [],
+                ["Verify observable state before acting"]);
+            yield return new ModelToolCallEvent(new("experience-result", AgentCore.Application.Experience.ExperienceService.RecordTool,
+                JsonSerializer.Serialize(content, new JsonSerializerOptions(JsonSerializerDefaults.Web))));
+            yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            yield break;
+        }
+        if (ThoughtActivationScript.Generate(request) is { } thoughtEvents)
+        {
+            foreach (var item in thoughtEvents) yield return item;
+            yield break;
+        }
+        if (request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text == "Use my recent experience before acting."
+            && request.Messages.Any(m => m.Text.StartsWith("Historical Experience", StringComparison.Ordinal)))
+        {
+            yield return new ModelTextDelta("I will observe current page state before acting, based on earlier experience. Current policy still controls every action.");
+            yield return new ModelCompleted(ModelStopReason.Completed);
+            yield break;
+        }
+        if (Offers(request, ToolCatalog.WorkComplete)
+            && IsScheduledReminderDelivery(request, request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text ?? "", out var reminder))
+        {
+            yield return new ModelToolCallEvent(new("reminder-complete", ToolCatalog.WorkComplete,
+                JsonSerializer.Serialize(new { summary = reminder, attentionRequired = false })));
+            yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            yield break;
+        }
         if (HarnessChatScript.Generate(request) is { } chatEvents)
         {
             foreach (var item in chatEvents) yield return item;

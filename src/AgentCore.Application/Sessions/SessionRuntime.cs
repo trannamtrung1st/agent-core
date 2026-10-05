@@ -2429,7 +2429,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ActiveSkillIds: ResolveActiveSkillIds(trigger, responseId),
                     ApplicationConnectionStatus: applicationConnectionStatus,
                     TrustedConnection: trustedConnection,
-                    Harness: trigger.Kind == TriggerKind.UserTurn ? await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, evaluationToken) : null);
+                    Harness: trigger.Kind == TriggerKind.UserTurn ? await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, evaluationToken) : null,
+                    ExperienceContext: await _tools.ExperienceContextAsync(_snapshot.AgentInstanceId, evaluationToken));
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
                 AgentDecision? decision = null;
@@ -5838,7 +5839,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     error = ex;
                 }
 
-                await CompletePersistJobAsync(job, saved, error, superseded: false, cancellationToken).ConfigureAwait(false);
+                var stableLifecycleCommit = error is null && saved is not null && job.Kind is PersistKind.Pause or PersistKind.TerminalEnd;
+                // Pause/end acknowledgement can immediately dispose the runtime. The saved checkpoint
+                // still owns secondary admission; disposal releases Applied and waits for this worker.
+                await CompletePersistJobAsync(job, saved, error, superseded: false,
+                    stableLifecycleCommit ? CancellationToken.None : cancellationToken).ConfigureAwait(false);
+                if (stableLifecycleCommit && saved?.AgentInstanceId is Guid instanceId)
+                    await _tools.ExperienceBoundaryAsync(instanceId, saved.SessionId, CancellationToken.None).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)

@@ -453,3 +453,11 @@ Contextual `HarnessChatContext` carries policy revision and active version. `Too
 Publication validation permits a fork to retain registered, configuration-gated tools already present in its published source, even when the current host cannot configure them. Runtime offering and execution still require current host configuration. A new unconfigured tool grant remains a blocking publication finding. This lets a Skill or knowledge change proceed from an existing published General Assistant version without broadening tool authority.
 
 Runtime exact-version resolution, harness fork-source selection and knowledge readback use one built-in-first source resolver. A same-version durable publication cannot silently replace the built-in baseline or its knowledge; a durable version without a built-in collision remains the source of its own resources.
+
+## P9.8-P9.9 continuity ports
+
+`IExperienceStore` owns per-instance enabled/revision settings, idempotent source admission, owned bounded listing/lookup, pending request recovery, immutable completion and revisioned visibility/reset. InMemory and SQLite implement the same contract. Optional `AdminEventAppend` on settings/visibility/reset commits safe history metadata with the mutation. Source history remains owned by `IMemoryStore`; learned-memory admission remains owned by `IStructuredMemoryService`.
+
+`ILanguageModel` remains the generation port. Retrospection requests select one pinned tool-capable unattended model, use named `experience.record`, accept one validated result, ignore text/reasoning channels, and never receive effectful tools. The independent WorkItem exposes status and safe DiagnosticId on unexpected failure.
+
+`ITriggerStore.SaveThoughtAsync` atomically changes an owner-created registration and appends Admin history. `TryAdmitThoughtAsync` and `AdmitThoughtNowAsync` perform revision, active-state, overlap and model-pin snapshot checks atomically. Existing `TriggerScheduler`, router, durable intake, `DurableWorkContextFactory`, `DurableOccurrenceExecution` and `IWorkItemStore` remain the execution owners. `TriggerKind.ThoughtActivation` is assigned by Core, then carried in tool/approval context.

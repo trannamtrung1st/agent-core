@@ -141,7 +141,9 @@ public sealed class TriggerScheduler
                     }
                 }
 
-                var result = await _store.TryAdmitScheduledAsync(
+                var result = registration.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought
+                    ? await AdmitThoughtAsync(registration, asOf, cancellationToken)
+                    : await _store.TryAdmitScheduledAsync(
                     registration.Owner,
                     registration.RegistrationId,
                     registration.ScheduleRevision,
@@ -244,6 +246,15 @@ public sealed class TriggerScheduler
             rejected,
             failed,
             occurrenceIds);
+    }
+
+    private async ValueTask<ScheduledAdmitResult> AdmitThoughtAsync(TriggerRegistration registration, DateTimeOffset asOf, CancellationToken ct)
+    {
+        var instance = _instances is null ? null : await _instances.FindAsync(registration.Owner.AgentInstanceId, ct);
+        var definition = instance is null || _definitions is null ? null : await _definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct);
+        var selected = definition is null || instance is null || _catalog is null ? null : ExecutionModelPolicy.Resolve(_catalog, definition, instance, registration);
+        if (selected?.Accepted != true || selected.Pin is null) return new(ScheduledAdmitOutcome.Rejected, registration, null, 0);
+        return await _store.TryAdmitThoughtAsync(registration, selected.Pin, asOf, ct);
     }
 
     private async Task PinAdmittedAsync(

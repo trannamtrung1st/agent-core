@@ -294,7 +294,8 @@ public sealed record WorkItemResponse(
     string? DiagnosticId = null,
     bool AttentionRequired = false,
     int? AttemptCount = null,
-    int? MaxAttempts = null);
+    int? MaxAttempts = null,
+    string? SourceId = null, string? RegistrationId = null, string? ModelKey = null, string? ThoughtOutcome = null);
 
 public sealed record WorkItemListResponse(IReadOnlyList<WorkItemResponse> Items);
 
