@@ -32,6 +32,39 @@ function renderDrawer(load: (sessionId: string) => Promise<SessionTrigger[]>, ca
 }
 
 describe("ScheduleDrawer", () => {
+  it("loads a bounded next page, keeps existing rows on failure, and retries", async () => {
+    const first = Array.from({ length: 21 }, (_, index) => ({ ...active, registrationId: `schedule-${index}`, intent: `Reminder ${index}`, status: "completed" }));
+    let release: (rows: SessionTrigger[]) => void = () => undefined;
+    const pending = new Promise<SessionTrigger[]>(resolve => { release = resolve; });
+    const load = vi.fn().mockResolvedValueOnce(first).mockRejectedValueOnce(new Error("Temporary schedule failure")).mockReturnValueOnce(pending);
+    renderDrawer(load);
+    expect(await screen.findByText("Reminder 19")).toBeInTheDocument();
+    expect(screen.queryByText("Reminder 20")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    expect(await screen.findByText("Temporary schedule failure")).toBeInTheDocument();
+    expect(screen.getByText("Reminder 0")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(screen.getByText("Loading more…")).toBeInTheDocument();
+    release([{ ...active, registrationId: "schedule-20", intent: "Reminder 20", status: "completed" }]);
+    expect(await screen.findByText("Reminder 20")).toBeInTheDocument();
+    expect(screen.getByText("You’re all caught up")).toBeInTheDocument();
+    expect(load).toHaveBeenLastCalledWith("session-1", { limit: 21, before: "schedule-19" });
+  });
+
+  it("retains the opened page count when a conversation refresh arrives", async () => {
+    const first = Array.from({ length: 21 }, (_, index) => ({ ...active, registrationId: `refresh-${index}`, intent: `Refresh reminder ${index}`, status: "completed" }));
+    const tail = [first[20]];
+    const load = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(tail).mockResolvedValueOnce(first).mockResolvedValueOnce(tail);
+    const view = renderDrawer(load);
+    await screen.findByText("Refresh reminder 19");
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    await screen.findByText("Refresh reminder 20");
+    view.rerender(<AntApp><ScheduleDrawer sessionId="session-1" open wide refreshKey={1}
+      onClose={() => undefined} load={load} cancel={vi.fn()} /></AntApp>);
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(4));
+    expect(screen.getByText("Refresh reminder 20")).toBeInTheDocument();
+  });
+
   it("shows an empty list", async () => {
     renderDrawer(async () => []);
     expect(await screen.findByText("No schedules yet")).toBeInTheDocument();

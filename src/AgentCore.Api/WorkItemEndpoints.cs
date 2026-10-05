@@ -18,6 +18,8 @@ public static class WorkItemEndpoints
         group.MapGet("", async (
             Guid sessionId,
             int? limit,
+            Guid? before,
+            bool? attentionOnly,
             SessionManager sessions,
             ILocalUserProfileService profiles,
             IWorkItemStore work,
@@ -31,7 +33,7 @@ public static class WorkItemEndpoints
                 }
 
                 var owner = await RequireOwnerAsync(sessions, profiles, sessionId, cancellationToken).ConfigureAwait(false);
-                var rows = await work.ListAsync(owner, limit ?? 50, cancellationToken).ConfigureAwait(false);
+                var rows = await work.ListPageAsync(owner, limit ?? 50, before, attentionOnly ?? false, cancellationToken).ConfigureAwait(false);
                 return Results.Json(new WorkItemListResponse(rows.Select(ToResponse).ToArray()));
             }
             catch (AgentCoreException ex)

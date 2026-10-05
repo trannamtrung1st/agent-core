@@ -147,6 +147,22 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         }
     }
 
+    public ValueTask<IReadOnlyList<TriggerRegistration>> ListSchedulesPageAsync(
+        TriggerOwner owner, int limit, Guid? before, CancellationToken cancellationToken = default)
+    {
+        lock (_state.Gate)
+        {
+            var owned = _state.Registrations.Values.Where(item => item.Owner.Equals(owner) && item.EventSourceId is null).ToArray();
+            var anchor = before is Guid id ? owned.FirstOrDefault(item => item.RegistrationId == id)
+                ?? throw AgentCoreErrors.NotFound("Page cursor was not found.") : null;
+            var page = owned.Where(item => anchor is null || item.Provenance.CreatedAt < anchor.Provenance.CreatedAt ||
+                item.Provenance.CreatedAt == anchor.Provenance.CreatedAt && item.RegistrationId.CompareTo(anchor.RegistrationId) < 0)
+                .OrderByDescending(item => item.Provenance.CreatedAt).ThenByDescending(item => item.RegistrationId)
+                .Take(Math.Clamp(limit, 1, 100)).ToArray();
+            return ValueTask.FromResult<IReadOnlyList<TriggerRegistration>>(page);
+        }
+    }
+
     public ValueTask<IReadOnlyList<TriggerRegistration>> ListSuspendedPolicyForAgentInstanceAsync(
         Guid agentInstanceId,
         int limit,

@@ -17,6 +17,32 @@ namespace AgentCore.Api.Tests;
 
 public sealed class ThoughtJourneyTests
 {
+    [Theory]
+    [InlineData(14, false)]
+    [InlineData(15, true)]
+    [InlineData(60, true)]
+    [InlineData(3600, true)]
+    [InlineData(604800, true)]
+    [InlineData(604801, false)]
+    public async Task Thought_intervals_enforce_seconds_bounds(int seconds, bool accepted)
+    {
+        var db = Path.Combine(Path.GetTempPath(), $"thought-interval-{Guid.NewGuid():N}.db");
+        await using var host = new ExperienceHost(db);
+        var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9);
+        var client = TestOwnerCapability.CreateOwnerClient(host);
+        var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/thoughts";
+        var response = await client.PostAsJsonAsync(path, Draft(0, seconds) with { Enabled = false });
+        Assert.Equal(accepted ? HttpStatusCode.OK : HttpStatusCode.BadRequest, response.StatusCode);
+        if (accepted)
+        {
+            var stored = (await response.Content.ReadFromJsonAsync<ThoughtRegistrationResponse>())!;
+            Assert.Equal(seconds, stored.IntervalSeconds);
+            var review = await client.GetFromJsonAsync<JsonElement>(path);
+            Assert.Equal(15, review.GetProperty("minIntervalSeconds").GetInt32());
+            Assert.Equal(seconds, review.GetProperty("items")[0].GetProperty("intervalSeconds").GetInt32());
+        }
+    }
+
     [Fact(Timeout = 90000)]
     public async Task Experience_to_thought_to_approved_skill_survives_restart_then_finishes_quietly_without_more_work()
     {

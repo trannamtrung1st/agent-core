@@ -583,6 +583,10 @@ public sealed class TriggerSchedulerTests
             CancellationToken cancellationToken = default) =>
             inner.ListFutureRegistrationsForAgentInstanceAsync(agentInstanceId, limit, cancellationToken);
 
+        public ValueTask<IReadOnlyList<TriggerRegistration>> ListSchedulesPageAsync(
+            TriggerOwner owner, int limit, Guid? before, CancellationToken cancellationToken = default) =>
+            inner.ListSchedulesPageAsync(owner, limit, before, cancellationToken);
+
         public ValueTask<int> CountActiveAsync(TriggerOwner owner, CancellationToken cancellationToken = default) =>
             inner.CountActiveAsync(owner, cancellationToken);
 

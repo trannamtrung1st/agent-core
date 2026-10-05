@@ -56,6 +56,16 @@ public sealed class TriggerScheduleApiTests : IClassFixture<AgentCoreApiFactory>
         Assert.Equal("UTC", item.GetProperty("timeZone").GetString());
         Assert.Equal(expectedSchedule, item.GetProperty("schedule").GetString());
         Assert.Equal(created.Revision, item.GetProperty("revision").GetInt64());
+        var firstPage = await client.GetFromJsonAsync<TriggerScheduleListResponse>(
+            $"/api/v2/sessions/{examiner.SessionId}/triggers?limit=1");
+        Assert.Equal(created.RegistrationId.ToString(), firstPage!.Items.Single().RegistrationId);
+        var nextPage = await client.GetFromJsonAsync<TriggerScheduleListResponse>(
+            $"/api/v2/sessions/{examiner.SessionId}/triggers?limit=1&before={created.RegistrationId}");
+        Assert.Empty(nextPage!.Items);
+        var foreignCursor = await client.GetAsync($"/api/v2/sessions/{other.SessionId}/triggers?before={created.RegistrationId}");
+        Assert.Equal(HttpStatusCode.NotFound, foreignCursor.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync($"/api/v2/sessions/{examiner.SessionId}/triggers?limit=0")).StatusCode);
+
 
         var hidden = await client.GetFromJsonAsync<TriggerScheduleListResponse>($"/api/v2/sessions/{other.SessionId}/triggers");
         Assert.Empty(hidden!.Items);

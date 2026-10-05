@@ -28,6 +28,10 @@ public sealed class TriggerRegistrationService(
         CancellationToken cancellationToken = default) =>
         store.ListAsync(owner, status, cancellationToken);
 
+    public ValueTask<IReadOnlyList<TriggerRegistration>> ListSchedulesPageAsync(
+        TriggerOwner owner, int limit, Guid? before, CancellationToken cancellationToken = default) =>
+        store.ListSchedulesPageAsync(owner, limit, before, cancellationToken);
+
     public ValueTask<int> CountActiveAsync(TriggerOwner owner, CancellationToken cancellationToken = default) =>
         store.CountActiveAsync(owner, cancellationToken);
 

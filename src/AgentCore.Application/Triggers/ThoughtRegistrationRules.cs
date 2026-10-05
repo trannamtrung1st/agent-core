@@ -19,7 +19,7 @@ public static class ThoughtRegistrationRules
             throw AgentCoreErrors.Validation("Deleted thought registration cannot be restored.");
         if (proposed.Schedule is not FixedIntervalSchedule { IntervalSeconds: >= ThoughtIntent.MinIntervalSeconds }
             || proposed.EventSourceId is not null || proposed.Provenance.SourceSessionId is not null)
-            throw AgentCoreErrors.Validation("Thought registration requires an owner-controlled hourly or longer interval.");
+            throw AgentCoreErrors.Validation("Thought registration requires an owner-controlled interval of at least 15 seconds.");
         ThoughtIntent.Require(proposed.Intent);
     }
 }

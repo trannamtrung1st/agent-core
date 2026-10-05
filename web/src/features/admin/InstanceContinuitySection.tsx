@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, App, Button, Collapse, Descriptions, Empty, Flex, Form, Input, InputNumber, Spin, Switch, Tag, Typography, theme } from "antd";
+import { Alert, App, Button, Collapse, Descriptions, Empty, Flex, Form, Input, InputNumber, Select, Spin, Switch, Tag, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
-import { listModels, type ModelDescriptor, type WorkItem, type WorkItemResult } from "../../services/api";
+import { drawerPageSearch, listModels, type DrawerPageQuery, type ModelDescriptor, type WorkItem, type WorkItemResult } from "../../services/api";
 import { instanceContinuityRequest as request, type ExperienceReview, type ThoughtDraft, type ThoughtRegistration, type ThoughtReview } from "../../services/adminApi";
 import { BackgroundWorkDrawer } from "../chat/BackgroundWorkDrawer";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
@@ -18,6 +18,11 @@ function useResponseOrder() {
   return order;
 }
 
+const loadInstanceWork = async (id: string, query?: DrawerPageQuery) =>
+  (await request<{ items: WorkItem[] }>(id, `work-items${drawerPageSearch(query)}`)).items;
+const loadInstanceWorkResult = (id: string, workId: string) =>
+  request<WorkItemResult>(id, `work-items/${workId}/result`);
+
 export function InstanceContinuitySection({ instanceId }: { instanceId: string }) {
   const { token } = theme.useToken();
   const [workOpen, setWorkOpen] = useState(false);
@@ -30,8 +35,8 @@ export function InstanceContinuitySection({ instanceId }: { instanceId: string }
     <ExperienceSection key={`experience-${instanceId}`} instanceId={instanceId} onWork={() => setWorkOpen(true)} />
     <ThoughtSection key={`thought-${instanceId}`} instanceId={instanceId} onWork={() => setWorkOpen(true)} />
     <BackgroundWorkDrawer sessionId={instanceId} open={workOpen} wide={wide} onClose={() => setWorkOpen(false)}
-      load={async id => (await request<{ items: WorkItem[] }>(id, "work-items")).items}
-      loadResult={(id, workId) => request<WorkItemResult>(id, `work-items/${workId}/result`)}
+      load={loadInstanceWork}
+      loadResult={loadInstanceWorkResult}
       cancel={(id, workId, expectedRevision) => request<WorkItem>(id, `work-items/${workId}/cancel`, "POST", { expectedRevision })}
       approve={(id, workId, approvalId, expectedRevision, expectedApprovalRevision, actionHash) => request<WorkItem>(id,
         `work-items/${workId}/approvals/${approvalId}/approve`, "POST", { expectedRevision, expectedApprovalRevision, actionHash })}
@@ -130,6 +135,16 @@ function ExperienceSection({ instanceId, onWork }: { instanceId: string; onWork:
   </section>;
 }
 
+const thoughtIntervalUnits = [
+  { value: 1, label: "Seconds" }, { value: 60, label: "Minutes" }, { value: 3600, label: "Hours" }
+];
+const intervalUnitFor = (seconds: number) => seconds % 3600 === 0 ? 3600 : seconds % 60 === 0 ? 60 : 1;
+function thoughtIntervalLabel(seconds: number) {
+  const unit = intervalUnitFor(seconds);
+  const value = seconds / unit;
+  const label = unit === 3600 ? "hour" : unit === 60 ? "minute" : "second";
+  return `Every ${value} ${label}${value === 1 ? "" : "s"}`;
+}
 const blank: ThoughtDraft = { expectedRevision: 0, enabled: false, intervalSeconds: 3600, thinkingPrompt: "", modelKey: null, reasoningEffort: null };
 function ThoughtSection({ instanceId, onWork }: { instanceId: string; onWork: () => void }) {
   const { token } = theme.useToken();
@@ -138,41 +153,72 @@ function ThoughtSection({ instanceId, onWork }: { instanceId: string; onWork: ()
   const [models, setModels] = useState<ModelDescriptor[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [error, setError] = useState<AdminFailureNotice | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<ThoughtDraft>(blank);
+  const [intervalUnit, setIntervalUnit] = useState(3600);
+  // Admission precedes the execution projection. Keep the click acknowledged across that gap.
+  const startingRunsRef = useRef<Record<string, string | null>>({});
+  const [startingRuns, setStartingRuns] = useState<Record<string, string | null>>({});
+  const applyReview = useCallback((next: ThoughtReview) => {
+    const remaining = Object.fromEntries(Object.entries(startingRunsRef.current).filter(([id, previousWorkId]) => {
+      const item = next.items.find(row => row.registrationId === id);
+      return item && (!item.lastWorkItemId || item.lastWorkItemId === previousWorkId);
+    }));
+    startingRunsRef.current = remaining;
+    setStartingRuns(remaining);
+    setReview(next);
+  }, []);
+  const minimumInterval = review?.minIntervalSeconds ?? 15;
+  const invalidInterval = draft.intervalSeconds < minimumInterval || draft.intervalSeconds > 604800;
   const order = useResponseOrder();
   const reload = useCallback(async () => {
     if (order.current.mutating) return;
     const generation = ++order.current.generation;
     setLoading(true); setError(null);
-    try { const [thoughts, available] = await Promise.all([request<ThoughtReview>(instanceId, "thoughts"), listModels()]); if (generation === order.current.generation) { setReview(thoughts); setModels(available.models.filter(model => model.tools)); } }
+    try { const [thoughts, available] = await Promise.all([request<ThoughtReview>(instanceId, "thoughts"), listModels()]); if (generation === order.current.generation) { applyReview(thoughts); setModels(available.models.filter(model => model.tools)); } }
     catch (reason) { if (generation === order.current.generation) setError(describeAdminError(reason, "Initiative could not be loaded.")); }
     finally { if (generation === order.current.generation) setLoading(false); }
-  }, [instanceId, order]);
+  }, [instanceId, order, applyReview]);
   useEffect(() => { void reload(); }, [reload]);
   useEffect(() => {
     if (loading) return;
     const timer = window.setInterval(() => {
       if (order.current.mutating) return;
       const generation = ++order.current.generation;
-      void request<ThoughtReview>(instanceId, "thoughts").then(next => { if (generation === order.current.generation) setReview(next); })
+      void request<ThoughtReview>(instanceId, "thoughts").then(next => { if (generation === order.current.generation) applyReview(next); })
         .catch(reason => { if (generation === order.current.generation) setError(describeAdminError(reason, "Initiative status could not be refreshed.")); });
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [instanceId, order, loading]);
+  }, [instanceId, order, loading, applyReview]);
   async function action(path: string, body: unknown, method = "POST") {
+    const runId = /^thoughts\/([^/]+)\/run$/.exec(path)?.[1];
+    if (order.current.mutating || (runId && runId in startingRunsRef.current)) return;
+    if (runId) {
+      startingRunsRef.current = { ...startingRunsRef.current, [runId]: review?.items.find(item => item.registrationId === runId)?.lastWorkItemId ?? null };
+      setStartingRuns(startingRunsRef.current);
+    }
+    let accepted = false;
     order.current.mutating = true; ++order.current.generation;
     setLoading(false);
-    setBusy(true); setError(null);
+    setBusy(true); setPendingAction(path); setError(null);
     try {
       await request(instanceId, path, method, body);
-      setReview(await request<ThoughtReview>(instanceId, "thoughts"));
-      if (path === "thoughts" || method === "PUT") { setEditing(null); setDraft(blank); }
-    } catch (reason) { setError(describeAdminError(reason, "Initiative update failed. Reload for the current revision.")); }
-    finally { order.current.mutating = false; setBusy(false); }
+      accepted = true;
+      applyReview(await request<ThoughtReview>(instanceId, "thoughts"));
+      if (path === "thoughts" || method === "PUT") { setEditing(null); setDraft(blank); setIntervalUnit(3600); }
+    } catch (reason) {
+      if (runId && !accepted) {
+        const remaining = { ...startingRunsRef.current }; delete remaining[runId];
+        startingRunsRef.current = remaining; setStartingRuns(remaining);
+      }
+      setError(describeAdminError(reason, "Initiative update failed. Reload for the current revision."));
+    }
+    finally { order.current.mutating = false; setBusy(false); setPendingAction(null); }
   }
   function edit(item: ThoughtRegistration) {
+    setIntervalUnit(intervalUnitFor(item.intervalSeconds));
     setEditing(item.registrationId); setDraft({ expectedRevision: item.revision, enabled: item.enabled,
       intervalSeconds: item.intervalSeconds, thinkingPrompt: item.thinkingPrompt, modelKey: item.modelKey, reasoningEffort: item.reasoningEffort });
   }
@@ -190,8 +236,17 @@ function ThoughtSection({ instanceId, onWork }: { instanceId: string; onWork: ()
               onChange={e => setDraft({ ...draft, thinkingPrompt: e.target.value })} />
           </Form.Item>
           <Flex wrap gap={token.padding}>
-            <Form.Item label="Interval (hours)"><InputNumber aria-label="Thought interval hours" min={1} max={168} precision={0} value={draft.intervalSeconds / 3600} disabled={busy}
-              onChange={value => setDraft({ ...draft, intervalSeconds: (value ?? 1) * 3600 })} /></Form.Item>
+            <Form.Item label="Interval" validateStatus={invalidInterval ? "error" : undefined}
+              help={invalidInterval ? `Choose an interval from ${minimumInterval} seconds to 7 days.` : undefined}
+              extra={`Minimum ${minimumInterval} seconds. Short intervals are useful for demos; frequent runs use more model and tool resources.`}>
+              <Flex gap={token.paddingXS}>
+                <InputNumber aria-label="Thought interval" min={Math.ceil(minimumInterval / intervalUnit)} max={Math.floor(604800 / intervalUnit)}
+                  precision={0} value={draft.intervalSeconds / intervalUnit} disabled={busy}
+                  onChange={value => setDraft({ ...draft, intervalSeconds: (value ?? 0) * intervalUnit })} />
+                <Select aria-label="Thought interval unit" style={{ width: "8rem", flex: "none" }} value={intervalUnit} options={thoughtIntervalUnits} disabled={busy}
+                  onChange={unit => { setDraft({ ...draft, intervalSeconds: Math.round(draft.intervalSeconds / intervalUnit) * unit }); setIntervalUnit(unit); }} />
+              </Flex>
+            </Form.Item>
             <Form.Item label="Enabled"><Switch aria-label="Enable thought activation" checked={draft.enabled} disabled={busy} onChange={enabled => setDraft({ ...draft, enabled })} /></Form.Item>
           </Flex>
           <Form.Item label="Execution model" extra="Uses this instance's unattended default unless you choose a model. More frequent runs use more model and tool resources.">
@@ -199,21 +254,21 @@ function ThoughtSection({ instanceId, onWork }: { instanceId: string; onWork: ()
               modelLabel="Thought execution model" effortLabel="Thought reasoning effort" defaultLabel="Unattended default"
               onChange={(modelKey, reasoningEffort) => setDraft({ ...draft, modelKey: modelKey || null, reasoningEffort: reasoningEffort || null })} />
           </Form.Item>
-          <Flex wrap gap={token.paddingXS}><Button type="primary" htmlType="submit" loading={busy} disabled={!draft.thinkingPrompt.trim()}>{editing ? "Save thought" : "Create thought"}</Button>
-            {editing ? <Button disabled={busy} onClick={() => { setEditing(null); setDraft(blank); }}>Cancel edit</Button> : null}
+          <Flex wrap gap={token.paddingXS}><Button type="primary" htmlType="submit" loading={pendingAction === (editing ? `thoughts/${editing}` : "thoughts")} disabled={!draft.thinkingPrompt.trim() || invalidInterval}>{editing ? "Save thought" : "Create thought"}</Button>
+            {editing ? <Button disabled={busy} onClick={() => { setEditing(null); setDraft(blank); setIntervalUnit(3600); }}>Cancel edit</Button> : null}
             <Button onClick={() => void reload()} disabled={busy}>Refresh initiative</Button><Button onClick={onWork}>View thought executions</Button></Flex>
         </Form>
         {review.items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No thought activations configured. The agent stays quiet until you enable one." /> :
           <Collapse items={review.items.map(item => ({ key: item.registrationId, label: <Flex vertical gap={token.paddingXS} style={{ minWidth: 0, width: "100%" }}>
             <Typography.Paragraph ellipsis={{ rows: 2 }} style={{ marginBottom: 0, overflowWrap: "anywhere" }}>{item.thinkingPrompt}</Typography.Paragraph>
-            <Flex wrap gap={token.paddingXS}><Tag>{item.enabled ? `Every ${item.intervalSeconds / 3600} hour${item.intervalSeconds === 3600 ? "" : "s"}` : "Disabled"}</Tag>
+            <Flex wrap gap={token.paddingXS}><Tag>{item.enabled ? thoughtIntervalLabel(item.intervalSeconds) : "Disabled"}</Tag>
               {item.executionStatus ? <Tag color={item.executionStatus === "WaitingForApproval" ? "warning" : item.executionStatus === "Running" ? "processing" : undefined}>
                 {item.executionStatus === "WaitingForApproval" ? "Needs approval" : item.lastOutcome ?? item.executionStatus}</Tag> : null}
               <Typography.Text type="secondary">Next: {item.enabled ? date(item.nextRunAt) : "Disabled"}</Typography.Text></Flex></Flex>,
             children: <Flex vertical gap={token.padding}><Typography.Paragraph style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{item.thinkingPrompt}</Typography.Paragraph>
               <Descriptions size="small" column={1}><Descriptions.Item label="Model">{item.effectiveModelKey ?? item.modelKey ?? "Unattended default"}</Descriptions.Item>
                 <Descriptions.Item label="Last activation">{date(item.lastRunAt)}</Descriptions.Item><Descriptions.Item label="Last outcome">{item.lastOutcome ?? item.executionStatus ?? "Not yet"}</Descriptions.Item></Descriptions>
-              <Flex wrap gap={token.paddingXS}><Button disabled={busy || !item.enabled || ["Queued", "Running", "WaitingForApproval", "WaitingToRetry"].includes(item.executionStatus ?? "")} onClick={() => void action(`thoughts/${item.registrationId}/run`, { expectedRevision: item.revision })}>Run now</Button>
+              <Flex wrap gap={token.paddingXS}><Button aria-label="Run now" loading={item.registrationId in startingRuns} aria-busy={item.registrationId in startingRuns} disabled={busy || item.registrationId in startingRuns || !item.enabled || ["Queued", "Running", "WaitingForApproval", "WaitingToRetry"].includes(item.executionStatus ?? "")} onClick={() => void action(`thoughts/${item.registrationId}/run`, { expectedRevision: item.revision })}>{item.registrationId in startingRuns ? "Starting…" : "Run now"}</Button>
                 <Button disabled={busy} onClick={() => edit(item)}>Edit thought</Button>
                 <Button disabled={busy} onClick={() => void action(`thoughts/${item.registrationId}`, { ...item, expectedRevision: item.revision, enabled: !item.enabled }, "PUT")}>{item.enabled ? "Disable thought" : "Enable thought"}</Button>
                 <Button danger disabled={busy} onClick={() => confirmAction(modal, { title: "Delete this thought registration?", content: "Stops future activations. Already admitted background work remains inspectable and can be cancelled there.", okText: "Delete thought", danger: true,

@@ -80,8 +80,37 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   await initiative.getByRole('button', { name: 'Create thought', exact: true }).click();
   await expect(initiative.getByText('Every 1 hour', { exact: true })).toBeVisible();
   await initiative.getByText(/synthetic-thought-improve:/).first().click();
-  await initiative.getByRole('button', { name: 'Run now', exact: true }).click();
+  const runPattern = `**/api/v2/admin/agent-instances/${id}/thoughts/*/run`;
+  const statusPattern = `**/api/v2/admin/agent-instances/${id}/thoughts`;
+  const previousStatus = await page.request.get(`/api/v2/admin/agent-instances/${id}/thoughts`, {
+    headers: { 'X-AgentCore-Owner-Capability': ownerToken! }
+  });
+  expect(previousStatus.ok()).toBe(true);
+  const previousStatusBody = await previousStatus.text();
+  await page.route(statusPattern, route => route.request().method() === 'GET'
+    ? route.fulfill({ status: 200, contentType: 'application/json', body: previousStatusBody })
+    : route.continue());
+  let runRequests = 0;
+  let releaseRun!: () => void;
+  const runGate = new Promise<void>(resolve => { releaseRun = resolve; });
+  await page.route(runPattern, async route => { runRequests++; await runGate; await route.continue(); });
+  const runButton = initiative.getByRole('button', { name: 'Run now', exact: true });
+  await runButton.evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
+  await expect(runButton).toBeDisabled();
+  await expect(runButton).toHaveAttribute('aria-busy', 'true');
+  await expect.poll(() => runRequests).toBe(1);
+  releaseRun();
+  await expect(initiative.getByRole('button', { name: 'Refresh initiative', exact: true })).toBeEnabled();
+  await expect(runButton).toBeDisabled();
+  await expect(runButton).toHaveText('Starting…');
+  await runButton.evaluate(button => (button as HTMLButtonElement).click());
+  expect(runRequests).toBe(1);
+  await page.unroute(statusPattern);
+  await initiative.getByRole('button', { name: 'Refresh initiative', exact: true }).click();
+
   await expect(initiative.getByText('Needs approval', { exact: true })).toBeVisible({ timeout: 30_000 });
+  expect(runRequests).toBe(1);
+  await page.unroute(runPattern);
   await initiative.getByRole('button', { name: 'View thought executions', exact: true }).click();
   const work = page.getByRole('dialog', { name: 'Background Work' });
   await expect(work.getByText('Thought activation', { exact: true })).toBeVisible();

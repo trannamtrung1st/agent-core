@@ -26,6 +26,34 @@ public sealed class WorkItemStoreContractTests
     private const string OtherToolCallId = "tool-call-b";
 
     [Fact]
+    public async Task Pages_reach_old_work_with_timestamp_ties_and_reject_foreign_cursors()
+    {
+        await ForEachStore(async store =>
+        {
+            var owner = new WorkOwner(InstanceA, ProfileA);
+            for (var index = 1; index <= 125; index++)
+                await store.CreateAsync(NewItem(owner, Id(index), Id(index + 500), Now));
+            var seen = new List<Guid>();
+            Guid? before = null;
+            while (true)
+            {
+                var page = await store.ListPageAsync(owner, 20, before, false);
+                if (page.Count == 0) break;
+                seen.AddRange(page.Select(item => item.WorkItemId));
+                before = page[^1].WorkItemId;
+            }
+            Assert.Equal(125, seen.Count);
+            Assert.Equal(125, seen.Distinct().Count());
+            Assert.Equal(Id(125), seen[0]);
+            Assert.Equal(Id(1), seen[^1]);
+            Assert.Empty(await store.ListPageAsync(owner, 20, null, true));
+            var foreign = new WorkOwner(InstanceB, ProfileB);
+            var error = await Assert.ThrowsAsync<AgentCoreException>(() => store.ListPageAsync(foreign, 20, before, false).AsTask());
+            Assert.Equal("NotFound", error.Code);
+        });
+    }
+
+    [Fact]
     public async Task Create_is_owner_scoped_and_idempotent_for_one_source_occurrence()
     {
         await ForEachStore(async store =>
@@ -859,6 +887,8 @@ public sealed class WorkItemStoreContractTests
                 "Two orders need review.",
                 Now.AddMinutes(2),
                 attentionRequired: true);
+            var attentionPage = await store.ListPageAsync(owner, 20, null, true);
+            Assert.Equal(attention.WorkItemId, Assert.Single(attentionPage).WorkItemId);
             var key = WorkAttentionKey.Format(attention.WorkItemId, attention.Revision);
             Assert.Equal([key], await store.ListAttentionAlertKeysAsync(attention.WorkItemId));
             var recovered = await store.CompleteAsync(

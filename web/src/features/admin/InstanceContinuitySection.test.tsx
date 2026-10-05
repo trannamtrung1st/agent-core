@@ -10,7 +10,7 @@ vi.mock('../../services/api', () => ({ listModels: vi.fn() }));
 const request = vi.mocked(instanceContinuityRequest);
 let enabled = false;
 const experience = () => ({ enabled, settingsRevision: 3, contextBudgetCharacters: 6000, items: [] });
-const thoughts = { minIntervalSeconds: 3600, items: [] };
+const thoughts = { minIntervalSeconds: 15, items: [] };
 function view(id = 'owner-instance') {
   return <ConfigProvider><App><InstanceContinuitySection instanceId={id} /></App></ConfigProvider>;
 }
@@ -106,6 +106,106 @@ describe('Instance continuity owner controls', () => {
     fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Reload' }));
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
     expect(request.mock.calls.filter(call => call[1] === 'experience/configuration')).toHaveLength(1);
+  });
+
+  it('acknowledges a run immediately, admits one rapid-click request, and releases controls after failure', async () => {
+    const item = { registrationId: 'run-thought', revision: 1, enabled: true, intervalSeconds: 3600,
+      thinkingPrompt: 'Review current work', modelKey: null, reasoningEffort: null, nextRunAt: null,
+      lastRunAt: null, lastOutcome: null, lastWorkItemId: null, executionStatus: null, effectiveModelKey: null, status: 'Active' };
+    let rejectRun!: (reason: Error) => void;
+    request.mockImplementation(async (_id, path) => {
+      if (path === 'thoughts/run-thought/run') return new Promise((_resolve, reject) => { rejectRun = reject; });
+      return path === 'thoughts' ? { ...thoughts, items: [item] } : experience();
+    });
+    render(view());
+    fireEvent.click(await screen.findByText('Review current work'));
+    const run = screen.getByRole('button', { name: 'Run now' });
+    act(() => { run.click(); run.click(); run.click(); });
+    expect(run).toBeDisabled();
+    expect(run).toHaveAttribute('aria-busy', 'true');
+    expect(request.mock.calls.filter(call => call[1] === 'thoughts/run-thought/run')).toHaveLength(1);
+    await act(async () => { rejectRun(new Error('Run admission unavailable')); });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Run admission unavailable');
+    expect(run).not.toBeDisabled();
+    expect(run).toHaveAttribute('aria-busy', 'false');
+    request.mockImplementation(async (_id, path) => path === 'thoughts' ? {
+      ...thoughts, items: [{ ...item, lastWorkItemId: 'new-work', executionStatus: 'Queued' }]
+    } : path.endsWith('/run') ? { occurrenceId: 'accepted-run' } : experience());
+    fireEvent.click(run);
+    await waitFor(() => expect(run).toHaveAttribute('aria-busy', 'false'));
+    expect(run).toBeDisabled();
+    expect(request.mock.calls.filter(call => call[1] === 'thoughts/run-thought/run')).toHaveLength(2);
+  });
+
+  it('keeps an accepted run locked across stale status and refresh failure until its new execution appears', async () => {
+    let poll!: () => void;
+    vi.spyOn(window, 'setInterval').mockImplementation((handler, interval) => {
+      if (interval === 5000) poll = handler as () => void;
+      return 123 as unknown as ReturnType<typeof window.setInterval>;
+    });
+    let item = { registrationId: 'run-thought', revision: 1, enabled: true, intervalSeconds: 3600,
+      thinkingPrompt: 'Review current work', modelKey: null, reasoningEffort: null, nextRunAt: null,
+      lastRunAt: null, lastOutcome: 'NoAction', lastWorkItemId: 'previous-work', executionStatus: 'Completed', effectiveModelKey: null, status: 'Active' };
+    let failRefresh = false;
+    request.mockImplementation(async (_id, path) => {
+      if (path.endsWith('/run')) return { occurrenceId: 'accepted-run' };
+      if (path !== 'thoughts') return experience();
+      if (failRefresh) throw new Error('Status temporarily unavailable');
+      return { ...thoughts, items: [item] };
+    });
+    render(view());
+    fireEvent.click(await screen.findByText('Review current work'));
+    const run = screen.getByRole('button', { name: 'Run now' });
+    fireEvent.click(run);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh initiative' })).not.toBeDisabled());
+    expect(run).toBeDisabled();
+    expect(run).toHaveTextContent('Starting…');
+    await act(async () => poll());
+    expect(run).toBeDisabled();
+    failRefresh = true;
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh initiative' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Status temporarily unavailable');
+    expect(run).toBeDisabled();
+    fireEvent.click(run);
+    expect(request.mock.calls.filter(call => call[1].endsWith('/run'))).toHaveLength(1);
+    failRefresh = false;
+    item = { ...item, lastWorkItemId: 'new-work', executionStatus: 'Queued', lastOutcome: 'Queued' };
+    fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Reload' }));
+    await waitFor(() => expect(run).toHaveAttribute('aria-busy', 'false'));
+    expect(run).toBeDisabled();
+    item = { ...item, executionStatus: 'Completed', lastOutcome: 'NoAction' };
+    await act(async () => poll());
+    await waitFor(() => expect(run).not.toBeDisabled());
+    fireEvent.click(run);
+    await waitFor(() => expect(request.mock.calls.filter(call => call[1].endsWith('/run'))).toHaveLength(2));
+    expect(run).toBeDisabled();
+    // A fast execution may complete between polls: its new identity still acknowledges this run.
+    item = { ...item, lastWorkItemId: 'fast-work' };
+    await act(async () => poll());
+    await waitFor(() => expect(run).not.toBeDisabled());
+  });
+
+  it('authors seconds, minutes and hours with the minimum interval enforced', async () => {
+    render(view());
+    fireEvent.change(await screen.findByLabelText('Thinking prompt'), { target: { value: 'Demo review' } });
+    const chooseUnit = async (label: string) => {
+      fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Thought interval unit' }));
+      fireEvent.click(await screen.findByText(label, { selector: '.ant-select-item-option-content' }));
+    };
+    await chooseUnit('Seconds');
+    expect(screen.getByRole('button', { name: 'Create thought' })).toBeDisabled();
+    const interval = screen.getByRole('spinbutton', { name: 'Thought interval' });
+    fireEvent.change(interval, { target: { value: '15' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create thought' }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith('owner-instance', 'thoughts', 'POST',
+      expect.objectContaining({ intervalSeconds: 15 })));
+    await waitFor(() => expect(screen.getByLabelText('Thinking prompt')).toHaveValue(''));
+    fireEvent.change(screen.getByLabelText('Thinking prompt'), { target: { value: 'Minute review' } });
+    await chooseUnit('Minutes');
+    fireEvent.change(interval, { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create thought' }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith('owner-instance', 'thoughts', 'POST',
+      expect.objectContaining({ intervalSeconds: 120 })));
   });
 
   it('uses revisioned owner configuration and bounded defaults for a new thought', async () => {

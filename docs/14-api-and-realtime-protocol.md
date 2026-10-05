@@ -76,16 +76,18 @@ REST handles creation, discovery, history, state and terminal ending. Live user 
 | DELETE /api/v2/admin/definition-drafts/{draftId}/resources/{resourceId}?expectedRevision={n} | Owner capability; trusted local caller; `expectedRevision` query parameter | 200 removed draft resource row | 401 capability; 403 non-local; 404; 409 stale revision |
 | GET /api/v2/admin/definition-drafts/{draftId}/resources/{resourceId}/content | Owner capability; trusted local caller | 200 resource bytes | 401 capability; 403 non-local; 404 |
 | GET /api/v2/admin/definitions/{definitionId}/publications/{version}/resources | Owner capability; trusted local caller | 200 immutable publication bindings | 401 capability; 403 non-local; 404 |
-| GET /api/v2/sessions/{sessionId}/triggers | Owner capability | 200 safe schedule list for the session's Agent Instance and trusted profile | 401 missing/invalid capability; 404 session |
+| GET /api/v2/sessions/{sessionId}/triggers | Owner capability; optional `limit` (minimum 1, clamped to 100) and `before` (registration ID) | 200 newest-first safe schedule page for the session's Agent Instance and trusted profile; omitted pagination preserves the full-list contract | 400 invalid query; 401 capability; 404 session or foreign/unknown cursor |
 | POST /api/v2/sessions/{sessionId}/triggers/{triggerId}/cancel | `{ "expectedRevision": n }` | 200 updated safe schedule | 400 invalid revision; 401 capability; 404 session, guessed id, or other instance; 409 stale revision |
-| GET /api/v2/sessions/{sessionId}/work-items | Optional `limit` (default 50, minimum 1) | 200 newest-first safe list for the session's Agent Instance and trusted profile. Each item includes `attentionRequired`, `attemptCount`, and `maxAttempts` | 401 capability; 404 session |
+| GET /api/v2/sessions/{sessionId}/work-items | Optional `limit` (default 50, minimum 1, clamped to 100), `before` (work-item ID), and `attentionOnly` | 200 newest-first safe page for the session's Agent Instance and trusted profile. `attentionOnly=true` selects completed attention results. Each item includes `attentionRequired`, `attemptCount`, and `maxAttempts` | 400 invalid query; 401 capability; 404 session or foreign/unknown cursor |
 | GET /api/v2/sessions/{sessionId}/work-items/{workItemId} | No body | 200 safe detail, including `attentionRequired`, `attemptCount`, and `maxAttempts` | 401 capability; 404 session, other owner, or unknown id |
 | GET /api/v2/sessions/{sessionId}/work-items/{workItemId}/result | No body | 200 semantic result, including `attentionRequired` | 401 capability; 404 when no result exists, including not-yet-complete and other owner |
 | POST /api/v2/sessions/{sessionId}/work-items/{workItemId}/cancel | `{ "expectedRevision": n }` | 200 cancelled, or the same cancelled item | 400 terminal work; 401 capability; 404 other owner; 409 stale revision |
 | POST /api/v2/sessions/{sessionId}/work-items/{workItemId}/approvals/{approvalId}/approve | `{ "expectedRevision", "expectedApprovalRevision", "actionHash" }` | 200 queued resume of the same item | 401 capability; 404 other owner; 409 stale revision or altered hash |
 | POST /api/v2/sessions/{sessionId}/work-items/{workItemId}/approvals/{approvalId}/reject | same body | 200 queued resume without dispatch | 401 capability; 404 other owner; 409 stale revision or altered hash |
 
-Work-item JSON uses status tokens `queued`, `running`, `needsApproval`, `retrying`, `completed`, `failed`, and `cancelled`. List and detail include origin, progress, failure summary, `attemptCount`, `maxAttempts`, and, while approval is pending, `approvalId`, `approvalRevision`, `actionHash`, and `approvalPreview`. A terminal failed item may include optional `diagnosticId`. They omit evidence JSON, checkpoint payload, prepared action JSON, and result text. The result route returns only `workItemId`, `text`, and `completedAt`. No new SignalR message carries durable work. A paused or ended session can still list and decide its owner's work.
+Operational list pages retain the `{ items }` envelope. Ordering is descending immutable creation time, then descending ID; `before` is exclusive and owner scoped. Clients request 21 rows for a 20-row UI page, use the extra row only to detect more data, and send the last displayed ID as the next cursor. Read acknowledgements are browser-local UI state and do not mutate work records.
+
+Work-item JSON uses status tokens `queued`, `running`, `needsApproval`, `retrying`, `completed`, `failed`, and `cancelled`. List and detail include origin, progress, failure summary, `attemptCount`, `maxAttempts`, and, while approval is pending, `approvalId`, `approvalRevision`, `actionHash`, and `approvalPreview`. A terminal failed item may include optional `diagnosticId`. They omit evidence JSON, checkpoint payload, prepared action JSON, and result text. The result route returns only `workItemId`, `text`, `completedAt`, and `attentionRequired`. No new SignalR message carries durable work. A paused or ended session can still list and decide its owner's work.
 
 Agent list (GET detail returns one item with the same fields):
 
@@ -365,12 +367,12 @@ All routes below are under `/api/v2/admin/agent-instances/{instanceId}` and requ
 | POST `/experience/checkpoints` | `{sessionId}` → review; Core chooses the stable cursor, same checkpoint deduplicates |
 | PUT `/experience/{experienceId}` | `{expectedRevision, visibility}` (`Eligible`, `Suppressed`, `Deleted`) → review |
 | POST `/experience/reset` | empty body → review; tombstones existing checkpoints without deleting source work |
-| GET `/thoughts` | minIntervalSeconds and owned registrations: revision, enabled/status, intervalSeconds, thinkingPrompt, optional model/effort, next/last run, outcome/work status and effective model |
+| GET `/thoughts` | minIntervalSeconds (15) and owned registrations: revision, enabled/status, intervalSeconds, thinkingPrompt, optional model/effort, next/last run, outcome/work status and effective model |
 | POST `/thoughts` | `{expectedRevision:0, enabled, intervalSeconds, thinkingPrompt, modelKey?, reasoningEffort?}` → registration |
 | PUT `/thoughts/{registrationId}` | same shape with current expectedRevision → registration |
 | POST `/thoughts/{registrationId}/delete` | `{expectedRevision}` → `{deleted:true}` |
 | POST `/thoughts/{registrationId}/run` | `{expectedRevision}` → `{occurrenceId}`; conflict while a prior activation is nonterminal |
-| GET `/work-items` | normal WorkItem list for this trusted owner |
+| GET `/work-items` | normal WorkItem page for this trusted owner; optional `limit` (default 100), `before`, and `attentionOnly` match session work reads |
 | GET `/work-items/{workItemId}/result` | normal result DTO; thought text is the safe summary |
 | POST `/work-items/{workItemId}/cancel` | existing `{expectedRevision}` contract |
 | POST `/work-items/{workItemId}/approvals/{approvalId}/approve` or `/reject` | existing `{expectedRevision, expectedApprovalRevision, actionHash}` contract |

@@ -525,8 +525,18 @@ async function problemMessage(response: Response, fallback: string): Promise<str
   }
 }
 
-export async function listSessionTriggers(sessionId: string): Promise<SessionTrigger[]> {
-  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/triggers`);
+export type DrawerPageQuery = { limit?: number; before?: string; attentionOnly?: boolean };
+
+export function drawerPageSearch(query?: DrawerPageQuery): string {
+  const params = new URLSearchParams();
+  if (query?.limit) params.set("limit", String(query.limit));
+  if (query?.before) params.set("before", query.before);
+  if (query?.attentionOnly) params.set("attentionOnly", "true");
+  return params.size ? `?${params}` : "";
+}
+
+export async function listSessionTriggers(sessionId: string, query?: DrawerPageQuery): Promise<SessionTrigger[]> {
+  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/triggers${drawerPageSearch(query)}`);
   if (!response.ok) {
     throw new Error(await problemMessage(response, "Unable to load schedules."));
   }
@@ -552,8 +562,8 @@ export async function cancelSessionTrigger(
   return (await response.json()) as SessionTrigger;
 }
 
-export async function listWorkItems(sessionId: string): Promise<WorkItem[]> {
-  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/work-items`);
+export async function listWorkItems(sessionId: string, query?: DrawerPageQuery): Promise<WorkItem[]> {
+  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/work-items${drawerPageSearch(query)}`);
   if (!response.ok) {
     throw new Error(await problemMessage(response, "Unable to load background work."));
   }

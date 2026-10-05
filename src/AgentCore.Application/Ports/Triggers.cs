@@ -138,6 +138,9 @@ public interface ITriggerStore
         int limit,
         CancellationToken cancellationToken = default);
 
+    ValueTask<IReadOnlyList<TriggerRegistration>> ListSchedulesPageAsync(
+        TriggerOwner owner, int limit, Guid? before, CancellationToken cancellationToken = default);
+
     ValueTask<int> CountActiveAsync(
         TriggerOwner owner,
         CancellationToken cancellationToken = default);
@@ -299,6 +302,9 @@ public interface ITriggerRegistrationService
         TriggerOwner owner,
         TriggerRegistrationStatus? status,
         CancellationToken cancellationToken = default);
+
+    ValueTask<IReadOnlyList<TriggerRegistration>> ListSchedulesPageAsync(
+        TriggerOwner owner, int limit, Guid? before, CancellationToken cancellationToken = default);
 
     ValueTask<int> CountActiveAsync(
         TriggerOwner owner,

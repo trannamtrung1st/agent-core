@@ -1403,6 +1403,9 @@ body,
   }
 
   .background-work-actions .ant-btn,
+  .background-work-attention .ant-btn,
+  .background-work-read-all.ant-btn,
+  .operational-list-footer .ant-btn,
   .schedule-actions .ant-btn {
     min-height: 40px;
   }
@@ -2352,4 +2355,12 @@ body,
   .admin-collection-table .ant-btn {
     min-height: 40px;
   }
+}
+
+.operational-list-footer {
+  padding-block: var(--ac-space-section);
+}
+
+.background-work-attention {
+  flex-wrap: wrap;
 }

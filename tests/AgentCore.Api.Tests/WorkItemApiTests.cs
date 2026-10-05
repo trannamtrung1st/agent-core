@@ -72,6 +72,12 @@ public sealed class WorkItemApiTests
         var newest = await client.GetFromJsonAsync<WorkItemListResponse>(
             $"/api/v2/sessions/{session.SessionId}/work-items?limit=1");
         Assert.Equal(completed.WorkItemId.ToString(), newest!.Items.Single().WorkItemId);
+        var nextPage = await client.GetFromJsonAsync<WorkItemListResponse>(
+            $"/api/v2/sessions/{session.SessionId}/work-items?limit=2&before={completed.WorkItemId}");
+        Assert.Equal(new[] { queued.WorkItemId.ToString(), approval.WorkItemId.ToString() }, nextPage!.Items.Select(item => item.WorkItemId));
+        var foreignCursor = await client.GetAsync($"/api/v2/sessions/{session.SessionId}/work-items?before={foreign.WorkItemId}");
+        Assert.Equal(HttpStatusCode.NotFound, foreignCursor.StatusCode);
+
 
         var hiddenList = await client.GetFromJsonAsync<WorkItemListResponse>(
             $"/api/v2/sessions/{other.SessionId}/work-items");

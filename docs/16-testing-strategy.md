@@ -133,6 +133,8 @@ after synthetic voice exists: synthetic Playwright voice scenarios
 
 Deterministic coverage uses `FakeTimeProvider` and Synthetic scripts, not wall-clock sleeps. Store parity, scheduler DST/recovery, current-turn authorization, occurrence routing, owner-scoped HTTP list/cancel, and Playwright `e2e/schedules.spec.ts` are the P5 gates. Optional hosted provider probes stay skipped. Counts and the closure SHA are in [P5 closure report](reports/p5-freeze-candidate.md).
 
+Operational drawer follow-up: `web/e2e/operational-drawer-paging.spec.ts` verifies 20-row initial pages, automatic scroll append, incremental loading, failed-page retention across polling/retry, Admin loaded-page retention across resizing/refresh, end state, individual/all read acknowledgements, reload persistence, and renewed attention at desktop and narrow widths. Focused drawer/read-state tests also cover changing callback identities, queued refreshes, slow list/result requests, stale owner actions, and newer acknowledgements surviving older read actions. Store contract tests cover tied creation timestamps, older work beyond the previous cap, owner-scoped cursors, and in-memory/SQLite parity.
+
 ## P6 durable work verification (observed)
 
 Deterministic journeys cover detached reminder completion, approval across a SQLite reopen, and cancellation that a stale worker cannot complete. Playwright `e2e/durable-journeys.spec.ts` ends the chat before a seeded due reminder and cancels a retrying item from Background Work. `scripts/compose-sqlite-volume.sh` recreates the API on a SQLite volume that already holds a completed result and a pending approval. Manual wall-clock firing is recorded separately from those seeded tests. Phase I recovery suites for Support, Compliance, and `sandbox.run` after `RequestDeactivate` remain not-applicable. Counts, manual times, and freeze evidence are in [P6 freeze candidate](reports/p6-freeze-candidate.md).
@@ -193,7 +195,7 @@ Run focused Harness API tests, full affected Domain/Application/Infrastructure/A
 
 ## P9.8-P9.9 continuity regression
 
-The hosted Synthetic workflow explicitly runs the isolated `p9899-continuity` Playwright project. Closure regressions exercise cancelled-thought deletion parity and pending blockers, malicious Experience context plus a forbidden forged tool call, canonical receipt projection, and separate timestamp persistence across SQLite reopen. Synthetic injection coverage proves structural and execution-policy boundaries, not hosted-model judgement.
+The hosted Synthetic workflow explicitly runs the isolated `p9899-continuity` Playwright project. The thought journey holds Run now admission and returns stale status after acceptance to verify continuous disabled/loading feedback and one request for rapid clicks. `InstanceContinuitySection.test.tsx` also covers rejected-admission recovery, accepted-run locking through stale or failed status reads, explicit reload, queued work, and fast completion between polls. Closure regressions exercise cancelled-thought deletion parity and pending blockers, malicious Experience context plus a forbidden forged tool call, canonical receipt projection, and separate timestamp persistence across SQLite reopen. Synthetic injection coverage proves structural and execution-policy boundaries, not hosted-model judgement.
 
 Run the normal full key-free backend/frontend/browser gate plus `ExperienceJourneyTests`, `ThoughtJourneyTests`, `ContinuityBoundaryTests`, `InstanceContinuitySection.test.tsx` and `e2e/p9899-continuity.spec.ts`.
 

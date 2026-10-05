@@ -76,10 +76,11 @@ internal static class ContinuityEndpoints
 
     private static void MapWork(RouteGroupBuilder group)
     {
-        group.MapGet("/work-items", (Guid instanceId, ExperienceService service, IWorkItemStore store, CancellationToken ct) => Respond(async () =>
+        group.MapGet("/work-items", (Guid instanceId, int? limit, Guid? before, bool? attentionOnly, ExperienceService service, IWorkItemStore store, CancellationToken ct) => Respond(async () =>
         {
+            if (limit is < 1) throw AgentCoreErrors.Validation("limit must be at least 1.");
             await service.RequireInstanceAsync(instanceId, ct);
-            return new WorkItemListResponse((await store.ListAsync(new(instanceId, LocalUserProfile.Id), 100, ct)).Select(WorkItemEndpoints.ToResponse).ToArray());
+            return new WorkItemListResponse((await store.ListPageAsync(new(instanceId, LocalUserProfile.Id), limit ?? 100, before, attentionOnly ?? false, ct)).Select(WorkItemEndpoints.ToResponse).ToArray());
         }));
         group.MapGet("/work-items/{workItemId:guid}/result", (Guid instanceId, Guid workItemId, ExperienceService service,
             IWorkItemStore store, CancellationToken ct) => Respond(async () =>

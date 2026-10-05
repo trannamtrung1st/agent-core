@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useWorkReadState } from "./workReadState";
 import { App as AntApp, Alert, Button, Drawer, Flex, Layout, Tooltip, Typography } from "antd";
 import { MenuOutlined, PlusOutlined, SettingOutlined } from "@ant-design/icons";
 import { isReadonlySession, isSessionModelBusy, useSessionStore } from "../../state/sessionStore";
@@ -97,25 +98,35 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [schedulesOpen, setSchedulesOpen] = useState(false);
   const [workOpen, setWorkOpen] = useState(false);
-  const [attentionCount, setAttentionCount] = useState(0);
+  const [attentionItems, setAttentionItems] = useState<Awaited<ReturnType<typeof listWorkItems>>>([]);
+  const { isUnread } = useWorkReadState();
+  const attentionCount = attentionItems.filter(isUnread).length;
 
   useEffect(() => {
     if (!state.sessionId) {
-      setAttentionCount(0);
+      setAttentionItems([]);
       return;
     }
 
     let current = true;
+    let generation = 0;
+    setAttentionItems([]);
     async function refresh() {
+      const request = ++generation;
       try {
-        const items = await listWorkItems(state.sessionId!);
-        if (current) {
-          setAttentionCount(items.filter((item) => item.status === "completed" && item.attentionRequired).length);
+        const items: Awaited<ReturnType<typeof listWorkItems>> = [];
+        let before: string | undefined;
+        while (current) {
+          const batch = await listWorkItems(state.sessionId!, { limit: 100, before, attentionOnly: true });
+          items.push(...batch);
+          if (batch.length < 100) break;
+          const next = batch[batch.length - 1].workItemId;
+          if (next === before) break;
+          before = next;
         }
+        if (current && request === generation) setAttentionItems(items);
       } catch {
-        if (current) {
-          setAttentionCount(0);
-        }
+        // Keep the last known attention count during a transient list failure.
       }
     }
 

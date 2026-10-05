@@ -354,9 +354,9 @@ public sealed class FixedIntervalSchedule : TriggerSchedule
         DateTimeOffset? endAtUtc = null,
         int? maxOccurrences = null)
     {
-        if (intervalSeconds is < TriggerLimits.MinFixedIntervalSeconds or > TriggerLimits.MaxFixedIntervalSeconds)
+        if (intervalSeconds is < ThoughtIntent.MinIntervalSeconds or > TriggerLimits.MaxFixedIntervalSeconds)
         {
-            throw new ArgumentException("Fixed interval must be between 60 seconds and 7 days.");
+            throw new ArgumentException("Fixed interval must be between 15 seconds and 7 days.");
         }
 
         if (anchorAtUtc.Offset != TimeSpan.Zero)

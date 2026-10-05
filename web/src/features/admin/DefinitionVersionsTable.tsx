@@ -21,6 +21,7 @@ export function DefinitionVersionsTable({ rows, publications, busy, onChat, onDe
   const titleId = `definition-version-details-${useId()}`;
   const triggerRef = useRef<HTMLElement | null>(null);
   const [selected, setSelected] = useState<AdminDefinitionInventoryItem | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   useEffect(() => {
     if (selected || !triggerRef.current) return;
     const frame = window.requestAnimationFrame(() => {
@@ -50,7 +51,7 @@ export function DefinitionVersionsTable({ rows, publications, busy, onChat, onDe
             sorter: (a, b) => a.version - b.version,
             render: (version: number, row) => <Flex gap={token.paddingXS} align="center">
               <Button type="link" size="small" aria-label={`View v${version} (${row.source})`}
-                onClick={(event) => { triggerRef.current = event.currentTarget; setSelected(row); }}>v{version}</Button>
+                onClick={(event) => { triggerRef.current = event.currentTarget; setSelected(row); setDrawerOpen(true); }}>v{version}</Button>
               {version === latest ? <Tag color="blue">Latest</Tag>
                 : version === latestActive ? <Tag color="blue">Latest active</Tag> : null}
             </Flex> },
@@ -85,7 +86,8 @@ export function DefinitionVersionsTable({ rows, publications, busy, onChat, onDe
           </Flex> }
         ]}
       />
-      <Drawer open={selected !== null} onClose={() => setSelected(null)} size={832}
+      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)}
+        afterOpenChange={open => { if (!open) setSelected(null); }} size={832}
         focusable={{ focusTriggerAfterClose: false }}
         styles={{ wrapper: { maxWidth: "100vw" } }}
         title={<Flex vertical gap={4}>

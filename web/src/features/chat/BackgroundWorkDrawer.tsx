@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   BellOutlined,
@@ -13,9 +13,12 @@ import {
 } from "@ant-design/icons";
 import { Alert, App, Button, Drawer, Empty, Flex, List, Spin, Tag, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
-import type { WorkItem, WorkItemResult } from "../../services/api";
+import type { DrawerPageQuery, WorkItem, WorkItemResult } from "../../services/api";
 import { formatChatTime } from "./chatTime";
 import { DiagnosticDetails } from "./DiagnosticDetails";
+import { useDrawerPages } from "./useDrawerPages";
+import { DrawerListFooter } from "./DrawerListFooter";
+import { useWorkReadState } from "./workReadState";
 
 function retryLabel(item: WorkItem, fallback: string) {
   if (item.status === "retrying" && item.attemptCount && item.maxAttempts) {
@@ -54,7 +57,7 @@ export function BackgroundWorkDrawer({
   refreshKey?: number;
   pollIntervalMs?: number;
   onClose: () => void;
-  load: (sessionId: string) => Promise<WorkItem[]>;
+  load: (sessionId: string, query?: DrawerPageQuery) => Promise<WorkItem[]>;
   loadResult: (sessionId: string, workItemId: string) => Promise<WorkItemResult>;
   cancel: (sessionId: string, workItemId: string, expectedRevision: number) => Promise<WorkItem>;
   approve: (
@@ -76,10 +79,13 @@ export function BackgroundWorkDrawer({
 }) {
   const { token } = theme.useToken();
   const { modal } = App.useApp();
-  const [items, setItems] = useState<WorkItem[]>([]);
+  const { items, updateItems, loading, loadingMore, hasMore, error, setError, loadMore, retry, captureScope } = useDrawerPages({
+    scope: sessionId, open, refreshKey, pollIntervalMs, load, id: item => item.workItemId
+  });
+  const { isUnread, markRead } = useWorkReadState();
+  const [markingRead, setMarkingRead] = useState(false);
+  const resultCache = useRef<Record<string, { revision: number; result: Promise<string> }>>({});
   const [results, setResults] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -121,73 +127,66 @@ export function BackgroundWorkDrawer({
   }, [open, onClose]);
 
   useEffect(() => {
-    if (!open) {
-      return;
+    resultCache.current = {};
+    setResults({});
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!open) return;
+    let current = true;
+    async function readResults() {
+      const completed = items.filter(item => item.status === "completed");
+      const loaded = await Promise.all(completed.map(async item => {
+        const cache = resultCache.current;
+        let cached = cache[item.workItemId];
+        if (cached?.revision !== item.revision) {
+          const result = loadResult(sessionId, item.workItemId).then(response => response.text);
+          cached = { revision: item.revision, result };
+          cache[item.workItemId] = cached;
+        }
+        try {
+          return [item.workItemId, await cached.result] as const;
+        } catch {
+          if (cache[item.workItemId] === cached) delete cache[item.workItemId];
+          return [item.workItemId, ""] as const;
+        }
+      }));
+      if (current) setResults(Object.fromEntries(loaded));
     }
+    void readResults();
+    return () => { current = false; };
+  }, [open, sessionId, items, loadResult]);
 
-    let generation = 0;
-    let timer: number | undefined;
+  useEffect(() => {
+    setMarkingRead(false);
+    setBusyId(null);
+  }, [sessionId, open]);
 
-    async function refresh(initial: boolean) {
-      const request = ++generation;
-      if (initial) {
-        setLoading(true);
-        setError(null);
+  async function markAllRead() {
+    const isCurrent = captureScope();
+    if (!isCurrent()) return;
+    setMarkingRead(true);
+    setError(null);
+    try {
+      let before: string | undefined;
+      const attention: WorkItem[] = [];
+      while (true) {
+        const batch = await load(sessionId, { limit: 100, before, attentionOnly: true });
+        if (!isCurrent()) return;
+        attention.push(...batch);
+        if (batch.length < 100) break;
+        const next = batch[batch.length - 1].workItemId;
+        if (next === before) throw new Error("Unable to finish loading unread work. Try again.");
+        before = next;
       }
-
-      try {
-        const next = await load(sessionId);
-        if (request !== generation) {
-          return;
-        }
-
-        const completed = next.filter((item) => item.status === "completed");
-        const loaded = await Promise.all(
-          completed.map(async (item) => {
-            try {
-              const result = await loadResult(sessionId, item.workItemId);
-              return [item.workItemId, result.text] as const;
-            } catch {
-              return [item.workItemId, ""] as const;
-            }
-          })
-        );
-        if (request !== generation) {
-          return;
-        }
-
-        setItems(next);
-        setResults(Object.fromEntries(loaded.filter(([, text]) => text.length > 0)));
-        setError(null);
-      } catch (reason: unknown) {
-        if (request !== generation) {
-          return;
-        }
-
-        if (initial) {
-          setItems([]);
-          setResults({});
-        }
-        setError(reason instanceof Error ? reason.message : "Unable to load background work.");
-      } finally {
-        if (request === generation) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void refresh(true);
-    timer = window.setInterval(() => {
-      void refresh(false);
-    }, pollIntervalMs);
-    return () => {
-      generation += 1;
-      window.clearInterval(timer);
-    };
-  }, [open, sessionId, refreshKey, pollIntervalMs, load, loadResult]);
+      markRead(attention);
+    } catch (reason) {
+      if (isCurrent()) setError(reason instanceof Error ? reason.message : "Unable to mark background work as read.");
+    } finally { if (isCurrent()) setMarkingRead(false); }
+  }
 
   function replace(updated: WorkItem) {
-    setItems((current) => current.map((row) => (row.workItemId === updated.workItemId ? updated : row)));
+    updateItems((current) => current.map((row) => (row.workItemId === updated.workItemId && updated.revision >= row.revision ? updated : row)));
     if (updated.status !== "completed") {
       setResults((current) => {
         const next = { ...current };
@@ -198,18 +197,23 @@ export function BackgroundWorkDrawer({
   }
 
   async function confirmCancel(item: WorkItem) {
+    const isCurrent = captureScope();
+    if (!isCurrent()) return;
     setBusyId(item.workItemId);
     setError(null);
     try {
-      replace(await cancel(sessionId, item.workItemId, item.revision));
+      const updated = await cancel(sessionId, item.workItemId, item.revision);
+      if (isCurrent()) replace(updated);
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : "Unable to cancel the work.");
+      if (isCurrent()) setError(reason instanceof Error ? reason.message : "Unable to cancel the work.");
     } finally {
-      setBusyId(null);
+      if (isCurrent()) setBusyId(null);
     }
   }
 
   async function confirmDecision(item: WorkItem, decision: "approve" | "reject") {
+    const isCurrent = captureScope();
+    if (!isCurrent()) return;
     if (!item.approvalId || item.approvalRevision == null || !item.actionHash) {
       return;
     }
@@ -220,11 +224,11 @@ export function BackgroundWorkDrawer({
       const updated = decision === "approve"
         ? await approve(sessionId, item.workItemId, item.approvalId, item.revision, item.approvalRevision, item.actionHash)
         : await reject(sessionId, item.workItemId, item.approvalId, item.revision, item.approvalRevision, item.actionHash);
-      replace(updated);
+      if (isCurrent()) replace(updated);
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : "Unable to update the approval.");
+      if (isCurrent()) setError(reason instanceof Error ? reason.message : "Unable to update the approval.");
     } finally {
-      setBusyId(null);
+      if (isCurrent()) setBusyId(null);
     }
   }
 
@@ -310,10 +314,13 @@ export function BackgroundWorkDrawer({
             </div>
           ) : null}
 
-          {item.attentionRequired ? (
+          {isUnread(item) ? (
             <Flex align="center" gap={token.paddingXS} className="background-work-attention">
               <BellOutlined aria-hidden />
               <Typography.Text>Needs attention</Typography.Text>
+              <Button size="small" onClick={() => {
+                try { markRead([item]); } catch (reason) { setError((reason as Error).message); }
+              }}>Mark as read</Button>
             </Flex>
           ) : null}
 
@@ -422,6 +429,9 @@ export function BackgroundWorkDrawer({
       className="background-work-drawer"
     >
       <Flex vertical gap={token.paddingSM}>
+        <Flex justify="flex-end">
+          <Button className="background-work-read-all" aria-label="Mark all as read" loading={markingRead} disabled={markingRead || loading || items.length === 0} onClick={() => void markAllRead()}>Mark all as read</Button>
+        </Flex>
         {error ? <Alert type="error" showIcon title={error} /> : null}
         {loading ? (
           <Flex justify="center" className="background-work-loading">
@@ -443,6 +453,8 @@ export function BackgroundWorkDrawer({
             className="background-work-list"
           />
         )}
+        {!loading ? <DrawerListFooter loadingMore={loadingMore} hasMore={hasMore} error={error} count={items.length}
+          onLoadMore={() => void loadMore()} onRetry={retry} /> : null}
       </Flex>
     </Drawer>
   );

@@ -251,7 +251,39 @@ describe("BackgroundWorkDrawer", () => {
     expect(document.querySelector(".ant-drawer-content-wrapper")).toHaveStyle({ width: "320px" });
   });
 
-  it("polls only while open and drops a stale response", async () => {
+  it("reuses a slow result request across polls until it completes", async () => {
+    vi.useFakeTimers();
+    let release: (result: WorkItemResult) => void = () => undefined;
+    const pending = new Promise<WorkItemResult>(resolve => { release = resolve; });
+    const load = vi.fn().mockResolvedValue([completed]);
+    const loadResult = vi.fn().mockReturnValue(pending);
+    renderDrawer(load, { loadResult, pollIntervalMs: 1000 });
+    await act(async () => { await Promise.resolve(); });
+    expect(loadResult).toHaveBeenCalledTimes(1);
+    await act(() => vi.advanceTimersByTimeAsync(3000));
+    expect(loadResult).toHaveBeenCalledTimes(1);
+    await act(async () => { release({ workItemId: completed.workItemId, text: "Slow result delivered", completedAt: completed.updatedAt }); });
+    expect(screen.getByText("Slow result delivered")).toBeInTheDocument();
+  });
+
+  it("does not show an old owner's cancellation failure after switching scope", async () => {
+    let reject: (reason: Error) => void = () => undefined;
+    const pending = new Promise<WorkItem>((_resolve, failure) => { reject = failure; });
+    const cancel = vi.fn().mockReturnValue(pending);
+    const load = vi.fn(async (owner: string) => [owner === "session-1" ? queued : { ...completed, origin: "Other owner's work" }]);
+    const view = renderDrawer(load, { cancel });
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel Scheduled reminder" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel work" }));
+    await waitFor(() => expect(cancel).toHaveBeenCalledTimes(1));
+    view.rerender(<AntApp><BackgroundWorkDrawer sessionId="session-2" open wide onClose={() => undefined}
+      load={load} loadResult={async () => ({ workItemId: "", text: "", completedAt: "" })}
+      cancel={cancel} approve={vi.fn()} reject={vi.fn()} /></AntApp>);
+    await screen.findByText("Other owner's work");
+    await act(async () => { reject(new Error("Old owner cancellation failed")); });
+    expect(screen.queryByText("Old owner cancellation failed")).not.toBeInTheDocument();
+  });
+
+  it("polls only while open and queues refresh behind a slow response", async () => {
     vi.useFakeTimers();
     let resolveFirst: (items: WorkItem[]) => void = () => undefined;
     const first = new Promise<WorkItem[]>((resolve) => {
@@ -271,13 +303,13 @@ describe("BackgroundWorkDrawer", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1_000);
     });
-    expect(load).toHaveBeenCalledTimes(2);
-    expect(screen.getByText("Newer reminder")).toBeInTheDocument();
+    expect(load).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       resolveFirst([older]);
       await Promise.resolve();
     });
+    expect(load).toHaveBeenCalledTimes(2);
     expect(screen.queryByText("Older reminder")).not.toBeInTheDocument();
     expect(screen.getByText("Newer reminder")).toBeInTheDocument();
 
@@ -303,8 +335,8 @@ describe("BackgroundWorkDrawer", () => {
     });
     expect(await screen.findByText("Needs attention")).toBeInTheDocument();
     expect(screen.getAllByText("Needs attention")).toHaveLength(1);
-    expect(screen.getByText("Two orders need review.")).toBeInTheDocument();
-    expect(screen.getByText("Nothing to report.")).toBeInTheDocument();
+    expect(await screen.findByText("Two orders need review.")).toBeInTheDocument();
+    expect(await screen.findByText("Nothing to report.")).toBeInTheDocument();
   });
 
   it("shows scheduled and order-placed sources without webhook evidence", async () => {

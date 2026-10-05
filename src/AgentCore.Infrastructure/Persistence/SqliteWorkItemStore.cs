@@ -97,6 +97,30 @@ public sealed class SqliteWorkItemStore(
         return await MapAllAsync(db, rows, cancellationToken).ConfigureAwait(false);
     }
 
+    public async ValueTask<IReadOnlyList<WorkItem>> ListPageAsync(
+        WorkOwner owner, int limit, Guid? before, bool attentionOnly, CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var instanceId = owner.AgentInstanceId.ToString("D");
+        var profileId = owner.ProfileId.ToString("D");
+        var query = db.WorkItems.AsNoTracking().Where(item => item.AgentInstanceId == instanceId && item.ProfileId == profileId);
+        if (before is Guid id)
+        {
+            var anchorId = id.ToString("D");
+            var anchor = await query.FirstOrDefaultAsync(item => item.WorkItemId == anchorId, cancellationToken).ConfigureAwait(false)
+                ?? throw AgentCoreErrors.NotFound("Page cursor was not found.");
+            query = query.Where(item => item.CreatedAtUtc < anchor.CreatedAtUtc ||
+                item.CreatedAtUtc == anchor.CreatedAtUtc && string.Compare(item.WorkItemId, anchorId) < 0);
+        }
+        if (attentionOnly)
+        {
+            query = query.Where(item => item.Status == (int)WorkItemStatus.Completed && item.ResultAttentionRequired);
+        }
+        var rows = await query.OrderByDescending(item => item.CreatedAtUtc).ThenByDescending(item => item.WorkItemId)
+            .Take(Clamp(limit)).ToListAsync(cancellationToken).ConfigureAwait(false);
+        return await MapAllAsync(db, rows, cancellationToken).ConfigureAwait(false);
+    }
+
     public async ValueTask<IReadOnlyList<WorkItem>> ListRunnableAsync(
         DateTimeOffset asOfUtc,
         int limit,

@@ -17,6 +17,8 @@ public static class TriggerScheduleEndpoints
 
         group.MapGet("", async (
             Guid sessionId,
+            int? limit,
+            Guid? before,
             SessionManager sessions,
             ILocalUserProfileService profiles,
             ITriggerRegistrationService triggers,
@@ -24,8 +26,11 @@ public static class TriggerScheduleEndpoints
         {
             try
             {
+                if (limit is < 1) throw AgentCoreErrors.Validation("limit must be at least 1.");
                 var owner = await RequireOwnerAsync(sessions, profiles, sessionId, cancellationToken).ConfigureAwait(false);
-                var rows = await triggers.ListAsync(owner, status: null, cancellationToken).ConfigureAwait(false);
+                var rows = limit is null && before is null
+                    ? await triggers.ListAsync(owner, status: null, cancellationToken).ConfigureAwait(false)
+                    : await triggers.ListSchedulesPageAsync(owner, limit ?? 50, before, cancellationToken).ConfigureAwait(false);
                 return Results.Json(new TriggerScheduleListResponse(
                     rows.Where(item => item.EventSourceId is null).Select(ToResponse).ToArray()));
             }

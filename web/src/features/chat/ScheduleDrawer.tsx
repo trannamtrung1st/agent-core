@@ -11,7 +11,10 @@ import {
 } from "@ant-design/icons";
 import { Alert, App, Button, Drawer, Empty, Flex, List, Spin, Tag, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
-import type { SessionTrigger } from "../../services/api";
+import type { DrawerPageQuery, SessionTrigger } from "../../services/api";
+
+import { useDrawerPages } from "./useDrawerPages";
+import { DrawerListFooter } from "./DrawerListFooter";
 
 const statusPresentation: Record<string, { label: string; color?: string; icon: ReactNode }> = {
   active: { label: "Active", color: "processing", icon: <ClockCircleOutlined /> },
@@ -52,56 +55,30 @@ export function ScheduleDrawer({
   wide: boolean;
   refreshKey: number;
   onClose: () => void;
-  load: (sessionId: string) => Promise<SessionTrigger[]>;
+  load: (sessionId: string, query?: DrawerPageQuery) => Promise<SessionTrigger[]>;
   cancel: (sessionId: string, registrationId: string, expectedRevision: number) => Promise<SessionTrigger>;
 }) {
   const { token } = theme.useToken();
   const { modal } = App.useApp();
-  const [items, setItems] = useState<SessionTrigger[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { items, updateItems, loading, loadingMore, hasMore, error, setError, loadMore, retry, captureScope } = useDrawerPages({
+    scope: sessionId, open, refreshKey, load, id: item => item.registrationId
+  });
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    load(sessionId)
-      .then((next) => {
-        if (!cancelled) {
-          setItems(next);
-        }
-      })
-      .catch((reason: unknown) => {
-        if (!cancelled) {
-          setItems([]);
-          setError(reason instanceof Error ? reason.message : "Unable to load schedules.");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, sessionId, refreshKey, load]);
+  useEffect(() => { setCancellingId(null); }, [sessionId, open]);
 
   async function confirmCancel(item: SessionTrigger) {
+    const isCurrent = captureScope();
+    if (!isCurrent()) return;
     setCancellingId(item.registrationId);
     setError(null);
     try {
       const updated = await cancel(sessionId, item.registrationId, item.revision);
-      setItems((current) => current.map((row) => (row.registrationId === updated.registrationId ? updated : row)));
+      if (isCurrent()) updateItems((current) => current.map((row) => (row.registrationId === updated.registrationId && updated.revision >= row.revision ? updated : row)));
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : "Unable to cancel the schedule.");
+      if (isCurrent()) setError(reason instanceof Error ? reason.message : "Unable to cancel the schedule.");
     } finally {
-      setCancellingId(null);
+      if (isCurrent()) setCancellingId(null);
     }
   }
 
@@ -232,6 +209,8 @@ export function ScheduleDrawer({
             className="schedule-list"
           />
         )}
+        {!loading ? <DrawerListFooter loadingMore={loadingMore} hasMore={hasMore} error={error} count={items.length}
+          onLoadMore={() => void loadMore()} onRetry={retry} /> : null}
       </Flex>
     </Drawer>
   );

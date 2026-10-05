@@ -114,6 +114,23 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
         }
     }
 
+    public ValueTask<IReadOnlyList<WorkItem>> ListPageAsync(
+        WorkOwner owner, int limit, Guid? before, bool attentionOnly, CancellationToken cancellationToken = default)
+    {
+        lock (_state.Gate)
+        {
+            var anchor = before is Guid id ? Find(owner, id) ?? throw AgentCoreErrors.NotFound("Page cursor was not found.") : null;
+            var items = _state.WorkItems.Values
+                .Where(item => item.Owner.Equals(owner))
+                .Where(item => !attentionOnly || item.Status == WorkItemStatus.Completed && item.Result?.AttentionRequired == true)
+                .Where(item => anchor is null || item.CreatedAtUtc < anchor.CreatedAtUtc ||
+                    item.CreatedAtUtc == anchor.CreatedAtUtc && item.WorkItemId.CompareTo(anchor.WorkItemId) < 0)
+                .OrderByDescending(item => item.CreatedAtUtc).ThenByDescending(item => item.WorkItemId)
+                .Take(Clamp(limit)).ToArray();
+            return ValueTask.FromResult<IReadOnlyList<WorkItem>>(items);
+        }
+    }
+
     public ValueTask<IReadOnlyList<WorkItem>> ListRunnableAsync(
         DateTimeOffset asOfUtc,
         int limit,

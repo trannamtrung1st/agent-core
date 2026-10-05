@@ -3,7 +3,7 @@ namespace AgentCore.Domain.Triggers;
 public static class ThoughtIntent
 {
     public const int MaxRegistrationsPerInstance = 8;
-    public const int MinIntervalSeconds = 3600;
+    public const int MinIntervalSeconds = 15;
     public const int MaxPromptCharacters = 2000;
     public static string Require(string value)
     {

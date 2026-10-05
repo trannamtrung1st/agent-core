@@ -25,6 +25,8 @@ public interface IWorkItemStore
 
     ValueTask<IReadOnlyList<WorkItem>> ListAsync(WorkOwner owner, int limit, CancellationToken cancellationToken = default);
 
+    ValueTask<IReadOnlyList<WorkItem>> ListPageAsync(WorkOwner owner, int limit, Guid? before, bool attentionOnly, CancellationToken cancellationToken = default);
+
     ValueTask<IReadOnlyList<WorkItem>> ListRunnableAsync(DateTimeOffset asOfUtc, int limit, CancellationToken cancellationToken = default);
 
     ValueTask<WorkItem?> TryClaimAsync(

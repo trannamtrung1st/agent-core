@@ -112,6 +112,27 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         return rows.Select(TriggerStoreMapping.ToRegistration).ToArray();
     }
 
+    public async ValueTask<IReadOnlyList<TriggerRegistration>> ListSchedulesPageAsync(
+        TriggerOwner owner, int limit, Guid? before, CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var instanceId = owner.AgentInstanceId.ToString("D");
+        var profileId = owner.ProfileId.ToString("D");
+        var query = db.TriggerRegistrations.AsNoTracking()
+            .Where(item => item.AgentInstanceId == instanceId && item.ProfileId == profileId && item.EventSourceId == null);
+        if (before is Guid id)
+        {
+            var anchorId = id.ToString("D");
+            var anchor = await query.FirstOrDefaultAsync(item => item.RegistrationId == anchorId, cancellationToken).ConfigureAwait(false)
+                ?? throw AgentCoreErrors.NotFound("Page cursor was not found.");
+            query = query.Where(item => item.CreatedAtUtc < anchor.CreatedAtUtc ||
+                item.CreatedAtUtc == anchor.CreatedAtUtc && string.Compare(item.RegistrationId, anchorId) < 0);
+        }
+        var rows = await query.OrderByDescending(item => item.CreatedAtUtc).ThenByDescending(item => item.RegistrationId)
+            .Take(Math.Clamp(limit, 1, 100)).ToListAsync(cancellationToken).ConfigureAwait(false);
+        return rows.Select(TriggerStoreMapping.ToRegistration).ToArray();
+    }
+
     public async ValueTask<IReadOnlyList<TriggerRegistration>> ListSuspendedPolicyForAgentInstanceAsync(
         Guid agentInstanceId,
         int limit,

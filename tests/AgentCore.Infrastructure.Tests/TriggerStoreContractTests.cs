@@ -24,6 +24,35 @@ public sealed class TriggerStoreContractTests
     private static readonly Guid SourceSessionId = Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842");
 
     [Fact]
+    public async Task Schedule_pages_keep_stable_tie_order_and_owner_isolation()
+    {
+        await ForEachStore(async store =>
+        {
+            var time = Clock();
+            var service = Service(store, time);
+            var owner = new TriggerOwner(InstanceA, ProfileA);
+            for (var index = 0; index < 45; index++)
+                await service.CreateAsync(Draft(owner, $"Reminder {index}", OneShot()));
+            var seen = new List<Guid>();
+            Guid? before = null;
+            while (true)
+            {
+                var page = await service.ListSchedulesPageAsync(owner, 20, before);
+                if (page.Count == 0) break;
+                seen.AddRange(page.Select(item => item.RegistrationId));
+                before = page[^1].RegistrationId;
+            }
+            Assert.Equal(45, seen.Count);
+            Assert.Equal(45, seen.Distinct().Count());
+            var all = await store.ListAsync(owner, null);
+            Assert.Equal(all.Select(item => item.RegistrationId), seen);
+            var foreign = new TriggerOwner(InstanceB, ProfileB);
+            var error = await Assert.ThrowsAsync<AgentCoreException>(() => service.ListSchedulesPageAsync(foreign, 20, before).AsTask());
+            Assert.Equal("NotFound", error.Code);
+        });
+    }
+
+    [Fact]
     public async Task Both_stores_create_list_update_cancel_and_isolate_owners()
     {
         await ForEachStore(async store =>
