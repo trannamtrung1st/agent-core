@@ -323,8 +323,22 @@ public sealed class SqliteAgentDefinitionAdminStore(
             publish.DraftId,
             draft.DefinitionId,
             nextVersion);
-        row.Revision = draft.Revision + 1;
-        row.UpdatedAtUtc = publish.PublishedAt.ToUnixTimeMilliseconds();
+        if (publish.ConsumeDraft)
+        {
+            var draftId = publish.DraftId.ToString("D");
+            await db.AgentDefinitionDraftResources.Where(item => item.DraftId == draftId)
+                .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.AgentDefinitionDraftEvaluationScenarios.Where(item => item.DraftId == draftId)
+                .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.AgentDefinitionDraftEvaluationResults.Where(item => item.DraftId == draftId)
+                .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            db.AgentDefinitionDrafts.Remove(row);
+        }
+        else
+        {
+            row.Revision = draft.Revision + 1;
+            row.UpdatedAtUtc = publish.PublishedAt.ToUnixTimeMilliseconds();
+        }
         if (historyAppend is not null)
         {
             var existing = await AdminEventPersistence.TryGetByOperationIdAsync(db, publish.OperationId, cancellationToken)

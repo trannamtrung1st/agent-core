@@ -110,6 +110,24 @@ internal static class AdminEndpoints
             return Results.Json(new AdminDefinitionInventoryResponse(items.Select(AdminHttpMapping.ToDefinitionItem).ToArray()));
         });
 
+        group.MapGet("/definitions/{definitionId}/versions/{version:int}", async (
+            string definitionId, int version, string sourceKind,
+            AgentDefinitionLifecycleService lifecycle, CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                if (!Enum.TryParse<DefinitionDraftSourceKind>(sourceKind, ignoreCase: true, out var kind))
+                    throw AgentCoreErrors.Validation("Version source is invalid.");
+                var candidate = await lifecycle.GetVersionCandidateAsync(definitionId, version, kind, cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(AdminDefinitionJson.WriteCandidate(candidate));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
         group.MapGet("/instances", async (
             AdminReadService admin,
             CancellationToken cancellationToken) =>
@@ -1067,7 +1085,7 @@ internal static class AdminEndpoints
                 var publication = await publish.PublishDraftAsync(
                         draftId,
                         request.ExpectedRevision,
-                        cancellationToken)
+                        cancellationToken, consumeDraft: true)
                     .ConfigureAwait(false);
                 return Results.Json(AdminHttpMapping.ToPublicationSummary(publication));
             }

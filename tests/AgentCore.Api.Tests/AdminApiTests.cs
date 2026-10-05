@@ -61,6 +61,27 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Admin_version_inspection_is_owner_protected_and_does_not_create_drafts()
+    {
+        const string url = "/api/v2/admin/definitions/examiner/versions/1?sourceKind=ForkBuiltIn";
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _factory.CreateClient().GetAsync(url)).StatusCode);
+        var client = OwnerClient();
+        var before = await client.GetStringAsync("/api/v2/admin/definition-drafts");
+        var response = await client.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+        var candidate = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("examiner", candidate.GetProperty("definitionId").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(candidate.GetProperty("systemInstructions").GetString()));
+        Assert.Equal(before, await client.GetStringAsync("/api/v2/admin/definition-drafts"));
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(
+            "/api/v2/admin/definitions/examiner/versions/99999?sourceKind=ForkBuiltIn")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync(
+            "/api/v2/admin/definitions/examiner/versions/1?sourceKind=New")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(
+            "/api/v2/admin/definitions/examiner/versions/1?sourceKind=ForkDurable")).StatusCode);
+    }
+
+    [Fact]
     public async Task Admin_tools_lists_registered_tool_names()
     {
         var client = OwnerClient();
@@ -1129,10 +1150,15 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         var v1 = await v1Publish.Content.ReadFromJsonAsync<AdminDefinitionPublicationSummaryResponse>();
         Assert.NotNull(v1);
 
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync($"/api/v2/admin/definition-drafts/{draft.DraftId}")).StatusCode);
+        var v2Fork = await owner.PostAsJsonAsync("/api/v2/admin/definition-drafts/fork",
+            new AdminForkDefinitionDraftRequest(definitionId, v1!.Version, "ForkDurable"));
+        v2Fork.EnsureSuccessStatusCode();
+        var v2Base = (await v2Fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>())!;
         var v2Update = await owner.PutAsJsonAsync(
-            $"/api/v2/admin/definition-drafts/{draft.DraftId}",
+            $"/api/v2/admin/definition-drafts/{v2Base.DraftId}",
             new AdminUpdateDefinitionDraftRequest(
-                draft.Revision + 1,
+                v2Base.Revision,
                 JsonSerializer.SerializeToElement(candidate with { SystemInstructions = "Active v2 body." }, JsonOptions())));
         v2Update.EnsureSuccessStatusCode();
         var v2Draft = await v2Update.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
@@ -1143,10 +1169,14 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         var v2 = await v2Publish.Content.ReadFromJsonAsync<AdminDefinitionPublicationSummaryResponse>();
         Assert.NotNull(v2);
 
+        var v3Fork = await owner.PostAsJsonAsync("/api/v2/admin/definition-drafts/fork",
+            new AdminForkDefinitionDraftRequest(definitionId, v2!.Version, "ForkDurable"));
+        v3Fork.EnsureSuccessStatusCode();
+        var v3Base = (await v3Fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>())!;
         var v3Update = await owner.PutAsJsonAsync(
-            $"/api/v2/admin/definition-drafts/{draft.DraftId}",
+            $"/api/v2/admin/definition-drafts/{v3Base.DraftId}",
             new AdminUpdateDefinitionDraftRequest(
-                v2Draft.Revision + 1,
+                v3Base.Revision,
                 JsonSerializer.SerializeToElement(candidate with { SystemInstructions = "Deprecated v3 body." }, JsonOptions())));
         v3Update.EnsureSuccessStatusCode();
         var v3Draft = await v3Update.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();

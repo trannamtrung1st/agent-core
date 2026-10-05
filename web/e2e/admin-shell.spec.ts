@@ -35,12 +35,14 @@ async function openFirstInstanceEffectiveConfig(page: import("@playwright/test")
   await expect.poll(async () => (await readTransport(page)).streaming).toBe(false);
   await expect.poll(async () => (await readTransport(page)).captureLive).toBe(false);
 
+  await page.getByRole("tab", { name: "Instances", exact: true }).click();
   const instances = page.locator('section[aria-label="Instances"]');
   const examinerLink = instances.locator("button", { hasText: /examiner/i });
   const instanceLink = (await examinerLink.count()) > 0 ? examinerLink.first() : instances.locator("button").first();
   await expect(instanceLink).toBeVisible({ timeout: 15_000 });
   await instanceLink.click();
   await expect(page).toHaveURL(/\/admin\/instances\/[0-9a-f-]{36}$/i);
+  await page.getByRole("tab", { name: "Effective configuration", exact: true }).click();
   await expect(page.getByText("Runtime model")).toBeVisible();
   await expect(page.getByText("Interruption classifier")).toBeVisible();
 }
@@ -62,7 +64,7 @@ test("chat to admin effective config and back with a new turn", async ({ page })
 
   await openFirstInstanceEffectiveConfig(page);
   await expect(page.getByText(/Compatibility \/ legacy|Managed/).first()).toBeVisible();
-  await expect(page.getByRole("region", { name: "Persona" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Effective configuration" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Automation", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Return to last chat" }).click();

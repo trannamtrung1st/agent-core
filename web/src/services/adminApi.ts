@@ -114,6 +114,19 @@ export async function listAdminDefinitions(): Promise<AdminDefinitionInventoryIt
   return payload.items;
 }
 
+export async function getAdminDefinitionVersion(
+  definitionId: string, version: number, source: string
+): Promise<Record<string, unknown>> {
+  const sourceKind = source === "builtIn" ? "ForkBuiltIn" : "ForkDurable";
+  const response = await ownerFetch(
+    `/api/v2/admin/definitions/${encodeURIComponent(definitionId)}/versions/${version}?sourceKind=${sourceKind}`
+  );
+  if (!response.ok) {
+    throw await adminProblemMessage(response, `Definition version unavailable (${response.status})`);
+  }
+  return await response.json() as Record<string, unknown>;
+}
+
 export async function listAdminInstances(): Promise<AdminInstanceInventoryItem[]> {
   const response = await ownerFetch("/api/v2/admin/instances");
   if (!response.ok) {

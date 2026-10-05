@@ -369,6 +369,13 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
                 }
             }
 
+            if (publish.ConsumeDraft)
+            {
+                _drafts.TryRemove(publish.DraftId, out _);
+                ResourceStore?.DeleteDraftResources(publish.DraftId);
+                EvaluationStore?.DeleteDraftEvaluation(publish.DraftId);
+            }
+
             return ValueTask.FromResult(AgentDefinitionAdminSnapshots.Freeze(publication));
         }
     }

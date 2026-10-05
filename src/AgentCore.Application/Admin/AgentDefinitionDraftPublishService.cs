@@ -17,7 +17,8 @@ public sealed class AgentDefinitionDraftPublishService(
         Guid draftId,
         long expectedRevision,
         CancellationToken cancellationToken = default,
-        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner)
+        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner,
+        bool consumeDraft = false)
     {
         var started = Stopwatch.GetTimestamp();
         var draft = await lifecycle.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
@@ -69,6 +70,6 @@ public sealed class AgentDefinitionDraftPublishService(
             validationResult.DraftRevision,
             ids.NewId(),
             changedSectionIds,
-            cancellationToken, actorKind).ConfigureAwait(false);
+            cancellationToken, actorKind, consumeDraft).ConfigureAwait(false);
     }
 }

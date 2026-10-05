@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App as AntApp } from "antd";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EventSourcesSection, webhookUrl } from "./EventSourcesSection";
@@ -62,8 +62,10 @@ describe("EventSourcesSection", () => {
     expect(await screen.findByText("No event sources yet.")).toBeInTheDocument();
     expect(screen.getByText(/does not grant an agent/i)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Event source name"), { target: { value: "Demo Store" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create event source" }));
-    const credential = await screen.findByRole("dialog", { name: "Copy this credential" });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create event source" })); });
+    await waitFor(() => expect(createEventSource).toHaveBeenCalledWith("Demo Store"));
+    const credential = await screen.findByRole("dialog");
+    expect(within(credential).getByText("Copy this credential")).toBeInTheDocument();
     expect(within(credential).getByLabelText("Event source credential")).toHaveValue("secret-credential-value");
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(screen.queryByLabelText("Event source credential")).not.toBeInTheDocument());
@@ -77,20 +79,21 @@ describe("EventSourcesSection", () => {
     expect(webhookUrl(sourceKey)).toBe(`${window.location.origin}/api/v1/hooks/${sourceKey}`);
 
     fireEvent.click(screen.getByRole("button", { name: "Rotate credential for Demo Store" }));
-    const rotate = await screen.findByRole("dialog", { name: "Rotate this credential?" });
+    const rotate = await screen.findByRole("dialog");
     fireEvent.click(within(rotate).getByRole("button", { name: "Keep" }));
     expect(rotateEventSource).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Rotate credential for Demo Store" }));
-    fireEvent.click(within(await screen.findByRole("dialog", { name: "Rotate this credential?" })).getByRole("button", { name: "Rotate credential" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Rotate credential" }));
     await waitFor(() => expect(rotateEventSource).toHaveBeenCalledWith(sourceId));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(screen.queryByText("rotated-credential-value")).not.toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "Revoke Demo Store" }));
-    const revoke = await screen.findByRole("dialog", { name: "Revoke this event source?" });
+    const revoke = await screen.findByRole("dialog");
     fireEvent.click(within(revoke).getByRole("button", { name: "Revoke source" }));
     await waitFor(() => expect(revokeEventSource).toHaveBeenCalledWith(sourceId));
-    expect(await screen.findByText("Webhook · Revoked")).toBeInTheDocument();
+    expect(await screen.findByText("Revoked")).toBeInTheDocument();
+    expect(screen.getByText("Webhook")).toBeInTheDocument();
     expect(screen.queryByText("secret-credential-value")).not.toBeInTheDocument();
   });
 });

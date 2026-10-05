@@ -59,6 +59,7 @@ async function patchExaminerDraftMemoryPolicy(page: Page, draftId: string) {
 }
 
 async function reopenExaminerDraftByMarker(page: Page, marker: string) {
+  await page.getByRole("tab", { name: "Drafts", exact: true }).click();
   const draftsList = definitionDraftsSection(page);
   await draftsList.getByRole("button", { name: /Draft rev .*ForkBuiltIn/ }).first().click();
   const editor = draftEditorSection(page);
@@ -72,6 +73,7 @@ async function reopenExaminerDraftByMarker(page: Page, marker: string) {
 export async function publishExaminerP7gFirstPublication(page: Page) {
   await page.getByRole("button", { name: "Open Admin" }).click();
   await expect(page).toHaveURL(/\/admin$/);
+  await page.getByRole("textbox", { name: "Search definitions" }).fill("examiner");
   await page.locator('section[aria-label="Definitions"]').getByRole("button", { name: /examiner/i }).first().click();
 
   const forkResponsePromise = page.waitForResponse(
@@ -165,6 +167,7 @@ export async function startSyntheticChat(page: Page) {
 export async function publishExaminerDraftAndCreateManagedInstance(page: Page) {
   await page.getByRole("button", { name: "Open Admin" }).click();
   await expect(page).toHaveURL(/\/admin$/);
+  await page.getByRole("textbox", { name: "Search definitions" }).fill("examiner");
   await page.locator('section[aria-label="Definitions"]').getByRole("button", { name: /examiner/i }).first().click();
 
   const draftEditor = await forkBuiltInV1Draft(page);

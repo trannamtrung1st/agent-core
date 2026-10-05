@@ -18,6 +18,7 @@ import {
 } from "../../services/adminApi";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 import { AdminErrorNotice, showAdminFailure } from "./adminFailure";
+import { adminCollectionPagination } from "./AdminCollectionToolbar";
 import {
   formatAutomationNextRun,
   isMemoryScopePermitted,
@@ -120,21 +121,23 @@ function RegistrationModelControl({
 
   return (
     <Flex vertical gap={8}>
-      <Typography.Text>{row.modelSource ?? "Conversation default"}</Typography.Text>
-      <Select
-        aria-label={`Model for ${row.intent}`}
-        value={catalogKey}
-        disabled={busy || row.status !== "active"}
-        options={modelOptions(models)}
-        optionRender={(option) => option.label}
-        onChange={setCatalogKey}
-      />
+      <Flex align="center" gap={8}>
+        <Select
+          aria-label={`Model for ${row.intent}`}
+          value={catalogKey}
+          disabled={busy || row.status !== "active"}
+          style={{ width: 180 }}
+          options={modelOptions(models)}
+          optionRender={(option) => option.label}
+          onChange={setCatalogKey}
+        />
+        {row.status === "active" ? (
+          <Button size="small" disabled={busy} aria-label={`Save model for ${row.intent}`} onClick={() => void save()}>
+            Save model
+          </Button>
+        ) : null}
+      </Flex>
       {error ? <Alert type="error" showIcon title={error} /> : null}
-      {row.status === "active" ? (
-        <Button size="small" disabled={busy} aria-label={`Save model for ${row.intent}`} onClick={() => void save()}>
-          Save model
-        </Button>
-      ) : null}
     </Flex>
   );
 }
@@ -342,15 +345,16 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
 
   const memoryColumns: ColumnsType<AdminLearnedMemoryItem> = [
     { title: "Kind", dataIndex: "kind", key: "kind", width: 100 },
-    { title: "Subject", dataIndex: "subject", key: "subject" },
-    { title: "Content", dataIndex: "content", key: "content", ellipsis: true },
+    { title: "Subject", dataIndex: "subject", key: "subject", width: 220, ellipsis: true },
+    { title: "Content", dataIndex: "content", key: "content", width: 480, ellipsis: true },
     {
       title: "Provenance",
       key: "provenance",
+      width: 200,
       render: (_, row) => row.provenance.source
     },
     {
-      title: "",
+      title: "Actions",
       key: "actions",
       width: 100,
       render: (_, row) => (
@@ -374,27 +378,35 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
   ];
 
   const automationColumns: ColumnsType<AdminAutomationRegistration> = [
-    { title: "Intent", dataIndex: "intent", key: "intent" },
+    { title: "Intent", dataIndex: "intent", key: "intent", width: 220, ellipsis: true },
     { title: "Status", dataIndex: "status", key: "status", width: 120 },
-    { title: "Schedule", dataIndex: "scheduleSummary", key: "scheduleSummary" },
+    { title: "Schedule", dataIndex: "scheduleSummary", key: "scheduleSummary", width: 240, ellipsis: true },
     {
       title: "Next run",
       key: "nextRun",
+      width: 260,
+      ellipsis: true,
       render: (_, row) => formatAutomationNextRun(row.timeZoneId, row.nextOccurrenceAtUtc)
     },
     {
       title: "Suspended",
       key: "suspension",
+      width: 180,
+      ellipsis: true,
       render: (_, row) => row.suspensionReason ?? "—"
     },
     {
       title: "Provenance",
       key: "prov",
+      width: 180,
       render: (_, row) => row.provenance.authorizationOrigin
     },
+    { title: "Model source", key: "modelSource", width: 160, ellipsis: true,
+      render: (_, row) => row.modelSource ?? "Conversation default" },
     {
       title: "Model",
       key: "model",
+      width: 290,
       render: (_, row) => (
         <RegistrationModelControl
           instanceId={config.instanceId}
@@ -409,7 +421,7 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
       )
     },
     {
-      title: "",
+      title: "Actions",
       key: "actions",
       width: 100,
       render: (_, row) =>
@@ -511,11 +523,13 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
               ) : null}
               {memoryItems ? (
                 <Table
+                  className="admin-collection-table"
+                  scroll={{ x: 1100 }}
                   size="small"
                   rowKey="memoryId"
                   dataSource={memoryItems}
                   columns={memoryColumns}
-                  pagination={false}
+                  pagination={adminCollectionPagination}
                   locale={{ emptyText: "No active learned-memory items in this scope." }}
                 />
               ) : null}
@@ -543,11 +557,13 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
               ) : null}
               {automationItems ? (
                 <Table
+                  className="admin-collection-table"
+                  scroll={{ x: 1850 }}
                   size="small"
                   rowKey="registrationId"
                   dataSource={automationItems}
                   columns={automationColumns}
-                  pagination={false}
+                  pagination={adminCollectionPagination}
                   locale={{ emptyText: "No active or suspended registrations." }}
                 />
               ) : null}

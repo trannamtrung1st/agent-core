@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { OwnerCapabilityError } from "../../services/api";
 import {
   AdminApp,
+  InstanceManagedControls,
   EffectiveConfigView,
   PublicationResourcesSummary,
   defaultForkSourceVersion,
@@ -289,14 +290,16 @@ describe("AdminApp", () => {
       render(<AdminApp route={{ area: "admin", view: "home" }} />);
     });
     await waitFor(() => {
-      expect(within(screen.getByLabelText("Definitions")).getByText("Examiner")).toBeInTheDocument();
+      expect(within(screen.getByRole("region", { name: "Definitions" })).getByText("Examiner")).toBeInTheDocument();
     });
-    expect(within(screen.getByLabelText("Definitions")).getByText("examiner")).toBeInTheDocument();
-    expect(screen.getByText("Latest v1 · Published")).toBeInTheDocument();
-    expect(screen.getByText("1 version")).toBeInTheDocument();
-    expect(within(screen.getByLabelText("Instances")).getByText("1 instance")).toBeInTheDocument();
-    expect(screen.getByText("Pinned to v1")).toBeInTheDocument();
-    expect(screen.getByText(/Compatibility \/ legacy instance/)).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Definitions" })).getByText("examiner")).toBeInTheDocument();
+    const definitionRow = screen.getByRole("button", { name: "Examiner · examiner" }).closest("tr")!;
+    expect(within(definitionRow).getAllByText("v1")).toHaveLength(2);
+    expect(within(definitionRow).getByText("Published")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Instances" }));
+    expect(within(screen.getByRole("region", { name: "Instances" })).getByText("1 instance")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Instances" })).getByText("v1")).toBeInTheDocument();
+    expect(screen.getByText("Compatibility", { exact: true })).toBeInTheDocument();
   });
 
   it("groups immutable versions under one logical definition", async () => {
@@ -322,14 +325,15 @@ describe("AdminApp", () => {
       render(<AdminApp route={{ area: "admin", view: "home" }} />);
     });
 
-    const definitions = screen.getByLabelText("Definitions");
+    const definitions = screen.getByRole("region", { name: "Definitions" });
     await waitFor(() => {
       expect(within(definitions).getByText("Customer Support")).toBeInTheDocument();
     });
-    expect(within(definitions).getAllByRole("button")).toHaveLength(1);
+    expect(within(definitions).getAllByRole("button", { name: "Customer Support · customer-support" })).toHaveLength(1);
     expect(within(definitions).getByText("customer-support")).toBeInTheDocument();
-    expect(within(definitions).getByText("Latest v2 · Published")).toBeInTheDocument();
-    expect(within(definitions).getByText("2 versions")).toBeInTheDocument();
+    expect(within(definitions).getAllByText("v2")).toHaveLength(2);
+    expect(within(definitions).getByRole("columnheader", { name: "Versions" })).toBeInTheDocument();
+    expect(within(definitions).getByText("2")).toBeInTheDocument();
     expect(within(definitions).getByText("1 definition")).toBeInTheDocument();
   });
 
@@ -358,10 +362,10 @@ describe("AdminApp", () => {
       render(<AdminApp route={{ area: "admin", view: "home" }} />);
     });
     await waitFor(() => {
-      expect(screen.getByText("Draft only · Never published")).toBeInTheDocument();
+      expect(screen.getByText("Draft")).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole("button", { name: "New instance" }));
-    const dialog = screen.getByRole("dialog", { name: "New instance" });
+    const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("Examiner · examiner")).toBeInTheDocument();
     expect(within(dialog).queryByText(/aaa-new-agent/)).not.toBeInTheDocument();
     expect(within(dialog).getByText(/v1 · Built-in · Published/)).toBeInTheDocument();
@@ -408,6 +412,7 @@ describe("AdminApp", () => {
     await act(async () => {
       render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
     });
+    fireEvent.click(await screen.findByRole("tab", { name: "Drafts" }));
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Draft rev 3/ })).toBeInTheDocument();
     });
@@ -445,10 +450,11 @@ describe("AdminApp", () => {
       render(<AdminApp route={{ area: "admin", view: "home" }} />);
     });
     await waitFor(() => {
-      expect(within(screen.getByLabelText("Definitions")).getByText("Examiner")).toBeInTheDocument();
+      expect(within(screen.getByRole("region", { name: "Definitions" })).getByText("Examiner")).toBeInTheDocument();
     });
+    fireEvent.click(screen.getByRole("tab", { name: "Instances" }));
     expect(screen.getByText(/Instances unavailable/)).toBeInTheDocument();
-    fireEvent.click(within(screen.getByLabelText("Instances")).getByRole("button", { name: "Retry" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Instances" })).getByRole("button", { name: "Retry" }));
     await waitFor(() => {
       expect(screen.getByText("No instances yet.")).toBeInTheDocument();
     });
@@ -563,6 +569,7 @@ describe("AdminApp", () => {
     await act(async () => {
       render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
     });
+    fireEvent.click(await screen.findByRole("tab", { name: "Drafts" }));
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Draft rev 2/ })).toBeInTheDocument();
     });
@@ -677,6 +684,7 @@ describe("AdminApp", () => {
     await act(async () => {
       render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
     });
+    fireEvent.click(await screen.findByRole("tab", { name: "Drafts" }));
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Draft rev 1/ })).toBeInTheDocument();
     });
@@ -832,6 +840,7 @@ describe("AdminApp", () => {
     await act(async () => {
       render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
     });
+    fireEvent.click(await screen.findByRole("tab", { name: "Drafts" }));
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Draft rev 1/ })).toBeInTheDocument();
     });
@@ -898,6 +907,7 @@ describe("AdminApp", () => {
     await act(async () => {
       render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
     });
+    fireEvent.click(await screen.findByRole("tab", { name: "Drafts" }));
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Draft rev 1/ })).toBeInTheDocument();
     });
@@ -992,6 +1002,7 @@ describe("AdminApp", () => {
     await act(async () => {
       render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
     });
+    fireEvent.click(await screen.findByRole("tab", { name: "Drafts" }));
     fireEvent.click(await screen.findByRole("button", { name: /Draft rev 1/ }));
     fireEvent.click(await screen.findByRole("tab", { name: "Capabilities" }));
     expect((await screen.findAllByText("Legacy fallback: knowledge/policy")).length).toBeGreaterThan(0);
@@ -1064,6 +1075,7 @@ describe("AdminApp", () => {
     await act(async () => {
       render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
     });
+    fireEvent.click(await screen.findByRole("tab", { name: "Drafts" }));
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Draft rev 1/ })).toBeInTheDocument();
     });
@@ -1097,6 +1109,40 @@ describe("AdminApp", () => {
     expect(within(screen.getByLabelText("Instance identity")).getByText("Compatibility / legacy")).toBeInTheDocument();
     expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
     expect(screen.getByText("Practice speaking.")).toBeInTheDocument();
+  });
+
+  it.each(["success", "failure"])("ignores a late effective configuration %s after instance navigation", async outcome => {
+    vi.mocked(listAdminDefinitions).mockResolvedValue([]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    let resolve!: (value: AdminEffectiveConfiguration) => void;
+    let reject!: (error: Error) => void;
+    const delayed = new Promise<AdminEffectiveConfiguration>((yes, no) => { resolve = yes; reject = no; });
+    const other = { ...sampleEffective, instanceId: "other-instance", persona: { ...sampleEffective.persona, name: "Beta" } };
+    vi.mocked(getAdminEffectiveConfig).mockImplementation(id => id === instanceId ? delayed : Promise.resolve(other));
+    const view = render(<AdminApp route={{ area: "admin", view: "instance", instanceId }} />);
+    await waitFor(() => expect(getAdminEffectiveConfig).toHaveBeenCalledWith(instanceId));
+    view.rerender(<AdminApp route={{ area: "admin", view: "instance", instanceId: other.instanceId }} />);
+    expect(await screen.findByRole("heading", { name: "Beta" })).toBeInTheDocument();
+    await act(async () => { if (outcome === "success") resolve(sampleEffective); else reject(new Error("Stale instance error")); });
+    expect(screen.getByRole("heading", { name: "Beta" })).toBeInTheDocument();
+    expect(screen.queryByText("Stale instance error")).not.toBeInTheDocument();
+  });
+
+  it("keeps persona edits after unrelated instance revisions and accepts a newer saved persona", async () => {
+    vi.mocked(listAdminDefinitions).mockResolvedValue([]);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+    const config = { ...sampleEffective, compatibility: false };
+    const props = { onUpdated: vi.fn(), onDeleted: vi.fn() };
+    let view!: ReturnType<typeof render>;
+    await act(async () => { view = render(<InstanceManagedControls config={config} {...props} />); });
+    fireEvent.change(screen.getByLabelText("Persona name"), { target: { value: "Unsaved name" } });
+    view.rerender(<InstanceManagedControls config={{ ...config, instanceRevision: 2 }} {...props} />);
+    expect(screen.getByLabelText("Persona name")).toHaveValue("Unsaved name");
+    view.rerender(<InstanceManagedControls config={{ ...config, instanceRevision: 3, instanceLifecycle: "Archived" }} {...props} />);
+    expect(screen.getByLabelText("Persona name")).toHaveValue(config.persona.name);
+    view.rerender(<InstanceManagedControls config={{ ...config, instanceRevision: 3, personaRevision: 2,
+      persona: { ...config.persona, name: "Saved name" } }} {...props} />);
+    expect(screen.getByLabelText("Persona name")).toHaveValue("Saved name");
   });
 
   it("saves managed instance persona from the form tab", async () => {
@@ -1435,7 +1481,9 @@ describe("AdminApp", () => {
       expect(screen.getByRole("button", { name: "Deprecate publication v2" })).toBeInTheDocument();
     });
     expect(screen.getByRole("button", { name: "Start managed chat for v2" })).toHaveTextContent("Chat");
-    expect(screen.getByText(/durable · published/)).toBeInTheDocument();
+    const versionRow = screen.getByRole("button", { name: "View v2 (durable)" }).closest("tr")!;
+    expect(within(versionRow).getByText("Durable")).toBeInTheDocument();
+    expect(within(versionRow).getByText("Published")).toBeInTheDocument();
 
     const inventoryCallsBefore = vi.mocked(listAdminDefinitions).mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: "Deprecate publication v2" }));
@@ -1448,7 +1496,7 @@ describe("AdminApp", () => {
     });
     await waitFor(() => {
       expect(screen.getByText("Latest v2 · Deprecated")).toBeInTheDocument();
-      expect(screen.getByText(/Deprecated · metadata rev 4/)).toBeInTheDocument();
+      expect(within(screen.getByRole("button", { name: "View v2 (durable)" }).closest("tr")!).getByText("4")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Start managed chat for v2" })).toBeDisabled();
       expect(screen.queryByRole("button", { name: "Deprecate publication v2" })).not.toBeInTheDocument();
     });

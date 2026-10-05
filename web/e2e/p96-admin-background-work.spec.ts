@@ -59,6 +59,7 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   });
 
   await page.goto(`/admin/instances/${instanceId}`);
+  await page.getByRole("tab", { name: "Memory & automation", exact: true }).click();
   const automation = page.getByLabel("Memory and automation administration");
   await automation.getByRole("tab", { name: "Automation" }).click();
   await expect(automation.getByText(/Effective source: Conversation default/)).toBeVisible();
@@ -82,9 +83,11 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   await page.reload();
   const config = await reloaded;
   expect((await config.json()).unattendedModelCatalogKey).toBe("scripted-alpha");
+  await page.getByRole("tab", { name: "Memory & automation", exact: true }).click();
   await automation.getByRole("tab", { name: "Automation" }).click();
   await expect(automation.getByText("Effective source: Unattended default (Scripted Alpha)")).toBeVisible({ timeout: 15_000 });
 
+  await page.getByRole("tab", { name: "Connections", exact: true }).click();
   const connection = page.getByRole("region", { name: "Application connection" });
   await expect(connection.getByRole("button", { name: /webhook/i })).toHaveCount(0);
 
@@ -122,6 +125,7 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   });
 
   await page.goto("/admin");
+  await page.getByRole("tab", { name: "Event sources", exact: true }).click();
   const sourcesRegion = page.getByRole("region", { name: "Event sources" });
   await expect(sourcesRegion.getByText("No event sources yet.")).toBeVisible();
   await sourcesRegion.getByLabel("Event source name").fill("Demo Store");
@@ -141,7 +145,8 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   await sourcesRegion.getByRole("button", { name: "Revoke Demo Store" }).click();
   const confirm = page.getByRole("dialog", { name: "Revoke this event source?" });
   await confirm.getByRole("button", { name: "Revoke source" }).click();
-  await expect(sourcesRegion.getByText("Webhook · Revoked")).toBeVisible();
+  await expect(sourcesRegion.getByText("Revoked", { exact: true })).toBeVisible();
+  await expect(sourcesRegion.getByRole("cell", { name: "Webhook", exact: true })).toBeVisible();
   await expect(page.getByText("once-secret-credential")).toHaveCount(0);
 
   expect(consoleErrors.filter((line) => !line.includes("[antd: List]"))).toEqual([]);

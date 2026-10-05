@@ -116,12 +116,14 @@ test("P8 publishes two skills, activates the matching one, and keeps one chat re
   await completeDefinitionDraftPublishGate(page, editor);
   await publishDraftFromInstructions(page, editor);
 
-  const published = definitionDraftsSection(page).getByRole("list", { name: "Published skills" });
+  await page.getByRole("button", { name: "View v1 (durable)", exact: true }).click();
+  const published = page.getByRole("region", { name: "Version details", exact: true }).getByRole("list", { name: "Published skills" });
   await expect(published).toBeVisible({ timeout: 15_000 });
   await expect(published).toContainText("Refund (refund.handle)");
   await expect(published).toContainText("Order lookup (order.lookup)");
   await expect(published).toContainText("Requirements do not grant tools, credentials, or approval.");
   await expect(published.getByRole("textbox")).toHaveCount(0);
+  await page.getByRole("dialog", { name: "Version details", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
 
   const instanceResponsePromise = page.waitForResponse(
     (response) =>

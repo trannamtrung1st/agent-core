@@ -185,6 +185,7 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
     scheduleIntent
   );
 
+  await page.getByRole("tab", { name: "Memory & automation", exact: true }).click();
   const memoryAutomation = page.getByLabel("Memory and automation administration");
   await memoryAutomation.getByRole("tab", { name: "Memory" }).click();
   await memoryAutomation.getByRole("combobox", { name: "Memory scope" }).click();

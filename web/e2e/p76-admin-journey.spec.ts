@@ -155,12 +155,14 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
   await expect(page.getByText("Instance unarchived.")).toBeVisible({ timeout: 15_000 });
   await expect(lifecycle.getByText("Active", { exact: true })).toBeVisible();
 
+  await page.getByRole("tab", { name: "Memory & automation", exact: true }).click();
   const memory = page.getByRole("region", { name: "Memory and automation" });
   await memory.getByRole("tab", { name: "Memory" }).click();
   await expect(memory.getByText("Effective memory policy", { exact: true })).toBeVisible();
   await memory.getByRole("tab", { name: "Automation" }).click();
   await expect(memory.locator('[aria-label="Automation administration"]')).toBeVisible();
 
+  await page.getByRole("tab", { name: "Effective configuration", exact: true }).click();
   const effective = page.getByRole("region", { name: "Effective configuration" });
   await expect(effective.getByText("Catalog key")).toBeVisible();
   await expect(effective.getByRole("textbox")).toHaveCount(0);

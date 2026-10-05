@@ -52,6 +52,7 @@ export function DefinitionCandidateEditor({
   view,
   jsonText,
   busy,
+  readOnly = false,
   onCandidateChange,
   onJsonTextChange,
   onViewChange
@@ -60,6 +61,7 @@ export function DefinitionCandidateEditor({
   view: DefinitionEditorView;
   jsonText: string;
   busy: boolean;
+  readOnly?: boolean;
   onCandidateChange: (candidate: DefinitionCandidate) => void;
   onJsonTextChange: (text: string) => void;
   onViewChange: (view: DefinitionEditorView) => void;
@@ -79,14 +81,16 @@ export function DefinitionCandidateEditor({
       })
       .catch((error: unknown) => {
         if (!cancelled) {
-          setAuthoringError("Authoring options could not be loaded. Advanced JSON can still name a configured value.");
+          setAuthoringError(readOnly
+            ? "Authoring options could not be loaded. Inspect the stored values in Advanced JSON."
+            : "Authoring options could not be loaded. Advanced JSON can still name a configured value.");
           setAuthoringDiagnosticId(describeAdminError(error, "").diagnosticId ?? null);
         }
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [readOnly]);
 
   return (
     <Flex vertical gap={12}>
@@ -107,6 +111,7 @@ export function DefinitionCandidateEditor({
           value={jsonText}
           rows={18}
           disabled={busy}
+          readOnly={readOnly}
           spellCheck={false}
           className="admin-draft-instructions"
           onChange={(event) => onJsonTextChange(event.target.value)}
@@ -114,7 +119,8 @@ export function DefinitionCandidateEditor({
       ) : (
         <DefinitionCandidateForm
           candidate={candidate}
-          busy={busy}
+          busy={busy || readOnly}
+          readOnly={readOnly}
           authoring={authoring}
           authoringError={authoringError}
           authoringDiagnosticId={authoringDiagnosticId}
@@ -128,6 +134,7 @@ export function DefinitionCandidateEditor({
 function DefinitionCandidateForm({
   candidate,
   busy,
+  readOnly,
   authoring,
   authoringError,
   authoringDiagnosticId,
@@ -135,6 +142,7 @@ function DefinitionCandidateForm({
 }: {
   candidate: DefinitionCandidate;
   busy: boolean;
+  readOnly: boolean;
   authoring: AdminAuthoringOptions | null;
   authoringError: string | null;
   authoringDiagnosticId: string | null;
@@ -161,7 +169,7 @@ function DefinitionCandidateForm({
   };
 
   return (
-    <Flex vertical gap={16} className="admin-draft-form-stack">
+    <Flex vertical gap={16} className={`admin-draft-form-stack${readOnly ? " admin-draft-form-readonly" : ""}`}>
       <section className="admin-draft-form-section" aria-label="Identity and goals">
         <Typography.Title level={5}>Identity &amp; goals</Typography.Title>
         <div className="admin-draft-field">
@@ -170,18 +178,21 @@ function DefinitionCandidateForm({
         </div>
         <div className="admin-draft-field-grid">
           <TextField
+            readOnly={readOnly}
             label="Definition name"
             value={readString(candidate, ["identity", "name"])}
             disabled={busy}
             onChange={(value) => onCandidateChange(patchRecord(candidate, ["identity"], { name: value }))}
           />
           <TextField
+            readOnly={readOnly}
             label="Definition role"
             value={readString(candidate, ["identity", "role"])}
             disabled={busy}
             onChange={(value) => onCandidateChange(patchRecord(candidate, ["identity"], { role: value }))}
           />
           <TextField
+            readOnly={readOnly}
             label="Definition tone"
             value={readString(candidate, ["identity", "tone"])}
             disabled={busy}
@@ -189,6 +200,7 @@ function DefinitionCandidateForm({
           />
         </div>
         <TextField
+          readOnly={readOnly}
           label="Definition description"
           value={readString(candidate, ["identity", "description"])}
           disabled={busy}
@@ -198,6 +210,7 @@ function DefinitionCandidateForm({
           {goalRows.map((goal, index) => (
             <div key={`goal-${index}`} className="admin-draft-repeat-row">
               <TextField
+                readOnly={readOnly}
                 label={`Goal ${index + 1}`}
                 value={goal}
                 disabled={busy}
@@ -206,7 +219,7 @@ function DefinitionCandidateForm({
                   setGoals(goals.length === 0 ? [value] : next);
                 }}
               />
-              <Button
+              {!readOnly ? <Button
                 danger
                 type="text"
                 icon={<DeleteOutlined />}
@@ -214,13 +227,13 @@ function DefinitionCandidateForm({
                 className="admin-knowledge-source-remove"
                 disabled={busy}
                 onClick={() => setGoals(goals.filter((_, itemIndex) => itemIndex !== index))}
-              />
+              /> : null}
             </div>
           ))}
         </Flex>
-        <Button onClick={() => setGoals([...goals, ""])} disabled={busy}>
+        {!readOnly ? <Button onClick={() => setGoals([...goals, ""])} disabled={busy}>
           Add goal
-        </Button>
+        </Button> : null}
       </section>
 
       <section className="admin-draft-form-section" aria-label="Instructions">
@@ -254,6 +267,7 @@ function DefinitionCandidateForm({
               index={index}
               skill={skill}
               disabled={busy}
+              readOnly={readOnly}
               onChange={(next) => {
                 const skills = readSkills(candidate).map((item, itemIndex) => (itemIndex === index ? next : item));
                 onCandidateChange(writeSkills(candidate, skills));
@@ -267,12 +281,12 @@ function DefinitionCandidateForm({
             />
           ))
         )}
-        <Button
+        {!readOnly ? <Button
           onClick={() => onCandidateChange(writeSkills(candidate, [...readSkills(candidate), emptySkill()]))}
           disabled={busy}
         >
           Add skill
-        </Button>
+        </Button> : null}
       </section>
 
       <section className="admin-draft-form-section" aria-label="Behavior and conversation">
@@ -297,6 +311,7 @@ function DefinitionCandidateForm({
             }
           />
           <TextField
+            readOnly={readOnly}
             label="Conversation language"
             hint="auto, or a BCP 47 tag such as en."
             value={readString(candidate, ["conversationPolicy", "language"])}
@@ -566,6 +581,7 @@ function DefinitionCandidateForm({
         />
         <div className="admin-draft-field-grid">
           <TextField
+            readOnly={readOnly}
             label="Voice id"
             value={readString(candidate, ["voice", "voiceId"])}
             disabled={busy}
@@ -710,6 +726,7 @@ function DefinitionCandidateForm({
           {metadataRows.map((row, index) => (
             <div key={`metadata-${index}`} className="admin-draft-metadata-row">
               <TextField
+                readOnly={readOnly}
                 label={`Metadata key ${index + 1}`}
                 value={row.key}
                 disabled={busy}
@@ -721,6 +738,7 @@ function DefinitionCandidateForm({
                 }}
               />
               <TextField
+                readOnly={readOnly}
                 label={`Metadata value ${index + 1}`}
                 value={row.value}
                 disabled={busy}
@@ -731,7 +749,7 @@ function DefinitionCandidateForm({
                   onCandidateChange(writeMetadataRows(candidate, next));
                 }}
               />
-              <Button
+              {!readOnly ? <Button
                 danger
                 type="text"
                 icon={<DeleteOutlined />}
@@ -744,16 +762,16 @@ function DefinitionCandidateForm({
                     metadataRows.filter((_, itemIndex) => itemIndex !== index)
                   ))
                 }
-              />
+              /> : null}
             </div>
           ))}
         </Flex>
-        <Button
+        {!readOnly ? <Button
           onClick={() => onCandidateChange(writeMetadataRows(candidate, [...metadataRows, { key: "", value: "" }]))}
           disabled={busy || metadataRows.some((row) => row.key === "")}
         >
           Add metadata
-        </Button>
+        </Button> : null}
       </section>
     </Flex>
   );
@@ -775,12 +793,14 @@ function SkillCard({
   index,
   skill,
   disabled,
+  readOnly,
   onChange,
   onRemove
 }: {
   index: number;
   skill: SkillDraft;
   disabled: boolean;
+  readOnly: boolean;
   onChange: (skill: SkillDraft) => void;
   onRemove: () => void;
 }) {
@@ -789,17 +809,18 @@ function SkillCard({
     <div className="admin-skill-card" aria-label={`Skill ${number}`}>
       <Flex justify="space-between" align="center" gap={8} wrap="wrap">
         <Typography.Text strong>{skill.name.trim() || `Skill ${number}`}</Typography.Text>
-        <Button
+        {!readOnly ? <Button
           danger
           type="text"
           icon={<DeleteOutlined />}
           aria-label={`Remove skill ${number}`}
           disabled={disabled}
           onClick={onRemove}
-        />
+        /> : null}
       </Flex>
       <div className="admin-draft-field-grid">
         <TextField
+          readOnly={readOnly}
           label={`Skill ${number} id`}
           hint="Lowercase id, such as refund.handle."
           value={skill.id}
@@ -807,6 +828,7 @@ function SkillCard({
           onChange={(id) => onChange({ ...skill, id })}
         />
         <TextField
+          readOnly={readOnly}
           label={`Skill ${number} name`}
           value={skill.name}
           disabled={disabled}
@@ -814,6 +836,7 @@ function SkillCard({
         />
       </div>
       <TextField
+        readOnly={readOnly}
         label={`Skill ${number} description`}
         value={skill.description}
         disabled={disabled}
@@ -831,6 +854,7 @@ function SkillCard({
         />
       </label>
       <TextField
+        readOnly={readOnly}
         label={`Skill ${number} activation keywords`}
         hint="Comma-separated. Keywords select this skill; they do not grant authority."
         value={skill.activationKeywords}
@@ -838,6 +862,7 @@ function SkillCard({
         onChange={(activationKeywords) => onChange({ ...skill, activationKeywords })}
       />
       <TextField
+        readOnly={readOnly}
         label={`Skill ${number} required capabilities`}
         hint="Comma-separated requirements, not grants. They do not add tools, credentials, or approval."
         value={skill.requiredCapabilities}
@@ -845,6 +870,7 @@ function SkillCard({
         onChange={(requiredCapabilities) => onChange({ ...skill, requiredCapabilities })}
       />
       <TextField
+        readOnly={readOnly}
         label={`Skill ${number} resource paths`}
         hint="Comma-separated relative paths."
         value={skill.resourcePaths}
@@ -896,25 +922,34 @@ function TextField({
   hint,
   value,
   disabled,
+  readOnly = false,
   onChange
 }: {
   label: string;
   hint?: string;
   value: string;
   disabled: boolean;
+  readOnly?: boolean;
   onChange: (value: string) => void;
 }) {
   const hintId = useId();
   return (
     <label className="admin-draft-field">
       <Typography.Text strong>{label}</Typography.Text>
-      <Input
+      {readOnly ? <Input.TextArea
+        aria-label={label}
+        aria-describedby={hint ? hintId : undefined}
+        value={value}
+        disabled={disabled}
+        readOnly
+        autoSize
+      /> : <Input
         aria-label={label}
         aria-describedby={hint ? hintId : undefined}
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
-      />
+      />}
       {hint ? (
         <Typography.Text id={hintId} type="secondary" className="admin-draft-field-hint">
           {hint}

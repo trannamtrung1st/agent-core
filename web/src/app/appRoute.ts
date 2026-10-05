@@ -1,7 +1,8 @@
 export type AppArea = "chat" | "admin";
+export type AdminCollection = "definitions" | "instances" | "event-sources";
 
 export type AdminRoute =
-  | { area: "admin"; view: "home" }
+  | { area: "admin"; view: "home"; collection?: AdminCollection }
   | { area: "admin"; view: "definition"; definitionId: string }
   | { area: "admin"; view: "instance"; instanceId: string };
 
@@ -14,6 +15,10 @@ const ADMIN_INSTANCE_PATTERN = /^\/admin\/instances\/([0-9a-f-]{36})\/?$/i;
 export function parseAppRoute(pathname: string): AppRoute {
   if (pathname === ADMIN_HOME || pathname === `${ADMIN_HOME}/`) {
     return { area: "admin", view: "home" };
+  }
+  const collectionMatch = /^\/admin\/(definitions|instances|event-sources)\/?$/i.exec(pathname);
+  if (collectionMatch) {
+    return { area: "admin", view: "home", collection: collectionMatch[1].toLowerCase() as AdminCollection };
   }
 
   const definitionMatch = ADMIN_DEFINITION_PATTERN.exec(pathname);
@@ -29,8 +34,8 @@ export function parseAppRoute(pathname: string): AppRoute {
   return { area: "chat" };
 }
 
-export function adminHomePath(): string {
-  return ADMIN_HOME;
+export function adminHomePath(collection: AdminCollection = "definitions"): string {
+  return collection === "definitions" ? ADMIN_HOME : `${ADMIN_HOME}/${collection}`;
 }
 
 export function adminDefinitionPath(definitionId: string): string {

@@ -3,8 +3,8 @@ import { expect, test, type Page } from '@playwright/test';
 test.use({ actionTimeout: 15_000 });
 
 async function select(page: Page, label: string, text: string) {
-  await page.getByLabel(label, { exact: true }).click();
-  if (label === 'Identity') await page.getByLabel(label, { exact: true }).fill(text);
+  await page.getByRole('combobox', { name: label, exact: true }).click();
+  if (label === 'Identity') await page.getByRole('combobox', { name: label, exact: true }).fill(text);
   await page.locator('.ant-select-item-option').filter({ hasText: text }).last().click();
 }
 async function send(page: Page, text: string) {
@@ -38,6 +38,7 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   await dialog.getByRole('button', { name: 'Create instance', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Continuity reviewer', exact: true })).toBeVisible();
   const id = page.url().split('/').at(-1)!;
+  await page.getByRole("tab", { name: "Behavior & continuity", exact: true }).click();
   const experience = page.getByRole('region', { name: 'Experience', exact: true });
   const initiative = page.getByRole('region', { name: 'Initiative', exact: true });
   await expect(experience.getByText('No experience yet. Enable experience and retrospect a completed task.')).toBeVisible();
@@ -56,6 +57,7 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   await expect(page.getByRole('button', { name: 'Resume', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Open Admin' }).click();
   await page.goto(`/admin/instances/${id}`);
+  await page.getByRole("tab", { name: "Behavior & continuity", exact: true }).click();
   // Persisted pause admits automatic retrospection; explicit request resolves to that checkpoint.
   await expect(experience.getByText('Review observable completed work').first()).toBeVisible({ timeout: 30_000 });
   await experience.getByLabel('Retrospection source Session', { exact: true }).fill(sessionId);
@@ -72,6 +74,7 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   await expect(page.getByText('I will observe current page state before acting, based on earlier experience. Current policy still controls every action.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Open Admin' }).click();
   await page.goto(`/admin/instances/${id}`);
+  await page.getByRole("tab", { name: "Behavior & continuity", exact: true }).click();
   await initiative.getByLabel('Thinking prompt', { exact: true }).fill('synthetic-thought-improve: review recent experience and improve only when useful. Otherwise do nothing.');
   await initiative.getByRole('switch', { name: 'Enable thought activation', exact: true }).click();
   await initiative.getByRole('button', { name: 'Create thought', exact: true }).click();

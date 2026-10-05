@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Alert, App, Button, Empty, Flex, Form, Input, Modal, Spin, Typography, theme } from "antd";
+import { Alert, App, Button, Empty, Flex, Form, Input, Modal, Spin, Table, Tag, Typography, theme } from "antd";
+import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
 import { confirmAction } from "../../app/confirmAction";
 import {
   createEventSource,
@@ -18,6 +19,7 @@ export function EventSourcesSection() {
   const { token } = theme.useToken();
   const { message, modal } = App.useApp();
   const [sources, setSources] = useState<AdminEventSource[]>([]);
+  const { search, setSearch, pagination } = useAdminCollectionSearch();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -149,15 +151,26 @@ export function EventSourcesSection() {
                   Create event source
                 </Button>
               </Form>
-              {sources.length === 0 ? (
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No event sources yet." />
-              ) : (
-                sources.map((source) => (
-                  <Flex key={source.sourceId} vertical gap={token.paddingXS} aria-label={source.displayName}>
-                    <Typography.Text strong>{source.displayName}</Typography.Text>
-                    <Typography.Text type="secondary">{source.kind} · {source.status}</Typography.Text>
-                    <Flex align="center" gap={token.paddingXS} wrap="wrap">
-                      <Typography.Text aria-label="Source key">{source.sourceKey}</Typography.Text>
+              <AdminCollectionToolbar label="event sources" value={search} onChange={setSearch} />
+              <Table
+                aria-label="Event sources table" className="admin-collection-table" rowKey="sourceId" size="small"
+                dataSource={sources.filter(source => [source.displayName, source.sourceKey, source.kind, source.status]
+                  .some(value => value.toLowerCase().includes(search.trim().toLowerCase())))}
+                pagination={pagination} scroll={{ x: 1140 }}
+                locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={search.trim() || sources.length > 0 ? "No matches. Clear search or filters to see all results." : "No event sources yet."} /> }}
+                columns={[
+                  { title: "Name", dataIndex: "displayName", width: 220, ellipsis: true, sorter: (a, b) => a.displayName.localeCompare(b.displayName),
+                    render: (name: string) => <Typography.Text strong>{name}</Typography.Text> },
+                  { title: "Type", dataIndex: "kind", width: 100 },
+                  { title: "Status", key: "status", width: 100,
+                    filters: [{ text: "Active", value: "Active" }, { text: "Revoked", value: "Revoked" }],
+                    onFilter: (value, source) => source.status === value,
+                    render: (_, source) => <Tag>{source.status}</Tag> },
+                  { title: "Source key", dataIndex: "sourceKey", width: 320,
+                    render: (key: string) => <Typography.Text aria-label="Source key">{key}</Typography.Text> },
+                  { title: "Actions", key: "actions", width: 400, render: (_, source) => (
+                    <Flex gap={token.paddingXS} align="center">
                       <Button
                         type="link"
                         size="small"
@@ -167,9 +180,8 @@ export function EventSourcesSection() {
                       >
                         Copy webhook URL
                       </Button>
-                    </Flex>
-                    <Flex gap={token.paddingXS} wrap="wrap">
                       <Button
+                        size="small"
                         disabled={busy}
                         aria-label={`Rotate credential for ${source.displayName}`}
                         onClick={() =>
@@ -187,6 +199,7 @@ export function EventSourcesSection() {
                       </Button>
                       {source.status === "Active" ? (
                         <Button
+                          size="small"
                           danger
                           disabled={busy}
                           aria-label={`Revoke ${source.displayName}`}
@@ -205,9 +218,9 @@ export function EventSourcesSection() {
                         </Button>
                       ) : null}
                     </Flex>
-                  </Flex>
-                ))
-              )}
+                  ) }
+                ]}
+              />
             </>
           ) : null}
           <Modal

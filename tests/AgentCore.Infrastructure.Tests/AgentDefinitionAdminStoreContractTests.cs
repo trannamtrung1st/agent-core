@@ -20,8 +20,10 @@ public sealed class InMemoryAgentDefinitionAdminStoreContractTests : AgentDefini
 
 public sealed class SqliteAgentDefinitionAdminStoreContractTests : AgentDefinitionAdminStoreContractTests
 {
-    [Fact]
-    public async Task Delete_removes_draft_resources_and_evaluation_evidence()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Delete_or_publish_removes_draft_resources_and_evaluation_evidence(bool publish)
     {
         var path = Path.Combine(Path.GetTempPath(), $"agent-core-def-admin-delete-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
@@ -83,8 +85,20 @@ public sealed class SqliteAgentDefinitionAdminStoreContractTests : AgentDefiniti
                     [],
                     now.AddMinutes(3)));
 
-            await admin.DeleteDraftAsync(
-                new AgentDefinitionDraftDelete(draft.DraftId, 3, now.AddMinutes(4)));
+            if (publish)
+            {
+                await Assert.ThrowsAsync<AgentCoreException>(async () => await admin.PublishDraftAsync(
+                    new AgentDefinitionDraftPublish(draft.DraftId, 2, [], now.AddMinutes(4), ConsumeDraft: true)));
+                Assert.NotNull(await admin.GetDraftAsync(draft.DraftId));
+                var publication = await admin.PublishDraftAsync(
+                    new AgentDefinitionDraftPublish(draft.DraftId, 3, [], now.AddMinutes(4), ConsumeDraft: true));
+                Assert.Single(await resources.ListPublicationResourcesAsync(draft.DefinitionId, publication.Version));
+            }
+            else
+            {
+                await admin.DeleteDraftAsync(new AgentDefinitionDraftDelete(draft.DraftId, 3, now.AddMinutes(4)));
+            }
+            Assert.Null(await admin.GetDraftAsync(draft.DraftId));
 
             Assert.Empty(await resources.ListDraftResourcesAsync(draft.DraftId));
             Assert.Empty(await evaluations.ListScenariosAsync(draft.DraftId));
@@ -119,8 +133,9 @@ public sealed class SqliteAgentDefinitionAdminStoreContractTests : AgentDefiniti
                 new AgentDefinitionDraftCreate("demo-agent", candidate, DefinitionDraftSourceKind.New, null, now),
                 CancellationToken.None);
             var published = await store.PublishDraftAsync(
-                new AgentDefinitionDraftPublish(draft.DraftId, draft.Revision, [], now.AddMinutes(1)),
+                new AgentDefinitionDraftPublish(draft.DraftId, draft.Revision, [], now.AddMinutes(1), ConsumeDraft: true),
                 CancellationToken.None);
+            Assert.Null(await store.GetDraftAsync(draft.DraftId));
 
             var reopened = new SqliteAgentDefinitionAdminStore(
                 factory,
@@ -189,6 +204,28 @@ public sealed class SqliteAgentDefinitionAdminStoreContractTests : AgentDefiniti
 
 public abstract class AgentDefinitionAdminStoreContractTests
 {
+    [Fact]
+    public async Task Consuming_publication_removes_only_its_source_draft()
+    {
+        await ForEachStoreAsync(async store =>
+        {
+            var now = DateTimeOffset.Parse("2026-01-04T00:00:00Z");
+            var candidate = SampleCandidate("consume-draft");
+            var source = await store.CreateDraftAsync(new AgentDefinitionDraftCreate(
+                "consume-draft", candidate, DefinitionDraftSourceKind.New, null, now));
+            var other = await store.CreateDraftAsync(new AgentDefinitionDraftCreate(
+                "consume-draft", candidate, DefinitionDraftSourceKind.New, null, now));
+            await Assert.ThrowsAsync<AgentCoreException>(async () => await store.PublishDraftAsync(
+                new AgentDefinitionDraftPublish(source.DraftId, source.Revision + 1, [], now, ConsumeDraft: true)));
+            Assert.NotNull(await store.GetDraftAsync(source.DraftId));
+            var published = await store.PublishDraftAsync(new AgentDefinitionDraftPublish(
+                source.DraftId, source.Revision, [], now, ConsumeDraft: true));
+            Assert.Null(await store.GetDraftAsync(source.DraftId));
+            Assert.NotNull(await store.GetDraftAsync(other.DraftId));
+            Assert.NotNull(await store.GetPublicationAsync(source.DefinitionId, published.Version));
+        });
+    }
+
     protected abstract Task ForEachStoreAsync(Func<IAgentDefinitionAdminStore, Task> exercise);
 
     [Fact]

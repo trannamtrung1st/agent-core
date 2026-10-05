@@ -129,11 +129,12 @@ test("store connection and quiet background work stay labeled", async ({ page })
   await expect(page.getByLabel(/Application connection:/)).toHaveCount(0);
   await page.goto(`/admin/instances/${instanceId}`);
   await expect(page).toHaveURL(/\/admin\/instances\/[0-9a-f-]{36}$/i);
+  await page.getByRole("tab", { name: "Connections", exact: true }).click();
   const section = page.getByRole("region", { name: "Application connection" });
   await expect(section.getByRole("heading", { name: "Application connection" })).toBeVisible();
   await expect(section.getByText("Connect the supported nopCommerce application to this agent. Authentication stays in this agent's browser profile.")).toBeVisible();
   await expect(section.getByText("Application type")).toBeVisible();
-  await expect(section.getByText("nopCommerce", { exact: true })).toBeVisible();
+  await expect(section.getByText("nopCommerce", { exact: true }).first()).toBeVisible();
   const existingRevoke = section.getByRole("button", { name: "Revoke connection" });
   if (await existingRevoke.isVisible()) {
     await existingRevoke.click();
@@ -167,6 +168,7 @@ test("store connection and quiet background work stay labeled", async ({ page })
 
   await page.goto(`/admin/instances/${instanceId}`);
   await page.setViewportSize({ width: 390, height: 800 });
+  await page.getByRole("tab", { name: "Connections", exact: true }).click();
   await expect(section.getByRole("heading", { name: "Application connection" })).toBeVisible();
   await expect(section.getByRole("button", { name: "Connect" })).toBeVisible();
 

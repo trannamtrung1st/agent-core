@@ -32,6 +32,15 @@ public sealed class AgentDefinitionLifecycleService(
             cancellationToken).ConfigureAwait(false)
         ?? throw AgentCoreErrors.NotFound("Definition version was not found.");
 
+    public ValueTask<AgentDefinitionCandidate> GetVersionCandidateAsync(
+        string definitionId, int version, DefinitionDraftSourceKind sourceKind,
+        CancellationToken cancellationToken = default) => sourceKind switch
+    {
+        DefinitionDraftSourceKind.ForkBuiltIn => ReadBuiltInCandidateAsync(definitionId, version, cancellationToken),
+        DefinitionDraftSourceKind.ForkDurable => ReadDurableCandidateAsync(definitionId, version, cancellationToken),
+        _ => throw AgentCoreErrors.Validation("Version source must be ForkBuiltIn or ForkDurable.")
+    };
+
     public async ValueTask<AgentDefinition?> GetDraftSourceAsync(AgentDefinitionDraft draft,
         CancellationToken cancellationToken = default) => draft.SourceKind switch
     {
@@ -118,9 +127,9 @@ public sealed class AgentDefinitionLifecycleService(
 
         var candidate = sourceKind switch
         {
-            DefinitionDraftSourceKind.ForkBuiltIn => await ForkFromBuiltInAsync(definitionId, sourceVersion, cancellationToken)
+            DefinitionDraftSourceKind.ForkBuiltIn => await ReadBuiltInCandidateAsync(definitionId, sourceVersion, cancellationToken)
                 .ConfigureAwait(false),
-            _ => await ForkFromDurableAsync(definitionId, sourceVersion, cancellationToken)
+            _ => await ReadDurableCandidateAsync(definitionId, sourceVersion, cancellationToken)
                 .ConfigureAwait(false)
         };
 
@@ -348,7 +357,8 @@ public sealed class AgentDefinitionLifecycleService(
         Guid operationId,
         IReadOnlyList<string> changedSectionIds,
         CancellationToken cancellationToken = default,
-        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner)
+        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner,
+        bool consumeDraft = false)
     {
         var draft = await GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
         return await WithDefinitionGateAsync(
@@ -358,7 +368,7 @@ public sealed class AgentDefinitionLifecycleService(
                 expectedRevision,
                 operationId,
                 changedSectionIds,
-                ct, actorKind),
+                ct, actorKind, consumeDraft),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -368,7 +378,8 @@ public sealed class AgentDefinitionLifecycleService(
         Guid operationId,
         IReadOnlyList<string> changedSectionIds,
         CancellationToken cancellationToken = default,
-        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner)
+        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner,
+        bool consumeDraft = false)
     {
         var started = Stopwatch.GetTimestamp();
         var draft = await GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
@@ -387,7 +398,7 @@ public sealed class AgentDefinitionLifecycleService(
                 occupied,
                 time.GetUtcNow(),
                 operationId,
-                ActorKind: actorKind, ChangedSectionIds: changedSectionIds),
+                ActorKind: actorKind, ChangedSectionIds: changedSectionIds, ConsumeDraft: consumeDraft),
             cancellationToken).ConfigureAwait(false);
         OperationalDiagnostics.RecordAdmin(
             "publish",
@@ -466,7 +477,7 @@ public sealed class AgentDefinitionLifecycleService(
         return publication;
     }
 
-    private async ValueTask<AgentDefinitionCandidate> ForkFromBuiltInAsync(
+    private async ValueTask<AgentDefinitionCandidate> ReadBuiltInCandidateAsync(
         string definitionId,
         int sourceVersion,
         CancellationToken cancellationToken)
@@ -476,7 +487,7 @@ public sealed class AgentDefinitionLifecycleService(
         return AgentDefinitionCandidate.FromDefinition(definition);
     }
 
-    private async ValueTask<AgentDefinitionCandidate> ForkFromDurableAsync(
+    private async ValueTask<AgentDefinitionCandidate> ReadDurableCandidateAsync(
         string definitionId,
         int sourceVersion,
         CancellationToken cancellationToken)

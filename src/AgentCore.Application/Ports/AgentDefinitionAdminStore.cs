@@ -80,7 +80,8 @@ public sealed record AgentDefinitionDraftPublish(
     DateTimeOffset PublishedAt,
     Guid OperationId = default,
     AdminEventActorKind ActorKind = AdminEventActorKind.LocalOwner,
-    IReadOnlyList<string>? ChangedSectionIds = null);
+    IReadOnlyList<string>? ChangedSectionIds = null,
+    bool ConsumeDraft = false);
 
 public sealed record AgentDefinitionPublicationDeprecate(
     string DefinitionId,

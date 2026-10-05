@@ -19,12 +19,14 @@ import {
   Spin,
   Switch,
   Tabs,
+  Table,
   Tag,
   Tooltip,
   Typography,
-  Upload
+  Upload,
+  theme
 } from "antd";
-import { ArrowLeftOutlined, DeleteOutlined, InboxOutlined, MessageOutlined, RightOutlined } from "@ant-design/icons";
+import { ArrowLeftOutlined, DeleteOutlined, InboxOutlined, MessageOutlined } from "@ant-design/icons";
 import {
   applyDraftEnvironmentToCandidate,
   readDraftEnvironment,
@@ -39,7 +41,7 @@ import {
   cloneCandidate,
   type DefinitionCandidate
 } from "./definitionCandidate";
-import { DefinitionCandidateEditor, PublishedSkillList, type DefinitionEditorView } from "./definitionCandidateEditor";
+import { DefinitionCandidateEditor, type DefinitionEditorView } from "./definitionCandidateEditor";
 import { HarnessManagementSection, HarnessPolicyModeScopes } from "./HarnessManagementSection";
 import { ApplicationConnectionSection } from "./ApplicationConnectionSection";
 import { EventSourcesSection } from "./EventSourcesSection";
@@ -97,7 +99,8 @@ import {
   lastChatUrl,
   navigateToAppPath,
   rememberChatUrl,
-  type AdminRoute
+  type AdminRoute,
+  type AdminCollection
 } from "../../app/appRoute";
 import { confirmAction } from "../../app/confirmAction";
 import { AdminDeletionBlockedAlert } from "./adminDeletionBlocked";
@@ -108,12 +111,19 @@ import { startManagedPublicationChat } from "./adminManagedChat";
 import { InstanceContinuitySection } from "./InstanceContinuitySection";
 import { InstanceMemoryAutomationPanel } from "./instanceMemoryAutomation";
 
+import { DefinitionVersionsTable } from "./DefinitionVersionsTable";
+import { AdminCollectionToolbar, adminCollectionPagination, useAdminCollectionSearch } from "./AdminCollectionToolbar";
+
 const { Header, Content } = Layout;
 
 type LoadState<T> =
   | { kind: "loading" }
   | { kind: "error"; message: string; unauthorized?: boolean; diagnosticId?: string }
   | { kind: "ready"; data: T };
+
+type EffectiveConfigLoadState = LoadState<AdminEffectiveConfiguration> & {
+  data?: AdminEffectiveConfiguration;
+};
 
 type DefinitionInventoryGroup = {
   definitionId: string;
@@ -270,9 +280,14 @@ export function groupDefinitionInventory(
 }
 
 export function AdminApp({ route }: { route: AdminRoute }) {
+  const [collection, setCollection] = useState<AdminCollection>(route.view === "home" ? route.collection ?? "definitions" : "definitions");
+  useEffect(() => {
+    if (route.view === "home") setCollection(route.collection ?? "definitions");
+  }, [route]);
   const [definitions, setDefinitions] = useState<LoadState<AdminDefinitionInventoryItem[]>>({ kind: "loading" });
   const [instances, setInstances] = useState<LoadState<AdminInstanceInventoryItem[]>>({ kind: "loading" });
-  const [effectiveConfig, setEffectiveConfig] = useState<LoadState<AdminEffectiveConfiguration>>({ kind: "loading" });
+  const [effectiveConfig, setEffectiveConfig] = useState<EffectiveConfigLoadState>({ kind: "loading" });
+  const effectiveRequest = useRef(0);
 
   const reloadDefinitions = useCallback(async () => {
     setDefinitions({ kind: "loading" });
@@ -311,18 +326,22 @@ export function AdminApp({ route }: { route: AdminRoute }) {
   }, [reloadDefinitions, reloadInstances]);
 
   const reloadEffectiveConfig = useCallback(async (instanceId: string) => {
-    setEffectiveConfig({ kind: "loading" });
+    const request = ++effectiveRequest.current;
+    setEffectiveConfig(current => ({ kind: "loading",
+      data: current.data?.instanceId === instanceId ? current.data : undefined }));
     try {
       const data = await getAdminEffectiveConfig(instanceId);
-      setEffectiveConfig({ kind: "ready", data });
+      if (request === effectiveRequest.current) setEffectiveConfig({ kind: "ready", data });
     } catch (error) {
+      if (request !== effectiveRequest.current) return;
       const formatted = formatAdminLoadError(error);
-      setEffectiveConfig({
+      setEffectiveConfig(current => ({
         kind: "error",
         message: formatted.message,
         unauthorized: formatted.unauthorized,
-        diagnosticId: formatted.diagnosticId
-      });
+        diagnosticId: formatted.diagnosticId,
+        data: formatted.unauthorized ? undefined : current.data
+      }));
     }
   }, []);
 
@@ -332,11 +351,13 @@ export function AdminApp({ route }: { route: AdminRoute }) {
 
   useEffect(() => {
     if (route.view !== "instance") {
+      ++effectiveRequest.current;
       setEffectiveConfig({ kind: "loading" });
       return;
     }
 
     void reloadEffectiveConfig(route.instanceId);
+    return () => { ++effectiveRequest.current; };
   }, [route, reloadEffectiveConfig]);
 
   const returnToChat = () => {
@@ -385,8 +406,13 @@ export function AdminApp({ route }: { route: AdminRoute }) {
                 <NewInstanceButton groups={definitionGroups.filter((group) => group.versions.length > 0)} />
               </Flex>
             </Flex>
-            <div className="admin-inventory-grid">
-              <InventorySection
+            <Tabs className="admin-collection-tabs" activeKey={collection}
+              onChange={(key) => {
+                setCollection(key as AdminCollection);
+                navigateToAppPath(adminHomePath(key as AdminCollection));
+              }}
+              items={[
+              { key: "definitions", label: "Definitions", children: <InventorySection
                 title="Definitions"
                 countLabel={definitions.kind === "ready"
                   ? `${definitionGroups.length} ${definitionGroups.length === 1 ? "definition" : "definitions"}`
@@ -403,15 +429,19 @@ export function AdminApp({ route }: { route: AdminRoute }) {
                         key: group.definitionId,
                         title: group.logicalName,
                         secondary: group.definitionId,
+                        latestActive: latestActiveVersion(group.versions),
+                        draftCount: group.draftCount,
+                        versionCount: group.versions.length,
                         description: formatDefinitionVersionSummary(group),
                         detail: formatDefinitionInventoryCounts(group),
                         tag: group.draftOnly ? "Draft" : formatInventoryStatus(group.latestStatus),
+                        version: group.latestVersion,
                         onClick: () => navigateToAppPath(adminDefinitionPath(group.definitionId))
                       }))
                     : []
                 }
-              />
-              <InventorySection
+              /> },
+              { key: "instances", label: "Instances", children: <InventorySection
                 title="Instances"
                 countLabel={instances.kind === "ready"
                   ? `${instances.data.length} ${instances.data.length === 1 ? "instance" : "instances"}`
@@ -426,24 +456,30 @@ export function AdminApp({ route }: { route: AdminRoute }) {
                   instances.kind === "ready"
                     ? instances.data.map((item) => ({
                         key: item.instanceId,
-                      title: `${item.personaName} · ${item.definitionId}`,
-                      secondary: item.compatibility ? "Compatibility / legacy instance" : "Managed instance",
-                      description: `Pinned to v${item.activeVersion}`,
+                        title: `${item.personaName} · ${item.definitionId}`,
+                        name: item.personaName,
+                        definitionId: item.definitionId,
+                        secondary: item.instanceId,
+                        description: `Pinned to v${item.activeVersion}`,
+                        version: item.activeVersion,
                         tag: item.compatibility ? "Compatibility" : "Managed",
+                        status: item.lifecycle,
+                        detail: `Updated ${formatAdminTimestamp(item.updatedAt)}`,
+                        updatedAt: item.updatedAt,
                         onClick: () => navigateToAppPath(adminInstancePath(item.instanceId))
                       }))
                     : []
                 }
-              />
-            </div>
-            <div className="admin-home-sources">
-              <EventSourcesSection />
-            </div>
+              /> },
+              { key: "event-sources", label: "Event sources", children: <EventSourcesSection /> }
+              ]}
+            />
           </div>
         ) : null}
 
         {route.view === "definition" ? (
           <DefinitionDetail
+            key={route.definitionId}
             definitionId={route.definitionId}
             definitions={definitions}
             onBack={() => navigateToAppPath(adminHomePath())}
@@ -457,10 +493,11 @@ export function AdminApp({ route }: { route: AdminRoute }) {
 
         {route.view === "instance" ? (
           <InstanceDetail
+            key={route.instanceId}
             instanceId={route.instanceId}
             instances={instances}
             effective={effectiveConfig}
-            onBack={() => navigateToAppPath(adminHomePath())}
+            onBack={() => navigateToAppPath(adminHomePath("instances"))}
             onRetryEffective={() => void reloadEffectiveConfig(route.instanceId)}
             onInstanceChanged={() => {
               void reloadEffectiveConfig(route.instanceId);
@@ -468,7 +505,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
             }}
             onInstanceDeleted={() => {
               void reloadInstances();
-              navigateToAppPath(adminHomePath());
+              navigateToAppPath(adminHomePath("instances"));
             }}
           />
         ) : null}
@@ -764,70 +801,85 @@ function InventorySection({
   items: Array<{
     key: string;
     title: string;
+    name?: string;
+    definitionId?: string;
     secondary?: string;
     description: string;
+    version: number;
+    latestActive?: number | null;
+    draftCount?: number;
+    versionCount?: number;
+    updatedAt?: string;
     detail?: string;
     tag?: string;
+    status?: string;
     onClick: () => void;
   }>;
 }) {
+  const { token } = theme.useToken();
+  const { search, setSearch, pagination } = useAdminCollectionSearch();
+  const query = search.trim().toLowerCase();
+  const filteredItems = items.filter(item =>
+    [item.title, item.secondary, item.description, item.detail, item.tag, item.status, item.key]
+      .some(value => value?.toLowerCase().includes(query))
+  );
   return (
     <section aria-label={title} className="admin-inventory-section">
       <Flex align="baseline" justify="space-between" gap={12} className="admin-inventory-heading">
         <Typography.Title level={4}>{title}</Typography.Title>
         {countLabel ? <Typography.Text type="secondary">{countLabel}</Typography.Text> : null}
       </Flex>
-      {error ? (
-        <Alert
-          type={unauthorized ? "warning" : "error"}
-          showIcon
-          message={error}
-          action={<AdminRetryAction onRetry={onRetry} diagnosticId={diagnosticId} />}
-          className="admin-inventory-alert"
+      {error ? <Alert type={unauthorized ? "warning" : "error"} showIcon title={error}
+        action={<AdminRetryAction onRetry={onRetry} diagnosticId={diagnosticId} />}
+        className="admin-inventory-alert" /> : null}
+      {!error ? <>
+        <AdminCollectionToolbar label={title.toLowerCase()} value={search} onChange={setSearch} />
+        <Table
+          aria-label={`${title} table`}
+          className="admin-collection-table"
+          rowKey="key"
+          loading={loading}
+          dataSource={filteredItems}
+          size="small"
+          scroll={{ x: title === "Definitions" ? 1050 : 1320 }}
+          pagination={pagination}
+          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={query || items.length > 0 ? "No matches. Clear search or filters to see all results." : emptyLabel} /> }}
+          columns={[
+            { title: title === "Definitions" ? "Definition" : "Instance", key: "name", width: 240, ellipsis: true,
+              sorter: (a, b) => a.title.localeCompare(b.title),
+              render: (_, item) => <Button type="link" size="small" className="admin-collection-name"
+                style={{ paddingInline: token.paddingXS }}
+                title={item.name ?? item.title}
+                aria-label={title === "Definitions" ? `${item.title} · ${item.secondary}` : item.title} onClick={item.onClick}>
+                <span>{item.name ?? item.title}</span>
+              </Button> },
+            { title: title === "Definitions" ? "Definition ID" : "Instance ID", dataIndex: "secondary", width: title === "Definitions" ? 230 : 340, ellipsis: true },
+            ...(title === "Instances" ? [{ title: "Definition", dataIndex: "definitionId", width: 190, ellipsis: true }] : []),
+            { title: title === "Definitions" ? "Latest version" : "Version", key: "version", width: 110,
+              sorter: (a, b) => a.version - b.version,
+              render: (_, item) => item.version > 0 ? `v${item.version}` : "—" },
+            ...(title === "Definitions" ? [{ title: "Latest active", dataIndex: "latestActive", width: 130,
+              render: (value: number | null) => value == null ? "—" : `v${value}` }] : []),
+            { title: title === "Definitions" ? "Status" : "Type", dataIndex: "tag", width: 130,
+              filters: [...new Set(items.map(item => item.tag).filter(Boolean))].map(value => ({ text: value!, value: value! })),
+              onFilter: (value, item) => item.tag === value,
+              render: (value: string) => <Tag>{value}</Tag> },
+            ...(title === "Instances" ? [{ title: "Lifecycle", dataIndex: "status", width: 110,
+              filters: [...new Set(items.map(item => item.status).filter(Boolean))].map(value => ({ text: value!, value: value! })),
+              onFilter: (value: React.Key | boolean, item: typeof items[number]) => item.status === value,
+              render: (value: string) => <Tag>{value}</Tag> },
+              { title: "Updated at", dataIndex: "updatedAt", width: 200,
+                sorter: (a: typeof items[number], b: typeof items[number]) => (a.updatedAt ?? "").localeCompare(b.updatedAt ?? ""),
+                render: (value: string) => formatAdminTimestamp(value) }] : [
+              { title: "Drafts", dataIndex: "draftCount", width: 90, align: "right" as const,
+                sorter: (a: typeof items[number], b: typeof items[number]) => (a.draftCount ?? 0) - (b.draftCount ?? 0) },
+              { title: "Versions", dataIndex: "versionCount", width: 90, align: "right" as const,
+                sorter: (a: typeof items[number], b: typeof items[number]) => (a.versionCount ?? 0) - (b.versionCount ?? 0) }
+            ])
+          ]}
         />
-      ) : null}
-      {loading ? (
-        <div className="admin-inventory-loading">
-          <Spin aria-label={`Loading ${title}`} />
-        </div>
-      ) : error ? null : items.length === 0 ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyLabel} className="admin-inventory-empty" />
-      ) : (
-        <List
-          className="admin-inventory-list"
-          dataSource={items}
-          renderItem={(item) => (
-            <List.Item className="admin-inventory-item">
-              <Button type="text" block className="admin-inventory-row" onClick={item.onClick}>
-                <Flex align="center" justify="space-between" gap={12}>
-                  <Flex vertical gap={4} className="admin-inventory-row-copy">
-                    <Typography.Text strong className="admin-inventory-row-title">
-                      {item.title}
-                    </Typography.Text>
-                    {item.secondary ? (
-                      <Typography.Text type="secondary" className="admin-inventory-row-secondary">
-                        {item.secondary}
-                      </Typography.Text>
-                    ) : null}
-                    <Flex gap={8} wrap="wrap" align="center">
-                      <Typography.Text type="secondary" className="admin-inventory-row-description">
-                        {item.description}
-                      </Typography.Text>
-                      {item.detail ? (
-                        <Typography.Text type="secondary" className="admin-inventory-row-description">
-                          {item.detail}
-                        </Typography.Text>
-                      ) : null}
-                      {item.tag ? <Tag>{item.tag}</Tag> : null}
-                    </Flex>
-                  </Flex>
-                  <RightOutlined className="admin-inventory-row-arrow" aria-hidden />
-                </Flex>
-              </Button>
-            </List.Item>
-          )}
-        />
-      )}
+      </> : null}
     </section>
   );
 }
@@ -846,10 +898,13 @@ function DefinitionDetail({
   onDeleted: () => void;
 }) {
   const { message, modal } = App.useApp();
+  const { token } = theme.useToken();
+  const [detailTab, setDetailTab] = useState("versions");
   const rows = definitions.kind === "ready"
     ? definitions.data.filter((item) => item.definitionId === definitionId)
     : [];
   const group = rows.length > 0 ? groupDefinitionInventory(rows)[0] : null;
+  useEffect(() => { if (group?.draftOnly) setDetailTab("drafts"); }, [group?.draftOnly]);
   const [lifecycleLoading, setLifecycleLoading] = useState(false);
   const [lifecycleError, setLifecycleErrorValue] = useState<string | null>(null);
   const [lifecycleDiagnosticId, setLifecycleDiagnosticId] = useState<string | null>(null);
@@ -964,6 +1019,7 @@ function DefinitionDetail({
   }, [activeDraft?.draftId]);
 
   const closeDraftEditor = () => {
+    setDetailTab("drafts");
     setActiveDraft(null);
     loadCandidate({});
   };
@@ -973,6 +1029,7 @@ function DefinitionDetail({
     setLifecycleError(null);
     try {
       const draft = await getAdminDefinitionDraft(draftId);
+      setDetailTab("drafts");
       setActiveDraft(draft);
       loadCandidate(draft.candidate);
     } catch (error) {
@@ -1150,7 +1207,7 @@ function DefinitionDetail({
       title: "Publish this draft?",
       content: dirty
         ? "Unsaved editor changes will be saved, then published as an immutable version."
-        : "Validated content becomes an immutable published version. You can continue editing the draft afterward.",
+        : "Validated content becomes an immutable published version and this draft is removed. To make further changes, create a draft from the published version.",
       okText: "Publish",
       onOk: async () => {
         setBusy(true);
@@ -1171,6 +1228,7 @@ function DefinitionDetail({
           }
           const publication = await publishAdminDefinitionDraft(draft.draftId, draft.revision);
           message.success(`Published version ${publication.version}.`);
+          setDetailTab("versions");
           setActiveDraft(null);
           loadCandidate({});
           await reloadLifecycle();
@@ -1282,15 +1340,6 @@ function DefinitionDetail({
                 Back to drafts
               </Button>
             )}
-            <Button
-              danger
-              icon={<DeleteOutlined />}
-              aria-label="Delete draft"
-              disabled={busy}
-              onClick={() => confirmDeleteDraft(activeDraft, activeDraft.revision)}
-            >
-              Delete draft
-            </Button>
           </Flex>
           {lifecycleError ? (
             <AdminDeletionBlockedAlert
@@ -1313,6 +1362,7 @@ function DefinitionDetail({
             onEditorViewChange={changeEditorView}
             onSave={() => void saveDraft()}
             onPublish={() => void confirmPublish()}
+            onDelete={() => confirmDeleteDraft(activeDraft, activeDraft.revision)}
             onDraftRevisionChange={(draft, options) => {
               setActiveDraft(draft);
               if (!options?.preserveLocalEdits) {
@@ -1324,193 +1374,110 @@ function DefinitionDetail({
         </section>
       ) : group || lifecycleLoading || draftSummaries.length > 0 ? (
         <div className="admin-definition-workspace">
-          {group && !group.draftOnly ? (
-          <section aria-label="Definition versions" className="admin-definition-panel admin-definition-versions">
-            <Flex align="baseline" justify="space-between" gap={12} className="admin-definition-panel-heading">
-              <Typography.Title level={4}>Versions</Typography.Title>
-              <Typography.Text type="secondary">Latest v{group.latestVersion}</Typography.Text>
-            </Flex>
-            <div className="admin-definition-panel-body">
-              <Descriptions bordered size="small" column={1}>
-                {group.versions.map((row) => (
-                  <Descriptions.Item key={`${row.definitionId}:${forkSourceKey(row)}`} label={`v${row.version}`}>
-                    <Flex gap={8} wrap="wrap" align="center">
-                      <Typography.Text>{row.displayName} · {row.source} · {row.status}</Typography.Text>
-                      {row.version === group.latestVersion ? <Tag color="blue">Latest</Tag> : null}
-                      {row.version === latestActiveVersion(group.versions)
-                        && row.version !== group.latestVersion ? (
-                          <Tag color="blue">Latest active</Tag>
-                        ) : null}
-                    </Flex>
-                  </Descriptions.Item>
-                ))}
-              </Descriptions>
-            </div>
-          </section>
-          ) : null}
           <section aria-label="Definition drafts" className="admin-definition-panel admin-definition-drafts">
             <div className="admin-definition-panel-heading">
-              <Typography.Title level={4}>Drafts &amp; publishing</Typography.Title>
+              <Typography.Title level={4}>Versions &amp; drafts</Typography.Title>
               <Typography.Text type="secondary">
                 Fork an immutable version to edit, validate, and publish a new one.
               </Typography.Text>
             </div>
             <div className="admin-definition-panel-body">
               {group && !group.draftOnly ? (
-              <Flex gap={8} wrap="wrap" align="center" className="admin-draft-create">
-                <Select
-                  aria-label="Base version"
-                  value={forkSource}
-                  onChange={setForkSource}
-                  options={group.versions.map((row) => ({
-                    value: forkSourceKey(row),
-                    label: `v${row.version} · ${formatInventorySource(row.source)}`
-                  }))}
-                  optionRender={(option) => {
-                    const row = group.versions.find((item) => forkSourceKey(item) === option.value);
-                    return row ? formatForkSourceOptionLabel(row) : option.label;
-                  }}
-                  disabled={busy}
-                  className="admin-draft-version-select"
-                />
-                <Button
-                  type="primary"
-                  aria-label={selectedForkRow
-                    ? `Fork v${selectedForkRow.version} (${selectedForkRow.source})`
-                    : "Fork version"}
-                  onClick={() => selectedForkRow && void forkFromVersion(selectedForkRow)}
-                  disabled={busy || !selectedForkRow}
-                >
-                  Create draft
-                </Button>
-              </Flex>
+                <Flex gap={token.paddingXS} align="center" className="admin-draft-create">
+                  <Select
+                    aria-label="Base version"
+                    value={forkSource}
+                    onChange={setForkSource}
+                    options={group.versions.map((row) => ({
+                      value: forkSourceKey(row),
+                      label: `v${row.version} · ${formatInventorySource(row.source)}`
+                    }))}
+                    optionRender={(option) => {
+                      const row = group.versions.find((item) => forkSourceKey(item) === option.value);
+                      return row ? formatForkSourceOptionLabel(row) : option.label;
+                    }}
+                    disabled={busy}
+                    className="admin-draft-version-select"
+                  />
+                  <Button
+                    type="primary"
+                    aria-label={selectedForkRow
+                      ? `Fork v${selectedForkRow.version} (${selectedForkRow.source})`
+                      : "Fork version"}
+                    onClick={() => selectedForkRow && void forkFromVersion(selectedForkRow)}
+                    disabled={busy || !selectedForkRow}
+                  >
+                    Create draft
+                  </Button>
+                </Flex>
               ) : (
                 <Typography.Paragraph type="secondary">
                   This definition has no published version yet. Edit the starter draft, then validate and publish it.
                 </Typography.Paragraph>
               )}
-          {lifecycleError ? (
-            <AdminDeletionBlockedAlert
-              className="admin-draft-status admin-destructive-detail"
-              message={lifecycleError}
-              diagnosticId={lifecycleDiagnosticId}
-              action={<Button size="small" onClick={() => void reloadLifecycle()}>Retry</Button>}
-            />
-          ) : null}
-          {lifecycleLoading ? <Spin className="admin-draft-status" /> : null}
-          {!lifecycleLoading && draftSummaries.length > 0 ? (
-            <div className="admin-draft-list">
-              <Flex align="baseline" justify="space-between" gap={12} className="admin-draft-list-heading">
-                <Typography.Text strong>Existing drafts</Typography.Text>
-                <Typography.Text type="secondary">{draftSummaries.length}</Typography.Text>
-              </Flex>
-              <List
-                dataSource={draftSummaries}
-                renderItem={(item) => {
-                  const selected = activeDraft?.draftId === item.draftId;
-                  const deleteRevision = selected ? activeDraft.revision : item.revision;
-                  return (
-                    <List.Item className="admin-draft-list-item">
-                      <Flex align="center" gap={8} className="admin-draft-row-shell">
-                        <Button
-                          type="text"
-                          block
-                          className="admin-draft-row"
-                          aria-label={`Draft rev ${item.revision} · ${item.sourceKind}${
-                            item.sourceVersion != null ? ` v${item.sourceVersion}` : ""
-                          }`}
-                          onClick={() => void selectDraft(item.draftId)}
-                          disabled={busy}
-                        >
-                          <Flex align="center" justify="space-between" gap={12}>
-                            <Flex vertical gap={4} className="admin-draft-row-copy">
-                              <Typography.Text strong>
-                                {item.sourceVersion != null ? `Draft from v${item.sourceVersion}` : "New draft"}
-                              </Typography.Text>
-                              <Typography.Text type="secondary" className="admin-draft-row-meta">
-                                {formatDraftSource(item.sourceKind)} · Revision{" "}
-                                {item.revision} · Updated {formatAdminTimestamp(item.updatedAt)}
-                              </Typography.Text>
-                            </Flex>
-                            {selected ? <Tag color="blue">Editing</Tag> : <RightOutlined aria-hidden />}
-                          </Flex>
-                        </Button>
-                        <Button
-                          type="text"
-                          danger
-                          icon={<DeleteOutlined />}
-                          aria-label={`Delete ${
-                            item.sourceVersion != null ? `draft from v${item.sourceVersion}` : "draft"
-                          }, revision ${deleteRevision}`}
-                          disabled={busy}
-                          className="admin-draft-delete"
-                          onClick={() => confirmDeleteDraft(item, deleteRevision)}
+              {lifecycleError ? (
+                <AdminDeletionBlockedAlert
+                  className="admin-draft-status admin-destructive-detail"
+                  message={lifecycleError}
+                  diagnosticId={lifecycleDiagnosticId}
+                  action={<Button size="small" onClick={() => void reloadLifecycle()}>Retry</Button>}
+                />
+              ) : null}
+              {lifecycleLoading ? <Spin className="admin-draft-status" /> : null}
+              <Tabs className="admin-draft-tabs" activeKey={detailTab}
+                onChange={setDetailTab} items={[
+                  { key: "versions", label: "Versions", children: <>
+                    {group && !group.draftOnly ? (
+                      <DefinitionVersionsTable key={definitionId}
+                        rows={group.versions} publications={publications} busy={busy}
+                        renderResources={(version) => <PublicationResourcesSummary definitionId={definitionId} version={version} />}
+                        onChat={(version) => void startManagedChat(definitionId, version)}
+                        onDeprecate={(item) => confirmAction(modal, {
+                          title: `Deprecate publication v${item.version}?`,
+                          content: "Metadata-only change. Exact version lookup and existing sessions stay intact; avoid selecting this version for new managed work.",
+                          okText: "Deprecate", onOk: () => void deprecatePublication(item)
+                        })}
+                      />
+                    ) : null}
+                    {group?.draftOnly ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No published versions yet." /> : null}
+                  </> },
+                  { key: "drafts", label: "Drafts", children: <>
+                    {!lifecycleLoading && draftSummaries.length > 0 ? (
+                      <div className="admin-draft-list">
+                        <Flex align="baseline" justify="space-between" gap={12} className="admin-draft-list-heading">
+                          <Typography.Text strong>Existing drafts</Typography.Text>
+                          <Typography.Text type="secondary">{draftSummaries.length}</Typography.Text>
+                        </Flex>
+                        <Table
+                          aria-label="Definition drafts table" className="admin-collection-table" rowKey="draftId"
+                          size="small" scroll={{ x: 560 }} dataSource={draftSummaries} pagination={adminCollectionPagination}
+                          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description="No matches. Clear filters to see all drafts." /> }}
+                          columns={[
+                            { title: "Draft", key: "draft", render: (_, item) => <Button type="link" size="small" disabled={busy}
+                              aria-label={`Draft rev ${item.revision} · ${item.sourceKind}${item.sourceVersion != null ? ` v${item.sourceVersion}` : ""}`}
+                              onClick={() => void selectDraft(item.draftId)}>
+                              {item.sourceVersion != null ? `Draft from v${item.sourceVersion}` : "New draft"}
+                            </Button> },
+                            { title: "Revision", dataIndex: "revision", width: 100, sorter: (a, b) => a.revision - b.revision },
+                            { title: "Source", dataIndex: "sourceKind", render: formatDraftSource,
+                              filters: [...new Set(draftSummaries.map(item => item.sourceKind))].map(value => ({ text: formatDraftSource(value), value })),
+                              onFilter: (value, item) => item.sourceKind === value },
+                            { title: "Updated", dataIndex: "updatedAt", defaultSortOrder: "descend",
+                              sorter: (a, b) => a.updatedAt.localeCompare(b.updatedAt), render: formatAdminTimestamp },
+                            { title: "Actions", key: "actions", width: 80, render: (_, item) => <Button type="text" size="small" danger
+                              icon={<DeleteOutlined />} disabled={busy}
+                              aria-label={`Delete ${item.sourceVersion != null ? `draft from v${item.sourceVersion}` : "draft"}, revision ${item.revision}`}
+                              onClick={() => confirmDeleteDraft(item, item.revision)} /> }
+                          ]}
                         />
-                      </Flex>
-                    </List.Item>
-                  );
-                }}
-              />
-            </div>
-          ) : null}
-          {!lifecycleLoading && draftSummaries.length === 0 ? (
-            <Typography.Text type="secondary">No drafts yet. Fork a catalog version to start.</Typography.Text>
-          ) : null}
-          {publications.length > 0 ? (
-            <Descriptions
-              className="admin-durable-publications"
-              bordered
-              size="small"
-              column={1}
-              title="Durable publications"
-            >
-              {publications.map((item) => (
-                <Descriptions.Item key={item.version} label={`v${item.version}`}>
-                  <Flex vertical gap={8} align="start">
-                    <span>
-                      {item.status} · metadata rev {item.metadataRevision} · {item.publishedAt}
-                    </span>
-                    <PublishedSkillList skills={item.skills} />
-                    <PublicationResourcesSummary definitionId={definitionId} version={item.version} />
-                    <Flex gap={8} wrap="wrap" align="center">
-                      <Tooltip
-                        title="Creates a managed instance for this version and opens Chat."
-                        trigger={["hover", "focus"]}
-                      >
-                        <Button
-                          size="small"
-                          aria-label={`Start managed chat for v${item.version}`}
-                          disabled={busy || item.status !== "Active"}
-                          onClick={() => void startManagedChat(definitionId, item.version)}
-                        >
-                          Chat
-                        </Button>
-                      </Tooltip>
-                      {item.status === "Active" ? (
-                        <Button
-                          size="small"
-                          danger
-                          disabled={busy}
-                          aria-label={`Deprecate publication v${item.version}`}
-                          onClick={() =>
-                            confirmAction(modal, {
-                              title: `Deprecate publication v${item.version}?`,
-                              content:
-                                "Metadata-only change. Exact version lookup and existing sessions stay intact; avoid selecting this version for new managed work.",
-                              okText: "Deprecate",
-                              onOk: () => void deprecatePublication(item)
-                            })
-                          }
-                        >
-                          Deprecate publication
-                        </Button>
-                      ) : null}
-                    </Flex>
-                  </Flex>
-                </Descriptions.Item>
-              ))}
-            </Descriptions>
-          ) : null}
+                      </div>
+                    ) : null}
+                    {!lifecycleLoading && draftSummaries.length === 0 ? (
+                      <Typography.Text type="secondary">No drafts yet. Fork a catalog version to start.</Typography.Text>
+                    ) : null}
+                  </> }
+                ]} />
             </div>
         </section>
         </div>
@@ -1583,6 +1550,7 @@ function DraftEditor({
   onEditorViewChange,
   onSave,
   onPublish,
+  onDelete,
   onDraftRevisionChange,
   onError
 }: {
@@ -1598,6 +1566,7 @@ function DraftEditor({
   onEditorViewChange: (view: DefinitionEditorView) => void;
   onSave: () => void;
   onPublish: () => void;
+  onDelete: () => void;
   onDraftRevisionChange: (
     draft: AdminDefinitionDraft,
     options?: { preserveLocalEdits?: boolean }
@@ -1759,6 +1728,10 @@ function DraftEditor({
           ID {activeDraft.draftId.slice(0, 8)}…
         </Typography.Text>
       </Flex>
+      <DraftEditorActions
+        dirty={dirty} busy={busy} publishEligible={publishEligible} saveBlocked={saveBlocked}
+        onSave={onSave} onPublish={onPublish} onDelete={onDelete}
+      />
       <Tabs
         className="admin-draft-tabs"
         items={[
@@ -1791,14 +1764,6 @@ function DraftEditor({
                     description={`${jsonError} The draft revision is unchanged until the JSON is valid.`}
                   />
                 ) : null}
-                <DraftEditorActions
-                  dirty={dirty}
-                  busy={busy}
-                  publishEligible={publishEligible}
-                  saveBlocked={saveBlocked}
-                  onSave={onSave}
-                  onPublish={onPublish}
-                />
               </section>
             )
           },
@@ -1979,14 +1944,6 @@ function DraftEditor({
                     Add knowledge source
                   </Button>
                 </section>
-                <DraftEditorActions
-                  dirty={dirty}
-                  busy={busy}
-                  publishEligible={publishEligible}
-                  saveBlocked={saveBlocked}
-                  onSave={onSave}
-                  onPublish={onPublish}
-                />
               </section>
             )
           },
@@ -2140,7 +2097,8 @@ function DraftEditorActions({
   publishEligible,
   saveBlocked = false,
   onSave,
-  onPublish
+  onPublish,
+  onDelete
 }: {
   dirty: boolean;
   busy: boolean;
@@ -2148,10 +2106,12 @@ function DraftEditorActions({
   saveBlocked?: boolean;
   onSave: () => void;
   onPublish: () => void;
+  onDelete: () => void;
 }) {
   return (
     <div className="admin-draft-actions">
-      <Flex gap={8} wrap="wrap">
+      <Flex gap={16} wrap="wrap" align="center">
+        <Flex gap={8} wrap="wrap">
         <Button type={dirty ? "primary" : "default"} onClick={onSave} disabled={busy || !dirty || saveBlocked}>
           Save draft
         </Button>
@@ -2162,6 +2122,9 @@ function DraftEditorActions({
         >
           Publish…
         </Button>
+        </Flex>
+        <Button danger aria-label="Delete draft" icon={<DeleteOutlined />} onClick={onDelete} disabled={busy}
+          >Delete draft</Button>
       </Flex>
       {saveBlocked ? (
         <Typography.Text type="danger">
@@ -2290,17 +2253,19 @@ function InstanceDetail({
 }: {
   instanceId: string;
   instances: LoadState<AdminInstanceInventoryItem[]>;
-  effective: LoadState<AdminEffectiveConfiguration>;
+  effective: EffectiveConfigLoadState;
   onBack: () => void;
   onRetryEffective: () => void;
   onInstanceChanged: () => void;
   onInstanceDeleted: () => void;
 }) {
+  const [activeTab, setActiveTab] = useState("identity");
+  useEffect(() => { setActiveTab("identity"); }, [instanceId]);
   const row = instances.kind === "ready"
     ? instances.data.find((item) => item.instanceId.toLowerCase() === instanceId.toLowerCase())
     : undefined;
 
-  const resolved = effective.kind === "ready" ? effective.data : null;
+  const resolved = effective.data?.instanceId === instanceId ? effective.data : null;
   const headerIdentity = resolved
     ? {
         compatibility: resolved.compatibility,
@@ -2348,46 +2313,76 @@ function InstanceDetail({
           action={<AdminRetryAction onRetry={onRetryEffective} diagnosticId={effective.diagnosticId} />}
         />
       ) : null}
-      {effective.kind === "ready" && !effective.data.compatibility ? (
-        <InstanceManagedControls
-          config={effective.data}
-          onUpdated={onInstanceChanged}
-          onDeleted={onInstanceDeleted}
+      {resolved ? (
+        <div inert={effective.kind !== "ready"}>
+          <Tabs
+            className="admin-draft-tabs admin-instance-tabs"
+            activeKey={resolved.compatibility && activeTab !== "connections" ? "effective"
+              : resolved.instanceLifecycle !== "Active" && activeTab === "behavior" ? "identity" : activeTab}
+            onChange={setActiveTab}
+            items={[
+              ...(!resolved.compatibility ? [{
+                key: "identity",
+                label: "Identity & version",
+                children: <InstanceManagedControls config={resolved} onUpdated={onInstanceChanged} onDeleted={onInstanceDeleted} />
+              }] : []),
+              ...(!resolved.compatibility && resolved.instanceLifecycle === "Active" ? [{
+                key: "behavior",
+                label: "Behavior & continuity",
+                children: (
+                  <Flex vertical gap={16}>
+                    <HarnessManagementSection instanceId={instanceId} eligibleTools={resolved.effectiveToolAllowlist} onUpdated={onInstanceChanged} />
+                    <InstanceContinuitySection instanceId={instanceId} />
+                  </Flex>
+                )
+              }] : []),
+              {
+                key: "connections",
+                label: "Connections",
+                children: (
+                  <Flex vertical gap={16}>
+                    <ApplicationConnectionSection instanceId={instanceId} />
+                    <EventSubscriptionsSection instanceId={instanceId} />
+                  </Flex>
+                )
+              },
+              ...(!resolved.compatibility ? [{
+                key: "memory",
+                label: "Memory & automation",
+                children: (
+                  <section className="admin-definition-panel" aria-label="Memory and automation">
+                    <div className="admin-definition-panel-heading">
+                      <Typography.Title level={4}>Memory &amp; automation</Typography.Title>
+                      <Typography.Text type="secondary">
+                        Inspect learned memory and manage durable registrations for this instance.
+                      </Typography.Text>
+                  </div>
+                  <div className="admin-definition-panel-body admin-instance-admin-body">
+                    <InstanceMemoryAutomationPanel config={resolved} />
+                  </div>
+                </section>
+              )
+            }] : []),
+            {
+              key: "effective",
+              label: "Effective configuration",
+              children: (
+                <section className="admin-definition-panel" aria-label="Effective configuration">
+                  <div className="admin-definition-panel-heading">
+                    <Typography.Title level={4}>Effective configuration</Typography.Title>
+                    <Typography.Text type="secondary">
+                      Read-only values resolved from the active definition and instance overrides.
+                    </Typography.Text>
+                  </div>
+                  <div className="admin-definition-panel-body">
+                    <EffectiveConfigView config={resolved} hidePersona={!resolved.compatibility} />
+                  </div>
+                </section>
+              )
+            }
+          ]}
         />
-      ) : null}
-      {effective.kind === "ready" && !effective.data.compatibility && effective.data.instanceLifecycle === "Active" ? (
-        <HarnessManagementSection instanceId={instanceId} eligibleTools={effective.data.effectiveToolAllowlist} onUpdated={onInstanceChanged} />
-      ) : null}
-      {effective.kind === "ready" && !effective.data.compatibility && effective.data.instanceLifecycle === "Active" ? (
-        <InstanceContinuitySection instanceId={instanceId} />
-      ) : null}
-      <ApplicationConnectionSection instanceId={instanceId} />
-      <EventSubscriptionsSection instanceId={instanceId} />
-      {effective.kind === "ready" && !effective.data.compatibility ? (
-        <section className="admin-definition-panel" aria-label="Memory and automation">
-          <div className="admin-definition-panel-heading">
-            <Typography.Title level={4}>Memory &amp; automation</Typography.Title>
-            <Typography.Text type="secondary">
-              Inspect learned memory and manage durable registrations for this instance.
-            </Typography.Text>
-          </div>
-          <div className="admin-definition-panel-body admin-instance-admin-body">
-            <InstanceMemoryAutomationPanel config={effective.data} />
-          </div>
-        </section>
-      ) : null}
-      {effective.kind === "ready" ? (
-        <section className="admin-definition-panel" aria-label="Effective configuration">
-          <div className="admin-definition-panel-heading">
-            <Typography.Title level={4}>Effective configuration</Typography.Title>
-            <Typography.Text type="secondary">
-              Read-only values resolved from the active definition and instance overrides.
-            </Typography.Text>
-          </div>
-          <div className="admin-definition-panel-body">
-            <EffectiveConfigView config={effective.data} hidePersona={!effective.data.compatibility} />
-          </div>
-        </section>
+        </div>
       ) : null}
     </Flex>
   );
@@ -2424,7 +2419,8 @@ export function InstanceManagedControls({
     setTargetVersion(config.definitionVersion);
     setDeleteError(null);
   }, [
-    config.instanceRevision,
+    config.instanceId,
+    config.instanceLifecycle,
     config.personaRevision,
     config.definitionVersion,
     config.persona.name,

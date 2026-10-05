@@ -38,8 +38,9 @@ test("admin definition fork edit and publish durable version", async ({ page }) 
   await page.getByRole("button", { name: "Open Admin" }).click();
   await expect(page).toHaveURL(/\/admin$/);
 
-  const definitions = page.locator('section[aria-label="Definitions"]');
-  await definitions.getByRole("button", { name: /examiner/i }).first().click();
+  const definitions = page.getByRole("region", { name: "Definitions", exact: true });
+  await definitions.getByRole("textbox", { name: "Search definitions" }).fill("examiner");
+  await definitions.getByRole("button", { name: "Examiner · examiner", exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/definitions\/examiner$/i);
 
   const draftEditor = await forkBuiltInV1Draft(page);
@@ -64,7 +65,7 @@ test("admin definition fork edit and publish durable version", async ({ page }) 
   expect(version).toBeTruthy();
 
   const draftsList = definitionDraftsSection(page);
-  await expect(draftsList.getByText("Durable publications")).toBeVisible({ timeout: 15_000 });
+  await expect(draftsList.getByRole("region", { name: "Definition versions", exact: true })).toBeVisible({ timeout: 15_000 });
   const forkedEditor = await forkDurablePublicationDraft(page, Number(version));
   await expect(forkedEditor.getByLabel("System instructions")).toHaveValue(new RegExp(marker), {
     timeout: 15_000
