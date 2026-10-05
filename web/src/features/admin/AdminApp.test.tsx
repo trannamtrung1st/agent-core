@@ -1287,7 +1287,8 @@ describe("AdminApp", () => {
     });
 
     fireEvent.change(screen.getByLabelText("Persona role"), { target: { value: "Coach" } });
-    fireEvent.click(screen.getByRole("button", { name: "Archive instance" }));
+    const archiveButton = screen.getByRole("button", { name: "Archive instance" });
+    fireEvent.click(archiveButton);
 
     await waitFor(
       () => {
@@ -1296,12 +1297,12 @@ describe("AdminApp", () => {
       { timeout: 10_000 }
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
     expect(updateAdminAgentInstanceLifecycle).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Archive instance" }));
-    const confirmButtons = screen.getAllByRole("button", { name: "Archive" });
-    fireEvent.click(confirmButtons[confirmButtons.length - 1]!);
+    fireEvent.click(archiveButton);
+    const confirmDialog = screen.getAllByRole("dialog").at(-1)!;
+    fireEvent.click(within(confirmDialog).getByRole("button", { name: "Archive", exact: true }));
 
     await waitFor(
       () => {
