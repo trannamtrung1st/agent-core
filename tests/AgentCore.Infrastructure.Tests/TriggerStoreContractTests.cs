@@ -24,6 +24,38 @@ public sealed class TriggerStoreContractTests
     private static readonly Guid SourceSessionId = Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842");
 
     [Fact]
+    public async Task Admin_capacity_matches_chat_count_excluding_event_subscriptions_on_create_and_enable()
+    {
+        await ForEachStore(async store =>
+        {
+            var owner = new TriggerOwner(InstanceA, ProfileA);
+            TriggerRegistration Row(Guid id, TriggerRegistrationStatus status, long revision = 1, Guid? source = null) =>
+                new(id, owner, status, "Known task", OneShot(), status == TriggerRegistrationStatus.Active ? Now.AddDays(1) : null,
+                    null, 0, revision, revision, new(TriggerAuthorizationOrigin.AdminOwner, null, null, Now, Now), null,
+                    eventSourceId: source, eventType: source is null ? null : "order.placed");
+            AgentCore.Application.Admin.AdminEventAppend Audit() => new(Guid.NewGuid(), Now,
+                AgentCore.Application.Admin.AdminEventActorKind.LocalOwner, AgentCore.Application.Admin.AdminEventOperationKind.ScheduleRegistrationChanged,
+                "agentInstance", InstanceA.ToString("D"), null, null,
+                System.Text.Json.JsonSerializer.Serialize(new { instanceId = InstanceA.ToString("D"), operation = "update" }));
+            for (var i = 0; i < 3; i++) await store.CreateAsync(Row(Guid.NewGuid(), TriggerRegistrationStatus.Active, source: Guid.NewGuid()));
+            Assert.Equal(0, await store.CountActiveAsync(owner));
+            var firstId = Guid.NewGuid(); var secondId = Guid.NewGuid();
+            await store.SaveScheduleAsync(Row(firstId, TriggerRegistrationStatus.Active), 0, Audit(), maxActiveRegistrations: 1);
+            Assert.Equal(1, await store.CountActiveAsync(owner));
+            await Assert.ThrowsAsync<AgentCoreException>(() => store.SaveScheduleAsync(Row(secondId, TriggerRegistrationStatus.Active), 0,
+                Audit(), maxActiveRegistrations: 1).AsTask());
+            Assert.Null(await store.GetAsync(owner, secondId));
+            await store.SaveScheduleAsync(Row(firstId, TriggerRegistrationStatus.Disabled, 2), 1, Audit(), maxActiveRegistrations: 1);
+            Assert.Equal(0, await store.CountActiveAsync(owner));
+            await store.SaveScheduleAsync(Row(secondId, TriggerRegistrationStatus.Active), 0, Audit(), maxActiveRegistrations: 1);
+            await Assert.ThrowsAsync<AgentCoreException>(() => store.SaveScheduleAsync(Row(firstId, TriggerRegistrationStatus.Active, 3), 2,
+                Audit(), maxActiveRegistrations: 1).AsTask());
+            Assert.Equal(TriggerRegistrationStatus.Disabled, (await store.GetAsync(owner, firstId))!.Status);
+            Assert.Equal(1, await store.CountActiveAsync(owner));
+        });
+    }
+
+    [Fact]
     public async Task Schedule_pages_keep_stable_tie_order_and_owner_isolation()
     {
         await ForEachStore(async store =>

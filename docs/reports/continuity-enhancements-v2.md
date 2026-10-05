@@ -79,6 +79,18 @@ The attached review's four findings and provenance note are fixed locally. This 
 
 Playwright MCP also ran against disposable Synthetic SQLite on 5098/Vite 5188: invalid zero occurrence count blocked submission; five-occurrence Daily schedule created, Run now completed through normal Background Work, edit added an end date, and reload retained both bounds. Desktop and 390px interaction passed with no horizontal overflow. Schedule network operations returned 200; no task-flow console error, only the unrelated development favicon 404. The new inputs reuse the existing Ant Design form and shared panel/Flex spacing. Temporary verification hosts were stopped. Full solution/frontend/browser suites and hosted CI were not rerun for this bounded repair; no live provider or physical audio check was invoked. The restricted test runner initially could not bind its socket; approved local test execution passed. Eight changed Markdown documents / 145 local links and fragments plus fence balance and `git diff --check` passed.
 
+## Capacity and lifecycle parity repair after `6dab30a9`
+
+The final capacity mismatch is fixed: Admin's create/enable check and Chat's CountActiveAsync reuse the same predicate in each store (active owner registrations with EventSourceId=null). Application-event subscriptions are excluded. The check stays inside SQLite's transaction / the in-memory lock rather than moving to a separate service read, preserving atomic capacity enforcement. Definition removal now permits disabling an unchanged existing schedule; create/enable/timing changes still require scheduling policy.
+
+Observed scenarios: with three active event subscriptions and a schedule cap of one, owner HTTP creates a finite schedule successfully, and a second schedule is rejected. Both store implementations likewise permit that first schedule, free capacity on disable, admit another schedule and reject re-enable at capacity without changing the disabled registration. After removing TriggerPolicy, owner HTTP disables the original schedule and retains provenance; enabling or changing timing returns 403 and preserves state/revision.
+
+Verification (key-free, 2026-10-05):
+
+- `dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --no-restore --nologo --disable-build-servers -m:1 --filter 'FullyQualifiedName~ContinuityReviewJourneyTests|FullyQualifiedName~ContinuityEnhancementJourneyTests'`: 7 passed (`/tmp/continuity-capacity-api.log`).
+- `dotnet test tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --no-build --no-restore --nologo --disable-build-servers -m:1 --filter FullyQualifiedName~TriggerStoreContractTests`: 8 passed (`/tmp/continuity-capacity-store-regression.log`), including the new two-store capacity regression (also passed separately in `/tmp/continuity-capacity-store.log`).
+- Changed-document links/fragments, fence balance and `git diff --check` passed. No frontend code changed. Full suites and hosted CI were not rerun for this bounded backend repair; historical freezes remain unchanged.
+
 ## Limits and deferred scope
 
 Recall is lexical and bounded to the latest 100 historical Sessions/Experience candidates. Automatic Session candidates rank title/persisted summary first and read at most five recent entry ranges; explicit search uses at most the last 100 entries per Session plus summary. Visible entries are capped at 700 characters. Automatic Continuity adds Experience/history only; structured Memory is supplied once through the existing learned-memory path. Detail truncation is signalled by hasMore; this is not exhaustive archive replay. Experience enablement and existing memory-retrieval policies control their respective sources.

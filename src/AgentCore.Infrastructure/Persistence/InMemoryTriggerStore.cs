@@ -26,7 +26,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
             if (thought && current is null && _state.Registrations.Values.Count(r => r.Owner.AgentInstanceId == proposed.Owner.AgentInstanceId
                 && r.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought && r.Status != TriggerRegistrationStatus.Cancelled) >= ThoughtIntent.MaxRegistrationsPerInstance)
                 throw AgentCoreErrors.Validation("At most eight thought registrations are supported.");
-            if (!thought && proposed.Status == TriggerRegistrationStatus.Active && current?.Status != TriggerRegistrationStatus.Active && _state.Registrations.Values.Count(r => r.Owner == proposed.Owner && r.Status == TriggerRegistrationStatus.Active) >= maxActiveRegistrations)
+            if (!thought && proposed.Status == TriggerRegistrationStatus.Active && current?.Status != TriggerRegistrationStatus.Active && CountActiveSchedules(proposed.Owner) >= maxActiveRegistrations)
                 throw AgentCoreErrors.Validation("Active schedule limit has been reached.");
             AgentCore.Application.Admin.AdminEventSummaryPolicy.ValidateAppend(history);
             _admin?.AppendWithinLock(history);
@@ -214,14 +214,14 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         }
     }
 
+    private int CountActiveSchedules(TriggerOwner owner) => _state.Registrations.Values.Count(item =>
+        item.Owner.Equals(owner) && item.Status == TriggerRegistrationStatus.Active && item.EventSourceId is null);
+
     public ValueTask<int> CountActiveAsync(TriggerOwner owner, CancellationToken cancellationToken = default)
     {
         lock (_state.Gate)
         {
-            var count = _state.Registrations.Values.Count(item =>
-                item.Owner.Equals(owner)
-                && item.Status == TriggerRegistrationStatus.Active
-                && item.EventSourceId is null);
+            var count = CountActiveSchedules(owner);
             return ValueTask.FromResult(count);
         }
     }

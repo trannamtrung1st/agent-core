@@ -25,8 +25,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         if (thought && current is null && await db.TriggerRegistrations.CountAsync(r => r.AgentInstanceId == proposed.Owner.AgentInstanceId.ToString("D")
             && r.AuthorizationOrigin == (int)TriggerAuthorizationOrigin.AdminThought && r.Status != (int)TriggerRegistrationStatus.Cancelled, ct) >= ThoughtIntent.MaxRegistrationsPerInstance)
             throw AgentCoreErrors.Validation("At most eight thought registrations are supported.");
-        if (!thought && proposed.Status == TriggerRegistrationStatus.Active && current?.Status != TriggerRegistrationStatus.Active && await db.TriggerRegistrations.CountAsync(r => r.AgentInstanceId == proposed.Owner.AgentInstanceId.ToString("D")
-            && r.ProfileId == proposed.Owner.ProfileId.ToString("D") && r.Status == (int)TriggerRegistrationStatus.Active, ct) >= maxActiveRegistrations)
+        if (!thought && proposed.Status == TriggerRegistrationStatus.Active && current?.Status != TriggerRegistrationStatus.Active && await ActiveSchedules(db, proposed.Owner).CountAsync(ct) >= maxActiveRegistrations)
             throw AgentCoreErrors.Validation("Active schedule limit has been reached.");
         if (row is null) db.TriggerRegistrations.Add(TriggerStoreMapping.ToRecord(proposed));
         else db.Entry(row).CurrentValues.SetValues(TriggerStoreMapping.ToRecord(proposed));
@@ -184,17 +183,18 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         return rows.Select(TriggerStoreMapping.ToRegistration).ToArray();
     }
 
+    private static IQueryable<TriggerRegistrationRecord> ActiveSchedules(AgentCoreDbContext db, TriggerOwner owner)
+    {
+        var instanceId = owner.AgentInstanceId.ToString("D");
+        var profileId = owner.ProfileId.ToString("D");
+        return db.TriggerRegistrations.Where(row => row.AgentInstanceId == instanceId && row.ProfileId == profileId
+            && row.Status == (int)TriggerRegistrationStatus.Active && row.EventSourceId == null);
+    }
+
     public async ValueTask<int> CountActiveAsync(TriggerOwner owner, CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var instanceId = owner.AgentInstanceId.ToString("D");
-        var profileId = owner.ProfileId.ToString("D");
-        return await db.TriggerRegistrations.CountAsync(
-            row => row.AgentInstanceId == instanceId
-                && row.ProfileId == profileId
-                && row.Status == (int)TriggerRegistrationStatus.Active
-                && row.EventSourceId == null,
-            cancellationToken).ConfigureAwait(false);
+        return await ActiveSchedules(db, owner).CountAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask<IReadOnlyList<TriggerRegistration>> ListEventSubscriptionsAsync(

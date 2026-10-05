@@ -29,11 +29,12 @@ public sealed class AdminScheduleService(ITriggerStore store, ExperienceService 
         var retainingDisabledModel = !enabled && current is not null && current.ModelOverrideCatalogKey == modelKey && current.ModelOverrideReasoningEffort == effort;
         if (!retainingDisabledModel) ExecutionModelPolicy.RequireSelectable(catalog, modelKey, effort);
         var definition = await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct) ?? throw AgentCoreErrors.NotFound("Definition was not found.");
-        var policy = definition.TriggerPolicy ?? throw AgentCoreErrors.Forbidden("Scheduling is disabled.");
+        var policy = definition.TriggerPolicy;
         var now = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
         // Disabling remains available if the Definition has since removed a capability.
         if (enabled || current is null || !current.Schedule.SemanticEquals(schedule))
         {
+            if (policy is null) throw AgentCoreErrors.Forbidden("Scheduling is disabled.");
             try { ScheduleDefinitionPolicy.Validate(schedule, policy, now, intent); }
             catch (Exception ex) when (ex is ArgumentException or TriggerScheduleCommandException)
             { throw AgentCoreErrors.Validation(ex.Message); }
@@ -48,7 +49,7 @@ public sealed class AdminScheduleService(ITriggerStore store, ExperienceService 
             current?.Provenance.WithUpdated(now) ?? new(TriggerAuthorizationOrigin.AdminOwner, null, null, now, now), null, modelKey, effort,
             current?.RequiresVision ?? false);
         if (enabled && !ExecutionModelPolicy.Resolve(catalog, definition, instance, proposed).Accepted) throw AgentCoreErrors.Validation("Unattended model is unavailable.");
-        return await store.SaveScheduleAsync(proposed, expectedRevision, History(proposed, current is null ? "create" : "update"), ct, policy.MaxActiveRegistrations);
+        return await store.SaveScheduleAsync(proposed, expectedRevision, History(proposed, current is null ? "create" : "update"), ct, policy?.MaxActiveRegistrations ?? 0);
     }
     public async ValueTask DeleteAsync(Guid instanceId, Guid registrationId, long revision, CancellationToken ct = default)
     {

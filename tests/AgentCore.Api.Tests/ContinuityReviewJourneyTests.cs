@@ -10,12 +10,38 @@ using AgentCore.Contracts.Http;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Memory;
+using AgentCore.Domain.Triggers;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AgentCore.Api.Tests;
 
 public sealed class ContinuityReviewJourneyTests
 {
+    [Fact(Timeout = 90000)]
+    public async Task Owner_can_disable_unchanged_schedule_after_trigger_policy_is_removed_but_cannot_enable_or_reconfigure()
+    {
+        OverrideDefinitions? definitions = null;
+        await using var host = new ExperienceHost(Database(), configure: services =>
+            services.AddSingleton<IAgentDefinitionStore>(sp => definitions = new(sp.GetRequiredService<IBuiltInAgentDefinitionStore>())));
+        var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9);
+        var client = TestOwnerCapability.CreateOwnerClient(host);
+        var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/schedules";
+        var draft = new AdminScheduleRequest(0, true, "Known task", new("daily", "UTC", LocalTime: "09:00"));
+        var created = await client.PostAsJsonAsync(path, draft); created.EnsureSuccessStatusCode();
+        var row = (await created.Content.ReadFromJsonAsync<AdminScheduleResponse>())!;
+        definitions!.RemovePolicy = true;
+        var disabledDraft = draft with { ExpectedRevision = row.Revision, Enabled = false };
+        var disabled = await client.PutAsJsonAsync(path + "/" + row.RegistrationId, disabledDraft); disabled.EnsureSuccessStatusCode();
+        row = (await disabled.Content.ReadFromJsonAsync<AdminScheduleResponse>())!;
+        Assert.Equal("Disabled", row.Status); Assert.Null(row.NextRunAt); Assert.Equal("AdminOwner", row.AuthorizationOrigin);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync(path + "/" + row.RegistrationId,
+            draft with { ExpectedRevision = row.Revision })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync(path + "/" + row.RegistrationId,
+            disabledDraft with { ExpectedRevision = row.Revision, Schedule = draft.Schedule with { Interval = 2 } })).StatusCode);
+        var retained = Assert.Single((await client.GetFromJsonAsync<AdminScheduleReview>(path))!.Items);
+        Assert.Equal("Disabled", retained.Status); Assert.Equal(row.Revision, retained.Revision);
+    }
+
     [Fact(Timeout = 90000)]
     public async Task Admin_enforces_definition_timing_limits_capacity_and_reenable_without_user_scheduling()
     {
@@ -47,6 +73,13 @@ public sealed class ContinuityReviewJourneyTests
         await Denied(policy, new("fixedInterval", Interval: 60, AnchorAtUtc: now.AddHours(1).ToString("O")));
         await Denied(policy with { AllowIndefiniteRecurrence = false }, daily);
         definitions!.Policy = policy with { AllowIndefiniteRecurrence = false };
+        var triggers = s.GetRequiredService<ITriggerStore>();
+        var owner = new TriggerOwner(instance.InstanceId, LocalUserProfile.Id);
+        for (var i = 0; i < 3; i++)
+            await triggers.CreateAsync(new(Guid.NewGuid(), owner, TriggerRegistrationStatus.Active, "Existing event subscription",
+                new OneShotSchedule(now.AddDays(1), "UTC"), now.AddDays(1), null, 0, 1, 1,
+                new(TriggerAuthorizationOrigin.ApplicationEvent, null, null, now, now), null, eventSourceId: Guid.NewGuid(), eventType: "order.placed"));
+        Assert.Equal(0, await triggers.CountActiveAsync(owner));
         var finite = Draft(daily with { MaxOccurrences = 2 });
         var created = await client.PostAsJsonAsync(path, finite); created.EnsureSuccessStatusCode();
         var row = (await created.Content.ReadFromJsonAsync<AdminScheduleResponse>())!;
@@ -129,8 +162,9 @@ public sealed class ContinuityReviewJourneyTests
     private sealed class OverrideDefinitions(IAgentDefinitionStore inner) : IAgentDefinitionStore
     {
         public TriggerPolicy? Policy { get; set; }
+        public bool RemovePolicy { get; set; }
         public async ValueTask<AgentDefinition?> GetAsync(string id, int? version = null, CancellationToken cancellationToken = default)
-        { var definition = await inner.GetAsync(id, version, cancellationToken); return definition is null || Policy is null ? definition : definition with { TriggerPolicy = Policy }; }
+        { var definition = await inner.GetAsync(id, version, cancellationToken); return definition is null ? null : RemovePolicy ? definition with { TriggerPolicy = null } : Policy is null ? definition : definition with { TriggerPolicy = Policy }; }
         public ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken cancellationToken = default) => inner.ListAsync(cancellationToken);
     }
     private sealed class CountingHistory(IMemoryStore inner) : IMemoryStore
