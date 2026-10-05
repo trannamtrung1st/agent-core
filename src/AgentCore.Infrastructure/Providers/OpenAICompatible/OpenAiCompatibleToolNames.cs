@@ -13,7 +13,7 @@ internal static partial class OpenAiCompatibleToolNames
 
     public static string ToCanonicalName(string wireName)
     {
-        foreach (var name in ToolCatalog.AllKnownNames())
+        foreach (var name in ToolRegistry.All.Select(descriptor => descriptor.Name))
         {
             if (string.Equals(ToWireName(name), wireName, StringComparison.Ordinal))
             {

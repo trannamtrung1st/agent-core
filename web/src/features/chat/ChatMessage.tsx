@@ -96,8 +96,8 @@ export function ChatMessage({
       ) : null}
       {entry.memoryReceipts?.length ? (
         <Flex wrap gap={token.paddingXS} className="chat-message-receipts">
-          {entry.memoryReceipts.map((receipt, index) => (
-            <MemoryReceiptLine key={`${receipt.operation}-${receipt.subject}-${index}`} receipt={receipt} />
+          {groupMemoryReceipts(entry.memoryReceipts).map(({ receipt, count }, index) => (
+            <MemoryReceiptLine key={`${receipt.operation}-${receipt.subject}-${index}`} receipt={receipt} count={count} />
           ))}
         </Flex>
       ) : null}
@@ -119,11 +119,32 @@ export function ChatMessage({
   );
 }
 
-function MemoryReceiptLine({ receipt }: { receipt: MemoryReceiptView }) {
+function groupMemoryReceipts(receipts: MemoryReceiptView[]) {
+  const grouped = new Map<string, { receipt: MemoryReceiptView; subjects: Set<string> }>();
+  const rows: Array<{ receipt: MemoryReceiptView; subjects?: Set<string> }> = [];
+  for (const receipt of receipts) {
+    if (receipt.presentation !== "indicator") {
+      rows.push({ receipt });
+      continue;
+    }
+    const key = `${receipt.operation}\u0000${receipt.label}`;
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.subjects.add(receipt.subject.trim().toLowerCase());
+    } else {
+      const row = { receipt, subjects: new Set([receipt.subject.trim().toLowerCase()]) };
+      grouped.set(key, row);
+      rows.push(row);
+    }
+  }
+  return rows.map(({ receipt, subjects }) => ({ receipt, count: subjects?.size ?? 1 }));
+}
+
+function MemoryReceiptLine({ receipt, count }: { receipt: MemoryReceiptView; count: number }) {
   const explicit = receipt.presentation === "explicit";
   return (
     <Typography.Text type={explicit ? "danger" : "secondary"} className="chat-message-receipt">
-      {explicit ? receipt.label : `✓ ${receipt.label}`}
+      {explicit ? receipt.label : `✓ ${receipt.label}${count > 1 ? ` (${count})` : ""}`}
     </Typography.Text>
   );
 }

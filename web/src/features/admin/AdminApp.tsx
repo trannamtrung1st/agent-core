@@ -1,8 +1,10 @@
+import { updateHarness } from "../../services/adminApi";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   App,
   Button,
+  Collapse,
   Descriptions,
   Empty,
   Flex,
@@ -38,6 +40,7 @@ import {
   type DefinitionCandidate
 } from "./definitionCandidate";
 import { DefinitionCandidateEditor, PublishedSkillList, type DefinitionEditorView } from "./definitionCandidateEditor";
+import { HarnessManagementSection, HarnessPolicyModeScopes } from "./HarnessManagementSection";
 import { ApplicationConnectionSection } from "./ApplicationConnectionSection";
 import { EventSourcesSection } from "./EventSourcesSection";
 import { EventSubscriptionsSection } from "./EventSubscriptionsSection";
@@ -102,6 +105,7 @@ import { describeAdminError, formatAdminLoadError, reportAdminError, type AdminF
 import { AdminRetryAction, showAdminFailure } from "./adminFailure";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 import { startManagedPublicationChat } from "./adminManagedChat";
+import { InstanceContinuitySection } from "./InstanceContinuitySection";
 import { InstanceMemoryAutomationPanel } from "./instanceMemoryAutomation";
 
 const { Header, Content } = Layout;
@@ -211,6 +215,17 @@ export function defaultForkSourceVersion(versions: AdminDefinitionInventoryItem[
 
 export function formatForkSourceOptionLabel(row: AdminDefinitionInventoryItem) {
   return `v${row.version} · ${formatInventorySource(row.source)} · ${formatInventoryStatus(row.status)}`;
+}
+
+function forkSourceKey(row: AdminDefinitionInventoryItem) {
+  return `${row.source}:${row.version}`;
+}
+
+function instanceVersionRows(versions: AdminDefinitionInventoryItem[]) {
+  // Exact-version resolution prefers a built-in definition over a durable publication.
+  return [...new Map([...versions]
+    .sort((a, b) => Number(a.source === "builtIn") - Number(b.source === "builtIn"))
+    .map(row => [row.version, row])).values()];
 }
 
 export function groupDefinitionInventory(
@@ -540,6 +555,8 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
   const [definitionId, setDefinitionId] = useState("");
   const [version, setVersion] = useState<number | null>(null);
   const [personaMode, setPersonaMode] = useState<"default" | "custom">("default");
+  const [harnessMode, setHarnessMode] = useState<import("../../services/adminApi").HarnessMode>("Disabled");
+  const [harnessAreas, setHarnessAreas] = useState<import("../../services/adminApi").HarnessScope[]>(["KnowledgeResources", "Skills"]);
   const [persona, setPersona] = useState<AdminCreateInstancePersona>({
     name: "",
     role: "",
@@ -548,7 +565,8 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
   });
   const [busy, setBusy] = useState(false);
   const selectedGroup = groups.find((group) => group.definitionId === definitionId) ?? null;
-  const selectedVersion = selectedGroup?.versions.find((row) => row.version === version) ?? null;
+  const instanceVersions = instanceVersionRows(selectedGroup?.versions ?? []);
+  const selectedVersion = instanceVersions.find((row) => row.version === version) ?? null;
   const customPersonaReady = personaFieldsReady(persona);
   const canCreate = Boolean(selectedGroup && selectedVersion) && (personaMode === "default" || customPersonaReady);
 
@@ -556,12 +574,14 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
     const first = groups[0];
     if (first) {
       setDefinitionId(first.definitionId);
-      setVersion(latestActiveVersion(first.versions) ?? first.latestVersion);
+      setVersion(latestActiveVersion(instanceVersionRows(first.versions)) ?? first.latestVersion);
     } else {
       setDefinitionId("");
       setVersion(null);
     }
     setPersonaMode("default");
+    setHarnessMode("Disabled");
+    setHarnessAreas(["KnowledgeResources", "Skills"]);
     setPersona({ name: "", role: "", description: "", tone: "" });
     setOpen(true);
   };
@@ -577,6 +597,12 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
         version,
         personaMode === "custom" ? trimmedPersona(persona) : null
       );
+      if (harnessMode !== "Disabled") {
+        try {
+          await updateHarness(created.instanceId, "policy", { expectedRevision: created.revision, mode: harnessMode,
+            scopes: harnessAreas, sources: [], eligibleTools: [], frozen: false });
+        } catch (error) { showAdminFailure(message, error, "Instance created; configure its authoring policy in the detail view."); }
+      }
       setOpen(false);
       navigateToAppPath(adminInstancePath(created.instanceId));
     } catch (error) {
@@ -620,7 +646,7 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
                   setDefinitionId(nextId);
                   const next = groups.find((group) => group.definitionId === nextId);
                   if (next) {
-                    setVersion(latestActiveVersion(next.versions) ?? next.latestVersion);
+                    setVersion(latestActiveVersion(instanceVersionRows(next.versions)) ?? next.latestVersion);
                   }
                 }}
                 disabled={busy}
@@ -630,8 +656,10 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
               <Typography.Text strong>Published version</Typography.Text>
               <Select
                 aria-label="Published version"
+                showSearch
+                optionFilterProp="label"
                 value={version ?? undefined}
-                options={(selectedGroup?.versions ?? []).map((row) => ({
+                options={instanceVersions.map((row) => ({
                   value: row.version,
                   label: formatForkSourceOptionLabel(row)
                 }))}
@@ -646,6 +674,12 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
                 message={`v${selectedVersion.version} is deprecated. New instances normally use the latest active publication.`}
               />
             ) : null}
+            <Collapse items={[{ key: "harness", label: "Harness management (optional)", children:
+              <Form layout="vertical"><HarnessPolicyModeScopes mode={harnessMode} scopes={harnessAreas} busy={busy}
+                onMode={setHarnessMode} onScopes={setHarnessAreas} />
+                <Typography.Text type="secondary">Configure which harness areas the agent may manage in Chat. Knowledge and Skills can be saved after Core verification; instruction and tool changes require your approval.</Typography.Text>
+              </Form>
+            }]} />
             <Radio.Group
               aria-label="Persona"
               value={personaMode}
@@ -830,7 +864,7 @@ function DefinitionDetail({
   const [draftSummaries, setDraftSummaries] = useState<AdminDefinitionDraftSummary[]>([]);
   const [publications, setPublications] = useState<AdminDefinitionPublicationSummary[]>([]);
   const [activeDraft, setActiveDraft] = useState<AdminDefinitionDraft | null>(null);
-  const [forkSourceVersion, setForkSourceVersion] = useState<number | null>(null);
+  const [forkSource, setForkSource] = useState<string | null>(null);
   const [candidate, setCandidate] = useState<DefinitionCandidate>({});
   const [jsonText, setJsonText] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
@@ -908,13 +942,14 @@ function DefinitionDetail({
 
   useEffect(() => {
     if (!group) {
-      setForkSourceVersion(null);
+      setForkSource(null);
       return;
     }
-    setForkSourceVersion((current) =>
-      current !== null && group.versions.some((item) => item.version === current)
+    const defaultRow = group.versions.find(item => item.version === defaultForkSourceVersion(group.versions));
+    setForkSource((current) =>
+      current !== null && group.versions.some((item) => forkSourceKey(item) === current)
         ? current
-        : defaultForkSourceVersion(group.versions)
+        : defaultRow ? forkSourceKey(defaultRow) : null
     );
   }, [definitionId, group?.latestVersion, group?.versions.length]);
 
@@ -1161,7 +1196,7 @@ function DefinitionDetail({
       setBusy(false);
     }
   };
-  const selectedForkRow = group?.versions.find((row) => row.version === forkSourceVersion)
+  const selectedForkRow = group?.versions.find((row) => forkSourceKey(row) === forkSource)
     ?? group?.versions[0]
     ?? null;
 
@@ -1298,7 +1333,7 @@ function DefinitionDetail({
             <div className="admin-definition-panel-body">
               <Descriptions bordered size="small" column={1}>
                 {group.versions.map((row) => (
-                  <Descriptions.Item key={`${row.definitionId}:${row.version}`} label={`v${row.version}`}>
+                  <Descriptions.Item key={`${row.definitionId}:${forkSourceKey(row)}`} label={`v${row.version}`}>
                     <Flex gap={8} wrap="wrap" align="center">
                       <Typography.Text>{row.displayName} · {row.source} · {row.status}</Typography.Text>
                       {row.version === group.latestVersion ? <Tag color="blue">Latest</Tag> : null}
@@ -1325,14 +1360,14 @@ function DefinitionDetail({
               <Flex gap={8} wrap="wrap" align="center" className="admin-draft-create">
                 <Select
                   aria-label="Base version"
-                  value={forkSourceVersion}
-                  onChange={setForkSourceVersion}
+                  value={forkSource}
+                  onChange={setForkSource}
                   options={group.versions.map((row) => ({
-                    value: row.version,
+                    value: forkSourceKey(row),
                     label: `v${row.version} · ${formatInventorySource(row.source)}`
                   }))}
                   optionRender={(option) => {
-                    const row = group.versions.find((item) => item.version === option.value);
+                    const row = group.versions.find((item) => forkSourceKey(item) === option.value);
                     return row ? formatForkSourceOptionLabel(row) : option.label;
                   }}
                   disabled={busy}
@@ -2319,6 +2354,12 @@ function InstanceDetail({
           onUpdated={onInstanceChanged}
           onDeleted={onInstanceDeleted}
         />
+      ) : null}
+      {effective.kind === "ready" && !effective.data.compatibility && effective.data.instanceLifecycle === "Active" ? (
+        <HarnessManagementSection instanceId={instanceId} eligibleTools={effective.data.effectiveToolAllowlist} onUpdated={onInstanceChanged} />
+      ) : null}
+      {effective.kind === "ready" && !effective.data.compatibility && effective.data.instanceLifecycle === "Active" ? (
+        <InstanceContinuitySection instanceId={instanceId} />
       ) : null}
       <ApplicationConnectionSection instanceId={instanceId} />
       <EventSubscriptionsSection instanceId={instanceId} />

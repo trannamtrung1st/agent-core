@@ -39,6 +39,8 @@ public static class ProblemResults
                 problem.Extensions["diagnosticId"] = diagnosticId.Value.ToString("D");
             }
 
+            if (exception.DiagnosticId is Guid id && id != Guid.Empty)
+                problem.Extensions["diagnosticId"] = id.ToString("D");
             httpContext.Response.StatusCode = exception.StatusCode;
             await httpContext.Response.WriteAsJsonAsync(problem).ConfigureAwait(false);
         }

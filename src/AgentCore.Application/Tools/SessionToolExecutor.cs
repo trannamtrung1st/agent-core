@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using AgentCore.Domain.Conversation;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Admin;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -31,7 +32,9 @@ public sealed partial class SessionToolExecutor(
     IBrowserSession? browser = null,
     IApplicationConnectionStore? applicationConnections = null,
     IAgentDefinitionResourceAdminStore? definitionResources = null,
-    IWorkCaptureStore? workCaptures = null)
+    IWorkCaptureStore? workCaptures = null,
+    Func<HarnessManagementService>? harnessAuthoring = null,
+    AgentCore.Application.Experience.ExperienceService? experience = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -45,6 +48,20 @@ public sealed partial class SessionToolExecutor(
         triggerAuthorizer ?? new HeuristicTriggerCommandAuthorizer();
 
     public ITriggerCommandAuthorizer TriggerCommandAuthorizer => _triggerAuthorizer;
+
+    public ValueTask<string> ExperienceContextAsync(Guid? instanceId, CancellationToken ct) =>
+        experience?.RecallAsync(instanceId, ct) ?? ValueTask.FromResult("");
+    public ValueTask ExperienceBoundaryAsync(Guid instanceId, Guid sessionId, CancellationToken ct) =>
+        experience?.TrySessionBoundaryAsync(instanceId, sessionId, ct) ?? ValueTask.CompletedTask;
+
+    public async ValueTask<HarnessChatContext?> HarnessContextAsync(Guid? instanceId, CancellationToken ct)
+    {
+        if (instanceId is not Guid id || _agentInstances is null || harnessAuthoring is null) return null;
+        var instance = await _agentInstances.FindAsync(id, ct);
+        if (instance is null || instance.Compatibility || instance.Lifecycle != AgentInstanceLifecycle.Active
+            || instance.HarnessManagement is not { } state || state.Policy.Frozen || state.Policy.Mode == HarnessManagementMode.Disabled) return null;
+        return new(state.Policy, state.PolicyRevision, instance.ActiveVersion);
+    }
 
     public ToolPolicyDecision EvaluateExecutionPolicy(
         AgentDefinition definition,
@@ -81,6 +98,7 @@ public sealed partial class SessionToolExecutor(
 
         if (admission?.Detached == true
             && ToolResources.IsSessionTool(call.Name)
+            && !(HarnessChatTools.IsHarness(call.Name) && admission.TriggerKind == TriggerKind.ThoughtActivation)
             && !(ToolCatalog.IsBrowserTool(call.Name)
                 && admission is { TrustedConnection: true }
                 && ToolResources.IsOccurrence(admission.TriggerKind)
@@ -96,6 +114,9 @@ public sealed partial class SessionToolExecutor(
         {
             return TextResult(Error("forbidden", "Trigger changes are not authorized from occurrence evidence."));
         }
+
+        if (HarnessChatTools.IsHarness(call.Name) && admission is not null)
+            admission = admission with { Harness = await HarnessContextAsync(admission.AgentInstanceId, cancellationToken) };
 
         var policy = ToolPolicy.EvaluateExecution(definition, call.Name, _configurationGate, approvalGrant, admission);
         if (policy == ToolPolicyDecision.Deny
@@ -156,6 +177,35 @@ public sealed partial class SessionToolExecutor(
 
         try
         {
+            if (call.Name == ToolCatalog.ExperienceRecent)
+            {
+                if (experience is null || admission?.AgentInstanceId is not Guid ownerId)
+                    return TextResult(Error("forbidden", "Experience is unavailable."));
+                if (args.EnumerateObject().Any(p => p.Name is not ("query" or "experienceId")))
+                    return TextResult(Error("invalid", "Experience lookup only accepts query or experienceId."));
+                var query = args.TryGetProperty("query", out var q) && q.ValueKind == JsonValueKind.String ? q.GetString() : null;
+                Guid? recordId = null;
+                if (query?.Length > 200) return TextResult(Error("invalid", "Experience query is oversized."));
+                if (args.TryGetProperty("experienceId", out var r))
+                {
+                    if (r.ValueKind != JsonValueKind.String || !Guid.TryParse(r.GetString(), out var id))
+                        return TextResult(Error("invalid", "Experience identity is invalid."));
+                    recordId = id;
+                }
+                await experience.RequireInstanceAsync(ownerId, cancellationToken);
+                var projection = await experience.RecallAsync(ownerId, cancellationToken, query, recordId);
+                return FitResult(remainingOutputBytes, JsonSerializer.Serialize(new { historicalExperience = projection }));
+            }
+            if (HarnessChatTools.IsHarness(call.Name))
+            {
+                if (harnessAuthoring is null || admission?.AgentInstanceId is not Guid instanceId)
+                    return TextResult(Error("forbidden", "Harness authoring is unavailable in this execution."));
+                var result = call.Name == HarnessChatTools.Inspect
+                    ? await harnessAuthoring().InspectChatAsync(instanceId, cancellationToken)
+                    : await harnessAuthoring().AuthorChatAsync(instanceId, call.Name, args, approvalGrant,
+                        admission.HarnessSources ?? [], admission.OwnerTurnText, cancellationToken);
+                return FitResult(remainingOutputBytes, JsonSerializer.Serialize(result));
+            }
             return call.Name switch
             {
                 ToolCatalog.AttachmentsRead => await ReadAttachmentAsync(sessionId, args, remainingOutputBytes, cancellationToken)
@@ -248,7 +298,9 @@ public sealed partial class SessionToolExecutor(
         }
         catch (AgentCoreException ex)
         {
-            return FitResult(remainingOutputBytes, Error(ex.Code, ex.Message));
+            return FitResult(remainingOutputBytes, ex.DiagnosticId is { } diagnosticId
+                ? JsonSerializer.Serialize(new { error = ex.Code, message = ex.Message, diagnosticId })
+                : Error(ex.Code, ex.Message));
         }
     }
 

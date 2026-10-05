@@ -145,6 +145,10 @@ public static class RuntimeTelemetry
         TriggerDueLagMs.Record(Math.Max(0, lagMs), new KeyValuePair<string, object?>("source", "schedule"));
     }
 
+    private static readonly Counter<long> ExperienceEvents = Meter.CreateCounter<long>("experience_events");
+    private static readonly Counter<long> ThoughtEvents = Meter.CreateCounter<long>("thought_events");
+    public static void RecordExperience(string outcome) => ExperienceEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
+    public static void RecordThought(string outcome) => ThoughtEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
     private static readonly Counter<long> WorkEvents = Meter.CreateCounter<long>("work_events");
     private static readonly Counter<long> AgentSteps = Meter.CreateCounter<long>("agent_steps");
     private static readonly Counter<long> ActiveSkills = Meter.CreateCounter<long>("active_skills");

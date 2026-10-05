@@ -421,8 +421,9 @@ public sealed class SpeechIngressTests
         var previous = runtime.StreamId;
         Assert.NotNull(previous);
         await runtime.SetMutedAsync(true);
-        await runtime.WaitUntilMailboxDrainedAsync();
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput { Muted: true });
         await runtime.SetMutedAsync(false);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput { Muted: false, StreamId: not null } state && state.StreamId != previous);
         await runtime.WaitUntilMailboxDrainedAsync();
         Assert.NotEqual(previous, runtime.StreamId);
         Assert.False(runtime.TryAdmitAudio(Frame(1, 0), previous));

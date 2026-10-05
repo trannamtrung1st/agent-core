@@ -2,6 +2,7 @@ using System.Diagnostics;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
+using AgentCore.Application.Experience;
 using AgentCore.Application.Models;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
@@ -32,6 +33,7 @@ public sealed class SessionManager
     private readonly ITriggerPolicyRecoveryService? _triggerPolicyRecovery;
     private readonly AdminLifecycleCoordinator? _lifecycleGate;
     private readonly IBrowserSessionLease? _browserLease;
+    private readonly ExperienceService? _experience;
 
     public SessionManager(
         IAgentDefinitionStore definitions,
@@ -49,7 +51,8 @@ public sealed class SessionManager
         IAgentInstanceService? instances = null,
         ITriggerPolicyRecoveryService? triggerPolicyRecovery = null,
         AdminLifecycleCoordinator? lifecycleGate = null,
-        IBrowserSessionLease? browserLease = null)
+        IBrowserSessionLease? browserLease = null,
+        ExperienceService? experience = null)
     {
         _definitions = definitions;
         _store = store;
@@ -67,6 +70,7 @@ public sealed class SessionManager
         _triggerPolicyRecovery = triggerPolicyRecovery;
         _lifecycleGate = lifecycleGate;
         _browserLease = browserLease;
+        _experience = experience;
     }
 
     public Task<SessionSnapshot> CreateAsync(
@@ -647,6 +651,11 @@ public sealed class SessionManager
         try
         {
             await _store.SaveAsync(next, snapshot.Revision, cancellationToken).ConfigureAwait(false);
+            // Offline lifecycle transitions own the same durable boundary as runtime transitions.
+            // Once committed, request cancellation cannot cancel secondary admission or change the source result.
+            if (_experience is not null && next.AgentInstanceId is Guid instanceId
+                && (target == SessionLifecycleStatus.Paused || SessionLifecycle.IsTerminal(target)))
+                await _experience.TrySessionBoundaryAsync(instanceId, sessionId, CancellationToken.None).ConfigureAwait(false);
             return next;
         }
         catch (AgentCoreException ex) when (ex.Code is "SessionPersistenceUnavailable" or "Conflict")

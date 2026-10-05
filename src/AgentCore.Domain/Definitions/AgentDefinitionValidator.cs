@@ -172,7 +172,7 @@ public static class AgentDefinitionValidator
         var procedureCharacters = 0;
         foreach (var skill in skills)
         {
-            if (string.IsNullOrWhiteSpace(skill.Id) || !ToolPattern.IsMatch(skill.Id))
+            if (!SkillIds.IsValid(skill.Id))
             {
                 throw new ArgumentException("skill id is invalid.");
             }

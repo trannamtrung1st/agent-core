@@ -308,3 +308,13 @@ Owners: [Protocol](14-api-and-realtime-protocol.md) (capability, leases vs Attac
 ## What may still be measured
 
 Provider selection within independently configured speech ports, VAD thresholds, frame size within the allowed range, TTS phrase segmentation and latency optimization are tuning variables. The default behavior and degraded paths are specified; measurement must not reopen project ownership, transport, storage or response identity decisions. No guaranteed provider-dependent SLA is implied.
+
+## P9.7 — Conversational Authoring through existing owners
+
+Normal Chat uses its existing model/tool/approval loop for instance-authorized harness learning. A separate preparation model runtime is retired. Authority comes from enabled contextual instance policy and trusted-local execution, never Definition text or a user assertion. Source authorization uses ordinary tools and content-bearing execution receipts; no mandatory secondary exact-source catalog exists. Tool eligibility is derived from configured, already-authorized ordinary capabilities. Managed knowledge/Skills may promote internally; instructions and every tool selection/configuration remain approval-bound. Current Session pins stay immutable; adoption applies to future Sessions. Existing lifecycle/resource/CAS/audit/SQLite owners remain authoritative. P11A records future principal/application/tenant delegation; it is not implemented in P9.7.
+
+## P9.8-P9.9 continuity decisions
+
+Reuse the existing single-process Trigger → Occurrence → WorkItem path for owner-configured thought activations and the existing WorkItem executor for secondary retrospection. Keep Experience as a separate SQLite/InMemory port with explicit ownership and tombstone semantics; do not repurpose learned memory or semantic summaries. Use provider-neutral native tool output for strict retrospective/no-op contracts. Origin-aware checks extend existing tool and P9.7 policy; no parallel autonomous policy/runtime is created.
+
+The narrow accepted thought-activation exception does not introduce an autonomous platform: no registration self-edit, authority bootstrap, raw reasoning retention, automatic knowledge/Skill promotion, distributed scheduling, vector store, multi-agent feature or generic agent filesystem. Ant Design v6 remains the direct product UI system. The native named-tool requirement means configured models must support tools.

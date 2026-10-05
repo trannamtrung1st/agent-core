@@ -1,5 +1,6 @@
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Definitions;
@@ -8,6 +9,22 @@ namespace AgentCore.Application.Tests;
 
 public sealed class PromptContextBuilderTests
 {
+    [Fact]
+    public void Harness_prompt_uses_minimal_skill_contract_and_owner_material_guidance()
+    {
+        var context = new AgentContext(SampleDefinitions.Examiner, [], string.Empty, null,
+            SessionMode.Text, null, false, null, new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, "Remember this procedure"),
+            Harness: new HarnessChatContext(new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []), 2, 7));
+        var request = new PromptContextBuilder().Build(context, Guid.NewGuid());
+        var guidance = Assert.Single(request.Messages, message => message.Role == ModelRole.System
+            && message.Text.Contains("Harness management for", StringComparison.Ordinal)).Text;
+        Assert.Contains("name, description and procedure", guidance);
+        Assert.Contains("Core assigns its id", guidance);
+        Assert.Contains("knowledgeIds", guidance);
+        Assert.Contains("Owner-provided procedures may be authored directly", guidance);
+        Assert.DoesNotContain("resourcePaths are arrays", guidance);
+    }
+
     [Fact]
     public void Voice_mode_system_prompt_has_no_marker_syntax()
     {

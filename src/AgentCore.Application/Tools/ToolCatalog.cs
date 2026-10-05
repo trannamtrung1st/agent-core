@@ -39,6 +39,7 @@ public static class ToolCatalog
     public const string BrowserClose = "browser.close";
     public const string BrowserPages = "browser.pages";
     public const string BrowserCapture = "browser.capture";
+    public const string ExperienceRecent = "experience.recent";
     public const string WorkComplete = "work.complete";
 
     public static bool RecordsOwnerVisibleEffect(string toolName) =>
@@ -97,7 +98,7 @@ public static class ToolCatalog
 
         foreach (var descriptor in ToolRegistry.All)
         {
-            if (descriptor.OfferRule != ToolOfferRule.CurrentExecutionCapability
+            if (descriptor.OfferRule is not (ToolOfferRule.CurrentExecutionCapability or ToolOfferRule.HarnessAuthority)
                 || !ToolPolicy.IsOffered(descriptor, definition, context, configurationGate)
                 || !seen.Add(descriptor.Name))
             {
@@ -165,11 +166,15 @@ public static class ToolCatalog
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (!string.IsNullOrEmpty(context?.ExperienceContext) && ToolRegistry.TryGet(ExperienceRecent, out var experienceDescriptor)
+            && ToolPolicy.IsOffered(experienceDescriptor, definition, context, configurationGate) && seen.Add(ExperienceRecent))
+            offered.Add(experienceDescriptor.ModelDefinition);
         if (ToolRegistry.TryGet(WorkComplete, out var descriptor)
             && ToolPolicy.IsOffered(descriptor, definition, context, configurationGate)
             && seen.Add(WorkComplete))
         {
-            offered.Add(descriptor.ModelDefinition);
+            offered.Add(context?.Trigger.Kind == TriggerKind.ThoughtActivation
+                ? AgentCore.Application.Work.ThoughtCompletion.Contract : descriptor.ModelDefinition);
         }
     }
 

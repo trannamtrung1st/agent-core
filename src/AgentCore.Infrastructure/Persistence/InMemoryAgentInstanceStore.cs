@@ -245,6 +245,7 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                 var next = instance with
                 {
                     ActiveVersion = activeVersion,
+                    HarnessManagement = update.HarnessManagement ?? instance.HarnessManagement,
                     UpdatedAt = updatedAt,
                     Revision = instance.Revision + 1
                 };
@@ -591,6 +592,7 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                 UpdatedAt = updatedAt,
                 Revision = instance.Revision + 1,
                 PersonaRevision = personaRevision,
+                HarnessManagement = update.HarnessManagement ?? instance.HarnessManagement,
                 UnattendedModelCatalogKey = update.SetUnattendedModel
                     ? NullIfBlank(update.UnattendedModelCatalogKey)
                     : instance.UnattendedModelCatalogKey,
@@ -598,6 +600,11 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                     ? NullIfBlank(update.UnattendedReasoningEffort)
                     : instance.UnattendedReasoningEffort
             };
+            if (update.History is not null)
+            {
+                if (EventStore is null) throw AgentCoreErrors.Persistence("Admin history is unavailable.");
+                EventStore.AppendWithinLock(update.History);
+            }
             _instances[update.InstanceId] = next;
             return ValueTask.FromResult(next);
         }

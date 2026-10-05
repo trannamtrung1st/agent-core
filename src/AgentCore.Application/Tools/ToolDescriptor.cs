@@ -5,7 +5,7 @@ namespace AgentCore.Application.Tools;
 public static class ToolResources
 {
     public static bool IsOccurrence(TriggerKind kind) =>
-        kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent;
+        kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent or TriggerKind.ThoughtActivation;
 
     public static bool IsSessionTool(string toolName) =>
         ToolRegistry.TryGet(toolName, out var descriptor) && descriptor.Scope == ToolResourceScope.Session;
@@ -32,7 +32,11 @@ public sealed record ToolExecutionAdmission(
     bool TrustedConnection = false,
     bool SupportsVision = false,
     string? CaptureScope = null,
-    Guid? WorkItemId = null);
+    Guid? WorkItemId = null,
+    HarnessChatContext? Harness = null,
+    IReadOnlyList<HarnessSourceReceipt>? HarnessSources = null,
+    string? OwnerTurnText = null,
+    bool SupportsTools = true);
 
 public sealed record ToolDescriptor(
     ModelToolDefinition ModelDefinition,

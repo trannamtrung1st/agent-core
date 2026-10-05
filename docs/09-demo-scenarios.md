@@ -176,3 +176,27 @@ A managed or compatibility instance shows one application connection on Admin. A
 ## Post-MVP planned until verified
 
 Observed later demos: durable multi-chat Support and Compliance flows with attachments, bounded work, artifacts, rich presentation, deactivation, and reopen (`SupportComplianceWorkflowTests`). Docker `sandbox.run` is a runtime capability, not a separate UI demo. Examiner MVP conversational demos above remain.
+
+## P9.7 — Teach an operations assistant in Chat
+
+Create a managed General Assistant v7 instance in Admin, choose Managed with Knowledge/Skills, then return to Chat. Say `Learn this order policy for future conversations: https://example.test/p97/order-policy`. Synthetic reads the exact deterministic public fixture through ordinary `web.fetch`, retains provenance and reports the verified durable result. No source-list/preparation/publication controls are required. Start a new Chat with the same instance and ask `What is the learned order policy?`; actual published knowledge retrieval returns payment/shipping/fraud review.
+
+Say `Learn this order-review procedure for future conversations: check payment, shipping and fraud notes.` Start another Session and say `Use the learned order-review procedure.` Normal `skills.load` admits the published Skill and injects its procedure. Synthetic does not prove real production effects.
+
+In Assisted mode, reject a knowledge proposal once (active version unchanged), then approve a fresh exact proposal in Chat. In Managed Tool proposals scope, `Propose disabling http.request for future conversations.` still requires approval. In the still-pinned current Session, `Try a sensitive HTTP action now.` still requires its own normal approval; reject it. Managed instruction proposals also await approval.
+
+Freeze in Admin and return to Chat: durable learning is unavailable, while `Hello` still works. For recovery, change policy revision while a Chat approval waits; the old approval fails without adoption, and a fresh request succeeds. Inspect recent change/evidence in Admin. See [new executed journeys](reports/p9.7-chat-first-freeze-candidate.md).
+
+For the Real Kubernetes harness-learning demo, select the existing **DeepSeek V4.1 Flash Reasoning** model for each session. Ask naturally to learn supplied materials and create reusable knowledge/Skills, start a new session to use them, request only a context/namespace-first refinement, and verify it in another session. The [final verification report](reports/p9.7-final-verification.md) records observed creation, activation, partial update and missing-Knowledge recovery. GPT-4o mini now accepts the corrected full tool payload, but this bounded scenario exposed unreliable Knowledge creation, Skill discovery and procedure preservation; it is not the verified model for this demo. Core validation and authority still apply with either model; model choice is not a grant.
+
+## P9.8-P9.9 continuity demo
+
+Use Synthetic and disposable SQLite data. Create a managed `general-assistant` v9 instance with a distinct persona and Assisted Harness Management for Skills; this version permits existing schedule admission. Enable Experience in the instance detail. Create a Chat with that instance, send `synthetic-fail-turn`, observe the failed result, then send `A correction: observe the current page before acting.` and wait for the completed reply.
+
+Pause the completed Chat (or end it) to exercise automatic checkpoint admission, then open the instance's Experience panel. Enter that Chat's Session id and choose Retrospect now. Wait for completed structured observations, including failure/correction evidence and source/Definition/model provenance. Repeat the request: the same checkpoint remains one logical record. Start another Session of the same instance and send `Use my recent experience before acting.` The Synthetic answer commits to observing current page state under current policy; another instance receives no Experience. The integration composition fixture seeds two checkpoints with the same harmless friction before activation.
+
+In Initiative, create an enabled hourly thought with `synthetic-thought-improve: review recent experience and improve only when useful. Otherwise do nothing.` Leave the model at the instance's unattended default. Run now: the existing background path inspects Experience/harness and proposes the Experience review Skill. Open Background Work, inspect the exact proposed action, approve it through the normal confirmation, and wait for ActionCompleted. Inspect the new active Definition version; the currently open Chat keeps its original pin.
+
+Run the same thought again. It should report NoAction, remain successful, and create no proactive message/attention alert. `synthetic-thought-attention` separately demonstrates the existing trusted-owner attention record; it grants no recipient or messaging authority. Disable the thought and verify Run now is unavailable; suppress/reset Experience and verify source Chat/memory/persona remain available. Delete the thought with confirmation. Inspect both desktop and 390px layouts.
+
+These marker prompts are deterministic Synthetic fixtures using production contracts, not claims about hosted model judgement or actual external store improvement. Hosted smoke uses a normal unmarked thinking prompt, explicit provider opt-in and operator credentials. [Acceptance/evidence](reports/p9.8-p9.9-freeze-candidate.md).

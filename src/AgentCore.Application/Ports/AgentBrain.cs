@@ -10,7 +10,8 @@ public enum TriggerKind
     EnvironmentUpdate,
     UnfinishedInteraction,
     ScheduledOccurrence,
-    ApplicationEvent
+    ApplicationEvent,
+    ThoughtActivation
 }
 
 public sealed record AgentTrigger(Guid EventId, TriggerKind Kind, string? Text, string? EnvironmentKind = null);
@@ -54,7 +55,9 @@ public sealed record AgentContext(
     bool IntermediateMessagingAllowed = false,
     string? ApplicationConnectionStatus = null,
     bool TrustedConnection = false,
-    bool ModelSupportsVision = false)
+    bool ModelSupportsVision = false,
+    Tools.HarnessChatContext? Harness = null,
+    string? ExperienceContext = null)
 {
     public AgentIdentity EffectiveIdentity => Persona ?? Definition.Identity;
 }

@@ -6,5 +6,7 @@ public enum ToolOfferRule
     SessionAttachmentsWhenRoleAllows,
     ConfigurationWhenRoleAllows,
     CurrentExecutionCapability,
-    OccurrenceCapability
+    OccurrenceCapability,
+    ExperienceAuthority,
+    HarnessAuthority
 }

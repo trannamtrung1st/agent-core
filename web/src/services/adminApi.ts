@@ -1117,3 +1117,64 @@ export async function setAdminRegistrationModel(
   }
   return (await response.json()) as AdminAutomationRegistration;
 }
+
+export type HarnessMode = "Disabled" | "Assisted" | "Managed";
+export type HarnessScope = "KnowledgeResources" | "Skills" | "Instructions" | "ToolSelection";
+export type HarnessPolicy = { mode: HarnessMode; scopes: HarnessScope[]; sources: string[]; eligibleTools: string[]; frozen: boolean };
+export type HarnessSkill = { id: string; name: string; description: string; procedure: string; requiredCapabilities: string[]; resourcePaths: string[] };
+export type HarnessOperation = { kind: string; draftRevision: number; id: string | null; content: string | null; source: string | null;
+  skill: HarnessSkill | null; enabled: boolean | null; allowUnreadUnsupportedTypes: boolean | null };
+export type HarnessApproval = { approvalId: string; actionHash: string; operation: HarnessOperation; status: string };
+export type HarnessEvidence = { actor: string; draftRevision: number; check: string; status: string; expected: string; observed: string; limitation: string | null };
+export type HarnessReview = {
+  instanceId: string; instanceRevision: number; activeVersion: number; policy: HarnessPolicy; policyRevision: number;
+  preparation: { preparationId: string; draftId: string; baseVersion: number; purpose: string; status: string;
+    approvals: HarnessApproval[]; evidence: HarnessEvidence[]; publishedVersion: number | null; diagnosticId: string | null; publishedDraftRevision: number | null } | null;
+  draftRevision: number | null; instructions: string | null; skills: HarnessSkill[];
+  knowledge: { identity: string; title: string; citation: string; resourcePath: string | null }[]; selectedTools: string[];
+  diff: AdminDefinitionDraftDiff | null; resources: AdminDefinitionDraftResource[];
+};
+
+export async function getHarnessReview(instanceId: string): Promise<HarnessReview> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/harness`);
+  if (!response.ok) throw await adminProblemMessage(response, "Harness management could not be loaded.");
+  return await response.json() as HarnessReview;
+}
+
+export async function updateHarness(instanceId: string, action: string, body: unknown, signal?: AbortSignal): Promise<HarnessReview> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/harness/${action}`, {
+    method: action === "policy" ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), ...(signal ? { signal } : {})
+  });
+  if (!response.ok) throw await adminProblemMessage(response, "Harness operation failed. Reload the candidate before retrying.");
+  return await response.json() as HarnessReview;
+}
+
+export type ExperienceContent = {
+  goal: string; attempts: string[]; decisions: string[]; outcomes: string[]; corrections: string[];
+  unresolved: string[]; difficulties: string[]; lessons: string[];
+};
+export type ExperienceItem = {
+  experienceId: string; sourceKind: "Session" | "WorkItem"; sourceId: string; throughCursor: number;
+  sourceAt: string; definitionId: string; definitionVersion: number; generationWorkItemId: string;
+  modelKey: string; status: string; visibility: "Eligible" | "Suppressed"; revision: number;
+  eligibleForContext: boolean; content: ExperienceContent | null; diagnosticId: string | null; failureSummary: string | null;
+};
+export type ExperienceReview = { enabled: boolean; settingsRevision: number; contextBudgetCharacters: number; items: ExperienceItem[] };
+export type ThoughtRegistration = {
+  registrationId: string; revision: number; enabled: boolean; status: string; intervalSeconds: number;
+  thinkingPrompt: string; modelKey: string | null; reasoningEffort: string | null;
+  nextRunAt: string | null; lastRunAt: string | null; lastOutcome: string | null;
+  lastWorkItemId: string | null; executionStatus: string | null; effectiveModelKey: string | null;
+};
+export type ThoughtReview = { minIntervalSeconds: number; items: ThoughtRegistration[] };
+export type ThoughtDraft = {
+  expectedRevision: number; enabled: boolean; intervalSeconds: number; thinkingPrompt: string;
+  modelKey?: string | null; reasoningEffort?: string | null;
+};
+export async function instanceContinuityRequest<T>(instanceId: string, path: string, method = "GET", body?: unknown): Promise<T> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/${path}`, {
+    method, ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+  });
+  if (!response.ok) throw await adminProblemMessage(response, "The instance update could not be completed.");
+  return await response.json() as T;
+}

@@ -57,7 +57,8 @@ public sealed record AgentDefinitionDraftUpdate(
     Guid DraftId,
     long ExpectedRevision,
     AgentDefinitionCandidate Candidate,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    AdminEventAppend? History = null);
 
 public sealed record AgentDefinitionDraftDelete(
     Guid DraftId,
@@ -69,7 +70,8 @@ public sealed record AgentDefinitionDraftDelete(
 public sealed record AgentDefinitionDraftRevisionBump(
     Guid DraftId,
     long ExpectedRevision,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    AdminEventAppend? History = null);
 
 public sealed record AgentDefinitionDraftPublish(
     Guid DraftId,

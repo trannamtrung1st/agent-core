@@ -2428,7 +2428,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ScheduleDraft: _scheduleDraftContext,
                     ActiveSkillIds: ResolveActiveSkillIds(trigger, responseId),
                     ApplicationConnectionStatus: applicationConnectionStatus,
-                    TrustedConnection: trustedConnection);
+                    TrustedConnection: trustedConnection,
+                    Harness: trigger.Kind == TriggerKind.UserTurn ? await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, evaluationToken) : null,
+                    ExperienceContext: await _tools.ExperienceContextAsync(_snapshot.AgentInstanceId, evaluationToken));
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
                 AgentDecision? decision = null;
@@ -2619,6 +2621,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var authorizedTools = request.Tools;
         var pinnedSkills = activeSkillIds.ToArray();
         var steps = 0;
+        var harnessSources = new List<HarnessSourceReceipt>();
         var outputBytes = 0;
         var retryingGeneration = false;
         var repairingTerminal = false;
@@ -3036,7 +3039,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     allowedIntermediate,
                                     _snapshot.AgentInstanceId,
                                     TrustedConnection: await LiveTrustedConnectionAsync(trigger.Kind, overallCts.Token)
-                                        .ConfigureAwait(false)));
+                                        .ConfigureAwait(false),
+                                    Harness: await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, overallCts.Token),
+                                    SupportsTools: model.Capabilities.Tools));
                             if (policy == ToolPolicyDecision.Deny || string.IsNullOrWhiteSpace(call.Name))
                             {
                                 if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal))
@@ -3185,7 +3190,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                                 TrustedConnection: await LiveTrustedConnectionAsync(trigger.Kind, toolCts.Token)
                                                     .ConfigureAwait(false),
                                                 SupportsVision: model.Capabilities.Vision,
-                                                CaptureScope: request.ResponseId.ToString()))
+                                                CaptureScope: request.ResponseId.ToString(),
+                                                HarnessSources: harnessSources.ToArray(),
+                                                OwnerTurnText: trigger.Kind == TriggerKind.UserTurn ? trigger.Text : null,
+                                                SupportsTools: model.Capabilities.Tools))
                                         .ConfigureAwait(false);
                                     if (executionResult.ReplaceTriggerProposal)
                                     {
@@ -3250,6 +3258,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         toolDetail);
                     RuntimeTelemetry.Record("tools", RuntimeTelemetry.ElapsedMs(toolStarted), call.Name);
 
+                    harnessSources.AddRange(HarnessChatTools.Sources(call, executionResult.Text));
                     executionResult = ToolResultAdmission.AdmitForModel(model, executionResult);
                     var closedPage = false;
                     if (!refusedBlocked)
@@ -5830,7 +5839,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     error = ex;
                 }
 
-                await CompletePersistJobAsync(job, saved, error, superseded: false, cancellationToken).ConfigureAwait(false);
+                var stableLifecycleCommit = error is null && saved is not null && job.Kind is PersistKind.Pause or PersistKind.TerminalEnd;
+                // Pause/end acknowledgement can immediately dispose the runtime. The saved checkpoint
+                // still owns secondary admission; disposal releases Applied and waits for this worker.
+                await CompletePersistJobAsync(job, saved, error, superseded: false,
+                    stableLifecycleCommit ? CancellationToken.None : cancellationToken).ConfigureAwait(false);
+                if (stableLifecycleCommit && saved?.AgentInstanceId is Guid instanceId)
+                    await _tools.ExperienceBoundaryAsync(instanceId, saved.SessionId, CancellationToken.None).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)

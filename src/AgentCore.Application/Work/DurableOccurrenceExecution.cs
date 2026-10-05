@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Work;
@@ -37,7 +38,7 @@ public sealed class DurableOccurrenceExecution(
         CancellationToken cancellationToken,
         bool trustedConnection = false)
     {
-        var occurrenceBrowser = triggerKind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent;
+        var occurrenceBrowser = ToolResources.IsOccurrence(triggerKind);
         var browserScope = occurrenceBrowser
             ? await tools.OpenOccurrenceBrowserAsync(
                 running.WorkItemId,
@@ -84,7 +85,9 @@ public sealed class DurableOccurrenceExecution(
             TrustedConnection: trustedConnection,
             SupportsVision: model.Capabilities.Vision,
             CaptureScope: running.WorkItemId.ToString("D"),
-            WorkItemId: running.WorkItemId);
+            WorkItemId: running.WorkItemId,
+            Harness: triggerKind == TriggerKind.ThoughtActivation ? await tools.HarnessContextAsync(running.Owner.AgentInstanceId, cancellationToken) : null,
+            SupportsTools: model.Capabilities.Tools);
         var observationRequired = restoredObservation;
         string? blockedActionHash = restoredBlockedHash;
         var browserUnavailable = false;
@@ -279,7 +282,22 @@ public sealed class DurableOccurrenceExecution(
                     .ConfigureAwait(false);
             }
 
+            // A persisted uncertain external effect remains terminal even if current policy denies the call.
+            // Policy changes cannot erase the recovery fence or turn it into a replayable retry.
+            if (running.SideEffect.Disposition is WorkSideEffectDisposition.InFlight or WorkSideEffectDisposition.Indeterminate
+                && !IsBrowserActHash(messages, running.SideEffect.ActionHash))
+                return new DurableOccurrenceFailed(running, "side-effect-indeterminate", "External effect outcome is unknown and was not replayed.");
+            if (HarnessChatTools.IsHarness(call.Name))
+                admission = admission with { Harness = await tools.HarnessContextAsync(running.Owner.AgentInstanceId, cancellationToken),
+                    HarnessSources = messages.Where(m => m.Role == ModelRole.Tool).SelectMany(m =>
+                        messages.SelectMany(a => a.ToolCalls ?? []).Where(c => c.Id == m.ToolCallId)
+                            .SelectMany(c => HarnessChatTools.Sources(c, m.Text))).ToArray() };
             var policy = tools.EvaluateExecutionPolicy(definition, call.Name, admission: admission);
+            if (policy == ToolPolicyDecision.Deny)
+                return await AppendResultAsync(call, ToolExecutionResult.FromText(
+                    ToolResources.IsSessionTool(call.Name) && !ToolCatalog.IsBrowserTool(call.Name) && !HarnessChatTools.IsHarness(call.Name)
+                    ? """{"error":"forbidden","message":"Session context is required."}"""
+                    : """{"error":"forbidden","message":"Tool is not permitted in this execution origin."}"""), false);
             var hash = await ResolveActionHashAsync(call, args, cancellationToken).ConfigureAwait(false);
             if (browserUnavailable && ToolCatalog.IsBrowserTool(call.Name))
             {
@@ -338,6 +356,13 @@ public sealed class DurableOccurrenceExecution(
                         false).ConfigureAwait(false);
                 }
 
+                if (triggerKind == TriggerKind.ThoughtActivation)
+                {
+                    if (!ThoughtCompletion.TryParse(args, messages, out var thoughtResult, out var thoughtAttention, out var thoughtRejection))
+                        return new DurableOccurrenceFailed(running, "invalid-completion", thoughtRejection);
+                    RuntimeTelemetry.RecordThought(thoughtAttention ? "attention" : ThoughtCompletion.Outcome(thoughtResult));
+                    return new DurableOccurrenceCompleted(running, thoughtResult, thoughtAttention);
+                }
                 if (!WorkCompletionRequest.TryParse(args, out var summary, out var attentionRequired, out var rejection))
                 {
                     return new DurableOccurrenceFailed(running, "invalid-completion", rejection);

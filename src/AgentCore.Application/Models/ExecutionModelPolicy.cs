@@ -188,7 +188,7 @@ public static class ExecutionModelPolicy
             return new ExecutionModelDecision(pin, CapabilityCode);
         }
 
-        if (RequiresBrowserTools(definition) && !descriptor.Tools)
+        if ((RequiresBrowserTools(definition) || registration?.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought) && !descriptor.Tools)
         {
             return new ExecutionModelDecision(pin, CapabilityCode);
         }
@@ -266,6 +266,6 @@ public static class ExecutionModelAdmission
             registration = await store.GetAsync(occurrence.Owner, registrationId, cancellationToken).ConfigureAwait(false);
         }
 
-        return ExecutionModelPolicy.Validate(catalog, occurrence.ModelPin, definition, registration);
+        return ExecutionModelPolicy.Validate(catalog, occurrence.ModelPin, definition, occurrence.SourceKind == TriggerSourceKind.ThoughtActivation ? null : registration);
     }
 }

@@ -296,6 +296,7 @@ public sealed class SqliteHostRecoveryTests
             .Build();
         await hub.StartAsync();
         string? eventDiagnosticId = null;
+        var errorPublished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         hub.On<ServerEvent>("SessionEvent", evt =>
         {
             if (evt.Type == "error"
@@ -304,6 +305,7 @@ public sealed class SqliteHostRecoveryTests
                 && evt.Payload.TryGetValue("diagnosticId", out var id))
             {
                 eventDiagnosticId = Convert.ToString(id);
+                errorPublished.TrySetResult();
             }
         });
         var ready = ReadyWaiter(hub);
@@ -326,6 +328,7 @@ public sealed class SqliteHostRecoveryTests
         Assert.False(ended.Accepted);
         Assert.Equal("SessionPersistenceUnavailable", ended.Error?.Code);
         Assert.True(Guid.TryParse(ended.Error?.DiagnosticId, out var diagnosticId));
+        await errorPublished.Task.WaitAsync(TimeSpan.FromSeconds(15));
         Assert.Equal(diagnosticId.ToString("D"), eventDiagnosticId);
         var logged = factory.Logs
             .Where(line => line.Contains(diagnosticId.ToString("D"), StringComparison.Ordinal))
@@ -641,7 +644,7 @@ public sealed class SqliteHostRecoveryTests
     }
 }
 
-internal sealed class DurableSqliteHostFactory(string dbPath, bool runScheduler = true, ILanguageModel? languageModel = null) : WebApplicationFactory<Program>
+internal class DurableSqliteHostFactory(string dbPath, bool runScheduler = true, ILanguageModel? languageModel = null) : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

@@ -77,7 +77,7 @@ public static class OccurrenceCompatibility
     public const string ApplicationEvent = "applicationEvent";
 
     public static string SourceName(TriggerSourceKind sourceKind) =>
-        sourceKind == TriggerSourceKind.Schedule ? Schedule : ApplicationEvent;
+        sourceKind is TriggerSourceKind.Schedule or TriggerSourceKind.ThoughtActivation ? Schedule : ApplicationEvent;
 
     public static bool Allows(AgentDefinition definition, TriggerSourceKind sourceKind)
     {
@@ -194,7 +194,7 @@ public sealed class TriggerOccurrenceRouter(
                 return;
             }
 
-            if (occurrence.ScheduleRevision != registration.ScheduleRevision)
+            if (occurrence.SourceKind != TriggerSourceKind.ThoughtActivation && occurrence.ScheduleRevision != registration.ScheduleRevision)
             {
                 await store.TryRejectPendingAsync(occurrence.OccurrenceId, "Schedule was superseded.", now, cancellationToken)
                     .ConfigureAwait(false);
@@ -210,7 +210,8 @@ public sealed class TriggerOccurrenceRouter(
         }
 
         occurrence = pinned;
-        var targets = directory.ListCompatible(occurrence.Owner, occurrence.SourceKind);
+        var targets = occurrence.SourceKind == TriggerSourceKind.ThoughtActivation
+            ? (IReadOnlyList<LiveOccurrenceTarget>)[] : directory.ListCompatible(occurrence.Owner, occurrence.SourceKind);
         var claimId = ids.NewId();
         var claimed = await store.TryClaimOccurrenceAsync(
             occurrence.OccurrenceId,
@@ -252,7 +253,8 @@ public sealed class TriggerOccurrenceRouter(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var targets = directory.ListCompatible(occurrence.Owner, occurrence.SourceKind);
+        var targets = occurrence.SourceKind == TriggerSourceKind.ThoughtActivation
+            ? (IReadOnlyList<LiveOccurrenceTarget>)[] : directory.ListCompatible(occurrence.Owner, occurrence.SourceKind);
         var leaseExpired = occurrence.ClaimLeaseExpiresAtUtc is DateTimeOffset lease && lease <= now;
         if (!leaseExpired)
         {

@@ -2,6 +2,7 @@ using AgentCore.Application.Models;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
+using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Admin;
 
@@ -19,12 +20,14 @@ public sealed class AgentDefinitionDraftValidationService(
         var draft = await lifecycle.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
         var revisionSnapshot = draft.Revision;
         var findings = new List<DefinitionValidationFinding>();
+        var source = await lifecycle.GetDraftSourceAsync(draft, cancellationToken).ConfigureAwait(false);
         findings.AddRange(
             AgentDefinitionCandidateValidator.CollectPublicationFindings(
                 draft.Candidate,
                 aliases,
                 catalog,
-                configurationGate));
+                configurationGate,
+                source is null ? [] : RoleEnvironments.Of(source).ToolList));
         var draftResources = await resources.ListDraftResourcesAsync(draftId, cancellationToken).ConfigureAwait(false);
         draft = await lifecycle.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
         if (draft.Revision != revisionSnapshot)

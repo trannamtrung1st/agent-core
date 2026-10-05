@@ -79,7 +79,7 @@ public static class WorkItemEndpoints
 
                 return Results.Json(new WorkItemResultResponse(
                     item.WorkItemId.ToString(),
-                    result.Text,
+                    item.Provenance.SourceKind == WorkSourceKind.ThoughtActivation ? AgentCore.Application.Work.ThoughtCompletion.Summary(result.Text) : result.Text,
                     HttpMapping.Format(result.CompletedAtUtc),
                     result.AttentionRequired));
             }
@@ -234,7 +234,7 @@ public static class WorkItemEndpoints
             ?? throw AgentCoreErrors.NotFound("Work item was not found.");
     }
 
-    private static WorkItemResponse ToResponse(WorkItem item)
+    internal static WorkItemResponse ToResponse(WorkItem item)
     {
         var summary = item.ToPublicSummary();
         var approval = item.Status == WorkItemStatus.WaitingForApproval ? item.Approval : null;
@@ -258,7 +258,9 @@ public static class WorkItemEndpoints
             summary.FailureDiagnosticId?.ToString("D"),
             item.Result?.AttentionRequired ?? false,
             item.AttemptCount,
-            item.MaxAttempts);
+            item.MaxAttempts,
+            item.Provenance.SourceOccurrenceId.ToString("D"), item.Provenance.RegistrationId?.ToString("D"), item.Model.CatalogKey,
+            item.Provenance.SourceKind == WorkSourceKind.ThoughtActivation && item.Result is { } thought ? AgentCore.Application.Work.ThoughtCompletion.Outcome(thought.Text) : null);
     }
 
     private static string ToStatus(WorkItemStatus status) => status switch

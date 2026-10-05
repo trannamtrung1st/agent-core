@@ -8,6 +8,58 @@ namespace AgentCore.Infrastructure.Persistence;
 public sealed class InMemoryTriggerStore : ITriggerStore
 {
     private readonly InMemoryDurableState _state;
+    private readonly AgentCore.Infrastructure.Admin.InMemoryAdminEventStore? _admin;
+
+    public ValueTask<TriggerRegistration> SaveThoughtAsync(TriggerRegistration proposed, long expectedRevision,
+        AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        lock (_state.Gate)
+        {
+            var current = Find(proposed.Owner, proposed.RegistrationId);
+            ThoughtRegistrationRules.ValidateSave(current, proposed, expectedRevision);
+            if (current is null && _state.Registrations.Values.Count(r => r.Owner.AgentInstanceId == proposed.Owner.AgentInstanceId
+                && r.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought && r.Status != TriggerRegistrationStatus.Cancelled) >= ThoughtIntent.MaxRegistrationsPerInstance)
+                throw AgentCoreErrors.Validation("At most eight thought registrations are supported.");
+            AgentCore.Application.Admin.AdminEventSummaryPolicy.ValidateAppend(history);
+            _admin?.AppendWithinLock(history);
+            _state.Registrations[proposed.RegistrationId] = proposed;
+            return ValueTask.FromResult(proposed);
+        }
+    }
+    public ValueTask<ScheduledAdmitResult> AdmitThoughtNowAsync(TriggerRegistration registration, ExecutionModelPin pin,
+        DateTimeOffset asOf, CancellationToken ct = default)
+    {
+        lock (_state.Gate)
+        {
+            var current = Find(registration.Owner, registration.RegistrationId);
+            if (current?.Revision != registration.Revision || current.Status != TriggerRegistrationStatus.Active)
+                return ValueTask.FromResult(new ScheduledAdmitResult(ScheduledAdmitOutcome.Stale, current, null, 0));
+            if (ThoughtBusy(registration.RegistrationId))
+                return ValueTask.FromResult(new ScheduledAdmitResult(ScheduledAdmitOutcome.NotDue, current, null, 0));
+            var decision = ThoughtRegistrationRules.ManualAdmission(current, asOf);
+            var occurrence = TriggerScheduleAdmission.CreateOccurrence(current, decision, asOf).WithModelPin(pin);
+            var result = AdmitOccurrenceAsync(occurrence, ct).Result;
+            return ValueTask.FromResult(new ScheduledAdmitResult(result.Kind == TriggerOccurrenceAdmitKind.Admitted
+                ? ScheduledAdmitOutcome.Admitted : ScheduledAdmitOutcome.Duplicate, current, result.Occurrence, 0));
+        }
+    }
+    public ValueTask<ScheduledAdmitResult> TryAdmitThoughtAsync(TriggerRegistration registration, ExecutionModelPin pin,
+        DateTimeOffset asOf, CancellationToken ct = default)
+    {
+        lock (_state.Gate)
+        {
+            var current = Find(registration.Owner, registration.RegistrationId);
+            if (current?.Revision != registration.Revision)
+                return ValueTask.FromResult(new ScheduledAdmitResult(ScheduledAdmitOutcome.Stale, current, null, 0));
+            return TryAdmitScheduledCore(registration.Owner, registration.RegistrationId, registration.ScheduleRevision,
+                registration.NextOccurrenceAtUtc!.Value, asOf, ct, pin);
+        }
+    }
+    private bool ThoughtBusy(Guid registrationId) => _state.Occurrences.Values.Any(o => o.RegistrationId == registrationId
+        && o.SourceKind == TriggerSourceKind.ThoughtActivation
+        && (o.Disposition is OccurrenceRoutingDisposition.Pending or OccurrenceRoutingDisposition.Claimed or OccurrenceRoutingDisposition.AwaitingDurableWork
+            || o.DurableWorkItemId is Guid id && _state.WorkItems.TryGetValue(id, out var item) && !item.IsTerminal));
 
     public InMemoryTriggerStore()
         : this(new InMemoryDurableState())
@@ -24,10 +76,11 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         }
     }
 
-    internal InMemoryTriggerStore(InMemoryDurableState state)
+    internal InMemoryTriggerStore(InMemoryDurableState state, AgentCore.Infrastructure.Admin.InMemoryAdminEventStore? admin = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         _state = state;
+        _admin = admin;
     }
 
     public ValueTask<TriggerRegistration> CreateAsync(
@@ -272,13 +325,18 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         }
     }
 
-    public ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(
+    public ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(TriggerOwner owner, Guid registrationId,
+        long expectedScheduleRevision, DateTimeOffset expectedNextOccurrenceAtUtc, DateTimeOffset asOfUtc,
+        CancellationToken cancellationToken = default) => TryAdmitScheduledCore(owner, registrationId,
+            expectedScheduleRevision, expectedNextOccurrenceAtUtc, asOfUtc, cancellationToken);
+
+    private ValueTask<ScheduledAdmitResult> TryAdmitScheduledCore(
         TriggerOwner owner,
         Guid registrationId,
         long expectedScheduleRevision,
         DateTimeOffset expectedNextOccurrenceAtUtc,
         DateTimeOffset asOfUtc,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, ExecutionModelPin? pin = null)
     {
         var asOf = TriggerScheduleCalculator.Truncate(asOfUtc);
         var expectedNext = TriggerScheduleCalculator.Truncate(expectedNextOccurrenceAtUtc);
@@ -323,7 +381,15 @@ public sealed class InMemoryTriggerStore : ITriggerStore
                 return ValueTask.FromResult(new ScheduledAdmitResult(outcome, closed, null, 0));
             }
 
+            if (current!.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought && ThoughtBusy(registrationId))
+            {
+                var coalesced = TriggerScheduleAdmission.Advance(current, decision with { OccurrenceCount = current.OccurrenceCount }, asOf);
+                _state.Registrations[registrationId] = coalesced;
+                AgentCore.Application.Observability.RuntimeTelemetry.RecordThought("coalesced");
+                return ValueTask.FromResult(new ScheduledAdmitResult(ScheduledAdmitOutcome.NotDue, coalesced, null, decision.SkippedCount + 1));
+            }
             var occurrence = TriggerScheduleAdmission.CreateOccurrence(current!, decision, asOf);
+            if (pin is not null) occurrence = occurrence.WithModelPin(pin);
             if (_state.DedupeKeys.TryGetValue(Dedupe(occurrence.Owner, occurrence.DedupeKey), out var existingId))
             {
                 var existing = _state.Occurrences[existingId];

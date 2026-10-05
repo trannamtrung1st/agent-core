@@ -339,6 +339,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("HarnessManagementJson")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Lifecycle")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -757,6 +760,66 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasFilter("SourceEventId IS NOT NULL");
 
                     b.ToTable("ConversationEntries", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ExperienceRecord", b =>
+                {
+                    b.Property<string>("ExperienceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AgentInstanceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProfileId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SourceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SourceKind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("ThroughCursor")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("ExperienceId");
+
+                    b.HasIndex("AgentInstanceId", "CreatedAtUtc");
+
+                    b.HasIndex("AgentInstanceId", "SourceKind", "SourceId", "ThroughCursor")
+                        .IsUnique();
+
+                    b.ToTable("Experiences");
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ExperienceSettingsRecord", b =>
+                {
+                    b.Property<string>("AgentInstanceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("Revision")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("AgentInstanceId");
+
+                    b.ToTable("ExperienceSettings");
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ExternalEventDeliveryRecord", b =>

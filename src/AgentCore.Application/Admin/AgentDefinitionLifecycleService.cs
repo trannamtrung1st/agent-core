@@ -26,6 +26,22 @@ public sealed class AgentDefinitionLifecycleService(
         await admin.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false)
         ?? throw AgentCoreErrors.NotFound("Definition draft was not found.");
 
+    public async ValueTask<AgentDefinitionExactSource> GetEffectiveExactSourceAsync(string definitionId,
+        int version, CancellationToken cancellationToken = default) =>
+        await AgentDefinitionExactSourceResolver.ResolveAsync(builtIns, admin, definitionId, version,
+            cancellationToken).ConfigureAwait(false)
+        ?? throw AgentCoreErrors.NotFound("Definition version was not found.");
+
+    public async ValueTask<AgentDefinition?> GetDraftSourceAsync(AgentDefinitionDraft draft,
+        CancellationToken cancellationToken = default) => draft.SourceKind switch
+    {
+        DefinitionDraftSourceKind.ForkBuiltIn when draft.SourceVersion is { } version =>
+            await builtIns.GetAsync(draft.DefinitionId, version, cancellationToken).ConfigureAwait(false),
+        DefinitionDraftSourceKind.ForkDurable when draft.SourceVersion is { } version =>
+            (await admin.GetPublicationAsync(draft.DefinitionId, version, cancellationToken).ConfigureAwait(false))?.Payload,
+        _ => null
+    };
+
     public async ValueTask<AgentDefinitionDraft> CreateDraftAsync(
         string definitionId,
         AgentDefinitionCandidate candidate,
@@ -127,7 +143,8 @@ public sealed class AgentDefinitionLifecycleService(
         Guid draftId,
         long expectedRevision,
         AgentDefinitionCandidate candidate,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken = default,
+        AdminEventAppend? history = null) =>
         WithDraftDefinitionGateAsync(
             draftId,
             async (draft, innerToken) =>
@@ -149,7 +166,7 @@ public sealed class AgentDefinitionLifecycleService(
 
                 AgentDefinitionCandidateValidator.ValidateForPersistence(candidate, aliases);
                 var updated = await admin.UpdateDraftAsync(
-                    new AgentDefinitionDraftUpdate(draftId, expectedRevision, candidate, time.GetUtcNow()),
+                    new AgentDefinitionDraftUpdate(draftId, expectedRevision, candidate, time.GetUtcNow(), history),
                     innerToken).ConfigureAwait(false);
                 OperationalDiagnostics.RecordAdmin(
                     "draftUpdate", "completed", "completed", started, updated.DefinitionId, null, null, "none");
@@ -330,7 +347,8 @@ public sealed class AgentDefinitionLifecycleService(
         long expectedRevision,
         Guid operationId,
         IReadOnlyList<string> changedSectionIds,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner)
     {
         var draft = await GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
         return await WithDefinitionGateAsync(
@@ -340,7 +358,7 @@ public sealed class AgentDefinitionLifecycleService(
                 expectedRevision,
                 operationId,
                 changedSectionIds,
-                ct),
+                ct, actorKind),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -349,7 +367,8 @@ public sealed class AgentDefinitionLifecycleService(
         long expectedRevision,
         Guid operationId,
         IReadOnlyList<string> changedSectionIds,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner)
     {
         var started = Stopwatch.GetTimestamp();
         var draft = await GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
@@ -368,7 +387,7 @@ public sealed class AgentDefinitionLifecycleService(
                 occupied,
                 time.GetUtcNow(),
                 operationId,
-                ChangedSectionIds: changedSectionIds),
+                ActorKind: actorKind, ChangedSectionIds: changedSectionIds),
             cancellationToken).ConfigureAwait(false);
         OperationalDiagnostics.RecordAdmin(
             "publish",

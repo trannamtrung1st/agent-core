@@ -257,6 +257,9 @@ export function BackgroundWorkDrawer({
             </Tag>
           </Flex>
 
+          {item.modelKey ? <Typography.Text type="secondary">Model: {item.modelKey}{item.thoughtOutcome ? ` · ${item.thoughtOutcome}` : ""}</Typography.Text> : null}
+          {item.registrationId ? <Typography.Text type="secondary" style={{ overflowWrap: "anywhere" }}>Registration: {item.registrationId}</Typography.Text> : null}
+          {item.sourceId && item.origin === "Retrospection" ? <Typography.Text type="secondary" style={{ overflowWrap: "anywhere" }}>Checkpoint: {item.sourceId}</Typography.Text> : null}
           {item.progress ? (
             <Typography.Text type="secondary" className="background-work-progress">
               {item.progress}

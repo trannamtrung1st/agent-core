@@ -99,6 +99,8 @@ internal static class AdminEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/api/v2/admin").AddEndpointFilter<OwnerCapabilityFilter>();
+        HarnessManagementEndpoints.Map(group);
+        ContinuityEndpoints.Map(group);
 
         group.MapGet("/definitions", async (
             AdminReadService admin,

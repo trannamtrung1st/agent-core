@@ -52,3 +52,9 @@ Trusted catalog, system default, persisted per-session resolved choice, session-
 ## Post-MVP planned until verified
 
 Phases A–H are observed in [Implementation Plan](18-implementation-plan.md#post-mvp-phases-planned-until-verified). Phase I is recorded not-applicable with a future trigger there and in [Technology Decisions](10-technology-decisions.md#post-mvp-planned-until-verified).
+
+## P9.7 handoff
+
+**P9.7 is frozen on behavior SHA `8f5afa00`** ([hosted Synthetic green](https://github.com/trannamtrung1st/agent-core/actions/runs/37224218680)). [Final verification](reports/p9.7-final-verification.md) records all current gates and the Real DeepSeek Kubernetes create/use/update/use/repair sequence; GPT-4o mini accepts the fixed payload but is not the verified demo model. The Admin-first closure on `11a3d25c` is [historical pre-pivot evidence](reports/p9.7-freeze-candidate.md), superseded as the final contract. [The Chat-first first-gate report](reports/p9.7-chat-first-freeze-candidate.md) preserves the initial acceptance matrix and historical gate. Normal Chat teaches durable knowledge/Skills through existing authoring and approval owners; Admin governs policy, inspection and freeze. Existing Sessions stay pinned and future Sessions use adopted versions. P8/P8.5/P9/P9.5/P9.6 retain their freeze boundaries. P10/P11 remain requirement-triggered; stop P9.7 architectural work and continue investor-demo stabilization and polish.
+
+P9.8–P9.9 continuity is implemented as a local acceptance candidate: separate bounded Experience and owner-controlled thought activation over existing background work. [Implementation slices](18-implementation-plan.md#p98-p99-continuity-implementation) and [gate evidence](reports/p9.8-p9.9-freeze-candidate.md) own completion status; historical freezes are unchanged.

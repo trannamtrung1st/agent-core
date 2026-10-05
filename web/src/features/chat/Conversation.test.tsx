@@ -293,7 +293,7 @@ describe("Conversation", () => {
     expect(screen.getByText("[Unsupported content]")).toBeInTheDocument();
   });
 
-  it("shows memory receipts beside the reply without folding them into the message", () => {
+  it("counts distinct remembered items beside the reply without folding them into the message", () => {
     render(
       <Conversation
         agentName="Alex"
@@ -311,6 +311,22 @@ describe("Conversation", () => {
                 scopes: ["identityUser"],
                 presentation: "indicator",
                 label: "Remembered"
+              },
+              {
+                outcome: "stored",
+                operation: "upsert",
+                subject: "preferred language",
+                scopes: ["user"],
+                presentation: "indicator",
+                label: "Remembered"
+              },
+              {
+                outcome: "alreadyStored",
+                operation: "upsert",
+                subject: " user identity ",
+                scopes: ["identityUser"],
+                presentation: "indicator",
+                label: "Remembered"
               }
             ]
           })
@@ -319,7 +335,8 @@ describe("Conversation", () => {
       />
     );
     expect(screen.getByText("Got it. Your secret's safe with me.")).toBeInTheDocument();
-    expect(screen.getByText("✓ Remembered")).toBeInTheDocument();
+    expect(screen.getByText("✓ Remembered (2)")).toBeInTheDocument();
+    expect(screen.queryByText("✓ Remembered")).not.toBeInTheDocument();
     expect(screen.queryByText(/Memory saved/)).not.toBeInTheDocument();
   });
 

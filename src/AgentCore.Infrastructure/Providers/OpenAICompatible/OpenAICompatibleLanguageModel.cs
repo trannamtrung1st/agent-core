@@ -544,7 +544,8 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         object parameters;
         try
         {
-            parameters = JsonSerializer.Deserialize<JsonElement>(tool.ParametersJson);
+            parameters = OpenAiCompatibleToolSchema.Normalize(tool.ParametersJson)
+                ?? new System.Text.Json.Nodes.JsonObject { ["type"] = "object" };
         }
         catch (JsonException)
         {

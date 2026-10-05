@@ -381,14 +381,52 @@ public sealed class OpenAICompatibleLanguageModelTests
         Assert.Equal(2, handler.PostCount);
     }
 
-    [Fact]
-    public async Task Maps_tool_call_fragments_when_tools_are_offered()
+    [Theory]
+    [InlineData("browser.navigate", false)]
+    [InlineData("browser.act", true)]
+    [InlineData("browser.pages", true)]
+    public async Task Browser_object_unions_map_to_provider_compatible_function_parameters(string name, bool operationRequired)
+    {
+        const string body = "data: {\"choices\":[{\"delta\":{\"content\":\"Ready\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
+        var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
+        var model = Create(handler, tools: true);
+        var definition = ToolRegistry.Get(name).ModelDefinition;
+        _ = await CollectAsync(model, new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Hi")], Tools: [definition]));
+        using var request = JsonDocument.Parse(handler.LastBody!);
+        var schema = request.RootElement.GetProperty("tools")[0].GetProperty("function").GetProperty("parameters");
+        Assert.Equal("object", schema.GetProperty("type").GetString());
+        Assert.False(schema.TryGetProperty("oneOf", out _));
+        Assert.False(schema.TryGetProperty("anyOf", out _));
+        Assert.False(schema.GetProperty("additionalProperties").GetBoolean());
+        var fields = schema.GetProperty("properties");
+        Assert.True(fields.TryGetProperty("operation", out _));
+        if (operationRequired)
+            Assert.Equal(["operation"], schema.GetProperty("required").EnumerateArray().Select(field => field.GetString()));
+        else Assert.False(schema.TryGetProperty("required", out _));
+        if (name == "browser.act")
+        {
+            Assert.Equal([200, 500], fields.GetProperty("value").GetProperty("anyOf").EnumerateArray()
+                .Select(field => field.GetProperty("maxLength").GetInt32()).Order());
+            Assert.Equal(128, fields.GetProperty("ref").GetProperty("maxLength").GetInt32());
+        }
+        using var original = JsonDocument.Parse(definition.ParametersJson);
+        Assert.True(original.RootElement.TryGetProperty("oneOf", out _));
+    }
+
+    [Theory]
+    [InlineData("knowledge.retrieve")]
+    [InlineData("harness.inspect")]
+    [InlineData("harness.knowledge.upsert")]
+    [InlineData("harness.skill.upsert")]
+    [InlineData("harness.tool.select")]
+    public async Task Maps_tool_call_fragments_when_tools_are_offered(string name)
     {
         var body =
             "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"knowledge_retrieve\",\"arguments\":\"\"}}]}}]}\n\n" +
             "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"identity\\\":\\\"support-order-policy\\\"}\"}}]}}]}\n\n" +
             "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n" +
             "data: [DONE]\n\n";
+        body = body.Replace("knowledge_retrieve", OpenAiCompatibleToolNames.ToWireName(name), StringComparison.Ordinal);
         var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
         var model = new OpenAICompatibleLanguageModel(
             new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
@@ -400,17 +438,27 @@ public sealed class OpenAICompatibleLanguageModelTests
                 ApiKey = "test-key",
                 Tools = true
             });
-        var tools = new[]
-        {
-            new ModelToolDefinition(ToolCatalog.KnowledgeRetrieve, "Retrieve knowledge.", """{"type":"object"}""")
-        };
+        Assert.True(ToolRegistry.TryGet(name, out var descriptor));
+        var tools = new[] { descriptor.ModelDefinition };
         var events = await CollectAsync(model, new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Hi")], Tools: tools));
         Assert.Contains("\"tools\"", handler.LastBody, StringComparison.Ordinal);
-        Assert.Contains("knowledge_retrieve", handler.LastBody, StringComparison.Ordinal);
-        Assert.DoesNotContain("knowledge.retrieve", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains(OpenAiCompatibleToolNames.ToWireName(name), handler.LastBody, StringComparison.Ordinal);
+        Assert.DoesNotContain(name, handler.LastBody, StringComparison.Ordinal);
+        if (name == "harness.skill.upsert")
+        {
+            using var request = JsonDocument.Parse(handler.LastBody!);
+            var schema = request.RootElement.GetProperty("tools")[0].GetProperty("function").GetProperty("parameters");
+            Assert.Contains(schema.GetProperty("required").EnumerateArray(), field => field.GetString() == "skill");
+            var skill = schema.GetProperty("properties").GetProperty("skill").GetProperty("properties");
+            Assert.Equal(SkillIds.Pattern, skill.GetProperty("id").GetProperty("pattern").GetString());
+            Assert.DoesNotContain(schema.GetProperty("required").EnumerateArray(), field => field.GetString() == "expected");
+            Assert.False(schema.GetProperty("properties").GetProperty("skill").TryGetProperty("required", out _));
+            Assert.Equal(8, skill.GetProperty("activationKeywords").GetProperty("maxItems").GetInt32());
+            Assert.True(skill.GetProperty("activationKeywords").GetProperty("uniqueItems").GetBoolean());
+        }
         var call = Assert.IsType<ModelToolCallEvent>(events[0]).Call;
         Assert.Equal("call_1", call.Id);
-        Assert.Equal(ToolCatalog.KnowledgeRetrieve, call.Name);
+        Assert.Equal(name, call.Name);
         Assert.Contains("support-order-policy", call.ArgumentsJson, StringComparison.Ordinal);
         Assert.Equal(ModelStopReason.ToolCalls, Assert.IsType<ModelCompleted>(events[^1]).Reason);
         Assert.Equal(1, handler.PostCount);
@@ -419,7 +467,7 @@ public sealed class OpenAICompatibleLanguageModelTests
     [Fact]
     public void ToolCatalog_wire_names_are_openai_compatible()
     {
-        foreach (var name in ToolCatalog.AllKnownNames())
+        foreach (var name in ToolRegistry.All.Select(d => d.Name))
         {
             var wire = OpenAiCompatibleToolNames.ToWireName(name);
             Assert.True(OpenAiCompatibleToolNames.IsWireSafe(wire), wire);

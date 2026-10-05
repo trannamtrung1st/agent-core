@@ -18,7 +18,8 @@ public sealed class DurableReminderExecutor(
     WorkCancellationRegistry cancellation,
     SessionToolExecutor tools,
     ILogger<DurableReminderExecutor>? logger = null,
-    IWorkCaptureStore? captures = null)
+    IWorkCaptureStore? captures = null,
+    AgentCore.Application.Experience.ExperienceService? experience = null)
 {
     private readonly DurableOccurrenceExecution occurrence = new(tools, time, captures);
     public const string BeforeModelCheckpoint = """{"phase":"before-model"}""";
@@ -31,6 +32,12 @@ public sealed class DurableReminderExecutor(
             await captures.PurgeExpiredAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        if (experience is not null)
+        {
+            try { await experience.ReconcileAsync(cancellationToken); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            { logger?.LogWarning("Secondary retrospective recovery failed; source work remains eligible."); }
+        }
         var recovery = await work.RecoverExpiredClaimsAsync(asOfUtc, cancellationToken).ConfigureAwait(false);
         LogRecoveredTerminalFailures(recovery);
         foreach (var resumed in recovery.ObservationResumes)
@@ -40,7 +47,7 @@ public sealed class DurableReminderExecutor(
         await work.ExpireDueApprovalsAsync(asOfUtc, cancellationToken).ConfigureAwait(false);
         var due = await work.ListRunnableAsync(asOfUtc, limit, cancellationToken).ConfigureAwait(false);
         var runnable = due
-            .Where(item => item.Provenance.SourceKind is WorkSourceKind.Schedule or WorkSourceKind.ApplicationEvent)
+            .Where(item => item.Provenance.SourceKind is WorkSourceKind.Schedule or WorkSourceKind.ApplicationEvent or WorkSourceKind.Retrospection or WorkSourceKind.ThoughtActivation)
             .ToArray();
         if (runnable.Length == 0)
         {
@@ -88,6 +95,7 @@ public sealed class DurableReminderExecutor(
             requestedAtUtc,
             cancellationToken).ConfigureAwait(false);
         cancellation.Signal(workItemId);
+        if (updated.IsTerminal && experience is not null) await experience.TryWorkBoundaryAsync(updated, CancellationToken.None);
         return updated;
     }
 
@@ -155,6 +163,30 @@ public sealed class DurableReminderExecutor(
                     linked.Token).ConfigureAwait(false);
             }
 
+            if (running.Provenance.SourceKind == WorkSourceKind.Retrospection)
+            {
+                try
+                {
+                    if (experience is null) throw AgentCoreErrors.Validation("Experience is unavailable.");
+                    using var derivedCts = CancellationTokenSource.CreateLinkedTokenSource(linked.Token);
+                    using var derivedTimer = time.CreateTimer(static state => ((CancellationTokenSource)state!).Cancel(),
+                        derivedCts, ToolLimits.Overall, Timeout.InfiniteTimeSpan);
+                    var derivedResult = await experience.GenerateAsync(running, derivedCts.Token);
+                    if (await TryCommitCancellationAsync(item.Provenance.SourceOccurrenceId, generation)) return true;
+                    await work.CompleteAsync(running.WorkItemId, running.Revision, generation, derivedResult, time.GetUtcNow(), CancellationToken.None);
+                }
+                catch (Exception exception) when (!linked.Token.IsCancellationRequested)
+                {
+                    var unavailable = exception is AgentCoreException { StatusCode: 404 };
+                    var invalid = exception is AgentCoreException { StatusCode: 400 };
+                    var now = time.GetUtcNow();
+                    await FailAsync(running, generation, now, unavailable ? "source-unavailable" : invalid ? "invalid-retrospective" : "retrospective-failed",
+                        unavailable ? "Source checkpoint is unavailable." : invalid ? "Retrospective output or model is invalid." : "Retrospection generation failed.",
+                        !unavailable && !invalid, !unavailable && !invalid ? now.Add(RetryDelay(running.AttemptCount)) : null, CancellationToken.None, exception);
+                }
+                return true;
+            }
+
             AgentContext context;
             try
             {
@@ -177,7 +209,7 @@ public sealed class DurableReminderExecutor(
                 return true;
             }
 
-            if (item.Provenance.SourceKind == WorkSourceKind.ApplicationEvent
+            if (item.Provenance.SourceKind is WorkSourceKind.ApplicationEvent or WorkSourceKind.ThoughtActivation
                 || (running.SideEffect.Disposition is WorkSideEffectDisposition.InFlight or WorkSideEffectDisposition.Indeterminate
                     && running.Checkpoint?.PayloadJson.Contains("\"ObservationRequired\":true", StringComparison.Ordinal) == true))
             {
@@ -376,6 +408,8 @@ public sealed class DurableReminderExecutor(
                     CancellationToken.None,
                     completed.AttentionRequired).ConfigureAwait(false);
                 await NoteTerminalAsync(completed.Running.WorkItemId, asOfUtc).ConfigureAwait(false);
+                if (experience is not null && await work.GetAsync(completed.Running.Owner, completed.Running.WorkItemId) is { } terminal)
+                    await experience.TryWorkBoundaryAsync(terminal, CancellationToken.None);
                 RuntimeTelemetry.RecordWork("completed");
                 break;
             case DurableOccurrenceRetry retry:
@@ -500,14 +534,17 @@ public sealed class DurableReminderExecutor(
         if (failed.Status is WorkItemStatus.Failed or WorkItemStatus.Cancelled)
         {
             await NoteTerminalAsync(failed.WorkItemId, asOfUtc).ConfigureAwait(false);
+            if (experience is not null) await experience.TryWorkBoundaryAsync(failed, CancellationToken.None);
         }
 
         RuntimeTelemetry.RecordWork(failed.Status == WorkItemStatus.WaitingToRetry ? "retry" : "failed");
         return failed;
     }
 
-    private ValueTask NoteTerminalAsync(Guid workItemId, DateTimeOffset terminalAt) =>
-        captures?.ExtendRetentionAsync(workItemId, terminalAt) ?? ValueTask.CompletedTask;
+    private async ValueTask NoteTerminalAsync(Guid workItemId, DateTimeOffset terminalAt)
+    {
+        if (captures is not null) await captures.ExtendRetentionAsync(workItemId, terminalAt);
+    }
 
     private void LogRecoveredTerminalFailures(ExpiredClaimRecovery recovery)
     {

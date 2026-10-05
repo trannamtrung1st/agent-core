@@ -18,6 +18,20 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         }
 
+        if (descriptor.OfferRule == ToolOfferRule.ExperienceAuthority)
+            return admission is { AgentInstanceId: not null, SupportsTools: true } ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
+        if (descriptor.OfferRule == ToolOfferRule.HarnessAuthority)
+        {
+            if (admission is not { AgentInstanceId: not null, SupportsTools: true }
+                || !((!admission.Detached && admission.TriggerKind == TriggerKind.UserTurn)
+                    || (admission.Detached && admission.TriggerKind == TriggerKind.ThoughtActivation))
+                || !HarnessChatTools.Allows(toolName, admission.Harness)) return ToolPolicyDecision.Deny;
+            if (admission.TriggerKind == TriggerKind.ThoughtActivation && toolName is "harness.tool.select" or "harness.tool.configure")
+                return ToolPolicyDecision.Deny;
+            return HarnessChatTools.NeedsApproval(toolName, admission.Harness!) && grant is null
+                ? ToolPolicyDecision.RequireApproval : ToolPolicyDecision.Allow;
+        }
+
         if (!RolePermissions.AllowsTool(definition, toolName))
         {
             return ToolPolicyDecision.Deny;
@@ -74,7 +88,8 @@ public static class ToolPolicy
 
         if (admission?.Detached == true
             && descriptor.Scope == ToolResourceScope.Session
-            && !(ToolCatalog.IsBrowserTool(toolName) && UnattendedBrowser(admission)))
+            && !(ToolCatalog.IsBrowserTool(toolName) && UnattendedBrowser(admission))
+            && !(HarnessChatTools.IsHarness(toolName) && admission.TriggerKind == TriggerKind.ThoughtActivation))
         {
             return ToolPolicyDecision.Deny;
         }
@@ -114,7 +129,8 @@ public static class ToolPolicy
 
         if (context?.DetachedExecution == true
             && descriptor.Scope == ToolResourceScope.Session
-            && !(ToolCatalog.IsBrowserTool(descriptor.Name) && UnattendedBrowser(context)))
+            && !(ToolCatalog.IsBrowserTool(descriptor.Name) && UnattendedBrowser(context))
+            && !(HarnessChatTools.IsHarness(descriptor.Name) && context.Trigger.Kind == TriggerKind.ThoughtActivation))
         {
             return false;
         }
@@ -125,6 +141,15 @@ public static class ToolPolicy
         {
             return false;
         }
+
+        if (descriptor.OfferRule == ToolOfferRule.ExperienceAuthority)
+            return context is { ModelSupportsTools: true } && !string.IsNullOrEmpty(context.ExperienceContext);
+        if (descriptor.OfferRule == ToolOfferRule.HarnessAuthority)
+            return context is { ModelSupportsTools: true }
+                && ((!context.DetachedExecution && context.Trigger.Kind == TriggerKind.UserTurn)
+                    || (context.DetachedExecution && context.Trigger.Kind == TriggerKind.ThoughtActivation))
+                && !(context.Trigger.Kind == TriggerKind.ThoughtActivation && descriptor.Name is "harness.tool.select" or "harness.tool.configure")
+                && HarnessChatTools.Allows(descriptor.Name, context.Harness);
 
         if (!RolePermissions.AllowsTool(definition, descriptor.Name))
         {

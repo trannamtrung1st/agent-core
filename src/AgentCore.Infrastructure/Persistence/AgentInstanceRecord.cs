@@ -14,4 +14,5 @@ public sealed class AgentInstanceRecord
     public long PersonaRevision { get; set; } = 1;
     public string? UnattendedModelCatalogKey { get; set; }
     public string? UnattendedReasoningEffort { get; set; }
+    public string? HarnessManagementJson { get; set; }
 }

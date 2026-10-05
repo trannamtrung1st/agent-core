@@ -98,6 +98,7 @@ public sealed class SqliteAgentDefinitionResourceAdminStore(
             db.AgentDefinitionDraftResources.Add(mapped);
         }
 
+        if (upsert.History is not null) AdminEventPersistence.StageAppend(db, upsert.History, ids.NewId());
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return resource;
@@ -197,6 +198,7 @@ public sealed class SqliteAgentDefinitionResourceAdminStore(
         draftRow.Revision += 1;
         draftRow.UpdatedAtUtc = remove.UpdatedAt.ToUnixTimeMilliseconds();
         db.AgentDefinitionDraftResources.Remove(row);
+        if (remove.History is not null) AdminEventPersistence.StageAppend(db, remove.History, ids.NewId());
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return DefinitionResourcePersistence.MapDraftResource(row);
     }

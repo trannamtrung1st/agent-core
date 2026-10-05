@@ -184,6 +184,8 @@ public sealed class SqliteAgentInstanceStore(
         }
 
         row.ActiveVersion = activeVersion;
+        if (update.HarnessManagement is not null)
+            row.HarnessManagementJson = JsonSerializer.Serialize(update.HarnessManagement, Json);
         row.UpdatedAtUtc = updatedAt.ToUnixTimeMilliseconds();
         row.Revision++;
         AdminEventPersistence.StageAppend(db, historyAppend, ids.NewId());
@@ -552,6 +554,10 @@ public sealed class SqliteAgentInstanceStore(
         row.UpdatedAtUtc = updatedAt.ToUnixTimeMilliseconds();
         row.Revision++;
         row.PersonaRevision = personaRevision;
+        if (update.HarnessManagement is not null)
+            row.HarnessManagementJson = JsonSerializer.Serialize(update.HarnessManagement, Json);
+        if (update.History is not null)
+            AdminEventPersistence.StageAppend(db, update.History, ids.NewId());
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -578,7 +584,8 @@ public sealed class SqliteAgentInstanceStore(
             row.Revision,
             row.PersonaRevision,
             row.UnattendedModelCatalogKey,
-            row.UnattendedReasoningEffort);
+            row.UnattendedReasoningEffort,
+            row.HarnessManagementJson is null ? null : JsonSerializer.Deserialize<HarnessManagementState>(row.HarnessManagementJson, Json));
 
     private static AgentInstanceRecord Map(AgentInstance instance) =>
         new()
@@ -594,6 +601,7 @@ public sealed class SqliteAgentInstanceStore(
             Revision = instance.Revision,
             PersonaRevision = instance.PersonaRevision,
             UnattendedModelCatalogKey = instance.UnattendedModelCatalogKey,
-            UnattendedReasoningEffort = instance.UnattendedReasoningEffort
+            UnattendedReasoningEffort = instance.UnattendedReasoningEffort,
+            HarnessManagementJson = instance.HarnessManagement is null ? null : JsonSerializer.Serialize(instance.HarnessManagement, Json)
         };
 }

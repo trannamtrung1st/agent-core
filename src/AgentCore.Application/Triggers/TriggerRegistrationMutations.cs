@@ -15,6 +15,8 @@ public static class TriggerRegistrationMutations
         DateTimeOffset updatedAt)
     {
         ArgumentNullException.ThrowIfNull(current);
+        if (current.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought)
+            throw AgentCoreErrors.Forbidden("Thought configuration can only be changed in owner Initiative controls.");
         ArgumentNullException.ThrowIfNull(schedule);
         if (current.Revision != expectedRevision)
         {
@@ -71,6 +73,8 @@ public static class TriggerRegistrationMutations
         DateTimeOffset updatedAt)
     {
         ArgumentNullException.ThrowIfNull(current);
+        if (current.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought)
+            throw AgentCoreErrors.Forbidden("Thought configuration can only be changed in owner Initiative controls.");
         if (current.Revision != expectedRevision)
         {
             throw AgentCoreErrors.Conflict("Registration revision is stale.");
@@ -106,6 +110,8 @@ public static class TriggerRegistrationMutations
         DateTimeOffset cancelledAt)
     {
         ArgumentNullException.ThrowIfNull(current);
+        if (current.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought)
+            throw AgentCoreErrors.Forbidden("Thought configuration can only be changed in owner Initiative controls.");
         if (current.Status == TriggerRegistrationStatus.Cancelled)
         {
             return current;

@@ -357,7 +357,8 @@ public static class TriggerScheduleAdmission
             dedupeKey,
             registration.RegistrationId,
             registration.Owner,
-            TriggerSourceKind.Schedule,
+            registration.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought
+                ? TriggerSourceKind.ThoughtActivation : TriggerSourceKind.Schedule,
             scheduled,
             asOf,
             asOf,
@@ -614,6 +615,7 @@ public static class TriggerScheduleAdmission
             ["registrationId"] = registration.RegistrationId,
             ["intent"] = registration.Intent,
             ["scheduleKind"] = registration.Schedule.Kind.ToString(),
+            ["registrationRevision"] = registration.Revision,
             ["scheduledAtUtc"] = scheduled.ToUnixTimeMilliseconds(),
             ["skippedCount"] = admission.SkippedCount,
             ["skippedFromUtc"] = admission.SkippedFromUtc?.ToUnixTimeMilliseconds(),

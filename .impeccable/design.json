@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-03T11:06:00.000Z",
+  "generatedAt": "2026-10-04T13:25:00.000Z",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -235,6 +235,7 @@
       "**Do** render Spoken only for assistant public `speechText` that differs after whitespace normalization; keep it first in the turn as the TTS projection, with Markdown as on-screen display below.",
       "**Do** honor `prefers-reduced-motion`; keep labeled errors, visible focus, and testids `connection` and `profile`.",
       "**Do** keep the labeled composer available while voice is live until `/docs` and tests change together.",
+      "**Do** teach harness improvements in Chat with readable exact approvals and concise future-conversation receipts. Keep Admin policy/freeze and collapsed recent evidence quiet. Distinguish Core checks, partial Agent assessments and stale/external evidence; preserve 40px narrow actions and 72ch evidence.",
       "**Do** treat Admin as the same dark product: shared spacing tokens, configuration panels, and operator copy. Behavior stays in `/docs`.",
       "**Do** use the shared centered Ant Design confirmation dialog (`confirmAction` in `web/src/app/confirmAction.ts`) for destructive or consequential actions across Chat, Admin, Background Work, and Schedules (session delete, Admin definition/instance delete, deprecation, work cancel, approval decisions, memory reset, automation revoke, and similar). Prefer a stable `dialog` surface for tests and keyboard focus.",
       "**Do** keep header identity, Speech locale, compact icon actions, profile, and connection status visible. Use 32×32px, 6px-radius fill-hover actions; keep Background Work at an 18px inbox icon with attention badge and Schedules/Admin/End at 16px.",

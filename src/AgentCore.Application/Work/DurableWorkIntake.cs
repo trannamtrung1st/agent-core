@@ -92,6 +92,7 @@ public sealed class DurableWorkIntake(
         {
             TriggerSourceKind.Schedule => WorkSourceKind.Schedule,
             TriggerSourceKind.ApplicationEvent => WorkSourceKind.ApplicationEvent,
+            TriggerSourceKind.ThoughtActivation => WorkSourceKind.ThoughtActivation,
             _ => (WorkSourceKind?)null
         };
         if (sourceKind is not WorkSourceKind kind)
@@ -139,7 +140,7 @@ public sealed class DurableWorkIntake(
         }
         else
         {
-            var validated = ExecutionModelPolicy.Validate(catalog, pin, definition, registration);
+            var validated = ExecutionModelPolicy.Validate(catalog, pin, definition, kind == WorkSourceKind.ThoughtActivation ? null : registration);
             if (!validated.Accepted)
             {
                 return null;

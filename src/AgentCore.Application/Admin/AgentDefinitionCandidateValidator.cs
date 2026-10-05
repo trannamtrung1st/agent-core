@@ -51,7 +51,8 @@ internal static class AgentDefinitionCandidateValidator
         AgentDefinitionCandidate candidate,
         ProviderAliasSet aliases,
         IModelCatalog catalog,
-        IToolConfigurationGate configurationGate)
+        IToolConfigurationGate configurationGate,
+        IReadOnlyList<string>? sourceTools = null)
     {
         var findings = new List<DefinitionValidationFinding>();
         findings.AddRange(CollectPersistenceFindings(candidate, aliases));
@@ -67,7 +68,7 @@ internal static class AgentDefinitionCandidateValidator
             return findings;
         }
 
-        findings.AddRange(CollectToolFindings(definition, configurationGate));
+        findings.AddRange(CollectToolFindings(definition, configurationGate, sourceTools));
         findings.AddRange(CollectSkillCapabilityFindings(candidate));
         return findings;
     }
@@ -176,7 +177,8 @@ internal static class AgentDefinitionCandidateValidator
 
     private static IEnumerable<DefinitionValidationFinding> CollectToolFindings(
         AgentDefinition definition,
-        IToolConfigurationGate configurationGate)
+        IToolConfigurationGate configurationGate,
+        IReadOnlyList<string>? sourceTools)
     {
         foreach (var toolName in RoleEnvironments.Of(definition).ToolList)
         {
@@ -193,7 +195,10 @@ internal static class AgentDefinitionCandidateValidator
             {
                 ToolOfferRule.RoleAllowlist => true,
                 ToolOfferRule.SessionAttachmentsWhenRoleAllows => true,
-                ToolOfferRule.ConfigurationWhenRoleAllows => configurationGate.IsConfigured(toolName),
+                // A published source may carry tools that this host cannot currently configure.
+                // Runtime admission still blocks them; unrelated forks may retain the same grant.
+                ToolOfferRule.ConfigurationWhenRoleAllows => configurationGate.IsConfigured(toolName)
+                    || sourceTools?.Contains(toolName, StringComparer.Ordinal) == true,
                 _ => false
             };
             if (!publishable)
