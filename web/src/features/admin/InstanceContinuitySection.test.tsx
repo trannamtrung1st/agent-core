@@ -1,7 +1,7 @@
 import { App, ConfigProvider } from 'antd';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { InstanceContinuitySection } from './InstanceContinuitySection';
+import { ExperienceSection, ThoughtSection } from './InstanceContinuitySection';
 import { instanceContinuityRequest, type ExperienceItem } from '../../services/adminApi';
 import { listModels } from '../../services/api';
 
@@ -12,8 +12,8 @@ const request = vi.mocked(instanceContinuityRequest);
 let enabled = false;
 const experience = () => ({ enabled, settingsRevision: 3, contextBudgetCharacters: 6000, items: [] });
 const thoughts = { minIntervalSeconds: 15, items: [] };
-function view(id = 'owner-instance') {
-  return <ConfigProvider><App><InstanceContinuitySection instanceId={id} /></App></ConfigProvider>;
+function view(id = 'owner-instance', section: 'experience' | 'thought' | 'both' = 'experience') {
+  return <ConfigProvider><App>{section !== 'thought' ? <ExperienceSection instanceId={id} onWork={vi.fn()} /> : null}{section !== 'experience' ? <ThoughtSection instanceId={id} onWork={vi.fn()} /> : null}</App></ConfigProvider>;
 }
 const record = (index: number): ExperienceItem => ({
   experienceId: `experience-${index}`, sourceKind: 'Session', sourceId: `source-${index}`, throughCursor: index,
@@ -145,24 +145,24 @@ describe('Instance continuity owner controls', () => {
       if (++reads === 2) return new Promise(resolve => { finishPoll = resolve; });
       return reads > 2 ? { ...thoughts, items: [created] } : thoughts;
     });
-    render(view());
-    await screen.findByText(/No thought activations configured/);
+    render(view('owner-instance', 'thought'));
+    await screen.findByText(/No thoughts configured/);
     act(() => poll());
     fireEvent.change(screen.getByLabelText('Thinking prompt'), { target: { value: 'Review experience' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create thought' }));
     await screen.findByText('Review experience');
     await act(async () => { finishPoll(thoughts); });
     expect(screen.getByText('Review experience')).toBeVisible();
-    expect(screen.queryByText(/No thought activations configured/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No thoughts configured/)).not.toBeInTheDocument();
   });
 
   it('keeps disabled and empty states clear and prevents checkpoint requests until enabled', async () => {
-    render(view());
+    render(view('owner-instance', 'both'));
     expect(await screen.findByText('No experience yet. Enable experience and retrospect a completed task.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Retrospect now' })).toBeDisabled();
     expect(screen.getByLabelText('Retrospection source Session')).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Create thought' })).toBeDisabled();
-    expect(screen.getByText(/No thought activations configured/)).toBeVisible();
+    expect(screen.getByText(/No thoughts configured/)).toBeVisible();
     expect(request.mock.calls.every(call => call[0] === 'owner-instance')).toBe(true);
   });
 
@@ -189,7 +189,7 @@ describe('Instance continuity owner controls', () => {
       if (path === 'thoughts/run-thought/run') return new Promise((_resolve, reject) => { rejectRun = reject; });
       return path === 'thoughts' ? { ...thoughts, items: [item] } : experience();
     });
-    render(view());
+    render(view('owner-instance', 'thought'));
     fireEvent.click(await screen.findByText('Review current work'));
     const run = screen.getByRole('button', { name: 'Run now' });
     act(() => { run.click(); run.click(); run.click(); });
@@ -225,17 +225,17 @@ describe('Instance continuity owner controls', () => {
       if (failRefresh) throw new Error('Status temporarily unavailable');
       return { ...thoughts, items: [item] };
     });
-    render(view());
+    render(view('owner-instance', 'thought'));
     fireEvent.click(await screen.findByText('Review current work'));
     const run = screen.getByRole('button', { name: 'Run now' });
     fireEvent.click(run);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh initiative' })).not.toBeDisabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh thoughts' })).not.toBeDisabled());
     expect(run).toBeDisabled();
     expect(run).toHaveTextContent('Starting…');
     await act(async () => poll());
     expect(run).toBeDisabled();
     failRefresh = true;
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh initiative' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh thoughts' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Status temporarily unavailable');
     expect(run).toBeDisabled();
     fireEvent.click(run);
@@ -244,7 +244,7 @@ describe('Instance continuity owner controls', () => {
     item = { ...item, lastWorkItemId: 'new-work', executionStatus: 'Queued', lastOutcome: 'NoAction' };
     fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Reload' }));
     await waitFor(() => expect(run).toHaveAttribute('aria-busy', 'false'));
-    expect(within(screen.getByRole('table', { name: 'Thought activations table' })).getByText('Queued', { exact: true })).toBeVisible();
+    expect(within(screen.getByRole('table', { name: 'Thoughts table' })).getAllByText('Queued', { exact: true })[0]).toBeVisible();
     expect(run).toBeDisabled();
     item = { ...item, executionStatus: 'Completed', lastOutcome: 'NoAction' };
     await act(async () => poll());
@@ -259,7 +259,7 @@ describe('Instance continuity owner controls', () => {
   });
 
   it('authors seconds, minutes and hours with the minimum interval enforced', async () => {
-    render(view());
+    render(view('owner-instance', 'thought'));
     fireEvent.change(await screen.findByLabelText('Thinking prompt'), { target: { value: 'Demo review' } });
     const chooseUnit = async (label: string) => {
       fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Thought interval unit' }));
@@ -282,7 +282,7 @@ describe('Instance continuity owner controls', () => {
   });
 
   it('uses revisioned owner configuration and bounded defaults for a new thought', async () => {
-    render(view());
+    render(view('owner-instance', 'thought'));
     const prompt = await screen.findByLabelText('Thinking prompt');
     fireEvent.change(prompt, { target: { value: 'Review experience. Do nothing when no useful action exists.' } });
     fireEvent.click(screen.getByRole('switch', { name: 'Enable thought activation' }));
@@ -293,4 +293,23 @@ describe('Instance continuity owner controls', () => {
     }));
     await waitFor(() => expect(prompt).toHaveValue(''));
   });
+  it('opens a retrospection checkpoint beyond pagination and keeps an unsaved source draft', async () => {
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
+    enabled = true;
+    request.mockResolvedValue({ ...experience(), items: Array.from({ length: 21 }, (_, index) => record(index + 1)) });
+    const onWork = vi.fn();
+    const ui = (selection?: { workItemId: string; request: number }) => <ConfigProvider><App><ExperienceSection instanceId="owner-instance" onWork={onWork} selection={selection} /></App></ConfigProvider>;
+    const view = render(ui());
+    await screen.findByRole('button', { name: 'View experience: Atlas review 21' });
+    fireEvent.change(screen.getByLabelText('Retrospection source Session'), { target: { value: 'Unsaved session' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search experience' }), { target: { value: 'Atlas review 21' } });
+    view.rerender(ui({ workItemId: 'work-1', request: 1 }));
+    const selected = await screen.findByRole('button', { name: 'View experience: Atlas review 1' });
+    await waitFor(() => expect(selected).toHaveFocus());
+    expect(selected).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByLabelText('Retrospection source Session')).toHaveValue('Unsaved session');
+    fireEvent.click(screen.getByRole('button', { name: 'View generation run' }));
+    expect(onWork).toHaveBeenCalledWith('work-1');
+  });
+
 });

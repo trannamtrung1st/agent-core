@@ -18,10 +18,11 @@ test.describe('Morgan secretary Synthetic journey', () => {
   let instanceId: string;
   let sourceSessionId: string;
 
-  async function openInstance(page: Page) {
+  async function openInstance(page: Page, automation = false) {
     await page.goto(`/admin/instances/${instanceId}`);
     await expect(page.getByRole('heading', { name: 'Morgan', exact: true })).toBeVisible();
-    await page.getByRole('tab', { name: 'Behavior & continuity', exact: true }).click();
+    await page.getByRole('tab', { name: automation ? 'Automation' : 'Continuity', exact: true }).click();
+    if (!automation) await page.getByRole('tab', { name: 'Experience', exact: true }).click();
   }
 
   async function newChat(page: Page) {
@@ -144,7 +145,8 @@ test.describe('Morgan secretary Synthetic journey', () => {
     instanceId = page.url().split('/').at(-1)!;
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Morgan', exact: true })).toBeVisible();
-    await page.getByRole('tab', { name: 'Behavior & continuity', exact: true }).click();
+    await page.getByRole('tab', { name: 'Continuity', exact: true }).click();
+    await page.getByRole('tab', { name: 'Experience', exact: true }).click();
     const experience = page.getByRole('region', { name: 'Experience', exact: true });
     await experience.getByRole('switch', { name: 'Enable experience', exact: true }).click();
     await expect(experience.getByText('Enabled · completed work may be retrospected', { exact: true })).toBeVisible();
@@ -194,8 +196,8 @@ test.describe('Morgan secretary Synthetic journey', () => {
 
   test('Admin and Chat schedule parity, pinned durable runs, quiet/attention Thought, and mobile controls', async ({ page }) => {
     test.setTimeout(180_000);
-    await openInstance(page);
-    const schedules = page.getByRole('region', { name: 'Scheduled work', exact: true });
+    await openInstance(page, true);
+    const schedules = page.getByRole('region', { name: 'Schedules', exact: true });
     const task = 'Review Atlas follow-up obligations and prepare a concise status summary.';
     await schedules.getByRole('button', { name: 'New schedule', exact: true }).click();
     await schedules.getByLabel('Schedule task', { exact: true }).fill(task);
@@ -228,11 +230,11 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await page.unroute(statusPattern);
     await schedules.getByRole('button', { name: 'Refresh schedules', exact: true }).click();
     await expect(schedules.getByRole('region', { name: 'Schedule details', exact: true }).getByText('Completed', { exact: true })).toBeVisible({ timeout: 30_000 });
-    await schedules.getByRole('button', { name: 'Inspect scheduled execution', exact: true }).click();
-    const work = page.getByRole('dialog', { name: 'Background work', exact: true });
-    await expect(work.getByText('Scheduled reminder', { exact: true })).toBeVisible();
+    await schedules.getByRole('button', { name: 'View last run', exact: true }).click();
+    const work = page.getByRole('region', { name: 'Runs', exact: true });
+    await expect(work.getByText('Schedule', { exact: true })).toBeVisible();
     await expect(work.getByRole('button', { name: /Create/ })).toHaveCount(0);
-    await work.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.locator('.background-work-selected').getByRole('button', { name: /View (schedule|thought)/ }).click();
     await schedules.getByRole('button', { name: 'Disable schedule', exact: true }).click();
     await expect(schedules.getByRole('button', { name: 'Enable schedule', exact: true })).toBeVisible();
     await expect(run).toBeDisabled();
@@ -250,7 +252,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await expect(drawer.getByText('Disabled', { exact: true })).toBeVisible();
     await drawer.getByRole('button', { name: 'Close', exact: true }).click();
     await endChat(page);
-    await openInstance(page);
+    await openInstance(page, true);
     await schedules.getByText('Call John', { exact: true }).click();
     await expect(schedules.getByText(new RegExp(`Chat user request.*${chatId}`))).toBeVisible();
     await schedules.getByRole('button', { name: 'Edit schedule', exact: true }).click();
@@ -270,7 +272,8 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await expect(schedules.getByText('Not scheduled', { exact: true })).toHaveCount(2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 
-    const initiative = page.getByRole('region', { name: 'Initiative', exact: true });
+    await page.getByRole('tab', { name: 'Thoughts', exact: true }).click();
+    const initiative = page.getByRole('region', { name: 'Thoughts', exact: true });
     const prompt = 'Review current secretary responsibilities and relevant Memory and Experience. Do nothing when there is no meaningful action.';
     await initiative.getByLabel('Thinking prompt', { exact: true }).fill(prompt);
     await initiative.getByRole('switch', { name: 'Enable thought activation', exact: true }).click();
@@ -278,20 +281,21 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await expect(initiative.getByText('Every 1 hour', { exact: true })).toBeVisible();
     await initiative.getByRole('button', { name: `View thought: ${prompt}`, exact: true }).click();
     await initiative.getByRole('button', { name: 'Run now', exact: true }).click();
-    await expect(initiative.getByText('NoAction', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(initiative.getByText('No action', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
     await initiative.getByRole('button', { name: 'Edit thought', exact: true }).click();
     await initiative.getByLabel('Thinking prompt', { exact: true }).fill('synthetic-thought-attention: review an unresolved Atlas checkpoint.');
     await initiative.getByRole('button', { name: 'Save thought', exact: true }).click();
     await expect(initiative.getByRole('button', { name: 'Save thought', exact: true })).toBeHidden();
     await initiative.getByRole('button', { name: 'Run now', exact: true }).click();
-    await expect(initiative.getByText('AttentionRequested', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
-    await initiative.getByRole('button', { name: 'Inspect execution', exact: true }).click();
-    await expect(work.getByText('Thought activation', { exact: true })).toHaveCount(2);
-    await expect(work.getByText('Needs attention', { exact: true })).toBeVisible();
-    await work.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(initiative.getByText('Needs attention', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await initiative.getByRole('button', { name: 'View run', exact: true }).click();
+    await expect(work.getByText('Thought', { exact: true })).toHaveCount(2);
+    await expect(work.getByText('Needs attention', { exact: true }).first()).toBeVisible();
+    await page.locator('.background-work-selected').getByRole('button', { name: /View (schedule|thought)/ }).click();
     await page.reload();
-    await page.getByRole('tab', { name: 'Behavior & continuity', exact: true }).click();
-    await expect(initiative.getByText('AttentionRequested', { exact: true }).first()).toBeVisible();
+    await page.getByRole('tab', { name: 'Automation', exact: true }).click();
+    await page.getByRole('tab', { name: 'Thoughts', exact: true }).click();
+    await expect(initiative.getByText('Needs attention', { exact: true }).first()).toBeVisible();
     const after = (await (await page.request.get(path, { headers: await headers(page) })).json()).items;
     const adminRow = after.find((row: { registrationId: string }) => row.registrationId === before.registrationId);
     expect(adminRow.authorizationOrigin).toBe('AdminOwner'); expect(adminRow.status).toBe('Disabled');

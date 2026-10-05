@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function select(page: Page, label: string, text: string) {
   await page.getByRole('combobox', {name:label, exact:true}).click();
-  if (label === 'Identity' || label === 'Published version') await page.getByRole('combobox', {name:label, exact:true}).fill(text);
+  if (label === 'Identity' || label === 'Published version' || label === 'Definition') await page.getByRole('combobox', {name:label, exact:true}).fill(text);
   await page.locator('.ant-select-item-option').filter({hasText:text}).last().click();
 }
 async function create(page: Page, name: string, mode = 'Managed', scope = 'Knowledge & resources') {
@@ -95,7 +95,8 @@ test('Managed tool and instruction proposals require exact Chat approval',async(
 test('Freeze blocks durable Chat learning while normal Chat still works',async({page})=>{
   const id=await create(page,'Frozen learning');
   await page.getByRole('button',{name:'Open Admin'}).click();await page.goto(`/admin/instances/${id}`);
-  await page.getByRole('tab', { name: 'Behavior & continuity', exact: true }).click();
+  await page.getByRole('tab', { name: 'Automation', exact: true }).click();
+  await page.getByRole('tab', { name: 'Policies & models', exact: true }).click();
   await page.getByRole('button',{name:'Freeze self-management',exact:true}).click();
   await page.getByRole('dialog').getByRole('button',{name:'Freeze self-management',exact:true}).click();
   await expect(page.getByText('Frozen',{exact:true})).toBeVisible();await page.locator('.admin-header').getByRole('button',{name:/Chat$/}).first().click();await select(page,'Identity','Frozen learning');

@@ -75,4 +75,17 @@ describe("EventSubscriptionsSection", () => {
     expect(await screen.findByText("No active event source.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Subscribe to order.placed" })).not.toBeInTheDocument();
   });
+  it("refreshes and focuses the exact subscription when returning from its run", async () => {
+    vi.mocked(listEventSources).mockResolvedValue([{ sourceId: "store", displayName: "Store", status: "Active", kind: "Webhook", sourceKey: "key", revision: 1 }]);
+    vi.mocked(listEventSubscriptions).mockResolvedValue([]);
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
+    const view = render(<AntApp><EventSubscriptionsSection instanceId="instance" /></AntApp>);
+    await screen.findByText("No order.placed subscription yet.");
+    vi.mocked(listEventSubscriptions).mockResolvedValue([{ registrationId: "target", sourceId: "store", eventType: "order.placed", status: "Active", revision: 1 }]);
+    view.rerender(<AntApp><EventSubscriptionsSection instanceId="instance" selection={{ registrationId: "target", request: 1 }} /></AntApp>);
+    await screen.findByText("order.placed");
+    const row = document.querySelector('[data-event-registration-id="target"]');
+    await waitFor(() => expect(row).toHaveFocus());
+    expect(row).toHaveClass("admin-selected-source");
+  });
 });

@@ -161,7 +161,7 @@ function triggerPolicySummary(config: AdminEffectiveConfiguration): string {
   return `enabled · ${p.allowedSourceKinds.join(", ")}`;
 }
 
-export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffectiveConfiguration }) {
+export function InstanceMemoryAutomationPanel({ config, section }: { config: AdminEffectiveConfiguration; section?: "memory" | "automation" }) {
   const { message, modal } = App.useApp();
   const detailLayout = useAdminDetailLayout();
   const [memoryScope, setMemoryScope] = useState<AdminLearnedMemoryScope>("IdentityUser");
@@ -449,11 +449,8 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
 
   const resetTitle = memoryResetConfirmTitle(memoryScope, config.instanceId, sessionId);
 
-  return (
-    <Tabs
-      className="admin-instance-admin-tabs"
-      aria-label="Memory and automation administration"
-      items={[
+  const sections = [
+
         {
           key: "memory",
           label: "Memory",
@@ -548,7 +545,7 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
               </Descriptions>
               <UnattendedModelForm config={config} models={models} />
               <Button onClick={() => void loadAutomation()} loading={automationBusy}>
-                Load registrations
+                Review advanced registrations
               </Button>
               {automationError ? (
                 <AdminErrorNotice
@@ -572,7 +569,7 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
             </Flex>
           )
         }
-      ]}
-    />
-  );
+      ];
+  if (section) return sections.find(item => item.key === section)?.children;
+  return <Tabs className="admin-instance-admin-tabs" aria-label="Memory and automation administration" items={sections} />;
 }

@@ -281,7 +281,7 @@ test("a detached reminder completes in Background work and cancel survives reloa
   await drawer
     .locator(".background-work-item", { hasText: "Retrying" })
     .first()
-    .getByRole("button", { name: "Cancel Scheduled reminder" })
+    .getByRole("button", { name: "Cancel Schedule" })
     .click();
   await page.getByRole("button", { name: "Cancel work" }).click();
   await expect(drawer.getByText("Cancelled").first()).toBeVisible({ timeout: 15_000 });

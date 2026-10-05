@@ -83,6 +83,9 @@ internal static class ContinuityEndpoints
             await service.RequireInstanceAsync(instanceId, ct);
             return new WorkItemListResponse((await store.ListPageAsync(new(instanceId, LocalUserProfile.Id), limit ?? 100, before, attentionOnly ?? false, ct)).Select(WorkItemEndpoints.ToResponse).ToArray());
         }));
+        group.MapGet("/work-items/{workItemId:guid}", (Guid instanceId, Guid workItemId, ExperienceService service,
+            IWorkItemStore store, CancellationToken ct) => Respond(async () =>
+                WorkItemEndpoints.ToResponse(await RequireWork(instanceId, workItemId, service, store, ct))));
         group.MapGet("/work-items/{workItemId:guid}/result", (Guid instanceId, Guid workItemId, ExperienceService service,
             IWorkItemStore store, CancellationToken ct) => Respond(async () =>
         {
@@ -138,12 +141,16 @@ internal static class ContinuityEndpoints
     {
         var instance = await service.RequireInstanceAsync(instanceId, ct);
         var definition = await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct);
-        var recent = await work.ListAsync(new(instanceId, LocalUserProfile.Id), 100, ct);
         var registrations = await triggers.ListAsync(new(instanceId, LocalUserProfile.Id), null, ct);
-        return new(ThoughtIntent.MinIntervalSeconds, registrations.Where(r => r.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought
-            && r.Status != TriggerRegistrationStatus.Cancelled).Select(r => Thought(r, recent.FirstOrDefault(w => w.Provenance.RegistrationId == r.RegistrationId),
-                definition is null ? null : ExecutionModelPolicy.Resolve(catalog, definition, instance, r).Pin?.CatalogKey)).ToArray());
+        var items = new List<ThoughtRegistrationResponse>();
+        foreach (var registration in registrations.Where(r => r.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought && r.Status != TriggerRegistrationStatus.Cancelled))
+        {
+            var last = await work.GetLatestForRegistrationAsync(new(instanceId, LocalUserProfile.Id), registration.RegistrationId, ct);
+            items.Add(Thought(registration, last, definition is null ? null : ExecutionModelPolicy.Resolve(catalog, definition, instance, registration).Pin?.CatalogKey));
+        }
+        return new(ThoughtIntent.MinIntervalSeconds, items);
     }
+
     private static ThoughtRegistrationResponse Thought(TriggerRegistration r, WorkItem? w, string? effectiveModel) => new(r.RegistrationId.ToString("D"), r.Revision,
         r.Status == TriggerRegistrationStatus.Active, r.Status.ToString(), ((FixedIntervalSchedule)r.Schedule).IntervalSeconds, r.Intent, r.ModelOverrideCatalogKey,
         r.ModelOverrideReasoningEffort, r.NextOccurrenceAtUtc is { } next ? HttpMapping.Format(next) : null,

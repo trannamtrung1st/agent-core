@@ -592,7 +592,7 @@ body,
   flex-direction: column;
 }
 
-.background-work-item.ant-list-item,
+.background-work-item,
 .schedule-item.ant-list-item {
   padding-block: var(--ac-space-section);
 }
@@ -630,6 +630,7 @@ body,
 .background-work-progress,
 .background-work-effect .ant-typography,
 .background-work-detail-body {
+  max-width: 72ch;
   overflow-wrap: anywhere;
 }
 
@@ -2370,3 +2371,11 @@ body,
     min-height: 40px;
   }
 }
+
+.background-work-item { padding-inline: var(--ac-space-default); border-block-end: 1px solid var(--ac-color-border); }
+.background-work-item:last-child { border-block-end: 0; }
+.background-work-list { list-style: none; padding: 0; margin: 0; }
+.background-work-selected { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
+.admin-run-source { align-self: flex-start; }
+
+.admin-selected-source { outline: 2px solid var(--ac-color-primary); outline-offset: 2px; }

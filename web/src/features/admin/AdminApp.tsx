@@ -108,7 +108,9 @@ import { describeAdminError, formatAdminLoadError, reportAdminError, type AdminF
 import { AdminRetryAction, showAdminFailure } from "./adminFailure";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 import { startManagedPublicationChat } from "./adminManagedChat";
-import { InstanceContinuitySection } from "./InstanceContinuitySection";
+import { ExperienceSection, ThoughtSection, InstanceRunsSection, type ExperienceSelection } from "./InstanceContinuitySection";
+import { InstanceSchedulesSection } from "./InstanceSchedulesSection";
+import type { AutomationSelection, RunSource } from "../chat/runPresentation";
 import { InstanceMemoryAutomationPanel } from "./instanceMemoryAutomation";
 
 import { DefinitionVersionsTable } from "./DefinitionVersionsTable";
@@ -2243,7 +2245,7 @@ function InstanceIdentityTags({
   );
 }
 
-function InstanceDetail({
+export function InstanceDetail({
   instanceId,
   instances,
   effective,
@@ -2261,7 +2263,25 @@ function InstanceDetail({
   onInstanceDeleted: () => void;
 }) {
   const [activeTab, setActiveTab] = useState("identity");
-  useEffect(() => { setActiveTab("identity"); }, [instanceId]);
+  const [continuityTab, setContinuityTab] = useState("memory");
+  const [automationTab, setAutomationTab] = useState("schedules");
+  const [sourceSelection, setSourceSelection] = useState<AutomationSelection>();
+  const [experienceSelection, setExperienceSelection] = useState<ExperienceSelection>();
+  const [eventSelection, setEventSelection] = useState<{ registrationId: string; request: number }>();
+  const [selectedWorkItemId, setSelectedWorkItemId] = useState<string>();
+  useEffect(() => { setActiveTab("identity"); setSourceSelection(undefined); setExperienceSelection(undefined); setEventSelection(undefined); setSelectedWorkItemId(undefined); setContinuityTab("memory"); setAutomationTab("schedules"); }, [instanceId]);
+  const viewRun = (workId?: string) => { setSelectedWorkItemId(workId); setActiveTab("runs"); };
+  const viewSource = (source: RunSource) => {
+    if (source.kind === "event") {
+      setEventSelection({ registrationId: source.registrationId, request: Date.now() }); setActiveTab("connections"); return;
+    }
+    if (source.kind === "retrospection") {
+      setExperienceSelection({ workItemId: source.workItemId, request: Date.now() }); setContinuityTab("experience"); setActiveTab("continuity"); return;
+    }
+    setSourceSelection({ ...source, request: Date.now() });
+    setAutomationTab(source.kind === "schedule" ? "schedules" : "thoughts");
+    setActiveTab("automation");
+  };
   const row = instances.kind === "ready"
     ? instances.data.find((item) => item.instanceId.toLowerCase() === instanceId.toLowerCase())
     : undefined;
@@ -2319,7 +2339,7 @@ function InstanceDetail({
           <Tabs
             className="admin-draft-tabs admin-instance-tabs"
             activeKey={resolved.compatibility && activeTab !== "connections" ? "effective"
-              : resolved.instanceLifecycle !== "Active" && activeTab === "behavior" ? "identity" : activeTab}
+              : resolved.instanceLifecycle !== "Active" && activeTab === "automation" ? "identity" : activeTab}
             onChange={setActiveTab}
             items={[
               ...(!resolved.compatibility ? [{
@@ -2327,15 +2347,29 @@ function InstanceDetail({
                 label: "Identity & version",
                 children: <InstanceManagedControls config={resolved} onUpdated={onInstanceChanged} onDeleted={onInstanceDeleted} />
               }] : []),
+              ...(!resolved.compatibility ? [{
+                key: "continuity", label: "Continuity",
+                children: <Tabs activeKey={continuityTab} onChange={setContinuityTab} aria-label="Continuity sections" items={[
+                  { key: "memory", label: "Memory", children: <InstanceMemoryAutomationPanel config={resolved} section="memory" /> },
+                  { key: "experience", label: "Experience", children: resolved.instanceLifecycle === "Active" ? <ExperienceSection instanceId={instanceId} onWork={viewRun} selection={activeTab === "continuity" && continuityTab === "experience" ? experienceSelection : undefined} /> : <Alert type="info" showIcon title="Experience is available when this instance is active" description="Unarchive the instance from Identity & version to inspect its experience." /> }
+                ]} />
+              }] : []),
               ...(!resolved.compatibility && resolved.instanceLifecycle === "Active" ? [{
-                key: "behavior",
-                label: "Behavior & continuity",
-                children: (
-                  <Flex vertical gap={16}>
-                    <HarnessManagementSection instanceId={instanceId} eligibleTools={resolved.effectiveToolAllowlist} onUpdated={onInstanceChanged} />
-                    <InstanceContinuitySection instanceId={instanceId} />
-                  </Flex>
-                )
+                key: "automation", label: "Automation",
+                children: <Flex vertical gap={16}>
+                  <Typography.Text type="secondary">A Schedule or Thought produces a Run when it fires. Core decides how that run is executed.</Typography.Text>
+                  <Tabs activeKey={automationTab} onChange={setAutomationTab} aria-label="Automation sections" items={[
+                    { key: "schedules", label: "Schedules", children: <InstanceSchedulesSection instanceId={instanceId} onWork={viewRun} selection={activeTab === "automation" ? sourceSelection : undefined} /> },
+                    { key: "thoughts", label: "Thoughts", children: <ThoughtSection instanceId={instanceId} onWork={viewRun} selection={activeTab === "automation" ? sourceSelection : undefined} /> },
+                    { key: "controls", label: "Policies & models", children: <Flex vertical gap={16}>
+                      <HarnessManagementSection instanceId={instanceId} eligibleTools={resolved.effectiveToolAllowlist} onUpdated={onInstanceChanged} />
+                      <InstanceMemoryAutomationPanel config={resolved} section="automation" />
+                    </Flex> }
+                  ]} />
+                </Flex>
+              }] : []),
+              ...(!resolved.compatibility ? [{ key: "runs", label: "Runs", children:
+                resolved.instanceLifecycle === "Active" ? <InstanceRunsSection instanceId={instanceId} open={activeTab === "runs"} inline selectedWorkItemId={selectedWorkItemId} onClose={() => setActiveTab("automation")} onSource={viewSource} /> : <Alert type="info" showIcon title="Runs are available when this instance is active" description="Unarchive the instance from Identity & version to inspect execution history." />
               }] : []),
               {
                 key: "connections",
@@ -2343,27 +2377,10 @@ function InstanceDetail({
                 children: (
                   <Flex vertical gap={16}>
                     <ApplicationConnectionSection instanceId={instanceId} />
-                    <EventSubscriptionsSection instanceId={instanceId} />
+                    <EventSubscriptionsSection instanceId={instanceId} selection={activeTab === "connections" ? eventSelection : undefined} />
                   </Flex>
                 )
               },
-              ...(!resolved.compatibility ? [{
-                key: "memory",
-                label: "Memory & automation",
-                children: (
-                  <section className="admin-definition-panel" aria-label="Memory and automation">
-                    <div className="admin-definition-panel-heading">
-                      <Typography.Title level={4}>Memory &amp; automation</Typography.Title>
-                      <Typography.Text type="secondary">
-                        Inspect learned memory and manage durable registrations for this instance.
-                      </Typography.Text>
-                  </div>
-                  <div className="admin-definition-panel-body admin-instance-admin-body">
-                    <InstanceMemoryAutomationPanel config={resolved} />
-                  </div>
-                </section>
-              )
-            }] : []),
             {
               key: "effective",
               label: "Effective configuration",

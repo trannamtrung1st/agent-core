@@ -26,6 +26,25 @@ public sealed class WorkItemStoreContractTests
     private const string OtherToolCallId = "tool-call-b";
 
     [Fact]
+    public async Task Latest_registration_read_is_owner_scoped_and_not_limited_by_the_recent_page()
+    {
+        await ForEachStore(async store =>
+        {
+            var owner = new WorkOwner(InstanceA, ProfileA);
+            var registration = Id(8000);
+            await store.CreateAsync(NewItem(owner, Id(1), Id(501), Now, registrationId: registration));
+            await store.CreateAsync(NewItem(owner, Id(2), Id(502), Now, registrationId: registration));
+            for (var index = 3; index <= 105; index++)
+                await store.CreateAsync(NewItem(owner, Id(index), Id(index + 500), Now.AddMinutes(index)));
+            Assert.DoesNotContain(await store.ListAsync(owner, 100), item => item.Provenance.RegistrationId == registration);
+            Assert.Equal(Id(2), (await store.GetLatestForRegistrationAsync(owner, registration))!.WorkItemId);
+            Assert.Null(await store.GetLatestForRegistrationAsync(new(InstanceB, ProfileA), registration));
+            Assert.Null(await store.GetLatestForRegistrationAsync(new(InstanceA, ProfileB), registration));
+            Assert.Null(await store.GetLatestForRegistrationAsync(owner, Id(8001)));
+        });
+    }
+
+    [Fact]
     public async Task Pages_reach_old_work_with_timestamp_ties_and_reject_foreign_cursors()
     {
         await ForEachStore(async store =>
@@ -952,14 +971,15 @@ public sealed class WorkItemStoreContractTests
         DateTimeOffset createdAt,
         int maxAttempts = 3,
         WorkSourceKind kind = WorkSourceKind.ApplicationEvent,
-        AgentIdentity? pinnedPersona = null) =>
+        AgentIdentity? pinnedPersona = null,
+        Guid? registrationId = null) =>
         WorkItem.Create(
             workItemId,
             owner,
             new WorkProvenance(
                 sourceId,
                 kind,
-                null,
+                registrationId,
                 Guid.Parse("019944af-0009-7000-8000-000000000092"),
                 null,
                 $"source|{sourceId:N}",

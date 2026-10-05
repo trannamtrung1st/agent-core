@@ -99,6 +99,19 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
         }
     }
 
+    public ValueTask<WorkItem?> GetLatestForRegistrationAsync(
+        WorkOwner owner, Guid registrationId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_state.Gate)
+        {
+            return ValueTask.FromResult(_state.WorkItems.Values
+                .Where(item => item.Owner.Equals(owner) && item.Provenance.RegistrationId == registrationId)
+                .OrderByDescending(item => item.CreatedAtUtc).ThenByDescending(item => item.WorkItemId)
+                .FirstOrDefault());
+        }
+    }
+
     public ValueTask<IReadOnlyList<WorkItem>> ListAsync(WorkOwner owner, int limit, CancellationToken cancellationToken = default)
     {
         var take = Clamp(limit);

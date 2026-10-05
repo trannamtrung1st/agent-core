@@ -77,6 +77,17 @@ public sealed class ThoughtJourneyTests
             var item = (await work.ListAsync(owner, 100)).Single(w => w.Provenance.SourceKind == WorkSourceKind.ThoughtActivation);
             workId = item.WorkItemId;
             Assert.Equal("Thought activation", item.OriginLabel);
+            var detailPath = $"/api/v2/admin/agent-instances/{instanceId}/work-items/{workId}";
+            var detail = (await client.GetFromJsonAsync<WorkItemResponse>(detailPath))!;
+            Assert.Equal(workId.ToString("D"), detail.WorkItemId);
+            Assert.Equal(registrationId.ToString("D"), detail.RegistrationId);
+            Assert.Equal("Thought activation", detail.Origin);
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/admin/agent-instances/{instanceId}/work-items/{Guid.NewGuid()}")).StatusCode);
+            var other = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9);
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/admin/agent-instances/{other.InstanceId}/work-items/{workId}")).StatusCode);
+            using var anonymous = host.CreateClient();
+            Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(detailPath)).StatusCode);
+
             Assert.Contains("synthetic-thought-improve", item.Provenance.EvidenceJson);
             Assert.Equal(1, await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100));
             item = (await work.GetAsync(owner, workId))!;

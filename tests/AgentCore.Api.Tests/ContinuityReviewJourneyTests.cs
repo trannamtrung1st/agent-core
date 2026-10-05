@@ -7,6 +7,9 @@ using AgentCore.Application.Memory;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Triggers;
+using AgentCore.Application.Work;
+using AgentCore.Domain.Work;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
@@ -18,6 +21,52 @@ namespace AgentCore.Api.Tests;
 
 public sealed class ContinuityReviewJourneyTests
 {
+    [Theory(Timeout = 90000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Last_run_remains_linked_after_more_than_one_hundred_unrelated_runs(bool thought)
+    {
+        await using var host = new ExperienceHost(Database());
+        var services = host.Services;
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9);
+        var client = TestOwnerCapability.CreateOwnerClient(host);
+        var root = $"/api/v2/admin/agent-instances/{instance.InstanceId}";
+        var path = root + (thought ? "/thoughts" : "/schedules");
+        string registrationId;
+        if (thought)
+        {
+            var created = await client.PostAsJsonAsync(path, new ThoughtRegistrationRequest(0, true, 3600, "Review; do nothing if no action is useful.", null, null));
+            created.EnsureSuccessStatusCode();
+            registrationId = (await created.Content.ReadFromJsonAsync<ThoughtRegistrationResponse>())!.RegistrationId;
+        }
+        else
+        {
+            var created = await client.PostAsJsonAsync(path, new AdminScheduleRequest(0, true, "Known future obligation", new("daily", "UTC", LocalTime: "09:00")));
+            created.EnsureSuccessStatusCode();
+            registrationId = (await created.Content.ReadFromJsonAsync<AdminScheduleResponse>())!.RegistrationId;
+        }
+        var run = await client.PostAsJsonAsync(path + "/" + registrationId + "/run", new ContinuityRevisionRequest(1));
+        run.EnsureSuccessStatusCode();
+        await ThoughtJourneyTests.Intake(services);
+        var store = services.GetRequiredService<IWorkItemStore>();
+        var owner = new WorkOwner(instance.InstanceId, LocalUserProfile.Id);
+        var original = Assert.Single(await store.ListAsync(owner, 100));
+        // Imported historical rows represent other sources without executing them.
+        for (var index = 0; index < 101; index++)
+        {
+            var at = original.CreatedAtUtc.AddMinutes(index + 1);
+            var source = Guid.NewGuid();
+            var provenance = new WorkProvenance(source, WorkSourceKind.ApplicationEvent, null, null, source, $"history|{source:N}", null, at,
+                "{}", original.Provenance.DefinitionId, original.Provenance.DefinitionVersion, original.Provenance.PersonaName);
+            await store.CreateAsync(WorkItem.Create(Guid.NewGuid(), owner, provenance, original.Model, 3, at));
+        }
+        Assert.DoesNotContain(await store.ListAsync(owner, 100), item => item.WorkItemId == original.WorkItemId);
+        var review = await client.GetFromJsonAsync<System.Text.Json.JsonElement>(path);
+        Assert.Equal(original.WorkItemId.ToString("D"), review.GetProperty("items")[0].GetProperty("lastWorkItemId").GetString());
+        var detail = (await client.GetFromJsonAsync<WorkItemResponse>(root + "/work-items/" + original.WorkItemId))!;
+        Assert.Equal(registrationId, detail.RegistrationId);
+    }
+
     [Fact(Timeout = 90000)]
     public async Task Continuity_empty_broad_current_deleted_and_invalid_queries_stay_bounded_and_untrusted()
     {

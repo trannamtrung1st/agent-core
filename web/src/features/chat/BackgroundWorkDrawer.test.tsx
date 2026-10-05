@@ -108,8 +108,8 @@ describe("BackgroundWorkDrawer", () => {
 
   it("shows an empty list", async () => {
     renderDrawer(async () => []);
-    expect(await screen.findByText("No background work yet")).toBeInTheDocument();
-    expect(screen.getByText("Tasks outside this conversation")).toBeInTheDocument();
+    expect(await screen.findByText("No runs yet. Runs appear when schedules, thoughts, events, or retrospection execute.")).toBeInTheDocument();
+
   });
 
   it("shows the retry attempt and the last safe reason", async () => {
@@ -137,7 +137,7 @@ describe("BackgroundWorkDrawer", () => {
         />
       </AntApp>
     );
-    expect(await screen.findByText("No background work yet")).toBeInTheDocument();
+    expect(await screen.findByText("No runs yet. Runs appear when schedules, thoughts, events, or retrospection execute.")).toBeInTheDocument();
     fireEvent.keyDown(screen.getByRole("dialog", { name: "Background work" }), { key: "Escape" });
     expect(onClose).toHaveBeenCalledOnce();
   });
@@ -161,7 +161,7 @@ describe("BackgroundWorkDrawer", () => {
         />
       </AntApp>
     );
-    expect(await screen.findByText("No background work yet")).toBeInTheDocument();
+    expect(await screen.findByText("No runs yet. Runs appear when schedules, thoughts, events, or retrospection execute.")).toBeInTheDocument();
     fireEvent.keyDown(document.body, { key: "Escape" });
     // The capture listener and Ant Design's portal Escape handler both close.
     expect(onClose).toHaveBeenCalledTimes(2);
@@ -182,12 +182,12 @@ describe("BackgroundWorkDrawer", () => {
     });
     renderDrawer(async () => [queued, approval, completed, failed], { loadResult });
     expect(await screen.findByText("Oven timer finished.")).toBeInTheDocument();
-    expect(screen.getAllByText("Scheduled reminder").length).toBeGreaterThan(0);
-    expect(screen.getByText("Application event")).toBeInTheDocument();
+    expect(screen.getAllByText("Schedule").length).toBeGreaterThan(0);
+    expect(screen.getByText("Event")).toBeInTheDocument();
     expect(screen.getByText("Queued")).toBeInTheDocument();
     expect(screen.queryByText("Needs attention")).not.toBeInTheDocument();
     expect(screen.getByText("Needs approval")).toBeInTheDocument();
-    expect(screen.getByText("Completed")).toBeInTheDocument();
+    expect(screen.getAllByText("Completed")[0]).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(screen.getByText("Waiting to start")).toBeInTheDocument();
     expect(screen.getByText("Checking the oven")).toBeInTheDocument();
@@ -223,12 +223,12 @@ describe("BackgroundWorkDrawer", () => {
       approve,
       reject
     });
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel Scheduled reminder" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel Schedule" }));
     fireEvent.click(await screen.findByRole("button", { name: "Cancel work" }));
     await waitFor(() => expect(cancel).toHaveBeenCalledWith("session-1", queued.workItemId, 1));
     expect(await screen.findByText("Cancelled")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve Application event" }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve Event" }));
     fireEvent.click(await screen.findByRole("button", { name: "Approve action" }));
     await waitFor(() => expect(approve).toHaveBeenCalledWith("session-1", approval.workItemId, "approval-1", 4, 1, approval.actionHash));
 
@@ -242,12 +242,12 @@ describe("BackgroundWorkDrawer", () => {
 
   it("uses the wide and narrow drawer widths", async () => {
     const wide = renderDrawer(async () => [], { wide: true });
-    expect(await screen.findByText("No background work yet")).toBeInTheDocument();
+    expect(await screen.findByText("No runs yet. Runs appear when schedules, thoughts, events, or retrospection execute.")).toBeInTheDocument();
     expect(document.querySelector(".ant-drawer-content-wrapper")).toHaveStyle({ width: "400px" });
     wide.unmount();
 
     renderDrawer(async () => [], { wide: false });
-    expect(await screen.findByText("No background work yet")).toBeInTheDocument();
+    expect(await screen.findByText("No runs yet. Runs appear when schedules, thoughts, events, or retrospection execute.")).toBeInTheDocument();
     expect(document.querySelector(".ant-drawer-content-wrapper")).toHaveStyle({ width: "320px" });
   });
 
@@ -272,7 +272,7 @@ describe("BackgroundWorkDrawer", () => {
     const cancel = vi.fn().mockReturnValue(pending);
     const load = vi.fn(async (owner: string) => [owner === "session-1" ? queued : { ...completed, origin: "Other owner's work" }]);
     const view = renderDrawer(load, { cancel });
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel Scheduled reminder" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel Schedule" }));
     fireEvent.click(await screen.findByRole("button", { name: "Cancel work" }));
     await waitFor(() => expect(cancel).toHaveBeenCalledTimes(1));
     view.rerender(<AntApp><BackgroundWorkDrawer sessionId="session-2" open wide onClose={() => undefined}
@@ -349,12 +349,62 @@ describe("BackgroundWorkDrawer", () => {
     renderDrawer(async () => [queued, placed], {
       loadResult: async () => ({ workItemId: "", text: "", completedAt: "" })
     });
-    expect(await screen.findByText("Scheduled reminder")).toBeInTheDocument();
-    expect(screen.getByText("Order placed")).toBeInTheDocument();
-    const source = screen.getByLabelText("Source: Order placed");
-    const updated = source.parentElement?.querySelector("time");
+    expect(await screen.findByText("Schedule")).toBeInTheDocument();
+    expect(screen.getByText("Event")).toBeInTheDocument();
+    const source = screen.getByLabelText("Source: Event");
+    const updated = [...source.closest("li")!.querySelectorAll("time")].find(time => time.parentElement?.textContent?.startsWith("Updated"));
     expect(updated).toHaveAttribute("dateTime", placed.updatedAt);
     expect(updated).toHaveTextContent(formatChatTime(placed.updatedAt) ?? placed.updatedAt);
     expect(screen.queryByText(/sourceEventId|orderReference|\{/)).not.toBeInTheDocument();
   });
+  it("opens a specific older run outside the first page and links to its exact source", async () => {
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
+    const onSource = vi.fn();
+    const target = { ...completed, workItemId: "older-run", registrationId: "original-schedule" };
+    const loadOne = vi.fn().mockResolvedValue(target);
+    render(<AntApp><BackgroundWorkDrawer sessionId="instance" open inline wide selectedWorkItemId="older-run"
+      onClose={vi.fn()} load={async () => [queued]} loadOne={loadOne}
+      loadResult={async () => ({ workItemId: target.workItemId, text: "Original result", completedAt: target.updatedAt })}
+      cancel={vi.fn()} approve={vi.fn()} reject={vi.fn()} onSource={onSource} /></AntApp>);
+    expect(await screen.findByText("Original result")).toBeVisible();
+    expect(loadOne).toHaveBeenCalledWith("instance", "older-run");
+    const selected = document.querySelector('[data-work-item-id="older-run"]')!;
+    expect(selected).toHaveClass("background-work-selected");
+    fireEvent.click(screen.getByRole("button", { name: "View schedule" }));
+    expect(onSource).toHaveBeenCalledWith({ kind: "schedule", registrationId: "original-schedule" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("shows actionable failure when a selected run cannot be read", async () => {
+    const loadOne = vi.fn().mockRejectedValue(new Error("Run is no longer available."));
+    render(<AntApp><BackgroundWorkDrawer sessionId="instance" open inline wide selectedWorkItemId="missing-run"
+      onClose={vi.fn()} load={async () => []} loadOne={loadOne}
+      loadResult={vi.fn()} cancel={vi.fn()} approve={vi.fn()} reject={vi.fn()} /></AntApp>);
+    expect(await screen.findByText("Run is no longer available.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Retry selected run" }));
+    await waitFor(() => expect(loadOne).toHaveBeenCalledTimes(2));
+  });
+
+  it("exposes a failed result read and retries without changing the run", async () => {
+    const loadResult = vi.fn().mockRejectedValueOnce(new Error("Result storage temporarily unavailable"))
+      .mockResolvedValue({ workItemId: completed.workItemId, text: "Recovered result", completedAt: completed.updatedAt });
+    renderDrawer(async () => [completed], { loadResult });
+    expect(await screen.findByText("Result storage temporarily unavailable")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Retry result" }));
+    expect(await screen.findByText("Recovered result")).toBeVisible();
+    expect(screen.queryByText("Result storage temporarily unavailable")).not.toBeInTheDocument();
+    expect(loadResult).toHaveBeenCalledTimes(2);
+  });
+
+  it("disables every owner action while a run mutation is pending", async () => {
+    let finish!: (item: WorkItem) => void;
+    const cancel = vi.fn(() => new Promise<WorkItem>(resolve => { finish = resolve; }));
+    renderDrawer(async () => [queued, approval], { cancel });
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel Schedule" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel work" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Approve Event" })).toBeDisabled());
+    await act(async () => { finish({ ...queued, revision: 2, status: "cancelled", cancellationAvailable: false }); });
+    expect(screen.getByRole("button", { name: "Approve Event" })).toBeEnabled();
+  });
+
 });

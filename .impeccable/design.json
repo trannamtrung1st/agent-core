@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-05T18:56:20.793Z",
+  "generatedAt": "2026-10-05T19:36:05.005Z",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -230,8 +230,8 @@
       "Composer owns Model (reasoning level inside the Model button when supported) with Attach/Voice and context-sensitive Stop/Queue/Send; header owns identity, Speech locale, compact icon actions, and status metadata.",
       "Model catalog rows expose enabled vision, reasoning, tools, and structured-output capabilities as compact named icons. Queued drafts remain a compact local work list above the composer.",
       "Assistant display Markdown stays primary for reading; persisted public speech text is a quieter **Spoken** inset first on the same turn when it differs (the TTS projection).",
-      "Background Work and Schedules share an operational drawer language: two-line headers, open List rows, semantic filled icon-and-text status chips, elevated detail insets, and trailing actions where needed.",
-      "Admin collections use compact tables with local horizontal scrolling; Experience, Scheduled work and Thought activations expand one record at a time. Read-only details share aligned labels on wider screens and stacked labels on mobile."
+      "Background Work and Schedules share an operational drawer language: quiet headers, semantic execution rows, semantic filled icon-and-text status chips, elevated detail insets, and trailing actions where needed.",
+      "Admin collections use compact tables with local horizontal scrolling; Experience, Schedules and Thoughts expand one record at a time. Read-only details share aligned labels on wider screens and stacked labels on mobile."
     ],
     "rules": [
       {
@@ -281,11 +281,11 @@
       "**Do** use the shared centered Ant Design confirmation dialog (`confirmAction` in `web/src/app/confirmAction.ts`) for destructive or consequential actions across Chat, Admin, Background Work, and Schedules (session delete, Admin definition/instance delete, deprecation, work cancel, approval decisions, memory reset, automation revoke, and similar). Prefer a stable `dialog` surface for tests and keyboard focus.",
       "**Do** keep header identity, Speech locale, compact icon actions, profile, and connection status visible. Use 32×32px, 6px-radius fill-hover actions; keep Background Work at an 18px inbox icon with attention badge and Schedules/Admin/End at 16px.",
       "**Do** keep ended history on the same reading column with a quiet ended note, not a disabled input.",
-      "**Do** reuse the operational drawer language for Background Work and Schedules: two-line headers, open List rows, semantic filled icon-and-text status chips, elevated 8px detail insets, and trailing actions only where the row exposes an operation.",
+      "**Do** reuse the operational drawer language for Background Work and Schedules: quiet headers, semantic execution rows, semantic filled icon-and-text status chips, elevated 8px detail insets, and trailing actions only where the row exposes an operation.",
       "**Do** show an application connection under the agent name only when a connection row exists, as display name, status, and Manage. Admin owns connect, revoke, and reset, and names nopCommerce as the supported application type. Attention results use the words Needs attention plus an icon. Quiet completions do not change the header count.",
       "**Do** format schedule occurrences for the viewer locale in the schedule’s named time zone; keep the zone identifier visible beside the readable time.",
-      "**Do** show Background Work’s updated time with the shared chat time formatter and a `time` element. Keep the origin as text (`Scheduled reminder`, `Order placed`, or `Application event`).",
-      "**Do** keep the unattended model and its effective-source sentence in Memory & automation. Show a webhook credential once in a dialog, then clear it on Done or Escape. The resting connection section keeps the public key and status only."
+      "**Do** show run timestamps with the shared chat time formatter and a `time` element. Use readable origin labels (`Schedule`, `Thought`, `Event`, `Retrospection`) while retaining transport values internally.",
+      "**Do** keep the unattended model and its effective-source sentence in Automation → Policies & models. Show a webhook credential once in a dialog, then clear it on Done or Escape. The resting connection section keeps the public key and status only."
     ],
     "donts": [
       "**Don't** reproduce Pixel Dialogue Field, Obsidian Mint, Martian Mono, field textures, presence plates, or a custom Select.",

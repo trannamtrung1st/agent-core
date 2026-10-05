@@ -183,7 +183,7 @@ describe("InstanceMemoryAutomationPanel", () => {
     expect(listAdminLearnedMemory).toHaveBeenCalledWith(config.instanceId, "IdentityUser", undefined);
 
     fireEvent.click(screen.getByRole("tab", { name: "Automation" }));
-    fireEvent.click(screen.getByRole("button", { name: "Load registrations" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review advanced registrations" }));
     await waitFor(() => expect(screen.getByText("Reminder")).toBeInTheDocument());
     expect(screen.getByText("CurrentUserTurn")).toBeInTheDocument();
     expect(screen.getByText(/UTC · next/i)).toBeInTheDocument();
@@ -254,7 +254,7 @@ describe("InstanceMemoryAutomationPanel", () => {
     ));
     expect(screen.getByText("Effective source: Unattended default (Synthetic)")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Load registrations" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review advanced registrations" }));
     await chooseSelectOption("Model for Reminder", "Synthetic");
     fireEvent.click(screen.getByRole("button", { name: "Save model for Reminder" }));
     await waitFor(() => expect(setAdminRegistrationModel).toHaveBeenCalledWith(

@@ -28,11 +28,11 @@ describe("Owner schedule authoring", () => {
     const rows = Array.from({ length: 11 }, (_, index) => ({ ...row, registrationId: `schedule-${index}`, revision: index + 2,
       intent: `Task ${index}`, sourceSessionId: index === 10 ? "unique-chat-source" : "source-session" }));
     request.mockResolvedValue({ items: rows }); render(view());
-    const section = screen.getByRole("region", { name: "Scheduled work" });
+    const section = screen.getByRole("region", { name: "Schedules" });
     await within(section).findByRole("button", { name: "View schedule: Task 0" });
     fireEvent.click(section.querySelector('.ant-pagination-next button')!);
     expect(await within(section).findByRole("button", { name: "View schedule: Task 10" })).toBeVisible();
-    fireEvent.change(within(section).getByRole("textbox", { name: "Search scheduled work" }), { target: { value: "unique-chat-source" } });
+    fireEvent.change(within(section).getByRole("textbox", { name: "Search schedules" }), { target: { value: "unique-chat-source" } });
     expect(await within(section).findByText("1 results")).toBeVisible();
     fireEvent.click(within(section).getByRole("button", { name: "View schedule: Task 10" }));
     expect(within(section).getByRole("region", { name: "Schedule details" })).toHaveTextContent("unique-chat-source");
@@ -41,7 +41,7 @@ describe("Owner schedule authoring", () => {
       expect.objectContaining({ expectedRevision: 12, enabled: false })));
   });
   it("creates a structured schedule without model interpretation", async () => {
-    render(view()); await screen.findByText(/No scheduled work yet/);
+    render(view()); await screen.findByText(/No schedules yet/);
     fireEvent.click(screen.getByRole("button", { name: "New schedule" }));
     expect(screen.getByRole("button", { name: "Create schedule" })).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Schedule task"), { target: { value: "Review pending orders" } });
@@ -55,7 +55,7 @@ describe("Owner schedule authoring", () => {
   it("requires a finite bound under Definition policy and sends the selected occurrence limit", async () => {
     request.mockResolvedValue({ items: [], policy: { allowOneShot: true, allowDaily: true, allowWeekly: true, allowFixedInterval: true,
       allowIndefiniteRecurrence: false, oneShotHorizonDays: 10, minRecurrenceDays: 1, minFixedIntervalSeconds: 300, maxActiveRegistrations: 2 } });
-    render(view()); await screen.findByText(/No scheduled work yet/);
+    render(view()); await screen.findByText(/No schedules yet/);
     fireEvent.click(screen.getByRole("button", { name: "New schedule" }));
     fireEvent.change(screen.getByLabelText("Schedule task"), { target: { value: "Finite store audit" } });
     expect(screen.getByText(/This Definition requires an end date/)).toBeVisible();
@@ -97,4 +97,26 @@ describe("Owner schedule authoring", () => {
       expectedRevision: 2, enabled: false, intent: "Future orders", schedule: row.schedule, modelKey: null, reasoningEffort: null
     }));
   });
+  it("opens the exact source beyond pagination without discarding an editor draft", async () => {
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
+    const rows = Array.from({ length: 12 }, (_, index) => ({ ...row, registrationId: `schedule-${index}`, intent: `Task ${index}`, lastWorkItemId: `run-${index}` }));
+    request.mockResolvedValue({ items: rows });
+    const onWork = vi.fn();
+    const ui = (selection?: { kind: "schedule"; registrationId: string; request: number }) => <ConfigProvider><App>
+      <InstanceSchedulesSection instanceId="instance" onWork={onWork} selection={selection} /></App></ConfigProvider>;
+    const view = render(ui());
+    await screen.findByRole("button", { name: "View schedule: Task 0" });
+    fireEvent.click(screen.getByRole("button", { name: "New schedule" }));
+    fireEvent.change(screen.getByLabelText("Schedule task"), { target: { value: "Unsaved task" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Search schedules" }), { target: { value: "Task 0" } });
+    view.rerender(ui({ kind: "schedule", registrationId: "schedule-11", request: 1 }));
+    const source = await screen.findByRole("button", { name: "View schedule: Task 11" });
+    await waitFor(() => expect(source).toHaveAttribute("aria-expanded", "true"));
+    expect(screen.getByLabelText("Schedule task")).toHaveValue("Unsaved task");
+    expect(screen.getByRole("textbox", { name: "Search schedules" })).toHaveValue("");
+    expect(screen.getByText("Originally created from")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "View last run" }));
+    expect(onWork).toHaveBeenCalledWith("run-11");
+  });
+
 });

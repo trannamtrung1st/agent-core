@@ -11,8 +11,8 @@ test("p7e admin memory and automation tabs exercise owner-protected APIs", async
   await page.goto(`/admin/instances/${instance.instanceId}`);
   await expect(page.locator(".admin-instance-heading").getByText("Managed", { exact: true })).toBeVisible();
 
-  await page.getByRole("tab", { name: "Memory & automation", exact: true }).click();
-  const memoryAutomation = page.getByLabel("Memory and automation administration");
+  await page.getByRole("tab", { name: "Continuity", exact: true }).click();
+  const memoryAutomation = page.locator(".admin-instance-tabs");
   await memoryAutomation.getByRole("tab", { name: "Memory" }).click();
   await memoryAutomation.getByRole("combobox", { name: "Memory scope" }).click();
   await page.locator(".ant-select-item-option", { hasText: "Session" }).click();
@@ -38,13 +38,14 @@ test("p7e admin memory and automation tabs exercise owner-protected APIs", async
     await expect(memoryAutomation.locator(".ant-typography-danger")).toBeVisible();
   }
 
-  await memoryAutomation.getByRole("tab", { name: "Automation" }).click();
+  await page.getByRole("tab", { name: "Automation", exact: true }).click();
+  await page.getByRole("tab", { name: "Policies & models", exact: true }).click();
   const automationResponse = page.waitForResponse(
     (response) =>
       response.request().method() === "GET" &&
       response.url().includes(`/api/v2/admin/agent-instances/${instance.instanceId}/automation/registrations`)
   );
-  await memoryAutomation.getByRole("button", { name: "Load registrations" }).click();
+  await memoryAutomation.getByRole("button", { name: "Review advanced registrations" }).click();
   const automation = await automationResponse;
   expect(automation.ok()).toBe(true);
   const automationBody = (await automation.json()) as { items: unknown[] };

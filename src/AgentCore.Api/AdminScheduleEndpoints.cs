@@ -22,11 +22,14 @@ internal static class AdminScheduleEndpoints
         {
             var instance = await instances.RequireInstanceAsync(instanceId, ct);
             var definition = await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct);
-            var recent = await work.ListAsync(new(instanceId, LocalUserProfile.Id), 100, ct);
             var rows = await store.ListAsync(new(instanceId, LocalUserProfile.Id), null, ct);
-            return new AdminScheduleReview(rows.Where(r => r.EventSourceId is null && r.Provenance.AuthorizationOrigin != TriggerAuthorizationOrigin.AdminThought)
-                .Select(r => Project(r, definition is null ? null : ExecutionModelPolicy.Resolve(catalog, definition, instance, r).Pin?.CatalogKey,
-                    recent.FirstOrDefault(w => w.Provenance.RegistrationId == r.RegistrationId))).ToArray(),
+            var items = new List<AdminScheduleResponse>();
+            foreach (var registration in rows.Where(r => r.EventSourceId is null && r.Provenance.AuthorizationOrigin != TriggerAuthorizationOrigin.AdminThought))
+            {
+                var last = await work.GetLatestForRegistrationAsync(new(instanceId, LocalUserProfile.Id), registration.RegistrationId, ct);
+                items.Add(Project(registration, definition is null ? null : ExecutionModelPolicy.Resolve(catalog, definition, instance, registration).Pin?.CatalogKey, last));
+            }
+            return new AdminScheduleReview(items,
                 definition?.TriggerPolicy is { } p ? new AdminSchedulePolicy(p.AllowOneShot, p.AllowDaily, p.AllowWeekly, p.AllowFixedInterval,
                     p.AllowIndefiniteRecurrence, p.OneShotHorizonDays, p.MinRecurrenceDays, p.MinFixedIntervalSeconds, p.MaxActiveRegistrations) : null);
         }));

@@ -44,7 +44,7 @@ test("store connection and quiet background work stay labeled", async ({ page })
   await page.keyboard.press("Enter");
   const drawer = page.getByRole("dialog", { name: "Background work" });
   await expect(drawer).toBeVisible({ timeout: 15_000 });
-  await expect(drawer.getByText("No background work yet")).toBeVisible({ timeout: 15_000 });
+  await expect(drawer.getByText("No runs yet. Runs appear when schedules, thoughts, events, or retrospection execute.")).toBeVisible({ timeout: 15_000 });
   const close = drawer.getByRole("button", { name: "Close" });
   await close.focus();
   await expect(close).toBeFocused();

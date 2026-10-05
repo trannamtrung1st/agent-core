@@ -35,7 +35,7 @@ test("background work stays out of the transcript at wide and narrow widths", as
   await expect(opener).toBeFocused();
   await page.keyboard.press("Enter");
   const drawer = page.getByRole("dialog", { name: "Background work" });
-  await expect(drawer.getByText("No background work yet")).toBeVisible();
+  await expect(drawer.getByText("No runs yet. Runs appear when schedules, thoughts, events, or retrospection execute.")).toBeVisible();
   await drawer.getByRole("button", { name: "Close" }).click();
   await expect(drawer).toBeHidden();
   await expect(opener).toBeVisible();
@@ -136,7 +136,7 @@ test("background work stays out of the transcript at wide and narrow widths", as
   await page.setViewportSize({ width: 390, height: 800 });
   await expect(page.getByRole("navigation", { name: "Chats" })).toBeHidden();
   await expect(drawer.getByText(resultText)).toBeVisible();
-  const approve = drawer.getByRole("button", { name: "Approve Application event" });
+  const approve = drawer.getByRole("button", { name: "Approve Event" });
   await approve.focus();
   await expect(approve).toBeFocused();
   await approve.click();

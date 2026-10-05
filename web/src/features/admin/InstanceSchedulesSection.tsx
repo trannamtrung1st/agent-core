@@ -9,13 +9,16 @@ import { ExecutionModelFields } from "./ExecutionModelFields";
 import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 
+import type { AutomationSelection } from "../chat/runPresentation";
+import { useAutomationSelection } from "./useAutomationSelection";
+
 const activeWork = ["Queued", "Running", "WaitingForApproval", "WaitingToRetry"];
 const terminal = ["Completed", "Cancelled", "Expired"];
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : "Not scheduled";
 const blank = (): OwnerScheduleDraft => ({ expectedRevision: 0, enabled: true, intent: "", modelKey: null, reasoningEffort: null,
   schedule: { kind: "daily", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", interval: 1, localTime: "09:00" } });
 
-export function InstanceSchedulesSection({ instanceId, onWork }: { instanceId: string; onWork: () => void }) {
+export function InstanceSchedulesSection({ instanceId, onWork, selection }: { instanceId: string; onWork: (workId?: string) => void; selection?: AutomationSelection }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
   const { search, setSearch, pagination } = useAdminCollectionSearch();
   const [expanded, setExpanded] = useState<Key[]>([]);
@@ -69,6 +72,7 @@ export function InstanceSchedulesSection({ instanceId, onWork }: { instanceId: s
       setError(describeAdminError(reason, "Schedule update failed. Reload for the current revision."));
     } finally { order.current.mutating = false; setBusy(false); }
   }
+  const tableVersion = useAutomationSelection(selection, "schedule", review?.items.map(item => item.registrationId) ?? [], setSearch, setExpanded);
   const timing = draft.schedule;
   const policy = review?.policy;
   const minimum = timing.kind === "fixedInterval" ? policy?.minFixedIntervalSeconds ?? 60 : timing.kind === "weekly" ? Math.ceil((policy?.minRecurrenceDays ?? 1) / 7) : policy?.minRecurrenceDays ?? 1;
@@ -83,15 +87,16 @@ export function InstanceSchedulesSection({ instanceId, onWork }: { instanceId: s
   function setTiming(change: Partial<ScheduleTiming>) { setDraft({ ...draft, schedule: { ...timing, ...change } }); }
   function edit(item: OwnerSchedule) { setEditor(item.registrationId); setDraft({ expectedRevision: item.revision, enabled: item.enabled, intent: item.intent,
     schedule: item.schedule, modelKey: item.modelKey, reasoningEffort: item.reasoningEffort }); }
-  return <section className="admin-definition-panel" aria-label="Scheduled work">
-    <div className="admin-definition-panel-heading"><Typography.Title level={4}>Scheduled work</Typography.Title>
+  return <section className="admin-definition-panel" aria-label="Schedules">
+    <div className="admin-definition-panel-heading"><Typography.Title level={4}>Schedules</Typography.Title>
       <Typography.Text type="secondary">Configure a known task for later. Chat and Admin use the same schedules; each run follows normal tools and approvals.</Typography.Text></div>
     <div className="admin-definition-panel-body"><Flex vertical gap={token.padding}>
       {loading ? <Spin aria-label="Loading schedules" /> : null}
+      {selection?.kind === "schedule" && review && !review.items.some(item => item.registrationId === selection.registrationId) ? <Alert type="info" showIcon title="This source configuration is no longer available" description="It may have been deleted or retired. Its run remains available in Runs." /> : null}
       {error ? <Alert type="error" showIcon title={error.message} action={<Button disabled={busy} onClick={() => void reload()}>Reload schedules</Button>}
         description={error.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: error.diagnosticId }} /> : undefined} /> : null}
       <Flex wrap gap={token.paddingXS}><Button disabled={busy} onClick={() => { setDraft(blank()); setEditor("new"); }}>New schedule</Button>
-        <Button disabled={busy} onClick={() => void reload()}>Refresh schedules</Button><Button onClick={onWork}>View scheduled executions</Button></Flex>
+        <Button disabled={busy} onClick={() => void reload()}>Refresh schedules</Button><Button onClick={() => onWork()}>View runs</Button></Flex>
       {editor ? <Form layout="vertical" onFinish={() => {
         const body = { ...draft, schedule: timing.kind === "fixedInterval" && !timing.anchorAtUtc ? { ...timing, anchorAtUtc: new Date(Date.now() + timing.interval * 1000).toISOString() } : timing };
         void mutate(editor === "new" ? "schedules" : `schedules/${editor}`, body, editor === "new" ? "POST" : "PUT");
@@ -128,31 +133,33 @@ export function InstanceSchedulesSection({ instanceId, onWork }: { instanceId: s
         <Flex wrap gap={token.paddingXS}><Button type="primary" htmlType="submit" disabled={!valid || busy} loading={busy}>{editor === "new" ? "Create schedule" : "Save schedule"}</Button>
           <Button disabled={busy} onClick={() => setEditor(null)}>Cancel schedule edit</Button></Flex>
       </Form> : null}
-      {review ? review.items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No scheduled work yet. Create a schedule here or ask the agent in Chat." /> :
+      {review ? review.items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No schedules yet. Create one here or ask the agent in Chat to do something later." /> :
         <>
-        <AdminCollectionToolbar label="scheduled work" value={search} onChange={setSearch} />
-        <Table<OwnerSchedule> aria-label="Scheduled work table" className="admin-collection-table" size="small" rowKey="registrationId"
+        <AdminCollectionToolbar label="schedules" value={search} onChange={setSearch} />
+        <Table<OwnerSchedule> key={tableVersion} aria-label="Schedules table" className="admin-collection-table" size="small" rowKey="registrationId"
           dataSource={review.items.filter(item => [item.intent, item.status, item.schedule.kind, item.schedule.timeZone,
             item.authorizationOrigin === "CurrentUserTurn" ? "Chat user request" : "Admin owner", item.sourceSessionId ?? "",
             item.effectiveModelKey ?? item.modelKey ?? "Unattended default", item.executionStatus ?? ""]
-            .some(value => value.toLowerCase().includes(search.trim().toLowerCase())))}
-          scroll={{ x: 1050 }} pagination={pagination}
+            .some(value => value.toLowerCase().includes(search.trim().toLowerCase()))).sort((a, b) => Number(b.registrationId === selection?.registrationId) - Number(a.registrationId === selection?.registrationId))}
+          scroll={{ x: 1470 }} pagination={pagination}
           locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No matches. Clear search or filters to see all results." /> }}
           columns={[
             { title: "Task", key: "task", width: 350, ellipsis: true,
               render: (_, item) => <Button type="link" size="small" className="admin-collection-name" title={item.intent}
-                aria-label={`View schedule: ${item.intent}`} aria-expanded={expanded.includes(item.registrationId)}
+                data-automation-id={item.registrationId} aria-label={`View schedule: ${item.intent}`} aria-expanded={expanded.includes(item.registrationId)}
                 onClick={() => setExpanded(expanded.includes(item.registrationId) ? [] : [item.registrationId])}>{item.intent}</Button> },
+            { title: "Timing", key: "timing", width: 240, ellipsis: true, render: (_, item) => <span title={scheduleTimingLabel(item.schedule)}>{scheduleTimingLabel(item.schedule)}</span> },
             { title: "Status", dataIndex: "status", width: 120,
               filters: [...new Set(review.items.map(item => item.status))].map(value => ({ text: value, value })),
               onFilter: (value, item) => item.status === value, render: (status: string) => <Tag>{status}</Tag> },
             { title: "Next run", key: "next", width: 220,
               sorter: (a, b) => (a.enabled && !terminal.includes(a.status) ? a.nextRunAt ?? "" : "").localeCompare(b.enabled && !terminal.includes(b.status) ? b.nextRunAt ?? "" : ""),
               render: (_, item) => date(item.enabled && !terminal.includes(item.status) ? item.nextRunAt : null) },
-            { title: "Latest execution", key: "execution", width: 180,
+            { title: "Last run", key: "execution", width: 180,
               filters: [...new Set(review.items.map(item => item.executionStatus ?? "Not yet"))].map(value => ({ text: value, value })),
               onFilter: (value, item) => (item.executionStatus ?? "Not yet") === value,
-              render: (_, item) => item.executionStatus ?? "Not yet" },
+              render: (_, item) => item.lastWorkItemId ? <Button type="link" size="small" aria-label={`View last run: ${item.intent}`} onClick={() => onWork(item.lastWorkItemId!)}>{item.executionStatus ?? "View run"}</Button> : "Not yet" },
+            { title: "Model", key: "model", width: 180, ellipsis: true, render: (_, item) => item.effectiveModelKey ?? item.modelKey ?? "Unattended default" },
             { title: "Origin", key: "origin", width: 180,
               filters: [{ text: "Chat user request", value: "CurrentUserTurn" }, { text: "Admin owner", value: "AdminOwner" }],
               onFilter: (value, item) => item.authorizationOrigin === value,
@@ -163,13 +170,13 @@ export function InstanceSchedulesSection({ instanceId, onWork }: { instanceId: s
             <Descriptions bordered column={1} size="small" {...detailLayout}>
             <Descriptions.Item label="Task"><span style={{ whiteSpace: "pre-wrap" }}>{item.intent}</span></Descriptions.Item>
             <Descriptions.Item label="Originally created from">{item.authorizationOrigin === "CurrentUserTurn" ? "Chat user request" : "Admin owner"}{item.sourceSessionId ? ` · Session ${item.sourceSessionId}` : ""}</Descriptions.Item>
-            <Descriptions.Item label="Timing">{item.schedule.kind} · {item.schedule.timeZone}{item.schedule.localTime ? ` · ${item.schedule.localTime}` : ""}{item.schedule.kind === "fixedInterval" ? ` · every ${item.schedule.interval} seconds` : ""}</Descriptions.Item>
+            <Descriptions.Item label="Timing">{scheduleTimingLabel(item.schedule)}</Descriptions.Item>
             {item.schedule.atUtc ? <Descriptions.Item label="Run at">{date(item.schedule.atUtc)}</Descriptions.Item> : null}
             {item.schedule.kind === "daily" || item.schedule.kind === "weekly" ? <Descriptions.Item label="Recurrence">Every {item.schedule.interval} {item.schedule.kind === "daily" ? "day" : "week"}{item.schedule.interval === 1 ? "" : "s"}{item.schedule.weekdays?.length ? ` · ${item.schedule.weekdays.map(day => ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][day]).join(", ")}` : ""}</Descriptions.Item> : null}
             {item.schedule.endAtUtc || item.schedule.endDate ? <Descriptions.Item label="End">{item.schedule.endAtUtc ? date(item.schedule.endAtUtc) : item.schedule.endDate}</Descriptions.Item> : null}
             {item.schedule.maxOccurrences ? <Descriptions.Item label="Maximum occurrences">{item.schedule.maxOccurrences}</Descriptions.Item> : null}
             <Descriptions.Item label="Model">{item.effectiveModelKey ?? item.modelKey ?? "Unattended default"}</Descriptions.Item>
-            <Descriptions.Item label="Latest execution">{item.executionStatus ?? "Not yet"}</Descriptions.Item></Descriptions>
+            <Descriptions.Item label="Last run">{item.executionStatus ?? "Not yet"}</Descriptions.Item></Descriptions>
             <Flex wrap gap={token.paddingXS}><Button aria-label="Run schedule now" aria-busy={item.registrationId in pending} loading={item.registrationId in pending}
               disabled={busy || !item.enabled || item.registrationId in pending || activeWork.includes(item.executionStatus ?? "")}
               onClick={() => void mutate(`schedules/${item.registrationId}/run`, { expectedRevision: item.revision })}>{item.registrationId in pending ? "Starting…" : "Run now"}</Button>
@@ -177,12 +184,19 @@ export function InstanceSchedulesSection({ instanceId, onWork }: { instanceId: s
               <Button disabled={busy || terminal.includes(item.status)} onClick={() => void mutate(`schedules/${item.registrationId}`, {
                 expectedRevision: item.revision, enabled: !item.enabled, intent: item.intent, schedule: item.schedule, modelKey: item.modelKey, reasoningEffort: item.reasoningEffort
               }, "PUT")}>{item.enabled ? "Disable schedule" : "Enable schedule"}</Button>
-              <Button danger disabled={busy || terminal.includes(item.status)} onClick={() => confirmAction(modal, { title: "Cancel this schedule?", content: "Stops future runs. Already admitted background work remains available there.", okText: "Cancel schedule", danger: true,
+              <Button danger disabled={busy || terminal.includes(item.status)} onClick={() => confirmAction(modal, { title: "Cancel this schedule?", content: "Stops future runs. Existing runs remain available in Runs.", okText: "Cancel schedule", danger: true,
                 onOk: () => mutate(`schedules/${item.registrationId}/cancel`, { expectedRevision: item.revision }) })}>Cancel schedule</Button>
-              {item.lastWorkItemId ? <Button onClick={onWork}>Inspect scheduled execution</Button> : null}</Flex>
+              {item.lastWorkItemId ? <Button onClick={() => onWork(item.lastWorkItemId!)}>View last run</Button> : null}</Flex>
             </Flex>
           }} />
         </> : null}
     </Flex></div>
   </section>;
+}
+
+export function scheduleTimingLabel(timing: ScheduleTiming) {
+  if (timing.kind === "oneShot") return `Once · ${date(timing.atUtc ?? null)}`;
+  if (timing.kind === "fixedInterval") return `Every ${timing.interval} seconds`;
+  const days = timing.weekdays?.map(day => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day]).join(", ");
+  return `Every ${timing.interval} ${timing.kind === "daily" ? "day" : "week"}${timing.interval === 1 ? "" : "s"}${days ? ` · ${days}` : ""} · ${timing.localTime} · ${timing.timeZone}`;
 }

@@ -7,10 +7,12 @@ import { BackgroundWorkDrawer } from "../chat/BackgroundWorkDrawer";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 
-import { InstanceSchedulesSection } from "./InstanceSchedulesSection";
 import { ExecutionModelFields } from "./ExecutionModelFields";
 import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
+
+import { thoughtOutcomeLabel, type AutomationSelection, type RunSource } from "../chat/runPresentation";
+import { useAutomationSelection } from "./useAutomationSelection";
 
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : "Not yet";
 
@@ -26,27 +28,18 @@ const loadInstanceWork = async (id: string, query?: DrawerPageQuery) =>
 const loadInstanceWorkResult = (id: string, workId: string) =>
   request<WorkItemResult>(id, `work-items/${workId}/result`);
 
-export function InstanceContinuitySection({ instanceId }: { instanceId: string }) {
-  const { token } = theme.useToken();
-  const [workOpen, setWorkOpen] = useState(false);
-  const [wide, setWide] = useState(window.innerWidth >= 768);
-  useEffect(() => {
-    const resize = () => setWide(window.innerWidth >= 768);
-    window.addEventListener("resize", resize); return () => window.removeEventListener("resize", resize);
-  }, []);
-  return <Flex vertical gap={token.padding} className="admin-instance-continuity">
-    <ExperienceSection key={`experience-${instanceId}`} instanceId={instanceId} onWork={() => setWorkOpen(true)} />
-    <InstanceSchedulesSection key={`schedules-${instanceId}`} instanceId={instanceId} onWork={() => setWorkOpen(true)} />
-    <ThoughtSection key={`thought-${instanceId}`} instanceId={instanceId} onWork={() => setWorkOpen(true)} />
-    <BackgroundWorkDrawer sessionId={instanceId} open={workOpen} wide={wide} onClose={() => setWorkOpen(false)}
-      load={loadInstanceWork}
-      loadResult={loadInstanceWorkResult}
-      cancel={(id, workId, expectedRevision) => request<WorkItem>(id, `work-items/${workId}/cancel`, "POST", { expectedRevision })}
-      approve={(id, workId, approvalId, expectedRevision, expectedApprovalRevision, actionHash) => request<WorkItem>(id,
-        `work-items/${workId}/approvals/${approvalId}/approve`, "POST", { expectedRevision, expectedApprovalRevision, actionHash })}
-      reject={(id, workId, approvalId, expectedRevision, expectedApprovalRevision, actionHash) => request<WorkItem>(id,
-        `work-items/${workId}/approvals/${approvalId}/reject`, "POST", { expectedRevision, expectedApprovalRevision, actionHash })} />
-  </Flex>;
+const loadInstanceWorkItem = (id: string, workId: string) => request<WorkItem>(id, `work-items/${workId}`);
+export function InstanceRunsSection({ instanceId, open, wide = true, inline = false, selectedWorkItemId, onClose, onSource }: {
+  instanceId: string; open: boolean; wide?: boolean; inline?: boolean; selectedWorkItemId?: string; onClose: () => void;
+  onSource?: (source: RunSource) => void;
+}) {
+  return <BackgroundWorkDrawer sessionId={instanceId} open={open} wide={wide} inline={inline} selectedWorkItemId={selectedWorkItemId}
+    onClose={onClose} onSource={onSource} load={loadInstanceWork} loadOne={loadInstanceWorkItem} loadResult={loadInstanceWorkResult}
+    cancel={(id, workId, expectedRevision) => request<WorkItem>(id, `work-items/${workId}/cancel`, "POST", { expectedRevision })}
+    approve={(id, workId, approvalId, expectedRevision, expectedApprovalRevision, actionHash) => request<WorkItem>(id,
+      `work-items/${workId}/approvals/${approvalId}/approve`, "POST", { expectedRevision, expectedApprovalRevision, actionHash })}
+    reject={(id, workId, approvalId, expectedRevision, expectedApprovalRevision, actionHash) => request<WorkItem>(id,
+      `work-items/${workId}/approvals/${approvalId}/reject`, "POST", { expectedRevision, expectedApprovalRevision, actionHash })} />;
 }
 
 function Failure({ error, reload }: { error: AdminFailureNotice | null; reload: () => void }) {
@@ -54,7 +47,8 @@ function Failure({ error, reload }: { error: AdminFailureNotice | null; reload: 
     description={error.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: error.diagnosticId }} /> : undefined} /> : null;
 }
 
-function ExperienceSection({ instanceId, onWork }: { instanceId: string; onWork: () => void }) {
+export type ExperienceSelection = { workItemId: string; request: number };
+export function ExperienceSection({ instanceId, onWork, selection }: { instanceId: string; onWork: (workId?: string) => void; selection?: ExperienceSelection }) {
   const { token } = theme.useToken();
   const { modal } = App.useApp();
   const [review, setReview] = useState<ExperienceReview | null>(null);
@@ -64,6 +58,25 @@ function ExperienceSection({ instanceId, onWork }: { instanceId: string; onWork:
   const [session, setSession] = useState("");
   const [expanded, setExpanded] = useState<Key[]>([]);
   const { search, setSearch, pagination } = useAdminCollectionSearch();
+  const [tableVersion, setTableVersion] = useState(0);
+  const appliedSelection = useRef<ExperienceSelection | undefined>(undefined);
+  useEffect(() => {
+    if (!selection || appliedSelection.current === selection) return;
+    const item = review?.items.find(item => item.generationWorkItemId === selection.workItemId);
+    if (!item) return;
+    appliedSelection.current = selection;
+    setSearch(""); setExpanded([item.experienceId]); setTableVersion(value => value + 1);
+  }, [selection, review, setSearch]);
+  useEffect(() => {
+    if (!selection) return;
+    const frame = requestAnimationFrame(() => {
+      const button = document.querySelector<HTMLButtonElement>(`[data-experience-generation-id="${selection.workItemId}"]`);
+      button?.scrollIntoView({ block: "nearest" });
+      const table = button?.closest(".ant-table-content"); if (table) table.scrollLeft = 0;
+      button?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selection, tableVersion]);
   const order = useResponseOrder();
   const reload = useCallback(async () => {
     if (order.current.mutating) return;
@@ -73,7 +86,7 @@ function ExperienceSection({ instanceId, onWork }: { instanceId: string; onWork:
     catch (reason) { if (generation === order.current.generation) setError(describeAdminError(reason, "Experience could not be loaded.")); }
     finally { if (generation === order.current.generation) setLoading(false); }
   }, [instanceId, order]);
-  useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => { void reload(); }, [reload, selection?.request]);
   useEffect(() => {
     if (loading || !review?.items.some(item => ["Pending", "Queued", "Running", "WaitingToRetry"].includes(item.status))) return;
     const timer = window.setInterval(() => {
@@ -102,6 +115,7 @@ function ExperienceSection({ instanceId, onWork }: { instanceId: string; onWork:
       <Typography.Text type="secondary">Derived observations about past work, kept separately from learned memory.</Typography.Text></div>
     <div className="admin-definition-panel-body"><Flex vertical gap={token.padding}>
       {loading ? <Spin aria-label="Loading experience" /> : null}
+      {selection && !loading && review && !review.items.some(item => item.generationWorkItemId === selection.workItemId) ? <Alert type="info" showIcon title="This experience checkpoint is not available in the current records" description="It may have been deleted or be outside the bounded review. Its run remains available in Runs." /> : null}
       <Failure error={error} reload={() => void reload()} />
       {review ? <>
         <Flex wrap align="center" gap={token.paddingXS}><Switch aria-label="Enable experience" checked={review.enabled} disabled={busy}
@@ -113,7 +127,7 @@ function ExperienceSection({ instanceId, onWork }: { instanceId: string; onWork:
             <Input aria-label="Retrospection source Session" placeholder="Session id from conversation details" value={session} onChange={e => setSession(e.target.value)} disabled={busy || !review.enabled} />
           </Form.Item>
           <Flex wrap gap={token.paddingXS}><Button htmlType="submit" disabled={busy || !review.enabled || !session.trim()}>Retrospect now</Button>
-            <Button onClick={onWork}>View background work</Button>
+            <Button onClick={() => onWork()}>View runs</Button>
             <Button danger disabled={busy || review.items.length === 0} onClick={() => confirmAction(modal, {
               title: "Reset this instance's experience?", content: "Removes derived experience. Source conversations, learned memory and persona remain available.",
               okText: "Reset experience", danger: true, onOk: () => mutate("experience/reset", "POST", {})
@@ -121,7 +135,7 @@ function ExperienceSection({ instanceId, onWork }: { instanceId: string; onWork:
         </Form>
         {review.items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No experience yet. Enable experience and retrospect a completed task." /> : <>
         <AdminCollectionToolbar label="experience" value={search} onChange={setSearch} />
-        <Table<ExperienceItem> aria-label="Experience table" className="admin-collection-table" size="small" rowKey="experienceId"
+        <Table<ExperienceItem> key={tableVersion} aria-label="Experience table" className="admin-collection-table" size="small" rowKey="experienceId"
           dataSource={review.items.filter(item => [experienceGoal(item), item.status, experienceContext(item), item.sourceKind === "Session" ? "Session" : "Background work",
             item.sourceId, item.definitionId, item.modelKey, ...Object.values(item.content ?? {}).flat()]
             .some(value => String(value).toLowerCase().includes(search.trim().toLowerCase())))}
@@ -131,7 +145,7 @@ function ExperienceSection({ instanceId, onWork }: { instanceId: string; onWork:
           columns={[
             { title: "Goal", key: "goal", width: 350, ellipsis: true,
               render: (_, item) => <Button type="link" size="small" className="admin-collection-name" title={experienceGoal(item)}
-                aria-label={`View experience: ${experienceGoal(item)}`} aria-expanded={expanded.includes(item.experienceId)}
+                data-experience-generation-id={item.generationWorkItemId} aria-label={`View experience: ${experienceGoal(item)}`} aria-expanded={expanded.includes(item.experienceId)}
                 onClick={() => setExpanded(expanded.includes(item.experienceId) ? [] : [item.experienceId])}>{experienceGoal(item)}</Button> },
             { title: "Status", dataIndex: "status", width: 120,
               filters: [...new Set(review.items.map(item => item.status))].map(value => ({ text: value, value })),
@@ -146,12 +160,13 @@ function ExperienceSection({ instanceId, onWork }: { instanceId: string; onWork:
               onFilter: (value, item) => item.sourceKind === value,
               render: (kind: string) => kind === "Session" ? "Session" : "Background work" },
             { title: "Checkpoint captured", key: "checkpointAt", width: 220, defaultSortOrder: "descend",
-              sorter: (a, b) => (a.checkpointAt ?? a.sourceCreatedAt ?? a.sourceAt).localeCompare(b.checkpointAt ?? b.sourceCreatedAt ?? b.sourceAt),
+              sorter: (a, b) => Number(a.generationWorkItemId === selection?.workItemId) - Number(b.generationWorkItemId === selection?.workItemId) || (a.checkpointAt ?? a.sourceCreatedAt ?? a.sourceAt).localeCompare(b.checkpointAt ?? b.sourceCreatedAt ?? b.sourceAt),
               render: (_, item) => item.checkpointAt ? date(item.checkpointAt) : <Typography.Text type="secondary" title={`Source created: ${date(item.sourceCreatedAt ?? item.sourceAt)}`}>Not recorded</Typography.Text> }
           ]}
           expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, item) => setExpanded(open ? [item.experienceId] : []),
             expandedRowRender: item => <Flex vertical gap={token.padding} style={{ whiteSpace: "normal" }}>
               <ExperienceDetails item={item} />
+              <Button style={{ alignSelf: "flex-start" }} onClick={() => onWork(item.generationWorkItemId)}>View generation run</Button>
               <Flex wrap gap={token.paddingXS}>
                 <Button disabled={busy} onClick={() => void mutate(`experience/${item.experienceId}`, "PUT", { expectedRevision: item.revision, visibility: item.visibility === "Suppressed" ? "Eligible" : "Suppressed" })}>
                   {item.visibility === "Suppressed" ? "Include in context" : "Suppress experience"}</Button>
@@ -209,8 +224,8 @@ function thoughtIntervalLabel(seconds: number) {
 const blank: ThoughtDraft = { expectedRevision: 0, enabled: false, intervalSeconds: 3600, thinkingPrompt: "", modelKey: null, reasoningEffort: null };
 const thoughtOutcome = (item: ThoughtRegistration) => item.executionStatus === "WaitingForApproval" ? "Needs approval"
   : ["Queued", "Running", "WaitingToRetry"].includes(item.executionStatus ?? "") ? item.executionStatus!
-  : item.lastOutcome ?? item.executionStatus ?? "Not yet";
-function ThoughtSection({ instanceId, onWork }: { instanceId: string; onWork: () => void }) {
+  : thoughtOutcomeLabel(item.lastOutcome ?? item.executionStatus);
+export function ThoughtSection({ instanceId, onWork, selection }: { instanceId: string; onWork: (workId?: string) => void; selection?: AutomationSelection }) {
   const { search, setSearch, pagination } = useAdminCollectionSearch();
   const [expanded, setExpanded] = useState<Key[]>([]);
   const detailLayout = useAdminDetailLayout();
@@ -245,7 +260,7 @@ function ThoughtSection({ instanceId, onWork }: { instanceId: string; onWork: ()
     const generation = ++order.current.generation;
     setLoading(true); setError(null);
     try { const [thoughts, available] = await Promise.all([request<ThoughtReview>(instanceId, "thoughts"), listModels()]); if (generation === order.current.generation) { applyReview(thoughts); setModels(available.models.filter(model => model.tools)); } }
-    catch (reason) { if (generation === order.current.generation) setError(describeAdminError(reason, "Initiative could not be loaded.")); }
+    catch (reason) { if (generation === order.current.generation) setError(describeAdminError(reason, "Thoughts could not be loaded.")); }
     finally { if (generation === order.current.generation) setLoading(false); }
   }, [instanceId, order, applyReview]);
   useEffect(() => { void reload(); }, [reload]);
@@ -255,7 +270,7 @@ function ThoughtSection({ instanceId, onWork }: { instanceId: string; onWork: ()
       if (order.current.mutating) return;
       const generation = ++order.current.generation;
       void request<ThoughtReview>(instanceId, "thoughts").then(next => { if (generation === order.current.generation) applyReview(next); })
-        .catch(reason => { if (generation === order.current.generation) setError(describeAdminError(reason, "Initiative status could not be refreshed.")); });
+        .catch(reason => { if (generation === order.current.generation) setError(describeAdminError(reason, "Thought status could not be refreshed.")); });
     }, 5000);
     return () => window.clearInterval(timer);
   }, [instanceId, order, loading, applyReview]);
@@ -280,7 +295,7 @@ function ThoughtSection({ instanceId, onWork }: { instanceId: string; onWork: ()
         const remaining = { ...startingRunsRef.current }; delete remaining[runId];
         startingRunsRef.current = remaining; setStartingRuns(remaining);
       }
-      setError(describeAdminError(reason, "Initiative update failed. Reload for the current revision."));
+      setError(describeAdminError(reason, "Thought update failed. Reload for the current revision."));
     }
     finally { order.current.mutating = false; setBusy(false); setPendingAction(null); }
   }
@@ -289,11 +304,13 @@ function ThoughtSection({ instanceId, onWork }: { instanceId: string; onWork: ()
     setEditing(item.registrationId); setDraft({ expectedRevision: item.revision, enabled: item.enabled,
       intervalSeconds: item.intervalSeconds, thinkingPrompt: item.thinkingPrompt, modelKey: item.modelKey, reasoningEffort: item.reasoningEffort });
   }
-  return <section className="admin-definition-panel" aria-label="Initiative">
-    <div className="admin-definition-panel-heading"><Typography.Title level={4}>Initiative / Thought activation</Typography.Title>
-      <Typography.Text type="secondary">Give the agent a bounded opportunity to review context and decide whether useful action exists.</Typography.Text></div>
+  const tableVersion = useAutomationSelection(selection, "thought", review?.items.map(item => item.registrationId) ?? [], setSearch, setExpanded);
+  return <section className="admin-definition-panel" aria-label="Thoughts">
+    <div className="admin-definition-panel-heading"><Typography.Title level={4}>Thoughts</Typography.Title>
+      <Typography.Text type="secondary">Periodically review current context and decide whether useful action exists. Doing nothing is a valid outcome.</Typography.Text></div>
     <div className="admin-definition-panel-body"><Flex vertical gap={token.padding}>
-      {loading ? <Spin aria-label="Loading initiative" /> : null}
+      {loading ? <Spin aria-label="Loading thoughts" /> : null}
+      {selection?.kind === "thought" && review && !review.items.some(item => item.registrationId === selection.registrationId) ? <Alert type="info" showIcon title="This source configuration is no longer available" description="It may have been deleted or retired. Its run remains available in Runs." /> : null}
       <Failure error={error} reload={() => void reload()} />
       {review ? <>
         <Form layout="vertical" onFinish={() => void action(editing ? `thoughts/${editing}` : "thoughts", draft, editing ? "PUT" : "POST")}>
@@ -325,31 +342,32 @@ function ThoughtSection({ instanceId, onWork }: { instanceId: string; onWork: ()
             aria-busy={pendingAction === (editing ? `thoughts/${editing}` : "thoughts")}
             loading={pendingAction === (editing ? `thoughts/${editing}` : "thoughts")} disabled={!draft.thinkingPrompt.trim() || invalidInterval}>{editing ? "Save thought" : "Create thought"}</Button>
             {editing ? <Button disabled={busy} onClick={() => { setEditing(null); setDraft(blank); setIntervalUnit(3600); }}>Cancel edit</Button> : null}
-            <Button onClick={() => void reload()} disabled={busy}>Refresh initiative</Button><Button onClick={onWork}>View thought executions</Button></Flex>
+            <Button onClick={() => void reload()} disabled={busy}>Refresh thoughts</Button><Button onClick={() => onWork()}>View runs</Button></Flex>
         </Form>
-        {review.items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No thought activations configured. The agent stays quiet until you enable one." /> :
+        {review.items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No thoughts configured. Add one when you want this agent to periodically review whether action is useful." /> :
           <>
-          <AdminCollectionToolbar label="thought activations" value={search} onChange={setSearch} />
-          <Table<ThoughtRegistration> aria-label="Thought activations table" className="admin-collection-table" size="small" rowKey="registrationId"
+          <AdminCollectionToolbar label="thoughts" value={search} onChange={setSearch} />
+          <Table<ThoughtRegistration> key={tableVersion} aria-label="Thoughts table" className="admin-collection-table" size="small" rowKey="registrationId"
             dataSource={review.items.filter(item => [item.thinkingPrompt, item.enabled ? "Enabled" : "Disabled", thoughtIntervalLabel(item.intervalSeconds),
               thoughtOutcome(item), item.executionStatus ?? "", item.effectiveModelKey ?? item.modelKey ?? "Unattended default"]
-              .some(value => value.toLowerCase().includes(search.trim().toLowerCase())))}
-            scroll={{ x: 1050 }} pagination={pagination}
+              .some(value => value.toLowerCase().includes(search.trim().toLowerCase()))).sort((a, b) => Number(b.registrationId === selection?.registrationId) - Number(a.registrationId === selection?.registrationId))}
+            scroll={{ x: 1270 }} pagination={pagination}
             locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No matches. Clear search or filters to see all results." /> }}
             columns={[
               { title: "Thinking prompt", key: "prompt", width: 350, ellipsis: true,
                 render: (_, item) => <Button type="link" size="small" className="admin-collection-name" title={item.thinkingPrompt}
-                  aria-label={`View thought: ${item.thinkingPrompt}`} aria-expanded={expanded.includes(item.registrationId)}
+                  data-automation-id={item.registrationId} aria-label={`View thought: ${item.thinkingPrompt}`} aria-expanded={expanded.includes(item.registrationId)}
                   onClick={() => setExpanded(expanded.includes(item.registrationId) ? [] : [item.registrationId])}>{item.thinkingPrompt}</Button> },
               { title: "Cadence", key: "cadence", width: 170,
                 filters: [{ text: "Enabled", value: true }, { text: "Disabled", value: false }], onFilter: (value, item) => item.enabled === value,
                 render: (_, item) => <Tag>{item.enabled ? thoughtIntervalLabel(item.intervalSeconds) : "Disabled"}</Tag> },
-              { title: "Latest outcome", key: "outcome", width: 180,
+              { title: "Last run", key: "run", width: 220, render: (_, item) => item.lastWorkItemId ? <Button type="link" size="small" aria-label={`View run: ${item.thinkingPrompt}`} onClick={() => onWork(item.lastWorkItemId!)}>{date(item.lastRunAt)}</Button> : "Not yet" },
+              { title: "Last outcome", key: "outcome", width: 180,
                 filters: [...new Set(review.items.map(thoughtOutcome))].map(value => ({ text: value, value })),
                 onFilter: (value, item) => thoughtOutcome(item) === value,
                 render: (_, item) => <Tag color={item.executionStatus === "WaitingForApproval" ? "warning" : item.executionStatus === "Running" ? "processing" : undefined}>
                   {thoughtOutcome(item)}</Tag> },
-              { title: "Next activation", key: "next", width: 220,
+              { title: "Next review", key: "next", width: 220,
                 sorter: (a, b) => (a.enabled ? a.nextRunAt ?? "" : "").localeCompare(b.enabled ? b.nextRunAt ?? "" : ""),
                 render: (_, item) => item.enabled ? date(item.nextRunAt) : "Disabled" },
               { title: "Model", key: "model", width: 180, ellipsis: true, render: (_, item) => item.effectiveModelKey ?? item.modelKey ?? "Unattended default" }
@@ -359,15 +377,15 @@ function ThoughtSection({ instanceId, onWork }: { instanceId: string; onWork: ()
                 <Descriptions bordered size="small" column={1} {...detailLayout}>
                   <Descriptions.Item label="Thinking prompt"><span style={{ whiteSpace: "pre-wrap" }}>{item.thinkingPrompt}</span></Descriptions.Item>
                   <Descriptions.Item label="Model">{item.effectiveModelKey ?? item.modelKey ?? "Unattended default"}</Descriptions.Item>
-                  <Descriptions.Item label="Last activation">{date(item.lastRunAt)}</Descriptions.Item>
-                  <Descriptions.Item label="Last outcome">{item.lastOutcome ?? item.executionStatus ?? "Not yet"}</Descriptions.Item>
+                  <Descriptions.Item label="Last run">{date(item.lastRunAt)}</Descriptions.Item>
+                  <Descriptions.Item label="Last outcome">{thoughtOutcome(item)}</Descriptions.Item>
                 </Descriptions>
               <Flex wrap gap={token.paddingXS}><Button aria-label="Run now" loading={item.registrationId in startingRuns} aria-busy={item.registrationId in startingRuns} disabled={busy || item.registrationId in startingRuns || !item.enabled || ["Queued", "Running", "WaitingForApproval", "WaitingToRetry"].includes(item.executionStatus ?? "")} onClick={() => void action(`thoughts/${item.registrationId}/run`, { expectedRevision: item.revision })}>{item.registrationId in startingRuns ? "Starting…" : "Run now"}</Button>
                 <Button disabled={busy} onClick={() => edit(item)}>Edit thought</Button>
                 <Button disabled={busy} onClick={() => void action(`thoughts/${item.registrationId}`, { ...item, expectedRevision: item.revision, enabled: !item.enabled }, "PUT")}>{item.enabled ? "Disable thought" : "Enable thought"}</Button>
-                <Button danger disabled={busy} onClick={() => confirmAction(modal, { title: "Delete this thought registration?", content: "Stops future activations. Already admitted background work remains inspectable and can be cancelled there.", okText: "Delete thought", danger: true,
+                <Button danger disabled={busy} onClick={() => confirmAction(modal, { title: "Delete this thought registration?", content: "Stops future activations. Existing runs remain inspectable and can be cancelled in Runs.", okText: "Delete thought", danger: true,
                   onOk: () => action(`thoughts/${item.registrationId}/delete`, { expectedRevision: item.revision }) })}>Delete thought</Button>
-                {item.lastWorkItemId ? <Button onClick={onWork}>Inspect execution</Button> : null}</Flex>
+                {item.lastWorkItemId ? <Button onClick={() => onWork(item.lastWorkItemId!)}>View run</Button> : null}</Flex>
               </Flex>
             }} />
           </>}

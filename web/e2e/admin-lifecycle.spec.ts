@@ -185,8 +185,8 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
     scheduleIntent
   );
 
-  await page.getByRole("tab", { name: "Memory & automation", exact: true }).click();
-  const memoryAutomation = page.getByLabel("Memory and automation administration");
+  await page.getByRole("tab", { name: "Continuity", exact: true }).click();
+  const memoryAutomation = page.locator(".admin-instance-tabs");
   await memoryAutomation.getByRole("tab", { name: "Memory" }).click();
   await memoryAutomation.getByRole("combobox", { name: "Memory scope" }).click();
   await page.locator(".ant-select-item-option", { hasText: "IdentityUser" }).click();
@@ -198,9 +198,10 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
     timeout: 15_000
   });
 
-  await memoryAutomation.getByRole("tab", { name: "Automation" }).click();
-  await memoryAutomation.getByRole("button", { name: "Load registrations" }).click();
-  await expect(memoryAutomation.getByText(scheduleIntent)).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("tab", { name: "Automation", exact: true }).click();
+  await page.getByRole("tab", { name: "Policies & models", exact: true }).click();
+  await memoryAutomation.getByRole("button", { name: "Review advanced registrations" }).click();
+  await expect(page.getByRole("tabpanel", { name: "Policies & models", exact: true }).getByText(scheduleIntent)).toBeVisible({ timeout: 15_000 });
   await memoryAutomation.getByRole("button", { name: "Revoke" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Cancel registration" }).click();
   await expect(memoryAutomation.getByText("No active or suspended registrations.")).toBeVisible({

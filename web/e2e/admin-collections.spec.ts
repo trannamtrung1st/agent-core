@@ -215,7 +215,8 @@ test("Behavior updates preserve persona edits through a failed refresh and retry
   const { instanceId } = await response.json();
   await page.goto(`/admin/instances/${instanceId}`);
   await page.getByLabel("Persona name", { exact: true }).fill("Unsaved persona survives");
-  await page.getByRole("tab", { name: "Behavior & continuity", exact: true }).click();
+  await page.getByRole("tab", { name: "Automation", exact: true }).click();
+  await page.getByRole("tab", { name: "Policies & models", exact: true }).click();
   await page.getByRole("combobox", { name: "Authoring mode", exact: true }).click();
   await page.locator(".ant-select-item-option").filter({ hasText: "Assisted" }).click();
   await page.getByLabel("Knowledge & resources", { exact: true }).check();
@@ -314,7 +315,7 @@ test("Version inspection creates no draft and the shared actions publish from Te
   await instanceDialog.getByRole("button", { name: "Create instance", exact: true }).click();
   const persona = page.getByLabel("Persona name", { exact: true });
   await persona.fill("Unsaved inspector");
-  for (const name of ["Connections", "Memory & automation", "Behavior & continuity", "Effective configuration"]) {
+  for (const name of ["Continuity", "Automation", "Runs", "Connections", "Effective configuration"]) {
     await page.getByRole("tab", { name, exact: true }).click();
     await expect(page.getByRole("tabpanel", { name, exact: true })).toBeVisible();
   }
@@ -322,7 +323,7 @@ test("Version inspection creates no draft and the shared actions publish from Te
   await expect(persona).toHaveValue("Unsaved inspector");
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
-  for (const name of ["Connections", "Memory & automation", "Behavior & continuity", "Effective configuration"]) {
+  for (const name of ["Continuity", "Automation", "Runs", "Connections", "Effective configuration"]) {
     await expect(page.getByRole("tab", { name, exact: true })).toBeInViewport();
   }
   expect(errors).toEqual([]);

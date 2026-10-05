@@ -23,6 +23,8 @@ public interface IWorkItemStore
 
     ValueTask<WorkItem?> GetBySourceOccurrenceAsync(Guid sourceOccurrenceId, CancellationToken cancellationToken = default);
 
+    ValueTask<WorkItem?> GetLatestForRegistrationAsync(WorkOwner owner, Guid registrationId, CancellationToken cancellationToken = default);
+
     ValueTask<IReadOnlyList<WorkItem>> ListAsync(WorkOwner owner, int limit, CancellationToken cancellationToken = default);
 
     ValueTask<IReadOnlyList<WorkItem>> ListPageAsync(WorkOwner owner, int limit, Guid? before, bool attentionOnly, CancellationToken cancellationToken = default);

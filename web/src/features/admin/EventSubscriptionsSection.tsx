@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, App, Button, Empty, Flex, Select, Spin, Typography, theme } from "antd";
 import {
   createEventSubscription,
@@ -9,7 +9,7 @@ import {
 } from "../../services/adminApi";
 import { describeAdminError } from "./adminErrors";
 
-export function EventSubscriptionsSection({ instanceId }: { instanceId: string }) {
+export function EventSubscriptionsSection({ instanceId, selection }: { instanceId: string; selection?: { registrationId: string; request: number } }) {
   const { token } = theme.useToken();
   const { message } = App.useApp();
   const [sources, setSources] = useState<AdminEventSource[]>([]);
@@ -43,7 +43,18 @@ export function EventSubscriptionsSection({ instanceId }: { instanceId: string }
     return () => {
       current = false;
     };
-  }, [instanceId]);
+  }, [instanceId, selection?.request]);
+
+  const focusedSelection = useRef<typeof selection>(undefined);
+  useEffect(() => {
+    if (!selection || loading || focusedSelection.current === selection) return;
+    const frame = requestAnimationFrame(() => {
+      const row = document.querySelector<HTMLElement>(`[data-event-registration-id="${selection.registrationId}"]`);
+      row?.scrollIntoView({ block: "nearest" }); row?.focus({ preventScroll: true });
+      if (row) focusedSelection.current = selection;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selection, loading, subscriptions]);
 
   async function subscribe() {
     if (!sourceId) {
@@ -80,6 +91,7 @@ export function EventSubscriptionsSection({ instanceId }: { instanceId: string }
       <div className="admin-definition-panel-body">
         <Flex vertical gap={token.paddingSM}>
           {loading ? <Spin aria-label="Loading event subscriptions" /> : null}
+          {selection && !loading && !subscriptions.some(item => item.registrationId === selection.registrationId) ? <Alert type="info" showIcon title="This event subscription is no longer available" /> : null}
           {error ? <Alert type="error" showIcon title={error} /> : null}
           {!loading ? (
             <>
@@ -110,7 +122,7 @@ export function EventSubscriptionsSection({ instanceId }: { instanceId: string }
                 <Typography.Text type="secondary">No order.placed subscription yet.</Typography.Text>
               ) : (
                 subscriptions.map((item) => (
-                  <Flex key={item.registrationId} vertical>
+                  <Flex key={item.registrationId} vertical data-event-registration-id={item.registrationId} tabIndex={-1} className={selection?.registrationId === item.registrationId ? "admin-selected-source" : undefined}>
                     <Typography.Text strong>{item.eventType}</Typography.Text>
                     <Typography.Text type="secondary">
                       {sourceName(item.sourceId)} · {item.status}

@@ -373,6 +373,7 @@ All routes below are under `/api/v2/admin/agent-instances/{instanceId}` and requ
 | POST `/thoughts/{registrationId}/delete` | `{expectedRevision}` → `{deleted:true}` |
 | POST `/thoughts/{registrationId}/run` | `{expectedRevision}` → `{occurrenceId}`; conflict while a prior activation is nonterminal |
 | GET `/work-items` | normal WorkItem page for this trusted owner; optional `limit` (default 100), `before`, and `attentionOnly` match session work reads |
+| GET `/work-items/{workItemId}` | safe WorkItem DTO for this instance and trusted owner; 401 without capability, 404 for unknown/foreign work; supports exact run navigation outside the current list page |
 | GET `/work-items/{workItemId}/result` | normal result DTO; thought text is the safe summary |
 | POST `/work-items/{workItemId}/cancel` | existing `{expectedRevision}` contract |
 | POST `/work-items/{workItemId}/approvals/{approvalId}/approve` or `/reject` | existing `{expectedRevision, expectedApprovalRevision, actionHash}` contract |

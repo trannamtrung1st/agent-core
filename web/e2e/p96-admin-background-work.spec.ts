@@ -59,9 +59,10 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   });
 
   await page.goto(`/admin/instances/${instanceId}`);
-  await page.getByRole("tab", { name: "Memory & automation", exact: true }).click();
-  const automation = page.getByLabel("Memory and automation administration");
-  await automation.getByRole("tab", { name: "Automation" }).click();
+  await page.getByRole("tab", { name: "Continuity", exact: true }).click();
+  const automation = page.locator(".admin-instance-tabs");
+  await page.getByRole("tab", { name: "Automation", exact: true }).click();
+  await page.getByRole("tab", { name: "Policies & models", exact: true }).click();
   await expect(automation.getByText(/Effective source: Conversation default/)).toBeVisible();
   const model = automation.getByRole("combobox", { name: "Unattended model" });
   await model.focus();
@@ -83,8 +84,9 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   await page.reload();
   const config = await reloaded;
   expect((await config.json()).unattendedModelCatalogKey).toBe("scripted-alpha");
-  await page.getByRole("tab", { name: "Memory & automation", exact: true }).click();
-  await automation.getByRole("tab", { name: "Automation" }).click();
+  await page.getByRole("tab", { name: "Continuity", exact: true }).click();
+  await page.getByRole("tab", { name: "Automation", exact: true }).click();
+  await page.getByRole("tab", { name: "Policies & models", exact: true }).click();
   await expect(automation.getByText("Effective source: Unattended default (Scripted Alpha)")).toBeVisible({ timeout: 15_000 });
 
   await page.getByRole("tab", { name: "Connections", exact: true }).click();
@@ -216,8 +218,8 @@ test("background work lists scheduled and order-placed sources", async ({ page }
   await opener.focus();
   await page.keyboard.press("Enter");
   const drawer = page.getByRole("dialog", { name: "Background work" });
-  await expect(drawer.getByText("Scheduled reminder")).toBeVisible();
-  await expect(drawer.getByText("Order placed")).toBeVisible();
+  await expect(drawer.getByText("Schedule", { exact: true })).toBeVisible();
+  await expect(drawer.getByText("Event", { exact: true })).toBeVisible();
   await expect(drawer.getByText("Approval required")).toBeVisible();
   await expect(drawer.getByText(/sourceEventId|orderReference/)).toHaveCount(0);
   await page.keyboard.press("Escape");
@@ -225,7 +227,7 @@ test("background work lists scheduled and order-placed sources", async ({ page }
 
   await page.setViewportSize({ width: 390, height: 800 });
   await opener.click();
-  await expect(drawer.getByText("Order placed")).toBeVisible();
+  await expect(drawer.getByText("Event", { exact: true })).toBeVisible();
   await drawer.getByRole("button", { name: "Close" }).click();
   await expect(drawer).toBeHidden();
 });

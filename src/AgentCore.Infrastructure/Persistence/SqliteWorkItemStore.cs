@@ -79,6 +79,22 @@ public sealed class SqliteWorkItemStore(
         return WorkStoreMapping.ToWorkItem(row, approval);
     }
 
+    public async ValueTask<WorkItem?> GetLatestForRegistrationAsync(
+        WorkOwner owner, Guid registrationId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var instanceId = owner.AgentInstanceId.ToString("D");
+        var profileId = owner.ProfileId.ToString("D");
+        var registration = registrationId.ToString("D");
+        var row = await db.WorkItems.AsNoTracking()
+            .Where(item => item.AgentInstanceId == instanceId && item.ProfileId == profileId && item.RegistrationId == registration)
+            .OrderByDescending(item => item.CreatedAtUtc).ThenByDescending(item => item.WorkItemId)
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        if (row is null) return null;
+        var approval = await LoadApprovalAsync(db, row, cancellationToken).ConfigureAwait(false);
+        return WorkStoreMapping.ToWorkItem(row, approval);
+    }
+
     public async ValueTask<IReadOnlyList<WorkItem>> ListAsync(
         WorkOwner owner,
         int limit,
