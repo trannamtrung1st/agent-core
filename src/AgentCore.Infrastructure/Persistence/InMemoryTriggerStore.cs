@@ -70,9 +70,29 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     {
         lock (_state.Gate)
         {
-            var registrations = _state.Registrations.Values.Count(item => item.Owner.AgentInstanceId == agentInstanceId);
-            var occurrences = _state.Occurrences.Values.Count(item => item.Owner.AgentInstanceId == agentInstanceId);
+            var deletedThoughts = DeletedThoughtIds(agentInstanceId);
+            var registrations = _state.Registrations.Values.Count(item => item.Owner.AgentInstanceId == agentInstanceId && !deletedThoughts.Contains(item.RegistrationId));
+            var occurrences = _state.Occurrences.Values.Count(item => item.Owner.AgentInstanceId == agentInstanceId
+                && !(item.RegistrationId is Guid id && deletedThoughts.Contains(id) && item.SourceKind == TriggerSourceKind.ThoughtActivation
+                    && item.Disposition == OccurrenceRoutingDisposition.Rejected && item.DurableWorkItemId is null));
             return (registrations, occurrences);
+        }
+    }
+
+    private HashSet<Guid> DeletedThoughtIds(Guid instanceId) => _state.Registrations.Values.Where(r => r.Owner.AgentInstanceId == instanceId
+        && r.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought && r.Status == TriggerRegistrationStatus.Cancelled)
+        .Select(r => r.RegistrationId).ToHashSet();
+
+    internal void PurgeDeletedThoughts(Guid instanceId)
+    {
+        lock (_state.Gate)
+        {
+            var ids = DeletedThoughtIds(instanceId);
+            foreach (var occurrence in _state.Occurrences.Values.Where(o => o.Owner.AgentInstanceId == instanceId && o.RegistrationId is Guid id && ids.Contains(id)
+                && o.SourceKind == TriggerSourceKind.ThoughtActivation && o.Disposition == OccurrenceRoutingDisposition.Rejected
+                && o.DurableWorkItemId is null).ToArray())
+                _state.Occurrences.Remove(occurrence.OccurrenceId);
+            foreach (var id in ids) _state.Registrations.Remove(id);
         }
     }
 

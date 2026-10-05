@@ -2,6 +2,7 @@ using AgentCore.Application.Admin;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Triggers;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -62,6 +63,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
             throw;
         }
         experience?.Purge(command.InstanceId);
+        triggers.PurgeDeletedThoughts(command.InstanceId);
     }
 
     public async ValueTask DeleteDefinitionAsync(
@@ -176,6 +178,11 @@ public sealed class SqliteAdminLifecycleDeletion(
 
         await db.Experiences.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
         await db.ExperienceSettings.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
+        var deletedThoughts = DeletedThoughts(db, key).Select(r => r.RegistrationId);
+        await db.TriggerOccurrences.Where(o => o.AgentInstanceId == key && deletedThoughts.Contains(o.RegistrationId!)
+            && o.SourceKind == (int)TriggerSourceKind.ThoughtActivation && o.Disposition == (int)OccurrenceRoutingDisposition.Rejected
+            && o.DurableWorkItemId == null).ExecuteDeleteAsync(cancellationToken);
+        await DeletedThoughts(db, key).ExecuteDeleteAsync(cancellationToken);
         db.AgentInstances.Remove(row);
         AdminEventPersistence.StageAppend(
             db,
@@ -260,6 +267,7 @@ public sealed class SqliteAdminLifecycleDeletion(
         CancellationToken cancellationToken)
     {
         var workItemIds = db.WorkItems.Where(item => item.AgentInstanceId == instanceId).Select(item => item.WorkItemId);
+        var deletedThoughts = DeletedThoughts(db, instanceId).Select(r => r.RegistrationId);
         return new AdminDeletionReferenceCounts(
             await db.Sessions.CountAsync(
                 item => item.AgentInstanceId == instanceId && item.DurablyDeletedAtUtc == null,
@@ -268,10 +276,12 @@ public sealed class SqliteAdminLifecycleDeletion(
                 item => item.OwnerInstanceId == instanceId && item.Scope == 1 && item.Status == 0,
                 cancellationToken).ConfigureAwait(false),
             await db.TriggerRegistrations.CountAsync(
-                item => item.AgentInstanceId == instanceId,
+                item => item.AgentInstanceId == instanceId && !deletedThoughts.Contains(item.RegistrationId),
                 cancellationToken).ConfigureAwait(false),
             await db.TriggerOccurrences.CountAsync(
-                item => item.AgentInstanceId == instanceId,
+                item => item.AgentInstanceId == instanceId && !(deletedThoughts.Contains(item.RegistrationId!)
+                    && item.SourceKind == (int)TriggerSourceKind.ThoughtActivation
+                    && item.Disposition == (int)OccurrenceRoutingDisposition.Rejected && item.DurableWorkItemId == null),
                 cancellationToken).ConfigureAwait(false),
             await db.WorkItems.CountAsync(item => item.AgentInstanceId == instanceId, cancellationToken)
                 .ConfigureAwait(false),
@@ -282,6 +292,10 @@ public sealed class SqliteAdminLifecycleDeletion(
                 cancellationToken).ConfigureAwait(false),
             Instances: 0);
     }
+
+    private static IQueryable<TriggerRegistrationRecord> DeletedThoughts(AgentCoreDbContext db, string instanceId) =>
+        db.TriggerRegistrations.Where(r => r.AgentInstanceId == instanceId && r.AuthorizationOrigin == (int)TriggerAuthorizationOrigin.AdminThought
+            && r.Status == (int)TriggerRegistrationStatus.Cancelled);
 
     private static async Task<AdminDeletionReferenceCounts> CountDefinitionAsync(
         AgentCoreDbContext db,

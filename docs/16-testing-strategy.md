@@ -189,6 +189,8 @@ Run focused Harness API tests, full affected Domain/Application/Infrastructure/A
 
 ## P9.8-P9.9 continuity regression
 
+The hosted Synthetic workflow explicitly runs the isolated `p9899-continuity` Playwright project. Closure regressions exercise cancelled-thought deletion parity and pending blockers, malicious Experience context plus a forbidden forged tool call, canonical receipt projection, and separate timestamp persistence across SQLite reopen. Synthetic injection coverage proves structural and execution-policy boundaries, not hosted-model judgement.
+
 Run the normal full key-free backend/frontend/browser gate plus `ExperienceJourneyTests`, `ThoughtJourneyTests`, `ContinuityBoundaryTests`, `InstanceContinuitySection.test.tsx` and `e2e/p9899-continuity.spec.ts`.
 
 The backend journey must generate an owned stable checkpoint, prove duplicate identity, bounded recall in a later Session, received/heard projection, cross-instance denial and SQLite reopen. Boundary cases cover malformed/prose/extra-field/secret output, source result independence, no memory/harness promotion, admission-gap repair, provider retry, deletion winning over late completion and InMemory/SQLite parity.

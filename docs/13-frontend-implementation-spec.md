@@ -173,6 +173,8 @@ Use direct Ant Design v6 components and existing confirmation/diagnostic primiti
 
 ## P9.8-P9.9 instance continuity UI
 
+Experience rows distinguish source creation from checkpoint capture. New records lead with checkpoint time; expanded provenance shows both. Legacy records lead with source creation and show checkpoint time as not recorded. Dates use the existing local-time renderer and wrap inside the shared Ant Design layout.
+
 Active managed instance details expose **Experience** and **Initiative / Thought activation** alongside existing Harness Management and automation. Compatibility or archived instances do not receive these controls.
 
 Experience shows enabled state, bounded records and source/date/Definition/model/checkpoint provenance, status, eligibility, structured observations and safe failure diagnostics. The owner can explicitly retrospect a Session, suppress/include, delete a checkpoint or reset derived Experience with confirmation. Empty/loading/disabled/pending/error states explain what is available; source history, learned memory and persona are not changed by reset. Deleted checkpoints cannot regenerate through retry.

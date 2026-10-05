@@ -1155,7 +1155,7 @@ export type ExperienceContent = {
 };
 export type ExperienceItem = {
   experienceId: string; sourceKind: "Session" | "WorkItem"; sourceId: string; throughCursor: number;
-  sourceAt: string; definitionId: string; definitionVersion: number; generationWorkItemId: string;
+  sourceAt: string; sourceCreatedAt?: string; checkpointAt?: string | null; definitionId: string; definitionVersion: number; generationWorkItemId: string;
   modelKey: string; status: string; visibility: "Eligible" | "Suppressed"; revision: number;
   eligibleForContext: boolean; content: ExperienceContent | null; diagnosticId: string | null; failureSummary: string | null;
 };

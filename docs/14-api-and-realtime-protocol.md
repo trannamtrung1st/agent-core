@@ -353,6 +353,8 @@ Typed owner review uses string modes/statuses and evidence actor, draft revision
 
 ## P9.8-P9.9 owner HTTP surface
 
+Experience review items expose `sourceCreatedAt` and nullable `checkpointAt`. `sourceAt` remains a compatibility alias for source creation. Session checkpoint time records when Core captured the stable cursor; WorkItem checkpoint time is the persisted terminal update. Legacy records omit checkpoint time rather than inventing it.
+
 All routes below are under `/api/v2/admin/agent-instances/{instanceId}` and require the existing owner capability. Core derives the local profile and validates active managed instance ownership. No model/client origin, arbitrary profile or authority field is accepted as authorization. Successful responses are JSON; validation/conflict/not-found/forbidden use existing safe ProblemDetails.
 
 | Method / suffix | Request / result |

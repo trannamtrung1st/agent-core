@@ -126,7 +126,8 @@ internal static class ContinuityEndpoints
                 r.Content is not null ? "Completed" : w?.Status.ToString() ?? "Pending", r.Visibility.ToString(), r.Revision,
                 settings.Enabled && r.Content is not null && r.Visibility == ExperienceVisibility.Eligible,
                 r.Content is { } c ? new(c.Goal, c.Attempts, c.Decisions, c.Outcomes, c.Corrections, c.Unresolved, c.Difficulties, c.Lessons) : null,
-                w?.Failure?.DiagnosticId?.ToString("D"), w?.Failure?.Summary));
+                w?.Failure?.DiagnosticId?.ToString("D"), w?.Failure?.Summary, HttpMapping.Format(r.SourceAtUtc),
+                r.CheckpointAtUtc is { } checkpointAt ? HttpMapping.Format(checkpointAt) : null));
         }
         return new(settings.Enabled, settings.Revision, ExperienceService.MaxContextCharacters, rows);
     }

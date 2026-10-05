@@ -111,6 +111,13 @@ jobs:
           PLAYWRIGHT_FAITHFUL_MANUAL=1 \
             pnpm exec playwright test --project=p97-harness
 
+      - name: P9.8/P9.9 continuity Playwright
+        working-directory: web
+        run: |
+          rm -f ../data/playwright/p9899-continuity.db
+          PLAYWRIGHT_SQLITE_PATH=../data/playwright/p9899-continuity.db \
+            pnpm exec playwright test --project=p9899-continuity
+
       - name: Upload Playwright failure
         if: failure()
         uses: actions/upload-artifact@v4

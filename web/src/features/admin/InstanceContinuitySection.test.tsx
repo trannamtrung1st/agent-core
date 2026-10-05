@@ -22,6 +22,22 @@ beforeEach(() => {
 });
 
 describe('Instance continuity owner controls', () => {
+  it('distinguishes captured checkpoint time from source creation and marks legacy times unknown', async () => {
+    const row = { experienceId: 'checkpoint', sourceKind: 'Session', sourceId: 'source', throughCursor: 4,
+      sourceAt: '2026-01-01T00:00:00Z', sourceCreatedAt: '2026-01-01T00:00:00Z', checkpointAt: '2026-02-01T00:00:00Z',
+      definitionId: 'general-assistant', definitionVersion: 9, modelKey: 'synthetic-default', generationWorkItemId: 'work',
+      visibility: 'Eligible', revision: 1, eligibleForContext: true, status: 'Completed', content: { goal: 'Observed correction',
+        attempts: [], decisions: [], outcomes: [], corrections: [], unresolved: [], difficulties: [], lessons: [] } };
+    request.mockImplementation(async (_id, path) => path === 'thoughts' ? thoughts : { ...experience(), items: [row, { ...row, experienceId: 'legacy', checkpointAt: null, content: { ...row.content, goal: 'Legacy observation' } }] });
+    render(view());
+    fireEvent.click(await screen.findByText('Observed correction'));
+    fireEvent.click(await screen.findByText('Legacy observation'));
+    expect(screen.getByText(/Not recorded \(legacy checkpoint\)/)).toBeVisible();
+    expect(screen.getAllByText(/Checkpoint captured:/).length).toBeGreaterThan(1);
+    expect(screen.getAllByText(/Source created:/).length).toBeGreaterThan(1);
+  });
+
+
   it('keeps a newer experience configuration when an earlier refresh completes late', async () => {
     let finishRead!: (value: ReturnType<typeof experience>) => void;
     let reads = 0;

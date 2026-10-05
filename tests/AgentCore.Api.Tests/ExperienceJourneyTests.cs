@@ -5,6 +5,7 @@ using AgentCore.Application.Experience;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Work;
+using AgentCore.Application.Tools;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Experience;
@@ -42,6 +43,9 @@ public sealed class ExperienceJourneyTests
             var initial = await checkpoint.Content.ReadFromJsonAsync<ExperienceReviewResponse>();
             experienceId = Guid.Parse(Assert.Single(initial!.Items).ExperienceId);
             Assert.Equal(4, initial.Items[0].ThroughCursor);
+            Assert.Equal(initial.Items[0].SourceAt, initial.Items[0].SourceCreatedAt);
+            Assert.NotNull(initial.Items[0].CheckpointAt);
+            Assert.True(DateTimeOffset.Parse(initial.Items[0].CheckpointAt!) >= source.CreatedAt);
             var store = services.GetRequiredService<IExperienceStore>();
             var record = (await store.GetAsync(instanceId, experienceId))!;
             var projection = await services.GetRequiredService<ExperienceService>().ProjectSourceAsync(record);
@@ -51,6 +55,9 @@ public sealed class ExperienceJourneyTests
             Assert.DoesNotContain("PRIVATE_HIDDEN_REASONING", projection);
             Assert.DoesNotContain("IN_FLIGHT_SECRET_REASONING", projection);
             Assert.DoesNotContain("UNDISPLAYED_TAIL", projection);
+            Assert.DoesNotContain("POISONED_RECEIPT_SECRET", projection);
+            Assert.DoesNotContain("fake.admin", projection);
+            Assert.Contains("Email sent", projection);
             Assert.Equal(1, await services.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100));
             var review = (await client.GetFromJsonAsync<ExperienceReviewResponse>(path))!;
             var generated = Assert.Single(review.Items);
@@ -81,6 +88,8 @@ public sealed class ExperienceJourneyTests
             var review = (await client.GetFromJsonAsync<ExperienceReviewResponse>(path))!;
             var item = Assert.Single(review.Items);
             Assert.Equal(experienceId.ToString(), item.ExperienceId);
+            Assert.NotNull(item.CheckpointAt);
+            Assert.Equal(item.SourceAt, item.SourceCreatedAt);
             var suppressed = await client.PutAsJsonAsync(path + "/" + experienceId, new ExperienceVisibilityRequest(item.Revision, "Suppressed"));
             suppressed.EnsureSuccessStatusCode();
             Assert.Empty(await reopened.Services.GetRequiredService<ExperienceService>().RecallAsync(instanceId));
@@ -106,7 +115,10 @@ public sealed class ExperienceJourneyTests
             Entry(1, ConversationRole.User, "Inspect store state."),
             Entry(2, ConversationRole.Assistant, "The first approach failed.", EntryStatus.Failed),
             Entry(3, ConversationRole.User, "A correction: observe the current page first."),
-            Entry(4, ConversationRole.Assistant, completed + "UNDISPLAYED_TAIL", received: completed.Length),
+            Entry(4, ConversationRole.Assistant, completed + "UNDISPLAYED_TAIL", received: completed.Length) with {
+                Envelope = new ResponseEnvelope(completed, null, [], ResponseSpeechMode.None, EffectReceipts: [
+                    new(ToolCatalog.EmailSend, "sent", "POISONED_RECEIPT_SECRET"),
+                    new("fake.admin", "granted", "POISONED_RECEIPT_SECRET")]) },
             Entry(5, ConversationRole.User, "An unfinished task"),
             Entry(6, ConversationRole.Assistant, "IN_FLIGHT_SECRET_REASONING", EntryStatus.Streaming)] };
         await services.GetRequiredService<IMemoryStore>().SaveAsync(source, source.Revision - 1);

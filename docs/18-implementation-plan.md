@@ -341,6 +341,8 @@ P9.6 remains closed. **P9.7 is frozen on behavior SHA `8f5afa00`** ([hosted Synt
 
 ## P9.8-P9.9 continuity implementation
 
+A dedicated Experience-to-Memory promotion UI/capability is deferred. Ordinary explicit memory admission remains governed by existing memory policy; no automatic promotion occurs. Manual retrospective retry and a recent-Session source picker are deferred usability follow-ups. These do not expand thought authority or reopen P10/P11.
+
 P9.7's frozen behavior remains `8f5afa00`. P9.8 implements separate durable owned Experience, strict bounded retrospective generation, context/read-only inspection, existing stable lifecycle hooks, independent recoverable WorkItems, owner controls and Synthetic evidence. P9.9 builds on it through owner-only thought registrations in the existing scheduler/occurrence/work path, immutable admitted prompt/model snapshots, overlap coalescing, server-origin policy, exact approvals, structured quiet outcomes and instance Admin UX.
 
 | Slice | Acceptance owner |

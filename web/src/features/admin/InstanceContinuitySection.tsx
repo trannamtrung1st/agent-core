@@ -109,9 +109,10 @@ function ExperienceSection({ instanceId, onWork }: { instanceId: string; onWork:
             label: <Flex vertical gap={token.paddingXS}><Typography.Text strong>{item.content?.goal ?? (item.status === "Failed" ? "Retrospection failed" : item.status === "Cancelled" ? "Retrospection cancelled" : "Retrospection in progress")}</Typography.Text>
               <Flex wrap gap={token.paddingXS}><Tag color={item.status === "Failed" ? "error" : undefined}>{item.status}</Tag>
                 <Tag>{item.eligibleForContext ? "Eligible for context" : item.visibility === "Suppressed" ? "Suppressed" : "Not in context"}</Tag>
-                <Typography.Text type="secondary">{date(item.sourceAt)} · {item.definitionId} v{item.definitionVersion}</Typography.Text></Flex></Flex>,
+                <Typography.Text type="secondary">{item.checkpointAt ? `Checkpoint captured: ${date(item.checkpointAt)}` : `Source created: ${date(item.sourceCreatedAt ?? item.sourceAt)}`} · {item.definitionId} v{item.definitionVersion}</Typography.Text></Flex></Flex>,
             children: <Flex vertical gap={token.padding}>
               <Typography.Text type="secondary" style={{ overflowWrap: "anywhere" }}>Source {item.sourceKind} {item.sourceId} · checkpoint {item.throughCursor} · model {item.modelKey}</Typography.Text>
+              <Typography.Text type="secondary">Source created: {date(item.sourceCreatedAt ?? item.sourceAt)} · Checkpoint captured: {item.checkpointAt ? date(item.checkpointAt) : "Not recorded (legacy checkpoint)"}</Typography.Text>
               {item.failureSummary ? <Alert type="error" showIcon title={item.failureSummary} description={item.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: item.diagnosticId }} /> : undefined} /> : null}
               {item.content ? <Descriptions column={1} size="small">{(["attempts", "decisions", "outcomes", "corrections", "unresolved", "difficulties", "lessons"] as const)
                 .filter(key => item.content![key].length > 0).map(key => <Descriptions.Item key={key} label={key[0].toUpperCase() + key.slice(1)}>

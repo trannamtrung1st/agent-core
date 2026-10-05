@@ -9,7 +9,7 @@ public sealed record ExperienceContentResponse(string Goal, IReadOnlyList<string
 public sealed record ExperienceResponse(string ExperienceId, string SourceKind, string SourceId, long ThroughCursor,
     string SourceAt, string DefinitionId, int DefinitionVersion, string GenerationWorkItemId, string ModelKey,
     string Status, string Visibility, long Revision, bool EligibleForContext, ExperienceContentResponse? Content,
-    string? DiagnosticId, string? FailureSummary);
+    string? DiagnosticId, string? FailureSummary, string? SourceCreatedAt = null, string? CheckpointAt = null);
 public sealed record ExperienceReviewResponse(bool Enabled, long SettingsRevision, int ContextBudgetCharacters,
     IReadOnlyList<ExperienceResponse> Items);
 public sealed record ThoughtRegistrationRequest(long ExpectedRevision, bool Enabled, int IntervalSeconds,

@@ -456,6 +456,8 @@ Runtime exact-version resolution, harness fork-source selection and knowledge re
 
 ## P9.8-P9.9 continuity ports
 
+Retrospective Session projection reconstructs only Core-known successful browser-close and email-send receipts with constant safe labels, drops unknown/failed receipts, and caps projected receipts at 20 per entry. Persisted labels never enter model input. Experience recall is delimited JSON historical data beneath an explicit System trust boundary; it cannot grant tools, weaken approvals or override the current task. Harness guidance names the actual execution origin and its pinned Definition.
+
 `IExperienceStore` owns per-instance enabled/revision settings, idempotent source admission, owned bounded listing/lookup, pending request recovery, immutable completion and revisioned visibility/reset. InMemory and SQLite implement the same contract. Optional `AdminEventAppend` on settings/visibility/reset commits safe history metadata with the mutation. Source history remains owned by `IMemoryStore`; learned-memory admission remains owned by `IStructuredMemoryService`.
 
 `ILanguageModel` remains the generation port. Retrospection requests select one pinned tool-capable unattended model, use named `experience.record`, accept one validated result, ignore text/reasoning channels, and never receive effectful tools. The independent WorkItem exposes status and safe DiagnosticId on unexpected failure.

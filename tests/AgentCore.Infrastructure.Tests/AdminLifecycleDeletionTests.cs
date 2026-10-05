@@ -418,6 +418,51 @@ public abstract class AdminLifecycleDeletionTests
         });
     }
 
+    [Theory]
+    [InlineData(OccurrenceRoutingDisposition.Rejected, true)]
+    [InlineData(OccurrenceRoutingDisposition.Pending, false)]
+    [InlineData(OccurrenceRoutingDisposition.AwaitingDurableWork, false)]
+    public async Task Cancelled_thought_allows_deletion_only_without_pending_or_durable_work(OccurrenceRoutingDisposition disposition, bool deletable)
+    {
+        await ForEachProfileAsync(async fixture =>
+        {
+            var now = DateTimeOffset.UtcNow;
+            var id = Guid.NewGuid(); var registrationId = Guid.NewGuid();
+            var owner = new TriggerOwner(id, Guid.NewGuid());
+            await fixture.Instances.InsertAsync(Instance(id, AgentInstanceLifecycle.Archived, false, now));
+            await fixture.Triggers.CreateAsync(new TriggerRegistration(registrationId, owner,
+                TriggerRegistrationStatus.Cancelled, "Review experience",
+                new OneShotSchedule(now.AddDays(1), "UTC", DateOnly.FromDateTime(now.UtcDateTime), new TimeOnly(9, 0)),
+                null, null, 0, 1, 1, new(TriggerAuthorizationOrigin.AdminThought, null, null, now, now), null));
+            var occurrence = new TriggerOccurrence(Guid.NewGuid(), $"thought:{Guid.NewGuid()}", registrationId, owner,
+                TriggerSourceKind.ThoughtActivation, now, now, now, "{}", null, 1, OccurrenceRoutingDisposition.Pending, null, 0, null, null, null);
+            await fixture.Triggers.AdmitOccurrenceAsync(occurrence);
+            if (disposition == OccurrenceRoutingDisposition.Rejected)
+                Assert.NotNull(await fixture.Triggers.TryRejectPendingAsync(occurrence.OccurrenceId, "Thought deleted", now));
+            if (disposition == OccurrenceRoutingDisposition.AwaitingDurableWork)
+            {
+                var claim = Guid.NewGuid();
+                Assert.NotNull(await fixture.Triggers.TryClaimOccurrenceAsync(occurrence.OccurrenceId, claim, now.AddMinutes(1), now));
+                Assert.NotNull(await fixture.Triggers.MarkAwaitingDurableWorkAsync(occurrence.OccurrenceId, claim, "Queue work", now));
+            }
+            var command = new AdminInstanceDeleteCommand(id, 1, fixture.Ids.NewId(), now);
+            if (deletable)
+            {
+                await fixture.Deletion.DeleteInstanceAsync(command);
+                Assert.Null(await fixture.Instances.FindAsync(id));
+                Assert.Null(await fixture.Triggers.GetAsync(owner, registrationId));
+                Assert.Null(await fixture.Triggers.GetOccurrenceAsync(owner, occurrence.OccurrenceId));
+                Assert.Contains(await fixture.Events.ListAsync(new AdminEventListQuery()), e => e.Operation == AdminEventOperationKind.InstanceDeleted);
+            }
+            else
+            {
+                await Assert.ThrowsAsync<AgentCoreException>(() => fixture.Deletion.DeleteInstanceAsync(command).AsTask());
+                Assert.NotNull(await fixture.Instances.FindAsync(id));
+                Assert.NotNull(await fixture.Triggers.GetOccurrenceAsync(owner, occurrence.OccurrenceId));
+            }
+        });
+    }
+
     private static AgentInstance Instance(
         Guid instanceId,
         AgentInstanceLifecycle lifecycle,

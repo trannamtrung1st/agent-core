@@ -31,4 +31,5 @@ public sealed record AgentExperience(Guid ExperienceId, Guid AgentInstanceId, Gu
     string DefinitionId, int DefinitionVersion, Guid GenerationWorkItemId, WorkModelPin Model,
     DateTimeOffset CreatedAtUtc, ExperienceContent? Content = null,
     ExperienceVisibility Visibility = ExperienceVisibility.Eligible, long Revision = 1,
-    string? GenerationDefinitionId = null, int? GenerationDefinitionVersion = null, AgentIdentity? GenerationPersona = null);
+    string? GenerationDefinitionId = null, int? GenerationDefinitionVersion = null, AgentIdentity? GenerationPersona = null,
+    DateTimeOffset? CheckpointAtUtc = null);

@@ -5,6 +5,14 @@ namespace AgentCore.Application.Tools;
 
 public static class EffectReceipts
 {
+    // Persisted labels are not authority or model-safe evidence. Reconstruct only Core-known receipts.
+    public static IReadOnlyList<EffectReceipt> ModelSafe(IReadOnlyList<EffectReceipt>? receipts) =>
+        (receipts ?? []).OfType<EffectReceipt>().Take(20).Select(receipt => (receipt.Tool, receipt.Status) switch
+        {
+            (ToolCatalog.BrowserClose, "closed" or "already_closed") => new EffectReceipt(ToolCatalog.BrowserClose, receipt.Status, "Browser closed"),
+            (ToolCatalog.EmailSend, "sent") => new EffectReceipt(ToolCatalog.EmailSend, "sent", "Email sent"),
+            _ => null
+        }).OfType<EffectReceipt>().ToArray();
     public static bool TryFromToolResult(string tool, string json, out EffectReceipt receipt)
     {
         receipt = null!;
