@@ -2652,8 +2652,8 @@ export function InstanceManagedControls({
             </Button>
             {personaDirty ? (
               <Typography.Text type="secondary">
-                Unsaved persona edits — save before other changes, or confirm discard on archive, unarchive, or
-                version apply.
+                Unsaved persona edits stay in this editor across lifecycle and version changes until you save or
+                leave this instance.
               </Typography.Text>
             ) : null}
           </Flex>
