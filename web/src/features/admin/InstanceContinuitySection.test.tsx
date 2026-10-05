@@ -23,6 +23,29 @@ beforeEach(() => {
 });
 
 describe('Instance continuity owner controls', () => {
+  it('admits one rapid Experience mutation and releases controls for a later owner action', async () => {
+    let finish!: (value: ReturnType<typeof experience>) => void;
+    request.mockImplementation(async (_id, path) => {
+      if (path === 'experience/configuration') return new Promise(resolve => { finish = resolve; });
+      return path === 'thoughts' ? thoughts : experience();
+    });
+    render(view());
+    const toggle = await screen.findByRole('switch', { name: 'Enable experience' });
+    act(() => { toggle.click(); toggle.click(); });
+    expect(request.mock.calls.filter(call => call[1] === 'experience/configuration')).toHaveLength(1);
+    expect(toggle).toBeDisabled();
+    enabled = true;
+    await act(async () => finish(experience()));
+    expect(toggle).toBeChecked();
+    expect(toggle).toBeEnabled();
+    fireEvent.click(toggle);
+    expect(request.mock.calls.filter(call => call[1] === 'experience/configuration')).toHaveLength(2);
+    enabled = false;
+    await act(async () => finish(experience()));
+    expect(toggle).not.toBeChecked();
+    expect(toggle).toBeEnabled();
+  });
+
   it('distinguishes captured checkpoint time from source creation and marks legacy times unknown', async () => {
     const row = { experienceId: 'checkpoint', sourceKind: 'Session', sourceId: 'source', throughCursor: 4,
       sourceAt: '2026-01-01T00:00:00Z', sourceCreatedAt: '2026-01-01T00:00:00Z', checkpointAt: '2026-02-01T00:00:00Z',

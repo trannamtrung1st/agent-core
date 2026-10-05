@@ -4,6 +4,11 @@ import { draftEditorSection } from './admin-draft-editor-helpers';
 import { selectManagedIdentityOption } from './admin-managed-helpers';
 import { waitForResponseSettled } from './support/response-settled';
 
+const knownAntDMigrationNotices = new Set([
+  "Warning: [antd: List] The `List` component is deprecated and will be removed in the next major version. If you're using version 6.6.0 or later, please use `Listy` instead.",
+  'Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.'
+]);
+
 // Synthetic proves the real runtime and durable owner flows. It does not prove
 // hosted-model judgement, natural-language memory admission, or lesson fidelity.
 test.describe('Morgan secretary Synthetic journey', () => {
@@ -61,7 +66,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     page.on('pageerror', error => failures.push(error.message));
     page.on('console', message => {
       // Existing AntD migration notices are tracked separately from runtime errors.
-      if (message.type() === 'error' && !/^Warning: \[antd: (List|Alert)\]/.test(message.text())) failures.push(message.text());
+      if (message.type() === 'error' && !knownAntDMigrationNotices.has(message.text())) failures.push(message.text());
     });
     page.on('requestfailed', request => {
       if (!request.failure()?.errorText.includes('ERR_ABORTED')) failures.push(`${request.url()}: ${request.failure()?.errorText}`);

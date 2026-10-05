@@ -82,6 +82,7 @@ function ExperienceSection({ instanceId, onWork }: { instanceId: string; onWork:
     return () => window.clearInterval(timer);
   }, [instanceId, review, order, loading]);
   async function mutate(path: string, method: string, body: unknown) {
+    if (order.current.mutating) return;
     order.current.mutating = true; ++order.current.generation;
     setLoading(false);
     setBusy(true); setError(null);
