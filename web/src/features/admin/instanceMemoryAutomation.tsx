@@ -1,3 +1,4 @@
+import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, App, Button, Descriptions, Flex, Input, Select, Table, Tabs, Typography } from "antd";
 import { confirmAction } from "../../app/confirmAction";
@@ -162,6 +163,7 @@ function triggerPolicySummary(config: AdminEffectiveConfiguration): string {
 
 export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffectiveConfiguration }) {
   const { message, modal } = App.useApp();
+  const detailLayout = useAdminDetailLayout();
   const [memoryScope, setMemoryScope] = useState<AdminLearnedMemoryScope>("IdentityUser");
   const [sessionId, setSessionId] = useState("");
   const [memoryItems, setMemoryItems] = useState<AdminLearnedMemoryItem[] | null>(null);
@@ -457,7 +459,7 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
           label: "Memory",
           children: (
             <Flex vertical gap={12} aria-label="Learned memory administration">
-              <Descriptions size="small" column={1} bordered>
+              <Descriptions {...detailLayout} size="small" column={1} bordered>
                 <Descriptions.Item label="Effective memory policy">{memoryPolicySummary(config)}</Descriptions.Item>
               </Descriptions>
               {memoryScope === "Session" ? (
@@ -541,7 +543,7 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
           label: "Automation",
           children: (
             <Flex vertical gap={12} aria-label="Automation administration">
-              <Descriptions size="small" column={1} bordered>
+              <Descriptions {...detailLayout} size="small" column={1} bordered>
                 <Descriptions.Item label="Effective trigger policy">{triggerPolicySummary(config)}</Descriptions.Item>
               </Descriptions>
               <UnattendedModelForm config={config} models={models} />

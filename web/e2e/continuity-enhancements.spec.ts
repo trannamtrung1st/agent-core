@@ -23,8 +23,8 @@ test('Admin authors scheduled work, runs through background execution, edits and
   await schedules.getByLabel('Schedule maximum occurrences', { exact: true }).fill('5');
   await schedules.getByRole('button', { name: 'Create schedule', exact: true }).click();
   await expect(schedules.getByLabel('Schedule task', { exact: true })).toBeHidden({ timeout: 30_000 });
-  await schedules.getByText('Review pending store orders', { exact: true }).click();
-  await expect(schedules.getByText('Admin owner', { exact: true })).toBeVisible();
+  await schedules.getByRole('button', { name: 'View schedule: Review pending store orders', exact: true }).click();
+  await expect(schedules.getByRole('region', { name: 'Schedule details', exact: true }).getByText('Admin owner', { exact: true })).toBeVisible();
   const instanceId = page.url().split('/').pop()!;
   const token = (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))!;
   const headers = { 'X-AgentCore-Owner-Capability': token };
@@ -38,7 +38,7 @@ test('Admin authors scheduled work, runs through background execution, edits and
   await page.route(`**/agent-instances/${instanceId}/schedules/*/run`, async route => { calls++; await route.continue(); });
   const run = schedules.getByRole('button', { name: 'Run schedule now', exact: true });
   await run.evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
-  await expect(schedules.getByText('Completed', { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(schedules.getByRole('region', { name: 'Schedule details', exact: true }).getByText('Completed', { exact: true })).toBeVisible({ timeout: 30_000 });
   expect(calls).toBe(1);
   await schedules.getByRole('button', { name: 'Inspect scheduled execution', exact: true }).click();
   const work = page.getByRole('dialog', { name: 'Background work', exact: true });
@@ -54,7 +54,7 @@ test('Admin authors scheduled work, runs through background execution, edits and
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   await page.reload();
   await page.getByRole('tab', { name: 'Behavior & continuity', exact: true }).click();
-  await schedules.getByText(/Review store orders with a deliberately longer/).click();
+  await schedules.getByRole('button', { name: /^View schedule: Review store orders with a deliberately longer/ }).click();
   await expect(schedules.getByRole('button', { name: 'Enable schedule', exact: true })).toBeVisible();
   const persisted = (await (await page.request.get(`/api/v2/admin/agent-instances/${instanceId}/schedules`, { headers })).json()).items[0];
   expect(persisted.authorizationOrigin).toBe('AdminOwner'); expect(persisted.status).toBe('Disabled'); expect(persisted.lastWorkItemId).toBeTruthy();

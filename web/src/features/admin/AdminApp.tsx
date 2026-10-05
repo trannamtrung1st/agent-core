@@ -1,3 +1,4 @@
+import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { updateHarness } from "../../services/adminApi";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -2776,6 +2777,7 @@ export function EffectiveConfigView({
   hidePersona?: boolean;
 }) {
   const trigger = config.triggerPolicy;
+  const detailLayout = useAdminDetailLayout();
   return (
     <div className="admin-effective-config-grid">
       <section
@@ -2788,7 +2790,7 @@ export function EffectiveConfigView({
           lifecycle={config.instanceLifecycle}
           definitionStatus={config.definitionStatus}
         />
-        <Descriptions bordered size="small" column={1}>
+        <Descriptions {...detailLayout} bordered size="small" column={1}>
           <Descriptions.Item label="Instance id">{config.instanceId}</Descriptions.Item>
           <Descriptions.Item label="Definition status">{config.definitionStatus}</Descriptions.Item>
           <Descriptions.Item label="Lifecycle">{config.instanceLifecycle}</Descriptions.Item>
@@ -2798,7 +2800,7 @@ export function EffectiveConfigView({
       {hidePersona ? null : (
         <section className="admin-effective-config-section" aria-label="Persona">
           <Typography.Title level={5}>Persona</Typography.Title>
-          <Descriptions bordered size="small" column={1}>
+          <Descriptions {...detailLayout} bordered size="small" column={1}>
             <Descriptions.Item label="Name">{config.persona.name}</Descriptions.Item>
             <Descriptions.Item label="Role">{config.persona.role}</Descriptions.Item>
             <Descriptions.Item label="Description">{config.persona.description}</Descriptions.Item>
@@ -2808,7 +2810,7 @@ export function EffectiveConfigView({
       )}
       <section className="admin-effective-config-section admin-effective-config-wide" aria-label="Runtime model">
         <Typography.Title level={5}>Runtime model</Typography.Title>
-        <Descriptions bordered size="small" column={1}>
+        <Descriptions {...detailLayout} bordered size="small" column={1}>
           <Descriptions.Item label="Definition">
             {config.definitionId} v{config.definitionVersion} ({config.definitionSource})
           </Descriptions.Item>
@@ -2834,7 +2836,7 @@ export function EffectiveConfigView({
         aria-label="Tools and resources"
       >
         <Typography.Title level={5}>Tools and resources</Typography.Title>
-        <Descriptions bordered size="small" column={1}>
+        <Descriptions {...detailLayout} bordered size="small" column={1}>
           <Descriptions.Item label="Offered tools">
             {config.effectiveToolAllowlist.length > 0 ? config.effectiveToolAllowlist.join(", ") : "None"}
           </Descriptions.Item>
@@ -2857,7 +2859,7 @@ export function EffectiveConfigView({
       </section>
       <section className="admin-effective-config-section" aria-label="Memory policy">
         <Typography.Title level={5}>Memory policy</Typography.Title>
-        <Descriptions bordered size="small" column={1}>
+        <Descriptions {...detailLayout} bordered size="small" column={1}>
           <Descriptions.Item label="Session memory">{config.memoryPolicy.sessionMemory ? "On" : "Off"}</Descriptions.Item>
           <Descriptions.Item label="Identity promotion">
             {config.memoryPolicy.identityUserPromotion ? "On" : "Off"}
@@ -2871,7 +2873,7 @@ export function EffectiveConfigView({
       </section>
       <section className="admin-effective-config-section" aria-label="Automation">
         <Typography.Title level={5}>Automation</Typography.Title>
-        <Descriptions bordered size="small" column={1}>
+        <Descriptions {...detailLayout} bordered size="small" column={1}>
           <Descriptions.Item label="Trigger enabled">{trigger?.enabled ? "Yes" : "No"}</Descriptions.Item>
           <Descriptions.Item label="User scheduling">{trigger?.allowUserScheduling ? "Yes" : "No"}</Descriptions.Item>
           <Descriptions.Item label="Allowed source kinds">

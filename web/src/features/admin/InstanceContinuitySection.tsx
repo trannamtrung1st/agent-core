@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type Key } from "react";
-import { Alert, App, Button, Collapse, Descriptions, Empty, Flex, Form, Grid, Input, InputNumber, Select, Spin, Switch, Table, Tag, Typography, theme } from "antd";
+import { Alert, App, Button, Descriptions, Empty, Flex, Form, Input, InputNumber, Select, Spin, Switch, Table, Tag, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
 import { drawerPageSearch, listModels, type DrawerPageQuery, type ModelDescriptor, type WorkItem, type WorkItemResult } from "../../services/api";
 import { instanceContinuityRequest as request, type ExperienceItem, type ExperienceReview, type ThoughtDraft, type ThoughtRegistration, type ThoughtReview } from "../../services/adminApi";
@@ -10,6 +10,7 @@ import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 import { InstanceSchedulesSection } from "./InstanceSchedulesSection";
 import { ExecutionModelFields } from "./ExecutionModelFields";
 import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
+import { useAdminDetailLayout } from "./useAdminDetailLayout";
 
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : "Not yet";
 
@@ -172,19 +173,18 @@ const experienceContext = (item: ExperienceItem) => item.eligibleForContext ? "E
 
 function ExperienceDetails({ item }: { item: ExperienceItem }) {
   const { token } = theme.useToken();
-  const screens = Grid.useBreakpoint();
-  const styles = { label: { width: screens.md ? "12rem" : undefined, verticalAlign: "top" }, content: { overflowWrap: "anywhere" as const } };
+  const detailLayout = useAdminDetailLayout();
   return <Flex vertical gap={token.padding} role="region" aria-label="Experience details">
     {item.failureSummary ? <Alert type="error" showIcon title={item.failureSummary}
       description={item.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: item.diagnosticId }} /> : undefined} /> : null}
-    {item.content ? <Descriptions bordered column={1} size="small" layout={screens.md ? "horizontal" : "vertical"} styles={styles}
+    {item.content ? <Descriptions bordered column={1} size="small" {...detailLayout}
       items={[{ key: "goal", label: "Goal", children: item.content.goal },
         ...(["lessons", "corrections", "outcomes", "decisions", "attempts", "unresolved", "difficulties"] as const)
           .filter(key => item.content![key].length > 0).map(key => ({ key, label: key[0].toUpperCase() + key.slice(1),
             children: <ul style={{ margin: 0, paddingInlineStart: token.padding, maxWidth: "72ch" }}>
               {item.content![key].map((text, index) => <li key={index}>{text}</li>)}
             </ul> }))]} /> : null}
-    <Descriptions title="Provenance" bordered column={1} size="small" layout={screens.md ? "horizontal" : "vertical"} styles={styles}
+    <Descriptions title="Provenance" bordered column={1} size="small" {...detailLayout}
       items={[
         { key: "source", label: `Source ${item.sourceKind === "Session" ? "Session" : "background work"}`, children: item.sourceId },
         { key: "checkpoint", label: "Checkpoint", children: item.throughCursor },
@@ -207,7 +207,13 @@ function thoughtIntervalLabel(seconds: number) {
   return `Every ${value} ${label}${value === 1 ? "" : "s"}`;
 }
 const blank: ThoughtDraft = { expectedRevision: 0, enabled: false, intervalSeconds: 3600, thinkingPrompt: "", modelKey: null, reasoningEffort: null };
+const thoughtOutcome = (item: ThoughtRegistration) => item.executionStatus === "WaitingForApproval" ? "Needs approval"
+  : ["Queued", "Running", "WaitingToRetry"].includes(item.executionStatus ?? "") ? item.executionStatus!
+  : item.lastOutcome ?? item.executionStatus ?? "Not yet";
 function ThoughtSection({ instanceId, onWork }: { instanceId: string; onWork: () => void }) {
+  const { search, setSearch, pagination } = useAdminCollectionSearch();
+  const [expanded, setExpanded] = useState<Key[]>([]);
+  const detailLayout = useAdminDetailLayout();
   const { token } = theme.useToken();
   const { modal } = App.useApp();
   const [review, setReview] = useState<ThoughtReview | null>(null);
@@ -322,23 +328,49 @@ function ThoughtSection({ instanceId, onWork }: { instanceId: string; onWork: ()
             <Button onClick={() => void reload()} disabled={busy}>Refresh initiative</Button><Button onClick={onWork}>View thought executions</Button></Flex>
         </Form>
         {review.items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No thought activations configured. The agent stays quiet until you enable one." /> :
-          <Collapse items={review.items.map(item => ({ key: item.registrationId, label: <Flex vertical gap={token.paddingXS} style={{ minWidth: 0, width: "100%" }}>
-            <Typography.Paragraph ellipsis={{ rows: 2 }} style={{ marginBottom: 0, overflowWrap: "anywhere" }}>{item.thinkingPrompt}</Typography.Paragraph>
-            <Flex wrap gap={token.paddingXS}><Tag>{item.enabled ? thoughtIntervalLabel(item.intervalSeconds) : "Disabled"}</Tag>
-              {item.executionStatus ? <Tag color={item.executionStatus === "WaitingForApproval" ? "warning" : item.executionStatus === "Running" ? "processing" : undefined}>
-                {item.executionStatus === "WaitingForApproval" ? "Needs approval" : item.lastOutcome ?? item.executionStatus}</Tag> : null}
-              <Typography.Text type="secondary">Next: {item.enabled ? date(item.nextRunAt) : "Disabled"}</Typography.Text></Flex></Flex>,
-            children: <Flex vertical gap={token.padding}><Typography.Paragraph style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{item.thinkingPrompt}</Typography.Paragraph>
-              <Descriptions size="small" column={1}><Descriptions.Item label="Model">{item.effectiveModelKey ?? item.modelKey ?? "Unattended default"}</Descriptions.Item>
-                <Descriptions.Item label="Last activation">{date(item.lastRunAt)}</Descriptions.Item><Descriptions.Item label="Last outcome">{item.lastOutcome ?? item.executionStatus ?? "Not yet"}</Descriptions.Item></Descriptions>
+          <>
+          <AdminCollectionToolbar label="thought activations" value={search} onChange={setSearch} />
+          <Table<ThoughtRegistration> aria-label="Thought activations table" className="admin-collection-table" size="small" rowKey="registrationId"
+            dataSource={review.items.filter(item => [item.thinkingPrompt, item.enabled ? "Enabled" : "Disabled", thoughtIntervalLabel(item.intervalSeconds),
+              thoughtOutcome(item), item.executionStatus ?? "", item.effectiveModelKey ?? item.modelKey ?? "Unattended default"]
+              .some(value => value.toLowerCase().includes(search.trim().toLowerCase())))}
+            scroll={{ x: 1050 }} pagination={pagination}
+            locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No matches. Clear search or filters to see all results." /> }}
+            columns={[
+              { title: "Thinking prompt", key: "prompt", width: 350, ellipsis: true,
+                render: (_, item) => <Button type="link" size="small" className="admin-collection-name" title={item.thinkingPrompt}
+                  aria-label={`View thought: ${item.thinkingPrompt}`} aria-expanded={expanded.includes(item.registrationId)}
+                  onClick={() => setExpanded(expanded.includes(item.registrationId) ? [] : [item.registrationId])}>{item.thinkingPrompt}</Button> },
+              { title: "Cadence", key: "cadence", width: 170,
+                filters: [{ text: "Enabled", value: true }, { text: "Disabled", value: false }], onFilter: (value, item) => item.enabled === value,
+                render: (_, item) => <Tag>{item.enabled ? thoughtIntervalLabel(item.intervalSeconds) : "Disabled"}</Tag> },
+              { title: "Latest outcome", key: "outcome", width: 180,
+                filters: [...new Set(review.items.map(thoughtOutcome))].map(value => ({ text: value, value })),
+                onFilter: (value, item) => thoughtOutcome(item) === value,
+                render: (_, item) => <Tag color={item.executionStatus === "WaitingForApproval" ? "warning" : item.executionStatus === "Running" ? "processing" : undefined}>
+                  {thoughtOutcome(item)}</Tag> },
+              { title: "Next activation", key: "next", width: 220,
+                sorter: (a, b) => (a.enabled ? a.nextRunAt ?? "" : "").localeCompare(b.enabled ? b.nextRunAt ?? "" : ""),
+                render: (_, item) => item.enabled ? date(item.nextRunAt) : "Disabled" },
+              { title: "Model", key: "model", width: 180, ellipsis: true, render: (_, item) => item.effectiveModelKey ?? item.modelKey ?? "Unattended default" }
+            ]}
+            expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, item) => setExpanded(open ? [item.registrationId] : []),
+              expandedRowRender: item => <Flex vertical gap={token.padding} style={{ whiteSpace: "normal" }} role="region" aria-label="Thought details">
+                <Descriptions bordered size="small" column={1} {...detailLayout}>
+                  <Descriptions.Item label="Thinking prompt"><span style={{ whiteSpace: "pre-wrap" }}>{item.thinkingPrompt}</span></Descriptions.Item>
+                  <Descriptions.Item label="Model">{item.effectiveModelKey ?? item.modelKey ?? "Unattended default"}</Descriptions.Item>
+                  <Descriptions.Item label="Last activation">{date(item.lastRunAt)}</Descriptions.Item>
+                  <Descriptions.Item label="Last outcome">{item.lastOutcome ?? item.executionStatus ?? "Not yet"}</Descriptions.Item>
+                </Descriptions>
               <Flex wrap gap={token.paddingXS}><Button aria-label="Run now" loading={item.registrationId in startingRuns} aria-busy={item.registrationId in startingRuns} disabled={busy || item.registrationId in startingRuns || !item.enabled || ["Queued", "Running", "WaitingForApproval", "WaitingToRetry"].includes(item.executionStatus ?? "")} onClick={() => void action(`thoughts/${item.registrationId}/run`, { expectedRevision: item.revision })}>{item.registrationId in startingRuns ? "Starting…" : "Run now"}</Button>
                 <Button disabled={busy} onClick={() => edit(item)}>Edit thought</Button>
                 <Button disabled={busy} onClick={() => void action(`thoughts/${item.registrationId}`, { ...item, expectedRevision: item.revision, enabled: !item.enabled }, "PUT")}>{item.enabled ? "Disable thought" : "Enable thought"}</Button>
                 <Button danger disabled={busy} onClick={() => confirmAction(modal, { title: "Delete this thought registration?", content: "Stops future activations. Already admitted background work remains inspectable and can be cancelled there.", okText: "Delete thought", danger: true,
                   onOk: () => action(`thoughts/${item.registrationId}/delete`, { expectedRevision: item.revision }) })}>Delete thought</Button>
                 {item.lastWorkItemId ? <Button onClick={onWork}>Inspect execution</Button> : null}</Flex>
-            </Flex>
-          }))} />}
+              </Flex>
+            }} />
+          </>}
       </> : null}
     </Flex></div>
   </section>;

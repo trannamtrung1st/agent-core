@@ -1,3 +1,4 @@
+import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Alert, Button, Descriptions, Drawer, Empty, Flex, Spin, Table, Tabs, Tag, Typography, theme } from "antd";
 import { getAdminDefinitionVersion, type AdminDefinitionInventoryItem, type AdminDefinitionPublicationSummary } from "../../services/adminApi";
@@ -110,6 +111,7 @@ function DefinitionVersionDetails({ row, renderResources }: {
   renderResources: (version: number) => ReactNode;
 }) {
   const { token } = theme.useToken();
+  const detailLayout = useAdminDetailLayout();
   const [candidate, setCandidate] = useState<DefinitionCandidate | null>(null);
   const [error, setError] = useState<ReturnType<typeof describeAdminError> | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -140,7 +142,7 @@ function DefinitionVersionDetails({ row, renderResources }: {
           { key: "definition", label: "Definition", children: <DefinitionCandidateEditor
             candidate={candidate} view={view} jsonText={candidateToJson(candidate)} busy={false} readOnly
             onViewChange={setView} onCandidateChange={() => {}} onJsonTextChange={() => {}} /> },
-          { key: "capabilities", label: "Capabilities", children: <Descriptions bordered column={1} size="small">
+          { key: "capabilities", label: "Capabilities", children: <Descriptions {...detailLayout} bordered column={1} size="small">
             <Descriptions.Item label="Tool allowlist">{environment?.toolAllowlist.join(", ") || "None"}</Descriptions.Item>
             <Descriptions.Item label="Harness references">{environment?.harness.join(", ") || "None"}</Descriptions.Item>
             <Descriptions.Item label="Workspace template">{environment?.workspaceTemplateId || "None"}</Descriptions.Item>

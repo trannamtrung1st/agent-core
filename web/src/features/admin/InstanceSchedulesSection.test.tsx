@@ -1,5 +1,5 @@
 import { App, ConfigProvider } from "antd";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InstanceSchedulesSection } from "./InstanceSchedulesSection";
 import { instanceContinuityRequest, type OwnerSchedule } from "../../services/adminApi";
@@ -21,8 +21,24 @@ describe("Owner schedule authoring", () => {
   it.each(["Disabled", "Cancelled", "Completed", "Expired"])("does not advertise a future run for %s registrations", async status => {
     request.mockResolvedValue({ items: [{ ...row, enabled: status !== "Disabled", status }] });
     render(view());
-    expect(await screen.findByText("Next: Not scheduled")).toBeVisible();
-    expect(screen.queryByText(/Next:.*2026/)).not.toBeInTheDocument();
+    expect(await screen.findByText("Not scheduled")).toBeVisible();
+    expect(screen.queryByText(/2026/)).not.toBeInTheDocument();
+  });
+  it("resets pagination when searching provenance and preserves the selected registration revision", async () => {
+    const rows = Array.from({ length: 11 }, (_, index) => ({ ...row, registrationId: `schedule-${index}`, revision: index + 2,
+      intent: `Task ${index}`, sourceSessionId: index === 10 ? "unique-chat-source" : "source-session" }));
+    request.mockResolvedValue({ items: rows }); render(view());
+    const section = screen.getByRole("region", { name: "Scheduled work" });
+    await within(section).findByRole("button", { name: "View schedule: Task 0" });
+    fireEvent.click(section.querySelector('.ant-pagination-next button')!);
+    expect(await within(section).findByRole("button", { name: "View schedule: Task 10" })).toBeVisible();
+    fireEvent.change(within(section).getByRole("textbox", { name: "Search scheduled work" }), { target: { value: "unique-chat-source" } });
+    expect(await within(section).findByText("1 results")).toBeVisible();
+    fireEvent.click(within(section).getByRole("button", { name: "View schedule: Task 10" }));
+    expect(within(section).getByRole("region", { name: "Schedule details" })).toHaveTextContent("unique-chat-source");
+    fireEvent.click(within(section).getByRole("button", { name: "Disable schedule" }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith("instance", "schedules/schedule-10", "PUT",
+      expect.objectContaining({ expectedRevision: 12, enabled: false })));
   });
   it("creates a structured schedule without model interpretation", async () => {
     render(view()); await screen.findByText(/No scheduled work yet/);

@@ -205,8 +205,8 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await schedules.getByLabel('Schedule maximum occurrences', { exact: true }).fill('5');
     await schedules.getByRole('button', { name: 'Create schedule', exact: true }).click();
     await expect(schedules.getByLabel('Schedule task', { exact: true })).toBeHidden();
-    await schedules.getByText(task, { exact: true }).click();
-    await expect(schedules.getByText('Admin owner', { exact: true })).toBeVisible();
+    await schedules.getByRole('button', { name: `View schedule: ${task}`, exact: true }).click();
+    await expect(schedules.getByRole('region', { name: 'Schedule details', exact: true }).getByText('Admin owner', { exact: true })).toBeVisible();
     const path = `/api/v2/admin/agent-instances/${instanceId}/schedules`;
     const before = (await (await page.request.get(path, { headers: await headers(page) })).json()).items[0];
     let runCalls = 0;
@@ -227,7 +227,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     expect(runCalls).toBe(1);
     await page.unroute(statusPattern);
     await schedules.getByRole('button', { name: 'Refresh schedules', exact: true }).click();
-    await expect(schedules.getByText('Completed', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(schedules.getByRole('region', { name: 'Schedule details', exact: true }).getByText('Completed', { exact: true })).toBeVisible({ timeout: 30_000 });
     await schedules.getByRole('button', { name: 'Inspect scheduled execution', exact: true }).click();
     const work = page.getByRole('dialog', { name: 'Background work', exact: true });
     await expect(work.getByText('Scheduled reminder', { exact: true })).toBeVisible();
@@ -267,7 +267,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await schedules.getByRole('button', { name: 'Cancel schedule', exact: true }).click();
     await page.getByRole('dialog', { name: 'Cancel this schedule?', exact: true }).getByRole('button', { name: 'Cancel schedule', exact: true }).click();
     await expect(schedules.getByText('Cancelled', { exact: true })).toBeVisible();
-    await expect(schedules.getByText('Next: Not scheduled', { exact: true })).toHaveCount(2);
+    await expect(schedules.getByText('Not scheduled', { exact: true })).toHaveCount(2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 
     const initiative = page.getByRole('region', { name: 'Initiative', exact: true });
@@ -276,7 +276,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await initiative.getByRole('switch', { name: 'Enable thought activation', exact: true }).click();
     await initiative.getByRole('button', { name: 'Create thought', exact: true }).click();
     await expect(initiative.getByText('Every 1 hour', { exact: true })).toBeVisible();
-    await initiative.getByText(prompt, { exact: true }).click();
+    await initiative.getByRole('button', { name: `View thought: ${prompt}`, exact: true }).click();
     await initiative.getByRole('button', { name: 'Run now', exact: true }).click();
     await expect(initiative.getByText('NoAction', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
     await initiative.getByRole('button', { name: 'Edit thought', exact: true }).click();

@@ -79,7 +79,7 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   await initiative.getByRole('switch', { name: 'Enable thought activation', exact: true }).click();
   await initiative.getByRole('button', { name: 'Create thought', exact: true }).click();
   await expect(initiative.getByText('Every 1 hour', { exact: true })).toBeVisible();
-  await initiative.getByText(/synthetic-thought-improve:/).first().click();
+  await initiative.getByRole('button', { name: /^View thought: synthetic-thought-improve:/ }).click();
   const runPattern = `**/api/v2/admin/agent-instances/${id}/thoughts/*/run`;
   const statusPattern = `**/api/v2/admin/agent-instances/${id}/thoughts`;
   const previousStatus = await page.request.get(`/api/v2/admin/agent-instances/${id}/thoughts`, {

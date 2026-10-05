@@ -241,9 +241,10 @@ describe('Instance continuity owner controls', () => {
     fireEvent.click(run);
     expect(request.mock.calls.filter(call => call[1].endsWith('/run'))).toHaveLength(1);
     failRefresh = false;
-    item = { ...item, lastWorkItemId: 'new-work', executionStatus: 'Queued', lastOutcome: 'Queued' };
+    item = { ...item, lastWorkItemId: 'new-work', executionStatus: 'Queued', lastOutcome: 'NoAction' };
     fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Reload' }));
     await waitFor(() => expect(run).toHaveAttribute('aria-busy', 'false'));
+    expect(within(screen.getByRole('table', { name: 'Thought activations table' })).getByText('Queued', { exact: true })).toBeVisible();
     expect(run).toBeDisabled();
     item = { ...item, executionStatus: 'Completed', lastOutcome: 'NoAction' };
     await act(async () => poll());

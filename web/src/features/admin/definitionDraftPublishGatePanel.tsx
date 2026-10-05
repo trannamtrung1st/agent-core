@@ -1,3 +1,4 @@
+import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { Alert, Button, Descriptions, Flex, Input, List, Select, Spin, Tag, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AdminDefinitionDraft } from "../../services/adminApi";
@@ -37,6 +38,7 @@ export function DefinitionDraftPublishGatePanel({
   onEligibilityChange
 }: Props) {
   const [loading, setLoading] = useState(false);
+  const detailLayout = useAdminDetailLayout();
   const [validation, setValidation] = useState<AdminDefinitionDraftValidation | null>(null);
   const [diff, setDiff] = useState<AdminDefinitionDraftDiff | null>(null);
   const [scenarios, setScenarios] = useState<AdminDefinitionEvaluationScenario[]>([]);
@@ -287,7 +289,7 @@ export function DefinitionDraftPublishGatePanel({
         </Button>
       </Flex>
       {validation ? (
-        <Descriptions bordered size="small" column={1} title="Validation snapshot" className="admin-validation-summary">
+        <Descriptions {...detailLayout} bordered size="small" column={1} title="Validation snapshot" className="admin-validation-summary">
           <Descriptions.Item label="Draft">{validation.draftId}</Descriptions.Item>
           <Descriptions.Item label="Revision">{validation.draftRevision}</Descriptions.Item>
           <Descriptions.Item label="Fingerprint">{validation.configurationFingerprint}</Descriptions.Item>
