@@ -9,12 +9,50 @@ using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Application.Tests;
 
 public sealed class AcceptedTurnDetachDurabilityTests
 {
+    [Fact]
+    public async Task Disposal_with_a_queued_detach_does_not_report_a_false_persistence_failure()
+    {
+        var output = new AttachOutputGate();
+        var logger = new ShutdownLogger();
+        var runtime = CreateRuntime(output, new ScriptedLanguageModel(), new FakeTimeProvider(),
+            new DefaultAgentBrain(new PromptContextBuilder()), logger: logger);
+        var attach = runtime.AttachAsync();
+        await output.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var detach = runtime.DetachAsync();
+        var dispose = runtime.DisposeAsync().AsTask();
+        output.Release.TrySetResult();
+        await Task.WhenAll(attach, detach, dispose).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Empty(logger.Errors);
+    }
+
+    private sealed class AttachOutputGate : ISessionOutput
+    {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public async ValueTask PublishAsync(SessionOutput output, CancellationToken cancellationToken = default)
+        {
+            if (output.Payload is not ReadyOutput) return;
+            Entered.TrySetResult();
+            await Release.Task;
+        }
+    }
+
+    private sealed class ShutdownLogger : ILogger<SessionRuntime>
+    {
+        public List<Exception?> Errors { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel level) => true;
+        public void Log<TState>(LogLevel level, EventId id, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        { if (level >= LogLevel.Error) Errors.Add(exception); }
+    }
+
     [Fact]
     public async Task Detach_after_ack_before_response_still_executes()
     {
@@ -228,7 +266,8 @@ public sealed class AcceptedTurnDetachDurabilityTests
         IAgentBrain brain,
         IMemoryStore? store = null,
         SessionSnapshot? snapshot = null,
-        InMemoryConversationTurnExecutionStore? turnExecutions = null)
+        InMemoryConversationTurnExecutionStore? turnExecutions = null,
+        ILogger<SessionRuntime>? logger = null)
     {
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 256).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
@@ -270,7 +309,7 @@ public sealed class AcceptedTurnDetachDurabilityTests
             output,
             ids,
             time,
-            NullLogger<SessionRuntime>.Instance,
+            logger ?? NullLogger<SessionRuntime>.Instance,
             new FakeInterruptionClassifier(),
             turnExecutions: turnExecutions);
     }

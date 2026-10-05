@@ -16,15 +16,20 @@ export async function ensureToolAllowlisted(
 ) {
   await draftEditor.getByRole("tab", { name: "Capabilities" }).click();
   const allowlist = draftEditor.getByLabel("Tool allowlist");
-  const alreadySelected = await allowlist
-    .locator(".ant-select-selection-item")
-    .filter({ hasText: toolName })
-    .count();
-  if (alreadySelected > 0) {
+  await expect(allowlist).toBeVisible();
+  // Responsive Select hides tags, so inspect the option's selected state.
+  await page.keyboard.press("Escape");
+  await allowlist.click();
+  await allowlist.fill(toolName);
+  const option = page.locator(`.ant-select-item-option[title="${toolName}"]`).last();
+  await expect(option).toBeVisible();
+  if (await option.getAttribute("aria-selected") === "true"
+      || (await option.getAttribute("class"))?.includes("ant-select-item-option-selected")) {
+    await page.keyboard.press("Escape");
     return;
   }
-
-  await selectAntdComboboxOption(page, allowlist, toolName);
+  await option.click();
+  await page.keyboard.press("Escape");
   const saveDraft = draftEditor.getByRole("button", { name: "Save draft" });
   await Promise.all([
     page.waitForResponse(

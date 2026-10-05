@@ -186,7 +186,12 @@ internal static class AdminEndpoints
 
         group.MapGet("/tools", () =>
         {
-            var names = ToolCatalog.AllKnownNames().OrderBy(name => name, StringComparer.Ordinal).ToArray();
+            var names = ToolRegistry.All
+                .Where(tool => tool.OfferRule is ToolOfferRule.RoleAllowlist
+                    or ToolOfferRule.SessionAttachmentsWhenRoleAllows
+                    or ToolOfferRule.ConfigurationWhenRoleAllows)
+                .Select(tool => tool.Name)
+                .OrderBy(name => name, StringComparer.Ordinal).ToArray();
             return Results.Json(new AdminToolRegistryResponse(names));
         });
 

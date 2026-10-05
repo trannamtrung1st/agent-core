@@ -152,6 +152,11 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
             var sawDone = false;
             var emittedText = false;
             var toolsOffered = request.Tools is { Count: > 0 };
+            // A provider can send prose before its response-function call. Hold
+            // that ambiguous channel until the finish reason establishes whether
+            // it is a plain-text fallback or a tool round's discarded preamble.
+            var functionChannel = request.Tools?.Any(tool => tool.Name == AssistantResponseSchema.ResponseFunctionName) == true;
+            var functionPreamble = new StringBuilder();
             var drafts = new Dictionary<int, ToolCallDraft>();
             var idle = TimeSpan.FromSeconds(Math.Max(1, _options.Timeouts.StreamIdleSeconds));
 
@@ -265,7 +270,18 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
 
                             yield return failed;
                             yield break;
-                        case ModelTextDelta:
+                        case ModelTextDelta text:
+                            if (functionChannel)
+                            {
+                                if (functionPreamble.Length + text.Text.Length > AssistantResponseSchema.MaxDisplayCharacters)
+                                {
+                                    yield return Fail(ProviderErrorCode.InvalidResponse, "Language model response exceeded the display limit.",
+                                        ProviderFailureReason.ResponseTooLarge, ProviderResponseChannel.ResponseFunction);
+                                    yield break;
+                                }
+                                functionPreamble.Append(text.Text);
+                                break;
+                            }
                             emittedText = true;
                             yield return mapped;
                             break;
@@ -300,7 +316,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
 
                     yield return new ModelToolCallEvent(new ModelToolCall(
                         draft.Id,
-                        OpenAiCompatibleToolNames.ToCanonicalName(draft.Name),
+                        OpenAiCompatibleToolNames.ToCanonicalName(draft.Name, request.Tools),
                         draft.Arguments.ToString()));
                 }
 
@@ -316,6 +332,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
             if (stop is { } completed)
             {
                 _breaker.RecordSuccess();
+                if (functionPreamble.Length > 0) yield return new ModelTextDelta(functionPreamble.ToString());
                 yield return new ModelCompleted(completed, inputTokens, outputTokens);
                 yield break;
             }

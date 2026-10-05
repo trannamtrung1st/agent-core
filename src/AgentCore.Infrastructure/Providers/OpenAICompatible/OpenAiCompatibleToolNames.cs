@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Ports;
 
 namespace AgentCore.Infrastructure.Providers.OpenAICompatible;
 
@@ -11,9 +12,12 @@ internal static partial class OpenAiCompatibleToolNames
     public static string ToWireName(string canonicalName) =>
         canonicalName.Replace(".", "_", StringComparison.Ordinal);
 
-    public static string ToCanonicalName(string wireName)
+    public static string ToCanonicalName(string wireName, IReadOnlyList<ModelToolDefinition>? offeredTools = null)
     {
-        foreach (var name in ToolRegistry.All.Select(descriptor => descriptor.Name))
+        // Private structured-result contracts (for example retrospection) are
+        // request-owned and deliberately absent from the executable registry.
+        foreach (var name in (offeredTools?.Select(tool => tool.Name) ?? [])
+            .Concat(ToolRegistry.All.Select(descriptor => descriptor.Name)))
         {
             if (string.Equals(ToWireName(name), wireName, StringComparison.Ordinal))
             {

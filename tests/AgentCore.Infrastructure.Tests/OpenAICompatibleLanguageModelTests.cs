@@ -16,6 +16,7 @@ using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
+using AgentCore.Infrastructure.Providers.SemanticResponses;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -462,6 +463,52 @@ public sealed class OpenAICompatibleLanguageModelTests
         Assert.Contains("support-order-policy", call.ArgumentsJson, StringComparison.Ordinal);
         Assert.Equal(ModelStopReason.ToolCalls, Assert.IsType<ModelCompleted>(events[^1]).Reason);
         Assert.Equal(1, handler.PostCount);
+    }
+
+    [Fact]
+    public async Task Response_function_discards_provider_prose_instead_of_duplicating_the_answer()
+    {
+        const string json = """{"displayText":"Atlas checklist once.","speech":{"mode":"same","text":null},"blocks":[],"memory":[]}""";
+        var payload = JsonSerializer.Serialize(new { choices = new[] { new {
+            delta = new { tool_calls = new[] { new { index = 0, id = "response_1", function = new {
+                name = AssistantResponseSchema.ResponseFunctionName, arguments = json } } } }, finish_reason = "tool_calls" } } });
+        var body = "data: {\"choices\":[{\"delta\":{\"content\":\"Atlas checklist once. This preamble is not the response.\"}}]}\n\n"
+            + "data: " + payload + "\n\ndata: [DONE]\n\n";
+        var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
+        var model = new SemanticResponseLanguageModel(Create(handler, tools: true));
+        var events = await CollectAsync(model, new ModelRequest(Guid.NewGuid(), [new(ModelRole.User, "Atlas")],
+            ResponseContract: new ModelResponseContract(false)));
+        Assert.DoesNotContain(events, e => e is ModelTextDelta or ModelDisplayDelta or ModelFailed);
+        Assert.Equal("Atlas checklist once.", Assert.Single(events.OfType<ModelSemanticResponseReady>()).Response.DisplayText);
+        Assert.Equal(ModelStopReason.Completed, Assert.Single(events.OfType<ModelCompleted>()).Reason);
+    }
+
+    [Fact]
+    public async Task Response_function_plain_text_fallback_is_preserved_when_no_function_is_returned()
+    {
+        const string body = "data: {\"choices\":[{\"delta\":{\"content\":\"Plain fallback.\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
+        var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
+        var events = await CollectAsync(new SemanticResponseLanguageModel(Create(handler, tools: true)),
+            new ModelRequest(Guid.NewGuid(), [new(ModelRole.User, "Hello")], ResponseContract: new ModelResponseContract(false)));
+        Assert.Equal("Plain fallback.", Assert.Single(events.OfType<ModelSemanticResponseReady>()).Response.DisplayText);
+        Assert.DoesNotContain(events, e => e is ModelFailed);
+    }
+
+    [Fact]
+    public async Task Private_retrospection_contract_round_trips_without_becoming_a_registry_grant()
+    {
+        const string body = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"record_1\",\"function\":{\"name\":\"experience_record\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n";
+        var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
+        var model = Create(handler, tools: true);
+        var contract = AgentCore.Application.Experience.ExperienceService.RecordContract;
+        Assert.False(ToolRegistry.TryGet(contract.Name, out _));
+        var events = await CollectAsync(model, new ModelRequest(Guid.NewGuid(), [new(ModelRole.User, "Retrospect")],
+            Tools: [contract], ToolChoice: ModelToolChoice.Named, ToolChoiceName: contract.Name));
+        Assert.Equal(contract.Name, Assert.IsType<ModelToolCallEvent>(events[0]).Call.Name);
+        Assert.Equal(ModelStopReason.ToolCalls, Assert.IsType<ModelCompleted>(events[^1]).Reason);
+        using var request = JsonDocument.Parse(handler.LastBody!);
+        Assert.Equal("experience_record", request.RootElement.GetProperty("tool_choice").GetProperty("function").GetProperty("name").GetString());
+        Assert.Equal("unoffered_tool", OpenAiCompatibleToolNames.ToCanonicalName("unoffered_tool", [contract]));
     }
 
     [Fact]

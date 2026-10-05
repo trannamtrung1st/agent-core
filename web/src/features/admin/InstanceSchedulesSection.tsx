@@ -126,7 +126,7 @@ export function InstanceSchedulesSection({ instanceId, onWork }: { instanceId: s
       {review ? review.items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No scheduled work yet. Create a schedule here or ask the agent in Chat." /> :
         <Collapse items={review.items.map(item => ({ key: item.registrationId, label: <Flex vertical gap={token.paddingXS} style={{ minWidth: 0 }}>
           <Typography.Paragraph ellipsis={{ rows: 2 }} style={{ marginBottom: 0, overflowWrap: "anywhere" }}>{item.intent}</Typography.Paragraph>
-          <Flex wrap gap={token.paddingXS}><Tag>{item.status}</Tag><Typography.Text type="secondary">Next: {date(item.nextRunAt)}</Typography.Text></Flex></Flex>,
+          <Flex wrap gap={token.paddingXS}><Tag>{item.status}</Tag><Typography.Text type="secondary">Next: {date(item.enabled && !terminal.includes(item.status) ? item.nextRunAt : null)}</Typography.Text></Flex></Flex>,
           children: <Flex vertical gap={token.padding}><Descriptions column={1} size="small">
             <Descriptions.Item label="Originally created from">{item.authorizationOrigin === "CurrentUserTurn" ? "Chat user request" : "Admin owner"}{item.sourceSessionId ? ` · Session ${item.sourceSessionId}` : ""}</Descriptions.Item>
             <Descriptions.Item label="Timing">{item.schedule.kind} · {item.schedule.timeZone}{item.schedule.localTime ? ` · ${item.schedule.localTime}` : ""}{item.schedule.kind === "fixedInterval" ? ` · every ${item.schedule.interval} seconds` : ""}</Descriptions.Item>

@@ -18,6 +18,12 @@ beforeEach(() => {
   request.mockResolvedValue({ items: [] });
 });
 describe("Owner schedule authoring", () => {
+  it.each(["Disabled", "Cancelled", "Completed", "Expired"])("does not advertise a future run for %s registrations", async status => {
+    request.mockResolvedValue({ items: [{ ...row, enabled: status !== "Disabled", status }] });
+    render(view());
+    expect(await screen.findByText("Next: Not scheduled")).toBeVisible();
+    expect(screen.queryByText(/Next:.*2026/)).not.toBeInTheDocument();
+  });
   it("creates a structured schedule without model interpretation", async () => {
     render(view()); await screen.findByText(/No scheduled work yet/);
     fireEvent.click(screen.getByRole("button", { name: "New schedule" }));

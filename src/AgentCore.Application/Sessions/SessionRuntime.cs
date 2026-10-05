@@ -873,19 +873,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         ClearDeferredUserTurn();
         CancelCompaction();
-        _persistJobs.Writer.TryComplete();
-        foreach (var pair in _pendingPersist)
-        {
-            if (!_pendingPersist.TryRemove(pair.Key, out var job))
-            {
-                continue;
-            }
-
-            job.Then = null;
-            job.Ended?.TrySetResult(false);
-            job.Applied.TrySetResult();
-        }
-
         _mailbox.Writer.TryComplete();
         _urgent.Writer.TryComplete();
         try
@@ -903,6 +890,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+        }
+
+        // The mailbox drains admitted inputs during shutdown. Keep its persist
+        // writer open until those handlers finish, including a queued detach.
+        _persistJobs.Writer.TryComplete();
+        foreach (var pair in _pendingPersist)
+        {
+            if (!_pendingPersist.TryRemove(pair.Key, out var job)) continue;
+            job.Then = null;
+            job.Ended?.TrySetResult(false);
+            job.Applied.TrySetResult();
         }
 
         try

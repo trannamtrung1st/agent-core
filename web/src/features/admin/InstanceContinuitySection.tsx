@@ -256,7 +256,9 @@ function ThoughtSection({ instanceId, onWork }: { instanceId: string; onWork: ()
               modelLabel="Thought execution model" effortLabel="Thought reasoning effort" defaultLabel="Unattended default"
               onChange={(modelKey, reasoningEffort) => setDraft({ ...draft, modelKey: modelKey || null, reasoningEffort: reasoningEffort || null })} />
           </Form.Item>
-          <Flex wrap gap={token.paddingXS}><Button type="primary" htmlType="submit" loading={pendingAction === (editing ? `thoughts/${editing}` : "thoughts")} disabled={!draft.thinkingPrompt.trim() || invalidInterval}>{editing ? "Save thought" : "Create thought"}</Button>
+          <Flex wrap gap={token.paddingXS}><Button type="primary" htmlType="submit" aria-label={editing ? "Save thought" : "Create thought"}
+            aria-busy={pendingAction === (editing ? `thoughts/${editing}` : "thoughts")}
+            loading={pendingAction === (editing ? `thoughts/${editing}` : "thoughts")} disabled={!draft.thinkingPrompt.trim() || invalidInterval}>{editing ? "Save thought" : "Create thought"}</Button>
             {editing ? <Button disabled={busy} onClick={() => { setEditing(null); setDraft(blank); setIntervalUnit(3600); }}>Cancel edit</Button> : null}
             <Button onClick={() => void reload()} disabled={busy}>Refresh initiative</Button><Button onClick={onWork}>View thought executions</Button></Flex>
         </Form>

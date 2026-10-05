@@ -82,7 +82,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
-    public async Task Admin_tools_lists_registered_tool_names()
+    public async Task Admin_tools_lists_definition_grants_without_contextual_runtime_capabilities()
     {
         var client = OwnerClient();
         var response = await client.GetAsync("/api/v2/admin/tools");
@@ -90,6 +90,14 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         var payload = await response.Content.ReadFromJsonAsync<AdminToolRegistryResponse>();
         Assert.NotNull(payload);
         Assert.Contains(payload!.ToolNames, name => name == ToolCatalog.WorkspaceRead);
+        Assert.Contains(ToolCatalog.AttachmentsRead, payload.ToolNames);
+        Assert.Contains(ToolCatalog.BrowserNavigate, payload.ToolNames);
+        Assert.DoesNotContain(ToolCatalog.ContinuitySearch, payload.ToolNames);
+        Assert.DoesNotContain(ToolCatalog.ContinuityGet, payload.ToolNames);
+        Assert.DoesNotContain(ToolCatalog.ExperienceRecent, payload.ToolNames);
+        Assert.DoesNotContain(ToolCatalog.WorkComplete, payload.ToolNames);
+        Assert.DoesNotContain(ToolCatalog.AppMessageSend, payload.ToolNames);
+        Assert.DoesNotContain(HarnessChatTools.Inspect, payload.ToolNames);
         Assert.Equal(payload.ToolNames.OrderBy(name => name, StringComparer.Ordinal), payload.ToolNames);
     }
 

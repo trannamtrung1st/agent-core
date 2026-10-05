@@ -6,7 +6,11 @@ Admin collection polish has focused browser coverage in `web/e2e/admin-collectio
 
 The collection suite also checks empty-filter recovery, delayed instance reads during navigation, persona edits surviving a behavior update and failed refresh/retry, long immutable goals wrapping on mobile, and draft isolation during definition history navigation. `AdminApp.test.tsx` covers superseded configuration successes/failures, edit preservation on unrelated instance revisions and lifecycle/version changes, and synchronization on saved-persona revisions.
 
+Hosted frontend unit CI runs `CI=true pnpm run test --run --maxWorkers=1`. The Admin form, version drawer, and event-source journeys render large Ant Design trees in jsdom; one worker avoids competing render/query work while preserving fresh file isolation. Local interactive Vitest retains its normal worker defaults. Keep the global 15-second timeout and use direct component renders for leaf behavior; retain AdminApp integration coverage for routing, dirty candidates, revision-protected saves and publication.
+
 ## Default versus live-provider verification
+
+`web/e2e/secretary-demo.spec.ts` creates a fresh Executive Secretary Definition and Morgan instance through Admin. The isolated `secretary-demo` Playwright project exercises publication, actual conversation checkpoints, Experience deduplication/recall/suppression, finite Admin and Chat schedules, stale run-status protection, Thought outcomes, Background Work, browser lookup and 390px controls. CI runs it with a dedicated SQLite database. Synthetic proves these runtime and ownership mechanics; natural-language Memory admission and the fidelity of derived lessons require a separately authorized, bounded live-model journey.
 
 Default verification is fully offline and deterministic: Synthetic/scripted adapters, stub `HttpMessageHandler` or loopback SSE, and hardware-free Playwright. External-provider smoke tests are explicit opt-in only. Implement the planned OpenAI-compatible LLM and OpenAI STT/TTS adapters, but do not add extra hosted mock or third-party inference services solely for testing.
 

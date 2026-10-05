@@ -462,6 +462,8 @@ Retrospective Session projection reconstructs only Core-known successful browser
 
 `ILanguageModel` remains the generation port. Retrospection requests select one pinned tool-capable unattended model, use named `experience.record`, accept one validated result, ignore text/reasoning channels, and never receive effectful tools. The independent WorkItem exposes status and safe DiagnosticId on unexpected failure.
 
+The OpenAI-compatible adapter maps returned function names using the request's offered contracts as well as registered tools. Private structured results such as `experience.record` remain outside the executable tool registry. When the assistant response function is offered, the HTTP adapter buffers bounded provider prose until the finish reason is known: a tool-call round discards that preamble, while a plain-text completion preserves the compatibility fallback. The validated response function supplies the answer once. Ordinary text and Synthetic streaming retain their existing incremental behavior.
+
 `ITriggerStore.SaveThoughtAsync` atomically changes an owner-created registration and appends Admin history. `TryAdmitThoughtAsync` and `AdmitThoughtNowAsync` perform revision, active-state, overlap and model-pin snapshot checks atomically. Existing `TriggerScheduler`, router, durable intake, `DurableWorkContextFactory`, `DurableOccurrenceExecution` and `IWorkItemStore` remain the execution owners. `TriggerKind.ThoughtActivation` is assigned by Core, then carried in tool/approval context.
 
 ## Continuity retrieval and owner schedule ports
