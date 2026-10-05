@@ -161,6 +161,47 @@ test("Definition history navigation closes the previous definition's draft edito
   await expect(draftEditorSection(page)).toBeVisible();
 });
 
+test("Lifecycle and version changes preserve unsaved persona edits", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForFunction(() => localStorage.getItem("agent-core.owner-capability"));
+  const token = await page.evaluate(() => localStorage.getItem("agent-core.owner-capability"));
+  const headers = { "X-AgentCore-Owner-Capability": token! };
+  const definitionId = `persona-retention-${Date.now()}`;
+  const candidate = await (await page.request.get("/api/v2/admin/definitions/examiner/versions/1?sourceKind=ForkBuiltIn", { headers })).json();
+  for (const version of [1, 2]) {
+    const created = version === 1
+      ? await page.request.post("/api/v2/admin/definition-drafts", { headers,
+        data: { definitionId, candidate: { ...candidate, definitionId, systemInstructions: "Retention fixture" } } })
+      : await page.request.post("/api/v2/admin/definition-drafts/fork", { headers,
+        data: { definitionId, sourceVersion: 1, sourceKind: "ForkDurable" } });
+    expect(created.ok()).toBeTruthy();
+    const draft = await created.json();
+    const published = await page.request.post(`/api/v2/admin/definition-drafts/${draft.draftId}/publish`, {
+      headers, data: { expectedRevision: draft.revision } });
+    expect(published.ok()).toBeTruthy();
+  }
+  const created = await page.request.post("/api/v2/admin/agent-instances", { headers,
+    data: { definitionId, version: 1 } });
+  expect(created.ok()).toBeTruthy();
+  const { instanceId } = await created.json();
+  await page.goto(`/admin/instances/${instanceId}`);
+  await page.getByLabel("Persona name", { exact: true }).fill("Retained unsaved persona");
+  await page.getByLabel("Target definition version", { exact: true }).click();
+  await page.locator(".ant-select-item-option").filter({ hasText: "v2" }).click();
+  await page.getByRole("button", { name: "Upgrade to v2", exact: true }).click();
+  await expect(page.getByText("Active version set to v2.", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Persona name", { exact: true })).toHaveValue("Retained unsaved persona");
+  await page.getByRole("tab", { name: "JSON", exact: true }).click();
+  await page.getByLabel("Persona JSON", { exact: true }).fill("{invalid json");
+  await page.getByRole("button", { name: "Archive instance", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Archive", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Unarchive instance", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Persona JSON", { exact: true })).toHaveValue("{invalid json");
+  await page.getByRole("button", { name: "Unarchive instance", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Archive instance", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Persona JSON", { exact: true })).toHaveValue("{invalid json");
+});
+
 test("Behavior updates preserve persona edits through a failed refresh and retry", async ({ page }) => {
   await page.goto("/");
   await page.waitForFunction(() => localStorage.getItem("agent-core.owner-capability"));
@@ -207,10 +248,19 @@ test("Version inspection creates no draft and the shared actions publish from Te
   const headers = { "X-AgentCore-Owner-Capability": token! };
   const draftsBefore = await (await page.request.get("/api/v2/admin/definition-drafts", { headers })).json();
   await page.goto("/admin/definitions/examiner");
-  await page.getByRole("textbox", { name: "Search versions", exact: true }).fill("builtIn");
+  await page.getByRole("textbox", { name: "Search versions", exact: true }).fill("Built-in");
   await page.getByRole("button", { name: "View v1 (builtIn)", exact: true }).click();
   const details = page.getByRole("region", { name: "Version details", exact: true });
-  await expect(details.getByLabel("System instructions", { exact: true })).toBeDisabled();
+  await expect(details.getByLabel("System instructions", { exact: true })).toHaveAttribute("readonly", "");
+  const instructions = details.getByLabel("System instructions", { exact: true });
+  await instructions.focus();
+  await expect(instructions).toBeFocused();
+  await instructions.press("ControlOrMeta+A");
+  expect(await instructions.evaluate((element: HTMLTextAreaElement) => element.selectionEnd - element.selectionStart)).toBeGreaterThan(0);
+  const retainedInstructions = await instructions.inputValue();
+  await instructions.press("x");
+  await expect(instructions).toHaveValue(retainedInstructions);
+
   await expect(details.getByRole("button", { name: "Add goal", exact: true })).toHaveCount(0);
   await details.getByText("Advanced JSON", { exact: true }).click();
   await expect(details.getByRole("textbox", { name: "Advanced JSON", exact: true })).toHaveAttribute("readonly");
@@ -252,7 +302,7 @@ test("Version inspection creates no draft and the shared actions publish from Te
   const goal = details.getByLabel("Goal 1", { exact: true });
   await expect(goal).toHaveValue(longGoal);
   await expect.poll(() => goal.evaluate(element => element.clientHeight)).toBeGreaterThan(32);
-  expect(await goal.evaluate(element => element.scrollHeight <= element.clientHeight)).toBe(true);
+  await expect.poll(() => goal.evaluate(element => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(1);
   await page.getByRole("dialog", { name: "Version details", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.getByRole("button", { name: /Back to inventory/ }).click();
@@ -299,18 +349,19 @@ test("Collection navigation and version drawer preserve context and keyboard foc
   await expect(definitions.getByLabel("Search definitions")).toHaveValue("examiner");
   await row.click();
   const versions = page.getByRole("region", { name: "Definition versions", exact: true });
-  await versions.getByLabel("Search versions").fill("builtIn");
+  await versions.getByLabel("Search versions").fill("Built-in");
   const trigger = versions.getByRole("button", { name: "View v1 (builtIn)", exact: true });
   await trigger.focus();
   const scroll = await page.evaluate(() => window.scrollY);
   await trigger.press("Enter");
   const drawer = page.getByRole("dialog", { name: "Version details", exact: true });
-  await expect(drawer.getByLabel("System instructions", { exact: true })).toBeDisabled();
+  await expect(drawer.getByLabel("System instructions", { exact: true })).not.toBeDisabled();
+  await expect(drawer.getByLabel("System instructions", { exact: true })).toHaveAttribute("readonly", "");
   expect(await page.evaluate(() => window.scrollY)).toBe(scroll);
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
   await expect(trigger).toBeFocused();
-  await expect(versions.getByLabel("Search versions")).toHaveValue("builtIn");
+  await expect(versions.getByLabel("Search versions")).toHaveValue("Built-in");
   expect(await page.evaluate(() => window.scrollY)).toBe(scroll);
   await page.setViewportSize({ width: 390, height: 844 });
   await trigger.click();

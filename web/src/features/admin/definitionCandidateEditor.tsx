@@ -119,7 +119,7 @@ export function DefinitionCandidateEditor({
       ) : (
         <DefinitionCandidateForm
           candidate={candidate}
-          busy={busy || readOnly}
+          busy={busy}
           readOnly={readOnly}
           authoring={authoring}
           authoringError={authoringError}
@@ -242,6 +242,7 @@ function DefinitionCandidateForm({
           <Typography.Text strong>System instructions</Typography.Text>
           <Input.TextArea
             aria-label="System instructions"
+            readOnly={readOnly}
             rows={8}
             value={readString(candidate, ["systemInstructions"])}
             disabled={busy}
@@ -296,7 +297,7 @@ function DefinitionCandidateForm({
             label="Interruption style"
             value={readString(candidate, ["behaviorPolicy", "interruptionStyle"])}
             options={INTERRUPTION_STYLES}
-            disabled={busy}
+            disabled={busy || readOnly}
             onChange={(value) =>
               onCandidateChange(patchRecord(candidate, ["behaviorPolicy"], { interruptionStyle: value }))
             }
@@ -305,7 +306,7 @@ function DefinitionCandidateForm({
             label="Response length"
             value={readString(candidate, ["conversationPolicy", "responseLength"])}
             options={RESPONSE_LENGTHS}
-            disabled={busy}
+            disabled={busy || readOnly}
             onChange={(value) =>
               onCandidateChange(patchRecord(candidate, ["conversationPolicy"], { responseLength: value }))
             }
@@ -323,7 +324,7 @@ function DefinitionCandidateForm({
           <NumberField
             label="Max output tokens"
             value={readNumber(candidate, ["conversationPolicy", "maxOutputTokens"])}
-            disabled={busy}
+            disabled={busy || readOnly}
             onChange={(value) =>
               onCandidateChange(
                 patchRecord(candidate, ["conversationPolicy"], {
@@ -336,7 +337,7 @@ function DefinitionCandidateForm({
         <SwitchField
           label="Acknowledge interruption"
           checked={readBoolean(candidate, ["behaviorPolicy", "acknowledgeInterruption"])}
-          disabled={busy}
+          disabled={busy || readOnly}
           onChange={(checked) =>
             onCandidateChange(patchRecord(candidate, ["behaviorPolicy"], { acknowledgeInterruption: checked }))
           }
@@ -344,7 +345,7 @@ function DefinitionCandidateForm({
         <SwitchField
           label="Avoid unsupported claims"
           checked={readBoolean(candidate, ["behaviorPolicy", "avoidUnsupportedClaims"])}
-          disabled={busy}
+          disabled={busy || readOnly}
           onChange={(checked) =>
             onCandidateChange(patchRecord(candidate, ["behaviorPolicy"], { avoidUnsupportedClaims: checked }))
           }
@@ -352,7 +353,7 @@ function DefinitionCandidateForm({
         <SwitchField
           label="Ask one question at a time"
           checked={readBoolean(candidate, ["conversationPolicy", "askOneQuestionAtATime"])}
-          disabled={busy}
+          disabled={busy || readOnly}
           onChange={(checked) =>
             onCandidateChange(
               patchRecord(candidate, ["conversationPolicy"], { askOneQuestionAtATime: checked })
@@ -366,7 +367,7 @@ function DefinitionCandidateForm({
         <SwitchField
           label="Initiative enabled"
           checked={readBoolean(candidate, ["initiativePolicy", "enabled"])}
-          disabled={busy}
+          disabled={busy || readOnly}
           onChange={(checked) =>
             onCandidateChange(patchRecord(candidate, ["initiativePolicy"], { enabled: checked }))
           }
@@ -376,7 +377,7 @@ function DefinitionCandidateForm({
             label="Silence threshold"
             hint="Milliseconds. 1,000 to 120,000."
             value={readNumber(candidate, ["initiativePolicy", "silenceThresholdMs"])}
-            disabled={busy}
+            disabled={busy || readOnly}
             onChange={(value) =>
               onCandidateChange(patchRecord(candidate, ["initiativePolicy"], { silenceThresholdMs: value }))
             }
@@ -385,7 +386,7 @@ function DefinitionCandidateForm({
             label="Cooldown"
             hint="Milliseconds. 5,000 to 600,000."
             value={readNumber(candidate, ["initiativePolicy", "cooldownMs"])}
-            disabled={busy}
+            disabled={busy || readOnly}
             onChange={(value) =>
               onCandidateChange(patchRecord(candidate, ["initiativePolicy"], { cooldownMs: value }))
             }
@@ -393,7 +394,7 @@ function DefinitionCandidateForm({
           <NumberField
             label="Max prompts per silence"
             value={readNumber(candidate, ["initiativePolicy", "maxPerSilencePeriod"])}
-            disabled={busy}
+            disabled={busy || readOnly}
             onChange={(value) =>
               onCandidateChange(patchRecord(candidate, ["initiativePolicy"], { maxPerSilencePeriod: value }))
             }
@@ -402,7 +403,7 @@ function DefinitionCandidateForm({
             label="Max consecutive proactive turns"
             hint="Empty uses 1."
             value={readNumber(candidate, ["initiativePolicy", "maxConsecutiveProactiveTurns"])}
-            disabled={busy}
+            disabled={busy || readOnly}
             onChange={(value) =>
               onCandidateChange(
                 patchRecord(candidate, ["initiativePolicy"], { maxConsecutiveProactiveTurns: value })
@@ -413,7 +414,7 @@ function DefinitionCandidateForm({
             label="Max silent evaluations"
             hint="Empty uses 8."
             value={readNumber(candidate, ["initiativePolicy", "maxSilentEvaluations"])}
-            disabled={busy}
+            disabled={busy || readOnly}
             onChange={(value) =>
               onCandidateChange(patchRecord(candidate, ["initiativePolicy"], { maxSilentEvaluations: value }))
             }
@@ -422,7 +423,7 @@ function DefinitionCandidateForm({
             label="Max inactivity"
             hint="Milliseconds. Empty uses 900,000."
             value={readNumber(candidate, ["initiativePolicy", "maxInactivityMs"])}
-            disabled={busy}
+            disabled={busy || readOnly}
             onChange={(value) =>
               onCandidateChange(patchRecord(candidate, ["initiativePolicy"], { maxInactivityMs: value }))
             }
@@ -433,7 +434,7 @@ function DefinitionCandidateForm({
           mode="multiple"
           value={readCandidateStringList(candidate, ["initiativePolicy", "triggers"])}
           options={INITIATIVE_TRIGGERS}
-          disabled={busy}
+          disabled={busy || readOnly}
           onChange={(value) =>
             onCandidateChange(patchRecord(candidate, ["initiativePolicy"], { triggers: value }))
           }
@@ -463,7 +464,7 @@ function DefinitionCandidateForm({
               (authoring?.models ?? []).map((item) => ({ value: item.key, label: item.displayName })),
               modelKey
             )}
-            disabled={busy}
+            disabled={busy || readOnly}
             onChange={(value) => {
               const key = typeof value === "string" ? value : "";
               let next = writeModelDefault(candidate, "catalogKey", key);
@@ -487,7 +488,7 @@ function DefinitionCandidateForm({
               reasoningChoices.map((item) => ({ value: item, label: effortLabel(item) })),
               reasoningEffort
             )}
-            disabled={busy || (selectedModel !== null && selectedModel.supportedReasoningEfforts.length === 0)}
+            disabled={busy || readOnly || (selectedModel !== null && selectedModel.supportedReasoningEfforts.length === 0)}
             onChange={(value) =>
               onCandidateChange(writeModelDefault(candidate, "reasoningEffort", typeof value === "string" ? value : ""))
             }
@@ -505,7 +506,7 @@ function DefinitionCandidateForm({
               (authoring?.languageModelAliases ?? []).map((item) => ({ value: item, label: item })),
               languageModel
             )}
-            disabled={busy}
+            disabled={busy || readOnly}
             onChange={(value) =>
               onCandidateChange(patchRecord(candidate, ["providerPreferences"], {
                 languageModel: typeof value === "string" ? value : ""
@@ -520,7 +521,7 @@ function DefinitionCandidateForm({
               (authoring?.speechRecognizerAliases ?? []).map((item) => ({ value: item, label: item })),
               speechRecognizer
             )}
-            disabled={busy || !voiceOn}
+            disabled={busy || readOnly || !voiceOn}
             onChange={(value) =>
               onCandidateChange(writeNullableString(
                 candidate,
@@ -537,7 +538,7 @@ function DefinitionCandidateForm({
               (authoring?.speechSynthesizerAliases ?? []).map((item) => ({ value: item, label: item })),
               speechSynthesizer
             )}
-            disabled={busy || !voiceOn}
+            disabled={busy || readOnly || !voiceOn}
             onChange={(value) =>
               onCandidateChange(writeNullableString(
                 candidate,
@@ -553,7 +554,7 @@ function DefinitionCandidateForm({
               (authoring?.interruptionClassifiers ?? []).map((item) => ({ value: item, label: item })),
               interruptionClassifier
             )}
-            disabled={busy}
+            disabled={busy || readOnly}
             onChange={(value) =>
               onCandidateChange(patchRecord(candidate, ["providerPreferences"], {
                 interruptionClassifier: typeof value === "string" ? value : ""
@@ -571,7 +572,7 @@ function DefinitionCandidateForm({
         <SwitchField
           label="Voice enabled"
           checked={readBoolean(candidate, ["voice", "enabled"])}
-          disabled={busy}
+          disabled={busy || readOnly}
           onChange={(checked) =>
             onCandidateChange(applyVoiceEnabled(candidate, checked, {
               speechRecognizer: authoring?.defaultSpeechRecognizerAlias ?? null,
@@ -591,7 +592,7 @@ function DefinitionCandidateForm({
             label="Speaking rate"
             hint="1 is normal speed. 0.5 to 2."
             value={readNumber(candidate, ["voice", "speakingRate"])}
-            disabled={busy}
+            disabled={busy || readOnly}
             step={0.1}
             onChange={(value) => onCandidateChange(patchRecord(candidate, ["voice"], { speakingRate: value }))}
           />
@@ -613,7 +614,7 @@ function DefinitionCandidateForm({
             key={field}
             label={label}
             checked={readBoolean(candidate, ["memoryPolicy", field])}
-            disabled={busy}
+            disabled={busy || readOnly}
             onChange={(checked) =>
               onCandidateChange(
                 patchRecord(candidate, ["memoryPolicy"], { [field]: checked }, memoryPolicyDefaults)
@@ -640,7 +641,7 @@ function DefinitionCandidateForm({
             key={field}
             label={label}
             checked={readBoolean(candidate, ["triggerPolicy", field])}
-            disabled={busy}
+            disabled={busy || readOnly}
             onChange={(checked) =>
               onCandidateChange(
                 patchRecord(candidate, ["triggerPolicy"], { [field]: checked }, triggerPolicyDefaults)
@@ -652,7 +653,7 @@ function DefinitionCandidateForm({
           <NumberField
             label="Max active registrations"
             value={readNumber(candidate, ["triggerPolicy", "maxActiveRegistrations"])}
-            disabled={busy}
+            disabled={busy || readOnly}
             onChange={(value) =>
               onCandidateChange(
                 patchRecord(
@@ -667,7 +668,7 @@ function DefinitionCandidateForm({
           <NumberField
             label="One-shot horizon days"
             value={readNumber(candidate, ["triggerPolicy", "oneShotHorizonDays"])}
-            disabled={busy}
+            disabled={busy || readOnly}
             onChange={(value) =>
               onCandidateChange(
                 patchRecord(candidate, ["triggerPolicy"], { oneShotHorizonDays: value }, triggerPolicyDefaults)
@@ -677,7 +678,7 @@ function DefinitionCandidateForm({
           <NumberField
             label="Minimum recurrence days"
             value={readNumber(candidate, ["triggerPolicy", "minRecurrenceDays"])}
-            disabled={busy}
+            disabled={busy || readOnly}
             onChange={(value) =>
               onCandidateChange(
                 patchRecord(candidate, ["triggerPolicy"], { minRecurrenceDays: value }, triggerPolicyDefaults)
@@ -687,7 +688,7 @@ function DefinitionCandidateForm({
           <NumberField
             label="Minimum fixed interval seconds"
             value={readNumber(candidate, ["triggerPolicy", "minFixedIntervalSeconds"])}
-            disabled={busy}
+            disabled={busy || readOnly}
             onChange={(value) =>
               onCandidateChange(
                 patchRecord(
@@ -705,7 +706,7 @@ function DefinitionCandidateForm({
           mode="multiple"
           value={readCandidateStringList(candidate, ["triggerPolicy", "allowedSourceKinds"])}
           options={TRIGGER_SOURCE_KINDS}
-          disabled={busy}
+          disabled={busy || readOnly}
           onChange={(value) =>
             onCandidateChange(
               patchRecord(candidate, ["triggerPolicy"], { allowedSourceKinds: value }, triggerPolicyDefaults)
@@ -846,6 +847,7 @@ function SkillCard({
         <Typography.Text strong>{`Skill ${number} procedure`}</Typography.Text>
         <Input.TextArea
           aria-label={`Skill ${number} procedure`}
+          readOnly={readOnly}
           rows={4}
           value={skill.procedure}
           disabled={disabled}

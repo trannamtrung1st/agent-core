@@ -6,8 +6,7 @@ import type {
 
 export type PersonaFields = AdminEffectiveConfiguration["persona"];
 
-export const UNSAVED_PERSONA_DISCARD_MESSAGE =
-  "Unsaved persona changes will be discarded when the instance reloads.";
+
 
 function personaFieldsEqual(left: PersonaFields, right: PersonaFields): boolean {
   return (

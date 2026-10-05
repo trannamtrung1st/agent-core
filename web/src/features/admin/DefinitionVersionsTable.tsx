@@ -40,7 +40,7 @@ export function DefinitionVersionsTable({ rows, publications, busy, onChat, onDe
       <Table
         aria-label="Definition versions table" className="admin-collection-table" size="small"
         rowKey={row => `${row.source}:${row.version}`}
-        dataSource={data.filter(row => [String(row.version), row.displayName, row.source, row.status]
+        dataSource={data.filter(row => [`v${row.version}`, row.displayName, row.source === "builtIn" ? "Built-in" : "Durable", row.status]
           .some(value => value.toLowerCase().includes(query)))}
         scroll={{ x: 1100 }} pagination={pagination}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}

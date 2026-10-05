@@ -28,12 +28,20 @@ describe("Definition version inspection", () => {
         publications={[]} busy={false} onChat={vi.fn()} onDeprecate={vi.fn()} renderResources={() => null}
       />);
     });
+    const search = screen.getByLabelText("Search versions");
+    fireEvent.change(search, { target: { value: "Built-in" } });
+    expect(screen.queryByRole("button", { name: "View v1 (durable)" })).not.toBeInTheDocument();
+    fireEvent.change(search, { target: { value: "v1" } });
+    expect(screen.getByRole("button", { name: "View v1 (durable)" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "View v1 (builtIn)" }));
     expect(await screen.findByText("Version load failed")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     const details = screen.getByRole("region", { name: "Version details" });
     await waitFor(() => expect(within(details).getByLabelText("System instructions")).toHaveValue("Built-in instructions"));
-    expect(within(details).getByLabelText("System instructions")).toBeDisabled();
+    expect(within(details).getByLabelText("System instructions")).not.toBeDisabled();
+    expect(within(details).getByLabelText("System instructions")).toHaveAttribute("readonly");
+    within(details).getByLabelText("System instructions").focus();
+    expect(within(details).getByLabelText("System instructions")).toHaveFocus();
     expect(within(details).getByLabelText("Goal 1").tagName).toBe("TEXTAREA");
     expect(within(details).getByLabelText("Goal 1")).toHaveValue("A long immutable goal that remains readable on a narrow screen");
     expect(within(details).queryByRole("button", { name: "Add goal" })).not.toBeInTheDocument();

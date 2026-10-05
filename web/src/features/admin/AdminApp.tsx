@@ -89,7 +89,6 @@ import {
   isPersonaDraftDirty,
   parsePersonaJson,
   syncPersonaOnTabChange,
-  UNSAVED_PERSONA_DISCARD_MESSAGE,
   type PersonaFields
 } from "./instanceManagedControls";
 import {
@@ -2416,18 +2415,15 @@ export function InstanceManagedControls({
     setPersona({ ...config.persona });
     setPersonaJsonDraft(JSON.stringify(config.persona, null, 2));
     setPersonaJsonError(null);
+  }, [config.instanceId, config.personaRevision]);
+
+  useEffect(() => {
     setTargetVersion(config.definitionVersion);
+  }, [config.instanceId, config.definitionVersion]);
+
+  useEffect(() => {
     setDeleteError(null);
-  }, [
-    config.instanceId,
-    config.instanceLifecycle,
-    config.personaRevision,
-    config.definitionVersion,
-    config.persona.name,
-    config.persona.role,
-    config.persona.description,
-    config.persona.tone
-  ]);
+  }, [config.instanceId, config.instanceLifecycle]);
 
   useEffect(() => {
     setInventoryError(null);
@@ -2696,28 +2692,10 @@ export function InstanceManagedControls({
                 onChange={setTargetVersion}
                 disabled={busy}
               />
-              {personaDirty ? (
-                <Button
-                  disabled={busy || targetVersion === config.definitionVersion}
-                  onClick={() =>
-                    confirmAction(modal, {
-                      title: "Apply version with unsaved persona?",
-                      content: UNSAVED_PERSONA_DISCARD_MESSAGE,
-                      okText: "Apply anyway",
-                      onOk: () => void applyVersion()
-                    })
-                  }
-                >
-                  {versionActionLabel}
-                </Button>
-              ) : (
-                <Button
-                  onClick={() => void applyVersion()}
-                  disabled={busy || targetVersion === config.definitionVersion}
-                >
-                  {versionActionLabel}
-                </Button>
-              )}
+              <Button onClick={() => void applyVersion()}
+                disabled={busy || targetVersion === config.definitionVersion}>
+                {versionActionLabel}
+              </Button>
             </Flex>
           </section>
           <section className="admin-instance-lifecycle" aria-label="Lifecycle controls">
@@ -2745,9 +2723,7 @@ export function InstanceManagedControls({
                   onClick={() =>
                     confirmAction(modal, {
                       title: "Archive this managed instance?",
-                      content: personaDirty
-                        ? `New chats and triggered work will stop until you unarchive. ${UNSAVED_PERSONA_DISCARD_MESSAGE}`
-                        : "New chats and triggered work will stop until you unarchive.",
+                      content: "New chats and triggered work will stop until you unarchive. Unsaved persona edits stay in this editor.",
                       okText: "Archive",
                       danger: true,
                       onOk: () => void setLifecycle("Archived")
@@ -2755,20 +2731,6 @@ export function InstanceManagedControls({
                   }
                 >
                   Archive instance
-                </Button>
-              ) : personaDirty ? (
-                <Button
-                  disabled={busy}
-                  onClick={() =>
-                    confirmAction(modal, {
-                      title: "Unarchive with unsaved persona?",
-                      content: UNSAVED_PERSONA_DISCARD_MESSAGE,
-                      okText: "Unarchive anyway",
-                      onOk: () => void setLifecycle("Active")
-                    })
-                  }
-                >
-                  Unarchive instance
                 </Button>
               ) : (
                 <Button disabled={busy} onClick={() => void setLifecycle("Active")}>

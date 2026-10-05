@@ -1139,10 +1139,16 @@ describe("AdminApp", () => {
     view.rerender(<InstanceManagedControls config={{ ...config, instanceRevision: 2 }} {...props} />);
     expect(screen.getByLabelText("Persona name")).toHaveValue("Unsaved name");
     view.rerender(<InstanceManagedControls config={{ ...config, instanceRevision: 3, instanceLifecycle: "Archived" }} {...props} />);
-    expect(screen.getByLabelText("Persona name")).toHaveValue(config.persona.name);
+    expect(screen.getByLabelText("Persona name")).toHaveValue("Unsaved name");
+    view.rerender(<InstanceManagedControls config={{ ...config, instanceRevision: 4, definitionVersion: 2 }} {...props} />);
+    expect(screen.getByLabelText("Persona name")).toHaveValue("Unsaved name");
+    fireEvent.click(screen.getByRole("tab", { name: "JSON" }));
+    fireEvent.change(screen.getByLabelText("Persona JSON"), { target: { value: "{invalid json" } });
+    view.rerender(<InstanceManagedControls config={{ ...config, instanceRevision: 5, definitionVersion: 3 }} {...props} />);
+    expect(screen.getByLabelText("Persona JSON")).toHaveValue("{invalid json");
     view.rerender(<InstanceManagedControls config={{ ...config, instanceRevision: 3, personaRevision: 2,
       persona: { ...config.persona, name: "Saved name" } }} {...props} />);
-    expect(screen.getByLabelText("Persona name")).toHaveValue("Saved name");
+    expect((screen.getByLabelText("Persona JSON") as HTMLTextAreaElement).value).toContain("Saved name");
   });
 
   it("saves managed instance persona from the form tab", async () => {
@@ -1308,7 +1314,7 @@ describe("AdminApp", () => {
     });
   });
 
-  it("warns before archive when persona form has unsaved edits", async () => {
+  it("confirms archive while keeping unsaved persona form edits", async () => {
     const managedEffective = { ...sampleEffective, compatibility: false };
     vi.mocked(listAdminDefinitions).mockResolvedValue([]);
     vi.mocked(listAdminInstances).mockResolvedValue([]);
@@ -1338,7 +1344,7 @@ describe("AdminApp", () => {
 
     await waitFor(
       () => {
-        expect(screen.getByText(/Unsaved persona changes will be discarded/)).toBeInTheDocument();
+        expect(screen.getByText(/Unsaved persona edits stay in this editor/)).toBeInTheDocument();
       },
       { timeout: 10_000 }
     );
@@ -1505,7 +1511,7 @@ describe("AdminApp", () => {
     });
   });
 
-  it("warns before apply version when JSON persona draft is dirty", async () => {
+  it("applies a version while retaining dirty persona JSON", async () => {
     const managedEffective = { ...sampleEffective, compatibility: false, definitionVersion: 1 };
     vi.mocked(listAdminDefinitions).mockResolvedValue([
       {
@@ -1558,11 +1564,7 @@ describe("AdminApp", () => {
     fireEvent.click(screen.getByText("v2 (builtIn · published)"));
     fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2" }));
 
-    await waitFor(() => {
-      expect(screen.getByText(/Unsaved persona changes will be discarded/)).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Apply anyway" }));
+    expect(screen.queryByRole("button", { name: "Apply anyway" })).not.toBeInTheDocument();
 
     await waitFor(() => {
       expect(updateAdminAgentInstanceActiveVersion).toHaveBeenCalledWith(managedEffective.instanceId, 1, 2);
