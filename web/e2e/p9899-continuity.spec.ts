@@ -59,14 +59,14 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   await page.goto(`/admin/instances/${id}`);
   await page.getByRole("tab", { name: "Behavior & continuity", exact: true }).click();
   // Persisted pause admits automatic retrospection; explicit request resolves to that checkpoint.
-  await expect(experience.getByText('Review observable completed work').first()).toBeVisible({ timeout: 30_000 });
+  await expect(experience.getByRole('button', { name: 'View experience: Review observable completed work', exact: true }).first()).toBeVisible({ timeout: 30_000 });
   await experience.getByLabel('Retrospection source Session', { exact: true }).fill(sessionId);
   await experience.getByRole('button', { name: 'Retrospect now', exact: true }).click();
-  await expect(experience.getByText('Review observable completed work').first()).toBeVisible({ timeout: 30_000 });
-  await experience.getByText('Review observable completed work').first().click();
+  await expect(experience.getByRole('button', { name: 'View experience: Review observable completed work', exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  await experience.getByRole('button', { name: 'View experience: Review observable completed work', exact: true }).first().click();
   await expect(experience.getByText('The user supplied a correction', { exact: true })).toBeVisible();
   await experience.getByRole('button', { name: 'Retrospect now', exact: true }).click();
-  await expect(experience.getByText('Review observable completed work')).toHaveCount(1);
+  await expect(experience.getByRole('button', { name: 'View experience: Review observable completed work', exact: true })).toHaveCount(1);
   await page.locator('.admin-header').getByRole('button', { name: /Chat$/ }).first().click();
   await page.getByRole('button', { name: 'Start a new chat', exact: true }).click();
   await select(page, 'Identity', 'Continuity reviewer');
@@ -132,7 +132,7 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   await initiative.getByRole('button', { name: 'Disable thought', exact: true }).click();
   await expect(initiative.getByRole('button', { name: 'Run now', exact: true })).toBeDisabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
-  await experience.getByText('Review observable completed work').first().click();
+  await experience.getByRole('button', { name: 'View experience: Review observable completed work', exact: true }).first().click();
   await experience.getByRole('button', { name: 'Suppress experience', exact: true }).first().click();
   await expect(experience.getByText('Suppressed', { exact: true }).first()).toBeVisible();
   await experience.getByRole('button', { name: 'Reset experience', exact: true }).click();

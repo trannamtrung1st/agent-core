@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, App, Button, Collapse, Descriptions, Empty, Flex, Form, Input, InputNumber, Select, Spin, Switch, Tag, Typography, theme } from "antd";
+import { useCallback, useEffect, useRef, useState, type Key } from "react";
+import { Alert, App, Button, Collapse, Descriptions, Empty, Flex, Form, Grid, Input, InputNumber, Select, Spin, Switch, Table, Tag, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
 import { drawerPageSearch, listModels, type DrawerPageQuery, type ModelDescriptor, type WorkItem, type WorkItemResult } from "../../services/api";
-import { instanceContinuityRequest as request, type ExperienceReview, type ThoughtDraft, type ThoughtRegistration, type ThoughtReview } from "../../services/adminApi";
+import { instanceContinuityRequest as request, type ExperienceItem, type ExperienceReview, type ThoughtDraft, type ThoughtRegistration, type ThoughtReview } from "../../services/adminApi";
 import { BackgroundWorkDrawer } from "../chat/BackgroundWorkDrawer";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 
 import { InstanceSchedulesSection } from "./InstanceSchedulesSection";
 import { ExecutionModelFields } from "./ExecutionModelFields";
+import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
 
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : "Not yet";
 
@@ -60,6 +61,8 @@ function ExperienceSection({ instanceId, onWork }: { instanceId: string; onWork:
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [session, setSession] = useState("");
+  const [expanded, setExpanded] = useState<Key[]>([]);
+  const { search, setSearch, pagination } = useAdminCollectionSearch();
   const order = useResponseOrder();
   const reload = useCallback(async () => {
     if (order.current.mutating) return;
@@ -86,7 +89,10 @@ function ExperienceSection({ instanceId, onWork }: { instanceId: string; onWork:
     order.current.mutating = true; ++order.current.generation;
     setLoading(false);
     setBusy(true); setError(null);
-    try { setReview(await request<ExperienceReview>(instanceId, path, method, body)); }
+    try {
+      setReview(await request<ExperienceReview>(instanceId, path, method, body));
+      if (path === "experience/reset") { setSearch(""); setExpanded([]); }
+    }
     catch (reason) { setError(describeAdminError(reason, "Experience update failed. Reload and try again.")); }
     finally { order.current.mutating = false; setBusy(false); }
   }
@@ -112,19 +118,39 @@ function ExperienceSection({ instanceId, onWork }: { instanceId: string; onWork:
               okText: "Reset experience", danger: true, onOk: () => mutate("experience/reset", "POST", {})
             })}>Reset experience</Button></Flex>
         </Form>
-        {review.items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No experience yet. Enable experience and retrospect a completed task." /> :
-          <Collapse items={review.items.map(item => ({ key: item.experienceId,
-            label: <Flex vertical gap={token.paddingXS}><Typography.Text strong>{item.content?.goal ?? (item.status === "Failed" ? "Retrospection failed" : item.status === "Cancelled" ? "Retrospection cancelled" : "Retrospection in progress")}</Typography.Text>
-              <Flex wrap gap={token.paddingXS}><Tag color={item.status === "Failed" ? "error" : undefined}>{item.status}</Tag>
-                <Tag>{item.eligibleForContext ? "Eligible for context" : item.visibility === "Suppressed" ? "Suppressed" : "Not in context"}</Tag>
-                <Typography.Text type="secondary">{item.checkpointAt ? `Checkpoint captured: ${date(item.checkpointAt)}` : `Source created: ${date(item.sourceCreatedAt ?? item.sourceAt)}`} · {item.definitionId} v{item.definitionVersion}</Typography.Text></Flex></Flex>,
-            children: <Flex vertical gap={token.padding}>
-              <Typography.Text type="secondary" style={{ overflowWrap: "anywhere" }}>Source {item.sourceKind} {item.sourceId} · checkpoint {item.throughCursor} · model {item.modelKey}</Typography.Text>
-              <Typography.Text type="secondary">Source created: {date(item.sourceCreatedAt ?? item.sourceAt)} · Checkpoint captured: {item.checkpointAt ? date(item.checkpointAt) : "Not recorded (legacy checkpoint)"}</Typography.Text>
-              {item.failureSummary ? <Alert type="error" showIcon title={item.failureSummary} description={item.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: item.diagnosticId }} /> : undefined} /> : null}
-              {item.content ? <Descriptions column={1} size="small">{(["attempts", "decisions", "outcomes", "corrections", "unresolved", "difficulties", "lessons"] as const)
-                .filter(key => item.content![key].length > 0).map(key => <Descriptions.Item key={key} label={key[0].toUpperCase() + key.slice(1)}>
-                  {item.content![key].join(" · ")}</Descriptions.Item>)}</Descriptions> : null}
+        {review.items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No experience yet. Enable experience and retrospect a completed task." /> : <>
+        <AdminCollectionToolbar label="experience" value={search} onChange={setSearch} />
+        <Table<ExperienceItem> aria-label="Experience table" className="admin-collection-table" size="small" rowKey="experienceId"
+          dataSource={review.items.filter(item => [experienceGoal(item), item.status, experienceContext(item), item.sourceKind === "Session" ? "Session" : "Background work",
+            item.sourceId, item.definitionId, item.modelKey, ...Object.values(item.content ?? {}).flat()]
+            .some(value => String(value).toLowerCase().includes(search.trim().toLowerCase())))}
+          scroll={{ x: 1050 }} pagination={pagination}
+          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search.trim() || review.items.length
+            ? "No matches. Clear search or filters to see all results." : "No experience yet. Enable experience and retrospect a completed task."} /> }}
+          columns={[
+            { title: "Goal", key: "goal", width: 350, ellipsis: true,
+              render: (_, item) => <Button type="link" size="small" className="admin-collection-name" title={experienceGoal(item)}
+                aria-label={`View experience: ${experienceGoal(item)}`} aria-expanded={expanded.includes(item.experienceId)}
+                onClick={() => setExpanded(expanded.includes(item.experienceId) ? [] : [item.experienceId])}>{experienceGoal(item)}</Button> },
+            { title: "Status", dataIndex: "status", width: 120,
+              filters: [...new Set(review.items.map(item => item.status))].map(value => ({ text: value, value })),
+              onFilter: (value, item) => item.status === value,
+              render: (status: string) => <Tag color={status === "Failed" ? "error" : undefined}>{status}</Tag> },
+            { title: "Context", key: "context", width: 170,
+              filters: ["Eligible for context", "Suppressed", "Not in context"].map(value => ({ text: value, value })),
+              onFilter: (value, item) => experienceContext(item) === value,
+              render: (_, item) => <Tag>{experienceContext(item)}</Tag> },
+            { title: "Source", dataIndex: "sourceKind", width: 150,
+              filters: [{ text: "Session", value: "Session" }, { text: "Background work", value: "WorkItem" }],
+              onFilter: (value, item) => item.sourceKind === value,
+              render: (kind: string) => kind === "Session" ? "Session" : "Background work" },
+            { title: "Checkpoint captured", key: "checkpointAt", width: 220, defaultSortOrder: "descend",
+              sorter: (a, b) => (a.checkpointAt ?? a.sourceCreatedAt ?? a.sourceAt).localeCompare(b.checkpointAt ?? b.sourceCreatedAt ?? b.sourceAt),
+              render: (_, item) => item.checkpointAt ? date(item.checkpointAt) : <Typography.Text type="secondary" title={`Source created: ${date(item.sourceCreatedAt ?? item.sourceAt)}`}>Not recorded</Typography.Text> }
+          ]}
+          expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, item) => setExpanded(open ? [item.experienceId] : []),
+            expandedRowRender: item => <Flex vertical gap={token.padding} style={{ whiteSpace: "normal" }}>
+              <ExperienceDetails item={item} />
               <Flex wrap gap={token.paddingXS}>
                 <Button disabled={busy} onClick={() => void mutate(`experience/${item.experienceId}`, "PUT", { expectedRevision: item.revision, visibility: item.visibility === "Suppressed" ? "Eligible" : "Suppressed" })}>
                   {item.visibility === "Suppressed" ? "Include in context" : "Suppress experience"}</Button>
@@ -132,10 +158,42 @@ function ExperienceSection({ instanceId, onWork }: { instanceId: string; onWork:
                   onOk: () => mutate(`experience/${item.experienceId}`, "PUT", { expectedRevision: item.revision, visibility: "Deleted" }) })}>Delete experience</Button>
               </Flex>
             </Flex>
-          }))} />}
+          }} />
+        </>}
       </> : null}
     </Flex></div>
   </section>;
+}
+
+const experienceGoal = (item: ExperienceItem) => item.content?.goal ?? (item.status === "Failed" ? "Retrospection failed"
+  : item.status === "Cancelled" ? "Retrospection cancelled" : "Retrospection in progress");
+const experienceContext = (item: ExperienceItem) => item.eligibleForContext ? "Eligible for context"
+  : item.visibility === "Suppressed" ? "Suppressed" : "Not in context";
+
+function ExperienceDetails({ item }: { item: ExperienceItem }) {
+  const { token } = theme.useToken();
+  const screens = Grid.useBreakpoint();
+  const styles = { label: { width: screens.md ? "12rem" : undefined, verticalAlign: "top" }, content: { overflowWrap: "anywhere" as const } };
+  return <Flex vertical gap={token.padding} role="region" aria-label="Experience details">
+    {item.failureSummary ? <Alert type="error" showIcon title={item.failureSummary}
+      description={item.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: item.diagnosticId }} /> : undefined} /> : null}
+    {item.content ? <Descriptions bordered column={1} size="small" layout={screens.md ? "horizontal" : "vertical"} styles={styles}
+      items={[{ key: "goal", label: "Goal", children: item.content.goal },
+        ...(["lessons", "corrections", "outcomes", "decisions", "attempts", "unresolved", "difficulties"] as const)
+          .filter(key => item.content![key].length > 0).map(key => ({ key, label: key[0].toUpperCase() + key.slice(1),
+            children: <ul style={{ margin: 0, paddingInlineStart: token.padding, maxWidth: "72ch" }}>
+              {item.content![key].map((text, index) => <li key={index}>{text}</li>)}
+            </ul> }))]} /> : null}
+    <Descriptions title="Provenance" bordered column={1} size="small" layout={screens.md ? "horizontal" : "vertical"} styles={styles}
+      items={[
+        { key: "source", label: `Source ${item.sourceKind === "Session" ? "Session" : "background work"}`, children: item.sourceId },
+        { key: "checkpoint", label: "Checkpoint", children: item.throughCursor },
+        { key: "definition", label: "Definition", children: `${item.definitionId} · v${item.definitionVersion}` },
+        { key: "model", label: "Model", children: item.modelKey },
+        { key: "created", label: "Source created", children: date(item.sourceCreatedAt ?? item.sourceAt) },
+        { key: "captured", label: "Checkpoint captured", children: item.checkpointAt ? date(item.checkpointAt) : "Not recorded (legacy checkpoint)" }
+      ]} />
+  </Flex>;
 }
 
 const thoughtIntervalUnits = [

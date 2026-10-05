@@ -2,7 +2,7 @@ import { App, ConfigProvider } from 'antd';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InstanceContinuitySection } from './InstanceContinuitySection';
-import { instanceContinuityRequest } from '../../services/adminApi';
+import { instanceContinuityRequest, type ExperienceItem } from '../../services/adminApi';
 import { listModels } from '../../services/api';
 
 vi.mock('./InstanceSchedulesSection', () => ({ InstanceSchedulesSection: () => null }));
@@ -15,6 +15,15 @@ const thoughts = { minIntervalSeconds: 15, items: [] };
 function view(id = 'owner-instance') {
   return <ConfigProvider><App><InstanceContinuitySection instanceId={id} /></App></ConfigProvider>;
 }
+const record = (index: number): ExperienceItem => ({
+  experienceId: `experience-${index}`, sourceKind: 'Session', sourceId: `source-${index}`, throughCursor: index,
+  sourceAt: '2026-01-01T00:00:00Z', sourceCreatedAt: '2026-01-01T00:00:00Z',
+  checkpointAt: new Date(Date.UTC(2026, 1, index)).toISOString(), definitionId: 'secretary', definitionVersion: 1,
+  modelKey: 'synthetic-default', generationWorkItemId: `work-${index}`, visibility: 'Eligible', revision: 1,
+  status: 'Completed', eligibleForContext: true, diagnosticId: null, failureSummary: null,
+  content: { goal: `Atlas review ${index}`, attempts: [], decisions: [], outcomes: [], corrections: [],
+    unresolved: [], difficulties: [], lessons: [`Lesson ${index}`, 'Check unresolved decisions before confirming the agenda.'] }
+});
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 beforeEach(() => {
   vi.clearAllMocks(); enabled = false;
@@ -23,6 +32,44 @@ beforeEach(() => {
 });
 
 describe('Instance continuity owner controls', () => {
+  it('paginates records and searches observation text across pages', async () => {
+    const items = Array.from({ length: 21 }, (_, index) => record(index + 1));
+    items[0].content!.lessons[0] = 'Unique Atlas preparation rule';
+    request.mockImplementation(async (_id, path) => {
+      if (path === 'thoughts') return thoughts;
+      return { ...experience(), items };
+    });
+    render(view());
+    await screen.findByRole('button', { name: 'View experience: Atlas review 21' });
+    expect(screen.getAllByRole('button', { name: /^View experience:/ })).toHaveLength(10);
+    fireEvent.click(screen.getByTitle('2'));
+    await screen.findByRole('button', { name: 'View experience: Atlas review 11' });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search experience' }), { target: { value: 'Unique Atlas preparation rule' } });
+    expect(screen.getAllByRole('button', { name: /^View experience:/ })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'View experience: Atlas review 1' })).toBeVisible();
+  });
+
+  it('shows separate observations and preserves revisioned detail actions', async () => {
+    let item = record(1);
+    item.content!.lessons[0] = 'Unique Atlas preparation rule';
+    request.mockImplementation(async (_id, path, method) => {
+      if (path === 'thoughts') return thoughts;
+      if (method === 'PUT') item = { ...item, visibility: 'Suppressed', eligibleForContext: false, revision: 2 };
+      return { ...experience(), items: [item] };
+    });
+    render(view());
+    await screen.findByRole('button', { name: 'View experience: Atlas review 1' });
+    fireEvent.click(screen.getByRole('button', { name: 'View experience: Atlas review 1' }));
+    const details = screen.getByRole('region', { name: 'Experience details' });
+    expect(within(details).getAllByRole('listitem').map(item => item.textContent)).toEqual([
+      'Unique Atlas preparation rule', 'Check unresolved decisions before confirming the agenda.'
+    ]);
+    expect(within(details).getByText('Source Session').closest('tr')).toHaveTextContent('source-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Suppress experience' }));
+    await screen.findByRole('button', { name: 'Include in context' });
+    expect(request).toHaveBeenCalledWith('owner-instance', 'experience/experience-1', 'PUT', { expectedRevision: 1, visibility: 'Suppressed' });
+  });
+
   it('admits one rapid Experience mutation and releases controls for a later owner action', async () => {
     let finish!: (value: ReturnType<typeof experience>) => void;
     request.mockImplementation(async (_id, path) => {
@@ -54,11 +101,12 @@ describe('Instance continuity owner controls', () => {
         attempts: [], decisions: [], outcomes: [], corrections: [], unresolved: [], difficulties: [], lessons: [] } };
     request.mockImplementation(async (_id, path) => path === 'thoughts' ? thoughts : { ...experience(), items: [row, { ...row, experienceId: 'legacy', checkpointAt: null, content: { ...row.content, goal: 'Legacy observation' } }] });
     render(view());
-    fireEvent.click(await screen.findByText('Observed correction'));
-    fireEvent.click(await screen.findByText('Legacy observation'));
+    fireEvent.click(await screen.findByRole('button', { name: 'View experience: Observed correction' }));
+    const current = screen.getByRole('region', { name: 'Experience details' });
+    expect(within(current).getByText('Checkpoint captured').closest('tr')).toHaveTextContent(new Date(row.checkpointAt).toLocaleString());
+    expect(within(current).getByText('Source created').closest('tr')).toHaveTextContent(new Date(row.sourceCreatedAt).toLocaleString());
+    fireEvent.click(screen.getByRole('button', { name: 'View experience: Legacy observation' }));
     expect(screen.getByText(/Not recorded \(legacy checkpoint\)/)).toBeVisible();
-    expect(screen.getAllByText(/Checkpoint captured:/).length).toBeGreaterThan(1);
-    expect(screen.getAllByText(/Source created:/).length).toBeGreaterThan(1);
   });
 
 

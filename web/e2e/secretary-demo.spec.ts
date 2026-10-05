@@ -159,7 +159,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await endChat(page);
     await openInstance(page);
     const experience = page.getByRole('region', { name: 'Experience', exact: true });
-    await expect(experience.getByText('Review observable completed work', { exact: true })).toHaveCount(1, { timeout: 30_000 });
+    await expect(experience.getByRole('button', { name: 'View experience: Review observable completed work', exact: true })).toHaveCount(1, { timeout: 30_000 });
     await experience.getByLabel('Retrospection source Session', { exact: true }).fill(sourceSessionId);
     const retrospect = () => Promise.all([
       page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/experience/checkpoints') && r.ok()),
@@ -168,16 +168,16 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await retrospect();
     await expect(experience.getByRole('button', { name: 'Retrospect now', exact: true })).toBeEnabled();
     await retrospect();
-    await expect(experience.getByText('Review observable completed work', { exact: true })).toHaveCount(1);
-    await experience.getByText('Review observable completed work', { exact: true }).click();
+    await expect(experience.getByRole('button', { name: 'View experience: Review observable completed work', exact: true })).toHaveCount(1);
+    await experience.getByRole('button', { name: 'View experience: Review observable completed work', exact: true }).click();
     await expect(experience.getByText('The user supplied a correction', { exact: true })).toBeVisible();
-    await expect(experience.getByText(new RegExp(`Source Session ${sourceSessionId}`))).toBeVisible();
+    await expect(experience.getByRole('region', { name: 'Experience details', exact: true }).getByText(sourceSessionId, { exact: true })).toBeVisible();
     await newChat(page);
     await send(page, 'Use my recent experience before acting.', 'I will observe current page state before acting, based on earlier experience. Current policy still controls every action.');
     expect(page.url()).not.toContain(sourceSessionId);
     await endChat(page);
     await openInstance(page);
-    await experience.getByText('Review observable completed work', { exact: true }).first().click();
+    await experience.getByRole('button', { name: 'View experience: Review observable completed work', exact: true }).first().click();
     await experience.getByRole('button', { name: 'Suppress experience', exact: true }).first().click();
     await expect(experience.getByText('Suppressed', { exact: true }).first()).toBeVisible();
     // Suppress every eligible source in this disposable instance, including the
