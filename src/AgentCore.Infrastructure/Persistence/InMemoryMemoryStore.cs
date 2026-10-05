@@ -215,6 +215,18 @@ public sealed class InMemoryMemoryStore : IMemoryStore
                 .Take(Math.Clamp(limit, 1, 100)).Select(CloneMeta).ToArray());
     }
 
+    public ValueTask<IReadOnlyList<SessionSnapshot>> ListOwnedActivePageAsync(Guid instanceId, Guid profileId,
+        Guid? afterId, int limit, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit));
+        lock (_gate) return ValueTask.FromResult<IReadOnlyList<SessionSnapshot>>(_sessions.Values
+            .Where(s => s.AgentInstanceId == instanceId && s.ProfileId == profileId && s.DurablyDeletedAt is null
+                && s.Status == SessionStatus.Attached && s.LifecycleStatus == SessionLifecycleStatus.Active
+                && (afterId is null || string.CompareOrdinal(s.SessionId.ToString("D"), afterId.Value.ToString("D")) > 0))
+            .OrderBy(s => s.SessionId.ToString("D"), StringComparer.Ordinal).Take(limit).Select(CloneMeta).ToArray());
+    }
+
     public ValueTask<SessionCatalogPage> ListCatalogAsync(
         string? cursor,
         int limit,

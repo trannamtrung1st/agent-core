@@ -108,7 +108,7 @@ public sealed record TriggerOccurrenceDraft(
 public interface ITriggerStore
 {
     ValueTask<TriggerRegistration> SaveScheduleAsync(TriggerRegistration proposed, long expectedRevision,
-        Admin.AdminEventAppend history, CancellationToken ct = default) => throw new NotSupportedException();
+        Admin.AdminEventAppend history, CancellationToken ct = default, int maxActiveRegistrations = 32) => throw new NotSupportedException();
     ValueTask<ScheduledAdmitResult> AdmitScheduleNowAsync(TriggerRegistration registration, ExecutionModelPin pin,
         DateTimeOffset asOf, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask<TriggerRegistration> SaveThoughtAsync(TriggerRegistration proposed, long expectedRevision,

@@ -12,9 +12,9 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
     public ValueTask<TriggerRegistration> SaveThoughtAsync(TriggerRegistration proposed, long expectedRevision,
         AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default) => SaveOwnerAsync(proposed, expectedRevision, history, true, ct);
     public ValueTask<TriggerRegistration> SaveScheduleAsync(TriggerRegistration proposed, long expectedRevision,
-        AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default) => SaveOwnerAsync(proposed, expectedRevision, history, false, ct);
+        AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default, int maxActiveRegistrations = 32) => SaveOwnerAsync(proposed, expectedRevision, history, false, ct, maxActiveRegistrations);
     private async ValueTask<TriggerRegistration> SaveOwnerAsync(TriggerRegistration proposed, long expectedRevision,
-        AgentCore.Application.Admin.AdminEventAppend history, bool thought, CancellationToken ct)
+        AgentCore.Application.Admin.AdminEventAppend history, bool thought, CancellationToken ct, int maxActiveRegistrations = 32)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
@@ -26,8 +26,8 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
             && r.AuthorizationOrigin == (int)TriggerAuthorizationOrigin.AdminThought && r.Status != (int)TriggerRegistrationStatus.Cancelled, ct) >= ThoughtIntent.MaxRegistrationsPerInstance)
             throw AgentCoreErrors.Validation("At most eight thought registrations are supported.");
         if (!thought && proposed.Status == TriggerRegistrationStatus.Active && current?.Status != TriggerRegistrationStatus.Active && await db.TriggerRegistrations.CountAsync(r => r.AgentInstanceId == proposed.Owner.AgentInstanceId.ToString("D")
-            && r.ProfileId == proposed.Owner.ProfileId.ToString("D") && r.Status == (int)TriggerRegistrationStatus.Active, ct) >= 32)
-            throw AgentCoreErrors.Validation("At most 32 active registrations are supported.");
+            && r.ProfileId == proposed.Owner.ProfileId.ToString("D") && r.Status == (int)TriggerRegistrationStatus.Active, ct) >= maxActiveRegistrations)
+            throw AgentCoreErrors.Validation("Active schedule limit has been reached.");
         if (row is null) db.TriggerRegistrations.Add(TriggerStoreMapping.ToRecord(proposed));
         else db.Entry(row).CurrentValues.SetValues(TriggerStoreMapping.ToRecord(proposed));
         AdminEventPersistence.StageAppend(db, history, history.OperationId);

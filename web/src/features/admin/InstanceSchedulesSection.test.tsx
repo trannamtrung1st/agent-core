@@ -30,10 +30,25 @@ describe("Owner schedule authoring", () => {
       schedule: { kind: "daily", timeZone: "Asia/Ho_Chi_Minh", interval: 1, localTime: "09:00" }
     }));
   });
+  it("requires a finite bound under Definition policy and sends the selected occurrence limit", async () => {
+    request.mockResolvedValue({ items: [], policy: { allowOneShot: true, allowDaily: true, allowWeekly: true, allowFixedInterval: true,
+      allowIndefiniteRecurrence: false, oneShotHorizonDays: 10, minRecurrenceDays: 1, minFixedIntervalSeconds: 300, maxActiveRegistrations: 2 } });
+    render(view()); await screen.findByText(/No scheduled work yet/);
+    fireEvent.click(screen.getByRole("button", { name: "New schedule" }));
+    fireEvent.change(screen.getByLabelText("Schedule task"), { target: { value: "Finite store audit" } });
+    expect(screen.getByText(/This Definition requires an end date/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create schedule" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Schedule maximum occurrences"), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create schedule" }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith("instance", "schedules", "POST", expect.objectContaining({
+      schedule: expect.objectContaining({ maxOccurrences: 3 })
+    })));
+  });
   it("preserves chat provenance and keeps accepted run locked across stale status until a new execution", async () => {
     let current = row; request.mockImplementation(async () => ({ items: [current] }));
     render(view()); fireEvent.click(await screen.findByText(row.intent));
     expect(screen.getByText(/Chat user request.*source-session/)).toBeVisible();
+    expect(screen.getByText("Originally created from")).toBeVisible();
     const run = screen.getByRole("button", { name: "Run schedule now" });
     await act(async () => { run.click(); run.click(); });
     await waitFor(() => expect(request.mock.calls.filter(c => c[1].endsWith("/run"))).toHaveLength(1));

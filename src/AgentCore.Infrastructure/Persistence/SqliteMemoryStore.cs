@@ -657,6 +657,18 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         return rows.Select(s => ToSnapshot(s, [])).ToArray();
     }
 
+    public async ValueTask<IReadOnlyList<SessionSnapshot>> ListOwnedActivePageAsync(Guid instanceId, Guid profileId,
+        Guid? afterId, int limit, CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit));
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var instance = instanceId.ToString("D"); var profile = profileId.ToString("D");
+        var query = db.Sessions.AsNoTracking().Include(s => s.Snapshot).Where(s => s.AgentInstanceId == instance && s.Snapshot!.ProfileId == profile
+            && s.DurablyDeletedAtUtc == null && s.Status == "Attached" && (s.Snapshot!.LifecycleStatus == "Active" || s.Snapshot.LifecycleStatus == null));
+        if (afterId is Guid id) { var cursor = id.ToString("D"); query = query.Where(s => string.Compare(s.SessionId, cursor) > 0); }
+        return (await query.OrderBy(s => s.SessionId).Take(limit).ToArrayAsync(cancellationToken)).Select(s => ToSnapshot(s, [])).ToArray();
+    }
+
     public async ValueTask<SessionCatalogPage> ListCatalogAsync(
         string? cursor,
         int limit,

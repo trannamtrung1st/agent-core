@@ -80,6 +80,15 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
         }
     }
 
+    public ValueTask<IReadOnlyList<AgentInstance>> ListMaintenancePageAsync(Guid? afterId, int limit, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit));
+        lock (_gate) return ValueTask.FromResult<IReadOnlyList<AgentInstance>>(_instances.Values
+            .Where(r => afterId is null || string.CompareOrdinal(r.InstanceId.ToString("D"), afterId.Value.ToString("D")) > 0)
+            .OrderBy(r => r.InstanceId.ToString("D"), StringComparer.Ordinal).Take(limit).ToArray());
+    }
+
     public ValueTask<AgentInstance?> FindAsync(Guid instanceId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

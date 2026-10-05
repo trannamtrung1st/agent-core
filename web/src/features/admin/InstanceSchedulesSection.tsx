@@ -65,9 +65,13 @@ export function InstanceSchedulesSection({ instanceId, onWork }: { instanceId: s
     } finally { order.current.mutating = false; setBusy(false); }
   }
   const timing = draft.schedule;
-  const minimum = timing.kind === "fixedInterval" ? 60 : 1;
+  const policy = review?.policy;
+  const minimum = timing.kind === "fixedInterval" ? policy?.minFixedIntervalSeconds ?? 60 : timing.kind === "weekly" ? Math.ceil((policy?.minRecurrenceDays ?? 1) / 7) : policy?.minRecurrenceDays ?? 1;
+  const kindAllowed = !policy || ({ oneShot: policy.allowOneShot, daily: policy.allowDaily, weekly: policy.allowWeekly, fixedInterval: policy.allowFixedInterval })[timing.kind];
+  const hasEnd = !!timing.maxOccurrences || (timing.kind === "fixedInterval" ? !!timing.endAtUtc : !!timing.endDate);
   const maximum = timing.kind === "fixedInterval" ? 604800 : timing.kind === "daily" ? 365 : 52;
-  const valid = draft.intent.trim().length > 0 && draft.intent.trim().length <= 500 &&
+  const valid = kindAllowed && (timing.kind === "oneShot" || policy?.allowIndefiniteRecurrence !== false || hasEnd) &&
+    (timing.maxOccurrences == null || Number.isInteger(timing.maxOccurrences) && timing.maxOccurrences >= 1) && draft.intent.trim().length > 0 && draft.intent.trim().length <= 500 &&
     (timing.kind === "oneShot" ? !!timing.atUtc && Number.isFinite(Date.parse(timing.atUtc)) :
       timing.interval >= minimum && timing.interval <= maximum && (timing.kind === "fixedInterval" ||
         /^\d{2}:\d{2}$/.test(timing.localTime ?? "") && !!timing.timeZone.trim() && (timing.kind !== "weekly" || !!timing.weekdays?.length)));
@@ -90,7 +94,7 @@ export function InstanceSchedulesSection({ instanceId, onWork }: { instanceId: s
         <Form.Item label="Task" extra={`${draft.intent.length} / 500 characters`}><Input.TextArea aria-label="Schedule task" rows={3} maxLength={500} value={draft.intent} disabled={busy} onChange={e => setDraft({ ...draft, intent: e.target.value })} /></Form.Item>
         <Flex wrap gap={token.padding}>
           <Form.Item label="Timing"><Select aria-label="Schedule timing" style={{ minWidth: "10rem" }} value={timing.kind} disabled={busy}
-            options={[{ value: "oneShot", label: "Once" }, { value: "daily", label: "Daily" }, { value: "weekly", label: "Weekly" }, { value: "fixedInterval", label: "Fixed interval" }]}
+            options={[{ value: "oneShot", label: "Once", disabled: policy?.allowOneShot === false }, { value: "daily", label: "Daily", disabled: policy?.allowDaily === false }, { value: "weekly", label: "Weekly", disabled: policy?.allowWeekly === false }, { value: "fixedInterval", label: "Fixed interval", disabled: policy?.allowFixedInterval === false }]}
             onChange={kind => setDraft({ ...draft, schedule: { kind, timeZone: timing.timeZone, interval: kind === "fixedInterval" ? 3600 : 1, localTime: "09:00", weekdays: kind === "weekly" ? [1] : null } })} /></Form.Item>
           {timing.kind === "oneShot" ? <Form.Item label="Run at (UTC)" extra="Enter an ISO timestamp, for example 2026-10-06T02:00:00Z."><Input aria-label="Schedule run at" value={timing.atUtc ?? ""} disabled={busy} onChange={e => setTiming({ atUtc: e.target.value })} /></Form.Item> :
             <Form.Item label={timing.kind === "fixedInterval" ? "Interval (seconds)" : timing.kind === "daily" ? "Every (days)" : "Every (weeks)"}>
@@ -101,6 +105,18 @@ export function InstanceSchedulesSection({ instanceId, onWork }: { instanceId: s
         </Flex>
         {timing.kind === "weekly" ? <Form.Item label="Weekdays"><Select mode="multiple" aria-label="Schedule weekdays" value={timing.weekdays ?? []} disabled={busy}
           options={["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((label, value) => ({ label, value }))} onChange={weekdays => setTiming({ weekdays })} /></Form.Item> : null}
+        {timing.kind !== "oneShot" ? <>
+          {policy?.allowIndefiniteRecurrence === false ? <Alert type="info" showIcon title="This Definition requires an end date or occurrence limit." /> : null}
+          <Flex wrap gap={token.padding}>
+            <Form.Item label={timing.kind === "fixedInterval" ? "End at (UTC)" : "End date"}>
+              <Input aria-label="Schedule end" type={timing.kind === "fixedInterval" ? "text" : "date"} value={(timing.kind === "fixedInterval" ? timing.endAtUtc : timing.endDate) ?? ""} disabled={busy}
+                onChange={e => setTiming(timing.kind === "fixedInterval" ? { endAtUtc: e.target.value || null } : { endDate: e.target.value || null })} />
+            </Form.Item>
+            <Form.Item label="Maximum occurrences" extra="Leave both bounds empty only if the Definition permits ongoing recurrence.">
+              <InputNumber aria-label="Schedule maximum occurrences" min={1} precision={0} value={timing.maxOccurrences} disabled={busy} onInput={text => setTiming({ maxOccurrences: text.trim() ? Number(text) : null })} onChange={value => setTiming({ maxOccurrences: value })} />
+            </Form.Item>
+          </Flex>
+        </> : null}
         <Form.Item label="Execution model" extra="Uses the instance unattended default unless you select a model. Each admitted run keeps its model."><ExecutionModelFields models={models}
           modelKey={draft.modelKey ?? ""} reasoningEffort={draft.reasoningEffort ?? ""} disabled={busy} modelLabel="Schedule execution model" effortLabel="Schedule reasoning effort" defaultLabel="Unattended default"
           onChange={(modelKey, reasoningEffort) => setDraft({ ...draft, modelKey: modelKey || null, reasoningEffort: reasoningEffort || null })} /></Form.Item>
@@ -112,7 +128,7 @@ export function InstanceSchedulesSection({ instanceId, onWork }: { instanceId: s
           <Typography.Paragraph ellipsis={{ rows: 2 }} style={{ marginBottom: 0, overflowWrap: "anywhere" }}>{item.intent}</Typography.Paragraph>
           <Flex wrap gap={token.paddingXS}><Tag>{item.status}</Tag><Typography.Text type="secondary">Next: {date(item.nextRunAt)}</Typography.Text></Flex></Flex>,
           children: <Flex vertical gap={token.padding}><Descriptions column={1} size="small">
-            <Descriptions.Item label="Created from">{item.authorizationOrigin === "CurrentUserTurn" ? "Chat user request" : "Admin owner"}{item.sourceSessionId ? ` · Session ${item.sourceSessionId}` : ""}</Descriptions.Item>
+            <Descriptions.Item label="Originally created from">{item.authorizationOrigin === "CurrentUserTurn" ? "Chat user request" : "Admin owner"}{item.sourceSessionId ? ` · Session ${item.sourceSessionId}` : ""}</Descriptions.Item>
             <Descriptions.Item label="Timing">{item.schedule.kind} · {item.schedule.timeZone}{item.schedule.localTime ? ` · ${item.schedule.localTime}` : ""}{item.schedule.kind === "fixedInterval" ? ` · every ${item.schedule.interval} seconds` : ""}</Descriptions.Item>
             <Descriptions.Item label="Model">{item.effectiveModelKey ?? item.modelKey ?? "Unattended default"}</Descriptions.Item>
             <Descriptions.Item label="Latest execution">{item.executionStatus ?? "Not yet"}</Descriptions.Item></Descriptions>

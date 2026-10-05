@@ -13,9 +13,9 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     public ValueTask<TriggerRegistration> SaveThoughtAsync(TriggerRegistration proposed, long expectedRevision,
         AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default) => SaveOwnerAsync(proposed, expectedRevision, history, true, ct);
     public ValueTask<TriggerRegistration> SaveScheduleAsync(TriggerRegistration proposed, long expectedRevision,
-        AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default) => SaveOwnerAsync(proposed, expectedRevision, history, false, ct);
+        AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default, int maxActiveRegistrations = 32) => SaveOwnerAsync(proposed, expectedRevision, history, false, ct, maxActiveRegistrations);
     private ValueTask<TriggerRegistration> SaveOwnerAsync(TriggerRegistration proposed, long expectedRevision,
-        AgentCore.Application.Admin.AdminEventAppend history, bool thought, CancellationToken ct)
+        AgentCore.Application.Admin.AdminEventAppend history, bool thought, CancellationToken ct, int maxActiveRegistrations = 32)
     {
         ct.ThrowIfCancellationRequested();
         lock (_state.Gate)
@@ -26,8 +26,8 @@ public sealed class InMemoryTriggerStore : ITriggerStore
             if (thought && current is null && _state.Registrations.Values.Count(r => r.Owner.AgentInstanceId == proposed.Owner.AgentInstanceId
                 && r.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought && r.Status != TriggerRegistrationStatus.Cancelled) >= ThoughtIntent.MaxRegistrationsPerInstance)
                 throw AgentCoreErrors.Validation("At most eight thought registrations are supported.");
-            if (!thought && proposed.Status == TriggerRegistrationStatus.Active && current?.Status != TriggerRegistrationStatus.Active && _state.Registrations.Values.Count(r => r.Owner == proposed.Owner && r.Status == TriggerRegistrationStatus.Active) >= 32)
-                throw AgentCoreErrors.Validation("At most 32 active registrations are supported.");
+            if (!thought && proposed.Status == TriggerRegistrationStatus.Active && current?.Status != TriggerRegistrationStatus.Active && _state.Registrations.Values.Count(r => r.Owner == proposed.Owner && r.Status == TriggerRegistrationStatus.Active) >= maxActiveRegistrations)
+                throw AgentCoreErrors.Validation("Active schedule limit has been reached.");
             AgentCore.Application.Admin.AdminEventSummaryPolicy.ValidateAppend(history);
             _admin?.AppendWithinLock(history);
             _state.Registrations[proposed.RegistrationId] = proposed;

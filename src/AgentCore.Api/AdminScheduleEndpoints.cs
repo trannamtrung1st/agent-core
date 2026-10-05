@@ -26,7 +26,9 @@ internal static class AdminScheduleEndpoints
             var rows = await store.ListAsync(new(instanceId, LocalUserProfile.Id), null, ct);
             return new AdminScheduleReview(rows.Where(r => r.EventSourceId is null && r.Provenance.AuthorizationOrigin != TriggerAuthorizationOrigin.AdminThought)
                 .Select(r => Project(r, definition is null ? null : ExecutionModelPolicy.Resolve(catalog, definition, instance, r).Pin?.CatalogKey,
-                    recent.FirstOrDefault(w => w.Provenance.RegistrationId == r.RegistrationId))).ToArray());
+                    recent.FirstOrDefault(w => w.Provenance.RegistrationId == r.RegistrationId))).ToArray(),
+                definition?.TriggerPolicy is { } p ? new AdminSchedulePolicy(p.AllowOneShot, p.AllowDaily, p.AllowWeekly, p.AllowFixedInterval,
+                    p.AllowIndefiniteRecurrence, p.OneShotHorizonDays, p.MinRecurrenceDays, p.MinFixedIntervalSeconds, p.MaxActiveRegistrations) : null);
         }));
         group.MapPost("", (Guid instanceId, AdminScheduleRequest request, AdminScheduleService service, CancellationToken ct) => Respond(async () =>
             Project(await service.SaveAsync(instanceId, null, request.ExpectedRevision, request.Enabled, request.Intent, Parse(request.Schedule), request.ModelKey, request.ReasoningEffort, ct))));

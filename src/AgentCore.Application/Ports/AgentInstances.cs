@@ -9,6 +9,9 @@ public interface IAgentInstanceStore
         int limit,
         CancellationToken cancellationToken = default);
 
+    ValueTask<IReadOnlyList<AgentInstance>> ListMaintenancePageAsync(Guid? afterId, int limit,
+        CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
     ValueTask<AgentInstance?> FindAsync(Guid instanceId, CancellationToken cancellationToken = default);
 
     ValueTask<AgentInstance?> FindCompatibilityAsync(string definitionId, CancellationToken cancellationToken = default);

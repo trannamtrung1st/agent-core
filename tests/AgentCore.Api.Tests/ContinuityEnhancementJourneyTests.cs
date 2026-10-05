@@ -145,7 +145,7 @@ public sealed class ContinuityEnhancementJourneyTests
             var s = host.Services; var client = TestOwnerCapability.CreateOwnerClient(host);
             instanceId = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9)).InstanceId;
             var path = $"/api/v2/admin/agent-instances/{instanceId}/schedules";
-            var timing = new AdminScheduleTiming("fixedInterval", Interval: 3600, AnchorAtUtc: DateTimeOffset.UtcNow.AddHours(1).ToString("O"));
+            var timing = new AdminScheduleTiming("daily", "UTC", LocalTime: "09:00");
             var draft = new AdminScheduleRequest(0, true, "Review pending store orders", timing);
             var created = await client.PostAsJsonAsync(path, draft); created.EnsureSuccessStatusCode();
             var r = (await created.Content.ReadFromJsonAsync<AdminScheduleResponse>())!; registrationId = Guid.Parse(r.RegistrationId);

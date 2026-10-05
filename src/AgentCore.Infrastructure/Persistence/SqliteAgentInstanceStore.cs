@@ -34,6 +34,15 @@ public sealed class SqliteAgentInstanceStore(
         return rows.Select(Map).ToArray();
     }
 
+    public async ValueTask<IReadOnlyList<AgentInstance>> ListMaintenancePageAsync(Guid? afterId, int limit, CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit));
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var query = db.AgentInstances.AsNoTracking();
+        if (afterId is Guid id) { var cursor = id.ToString("D"); query = query.Where(r => string.Compare(r.InstanceId, cursor) > 0); }
+        return (await query.OrderBy(r => r.InstanceId).Take(limit).ToArrayAsync(cancellationToken)).Select(Map).ToArray();
+    }
+
     public async ValueTask<AgentInstance?> FindAsync(Guid instanceId, CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);

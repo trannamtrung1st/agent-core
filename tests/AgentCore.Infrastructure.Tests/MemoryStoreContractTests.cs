@@ -13,6 +13,34 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed class MemoryStoreContractTests
 {
     [Fact]
+    public async Task Active_owned_pages_exclude_ineligible_sessions_and_visit_all_ids_once()
+    {
+        await using var harness = await SqliteAsync();
+        IMemoryStore[] stores = [new InMemoryMemoryStore(), harness.Store];
+        foreach (var store in stores)
+        {
+            var instance = Guid.NewGuid(); var profile = Guid.NewGuid();
+            var sample = First() with { AgentInstanceId = instance, ProfileId = profile, Status = SessionStatus.Attached };
+            for (var i = 105; i >= 1; i--)
+                await store.SaveAsync(sample with { SessionId = Guid.Parse($"bbbbbbbb-bbbb-bbbb-bbbb-{i:000000000000}"),
+                    Status = i == 102 ? SessionStatus.Paused : SessionStatus.Attached,
+                    LifecycleStatus = i == 103 ? SessionLifecycleStatus.Completed : SessionLifecycleStatus.Active,
+                    ProfileId = i == 104 ? Guid.NewGuid() : profile,
+                    DurablyDeletedAt = i == 105 ? DateTimeOffset.UtcNow : null }, 0);
+            var seen = new List<Guid>(); Guid? cursor = null;
+            while (true)
+            {
+                var page = await store.ListOwnedActivePageAsync(instance, profile, cursor, 40);
+                if (page.Count == 0) break;
+                Assert.InRange(page.Count, 1, 40); Assert.All(page, item => Assert.Empty(item.Entries));
+                seen.AddRange(page.Select(i => i.SessionId)); cursor = page[^1].SessionId;
+            }
+            Assert.Equal(101, seen.Count); Assert.Equal(101, seen.Distinct().Count());
+            Assert.Equal(seen.OrderBy(i => i.ToString("D"), StringComparer.Ordinal), seen);
+        }
+    }
+
+    [Fact]
     public async Task In_memory_and_sqlite_share_revision_idempotency_and_conflict()
     {
         await using var harness = await SqliteAsync();

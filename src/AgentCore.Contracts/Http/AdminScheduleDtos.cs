@@ -9,4 +9,6 @@ public sealed record AdminScheduleResponse(string RegistrationId, long Revision,
     AdminScheduleTiming Schedule, string AuthorizationOrigin, string? SourceSessionId, string? SourceEventId,
     string CreatedAt, string? NextRunAt, string? ModelKey, string? ReasoningEffort, string? EffectiveModelKey,
     string? LastWorkItemId, string? ExecutionStatus);
-public sealed record AdminScheduleReview(IReadOnlyList<AdminScheduleResponse> Items);
+public sealed record AdminSchedulePolicy(bool AllowOneShot, bool AllowDaily, bool AllowWeekly, bool AllowFixedInterval,
+    bool AllowIndefiniteRecurrence, int OneShotHorizonDays, int MinRecurrenceDays, int MinFixedIntervalSeconds, int MaxActiveRegistrations);
+public sealed record AdminScheduleReview(IReadOnlyList<AdminScheduleResponse> Items, AdminSchedulePolicy? Policy = null);

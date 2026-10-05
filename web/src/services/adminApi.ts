@@ -1203,4 +1203,6 @@ export type OwnerSchedule = { registrationId: string; revision: number; intent: 
   schedule: ScheduleTiming; authorizationOrigin: string; sourceSessionId: string | null; sourceEventId: string | null;
   createdAt: string; nextRunAt: string | null; modelKey: string | null; reasoningEffort: string | null;
   effectiveModelKey: string | null; lastWorkItemId: string | null; executionStatus: string | null };
-export type OwnerScheduleReview = { items: OwnerSchedule[] };
+export type OwnerSchedulePolicy = { allowOneShot: boolean; allowDaily: boolean; allowWeekly: boolean; allowFixedInterval: boolean;
+  allowIndefiniteRecurrence: boolean; oneShotHorizonDays: number; minRecurrenceDays: number; minFixedIntervalSeconds: number; maxActiveRegistrations: number };
+export type OwnerScheduleReview = { items: OwnerSchedule[]; policy?: OwnerSchedulePolicy | null };

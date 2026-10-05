@@ -53,6 +53,9 @@ public interface IMemoryStore
         Guid instanceId, Guid profileId, int limit, bool activeOnly = false,
         CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<SessionSnapshot>>([]);
 
+    ValueTask<IReadOnlyList<SessionSnapshot>> ListOwnedActivePageAsync(Guid instanceId, Guid profileId,
+        Guid? afterId, int limit, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
     ValueTask<SessionCatalogPage> ListCatalogAsync(
         string? cursor,
         int limit,

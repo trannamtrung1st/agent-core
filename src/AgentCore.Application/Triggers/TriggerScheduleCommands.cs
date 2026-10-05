@@ -477,11 +477,6 @@ public static class TriggerScheduleCommands
         TriggerCommandContext context,
         TriggerPolicy policy)
     {
-        if (!policy.AllowOneShot)
-        {
-            throw new ArgumentException("One-shot schedules are not enabled.");
-        }
-
         var now = TriggerScheduleCalculator.Truncate(context.UtcNow);
         var hasOffset = TryPresent(arguments, "relativeDayOffset", out var offsetElement);
         var hasDate = TryTimeString(arguments, "localDate", out var localDateText);
@@ -583,12 +578,9 @@ public static class TriggerScheduleCommands
         }
 
         instant = TriggerScheduleCalculator.Truncate(instant);
-        if (instant <= now || instant > now.AddDays(policy.OneShotHorizonDays))
-        {
-            throw new ArgumentException("One-shot time must be in the future and inside the scheduling horizon.");
-        }
-
-        return (new OneShotSchedule(instant, zone, localDate, localTime), instant);
+        var schedule = new OneShotSchedule(instant, zone, localDate, localTime);
+        ScheduleDefinitionPolicy.Validate(schedule, policy, now);
+        return (schedule, instant);
     }
 
     private static TriggerSchedule ResolveRecurring(
@@ -617,13 +609,6 @@ public static class TriggerScheduleCommands
         if (kind.Equals("fixed_interval", StringComparison.OrdinalIgnoreCase)
             || kind.Equals("fixedInterval", StringComparison.OrdinalIgnoreCase))
         {
-            if (!policy.AllowFixedInterval)
-            {
-                throw new TriggerScheduleCommandException(
-                    "unsupported_recurrence",
-                    "Fixed-interval recurrence is not enabled for this agent.");
-            }
-
             if (!arguments.TryGetProperty("intervalSeconds", out var secondsElement)
                 || secondsElement.ValueKind != JsonValueKind.Number
                 || !secondsElement.TryGetInt32(out var intervalSeconds))
@@ -634,17 +619,7 @@ public static class TriggerScheduleCommands
             }
 
             var intent = TryString(arguments, "intent", out var intentText) ? intentText : string.Empty;
-            if (intervalSeconds < policy.MinFixedIntervalSeconds)
-            {
-                throw new TriggerScheduleCommandException(
-                    "recurrence_below_minimum",
-                    $"The minimum supported fixed interval is {policy.MinFixedIntervalSeconds} seconds. Ask the user for a longer interval.",
-                    ScheduleDraftContext.ForFixedIntervalRejection(
-                        intent,
-                        intervalSeconds,
-                        "recurrence_below_minimum",
-                        context.UtcNow));
-            }
+            ScheduleDefinitionPolicy.RequireInterval(policy, intervalSeconds, context.UtcNow, intent);
 
             if (intervalSeconds > TriggerLimits.MaxFixedIntervalSeconds)
             {
@@ -655,15 +630,10 @@ public static class TriggerScheduleCommands
 
             var endAt = ResolveOptionalEndAtUtc(arguments);
 
-            if (cap is null && endAt is null && !policy.AllowIndefiniteRecurrence)
-            {
-                throw new TriggerScheduleCommandException(
-                    "schedule_validation_failed",
-                    "Indefinite recurrence is not enabled. Ask for an end date or occurrence cap.");
-            }
-
             var anchor = TriggerScheduleCalculator.Truncate(context.UtcNow);
-            return new FixedIntervalSchedule(intervalSeconds, anchor, endAt, cap);
+            var schedule = new FixedIntervalSchedule(intervalSeconds, anchor, endAt, cap);
+            ScheduleDefinitionPolicy.Validate(schedule, policy, context.UtcNow, intent);
+            return schedule;
         }
 
         var zone = RequireTimeZone(arguments, context);
@@ -673,42 +643,19 @@ public static class TriggerScheduleCommands
             : 1;
         var start = OptionalDate(arguments, "startDate");
         var end = OptionalDate(arguments, "endDate");
-        if (cap is null && end is null && !policy.AllowIndefiniteRecurrence)
-        {
-            throw new ArgumentException("Indefinite recurrence is not enabled. Ask for an end date or occurrence cap.");
-        }
-
         if (kind.Equals("daily", StringComparison.OrdinalIgnoreCase))
         {
-            if (!policy.AllowDaily)
-            {
-                throw new ArgumentException("Daily schedules are not enabled.");
-            }
-
-            if (interval < policy.MinRecurrenceDays)
-            {
-                throw new TriggerScheduleCommandException(
-                    "unsupported_recurrence",
-                    "Daily schedules cannot represent sub-day recurrence. Use kind fixed_interval with intervalSeconds for minute or hour cadences.");
-            }
-
-            return new DailySchedule(interval, localTime, zone, start, end, cap);
+            var schedule = new DailySchedule(interval, localTime, zone, start, end, cap);
+            ScheduleDefinitionPolicy.Validate(schedule, policy, context.UtcNow);
+            return schedule;
         }
 
         if (kind.Equals("weekly", StringComparison.OrdinalIgnoreCase))
         {
-            if (!policy.AllowWeekly)
-            {
-                throw new ArgumentException("Weekly schedules are not enabled.");
-            }
-
-            if (interval * 7 < policy.MinRecurrenceDays)
-            {
-                throw new ArgumentException("Weekly interval is shorter than the policy minimum.");
-            }
-
             var weekdays = ReadWeekdays(arguments);
-            return new WeeklySchedule(interval, weekdays, localTime, zone, start, end, cap);
+            var schedule = new WeeklySchedule(interval, weekdays, localTime, zone, start, end, cap);
+            ScheduleDefinitionPolicy.Validate(schedule, policy, context.UtcNow);
+            return schedule;
         }
 
         throw new TriggerScheduleCommandException(
@@ -951,13 +898,6 @@ public static class TriggerScheduleCommands
         TriggerCommandContext context,
         TriggerPolicy policy)
     {
-        if (!policy.AllowFixedInterval)
-        {
-            throw new TriggerScheduleCommandException(
-                "unsupported_recurrence",
-                "Fixed-interval recurrence is not enabled for this agent.");
-        }
-
         var intervalSeconds = current.IntervalSeconds;
         if (arguments.TryGetProperty("intervalSeconds", out var secondsElement)
             && secondsElement.ValueKind == JsonValueKind.Number
@@ -974,12 +914,7 @@ public static class TriggerScheduleCommands
             }
         }
 
-        if (intervalSeconds < policy.MinFixedIntervalSeconds)
-        {
-            throw new TriggerScheduleCommandException(
-                "recurrence_below_minimum",
-                $"The minimum supported fixed interval is {policy.MinFixedIntervalSeconds} seconds.");
-        }
+        ScheduleDefinitionPolicy.RequireInterval(policy, intervalSeconds, context.UtcNow);
 
         var endAt = ResolveOptionalEndAtUtc(arguments, current.EndAtUtc);
 
@@ -990,6 +925,7 @@ public static class TriggerScheduleCommands
         }
 
         var updated = new FixedIntervalSchedule(intervalSeconds, current.AnchorAtUtc, endAt, maxOccurrences);
+        ScheduleDefinitionPolicy.Validate(updated, policy, context.UtcNow);
         var next = TriggerScheduleCalculator.InitialNext(updated, context.UtcNow)
             ?? throw new ArgumentException("No future occurrence matches this schedule.");
         return (updated, next);

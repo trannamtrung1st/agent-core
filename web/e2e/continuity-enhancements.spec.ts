@@ -18,6 +18,9 @@ test('Admin authors scheduled work, runs through background execution, edits and
   await expect(schedules.getByRole('button', { name: 'Create schedule', exact: true })).toBeDisabled();
   await schedules.getByLabel('Schedule task', { exact: true }).fill('Review pending store orders');
   await schedules.getByLabel('Schedule time zone', { exact: true }).fill('Asia/Ho_Chi_Minh');
+  await schedules.getByLabel('Schedule maximum occurrences', { exact: true }).fill('0');
+  await expect(schedules.getByRole('button', { name: 'Create schedule', exact: true })).toBeDisabled();
+  await schedules.getByLabel('Schedule maximum occurrences', { exact: true }).fill('5');
   await schedules.getByRole('button', { name: 'Create schedule', exact: true }).click();
   await expect(schedules.getByLabel('Schedule task', { exact: true })).toBeHidden({ timeout: 30_000 });
   await schedules.getByText('Review pending store orders', { exact: true }).click();
@@ -29,6 +32,8 @@ test('Admin authors scheduled work, runs through background execution, edits and
   const row = (await before.json()).items[0];
   expect(row.authorizationOrigin).toBe('AdminOwner');
   expect(row.sourceSessionId).toBeNull();
+  expect(row.schedule.maxOccurrences).toBe(5);
+  await expect(schedules.getByText('Originally created from', { exact: true })).toBeVisible();
   let calls = 0;
   await page.route(`**/agent-instances/${instanceId}/schedules/*/run`, async route => { calls++; await route.continue(); });
   const run = schedules.getByRole('button', { name: 'Run schedule now', exact: true });

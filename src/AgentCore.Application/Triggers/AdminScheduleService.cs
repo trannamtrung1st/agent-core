@@ -28,7 +28,16 @@ public sealed class AdminScheduleService(ITriggerStore store, ExperienceService 
         if (registrationId is not null && current is null) throw AgentCoreErrors.NotFound("Schedule was not found.");
         var retainingDisabledModel = !enabled && current is not null && current.ModelOverrideCatalogKey == modelKey && current.ModelOverrideReasoningEffort == effort;
         if (!retainingDisabledModel) ExecutionModelPolicy.RequireSelectable(catalog, modelKey, effort);
+        var definition = await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct) ?? throw AgentCoreErrors.NotFound("Definition was not found.");
+        var policy = definition.TriggerPolicy ?? throw AgentCoreErrors.Forbidden("Scheduling is disabled.");
         var now = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
+        // Disabling remains available if the Definition has since removed a capability.
+        if (enabled || current is null || !current.Schedule.SemanticEquals(schedule))
+        {
+            try { ScheduleDefinitionPolicy.Validate(schedule, policy, now, intent); }
+            catch (Exception ex) when (ex is ArgumentException or TriggerScheduleCommandException)
+            { throw AgentCoreErrors.Validation(ex.Message); }
+        }
         var next = enabled ? TriggerScheduleCalculator.InitialNext(schedule, now) : null;
         if (enabled && next is null) throw AgentCoreErrors.Validation("Schedule has no future occurrence.");
         var changed = current is null || !current.Schedule.SemanticEquals(schedule) || current.Status != (enabled ? TriggerRegistrationStatus.Active : TriggerRegistrationStatus.Disabled);
@@ -38,9 +47,8 @@ public sealed class AdminScheduleService(ITriggerStore store, ExperienceService 
             (current?.ScheduleRevision ?? 0) + 1,
             current?.Provenance.WithUpdated(now) ?? new(TriggerAuthorizationOrigin.AdminOwner, null, null, now, now), null, modelKey, effort,
             current?.RequiresVision ?? false);
-        var definition = await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct) ?? throw AgentCoreErrors.NotFound("Definition was not found.");
         if (enabled && !ExecutionModelPolicy.Resolve(catalog, definition, instance, proposed).Accepted) throw AgentCoreErrors.Validation("Unattended model is unavailable.");
-        return await store.SaveScheduleAsync(proposed, expectedRevision, History(proposed, current is null ? "create" : "update"), ct);
+        return await store.SaveScheduleAsync(proposed, expectedRevision, History(proposed, current is null ? "create" : "update"), ct, policy.MaxActiveRegistrations);
     }
     public async ValueTask DeleteAsync(Guid instanceId, Guid registrationId, long revision, CancellationToken ct = default)
     {

@@ -16,20 +16,34 @@ public sealed class ContinuityMaintenance(IAgentInstanceStore instances, IMemory
     public static readonly TimeSpan Cadence = TimeSpan.FromMinutes(5);
     public async ValueTask RunOnceAsync(CancellationToken ct = default)
     {
-        foreach (var instance in await instances.ListAsync(100, ct))
+        Guid? instanceCursor = null;
+        while (true)
         {
-            if (instance.Compatibility || instance.Lifecycle != AgentInstanceLifecycle.Active
-                || !(await experiences.SettingsAsync(instance.InstanceId, ct)).Enabled) continue;
-            foreach (var s in await history.ListOwnedSessionsAsync(instance.InstanceId, LocalUserProfile.Id, 100, true, ct))
+            var instancePage = await instances.ListMaintenancePageAsync(instanceCursor, 100, ct);
+            if (instancePage.Count == 0) break;
+            instanceCursor = instancePage[^1].InstanceId;
+            foreach (var instance in instancePage)
             {
-                var entries = await history.ReadHistoryAsync(s.SessionId, Math.Max(0, s.DurableLastEntrySequence - 100), 100, ct);
-                var cutoff = ExperienceService.StableSessionCheckpoint(entries);
-                if (cutoff == 0) continue;
-                // Full deterministic identity lookup includes pending, suppressed and deleted records.
-                var key = $"experience:{instance.InstanceId:D}:{ExperienceSourceKind.Session}:{s.SessionId:D}:{cutoff}";
-                var id = AgentCore.Application.Triggers.TriggerScheduleAdmission.OccurrenceId(key);
-                if (await experiences.GetAsync(instance.InstanceId, id, ct) is not null) continue;
-                await experience.TrySessionBoundaryAsync(instance.InstanceId, s.SessionId, ct);
+                if (instance.Compatibility || instance.Lifecycle != AgentInstanceLifecycle.Active
+                    || !(await experiences.SettingsAsync(instance.InstanceId, ct)).Enabled) continue;
+                Guid? sessionCursor = null;
+                while (true)
+                {
+                    var sessionPage = await history.ListOwnedActivePageAsync(instance.InstanceId, LocalUserProfile.Id, sessionCursor, 100, ct);
+                    if (sessionPage.Count == 0) break;
+                    sessionCursor = sessionPage[^1].SessionId;
+                    foreach (var s in sessionPage)
+                    {
+                        var entries = await history.ReadHistoryAsync(s.SessionId, Math.Max(0, s.DurableLastEntrySequence - 100), 100, ct);
+                        var cutoff = ExperienceService.StableSessionCheckpoint(entries);
+                        if (cutoff == 0) continue;
+                        // Full deterministic identity lookup includes pending, suppressed and deleted records.
+                        var key = $"experience:{instance.InstanceId:D}:{ExperienceSourceKind.Session}:{s.SessionId:D}:{cutoff}";
+                        var id = AgentCore.Application.Triggers.TriggerScheduleAdmission.OccurrenceId(key);
+                        if (await experiences.GetAsync(instance.InstanceId, id, ct) is not null) continue;
+                        await experience.TrySessionBoundaryAsync(instance.InstanceId, s.SessionId, ct);
+                    }
+                }
             }
         }
     }

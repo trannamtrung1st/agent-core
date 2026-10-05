@@ -13,6 +13,26 @@ public abstract class AgentInstanceStoreContractTests
     protected abstract Task ForEachStoresAsync(Func<IAgentInstanceStore, Task> exercise);
 
     [Fact]
+    public async Task Maintenance_pages_visit_every_instance_once_in_stable_id_order()
+    {
+        await ForEachStoresAsync(async store =>
+        {
+            var sample = SampleManaged(DateTimeOffset.Parse("2026-01-06T00:00:00Z"));
+            for (var i = 101; i >= 1; i--) await store.InsertAsync(sample with { InstanceId = Guid.Parse($"aaaaaaaa-aaaa-aaaa-aaaa-{i:000000000000}") });
+            var seen = new List<Guid>(); Guid? cursor = null;
+            while (true)
+            {
+                var page = await store.ListMaintenancePageAsync(cursor, 40);
+                if (page.Count == 0) break;
+                Assert.InRange(page.Count, 1, 40);
+                seen.AddRange(page.Select(i => i.InstanceId)); cursor = page[^1].InstanceId;
+            }
+            Assert.Equal(101, seen.Count); Assert.Equal(101, seen.Distinct().Count());
+            Assert.Equal(seen.OrderBy(i => i.ToString("D"), StringComparer.Ordinal), seen);
+        });
+    }
+
+    [Fact]
     public async Task Managed_update_with_expected_revision_succeeds_and_bumps_aggregate_revision()
     {
         await ForEachStoresAsync(async store =>

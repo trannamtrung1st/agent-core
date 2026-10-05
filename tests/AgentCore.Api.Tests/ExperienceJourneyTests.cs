@@ -131,7 +131,8 @@ internal sealed class ExperienceHost : DurableSqliteHostFactory
     private readonly string db;
     private readonly TimeProvider? clock;
     private readonly IExperienceStore? experienceStore;
-    internal ExperienceHost(string db, ILanguageModel? languageModel = null, TimeProvider? clock = null, IExperienceStore? experienceStore = null) : base(db, runScheduler: false, languageModel: languageModel) { this.db = db; this.clock = clock; this.experienceStore = experienceStore; }
+    private readonly Action<IServiceCollection>? configure;
+    internal ExperienceHost(string db, ILanguageModel? languageModel = null, TimeProvider? clock = null, IExperienceStore? experienceStore = null, Action<IServiceCollection>? configure = null) : base(db, runScheduler: false, languageModel: languageModel) { this.db = db; this.clock = clock; this.experienceStore = experienceStore; this.configure = configure; }
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         base.ConfigureWebHost(builder);
@@ -143,6 +144,7 @@ internal sealed class ExperienceHost : DurableSqliteHostFactory
             services.RemoveAll<IStructuredMemoryStore>(); services.AddSingleton<IStructuredMemoryStore, SqliteStructuredMemoryStore>();
             services.RemoveAll<IExperienceStore>(); services.AddSingleton<IExperienceStore, SqliteExperienceStore>();
             if (experienceStore is not null) { services.RemoveAll<IExperienceStore>(); services.AddSingleton(experienceStore); }
+            configure?.Invoke(services);
             services.RemoveAll<IAdminLifecycleDeletion>(); services.AddSingleton<IAdminLifecycleDeletion, SqliteAdminLifecycleDeletion>();
             services.RemoveAll<IAdminEventStore>(); services.AddSingleton<IAdminEventStore, SqliteAdminEventStore>();
             services.RemoveAll<IAgentDefinitionAdminStore>(); services.AddSingleton<IAgentDefinitionAdminStore, SqliteAgentDefinitionAdminStore>();
