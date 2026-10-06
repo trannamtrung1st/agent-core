@@ -41,7 +41,10 @@ describe("Admin conversation sources", () => {
     await open(); await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Load older conversations" })); });
     expect(listCatalog).toHaveBeenLastCalledWith({ limit: 50, includeArchived: true, cursor: "older" });
     expect(screen.queryByRole("button", { name: "Load older conversations" })).not.toBeInTheDocument();
-    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Source conversation" }));
-    expect(await screen.findByText(/Earlier interview/)).toBeVisible();
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Source conversation" }), { key: "ArrowDown", code: "ArrowDown", keyCode: 40 });
+    await waitFor(() => {
+      expect(screen.getByText(/Earlier interview/)).toBeVisible();
+      expect(screen.getByText(/Practice interview/)).toBeVisible();
+    });
   });
 });
