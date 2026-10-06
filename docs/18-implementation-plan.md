@@ -1,5 +1,12 @@
 # Implementation Plan
 
+## Post-filesystem managed workspace refinement
+
+This user-requested bounded follow-on adds explicit `agentWorkspaceV2`, Session-local cwd, direct CAS-safe home write/patch, single-operation cross-root binary/tree copy, new owner-nested scratch provisioning and canonical Admin tool-count validation. General Assistant v15 has 31 tools; published v12/v13/v14 remain immutable. Existing phase freezes are unchanged and P10/P11 remain unopened.
+
+Acceptance requires new and compatibility runtime journeys; cwd failure/ancestor rules; durable create/replacement/patch conflicts; binary and empty-tree copies, quotas and ownership isolation; Session deletion/SQLite reopen/Compose survival; normal Artifact delivery and sandbox/approval regressions; Form 31/32/invalid33 and backend field/code diagnostics; canonical docs and green hosted Synthetic jobs. Cross-store batches, richer home sandbox mounts and dynamic model tool projection remain deferred. [The refinement verification report](reports/agent-workspace-refinement-verification.md) records acceptance evidence; historical workspace reports remain unchanged.
+
+
 This is the ordered implementation handoff. Each milestone must satisfy its acceptance criteria before dependent work begins. Scope remains conversational presence, not a general autonomous-agent platform. [Roadmap](08-development-roadmap.md) is the short index; this document owns the detailed gates. Observability hooks, cancellation and tests begin with the first slice, although full instrumentation/tuning is Milestone 12.
 
 The verified MVP generic UI is Ant Design v6 ([Technology Decisions](10-technology-decisions.md#decision-ant-design-v6-as-mvp-generic-ui-system)). That presentation change is not a new numbered milestone and does not reopen historical Milestone 1–12 status. Evidence: [antd-migration-handoff](reports/antd-migration-handoff.md).

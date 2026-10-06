@@ -17,6 +17,12 @@ public sealed record WorkspacePatchResult(
 
 public interface ISessionWorkspace
 {
+    ValueTask<WorkspaceTransfer> ExportAsync(Guid sessionId, string path, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Workspace tree export is unavailable.");
+    ValueTask ImportAsync(Guid sessionId, string destination, WorkspaceTransfer transfer,
+        long? expectedRevision = null, string? expectedSha256 = null, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Workspace tree import is unavailable.");
+
     ValueTask EnsureAsync(Guid sessionId, AgentDefinition definition, CancellationToken cancellationToken = default);
 
     ValueTask<IReadOnlyList<WorkspaceNode>> ListAsync(

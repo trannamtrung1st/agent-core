@@ -37,7 +37,8 @@ public sealed record ToolExecutionAdmission(
     IReadOnlyList<HarnessSourceReceipt>? HarnessSources = null,
     string? OwnerTurnText = null,
     bool SupportsTools = true,
-    AgentCore.Domain.Work.WorkModelPin? Model = null);
+    AgentCore.Domain.Work.WorkModelPin? Model = null,
+    string? WorkspaceCwd = null);
 
 public sealed record ToolDescriptor(
     ModelToolDefinition ModelDefinition,

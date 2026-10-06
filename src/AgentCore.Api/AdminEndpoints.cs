@@ -192,7 +192,7 @@ internal static class AdminEndpoints
                     or ToolOfferRule.ConfigurationWhenRoleAllows)
                 .Select(tool => tool.Name)
                 .OrderBy(name => name, StringComparer.Ordinal).ToArray();
-            return Results.Json(new AdminToolRegistryResponse(names));
+            return Results.Json(new AdminToolRegistryResponse(names, AgentDefinitionValidator.MaxToolAllowlistEntries));
         });
 
         group.MapGet("/events", async (

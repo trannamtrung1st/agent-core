@@ -13,11 +13,25 @@ public sealed partial class SessionToolExecutor
     {
         if (tool == ToolCatalog.WorkspaceMove && !WorkspaceFilesystemPolicy.AllowsStructure(definition))
             return await MoveLegacyWorkspaceFileAsync(sessionId, args, ct);
+        if (System.Text.Encoding.UTF8.GetByteCount(args.GetRawText()) > WorkspaceStructureLimits.MaxRequestBytes)
+            throw AgentCoreErrors.Validation("Structural request exceeds the bounded request size.");
+        if (WorkspaceSemantics.IsV2(definition) && tool == ToolCatalog.WorkspaceCopy
+            && TryString(args, "source", out var crossSource) && TryString(args, "destination", out var crossDestination)
+            && AgentHomePath.IsHome(crossSource) != AgentHomePath.IsHome(crossDestination))
+        {
+            if (args.EnumerateObject().Any(p => p.Name is not ("source" or "destination" or "expectedRevision" or "expectedSha256")))
+                return Error("invalid", "Cross-scope copy accepts source, destination and optional durable destination revision/hash.");
+            if (agentWorkspace is null) return Error("unavailable", "Agent Workspace is unavailable.");
+            await agentWorkspace.CopyAcrossScopesAsync(sessionId, crossSource, crossDestination, ExpectedRevision(args), ExpectedHash(args), ct);
+            return JsonSerializer.Serialize(new { completed = true, source = crossSource, destination = crossDestination });
+        }
         var request = WorkspaceStructureArguments.Parse(tool,args);
         var operations = WorkspaceStructuralPaths.Normalize(sessionId,request.Operations);
         var paths = operations.SelectMany(o => new[] {o.Path,o.Source,o.Destination}).OfType<string>().ToArray();
         var home = paths.All(AgentHomePath.IsHome);
-        if (!home && paths.Any(AgentHomePath.IsHome)) throw AgentCoreErrors.Forbidden("A structural operation cannot cross workspace scopes. Use retain or checkout.");
+        if (!home && paths.Any(AgentHomePath.IsHome)) throw AgentCoreErrors.Forbidden(WorkspaceSemantics.IsV2(definition)
+            ? "Cross-scope move and batches are forbidden. Use individual workspace.copy, then explicit delete if needed."
+            : "A structural operation cannot cross workspace scopes. Use retain or checkout.");
         WorkspaceStructureResult result;
         if (home)
         {

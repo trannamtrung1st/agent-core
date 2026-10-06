@@ -29,7 +29,15 @@ public sealed record KnowledgeSourceRef(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? ResourcePath = null);
 
-public sealed record WorkspaceTemplatePolicy(string? TemplateId = null);
+public sealed record WorkspaceTemplatePolicy(string? TemplateId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Semantics = null);
+
+public static class WorkspaceSemantics
+{
+    public const string AgentWorkspaceV2 = "agentWorkspaceV2";
+    public static bool IsV2(AgentDefinition definition) =>
+        RoleEnvironments.Of(definition).WorkspacePolicy.Semantics == AgentWorkspaceV2;
+}
 
 public sealed record AttachmentStorePolicy(bool AllowUnreadUnsupportedTypes = false);
 

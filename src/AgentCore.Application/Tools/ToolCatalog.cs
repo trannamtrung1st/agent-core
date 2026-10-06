@@ -8,6 +8,7 @@ public static class ToolCatalog
 {
     public const string KnowledgeRetrieve = "knowledge.retrieve";
     public const string AttachmentsRead = "attachments.read";
+    public const string WorkspaceCwd = "workspace.cwd";
     public const string WorkspaceRead = "workspace.read";
     public const string WorkspaceList = "workspace.list";
     public const string WorkspaceWrite = "workspace.write";

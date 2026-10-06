@@ -40,6 +40,10 @@ public static class ToolPolicy
                 ? ToolPolicyDecision.RequireApproval : ToolPolicyDecision.Allow;
         }
 
+        if (toolName == ToolCatalog.WorkspaceCwd && !WorkspaceSemantics.IsV2(definition)
+            || toolName is ToolCatalog.WorkspaceRetain or ToolCatalog.WorkspaceCheckout && WorkspaceSemantics.IsV2(definition))
+            return ToolPolicyDecision.Deny;
+
         if (!RolePermissions.AllowsTool(definition, toolName))
         {
             return ToolPolicyDecision.Deny;
@@ -166,6 +170,10 @@ public static class ToolPolicy
                     || (context.DetachedExecution && context.Trigger.Kind == TriggerKind.ThoughtActivation))
                 && !(context.Trigger.Kind == TriggerKind.ThoughtActivation && descriptor.Name is "harness.tool.select" or "harness.tool.configure")
                 && HarnessChatTools.Allows(descriptor.Name, context.Harness);
+
+        if (descriptor.Name == ToolCatalog.WorkspaceCwd && (!WorkspaceSemantics.IsV2(definition) || context?.AgentWorkspaceAvailable != true)
+            || descriptor.Name is ToolCatalog.WorkspaceRetain or ToolCatalog.WorkspaceCheckout && WorkspaceSemantics.IsV2(definition))
+            return false;
 
         if (!RolePermissions.AllowsTool(definition, descriptor.Name))
         {

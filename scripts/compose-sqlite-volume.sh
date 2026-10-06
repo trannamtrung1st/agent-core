@@ -184,6 +184,26 @@ status, workspace_body = request(workspace_url, headers=owner_headers)
 workspace_text = workspace_body.decode("utf-8") if isinstance(workspace_body, bytes) else workspace_body
 assert resource_bytes.decode("utf-8") in workspace_text, workspace_text
 
+# New-mode binary home writes and scratch retain their distinct lifetimes after recreation.
+status, v2_owner_body = request("http://127.0.0.1:5080/api/v2/admin/agent-instances", method="POST",
+    data=json.dumps({"definitionId": "general-assistant", "version": 15}).encode(), headers=owner_headers)
+v2_owner = json.loads(v2_owner_body)["instanceId"]
+status, v2_session_body = request("http://127.0.0.1:5080/api/v2/sessions", method="POST",
+    data=json.dumps({"agentInstanceId": v2_owner, "mode": "text"}).encode(), headers=owner_headers)
+v2_session = json.loads(v2_session_body)["sessionId"]
+v2_bytes = bytes([0, 255, 128, 13, 10])
+for v2_path in ("/home/binary.dat", "/working/binary.dat"):
+    status, _ = request(f"http://127.0.0.1:5080/api/v2/sessions/{v2_session}/workspace/content?path={v2_path}",
+        method="PUT", data=v2_bytes, headers={**owner_headers, "Content-Type": "application/octet-stream"})
+    assert status == 204, status
+req = urllib.request.Request(f"http://127.0.0.1:5080/api/v2/sessions/{v2_session}/workspace/content?path=/home/binary.dat",
+    method="PUT", data=b"unguarded", headers={**owner_headers, "Content-Type": "application/octet-stream"})
+try:
+    urllib.request.urlopen(req)
+    raise AssertionError("unguarded durable replacement succeeded")
+except urllib.error.HTTPError as error: assert error.code == 409
+json.dump({"instanceId": v2_owner, "sessionId": v2_session}, open("/tmp/agent-core-v2-survival.json", "w"))
+
 # A retained copy is independent of the source Session and survives container recreation.
 status, home_source_body = request(
     "http://127.0.0.1:5080/api/v2/sessions", method="POST",
@@ -366,7 +386,7 @@ print("work survived", work["completedId"], work["approvalWorkId"])
 PY
 
 python3 - <<PY
-import json, urllib.parse, urllib.request
+import json, urllib.error, urllib.parse, urllib.request
 
 token = open("/tmp/agent-core-owner-token.txt").read()
 admin = json.load(open("/tmp/agent-core-admin.json"))
@@ -441,6 +461,25 @@ status, listed_home = get(f"http://127.0.0.1:5080/api/v2/agent-instances/{home['
 assert any(item["sha256Hex"] == home["item"]["sha256Hex"] and not item["directory"] for item in json.loads(listed_home)["items"])
 assert any(item["logicalPath"] == "/home/reports" and item["directory"] for item in json.loads(listed_home)["items"])
 assert len(json.loads(listed_home)["treeSha256"]) == 64
+v2 = json.load(open("/tmp/agent-core-v2-survival.json"))
+v2_bytes = bytes([0, 255, 128, 13, 10])
+for path in ("/home/binary.dat", "/working/binary.dat"):
+    req = urllib.request.Request(f"http://127.0.0.1:5080/api/v2/sessions/{v2['sessionId']}/workspace/content?path={path}", headers={"X-AgentCore-Owner-Capability": token})
+    with urllib.request.urlopen(req) as response: assert response.read() == v2_bytes
+req = urllib.request.Request(f"http://127.0.0.1:5080/api/v2/sessions/{v2['sessionId']}", method="DELETE", headers={"X-AgentCore-Owner-Capability": token})
+with urllib.request.urlopen(req) as response: assert response.status == 204
+req = urllib.request.Request("http://127.0.0.1:5080/api/v2/sessions", method="POST",
+    data=json.dumps({"agentInstanceId": v2["instanceId"], "mode": "text"}).encode(),
+    headers={"X-AgentCore-Owner-Capability": token, "Content-Type": "application/json"})
+with urllib.request.urlopen(req) as response: fresh = json.load(response)["sessionId"]
+req = urllib.request.Request(f"http://127.0.0.1:5080/api/v2/sessions/{fresh}/workspace/content?path=/home/binary.dat", headers={"X-AgentCore-Owner-Capability": token})
+with urllib.request.urlopen(req) as response: assert response.read() == v2_bytes
+req = urllib.request.Request(f"http://127.0.0.1:5080/api/v2/sessions/{fresh}/workspace/content?path=/working/binary.dat", headers={"X-AgentCore-Owner-Capability": token})
+try:
+    urllib.request.urlopen(req)
+    raise AssertionError("new Session inherited scratch")
+except urllib.error.HTTPError as error: assert error.code == 404
+print("managed v2 binary home and nested scratch survived recreation; fresh scratch isolated", v2["instanceId"])
 print("agent workspace survived source deletion and container recreation", home["instanceId"])
 print("admin survived", instance_id, managed_session_id, pub_version, resource_path)
 PY

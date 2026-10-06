@@ -265,7 +265,8 @@ public static class InfrastructureServiceCollectionExtensions
             persistence.WorkspaceRoot,
             persistence.TemplateRoot,
             provider.GetService<IAttachmentStore>(),
-            publicationResources: provider.GetService<DefinitionPublicationResourceReader>()));
+            publicationResources: provider.GetService<DefinitionPublicationResourceReader>(),
+            sessions: provider.GetRequiredService<IMemoryStore>()));
         if (string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
         {
             services.TryAddSingleton<IArtifactStore>(provider => new SqliteArtifactStore(

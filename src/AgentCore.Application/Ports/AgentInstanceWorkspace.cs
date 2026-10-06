@@ -9,6 +9,12 @@ public sealed record AgentWorkspaceCheckout(AgentWorkspaceItem Source, string De
 /// <summary>Dedicated managed-instance storage. Provenance never owns or cascades into these bytes.</summary>
 public interface IAgentInstanceWorkspaceStore
 {
+    ValueTask<WorkspaceTransfer> ExportAsync(Guid instanceId, string path, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Workspace tree export is unavailable.");
+    ValueTask ImportAsync(Guid instanceId, string destination, WorkspaceTransfer transfer,
+        long? expectedRevision = null, string? expectedSha256 = null, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Workspace tree import is unavailable.");
+
     ValueTask<AgentWorkspacePage> ListAsync(Guid instanceId, string prefix, string? afterPath, int limit, CancellationToken cancellationToken = default);
     ValueTask<AgentWorkspaceContent> ReadAsync(Guid instanceId, Guid? itemId, string? path, CancellationToken cancellationToken = default);
     ValueTask<AgentWorkspaceItem> RetainAsync(Guid instanceId, string path, string contentType, ReadOnlyMemory<byte> bytes,

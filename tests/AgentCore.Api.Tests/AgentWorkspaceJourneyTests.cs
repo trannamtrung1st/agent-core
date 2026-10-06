@@ -198,6 +198,70 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
         if (!structural) Assert.Equal(before.TreeSha256, (await store.ListAsync(owner, "/home", null, 256)).TreeSha256);
     }
 
+    [Fact]
+    public async Task V2_managed_workspace_uses_cwd_direct_CAS_tree_copy_and_home_artifacts()
+    {
+        var client = Owner(); var owner = await CreateInstance(client, 15); var session = await CreateSession(client, owner);
+        var executor = _factory.Services.GetRequiredService<SessionToolExecutor>();
+        var snapshot = (await _factory.Services.GetRequiredService<IMemoryStore>().LoadAsync(session))!;
+        string cwd = "/home";
+        async Task<System.Text.Json.JsonElement> Tool(string name, object args, bool approved = false)
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(args);
+            var element = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(json);
+            var grant = approved ? new ToolApprovalGrant(Guid.NewGuid(), name, ToolActionHash.Compute(name, element), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()) : null;
+            var result = await executor.ExecuteAsync(snapshot.Definition, session, new("v2-test", name, json), 16000,
+                approvalGrant: grant, admission: new(false, TriggerKind.UserTurn, AgentInstanceId: owner, WorkspaceCwd: cwd));
+            if (result.WorkspaceCwd is not null) cwd = result.WorkspaceCwd;
+            Assert.DoesNotContain("/workspace", result.Text);
+            return System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(result.Text);
+        }
+        var initial = await Tool(ToolCatalog.WorkspaceCwd, new { operation = "get" }); Assert.Equal("/home", initial.GetProperty("cwd").GetString());
+        var listing = await Tool(ToolCatalog.WorkspaceList, new { });
+        await Tool(ToolCatalog.WorkspaceMkdir, new { path = "project/empty", expectedTreeSha256 = listing.GetProperty("treeSha256").GetString() });
+        await Tool(ToolCatalog.WorkspaceCwd, new { operation = "set", path = "/home/project" }); Assert.Equal("/home/project", cwd);
+        var written = await Tool(ToolCatalog.WorkspaceWrite, new { path = "notes.md", content = "hello café" });
+        Assert.Equal("/home/project/notes.md", written.GetProperty("path").GetString());
+        var metadata = written.GetProperty("homeItem"); var hash = metadata.GetProperty("Sha256Hex").GetString();
+        Assert.Equal("Conflict", (await Tool(ToolCatalog.WorkspaceWrite, new { path = "notes.md", content = "lost" })).GetProperty("error").GetString());
+        var patch = await Tool(ToolCatalog.WorkspacePatch, new { path = "notes.md", expectedSha256 = hash, edits = new[] { new { oldText = "hello", newText = "updated" } } });
+        Assert.True(patch.TryGetProperty("newSha256", out _));
+        Assert.Equal("Conflict", (await Tool(ToolCatalog.WorkspacePatch, new { path = "notes.md", expectedSha256 = hash, edits = new[] { new { oldText = "updated", newText = "lost" } } })).GetProperty("error").GetString());
+        Assert.Contains("updated", (await Tool(ToolCatalog.WorkspaceRead, new { path = "notes.md" })).GetProperty("content").GetString());
+        Assert.Contains("/home/project/notes.md", (await Tool(ToolCatalog.WorkspaceSearch, new { query = "updated" })).GetRawText());
+        Assert.Equal("notFound", (await Tool(ToolCatalog.WorkspaceCwd, new { operation = "set", path = "missing" })).GetProperty("error").GetString());
+        Assert.Equal("invalid", (await Tool(ToolCatalog.WorkspaceCwd, new { operation = "set", path = "notes.md" })).GetProperty("error").GetString());
+        Assert.True((await Tool(ToolCatalog.WorkspaceCwd, new { operation = "set", path = "/agent" })).TryGetProperty("error", out _));
+        listing = await Tool(ToolCatalog.WorkspaceList, new { path = "/home" });
+        var treeToken = listing.GetProperty("treeSha256").GetString();
+        Assert.Equal("Conflict", (await Tool(ToolCatalog.WorkspaceMove, new { source = "/home/project", destination = "/home/renamed", expectedTreeSha256 = treeToken })).GetProperty("error").GetString());
+        Assert.Equal("Conflict", (await Tool(ToolCatalog.WorkspaceDelete, new { path = "/home/project", recursive = true, expectedTreeSha256 = treeToken }, true)).GetProperty("error").GetString());
+        await Tool(ToolCatalog.WorkspaceCopy, new { source = "/home/project", destination = "/working/copy" });
+        var scratch = await client.GetFromJsonAsync<WorkspaceNodeResponse[]>($"/api/v2/sessions/{session}/workspace?prefix=/working/copy");
+        Assert.Contains(scratch!, n => n.LogicalPath == "/working/copy/empty" && n.Directory);
+        var bytes = new byte[] { 0, 255, 128, 13, 10 };
+        (await client.PutAsync($"/api/v2/sessions/{session}/workspace/content?path=/working/copy/raw.bin", new ByteArrayContent(bytes))).EnsureSuccessStatusCode();
+        await Tool(ToolCatalog.WorkspaceCopy, new { source = "/working/copy", destination = "/home/binary-tree" });
+        Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/binary-tree/raw.bin"));
+        Assert.Equal("Conflict", (await Tool(ToolCatalog.WorkspaceCopy, new { source = "/home/project", destination = "/working/copy" })).GetProperty("error").GetString());
+        Assert.Equal("Forbidden", (await Tool(ToolCatalog.WorkspaceMove, new { source = "/working/copy", destination = "/home/transferred" })).GetProperty("error").GetString());
+        await Tool(ToolCatalog.WorkspaceCwd, new { operation = "set", path = "/working" });
+        await Tool(ToolCatalog.WorkspaceWrite, new { path = "scratch.md", content = "scratch" });
+        Assert.Equal("scratch", System.Text.Encoding.UTF8.GetString(await client.GetByteArrayAsync($"/api/v2/sessions/{session}/workspace/content?path=/working/scratch.md")));
+        var artifact = await Tool(ToolCatalog.ArtifactsCreateFromWorkspace, new { path = "/home/project/notes.md", displayName = "notes.md" });
+        Assert.Equal("updated café", System.Text.Encoding.UTF8.GetString(await client.GetByteArrayAsync($"/api/v2/sessions/{session}/artifacts/{artifact.GetProperty("artifactId").GetString()}/content")));
+        Assert.Equal("forbidden", (await Tool(ToolCatalog.WorkspaceRetain, new { source = "/working/scratch.md", destination = "/home/legacy.md" })).GetProperty("error").GetString());
+        var fresh = await CreateSession(client, owner);
+        var result = await executor.ExecuteAsync(snapshot.Definition, fresh, new("new", ToolCatalog.WorkspaceCwd, "{\"operation\":\"get\"}"), 8192);
+        Assert.Contains("/home", result.Text);
+        (await client.DeleteAsync($"/api/v2/sessions/{session}")).EnsureSuccessStatusCode();
+        Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/sessions/{fresh}/workspace/content?path=/home/binary-tree/raw.bin"));
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/sessions/{fresh}/workspace/content?path=/working/scratch.md")).StatusCode);
+        var other = await CreateInstance(client, 15); var otherSession = await CreateSession(client, other);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/sessions/{otherSession}/workspace/content?path=/home/project/notes.md")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/api/v2/sessions/{fresh}/workspace/content?path=/working/{session}/scratch.md")).StatusCode);
+    }
+
     private static async Task<Guid> CreateInstance(HttpClient client, int version = 13)
     {
         var response = await client.PostAsJsonAsync("/api/v2/admin/agent-instances", new AdminCreateAgentInstanceRequest("general-assistant", version)); response.EnsureSuccessStatusCode();
@@ -243,6 +307,40 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }
 
+    [Fact]
+    public async Task V2_Sqlite_reopen_preserves_home_and_owner_nested_scratch_then_cleans_each_lifecycle()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "workspace-v2-restart", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        Guid owner, session; byte[] bytes = [0, 255, 128, 13, 10];
+        try
+        {
+            using (var first = new SqliteFactory(root))
+            {
+                var client = OwnerOf(first); owner = await CreateInstance(client, 15); session = await CreateSession(client, owner);
+                (await client.PutAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/binary.dat", new ByteArrayContent(bytes))).EnsureSuccessStatusCode();
+                (await client.PutAsync($"/api/v2/sessions/{session}/workspace/content?path=/working/binary.dat", new ByteArrayContent(bytes))).EnsureSuccessStatusCode();
+                Assert.True(Directory.Exists(Path.Combine(root, "scratch", "agent-" + owner.ToString("N"), "sessions", "session-" + session.ToString("N"), "workspace", "working")));
+            }
+            using (var second = new SqliteFactory(root))
+            {
+                var client = OwnerOf(second);
+                Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/binary.dat"));
+                Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/sessions/{session}/workspace/content?path=/working/binary.dat"));
+                Assert.Equal(HttpStatusCode.Conflict, (await client.PutAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/binary.dat", new ByteArrayContent([42]))).StatusCode);
+                (await client.DeleteAsync($"/api/v2/sessions/{session}")).EnsureSuccessStatusCode();
+                Assert.False(Directory.Exists(Path.Combine(root, "scratch", "agent-" + owner.ToString("N"), "sessions", "session-" + session.ToString("N"))));
+                var fresh = await CreateSession(client, owner);
+                Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/sessions/{fresh}/workspace/content?path=/home/binary.dat"));
+                Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/sessions/{fresh}/workspace/content?path=/working/binary.dat")).StatusCode);
+                (await client.DeleteAsync($"/api/v2/sessions/{fresh}")).EnsureSuccessStatusCode();
+                (await client.PatchAsJsonAsync($"/api/v2/admin/agent-instances/{owner}/lifecycle", new AdminUpdateAgentInstanceLifecycleRequest(1, "Archived"))).EnsureSuccessStatusCode();
+                (await client.SendAsync(new HttpRequestMessage(HttpMethod.Delete, $"/api/v2/admin/agent-instances/{owner}") { Content = JsonContent.Create(new AdminInstanceDeleteRequest(2)) })).EnsureSuccessStatusCode();
+                Assert.False(Directory.Exists(Path.Combine(root, "home", owner.ToString("N"))));
+            }
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
+    }
+
     private static HttpClient OwnerOf(Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> factory)
     {
         var client = factory.CreateClient(); client.DefaultRequestHeaders.TryAddWithoutValidation(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(factory.Services)); return client;
@@ -261,6 +359,8 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
             }));
             builder.ConfigureTestServices(services =>
             {
+                services.RemoveAll<ISessionWorkspace>();
+                services.AddSingleton<ISessionWorkspace>(sp => new FileSessionWorkspace(Path.Combine(root, "scratch"), Path.Combine(root, "templates"), sessions: sp.GetRequiredService<IMemoryStore>()));
                 services.RemoveAll<IAgentInstanceWorkspaceStore>();
                 services.AddSingleton<IAgentInstanceWorkspaceStore>(sp => new FileAgentInstanceWorkspaceStore(Path.Combine(root, "home"),
                     sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<IIdGenerator>(), sp.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));

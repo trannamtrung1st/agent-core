@@ -64,6 +64,9 @@ public sealed record ApplicationMessageRequested(
     string ArgumentsJson,
     TaskCompletionSource<ApplicationMessageMailboxResult> Completed) : SessionInput(Context);
 
+public sealed record WorkspaceCwdRequested(EventContext Context, Guid ResponseId, Guid Epoch,
+    string? Next, TaskCompletionSource<string?> Completed) : SessionInput(Context);
+
 public sealed record SkillLoadRequested(
     EventContext Context,
     Guid ResponseId,

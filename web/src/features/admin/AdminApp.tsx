@@ -74,7 +74,7 @@ import {
   listAdminDraftResources,
   listAdminInstances,
   listAdminPublicationResources,
-  listAdminToolNames,
+  getAdminToolRegistry,
   publishAdminDefinitionDraft,
   removeAdminDraftResource,
   updateAdminDefinitionDraft,
@@ -1624,11 +1624,16 @@ function DraftEditor({
     }
     onCandidateChange(applyDraftEnvironmentToCandidate(candidate, next));
   };
-  const saveBlocked = candidateLocked;
+
   const { message } = App.useApp();
   const [toolRegistryLoading, setToolRegistryLoading] = useState(false);
   const [toolRegistryError, setToolRegistryError] = useState<AdminFailureNotice | null>(null);
   const [toolNames, setToolNames] = useState<string[]>([]);
+  const [maxToolAllowlistEntries, setMaxToolAllowlistEntries] = useState<number | null>(null);
+  const selectedToolCount = capabilities.toolAllowlist.length;
+  const toolLimitExceeded = maxToolAllowlistEntries !== null && selectedToolCount > maxToolAllowlistEntries;
+  const toolLimitReached = maxToolAllowlistEntries !== null && selectedToolCount >= maxToolAllowlistEntries;
+  const saveBlocked = candidateLocked || (editorView === "form" && (toolLimitExceeded || maxToolAllowlistEntries === null));
   const [resources, setResources] = useState<AdminDefinitionDraftResource[]>([]);
   const [resourcesLoading, setResourcesLoading] = useState(false);
   const [logicalPath, setLogicalPath] = useState("");
@@ -1661,10 +1666,12 @@ function DraftEditor({
     setToolRegistryLoading(true);
     setToolRegistryError(null);
     try {
-      const names = await listAdminToolNames();
-      setToolNames(names);
+      const registry = await getAdminToolRegistry();
+      setToolNames(registry.toolNames);
+      setMaxToolAllowlistEntries(registry.maxToolAllowlistEntries);
     } catch (error) {
       setToolNames([]);
+      setMaxToolAllowlistEntries(null);
       setToolRegistryError(describeAdminError(error, "Failed to load tool registry."));
     } finally {
       setToolRegistryLoading(false);
@@ -1863,6 +1870,7 @@ function DraftEditor({
                   <label className="admin-draft-field">
                     <Flex align="center" gap={8}>
                       <Typography.Text strong>Tool allowlist</Typography.Text>
+                      {maxToolAllowlistEntries !== null ? <Typography.Text type={toolLimitExceeded ? "danger" : "secondary"} aria-live="polite">{selectedToolCount} / {maxToolAllowlistEntries}</Typography.Text> : null}
                       {toolRegistryLoading ? <Spin size="small" /> : null}
                     </Flex>
                     <Select
@@ -1871,16 +1879,29 @@ function DraftEditor({
                       maxTagCount="responsive"
                       value={capabilities.toolAllowlist}
                       onChange={(values) =>
-                        onCapabilitiesChange({ ...capabilities, toolAllowlist: values })
+                        maxToolAllowlistEntries !== null && (values.length <= maxToolAllowlistEntries || values.length < selectedToolCount)
+                          && onCapabilitiesChange({ ...capabilities, toolAllowlist: values })
                       }
                       disabled={busy || candidateLocked || toolRegistryLoading || toolRegistryError !== null}
-                      options={toolNames.map((name) => ({ value: name, label: name }))}
+                      status={toolLimitExceeded ? "error" : undefined}
+                      options={toolNames.map((name) => ({ value: name, label: name,
+                        disabled: toolLimitReached && !capabilities.toolAllowlist.includes(name) }))}
                       placeholder="Select registered tools"
                     />
+                    {toolLimitExceeded ? <Typography.Text type="danger" role="alert">{selectedToolCount} tools selected; maximum is {maxToolAllowlistEntries}.</Typography.Text>
+                      : toolLimitReached ? <Typography.Text type="secondary">Maximum {maxToolAllowlistEntries} tools per definition. Remove one before adding another.</Typography.Text> : null}
                   </label>
                 </section>
                 <section className="admin-draft-form-section" aria-label="Workspace behavior">
                   <Typography.Title level={5}>Workspace behavior</Typography.Title>
+                  <label className="admin-draft-field">
+                    <Typography.Text strong>Workspace semantics</Typography.Text>
+                    <Select aria-label="Workspace semantics" value={capabilities.workspaceSemantics ?? "legacy"}
+                      onChange={(value) => onCapabilitiesChange({ ...capabilities, workspaceSemantics: value === "legacy" ? undefined : value })}
+                      options={[{ value: "legacy", label: "Legacy · Session scratch by default" }, { value: "agentWorkspaceV2", label: "Agent Workspace · /home by default" }]}
+                      disabled={busy || candidateLocked} />
+                    <Typography.Text type="secondary">Applies to this new definition only. Agent Workspace requires a managed instance; use copy instead of retain/checkout.</Typography.Text>
+                  </label>
                   <label className="admin-draft-field">
                     <Typography.Text strong>Workspace template ID</Typography.Text>
                     <Input

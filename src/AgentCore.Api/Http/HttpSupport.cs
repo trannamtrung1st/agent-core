@@ -22,6 +22,8 @@ public static class ProblemResults
                 Detail = exception.Message
             };
             problem.Extensions["code"] = exception.Code;
+            if (exception.ValidationField is { } field) problem.Extensions["field"] = field;
+            if (exception.ValidationCode is { } code) problem.Extensions["validationCode"] = code;
             if (exception.Code == "SessionPersistenceUnavailable")
             {
                 var diagnosticId = exception.DiagnosticId;

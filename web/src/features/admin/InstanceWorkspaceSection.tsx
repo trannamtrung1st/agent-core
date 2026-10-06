@@ -51,11 +51,11 @@ export function InstanceWorkspaceSection({ instanceId, archived }: { instanceId:
   const items = page?.items.filter(i => `${i.logicalPath} ${i.contentType}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())) ?? [];
   return <section className="admin-definition-panel" aria-label="Agent Workspace">
     <div className="admin-definition-panel-heading">
-      <Typography.Title level={4}>Workspace</Typography.Title>
-      <Typography.Text type="secondary">Files and folders intentionally kept by this agent across conversations.</Typography.Text>
+      <Typography.Title level={4}>Agent Workspace</Typography.Title>
+      <Typography.Text type="secondary">/home · Durable across sessions.</Typography.Text>
     </div>
     <div className="admin-definition-panel-body"><Flex vertical gap={token.padding}>
-      {archived ? <Alert type="info" showIcon title="Archived workspace is read-only" description="Retained files remain available to download." /> : null}
+      {archived ? <Alert type="info" showIcon title="Archived workspace is read-only" description="Files remain available to download." /> : null}
       <Flex justify="space-between" align="center" wrap gap={token.paddingXS}>
         <Typography.Text type="secondary">{page ? `${artifactSize(page.usedBytes)} of ${artifactSize(page.maxInstanceBytes)} · ${page.totalItems} ${page.totalItems === 1 ? "item" : "items"}` : ""}</Typography.Text>
         <Button disabled={loading || !!busy} onClick={() => void reload()}>Reload workspace</Button>
@@ -76,7 +76,7 @@ export function InstanceWorkspaceSection({ instanceId, archived }: { instanceId:
             { title: "Actions", width: 180, render: (_, item) => <Flex wrap gap={token.paddingXS}>
               <Button aria-label={`Download ${item.logicalPath}`} disabled={!!busy || item.directory} onClick={() => void save(item)}>Download</Button>
               <Button danger aria-label={`Delete ${item.logicalPath}`} disabled={archived || !!busy || loading} onClick={() => confirmAction(modal, {
-                title: item.directory ? "Delete empty folder?" : "Delete retained file?", content: `Delete ${item.logicalPath} from this agent's workspace. Existing conversation Artifacts are kept.`,
+                title: item.directory ? "Delete empty folder?" : "Delete workspace file?", content: `Delete ${item.logicalPath} from this agent's workspace. Existing conversation Artifacts are kept.`,
                 okText: item.directory ? "Delete folder" : "Delete file", danger: true, onOk: () => remove(item)
               })}>Delete</Button>
             </Flex> }

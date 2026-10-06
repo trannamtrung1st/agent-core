@@ -102,6 +102,25 @@ public sealed class AdminDefinitionCandidateValidatorTests
         Assert.False(ToolRegistry.TryGet(SkillCapabilities.ChatRespond, out _));
     }
 
+    [Theory]
+    [InlineData("limit", "tool_limit_exceeded")]
+    [InlineData("duplicate", "duplicate_tool")]
+    [InlineData("malformed", "invalid_tool_name")]
+    [InlineData("unknown", "unregistered_tool")]
+    public void Tool_validation_returns_precise_field_codes(string scenario, string code)
+    {
+        IReadOnlyList<string> tools = scenario switch
+        {
+            "limit" => Enumerable.Range(0, 33).Select(n => "tool." + n).ToArray(),
+            "duplicate" => ["workspace.read", "workspace.read"],
+            "malformed" => ["Workspace Read"],
+            _ => ["unknown.tool"]
+        };
+        var candidate = AgentDefinitionCandidate.FromDefinition(SampleDefinitions.Support) with
+        { Environment = new RoleEnvironment(ToolAllowlist: tools) };
+        Assert.Contains(Publish(candidate), f => f.Field == "environment.toolAllowlist" && f.Code == code);
+    }
+
     private static AgentDefinitionCandidate Candidate(SkillSpec skill, IReadOnlyList<string>? tools = null) =>
         AgentDefinitionCandidate.FromDefinition(SampleDefinitions.Support) with
         {

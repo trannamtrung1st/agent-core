@@ -30,7 +30,8 @@ internal static class AgentDefinitionCandidateValidator
         var findings = CollectPersistenceFindings(candidate, aliases);
         if (findings.Count > 0)
         {
-            throw AgentCoreErrors.Validation(findings[0].Message);
+            throw new AgentCoreException("ValidationError", findings[0].Message, 400)
+            { ValidationField = findings[0].Field, ValidationCode = findings[0].Code };
         }
     }
 
@@ -43,7 +44,8 @@ internal static class AgentDefinitionCandidateValidator
         var findings = CollectPublicationFindings(candidate, aliases, catalog, configurationGate);
         if (findings.Count > 0)
         {
-            throw AgentCoreErrors.Validation(findings[0].Message);
+            throw new AgentCoreException("ValidationError", findings[0].Message, 400)
+            { ValidationField = findings[0].Field, ValidationCode = findings[0].Code };
         }
     }
 
@@ -105,6 +107,11 @@ internal static class AgentDefinitionCandidateValidator
         catch (AgentCoreException ex)
         {
             return [Blocking("candidate", "domain_shape", ex.Message)];
+        }
+        catch (ToolAllowlistValidationException)
+        {
+            return AgentDefinitionValidator.ToolAllowlistFindings(candidate.Environment!.ToolList)
+                .Select(f => Blocking("environment.toolAllowlist", f.Code, f.Message));
         }
         catch (ArgumentException ex)
         {

@@ -30,7 +30,10 @@ test("managed home survives deleted source, checks out a revision and delivers a
   expect((await request.get(`/api/v2/sessions/${a1}/workspace/content?path=${scratch}`, { headers })).status()).toBe(404);
   const a2 = await session(a);
   await page.goto(`/c/${a2}`); await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 20_000 });
-  await page.getByLabel("Message").fill("synthetic-agent-workspace: search"); await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(async () => {
+    await page.getByLabel("Message").fill("synthetic-agent-workspace: search");
+    await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  }).toPass(); await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(page.locator(".chat-message-assistant").last()).toContainText(home, { timeout: 30_000 });
   const read = await request.get(`/api/v2/sessions/${a2}/workspace/content?path=${home}`, { headers }); expect(await read.body()).toEqual(source);
   const checkout = await request.post(`/api/v2/sessions/${a2}/workspace/checkout`, { headers, data: { source: home, destination: scratch, expectedRevision: first.revision, expectedSha256: first.sha256Hex } });

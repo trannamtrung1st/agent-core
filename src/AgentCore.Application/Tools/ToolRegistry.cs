@@ -42,6 +42,11 @@ public static class ToolRegistry
                 ToolEffect.ReadOnly,
                 ToolOfferRule.SessionAttachmentsWhenRoleAllows,
                 ToolResourceScope.Session),
+            [ToolCatalog.WorkspaceCwd] = Descriptor(
+                ToolCatalog.WorkspaceCwd,
+                "Get or set the session current working directory. New sessions start at /home; /working is temporary scratch. Set requires an existing authorized directory and never grants authority.",
+                """{"type":"object","properties":{"operation":{"type":"string","enum":["get","set"]},"path":{"type":"string"}},"required":["operation"],"additionalProperties":false}""",
+                ToolEffect.Write, scope: ToolResourceScope.Session),
             [ToolCatalog.WorkspaceRead] = Descriptor(
                 ToolCatalog.WorkspaceRead,
                 "Read a file from the session workspace. Relative paths and bare filenames resolve from the working directory (for example notes.txt). Explicit /home (durable, read-only), /agent, /attachments, and /workspace logical paths may be used when permitted.",

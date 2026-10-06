@@ -89,7 +89,9 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         response.EnsureSuccessStatusCode();
         var payload = await response.Content.ReadFromJsonAsync<AdminToolRegistryResponse>();
         Assert.NotNull(payload);
-        Assert.Contains(payload!.ToolNames, name => name == ToolCatalog.WorkspaceRead);
+        Assert.Equal(AgentDefinitionValidator.MaxToolAllowlistEntries, payload!.MaxToolAllowlistEntries);
+        Assert.True(payload.ToolNames.Count > payload.MaxToolAllowlistEntries);
+        Assert.Contains(payload.ToolNames, name => name == ToolCatalog.WorkspaceRead);
         Assert.Contains(ToolCatalog.AttachmentsRead, payload.ToolNames);
         Assert.Contains(ToolCatalog.BrowserNavigate, payload.ToolNames);
         Assert.DoesNotContain(ToolCatalog.ContinuitySearch, payload.ToolNames);
@@ -558,6 +560,24 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
             "/api/v2/admin/definition-drafts",
             new AdminCreateDefinitionDraftRequest("demo-agent", JsonSerializer.SerializeToElement(candidate, JsonOptions())));
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(33, "tool_limit_exceeded")]
+    [InlineData(2, "duplicate_tool")]
+    [InlineData(1, "invalid_tool_name")]
+    public async Task Admin_definition_authoring_returns_precise_tool_shape_failure(int count, string expectedCode)
+    {
+        var tools = count == 33 ? Enumerable.Range(0, count).Select(n => "tool." + n).ToArray()
+            : count == 2 ? new[] { "workspace.read", "workspace.read" } : new[] { "Workspace Read" };
+        var candidate = SampleDraftCandidate("tool-shape-" + count) with { Environment = new RoleEnvironment(ToolAllowlist: tools) };
+        var response = await OwnerClient().PostAsJsonAsync("/api/v2/admin/definition-drafts",
+            new AdminCreateDefinitionDraftRequest(candidate.DefinitionId, JsonSerializer.SerializeToElement(candidate, JsonOptions())));
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(expectedCode, problem.GetProperty("validationCode").GetString());
+        Assert.Equal("environment.toolAllowlist", problem.GetProperty("field").GetString());
+        if (count == 33) Assert.Equal("33 tools selected; maximum is 32.", problem.GetProperty("detail").GetString());
     }
 
     [Fact]

@@ -87,7 +87,7 @@ vi.mock("../../services/adminApi", () => ({
   forkAdminDefinitionDraft: vi.fn(),
   listAdminDraftResources: vi.fn(),
   listAdminPublicationResources: vi.fn(),
-  listAdminToolNames: vi.fn().mockResolvedValue(["workspace.read"]),
+  getAdminToolRegistry: vi.fn().mockResolvedValue({ toolNames: ["workspace.read"], maxToolAllowlistEntries: 32 }),
   uploadAdminDraftResourceContent: vi.fn(),
   upsertAdminDraftResource: vi.fn(),
   bindAdminDraftResources: vi.fn(),
@@ -149,7 +149,7 @@ import {
   listAdminDefinitions,
   listAdminDraftResources,
   listAdminPublicationResources,
-  listAdminToolNames,
+  getAdminToolRegistry,
   listAdminInstances,
   removeAdminDraftResource,
   publishAdminDefinitionDraft,
@@ -817,7 +817,7 @@ describe("AdminApp", () => {
       }
     ]);
     vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
-    vi.mocked(listAdminToolNames).mockResolvedValue(["workspace.read"]);
+    vi.mocked(getAdminToolRegistry).mockResolvedValue({ toolNames: ["workspace.read"], maxToolAllowlistEntries: 32 });
     vi.mocked(listAdminDraftResources).mockResolvedValue([
       {
         resourceId: "019944af-00d1-7000-8000-0000000000aa",
@@ -881,7 +881,7 @@ describe("AdminApp", () => {
     ]);
     vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
     vi.mocked(listAdminDraftResources).mockResolvedValue([]);
-    vi.mocked(listAdminToolNames).mockResolvedValue(["workspace.read", "knowledge.retrieve"]);
+    vi.mocked(getAdminToolRegistry).mockResolvedValue({ toolNames: ["workspace.read", "knowledge.retrieve"], maxToolAllowlistEntries: 32 });
     vi.mocked(getAdminDefinitionDraft).mockResolvedValue({
       draftId,
       definitionId: "examiner",
@@ -1033,14 +1033,14 @@ describe("AdminApp", () => {
 
   it("retries tool registry loading from the Capabilities tab", async () => {
     const draftId = "019944af-00d1-7000-8000-0000000000cc";
-    vi.mocked(listAdminToolNames).mockReset();
+    vi.mocked(getAdminToolRegistry).mockReset();
     let toolRegistryAttempts = 0;
-    vi.mocked(listAdminToolNames).mockImplementation(async () => {
+    vi.mocked(getAdminToolRegistry).mockImplementation(async () => {
       toolRegistryAttempts += 1;
       if (toolRegistryAttempts === 1) {
         throw new Error("Registry unavailable");
       }
-      return ["workspace.read", "knowledge.retrieve"];
+      return { toolNames: ["workspace.read", "knowledge.retrieve"], maxToolAllowlistEntries: 32 };
     });
     vi.mocked(listAdminDefinitions).mockResolvedValue([
       {

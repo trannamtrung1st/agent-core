@@ -93,9 +93,10 @@ public sealed class AgentDefinitionValidatorTests
     {
         Assert.Equal(32, AgentDefinitionValidator.MaxToolAllowlistEntries);
         AgentDefinitionValidator.Validate(WithTools(AgentDefinitionValidator.MaxToolAllowlistEntries));
-        var error = Assert.Throws<ArgumentException>(() =>
+        var error = Assert.Throws<ToolAllowlistValidationException>(() =>
             AgentDefinitionValidator.Validate(WithTools(AgentDefinitionValidator.MaxToolAllowlistEntries + 1)));
-        Assert.Contains("toolAllowlist", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("tool_limit_exceeded", error.Code);
+        Assert.Equal("33 tools selected; maximum is 32.", error.Message);
     }
 
     private static AgentDefinition WithTools(int count)

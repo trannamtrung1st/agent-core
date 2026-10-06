@@ -1,5 +1,12 @@
 # Frontend Implementation Specification
 
+## Workspace refinement authoring and inspection
+
+Admin registry loading supplies `{toolNames,maxToolAllowlistEntries}`; React uses the server value, including when the registry has more choices than a Definition permits. The existing Ant Design multi-select displays selected/max count with live status. At the cap, unselected options are disabled and selected tools remain removable. Additions never silently remove a capability. A loaded excessive candidate stays intact, shows `33 tools selected; maximum is 32`, and blocks Form Save until corrected. Registry unavailability blocks Form Save with retry; Advanced JSON may still submit an invalid candidate and receives authoritative backend findings.
+
+The workspace semantics selector preserves the explicit `agentWorkspaceV2` policy through Form/JSON edits. New managed definitions expose cwd and omit retain/checkout; legacy authoring keeps its existing policy. The owner Workspace tab uses `Agent Workspace`, `/home` and `Durable across sessions`, lists first-class folders, permits file downloads and leaves directory downloads disabled. It reuses established responsive Ant Design tables and archived read-only policy; no scratch management surface or second UI kit is added.
+
+
 ## Baseline and modules
 
 React SPA, Vite, pnpm, strict TypeScript, Zustand, @microsoft/signalr, @microsoft/signalr-protocol-msgpack, browser fetch, Ant Design v6 (product components import AntD directly), and minimal app-specific CSS. Vitest and React Testing Library test behavior; Playwright tests synthetic end-to-end flows. No SSR, Next.js, heavy data cache, Ant Design Pro/ProComponents/X, or a second component/CSS framework.

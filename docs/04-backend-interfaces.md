@@ -1,5 +1,14 @@
 # Backend Interfaces
 
+## Managed workspace refinement ports
+
+`WorkspaceTemplatePolicy.Semantics` is null for compatibility or `agentWorkspaceV2` for explicit managed opt-in. `WorkspaceSemantics.IsV2` is the shared pure predicate. `ToolExecutionAdmission.WorkspaceCwd` carries a runtime snapshot; `ToolExecutionResult.WorkspaceCwd` is a typed proposed metadata effect. Only the fenced Session mailbox commits that effect. `workspace.cwd` uses one get/set contract, remains independently allowlisted, and requires actual managed workspace availability.
+
+`AgentInstanceWorkspaceService.WriteAsync`, `PatchAsync` and `CopyAcrossScopesAsync` derive the owner from persisted Session metadata and recheck active eligibility inside lifecycle exclusion. Create rejects supplied stale tokens; replacement requires current expectedRevision and/or expectedSha256. Patch requires expectedSha256, strict UTF-8 and exactly one occurrence per oldText. Same-scope home restructuring still requires the whole-tree token.
+
+`ISessionWorkspace` and `IAgentInstanceWorkspaceStore` export/import a bounded `WorkspaceTransfer` of relative entries, directory markers, MIME types and exact bytes. Neither returns a physical root/blob key. Scratch import stages the validated tree before exclusive destination installation; home import writes immutable blobs and commits tree metadata together, cleaning new blobs on failed commit. Single-file home import uses existing guarded replacement. Cross-store copy snapshots source bytes and then checks the destination; it grants no cross-store transaction or destructive move. Prior structural batch partial-result semantics remain unchanged.
+
+
 These C# 14 signatures are the implementation contract, not source files. Ports and normalized provider records live in Application; definition/conversation records live in Domain as specified in [Backend Implementation](12-backend-implementation-spec.md). Use BCL `System`, `System.Collections.Generic`, `System.Threading`, and `System.Threading.Tasks` namespaces. Collections passed to workers must be immutable snapshots, even where typed as `IReadOnlyList<T>`.
 
 ## Portable capabilities and concrete configurations

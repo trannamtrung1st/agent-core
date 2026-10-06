@@ -39,6 +39,15 @@ public sealed class AgentInstanceWorkspaceService(
             await store.DeleteAsync(owner, itemId, expectedRevision, ct);
         }, cancellationToken);
 
+    public async ValueTask<bool> SessionWritableAsync(Guid sessionId, CancellationToken ct)
+    {
+        var snapshot = await SessionAsync(sessionId, false, ct);
+        if (!WorkspaceSemantics.IsV2(snapshot.Definition) || snapshot.ArchivedAt is not null || snapshot.Status == SessionStatus.Ended
+            || snapshot.AgentInstanceId is not Guid owner) return false;
+        var instance = await RequireAsync(owner, false, ct);
+        return instance.Lifecycle == AgentInstanceLifecycle.Active;
+    }
+
     public async ValueTask<Guid> SessionOwnerAsync(Guid sessionId, CancellationToken ct = default)
     {
         var snapshot = await SessionAsync(sessionId, false, ct);
@@ -86,6 +95,60 @@ public sealed class AgentInstanceWorkspaceService(
             await scratch.WriteNewAsync(sessionId, destination, content.Bytes, ct);
             return new AgentWorkspaceCheckout(content.Item, destination, content.Bytes.LongLength,
                 Convert.ToHexString(SHA256.HashData(content.Bytes)).ToLowerInvariant());
+        }, cancellationToken);
+    }
+
+    public async ValueTask<AgentWorkspaceItem> WriteAsync(Guid sessionId, string path, string contentType, ReadOnlyMemory<byte> bytes,
+        long? expectedRevision, string? expectedSha256, CancellationToken cancellationToken = default)
+    {
+        var snapshot = await SessionAsync(sessionId, true, cancellationToken);
+        var owner = snapshot.AgentInstanceId ?? throw AgentCoreErrors.Forbidden("Managed Agent Instance is required.");
+        if (!WorkspaceSemantics.IsV2(snapshot.Definition)) throw AgentCoreErrors.Forbidden("Direct home writes require Agent Workspace v2.");
+        path = AgentHomePath.Normalize(path); ValidateExpected(expectedRevision, expectedSha256);
+        return await lifecycle.WithInstanceAsync(owner, async ct =>
+        {
+            await RequireAsync(owner, true, ct); await SessionAsync(sessionId, true, ct);
+            return await store.RetainAsync(owner, path, contentType, bytes, sessionId, expectedRevision, expectedSha256, ct);
+        }, cancellationToken);
+    }
+
+    public async ValueTask<WorkspacePatchResult> PatchAsync(Guid sessionId, string path, string expectedSha256,
+        IReadOnlyList<WorkspaceTextEdit> edits, CancellationToken cancellationToken = default)
+    {
+        var snapshot = await SessionAsync(sessionId, true, cancellationToken);
+        var owner = snapshot.AgentInstanceId ?? throw AgentCoreErrors.Forbidden("Managed Agent Instance is required.");
+        if (!WorkspaceSemantics.IsV2(snapshot.Definition)) throw AgentCoreErrors.Forbidden("Direct home patches require Agent Workspace v2.");
+        path = AgentHomePath.Normalize(path); ValidateExpected(null, expectedSha256);
+        return await lifecycle.WithInstanceAsync<WorkspacePatchResult>(owner, async ct =>
+        {
+            await RequireAsync(owner, true, ct); await SessionAsync(sessionId, true, ct);
+            var original = await store.ReadAsync(owner, null, path, ct);
+            if (original.Item.Sha256Hex != expectedSha256) throw AgentCoreErrors.Conflict("Home file hash does not match expectedSha256.");
+            var bytes = WorkspaceTextPatches.Apply(original.Bytes, edits);
+            var updated = await store.RetainAsync(owner, path, original.Item.ContentType, bytes, sessionId,
+                original.Item.Revision, expectedSha256, ct);
+            return new(path, expectedSha256, updated.Sha256Hex, updated.ByteSize, edits.Count);
+        }, cancellationToken);
+    }
+
+    public async ValueTask CopyAcrossScopesAsync(Guid sessionId, string source, string destination,
+        long? expectedRevision, string? expectedSha256, CancellationToken cancellationToken = default)
+    {
+        var snapshot = await SessionAsync(sessionId, true, cancellationToken);
+        var owner = snapshot.AgentInstanceId ?? throw AgentCoreErrors.Forbidden("Managed Agent Instance is required.");
+        if (!WorkspaceSemantics.IsV2(snapshot.Definition)) throw AgentCoreErrors.Forbidden("Cross-scope copy requires Agent Workspace v2.");
+        source = WorkspaceLogicalPath.Resolve(source, sessionId); destination = WorkspaceLogicalPath.Resolve(destination, sessionId);
+        var sourceHome = AgentHomePath.IsHome(source); var destinationHome = AgentHomePath.IsHome(destination);
+        if (sourceHome == destinationHome || !(sourceHome ? destination : source).StartsWith("/workspace/working/", StringComparison.Ordinal))
+            throw AgentCoreErrors.Forbidden("Cross-scope copy requires /home and current Session /working children.");
+        ValidateExpected(expectedRevision, expectedSha256);
+        await lifecycle.WithInstanceAsync(owner, async ct =>
+        {
+            await RequireAsync(owner, true, ct); await SessionAsync(sessionId, true, ct);
+            await scratch.EnsureAsync(sessionId, snapshot.Definition, ct);
+            var transfer = sourceHome ? await store.ExportAsync(owner, source, ct) : await scratch.ExportAsync(sessionId, source, ct);
+            if (destinationHome) await store.ImportAsync(owner, destination, transfer, expectedRevision, expectedSha256, ct);
+            else await scratch.ImportAsync(sessionId, destination, transfer, expectedRevision, expectedSha256, ct);
         }, cancellationToken);
     }
 

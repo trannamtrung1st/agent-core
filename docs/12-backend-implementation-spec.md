@@ -1,5 +1,18 @@
 # Backend Implementation Specification
 
+## Agent Workspace v2 tools and policy
+
+Set `environment.workspace` to `{ "semantics": "agentWorkspaceV2" }` to opt a managed definition in. Null/missing semantics preserves legacy behavior; unknown values fail validation. New-mode allowlists exclude retain/checkout. General Assistant v15 has 31 tools, including one `workspace.cwd`.
+
+`workspace.cwd({operation:"get"})` returns `{cwd:"/home"}` initially. Set accepts `{operation:"set",path:"/home/projects/a"}` or an existing `/working` directory. A target must exist, be a directory and remain authorized. Relative read/list/search/write/patch/structure/artifact paths resolve from the current cwd. Omitted list/search path means cwd. `/workspace/working` is rejected in new mode rather than becoming a public alias. Paths cannot escape a root, select another Session/owner or expose host/blob paths. Move/delete/batch affecting cwd or an ancestor fails Conflict.
+
+Ordinary write creates home files, accepting optional expectedRevision/expectedSha256 for replacement. Patch requires current expectedSha256 and exact-once UTF-8 edits. Read/list/search retain bounded content/tree behavior. Same-scope home mkdir/copy/move/delete/batch requires expectedTreeSha256 from a current whole-home listing. Individual `workspace.copy` between `/home` and `/working` supports exact binary bytes, complete trees, empty directories and parents, with destination quota/conflict checks. Existing home file replacement requires CAS; directory destinations never merge. Cross-scope move is Forbidden; copy then separately delete if intended. Batch stays structural, at most 16 operations/16 KiB and single-scope, with full ordered preflight and honest partial execution.
+
+Publish user downloads with `artifacts.create_from_workspace` from either root. Normal model guidance describes durable work directly in home and explicit scratch processing/copy for sandbox. Tool policy and execution both check the pinned policy and actual managed eligibility; background work does not receive Session cwd.
+
+Canonical allowlist validation distinguishes tool_limit_exceeded, duplicate_tool and invalid_tool_name; candidate validation retains unregistered_tool and unconfigured_tool. Findings name `environment.toolAllowlist`; authoring Problem Details retains `code:ValidationError` and adds `field`/`validationCode` plus useful detail. The 32 limit is unchanged.
+
+
 [Interfaces](04-backend-interfaces.md) owns ports, [Architecture](03-system-architecture.md) owns concurrency, and [Controller](05-interaction-controller.md) owns turn-taking. This document owns Agent Definition, text-first context construction and the initial HTTP model adapter. The canonical MVP composes STT → Interaction Controller → text Agent Runtime / LLM → Speech Segmenter → TTS; it requires no multimodal audio-reasoning model.
 
 ## Agent Definition

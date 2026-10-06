@@ -15,6 +15,8 @@ public sealed class AgentCoreException : Exception
     public bool Fatal { get; }
     public int? RetryAfterMs { get; init; }
     public Guid? DiagnosticId { get; init; }
+    public string? ValidationField { get; init; }
+    public string? ValidationCode { get; init; }
 }
 
 public static class AgentCoreErrors

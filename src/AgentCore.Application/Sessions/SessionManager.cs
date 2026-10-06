@@ -140,8 +140,9 @@ public sealed class SessionManager
         string? reasoningEffort,
         ModelSelectionSource modelSource)
     {
-        var definition = await _definitions.GetAsync(agentId, agentVersion, cancellationToken).ConfigureAwait(false)
+        var definition = await CompatibilityDefinitionAsync(agentId, agentVersion, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound($"Agent '{agentId}' was not found.");
+        if (WorkspaceSemantics.IsV2(definition)) throw AgentCoreErrors.Validation("Agent Workspace v2 requires a managed Agent Instance. Create one in Admin and open its conversation.");
         Guid? instanceId = null;
         AgentIdentity? persona = null;
         if (_instances is not null)
@@ -812,7 +813,7 @@ public sealed class SessionManager
         var resolved = new List<PublicAgentDescriptor>();
         foreach (var id in ids)
         {
-            var definition = await _definitions.GetAsync(id, version: null, cancellationToken).ConfigureAwait(false);
+            var definition = await CompatibilityDefinitionAsync(id, null, cancellationToken).ConfigureAwait(false);
             if (definition is not null)
             {
                 resolved.Add(PublicHistory.FromDefinition(definition, _voice.IsAvailable(definition)));
@@ -827,9 +828,18 @@ public sealed class SessionManager
         int? version,
         CancellationToken cancellationToken = default)
     {
-        var definition = await _definitions.GetAsync(agentId, version, cancellationToken).ConfigureAwait(false)
+        var definition = await CompatibilityDefinitionAsync(agentId, version, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound($"Agent '{agentId}' was not found.");
         return PublicHistory.FromDefinition(definition, _voice.IsAvailable(definition));
+    }
+
+    // The public identity picker creates compatibility sessions. Managed-only policies are selected in Admin.
+    private async ValueTask<AgentDefinition?> CompatibilityDefinitionAsync(string id, int? version, CancellationToken ct)
+    {
+        var definition = await _definitions.GetAsync(id, version, ct);
+        if (version is not null || definition is null || !WorkspaceSemantics.IsV2(definition)) return definition;
+        var legacy = (await _definitions.ListAsync(ct)).Where(d => d.Id == id && !WorkspaceSemantics.IsV2(d)).OrderByDescending(d => d.Version).FirstOrDefault();
+        return legacy is null ? null : await _definitions.GetAsync(id, legacy.Version, ct);
     }
 
     public async Task<KnowledgeDocument> RetrieveKnowledgeAsync(
@@ -853,13 +863,19 @@ public sealed class SessionManager
     {
         var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
         var workspace = RequireWorkspace();
-        var resolvedPrefix = string.IsNullOrWhiteSpace(prefix)
-            ? WorkspaceLogicalPath.WorkingDirectory
-            : WorkspaceLogicalPath.Resolve(prefix, sessionId);
+        var v2 = WorkspaceSemantics.IsV2(snapshot.Definition);
+        var resolvedPrefix = v2
+            ? (prefix == "/" ? "/home" : AgentWorkspacePaths.Resolve(string.IsNullOrWhiteSpace(prefix) ? "/home" : prefix, sessionId))
+            : string.IsNullOrWhiteSpace(prefix) ? WorkspaceLogicalPath.WorkingDirectory : WorkspaceLogicalPath.Resolve(prefix, sessionId);
         if (AgentCore.Application.Workspaces.AgentHomePath.IsHome(resolvedPrefix) && _agentWorkspace is not null)
-            return await _agentWorkspace.ListNodesAsync(await _agentWorkspace.SessionOwnerAsync(sessionId, cancellationToken), resolvedPrefix, cancellationToken);
+        {
+            var homeNodes = await _agentWorkspace.ListNodesAsync(await _agentWorkspace.SessionOwnerAsync(sessionId, cancellationToken), resolvedPrefix, cancellationToken);
+            var writable = v2 && await _agentWorkspace.SessionWritableAsync(sessionId, cancellationToken);
+            return writable ? homeNodes.Select(n => n with { Writable = true }).ToArray() : homeNodes;
+        }
         await workspace.EnsureAsync(sessionId, snapshot.Definition, cancellationToken).ConfigureAwait(false);
-        return await workspace.ListAsync(sessionId, snapshot.Definition, resolvedPrefix, cancellationToken).ConfigureAwait(false);
+        var nodes = await workspace.ListAsync(sessionId, snapshot.Definition, resolvedPrefix, cancellationToken).ConfigureAwait(false);
+        return v2 ? nodes.Select(n => n with { LogicalPath = AgentWorkspacePaths.Public(n.LogicalPath) }).ToArray() : nodes;
     }
 
     public async Task<WorkspaceContent> ReadWorkspaceAsync(
@@ -869,7 +885,8 @@ public sealed class SessionManager
     {
         var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
         var workspace = RequireWorkspace();
-        var resolvedPath = WorkspaceLogicalPath.Resolve(logicalPath, sessionId);
+        var resolvedPath = WorkspaceSemantics.IsV2(snapshot.Definition) ? AgentWorkspacePaths.Resolve(logicalPath, sessionId)
+            : WorkspaceLogicalPath.Resolve(logicalPath, sessionId);
         if (AgentCore.Application.Workspaces.AgentHomePath.IsHome(resolvedPath) && _agentWorkspace is not null)
         {
             var home = await _agentWorkspace.ReadAsync(await _agentWorkspace.SessionOwnerAsync(sessionId, cancellationToken), path: resolvedPath, cancellationToken: cancellationToken);
@@ -884,7 +901,8 @@ public sealed class SessionManager
         Guid sessionId,
         string logicalPath,
         ReadOnlyMemory<byte> bytes,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        long? expectedRevision = null, string? expectedSha256 = null, string? contentType = null)
     {
         var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
         if (snapshot.ArchivedAt is not null)
@@ -898,10 +916,17 @@ public sealed class SessionManager
         }
 
         var workspace = RequireWorkspace();
-        var resolvedPath = WorkspaceLogicalPath.Resolve(logicalPath, sessionId);
+        var resolvedPath = WorkspaceSemantics.IsV2(snapshot.Definition) ? AgentWorkspacePaths.Resolve(logicalPath, sessionId)
+            : WorkspaceLogicalPath.Resolve(logicalPath, sessionId);
         var started = Stopwatch.GetTimestamp();
         await workspace.EnsureAsync(sessionId, snapshot.Definition, cancellationToken).ConfigureAwait(false);
-        await workspace.WriteAsync(sessionId, resolvedPath, bytes, cancellationToken).ConfigureAwait(false);
+        if (AgentCore.Application.Workspaces.AgentHomePath.IsHome(resolvedPath))
+        {
+            if (!WorkspaceSemantics.IsV2(snapshot.Definition) || _agentWorkspace is null)
+                throw AgentCoreErrors.Forbidden("This definition uses the legacy workspace contract. Direct durable writes are unavailable.");
+            await _agentWorkspace.WriteAsync(sessionId, resolvedPath, contentType ?? "application/octet-stream", bytes, expectedRevision, expectedSha256, cancellationToken);
+        }
+        else await workspace.WriteAsync(sessionId, resolvedPath, bytes, cancellationToken).ConfigureAwait(false);
         RuntimeTelemetry.Record("workspace", RuntimeTelemetry.ElapsedMs(started));
     }
 

@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
 using AgentCore.Infrastructure.Identity;
+using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Workspaces;
 using Microsoft.EntityFrameworkCore;
@@ -122,6 +124,49 @@ public sealed class AgentWorkspaceStoreTests
             Assert.Equal(original, retained.Item); Assert.Equal("original"u8.ToArray(), retained.Bytes);
             Assert.Single((await store.ListAsync(owner, "/home", null, 10)).Items);
             Assert.Single(Directory.GetFiles(Path.Combine(root, "blobs", owner.ToString("N"))));
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Cross_store_tree_copy_preserves_binary_empty_directories_and_preflights_quotas(bool sqlite)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "workspace-transfer", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        try
+        {
+            var factory = sqlite ? new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={root}/store.db").Options) : null;
+            if (factory is not null) await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
+            var home = NewStore(root, factory); var owner = Guid.NewGuid(); var session = Guid.NewGuid();
+            var scratch = new FileSessionWorkspace(Path.Combine(root, "scratch"), Path.Combine(root, "templates"), maxWritableBytes: 8);
+            var repository = new DirectoryInfo(AppContext.BaseDirectory);
+            while (repository is not null && !Directory.Exists(Path.Combine(repository.FullName, "agents"))) repository = repository.Parent;
+            var definition = (await new FileAgentDefinitionStore(Path.Combine(repository!.FullName, "agents"), SyntheticProviderAliases.Default).GetAsync("general-assistant", 15))!;
+            await scratch.EnsureAsync(session, definition);
+            byte[] bytes = [0, 255, 128, 10, 13];
+            var tree = new WorkspaceTransfer([new("", true, "inode/directory", []), new("empty", true, "inode/directory", []), new("data.bin", false, "application/octet-stream", bytes)]);
+            await home.ImportAsync(owner, "/home/project", tree);
+            await scratch.ImportAsync(session, "/workspace/working/copied", await home.ExportAsync(owner, "/home/project"));
+            Assert.Equal(bytes, (await scratch.ReadAsync(session, definition, "/workspace/working/copied/data.bin")).Bytes);
+            Assert.Contains(await scratch.ListAsync(session, definition, "/workspace/working/copied"), n => n.Directory && n.LogicalPath.EndsWith("/empty", StringComparison.Ordinal));
+            var transfer = await scratch.ExportAsync(session, "/workspace/working/copied");
+            await home.ImportAsync(owner, "/home/roundtrip", transfer);
+            Assert.Equal(bytes, (await home.ReadAsync(owner, null, "/home/roundtrip/data.bin")).Bytes);
+            await Assert.ThrowsAsync<AgentCoreException>(async () => await scratch.ImportAsync(session, "/workspace/working/over-quota", transfer));
+            Assert.False(Directory.Exists(Path.Combine(scratch.PhysicalWorkingDirectory(session), "over-quota")));
+            await Assert.ThrowsAsync<AgentCoreException>(async () => await home.ImportAsync(owner, "/home/project", transfer));
+            var large = new WorkspaceTransfer([new("", true, "inode/directory", []), new("big", false, "text/plain", new byte[31])]);
+            await Assert.ThrowsAsync<AgentCoreException>(async () => await home.ImportAsync(owner, "/home/over-quota", large));
+            Assert.DoesNotContain((await home.ListAsync(owner, "/home", null, 256)).Items, n => n.LogicalPath.StartsWith("/home/over-quota", StringComparison.Ordinal));
+            var existing = (await home.ReadAsync(owner, null, "/home/project/data.bin")).Item;
+            var replacement = new WorkspaceTransfer([new("", false, "application/octet-stream", new byte[] { 42, 0 })]);
+            await Assert.ThrowsAsync<AgentCoreException>(async () => await home.ImportAsync(owner, existing.LogicalPath, replacement));
+            await home.ImportAsync(owner, existing.LogicalPath, replacement, existing.Revision, existing.Sha256Hex);
+            await Assert.ThrowsAsync<AgentCoreException>(async () => await home.ImportAsync(owner, existing.LogicalPath, replacement, existing.Revision, existing.Sha256Hex));
+            if (sqlite) home = NewStore(root, factory);
+            Assert.Equal(new byte[] { 42, 0 }, (await home.ReadAsync(owner, null, existing.LogicalPath)).Bytes);
+            Assert.Contains((await home.ListAsync(owner, "/home", null, 256)).Items, n => n.LogicalPath == "/home/roundtrip/empty" && n.Directory);
         }
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }

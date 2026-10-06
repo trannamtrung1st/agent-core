@@ -318,18 +318,31 @@ public static class AgentDefinitionValidator
             }
         }
 
-        if (environment.ToolList.Count > MaxToolAllowlistEntries
-            || environment.ToolList.Count != environment.ToolList.Distinct(StringComparer.Ordinal).Count()
-            || environment.ToolList.Any(tool => !ToolPattern.IsMatch(tool)))
-        {
-            throw new ArgumentException("toolAllowlist is invalid.");
-        }
+        var toolError = ToolAllowlistFindings(environment.ToolList).FirstOrDefault();
+        if (toolError is not null) throw new ToolAllowlistValidationException(toolError.Code, toolError.Message);
+        if (environment.WorkspacePolicy.Semantics is not null and not WorkspaceSemantics.AgentWorkspaceV2)
+            throw new ArgumentException("workspace semantics is invalid.");
+        if (environment.WorkspacePolicy.Semantics == WorkspaceSemantics.AgentWorkspaceV2
+            && environment.ToolList.Any(t => t is "workspace.retain" or "workspace.checkout"))
+            throw new ArgumentException("Agent Workspace v2 uses workspace.copy; retain/checkout are legacy tools.");
 
         var template = environment.WorkspacePolicy.TemplateId;
         if (template is not null && !IdPattern.IsMatch(template))
         {
             throw new ArgumentException("workspace templateId is invalid.");
         }
+    }
+
+    public static IReadOnlyList<ToolAllowlistFinding> ToolAllowlistFindings(IReadOnlyList<string> tools)
+    {
+        var findings = new List<ToolAllowlistFinding>();
+        if (tools.Count > MaxToolAllowlistEntries)
+            findings.Add(new("tool_limit_exceeded", $"{tools.Count} tools selected; maximum is {MaxToolAllowlistEntries}."));
+        if (tools.Count != tools.Distinct(StringComparer.Ordinal).Count())
+            findings.Add(new("duplicate_tool", "Tool allowlist contains duplicate tools."));
+        if (tools.Any(tool => tool is null || !ToolPattern.IsMatch(tool)))
+            findings.Add(new("invalid_tool_name", "Tool names must match [a-z][a-z0-9._] and contain at most 64 characters."));
+        return findings;
     }
 
     public static void ValidateIdentity(AgentIdentity identity)
@@ -342,4 +355,10 @@ public static class AgentDefinitionValidator
             throw new ArgumentException("identity field lengths are invalid.");
         }
     }
+}
+
+public sealed record ToolAllowlistFinding(string Code, string Message);
+public sealed class ToolAllowlistValidationException(string code, string message) : ArgumentException(message)
+{
+    public string Code { get; } = code;
 }

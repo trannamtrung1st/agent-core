@@ -26,6 +26,8 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
     private readonly IAttachmentStore? _attachments;
     private readonly DefinitionPublicationResourceReader? _publicationResources;
     private readonly long _maxWritableBytes;
+    private readonly IMemoryStore? _sessions;
+    private readonly ConcurrentDictionary<Guid, Guid> _owners = new();
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _locks = new();
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _writers = new();
     private readonly object _writerFence = new();
@@ -36,12 +38,14 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
         string templateRoot,
         IAttachmentStore? attachments = null,
         long maxWritableBytes = WorkspaceLimits.MaxWritableBytes,
-        DefinitionPublicationResourceReader? publicationResources = null)
+        DefinitionPublicationResourceReader? publicationResources = null,
+        IMemoryStore? sessions = null)
     {
         AttachmentBlobKeys.EnsureSafeRoot(workspaceRoot);
         AttachmentBlobKeys.EnsureSafeRoot(templateRoot);
         _root = Path.GetFullPath(workspaceRoot);
         _templateRoot = Path.GetFullPath(templateRoot);
+        _sessions = sessions;
         _attachments = attachments;
         _publicationResources = publicationResources;
         _maxWritableBytes = maxWritableBytes;
@@ -54,6 +58,7 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
         CancellationToken cancellationToken = default)
     {
         ThrowIfDeleted(sessionId);
+        await ResolveOwnerAsync(sessionId, cancellationToken);
         var gate = Gate(sessionId);
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -335,6 +340,7 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
 
     public async ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
+        await ResolveOwnerAsync(sessionId, cancellationToken);
         CancellationTokenSource? writers;
         lock (_writerFence)
         {
@@ -874,7 +880,20 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
             _ => "application/octet-stream"
         };
 
-    private string SessionRoot(Guid sessionId) => Path.Combine(_root, sessionId.ToString("N"));
+    private async ValueTask ResolveOwnerAsync(Guid sessionId, CancellationToken ct)
+    {
+        if (_sessions is null || _owners.ContainsKey(sessionId)) return;
+        var snapshot = await _sessions.LoadMetadataAsync(sessionId, ct);
+        if (snapshot?.AgentInstanceId is Guid owner && WorkspaceSemantics.IsV2(snapshot.Definition))
+        {
+            // Existing physical data remains at its historical location; never migrate or strand it implicitly.
+            if (!Directory.Exists(Path.Combine(_root, sessionId.ToString("N")))) _owners.TryAdd(sessionId, owner);
+        }
+    }
+
+    private string SessionRoot(Guid sessionId) => _owners.TryGetValue(sessionId, out var owner)
+        ? Path.Combine(_root, "agent-" + owner.ToString("N"), "sessions", "session-" + sessionId.ToString("N"))
+        : Path.Combine(_root, sessionId.ToString("N"));
 
     public string PhysicalWorkingDirectory(Guid sessionId)
     {

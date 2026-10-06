@@ -1,5 +1,14 @@
 # Technology Decisions
 
+## Decision: explicit managed working environment
+
+The user-authorized refinement opts new managed definitions into `agentWorkspaceV2`; it does not rewrite v12/v13/v14 or inferred version ranges. General Assistant v15 removes retain/checkout and adds one cwd tool, reducing its allowlist from 32 to 31. These legacy tools remain registered and executable only where authorized by compatibility definitions. Public compatibility creation/default selection continues to select the latest legacy contract; explicit new-mode creation requires a managed Agent Instance.
+
+Choose transient mailbox-owned Session cwd with `/home` initialization and deterministic reset on runtime reconstruction. Reject moving/deleting cwd or ancestors. Resolve relative model paths from cwd within one authorized logical root; expose only `/home` and `/working` for the writable scopes. HTTP execution-view paths use stable `/home` defaults, independent of runtime cwd. Sandbox remains explicitly scratch-oriented: its relative paths resolve from `/working`, which maps to the existing private mount contract. A richer `/home` sandbox mount is deferred.
+
+Keep metadata/immutable blobs for home and nest new managed scratch beneath its owner. Do not migrate historical directories implicitly. Individual cross-scope binary/tree copy replaces retain/checkout for new definitions; existing durable destinations retain CAS. Cross-scope move and cross-store batches are excluded. The static Definition limit stays 32 and Admin receives it from the canonical Domain constant. Future contextual projection from a larger authorized capability set may reduce model-visible tools; that redesign and increasing this bound are deferred. Earlier decisions below remain the historical compatibility baseline.
+
+
 ## Decision: bounded Agent Instance workspace (observed)
 
 The verified post-P9.10 enhancement adds a managed-instance-owned `/home`, with SQLite metadata and local immutable blobs. Session `/workspace` remains scratch. Explicit `workspace.retain` copies scratch bytes into home with revision/hash compare-and-swap; `workspace.checkout` creates a separate session copy. Home read/list/search is bounded and tool-driven. Compatibility instances have no home. Archive preserves owner inspection; hard delete cleans the home through existing lifecycle coordination. Artifacts remain immutable session-owned deliverables. This does not reopen frozen continuity phases or start P10/P11. Behavior is frozen on `b21484d4` with exact-SHA hosted Synthetic/Compose green; see [final verification](reports/agent-instance-workspace-final-verification.md).

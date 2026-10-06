@@ -1,5 +1,14 @@
 # System Architecture
 
+## Managed workspace refinement
+
+An explicit `environment.workspace.semantics: "agentWorkspaceV2"` policy selects the managed working environment. `/home` is durable Agent Instance working material; `/working` is current Session scratch; Artifacts are separate immutable downloads. The policy, pinned Definition and trusted managed Session owner determine authority. Version numbers never do. Existing published definitions keep their contracts, including `/workspace/working`, scratch-relative paths and authorized retain/checkout.
+
+The Session Runtime mailbox owns a transient cwd, initially `/home`. Off-mailbox tool execution receives a fenced snapshot; a successful typed `workspace.cwd` effect returns through the mailbox with response/epoch checks before the next tool uses it. Reconnect keeps that runtime's cwd. Runtime reconstruction and a new Session initialize `/home`; cwd is not durable identity state or a workspace file. Setting cwd validates an existing authorized directory. Moving/deleting cwd or its ancestors is rejected until cwd changes.
+
+`AgentInstanceWorkspaceService` orchestrates direct durable writes/patches and individual cross-scope copies through existing lifecycle exclusion. Bounded exact-byte `WorkspaceTransfer` ports share `WorkspaceTransferPlan` and the logical tree planner; adapters keep their independent filesystem or metadata/blob gates. Copy preserves binaries and empty directories, creates parents, preflights destination quota, and never merges. Existing durable file destinations require matching revision/hash; cross-scope move is forbidden and structural batches remain single-scope. No provider DTO, physical path, caller-selected owner, new runtime or storage framework is introduced. The earlier workspace sections below describe the compatibility contract where retain/checkout remain relevant.
+
+
 ## Decision
 
 Agent Core is one .NET 10 modular monolith with a React SPA. Its purpose remains to make an AI agent feel present in a live conversation. The Agent Runtime owns conversational meaning; the Interaction Controller arbitrates turn-taking. Both execute under one Session Runtime's state ownership.
@@ -87,7 +96,7 @@ Infrastructure stores persist the rows named below. API routes map commands and 
 | Attachment | session authorization in `SessionManager`; bytes in `IAttachmentStore` | upload, bind, TTL delete | attachment store | composer, history chips | runtime input |
 | Artifact | session tools and `SessionManager` through `IArtifactStore` | create under session authorization | artifact store | history refs | runtime output |
 | SessionWorkspace | `ISessionWorkspace`; `FileSessionWorkspace` in Infrastructure | session-owned file mutations from `SessionToolExecutor` and `SessionManager` | host filesystem; paths stay in Infrastructure | workspace tools, sandbox | runtime mutable files |
-| Agent Workspace | `AgentInstanceWorkspaceService`; `IAgentInstanceWorkspaceStore` | managed Agent Instance, explicit retain with CAS | SQLite metadata + local opaque blobs | Session tools and owner Admin; source Session deletion preserves copies | durable working material; archive read-only; hard delete purges |
+| Agent Workspace | `AgentInstanceWorkspaceService`; `IAgentInstanceWorkspaceStore` | managed Agent Instance, guarded working files | SQLite metadata + local opaque blobs | Session tools and owner Admin; source Session deletion preserves copies | durable working material; archive read-only; hard delete purges |
 
 Known boundaries that stay separate:
 
@@ -282,15 +291,15 @@ Semantic maintenance extends the existing structured Memory and Experience store
 
 ## Bounded Agent Instance workspace
 
-A managed Agent Instance owns a separate durable `/home`; SessionWorkspace remains isolated `/workspace` scratch, and Artifacts remain immutable Session deliverables. `AgentInstanceWorkspaceService` derives the owner from trusted Session metadata, checks managed/active eligibility, and uses `AdminLifecycleCoordinator` for lifecycle exclusion. Explicit retain copies scratch bytes into home; checkout copies home bytes into scratch without overwriting an existing destination. Read/list/search are bounded and do not inject the inventory into prompts. Compatibility instances have no home. Archive preserves owner inspection; hard deletion removes metadata and local blobs. Source Session ids are informational provenance with no cascading ownership. No shared/application/task workspace is introduced.
+A managed Agent Instance owns a separate durable `/home`; compatibility SessionWorkspace remains isolated `/workspace` scratch, and Artifacts remain immutable Session deliverables. `AgentInstanceWorkspaceService` derives the owner from trusted Session metadata, checks managed/active eligibility, and uses `AdminLifecycleCoordinator` for lifecycle exclusion. Explicit retain copies scratch bytes into home; checkout copies home bytes into scratch without overwriting an existing destination. Read/list/search are bounded and do not inject the inventory into prompts. Compatibility instances have no home. Archive preserves owner inspection; hard deletion removes metadata and local blobs. Source Session ids are informational provenance with no cascading ownership. No shared/application/task workspace is introduced.
 
 ## Bounded workspace virtual filesystem
 
-Workspace tools manage files/directories. Sandbox tools execute programs. The native vocabulary is `list`, `read`, `write`, `patch`, `search`, `mkdir`, `copy`, `move`, `delete`, and `batch`; retain/checkout remain intentional copy boundaries between scratch and durable home. `write`/`patch` edit scratch content; home content replacement retains its revision/hash guard.
+Workspace tools manage files/directories. Sandbox tools execute programs. The native vocabulary is `list`, `read`, `write`, `patch`, `search`, `mkdir`, `copy`, `move`, `delete`, and `batch`; retain/checkout remain intentional copy boundaries between scratch and durable home. Compatibility `write`/`patch` edit scratch content; new-mode home content edits use revision/hash guards.
 
 A shared pure Application `WorkspaceTreePlanner` models the complete ordered result before any structural mutation. `FileSessionWorkspace` uses a physical tree and a per-Session filesystem gate; `FileAgentInstanceWorkspaceStore` uses logical directory metadata and immutable opaque blobs under the existing per-instance/lifecycle gates. This shares scope/path/conflict/parent/dependency/quota rules without exposing physical names or coupling the two storage adapters. The Session Runtime continues to own conversation state through its mailbox.
 
-Empty directories are first-class entries. Copy preserves complete trees and exact file bytes; move includes rename and keeps complete descendants. Destinations never overwrite or merge. Root/internal entries, scope changes, mutation globs, traversal and symlinks are rejected. Non-empty directory deletion requires explicit `recursive:true` and approval. Batches accept at most 16 operations, preflight all dependencies and cumulative bounds, execute in order, and stop on unexpected failure. Earlier changes remain; preflight does not promise atomic rollback. Whole-home tree tokens prevent stale durable plans. See [interfaces](04-backend-interfaces.md#workspace-structure-ports), [tools](12-backend-implementation-spec.md#native-workspace-filesystem-tools) and [verification](reports/workspace-filesystem-final-verification.md).
+Empty directories are first-class entries. Copy preserves complete trees and exact file bytes; move includes rename and keeps complete descendants. Destinations never overwrite or merge. Root/internal entries, unauthorized scope changes, mutation globs, traversal and symlinks are rejected; new-mode individual cross-root copy is the explicit exception. Non-empty directory deletion requires explicit `recursive:true` and approval. Batches accept at most 16 operations, preflight all dependencies and cumulative bounds, execute in order, and stop on unexpected failure. Earlier changes remain; preflight does not promise atomic rollback. Whole-home tree tokens prevent stale durable plans. See [interfaces](04-backend-interfaces.md#workspace-structure-ports), [tools](12-backend-implementation-spec.md#native-workspace-filesystem-tools) and [verification](reports/workspace-filesystem-final-verification.md).
 
 ```mermaid
 flowchart LR

@@ -9,6 +9,7 @@ export type DraftEnvironment = {
   harness: string[];
   toolAllowlist: string[];
   workspaceTemplateId: string;
+  workspaceSemantics?: string;
   knowledgeSources: DraftKnowledgeSource[];
   allowUnreadUnsupportedAttachmentTypes: boolean;
 };
@@ -69,6 +70,7 @@ export function readDraftEnvironment(candidate: unknown): DraftEnvironment {
     harness: readStringList(environment.harness),
     toolAllowlist: readStringList(environment.toolAllowlist),
     workspaceTemplateId: templateId,
+    workspaceSemantics: typeof workspace?.semantics === "string" ? workspace.semantics : undefined,
     knowledgeSources: readKnowledgeSources(environment.knowledgeSources),
     allowUnreadUnsupportedAttachmentTypes:
       attachments?.allowUnreadUnsupportedTypes === true
@@ -84,6 +86,7 @@ function normalizeDraftEnvironment(env: DraftEnvironment): DraftEnvironment {
     harness: [...env.harness].sort(),
     toolAllowlist: [...env.toolAllowlist].sort(),
     workspaceTemplateId: env.workspaceTemplateId,
+    workspaceSemantics: env.workspaceSemantics,
     knowledgeSources: env.knowledgeSources.map((item) => ({
       identity: item.identity,
       title: item.title,
@@ -98,10 +101,10 @@ export function applyDraftEnvironmentToCandidate(
   candidate: Record<string, unknown>,
   environment: DraftEnvironment
 ): Record<string, unknown> {
-  const workspace =
-    environment.workspaceTemplateId.trim().length > 0
-      ? { templateId: environment.workspaceTemplateId.trim() }
-      : {};
+  const workspace = {
+    ...(environment.workspaceTemplateId.trim().length > 0 ? { templateId: environment.workspaceTemplateId.trim() } : {}),
+    ...(environment.workspaceSemantics ? { semantics: environment.workspaceSemantics } : {})
+  };
 
   const knowledgeSources = environment.knowledgeSources.map((item) => {
     const source: { identity: string; title: string; citation: string; resourcePath?: string } = {

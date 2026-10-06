@@ -297,7 +297,17 @@ public sealed partial class SessionToolExecutor(
                         admission.HarnessSources ?? [], admission.OwnerTurnText, cancellationToken);
                 return FitResult(remainingOutputBytes, JsonSerializer.Serialize(result));
             }
-            return call.Name switch
+            var v2 = WorkspaceSemantics.IsV2(definition);
+            if (v2 && (call.Name.StartsWith("workspace.", StringComparison.Ordinal) || call.Name == ToolCatalog.ArtifactsCreateFromWorkspace))
+            {
+                if (!await AgentWorkspaceAvailableAsync(sessionId, cancellationToken))
+                    return TextResult(Error("forbidden", "Agent Workspace v2 requires a managed Agent Instance."));
+                if (call.Name == ToolCatalog.WorkspaceCwd)
+                    return await ExecuteCwdAsync(definition, sessionId, args, admission?.WorkspaceCwd ?? "/home", cancellationToken);
+                args = AgentWorkspacePaths.Arguments(call.Name, args, sessionId, admission?.WorkspaceCwd ?? "/home");
+                ProtectCwd(call.Name, args, sessionId, admission?.WorkspaceCwd ?? "/home");
+            }
+            var executed = call.Name switch
             {
                 ToolCatalog.AttachmentsRead => await ReadAttachmentAsync(sessionId, args, remainingOutputBytes, cancellationToken)
                     .ConfigureAwait(false),
@@ -384,6 +394,8 @@ public sealed partial class SessionToolExecutor(
                         _profiles).ConfigureAwait(false),
                 _ => TextResult(Error("forbidden", "Tool is not permitted for this role."))
             };
+            return v2 && (call.Name.StartsWith("workspace.", StringComparison.Ordinal) || call.Name is ToolCatalog.ArtifactsCreateFromWorkspace or ToolCatalog.SandboxRun)
+                ? executed with { Text = AgentWorkspacePaths.Project(executed.Text) } : executed;
         }
         catch (OperationCanceledException)
         {
@@ -651,7 +663,7 @@ public sealed partial class SessionToolExecutor(
             return Error("unavailable", "Workspace is unavailable.");
         }
 
-        var path = WorkspaceLogicalPath.WorkingDirectory;
+        var path = ".";
         if (args.ValueKind == JsonValueKind.Object && args.TryGetProperty("path", out var pathElement) && pathElement.ValueKind == JsonValueKind.String)
         {
             path = pathElement.GetString() ?? path;
@@ -668,7 +680,9 @@ public sealed partial class SessionToolExecutor(
         if (AgentCore.Application.Workspaces.AgentHomePath.IsHome(path) && agentWorkspace is not null)
         {
             var projection = await agentWorkspace.ListProjectionAsync(await agentWorkspace.SessionOwnerAsync(sessionId, cancellationToken), path, cancellationToken);
-            nodes = projection.Nodes; treeSha256 = projection.TreeSha256;
+            var writable = WorkspaceSemantics.IsV2(definition) && await agentWorkspace.SessionWritableAsync(sessionId, cancellationToken);
+            nodes = writable ? projection.Nodes.Select(n => n with { Writable = true }).ToArray() : projection.Nodes;
+            treeSha256 = projection.TreeSha256;
         }
         else nodes = await ListExecutionWorkspaceAsync(sessionId, definition, path, cancellationToken).ConfigureAwait(false);
         var truncated = nodes.Count > WorkspaceLimits.MaxListEntries;
@@ -736,6 +750,14 @@ public sealed partial class SessionToolExecutor(
             return pathError;
         }
 
+        if (AgentCore.Application.Workspaces.AgentHomePath.IsHome(path))
+        {
+            if (!WorkspaceSemantics.IsV2(definition)) return Error("unsupported_legacy_operation", "This definition uses the legacy workspace contract. Direct durable patches are unavailable.");
+            if (agentWorkspace is null) return Error("unavailable", "Agent Workspace is unavailable.");
+            var patched = await agentWorkspace.PatchAsync(sessionId, path, expectedSha256, edits, cancellationToken);
+            return JsonSerializer.Serialize(new { path = patched.LogicalPath, previousSha256 = patched.PreviousSha256Hex,
+                newSha256 = patched.NewSha256Hex, byteSize = patched.ByteSize, editsApplied = patched.EditsApplied });
+        }
         var result = await workspace.PatchTextAsync(
                 sessionId,
                 definition,
@@ -760,6 +782,8 @@ public sealed partial class SessionToolExecutor(
         JsonElement args,
         CancellationToken cancellationToken)
     {
+        if (WorkspaceSemantics.IsV2(definition) && args.EnumerateObject().Any(p => p.Name is not ("path" or "content" or "expectedRevision" or "expectedSha256")))
+            return Error("invalid", "Write accepts path, content and optional expected durable revision/hash.");
         if (workspace is null
             || !TryString(args, "path", out var path)
             || !TryString(args, "content", out var content))
@@ -774,6 +798,14 @@ public sealed partial class SessionToolExecutor(
 
         await workspace.EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
         var bytes = Encoding.UTF8.GetBytes(content);
+        if (AgentCore.Application.Workspaces.AgentHomePath.IsHome(path))
+        {
+            if (!WorkspaceSemantics.IsV2(definition)) return Error("unsupported_legacy_operation", "This definition uses the legacy workspace contract. Direct durable writes are unavailable.");
+            if (agentWorkspace is null) return Error("unavailable", "Agent Workspace is unavailable.");
+            var item = await agentWorkspace.WriteAsync(sessionId, path, "text/plain; charset=utf-8", bytes,
+                ExpectedRevision(args), ExpectedHash(args), cancellationToken);
+            return JsonSerializer.Serialize(new { path, bytes = bytes.Length, homeItem = item });
+        }
         await workspace.WriteAsync(sessionId, path, bytes, cancellationToken).ConfigureAwait(false);
         return JsonSerializer.Serialize(new { path, bytes = bytes.Length });
     }
@@ -853,21 +885,22 @@ public sealed partial class SessionToolExecutor(
             return pathError;
         }
 
-        if (!path.StartsWith("/workspace/", StringComparison.Ordinal))
+        if (!path.StartsWith("/workspace/", StringComparison.Ordinal)
+            && !(WorkspaceSemantics.IsV2(definition) && AgentCore.Application.Workspaces.AgentHomePath.IsHome(path)))
         {
             return Error("path_outside_workspace", WorkspaceLogicalPath.OutsideWorkspaceMessage);
         }
 
         TryString(args, "contentType", out var contentType);
         await workspace.EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
-        var content = await workspace.ReadAsync(sessionId, definition, path, cancellationToken).ConfigureAwait(false);
+        var content = await ReadExecutionWorkspaceAsync(sessionId, definition, path, cancellationToken).ConfigureAwait(false);
         var created = await artifacts.CreateAsync(
                 sessionId,
                 displayName,
                 string.IsNullOrWhiteSpace(contentType) ? content.ContentType : contentType,
                 content.Bytes,
                 sourceAttachmentId: null,
-                workspaceLogicalPath: content.LogicalPath,
+                workspaceLogicalPath: WorkspaceSemantics.IsV2(definition) ? AgentWorkspacePaths.Public(content.LogicalPath) : content.LogicalPath,
                 cancellationToken)
             .ConfigureAwait(false);
         return JsonSerializer.Serialize(new
@@ -1015,6 +1048,11 @@ public sealed partial class SessionToolExecutor(
         }
 
         TryString(args, "exportPath", out var export);
+        if (WorkspaceSemantics.IsV2(definition))
+        {
+            if (!string.IsNullOrWhiteSpace(export)) export = AgentWorkspacePaths.Resolve(export, sessionId, "/working");
+            if (verb == "cat" && arguments.Count == 1) arguments[0] = AgentWorkspacePaths.Resolve(arguments[0], sessionId, "/working");
+        }
         if (!string.IsNullOrWhiteSpace(export)
             && !TryResolveWorkspacePath(export, sessionId, out export, out var exportError))
         {

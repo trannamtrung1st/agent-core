@@ -60,6 +60,8 @@ public static class WorkspaceEndpoints
             Guid sessionId,
             string? path,
             HttpContext http,
+            long? expectedRevision,
+            string? expectedSha256,
             SessionManager sessions,
             CancellationToken cancellationToken) =>
         {
@@ -97,7 +99,8 @@ public static class WorkspaceEndpoints
                     await buffer.WriteAsync(block.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
                 }
 
-                await sessions.WriteWorkspaceAsync(sessionId, path, buffer.ToArray(), cancellationToken)
+                await sessions.WriteWorkspaceAsync(sessionId, path, buffer.ToArray(), cancellationToken,
+                    expectedRevision, expectedSha256, http.Request.ContentType)
                     .ConfigureAwait(false);
                 return Results.NoContent();
             }

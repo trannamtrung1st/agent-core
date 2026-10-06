@@ -18,6 +18,7 @@ using AgentCore.Application.Tools;
 using AgentCore.Application.Triggers;
 using AgentCore.Domain.Connections;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Diagnostics;
 using AgentCore.Domain.Triggers;
 using Microsoft.Extensions.Logging;
@@ -1169,6 +1170,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case ApplicationMessageRequested applicationMessage:
                     await HandleApplicationMessageAsync(applicationMessage, cancellationToken).ConfigureAwait(false);
                     break;
+                case WorkspaceCwdRequested workspaceCwd:
+                    HandleWorkspaceCwd(workspaceCwd);
+                    break;
                 case SkillLoadRequested skillLoad:
                     await HandleSkillLoadAsync(skillLoad, cancellationToken).ConfigureAwait(false);
                     break;
@@ -1209,6 +1213,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 receipt.Admitted.TrySetResult(false);
             }
 
+            if (input is WorkspaceCwdRequested workspaceCwd) workspaceCwd.Completed.TrySetResult(null);
             if (input is SkillLoadRequested skillLoad)
             {
                 skillLoad.Completed.TrySetResult(SkillLoadMailboxResult.Failed(
@@ -1286,6 +1291,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         switch (input)
         {
+            case WorkspaceCwdRequested workspaceCwd:
+                workspaceCwd.Completed.TrySetResult(null);
+                break;
             case EndSessionReceived ended:
                 ended.Persisted.TrySetResult(value);
                 break;
@@ -2620,6 +2628,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var messages = request.Messages.ToList();
         var authorizedTools = request.Tools;
         var pinnedSkills = activeSkillIds.ToArray();
+        var workspaceCwd = WorkspaceSemantics.IsV2(_snapshot.Definition)
+            ? await RequestWorkspaceCwdAsync(cause, request.ResponseId, null, cancellationToken).ConfigureAwait(false) : null;
+        if (WorkspaceSemantics.IsV2(_snapshot.Definition) && workspaceCwd is null) return;
         var steps = 0;
         var harnessSources = new List<HarnessSourceReceipt>();
         var outputBytes = 0;
@@ -3097,7 +3108,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             args,
                                             overallCts.Token,
                                             _snapshot.Definition, SessionId,
-                                            new ToolExecutionAdmission(false, trigger.Kind, AgentInstanceId: _snapshot.AgentInstanceId, SupportsTools: model.Capabilities.Tools))
+                                            new ToolExecutionAdmission(false, trigger.Kind, AgentInstanceId: _snapshot.AgentInstanceId, SupportsTools: model.Capabilities.Tools, WorkspaceCwd: workspaceCwd))
                                         .ConfigureAwait(false);
                                     if (prepared.Preparation is null)
                                     {
@@ -3196,8 +3207,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                                 HarnessSources: harnessSources.ToArray(),
                                                 OwnerTurnText: trigger.Kind == TriggerKind.UserTurn ? trigger.Text : null,
                                                 SupportsTools: model.Capabilities.Tools,
-                                                Model: _snapshot.ModelSelection is { } choice ? new AgentCore.Domain.Work.WorkModelPin(choice.CatalogKey, choice.ProviderAlias, choice.ModelId, choice.ReasoningEffort) : null))
+                                                Model: _snapshot.ModelSelection is { } choice ? new AgentCore.Domain.Work.WorkModelPin(choice.CatalogKey, choice.ProviderAlias, choice.ModelId, choice.ReasoningEffort) : null,
+                                                WorkspaceCwd: workspaceCwd))
                                         .ConfigureAwait(false);
+                                    if (executionResult.WorkspaceCwd is { } nextCwd)
+                                    {
+                                        workspaceCwd = await RequestWorkspaceCwdAsync(cause, request.ResponseId, nextCwd, toolCts.Token).ConfigureAwait(false);
+                                        if (workspaceCwd is null) return;
+                                    }
                                     if (executionResult.ReplaceTriggerProposal)
                                     {
                                         _pendingTriggerProposal = executionResult.TriggerProposal;

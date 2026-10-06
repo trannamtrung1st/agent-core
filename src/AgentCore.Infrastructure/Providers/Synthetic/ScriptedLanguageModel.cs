@@ -178,6 +178,12 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
 
+        var workspaceV2 = AgentWorkspaceV2Script.Generate(request);
+        if (workspaceV2 is not null)
+        {
+            foreach (var item in workspaceV2) yield return item;
+            yield break;
+        }
         var diagnosticUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
         if (diagnosticUser.Contains(DiagnosticFailureMarker, StringComparison.Ordinal))
         {

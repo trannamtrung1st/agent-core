@@ -1,5 +1,14 @@
 # Persistence and Configuration
 
+## Workspace refinement storage and lifecycle
+
+Home continues to use existing AgentWorkspace metadata, first-class directory rows and immutable blobs beneath `Persistence:AgentWorkspaceRoot`; no schema migration is needed. New opted-in managed scratch maps internally to `Persistence:WorkspaceRoot/agent-<instanceN>/sessions/session-<sessionN>/workspace/working`. The private `workspace` subdirectory preserves sandbox/adapter layout. Existing legacy or already materialized historical Session directories remain at their old location; there is no automatic move or client-visible alias.
+
+Logical paths are `/home` and `/working`, with owner/root selection derived from trusted metadata. Session deletion fences writers and removes only that Session tree; durable home survives. Archive preserves home inspection and disallows mutation. Existing hard-delete preconditions require Session cleanup before the instance purge removes home metadata/blobs. Empty parent ownership containers may remain after all Session directories are deleted; they contain no working data. Neither owner UUID directory names nor blob keys appear in model/client projections.
+
+Cwd is transient Session Runtime mailbox metadata and starts at `/home` when a runtime is reconstructed or a new Session is created. It is not stored in SQLite or a file and never carries into future Sessions. Home content/tree revisions and hashes remain durable and survive reopen/Compose recreation. Compose configures both home and `Persistence:WorkspaceRoot` under the persistent `/data` volume, so a container recreation also preserves current Session scratch. Cross-root copy is an exact source snapshot followed by independently guarded destination import, not a cross-store transaction. Structural batch remains single-store with its existing partial execution reporting.
+
+
 ## Persistence model
 
 EF Core 10 with SQLite is the MVP durable store, implemented behind IMemoryStore in Infrastructure. The base Synthetic/testing profile defaults to InMemoryMemoryStore; the normal native developer workflow explicitly selects SQLite as shown in [Operations](17-observability-and-operations.md#running-after-implementation). SQLite contract/integration suites use a temporary database. Real profile defaults to SQLite. No raw microphone frames, TTS chunks, credentials, provider request bodies, every token delta, or high-frequency controller internals are persisted.

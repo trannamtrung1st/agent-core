@@ -238,6 +238,19 @@ public sealed class WorkspaceArtifactToolTests
         ModelToolCall call) =>
         (await executor.ExecuteAsync(definition, sessionId, call, ToolLimits.MaxOutputBytes)).Text;
 
+    [Fact]
+    public void Explicit_workspace_policy_enables_tree_move_without_an_unrelated_structural_tool_grant()
+    {
+        var legacy = WorkspaceTools() with { Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.WorkspaceMove]) };
+        var managed = legacy with { Environment = legacy.Environment! with { Workspace = new WorkspaceTemplatePolicy(Semantics: WorkspaceSemantics.AgentWorkspaceV2) } };
+        Assert.False(WorkspaceFilesystemPolicy.AllowsStructure(legacy));
+        Assert.True(WorkspaceFilesystemPolicy.AllowsStructure(managed));
+        using var oldSchema = JsonDocument.Parse(WorkspaceFilesystemPolicy.ForDefinition(legacy, ToolRegistry.Get(ToolCatalog.WorkspaceMove)).ParametersJson);
+        using var newSchema = JsonDocument.Parse(WorkspaceFilesystemPolicy.ForDefinition(managed, ToolRegistry.Get(ToolCatalog.WorkspaceMove)).ParametersJson);
+        Assert.False(oldSchema.RootElement.GetProperty("properties").TryGetProperty("expectedTreeSha256", out _));
+        Assert.True(newSchema.RootElement.GetProperty("properties").TryGetProperty("expectedTreeSha256", out _));
+    }
+
     private static AgentDefinition WorkspaceTools() => new(
         1,
         "workspace-tools",

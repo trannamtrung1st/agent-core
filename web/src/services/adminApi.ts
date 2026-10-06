@@ -178,13 +178,21 @@ export async function deleteAdminDefinition(
   }
 }
 
-export async function listAdminToolNames(): Promise<string[]> {
+export type AdminToolRegistry = { toolNames: string[]; maxToolAllowlistEntries: number };
+
+export async function getAdminToolRegistry(): Promise<AdminToolRegistry> {
   const response = await ownerFetch("/api/v2/admin/tools");
   if (!response.ok) {
     throw await adminProblemMessage(response, `Admin tool registry failed (${response.status})`);
   }
-  const payload = (await response.json()) as { toolNames: string[] };
-  return payload.toolNames;
+  const payload = (await response.json()) as AdminToolRegistry;
+  if (!Number.isInteger(payload.maxToolAllowlistEntries) || payload.maxToolAllowlistEntries < 1)
+    throw new Error("Admin tool registry is missing its allowlist limit. Reload the server and retry.");
+  return payload;
+}
+
+export async function listAdminToolNames(): Promise<string[]> {
+  return (await getAdminToolRegistry()).toolNames;
 }
 
 export async function getAdminEffectiveConfig(instanceId: string): Promise<AdminEffectiveConfiguration> {

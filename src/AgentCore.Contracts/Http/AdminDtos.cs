@@ -97,7 +97,7 @@ public sealed record AdminDurableExecutionEligibilityResponse(
     bool AllowsApplicationEventSource,
     bool CanAcceptNewTriggeredWork);
 
-public sealed record AdminToolRegistryResponse(IReadOnlyList<string> ToolNames);
+public sealed record AdminToolRegistryResponse(IReadOnlyList<string> ToolNames, int MaxToolAllowlistEntries);
 
 public sealed record AdminDefinitionDraftListResponse(IReadOnlyList<AdminDefinitionDraftSummaryResponse> Items);
 
