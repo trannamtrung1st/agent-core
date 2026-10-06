@@ -145,6 +145,7 @@ export function EventSourcesSection() {
           {!loading && loaded ? (
             <>
               <Form
+                className="admin-config-form"
                 layout="vertical"
                 onFinish={() => {
                   void create();

@@ -121,6 +121,7 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
               {detail ? <Typography.Text>{detail}</Typography.Text> : null}
               {status === null || status === "NotConnected" ? (
                 <Form
+                  className="admin-config-form"
                   layout="vertical"
                   onFinish={() =>
                     void run(

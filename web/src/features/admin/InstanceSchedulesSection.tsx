@@ -109,7 +109,7 @@ export function InstanceSchedulesSection({ instanceId, onWork, selection, active
         description={error.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: error.diagnosticId }} /> : undefined} /> : null}
       <Flex wrap gap={token.paddingXS}><Button disabled={busy} onClick={() => { setDraft(blank()); setEditor("new"); }}>New schedule</Button>
         <Button disabled={busy} onClick={() => void reload()}>Refresh schedules</Button><Button onClick={() => onWork()}>View runs</Button></Flex>
-      {editor ? <Form layout="vertical" onKeyDown={event => {
+      {editor ? <Form layout="vertical" className="admin-config-form" onKeyDown={event => {
         if (event.key === "Enter" && (event.target as HTMLElement).closest(".ant-picker")) event.preventDefault();
       }} onFinish={() => {
         const body = { ...draft, schedule: timing.kind === "fixedInterval" && !timing.anchorAtUtc ? { ...timing, anchorAtUtc: new Date(Date.now() + timing.interval * 1000).toISOString() } : timing };

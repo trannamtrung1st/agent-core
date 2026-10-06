@@ -116,7 +116,7 @@ function UnattendedModelForm({
   }
 
   return (
-    <Flex vertical gap={token.paddingSM} aria-label="Unattended model" className="admin-policy-form">
+    <Flex vertical gap={token.paddingSM} aria-label="Unattended model" className="admin-config-form">
       <Typography.Text>{source}</Typography.Text>
       <Typography.Text type="secondary">
         Conversation default is {config.effectiveModel.displayName}. An unattended default applies to scheduled and
@@ -541,7 +541,7 @@ export function InstanceMemoryAutomationPanel({ config, section }: { config: Adm
                 </Typography.Text>
               ) : null}
               <Flex gap={token.paddingXS} wrap="wrap" align={memoryScope === "Session" ? "start" : "flex-end"}>
-                <Flex vertical gap={token.paddingXS}>
+                <Flex vertical gap={token.paddingXS} className="admin-memory-scope">
                   <Typography.Text>Memory scope</Typography.Text>
                   <Select
                     aria-label="Memory scope"
@@ -552,7 +552,6 @@ export function InstanceMemoryAutomationPanel({ config, section }: { config: Adm
                       bumpMemoryLoadGeneration();
                     }}
                     options={MEMORY_SCOPES.map((value) => ({ value, label: value }))}
-                    style={{ minWidth: 160 }}
                   />
                 </Flex>
                 {memoryScope === "Session" ? (

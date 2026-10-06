@@ -62,7 +62,7 @@ export function HarnessManagementSection({ instanceId, onUpdated }: {
       {review ? <>
         <Flex wrap gap={token.paddingXS}><Typography.Text strong>Active version {review.activeVersion}</Typography.Text>
           <Tag>{review.policy.frozen ? "Frozen" : review.policy.mode === "Disabled" ? "Manual" : review.policy.mode}</Tag></Flex>
-        <Form layout="vertical" className="admin-policy-form">
+        <Form layout="vertical" className="admin-config-form">
           <HarnessPolicyModeScopes mode={mode} scopes={scopes} busy={busy} onMode={setMode} onScopes={setScopes} />
           <Typography.Paragraph type="secondary">Managed may save knowledge and Skills automatically. Instructions and tool changes always need approval in Chat. Existing conversations keep their current version.</Typography.Paragraph>
           <Flex wrap gap={token.paddingXS}>

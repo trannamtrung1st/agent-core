@@ -1617,6 +1617,9 @@ body,
 
 .admin-definition-panel-body > .ant-typography-secondary {
   display: block;
+}
+
+.admin-definition-panel-body > * + .ant-typography-secondary {
   margin-block-start: var(--ac-space-default);
 }
 
@@ -2228,10 +2231,14 @@ body,
 
 /* Harness review shares Admin panel insets; the stack owns section gaps. */
 .harness-management-content { min-width: 0; overflow-wrap: anywhere; }
-.admin-policy-form { width: 100%; max-width: 48rem; min-width: 0; }
-.admin-policy-form .ant-select { width: 100%; min-width: 0; }
-.admin-policy-form .ant-form-item { margin-block-end: var(--ac-space-section); }
-.admin-policy-form .ant-typography { max-width: 72ch; }
+.admin-config-form { width: 100%; max-width: 48rem; min-width: 0; }
+.admin-content .ant-form .ant-select,
+.admin-config-form .ant-select { width: 100%; min-width: 0; }
+.admin-config-form .ant-form-item { margin-block-end: var(--ac-space-section); }
+.admin-config-form .ant-typography { max-width: 72ch; }
+.admin-source-choice { flex: 1 1 20rem; width: 100%; max-width: 48rem; min-width: 0; }
+.admin-memory-scope { flex: 0 1 12rem; min-width: 0; max-width: 100%; }
+.admin-memory-scope .ant-select { width: 100%; }
 .harness-management-content .ant-checkbox-group { display: flex; flex-wrap: wrap; gap: 8px; }
 .harness-procedure { white-space: pre-wrap; overflow-wrap: anywhere; }
 .harness-approval { border-inline-start: 2px solid var(--ant-color-primary); padding-inline-start: 12px; }

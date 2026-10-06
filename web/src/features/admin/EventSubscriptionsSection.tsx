@@ -121,7 +121,7 @@ export function EventSubscriptionsSection({ instanceId, selection }: { instanceI
                     placeholder="Event source"
                     value={sourceId ?? undefined}
                     disabled={busy}
-                    style={{ minWidth: 220 }}
+                    className="admin-source-choice"
                     options={activeSources.map((source) => ({
                       value: source.sourceId,
                       label: `${source.displayName} · ${source.status}`

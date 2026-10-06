@@ -14,3 +14,13 @@ Local verification:
 Logs: `/private/tmp/p910-policies-{unit,unit-final,build-verified,e2e}.log`. Final viewport screenshots: `/private/tmp/p910-policies-final-{1440,768,390}.png`.
 
 Workflow-run checks were omitted at the operator's request. This local UI verification does not close the proposal's hosted acceptance gate.
+
+## Shared field widths and leading messages
+
+The leading Advanced registrations message had 16px panel padding plus a generic 12px secondary-text margin: 28px above versus 16px below. The shared rule now adds that margin only when secondary text follows another direct child. Leading messages use equal 16px insets.
+
+Record-editing forms for policy/model, Schedule, Thought, Experience checkpoint, Event source and application connection share `admin-config-form`, a 48rem maximum with full available width on smaller screens. Selects fill their assigned field column. Draft/instance grids intentionally retain multiple columns; each select fills its column. Short timing and unit controls, Memory scope filters, base-version toolbar choices, pagination and bounded table model editors retain compact widths appropriate to their roles. Event subscription source selection flexes with its action row, caps at the same form measure and wraps on mobile instead of sizing to label content.
+
+Verification: six affected unit files passed 52 tests; production build passed (6.85s). Five Synthetic/P7.6 browser regressions passed (45.3s), covering read recovery/clipboard, local-time schedule save, sticky desktop/mobile draft actions, memory/automation and definition/managed Chat. MCP measured the leading message at equal 16px insets at 1440/768/390px. Model and Thought execution selects fill columns of 768/702/332px; the Thought unit control deliberately stays 128px. Weekly schedule creation succeeded, empty-weekday submission remained disabled, Memory loading worked with a compact 192px scope selector, and a long Event source name saved and remained readable in its subscription selector without document overflow. This fixture's schedule-only policy rejected subscribing with 400 and a clear inline message; Retry subscriptions recovered. No application connection sign-in was attempted. Layout and existing connection behavior are covered by the focused suite; real authentication remains outside this presentation change.
+
+Evidence: `/private/tmp/admin-field-width-{unit,build,e2e}.log` and `/private/tmp/admin-field-width-{policies,schedules,thoughts,connections}-{1440,768,390}.png`. Hosted workflow checks remain omitted as requested.

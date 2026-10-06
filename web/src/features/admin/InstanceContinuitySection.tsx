@@ -167,7 +167,7 @@ export function ExperienceSection({ instanceId, onWork, selection, active = true
           onChange={enabled => void mutate("experience/configuration", "PUT", { expectedRevision: review.settingsRevision, enabled })} />
           <Typography.Text>{review.enabled ? "Enabled · completed work may be retrospected" : "Disabled · experience is not supplied to the agent"}</Typography.Text>
           <Button onClick={() => void reload()} disabled={busy}>Refresh experience</Button></Flex>
-        <Form layout="vertical" onFinish={() => void mutate("experience/checkpoints", "POST", { sessionId: session.trim() })}>
+        <Form layout="vertical" className="admin-config-form" onFinish={() => void mutate("experience/checkpoints", "POST", { sessionId: session.trim() })}>
           <Form.Item label="Source conversation" extra="Only completed observable work in this instance is eligible. A repeated checkpoint creates no duplicate.">
             <AdminSessionPicker instanceId={instanceId} value={session} onChange={setSession} disabled={busy || !review.enabled} />
           </Form.Item>
@@ -370,7 +370,7 @@ export function ThoughtSection({ instanceId, onWork, selection, active = true }:
       {selection?.kind === "thought" && !loading && !error && review && !review.items.some(item => item.registrationId === selection.registrationId) ? <Alert type="info" showIcon title="This source configuration is no longer available" description="It may have been deleted or retired. Its run remains available in Runs." /> : null}
       <Failure error={error} reload={() => void reload()} />
       {review ? <>
-        <Form layout="vertical" onFinish={() => void action(editing ? `thoughts/${editing}` : "thoughts", draft, editing ? "PUT" : "POST")}>
+        <Form layout="vertical" className="admin-config-form" onFinish={() => void action(editing ? `thoughts/${editing}` : "thoughts", draft, editing ? "PUT" : "POST")}>
           <Form.Item label="Thinking prompt" extra={<Flex vertical gap={token.paddingXS}><Typography.Text type="secondary">{draft.thinkingPrompt.length} / 2000 characters</Typography.Text>
             <span>For example: Review recent experience for repeated problems. Improve only when meaningful; otherwise do nothing. Tools and approvals still follow current policy.</span></Flex>}>
             <Input.TextArea aria-label="Thinking prompt" rows={4} maxLength={2000} value={draft.thinkingPrompt} disabled={busy}
