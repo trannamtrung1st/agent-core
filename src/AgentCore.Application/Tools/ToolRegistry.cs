@@ -44,13 +44,13 @@ public static class ToolRegistry
                 ToolResourceScope.Session),
             [ToolCatalog.WorkspaceRead] = Descriptor(
                 ToolCatalog.WorkspaceRead,
-                "Read a file from the session workspace. Relative paths and bare filenames resolve from the working directory (for example notes.txt). Explicit /agent, /attachments, and /workspace logical paths may be used when permitted.",
+                "Read a file from the session workspace. Relative paths and bare filenames resolve from the working directory (for example notes.txt). Explicit /home (durable, read-only), /agent, /attachments, and /workspace logical paths may be used when permitted.",
                 """{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}""",
                 ToolEffect.ReadOnly,
                 scope: ToolResourceScope.Session),
             [ToolCatalog.WorkspaceList] = Descriptor(
                 ToolCatalog.WorkspaceList,
-                "List bounded session workspace metadata. Relative paths resolve from the working directory; omit path to list the working directory.",
+                "List bounded workspace metadata. /home contains intentionally retained durable work; /workspace is session scratch. Relative paths resolve from the working directory; omit path to list the working directory.",
                 """{"type":"object","properties":{"path":{"type":"string"}}}""",
                 ToolEffect.ReadOnly,
                 scope: ToolResourceScope.Session),
@@ -68,10 +68,20 @@ public static class ToolRegistry
                 scope: ToolResourceScope.Session),
             [ToolCatalog.WorkspaceSearch] = Descriptor(
                 ToolCatalog.WorkspaceSearch,
-                "Search filenames and bounded UTF-8 text under a workspace directory. Relative paths resolve from the working directory. Skips binary contents. Use this instead of reading files one by one.",
+                "Search filenames and bounded UTF-8 text under a workspace directory, including durable /home for managed sessions. Relative paths resolve from the working directory. Skips binary contents. Use this instead of reading files one by one.",
                 """{"type":"object","properties":{"query":{"type":"string"},"path":{"type":"string"},"glob":{"type":"string"},"maxResults":{"type":"integer"}},"required":["query"]}""",
                 ToolEffect.ReadOnly,
                 scope: ToolResourceScope.Session),
+            [ToolCatalog.WorkspaceRetain] = Descriptor(
+                ToolCatalog.WorkspaceRetain,
+                "Intentionally keep a session scratch file under durable /home for this managed identity. Do not retain temporary/intermediate files by default. Retain useful outputs/sources or files the user wants kept. Existing destinations require current expectedRevision or expectedSha256. This copies bytes; it does not write memory or publish an Artifact.",
+                """{"type":"object","additionalProperties":false,"properties":{"source":{"type":"string"},"destination":{"type":"string"},"expectedRevision":{"type":"integer","minimum":1},"expectedSha256":{"type":"string"}},"required":["source","destination"]}""",
+                ToolEffect.Write, scope: ToolResourceScope.Session),
+            [ToolCatalog.WorkspaceCheckout] = Descriptor(
+                ToolCatalog.WorkspaceCheckout,
+                "Copy a durable /home file to separate session /workspace/working scratch before editing or using session tools. Does not overwrite an existing destination. Optionally check expectedRevision or expectedSha256. Publish a fresh session Artifact when the user needs a downloadable deliverable.",
+                """{"type":"object","additionalProperties":false,"properties":{"source":{"type":"string"},"destination":{"type":"string"},"expectedRevision":{"type":"integer","minimum":1},"expectedSha256":{"type":"string"}},"required":["source"]}""",
+                ToolEffect.Write, scope: ToolResourceScope.Session),
             [ToolCatalog.WorkspaceMove] = Descriptor(
                 ToolCatalog.WorkspaceMove,
                 "Move a workspace file to another relative path. Does not overwrite an existing destination.",

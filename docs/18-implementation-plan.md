@@ -375,3 +375,9 @@ Required slices: semantic contracts/persistence; Memory authority/admission/atom
 Acceptance maps AC1–AC20 in [the P9.10 report](reports/p9.10-final-verification.md). **P9.10 is closed/frozen on verified candidate `71a9e6fd`**, with bounded Real semantic judgement and [exact-commit hosted Synthetic/Compose `37452986171`](https://github.com/trannamtrung1st/agent-core/actions/runs/37452986171) green on 2026-10-06. All required acceptance gates are complete.
 
 The requested configurable Continuity maintenance cadence is included in that closure: operator polling policy, separate revisioned per-instance intervals and persisted evaluation claims, with Admin/API controls. It retains one hosted loop and existing Experience/Thought/consolidation ownership. The final hosted gates include the cadence enhancement and test synchronization repairs. Stop P9.10 expansion; P10/P11 remain requirement-triggered.
+
+## Bounded post-P9.10 Agent Instance workspace
+
+Accepted scope: one managed identity-owned `/home`, explicit retain/checkout, bounded tool-driven read/list/search, optimistic replacement, owner Admin inspection/download/delete, source Session deletion survival and local SQLite/Compose restart durability. Prior P9.8/P9.9/P9.10 freezes remain unchanged; this does not start P10/P11. No shared/application/task workspace, remote storage or Artifact ownership change is included.
+
+Acceptance requires focused/full backend and frontend gates, production build, canonical cross-session Synthetic browser journey, existing Artifact/continuity/browser regression, SQLite/Compose survival, synchronized docs, exact published behavior SHA and green hosted Synthetic/Compose on that SHA. Status and AC1–AC20 evidence are recorded in [final verification](reports/agent-instance-workspace-final-verification.md); local passing checks alone do not freeze this enhancement.

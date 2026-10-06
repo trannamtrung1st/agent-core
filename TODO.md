@@ -224,7 +224,7 @@ Session workspace
   mutable, isolated, session-owned
 ```
 
-Attachments, artifacts, definition resources, and session workspace stay separate stores. Do not add a general cross-session Agent Instance filesystem without a concrete workflow that requires it.
+Attachments, artifacts, definition resources, and session workspace stay separate stores. The accepted bounded Agent Workspace keeps intentionally retained work under managed-instance `/home`; `/workspace` remains session scratch. Explicit retain/checkout and CAS preserve the ownership split. General/shared/application/task filesystems remain deferred.
 
 ## Development infrastructure
 
@@ -330,7 +330,7 @@ A prepared worker package must not share one customer’s identity, memory, auth
 
 Memory scopes, if portability requires them, stay explicit: identity, relationship, application, task, and session. Memory does not automatically cross applications.
 
-Workspace scopes, if a concrete workflow requires them, stay separate lifecycles: identity/home, application, task, and session. They are not one shared filesystem. Definition resources, attachments, artifacts, and mutable workspace data stay distinct. `SessionWorkspace` remains the only implemented mutable workspace.
+Workspace scopes stay separate lifecycles. The bounded managed-instance `/home` now keeps explicitly retained work; `SessionWorkspace` remains execution scratch. Definition resources, attachments, artifacts, and mutable workspace data stay distinct. Application/task/shared scopes require a separate concrete workflow and decision.
 
 Unattended work extends Trigger, Occurrence, and WorkItem. It is not a permanent `while(true)` model loop. The shape is a goal or task, a WorkItem, an authorized action, a checkpoint, then continue, wait for an event or approval, or complete. Waiting must not require a live model call or browser session. Delegation between identities, if it is ever required, carries identity, authority, provenance, and work ownership. It is not an agent swarm.
 
@@ -864,7 +864,7 @@ The frozen P9 proof is a Restricted, session-scoped ephemeral browser (`ProfileM
 - [ ] Add an external tool or integration provider only when that second implementation justifies the seam.
 - [ ] Define extension identity and versioning only to the degree that extension requires.
 - [ ] Reuse shared policy primitives. Do not invent a second policy or one universal configuration object.
-- [ ] Revisit a durable Agent Instance workspace only for a concrete cross-session file workflow, with an explicit scope. Do not generalize `SessionWorkspace`.
+- [ ] Close the bounded post-P9.10 Agent Workspace enhancement against its focused/full/browser/Compose and exact-SHA hosted gates. The concrete workflow is retained work reused in a later Session and republished as a fresh Artifact; `SessionWorkspace` stays scratch. See `docs/reports/agent-instance-workspace-final-verification.md`.
 - [ ] Revisit richer reusable evaluation suites only when multiple provider implementations make them useful.
 
 P9 is not a plugin marketplace, a prepared-worker package system, a visual workflow builder, a multi-agent engine, a distributed job platform, tenant RBAC, Kubernetes, or a microservice split. OpenWeb is a post-closure local/demo host policy. It is not part of the frozen `bba1de4` proof, and it is not a model-controlled unrestricted agent.
@@ -1412,7 +1412,7 @@ These items are recorded decisions. P9.5–P9.9 take only the narrow exceptions 
 
 **Bindings, messaging, and skills beyond P9.9.** Full/universal Application Binding persistence remains deferred; P9.5 owns only a minimal Agent-Instance-owned nopCommerce relationship. Cross-application and arbitrary-recipient messaging remains deferred; P9.5 owns only narrow trusted-owner proactive delivery. P9.7 owns Definition-versioned Skill authoring only. An independently versioned Skill shared across many Definitions, Skill/plugin marketplaces, embeddings/vector Skill retrieval, and a dedicated Skill-router model remain deferred.
 
-**Agent scope.** Multi-agent coordination or an agent swarm, a visual workflow builder, a persistent general Agent Instance filesystem, and an Admin assistant agent remain deferred. P9.5/P9.6 provide bounded Trigger → Occurrence → WorkItem execution; P9.9 is the narrow, policy-governed thought-activation exception that adds a decision step. Unrestricted/arbitrary autonomous loops remain deferred.
+**Agent scope.** Multi-agent coordination or an agent swarm, a visual workflow builder, a generalized/shared Agent filesystem beyond bounded `/home`, and an Admin assistant agent remain deferred. P9.5/P9.6 provide bounded Trigger → Occurrence → WorkItem execution; P9.9 is the narrow, policy-governed thought-activation exception that adds a decision step. Unrestricted/arbitrary autonomous loops remain deferred.
 
 **Voice and hosted providers.** The known Real/OpenRouter historical-image reread gap: bounded, credential-gated, outside default CI. HOSTED-04, one non-Synthetic voice smoke on an explicitly selected hosted configuration. Replacing realtime `OpenAiSpeechRecognizer` only when a concrete need exists. Native speech-to-speech only if measured latency or quality shows that `STT → text model → TTS` is insufficient.
 
@@ -1454,7 +1454,7 @@ Orientation for what later work can build on. Detail and gate history are in `/d
 
 **Voice and realtime.** SignalR with MessagePack as the default transport, optional JSON diagnostic mode with the same contract, independently replaceable STT and TTS, voice interruption, and heard versus received tracking. Synthetic speech requires no provider credentials.
 
-**Workspace and resources.** Session-owned workspaces, attachments and artifacts, current and historical images, and versioned definition resources.
+**Workspace and resources.** Session-owned scratch, attachments and artifacts, current and historical images, versioned definition resources, and bounded managed-instance `/home` with explicit retain/checkout and guarded replacement.
 
 **Triggers and background work.** Durable trigger registration and occurrences, and durable `WorkModelPin`-carrying WorkItems for work that must outlive the Session Runtime. Schedules and source-owned authenticated `order.placed` events use the same occurrence routing model. Event admission snapshots matching subscribers into a delivery ledger so fan-out can resume after restart without adding later subscribers. Scheduled and application-event background browser execution can reuse an Agent-Instance-owned persistent authenticated profile. Attention-worthy results have idempotent trusted-owner delivery; ordinary completion can remain quiet. One process schedules and executes this work.
 

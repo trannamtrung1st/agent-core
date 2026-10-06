@@ -79,8 +79,10 @@ public sealed class AdminReadServiceTests
         Assert.False(config.DurableExecutionEligibility.CanAcceptNewTriggeredWork);
     }
 
-    [Fact]
-    public async Task Effective_configuration_projects_shared_definition_fields()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Effective_configuration_projects_shared_definition_fields(bool compatibility)
     {
         var preferences = new ProviderPreferences("primary-llm", "primary-stt", "primary-tts");
         var definition = Sample("examiner", 1, "Examiner v1") with
@@ -89,7 +91,7 @@ public sealed class AdminReadServiceTests
             Environment = new RoleEnvironment(
                 Harness: ["beta-harness", "alpha-harness"],
                 KnowledgeSources: [new KnowledgeSourceRef("handbook", "Handbook", "cite-handbook")],
-                ToolAllowlist: [ToolCatalog.KnowledgeRetrieve],
+                ToolAllowlist: [ToolCatalog.KnowledgeRetrieve, ToolCatalog.WorkspaceRetain, ToolCatalog.WorkspaceCheckout],
                 Workspace: new WorkspaceTemplatePolicy("support-desk"))
         };
         var instance = new AgentInstance(
@@ -100,7 +102,7 @@ public sealed class AdminReadServiceTests
             AgentInstanceLifecycle.Active,
             DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
             DateTimeOffset.Parse("2026-01-02T00:00:00Z"),
-            Compatibility: false);
+            Compatibility: compatibility);
         var service = new AdminReadService(
             new VersionedDefinitions(definition),
             new VersionedDefinitions(definition),
@@ -120,7 +122,8 @@ public sealed class AdminReadServiceTests
         Assert.Equal("knowledge/handbook", source.ResolvedResourcePath);
         Assert.Equal(MemoryPolicy.Disabled, config.MemoryPolicy);
         Assert.Equal(preferences, config.ProviderPreferences);
-        Assert.Equal([ToolCatalog.KnowledgeRetrieve], config.EffectiveToolAllowlist);
+        Assert.Equal(compatibility ? [ToolCatalog.KnowledgeRetrieve]
+            : new[] { ToolCatalog.KnowledgeRetrieve, ToolCatalog.WorkspaceCheckout, ToolCatalog.WorkspaceRetain }, config.EffectiveToolAllowlist);
         Assert.Equal("scripted-alpha", config.EffectiveModel.CatalogKey);
         Assert.Equal("systemDefault", config.EffectiveModel.SelectionSource);
     }

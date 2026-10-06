@@ -132,6 +132,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield return new ModelCompleted(ModelStopReason.ToolCalls);
             yield break;
         }
+        if (AgentWorkspaceScript.Generate(request) is { } workspaceEvents)
+        {
+            foreach (var item in workspaceEvents) yield return item;
+            yield break;
+        }
         if (HarnessChatScript.Generate(request) is { } chatEvents)
         {
             foreach (var item in chatEvents) yield return item;

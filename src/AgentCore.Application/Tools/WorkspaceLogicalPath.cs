@@ -45,6 +45,14 @@ public static class WorkspaceLogicalPath
             return Finalize(sessionId, canonical, out errorCode, out message);
         }
 
+        if (AgentCore.Application.Workspaces.AgentHomePath.IsHome(trimmed))
+        {
+            try { trimmed = AgentCore.Application.Workspaces.AgentHomePath.Normalize(trimmed, false); }
+            catch (AgentCoreException)
+            {
+                errorCode = "invalid"; message = "Use a safe normalized home path."; return false;
+            }
+        }
         var explicitRoot = IsExplicitLogicalRoot(trimmed);
         if (!explicitRoot && trimmed.StartsWith('/'))
         {
@@ -148,7 +156,8 @@ public static class WorkspaceLogicalPath
     }
 
     private static bool IsExplicitLogicalRoot(string path) =>
-        path.StartsWith("/agent", StringComparison.Ordinal)
+        path.StartsWith("/home", StringComparison.Ordinal)
+        || path.StartsWith("/agent", StringComparison.Ordinal)
         || path.StartsWith("/attachments", StringComparison.Ordinal)
         || path.StartsWith("/workspace", StringComparison.Ordinal);
 }

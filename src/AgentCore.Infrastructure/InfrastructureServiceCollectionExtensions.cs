@@ -1,3 +1,4 @@
+using AgentCore.Application.Workspaces;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Connections;
 using AgentCore.Application.Conversation;
@@ -156,7 +157,8 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IIdGenerator>()));
             services.AddSingleton<IAdminLifecycleDeletion>(provider => new SqliteAdminLifecycleDeletion(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
-                provider.GetRequiredService<IIdGenerator>()));
+                provider.GetRequiredService<IIdGenerator>(),
+                provider.GetRequiredService<IAgentInstanceWorkspaceStore>()));
             services.TryAddSingleton<IAdminP7eHistoryMutator>(provider =>
                 new SqliteAdminP7eHistoryMutator(
                     provider.GetRequiredService<AdminMemoryService>(),
@@ -240,7 +242,8 @@ public static class InfrastructureServiceCollectionExtensions
                     provider.GetRequiredService<InMemoryConversationTurnExecutionStore>(),
                     provider.GetRequiredService<InMemoryAgentDefinitionAdminStore>(),
                     provider.GetRequiredService<InMemoryAdminEventStore>(),
-                    (InMemoryExperienceStore)provider.GetRequiredService<IExperienceStore>());
+                    (InMemoryExperienceStore)provider.GetRequiredService<IExperienceStore>(),
+                    provider.GetRequiredService<IAgentInstanceWorkspaceStore>());
             });
             services.TryAddSingleton<IAdminP7eHistoryMutator>(provider =>
                 new InMemoryAdminP7eHistoryMutator(
@@ -253,6 +256,11 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<ApplicationConnectionService>();
         services.TryAddSingleton<IAttachmentProcessor, AttachmentProcessor>();
         services.TryAddSingleton<DefinitionPublicationResourceReader>();
+        services.TryAddSingleton<IAgentInstanceWorkspaceStore>(provider => new FileAgentInstanceWorkspaceStore(
+            persistence.AgentWorkspaceRoot, provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<IIdGenerator>(),
+            string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase) ? provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>() : null));
+        services.TryAddSingleton<AdminLifecycleCoordinator>();
+        services.TryAddSingleton<AgentInstanceWorkspaceService>();
         services.TryAddSingleton<ISessionWorkspace>(provider => new FileSessionWorkspace(
             persistence.WorkspaceRoot,
             persistence.TemplateRoot,
@@ -405,7 +413,8 @@ public static class InfrastructureServiceCollectionExtensions
             () => provider.GetRequiredService<HarnessManagementService>(),
             provider.GetRequiredService<AgentCore.Application.Experience.ExperienceService>(),
             provider.GetRequiredService<AgentCore.Application.Continuity.ContinuityService>(),
-            provider.GetRequiredService<AgentCore.Application.Continuity.IdentityMaintenanceService>()));
+            provider.GetRequiredService<AgentCore.Application.Continuity.IdentityMaintenanceService>(),
+            provider.GetRequiredService<AgentInstanceWorkspaceService>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),

@@ -59,7 +59,8 @@ public sealed record AgentContext(
     Tools.HarnessChatContext? Harness = null,
     string? ExperienceContext = null,
     string? ContinuityContext = null,
-    bool AllowAgentConsolidation = false)
+    bool AllowAgentConsolidation = false,
+    bool AgentWorkspaceAvailable = false)
 {
     public AgentIdentity EffectiveIdentity => Persona ?? Definition.Identity;
 }

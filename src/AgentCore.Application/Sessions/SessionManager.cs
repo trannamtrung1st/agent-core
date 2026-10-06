@@ -24,6 +24,7 @@ public sealed class SessionManager
     private readonly VoiceAvailability _voice;
     private readonly IAttachmentStore? _attachments;
     private readonly RoleKnowledgeService? _knowledge;
+    private readonly AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? _agentWorkspace;
     private readonly ISessionWorkspace? _workspace;
     private readonly IArtifactStore? _artifacts;
     private readonly IModelCatalog? _models;
@@ -52,7 +53,8 @@ public sealed class SessionManager
         ITriggerPolicyRecoveryService? triggerPolicyRecovery = null,
         AdminLifecycleCoordinator? lifecycleGate = null,
         IBrowserSessionLease? browserLease = null,
-        ExperienceService? experience = null)
+        ExperienceService? experience = null,
+        AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null)
     {
         _definitions = definitions;
         _store = store;
@@ -62,6 +64,7 @@ public sealed class SessionManager
         _attachments = attachments;
         _knowledge = knowledge;
         _workspace = workspace;
+        _agentWorkspace = agentWorkspace;
         _artifacts = artifacts;
         _models = models;
         _localProfiles = localProfiles ?? new LocalUserProfileService(store, time);
@@ -853,6 +856,8 @@ public sealed class SessionManager
         var resolvedPrefix = string.IsNullOrWhiteSpace(prefix)
             ? WorkspaceLogicalPath.WorkingDirectory
             : WorkspaceLogicalPath.Resolve(prefix, sessionId);
+        if (AgentCore.Application.Workspaces.AgentHomePath.IsHome(resolvedPrefix) && _agentWorkspace is not null)
+            return await _agentWorkspace.ListNodesAsync(await _agentWorkspace.SessionOwnerAsync(sessionId, cancellationToken), resolvedPrefix, cancellationToken);
         await workspace.EnsureAsync(sessionId, snapshot.Definition, cancellationToken).ConfigureAwait(false);
         return await workspace.ListAsync(sessionId, snapshot.Definition, resolvedPrefix, cancellationToken).ConfigureAwait(false);
     }
@@ -865,6 +870,11 @@ public sealed class SessionManager
         var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
         var workspace = RequireWorkspace();
         var resolvedPath = WorkspaceLogicalPath.Resolve(logicalPath, sessionId);
+        if (AgentCore.Application.Workspaces.AgentHomePath.IsHome(resolvedPath) && _agentWorkspace is not null)
+        {
+            var home = await _agentWorkspace.ReadAsync(await _agentWorkspace.SessionOwnerAsync(sessionId, cancellationToken), path: resolvedPath, cancellationToken: cancellationToken);
+            return new WorkspaceContent(home.Item.LogicalPath, home.Item.ContentType, home.Bytes);
+        }
         await workspace.EnsureAsync(sessionId, snapshot.Definition, cancellationToken).ConfigureAwait(false);
         return await workspace.ReadAsync(sessionId, snapshot.Definition, resolvedPath, cancellationToken)
             .ConfigureAwait(false);

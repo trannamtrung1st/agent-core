@@ -15,6 +15,7 @@ services:
       AgentCore__AgentDirectory: /app/agents
       Persistence__Provider: Sqlite
       Persistence__ConnectionString: Data Source=/data/agent-core.db
+      Persistence__AgentWorkspaceRoot: /data/agent-workspaces
       Persistence__DefinitionResourceRoot: /data/definition-resources
       Providers__LanguageModels__primary-llm__Adapter: Scripted
       # This image does not install Chromium. Leave browser tools off until that runtime is packaged.

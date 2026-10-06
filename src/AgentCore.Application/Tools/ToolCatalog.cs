@@ -13,6 +13,8 @@ public static class ToolCatalog
     public const string WorkspaceWrite = "workspace.write";
     public const string WorkspacePatch = "workspace.patch";
     public const string WorkspaceSearch = "workspace.search";
+    public const string WorkspaceRetain = "workspace.retain";
+    public const string WorkspaceCheckout = "workspace.checkout";
     public const string WorkspaceMove = "workspace.move";
     public const string ArtifactsCreate = "artifacts.create";
     public const string ArtifactsCreateFromWorkspace = "artifacts.create_from_workspace";
@@ -83,6 +85,7 @@ public static class ToolCatalog
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var name in RoleEnvironments.Of(definition).ToolList)
         {
+            if (name is WorkspaceRetain or WorkspaceCheckout && context is not { AgentWorkspaceAvailable: true, DetachedExecution: false }) continue;
             if (!ToolRegistry.TryGet(name, out var descriptor)
                 || descriptor.OfferRule is not (ToolOfferRule.RoleAllowlist or ToolOfferRule.ConfigurationWhenRoleAllows)
                 || !ToolPolicy.IsOffered(descriptor, definition, context, configurationGate)

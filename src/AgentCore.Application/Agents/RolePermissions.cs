@@ -54,8 +54,9 @@ public static class RolePermissions
         var normalized = path.Replace('\\', '/').Trim();
         if (normalized.StartsWith('/') && !normalized.StartsWith("/agent/", StringComparison.Ordinal)
             && !normalized.StartsWith("/attachments/", StringComparison.Ordinal)
+            && !normalized.StartsWith("/home/", StringComparison.Ordinal)
             && !normalized.StartsWith("/workspace/", StringComparison.Ordinal)
-            && normalized is not "/" and not "/agent" and not "/attachments" and not "/workspace")
+            && normalized is not "/" and not "/agent" and not "/attachments" and not "/workspace" and not "/home")
         {
             return false;
         }

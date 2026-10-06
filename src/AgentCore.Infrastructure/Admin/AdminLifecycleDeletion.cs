@@ -18,7 +18,8 @@ public sealed class InMemoryAdminLifecycleDeletion(
     InMemoryConversationTurnExecutionStore executions,
     InMemoryAgentDefinitionAdminStore definitions,
     InMemoryAdminEventStore events,
-    InMemoryExperienceStore? experience = null) : IAdminLifecycleDeletion
+    InMemoryExperienceStore? experience = null,
+    IAgentInstanceWorkspaceStore? workspace = null) : IAdminLifecycleDeletion
 {
     internal Func<CancellationToken, ValueTask>? BeforeCommit { get; set; }
 
@@ -46,6 +47,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
             await BeforeCommit(cancellationToken).ConfigureAwait(false);
         }
 
+        if (workspace is not null) await workspace.DeleteInstanceAsync(command.InstanceId, cancellationToken);
         var removed = instances.RemoveForDeletion(command.InstanceId, command.ExpectedRevision);
         try
         {
@@ -141,7 +143,8 @@ public sealed class InMemoryAdminLifecycleDeletion(
 
 public sealed class SqliteAdminLifecycleDeletion(
     IDbContextFactory<AgentCoreDbContext> contexts,
-    IIdGenerator ids) : IAdminLifecycleDeletion
+    IIdGenerator ids,
+    IAgentInstanceWorkspaceStore? workspace = null) : IAdminLifecycleDeletion
 {
     public async ValueTask DeleteInstanceAsync(
         AdminInstanceDeleteCommand command,
@@ -176,6 +179,8 @@ public sealed class SqliteAdminLifecycleDeletion(
             throw AgentCoreErrors.Conflict(AdminDeletionMessages.InstanceBlocked(counts));
         }
 
+        if (workspace is not null) await workspace.DeleteInstanceContentAsync(command.InstanceId, cancellationToken);
+        await db.AgentWorkspaceItems.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
         await db.Experiences.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
         await db.IdentityMaintenanceSettings.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
         await db.ContinuityMaintenanceSettings.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);

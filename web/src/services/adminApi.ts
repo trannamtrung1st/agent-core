@@ -630,7 +630,7 @@ export function friendlyAdminDetail(detail: string | undefined, fallback: string
   return text;
 }
 
-async function adminProblemMessage(response: Response, fallback: string): Promise<AdminRequestError> {
+export async function adminProblemMessage(response: Response, fallback: string): Promise<AdminRequestError> {
   try {
     const problem = (await response.json()) as { title?: string; detail?: string; diagnosticId?: unknown };
     return adminRequestErrorFromProblem(problem, fallback);

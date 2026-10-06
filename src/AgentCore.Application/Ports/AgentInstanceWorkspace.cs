@@ -1,0 +1,19 @@
+using AgentCore.Domain.Conversation;
+
+namespace AgentCore.Application.Ports;
+
+public sealed record AgentWorkspacePage(IReadOnlyList<AgentWorkspaceItem> Items, long UsedBytes, int TotalItems, string? NextPath);
+public sealed record AgentWorkspaceContent(AgentWorkspaceItem Item, byte[] Bytes);
+public sealed record AgentWorkspaceCheckout(AgentWorkspaceItem Source, string Destination, long ByteSize, string Sha256Hex);
+
+/// <summary>Dedicated managed-instance storage. Provenance never owns or cascades into these bytes.</summary>
+public interface IAgentInstanceWorkspaceStore
+{
+    ValueTask<AgentWorkspacePage> ListAsync(Guid instanceId, string prefix, string? afterPath, int limit, CancellationToken cancellationToken = default);
+    ValueTask<AgentWorkspaceContent> ReadAsync(Guid instanceId, Guid? itemId, string? path, CancellationToken cancellationToken = default);
+    ValueTask<AgentWorkspaceItem> RetainAsync(Guid instanceId, string path, string contentType, ReadOnlyMemory<byte> bytes,
+        Guid? sourceSessionId, long? expectedRevision, string? expectedSha256, CancellationToken cancellationToken = default);
+    ValueTask DeleteAsync(Guid instanceId, Guid itemId, long expectedRevision, CancellationToken cancellationToken = default);
+    ValueTask DeleteInstanceContentAsync(Guid instanceId, CancellationToken cancellationToken = default);
+    ValueTask DeleteInstanceAsync(Guid instanceId, CancellationToken cancellationToken = default);
+}

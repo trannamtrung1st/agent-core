@@ -3,7 +3,7 @@ export type AdminCollection = "definitions" | "instances" | "event-sources";
 
 export const ADMIN_DEFINITION_TABS = ["versions", "drafts"] as const;
 export type AdminDefinitionTab = (typeof ADMIN_DEFINITION_TABS)[number];
-export const ADMIN_INSTANCE_TABS = ["identity", "continuity", "automation", "runs", "connections", "effective"] as const;
+export const ADMIN_INSTANCE_TABS = ["identity", "continuity", "automation", "runs", "workspace", "connections", "effective"] as const;
 export type AdminInstanceTab = (typeof ADMIN_INSTANCE_TABS)[number];
 export const ADMIN_CONTINUITY_TABS = ["memory", "experience"] as const;
 export const ADMIN_AUTOMATION_TABS = ["schedules", "thoughts", "controls"] as const;

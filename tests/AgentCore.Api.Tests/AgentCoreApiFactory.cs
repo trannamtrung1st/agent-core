@@ -27,6 +27,7 @@ public class AgentCoreApiFactory : WebApplicationFactory<Program>
                 ["Providers:Speech:Synthesis:Adapter"] = "Synthetic",
                 ["Persistence:WorkspaceRoot"] = Path.Combine(Path.GetTempPath(), "agent-core-ws", Guid.NewGuid().ToString("N")),
                 ["Persistence:TemplateRoot"] = Path.Combine(repo, "agents", "templates"),
+                ["Persistence:AgentWorkspaceRoot"] = Path.Combine(Path.GetTempPath(), "agent-core-home", Guid.NewGuid().ToString("N")),
                 ["Persistence:ArtifactRoot"] = Path.Combine(Path.GetTempPath(), "agent-core-art", Guid.NewGuid().ToString("N"))
             };
             foreach (var pair in ExtraConfiguration)

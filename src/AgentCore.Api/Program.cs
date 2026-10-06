@@ -137,6 +137,7 @@ HostSessionEndpoints.Map(app);
 LegacySessionEndpoints.Map(app);
 AttachmentEndpoints.Map(app);
 WorkspaceEndpoints.Map(app);
+AgentWorkspaceEndpoints.Map(app);
 ArtifactEndpoints.Map(app);
 
 app.MapGet("/health", (IConfiguration configuration) =>

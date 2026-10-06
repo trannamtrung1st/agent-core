@@ -31,6 +31,7 @@ ENV AgentCore__Profile=Synthetic
 ENV AgentCore__AgentDirectory=/app/agents
 ENV Persistence__Provider=Sqlite
 ENV Persistence__ConnectionString=Data Source=/data/agent-core.db
+ENV Persistence__AgentWorkspaceRoot=/data/agent-workspaces
 ENV Persistence__DefinitionResourceRoot=/data/definition-resources
 ENV Providers__LanguageModels__primary-llm__Adapter=Scripted
 # The image does not install Playwright Chromium. Keep browser tools off until that runtime is packaged.

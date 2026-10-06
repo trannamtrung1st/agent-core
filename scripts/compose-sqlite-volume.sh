@@ -184,6 +184,22 @@ status, workspace_body = request(workspace_url, headers=owner_headers)
 workspace_text = workspace_body.decode("utf-8") if isinstance(workspace_body, bytes) else workspace_body
 assert resource_bytes.decode("utf-8") in workspace_text, workspace_text
 
+# A retained copy is independent of the source Session and survives container recreation.
+status, home_source_body = request(
+    "http://127.0.0.1:5080/api/v2/sessions", method="POST",
+    data=json.dumps({"agentInstanceId": instance["instanceId"], "mode": "text"}).encode(), headers=owner_headers)
+home_source = json.loads(home_source_body)["sessionId"]
+home_bytes = b"compose retained workspace exact bytes\r\n"
+status, _ = request(f"http://127.0.0.1:5080/api/v2/sessions/{home_source}/workspace/content?path=retained.txt",
+    method="PUT", data=home_bytes, headers=owner_headers)
+status, home_body = request(f"http://127.0.0.1:5080/api/v2/sessions/{home_source}/workspace/retain", method="POST",
+    data=json.dumps({"source": "retained.txt", "destination": "/home/reports/retained.txt"}).encode(), headers=owner_headers)
+home_item = json.loads(home_body)
+assert home_item["byteSize"] == len(home_bytes), home_item
+request(f"http://127.0.0.1:5080/api/v2/sessions/{home_source}", method="DELETE", headers=owner_headers)
+with open("/tmp/agent-core-home-survival.json", "w") as target:
+    json.dump({"instanceId": instance["instanceId"], "item": home_item, "text": home_bytes.decode()}, target)
+
 status, cadence_body = request(
     f"http://127.0.0.1:5080/api/v2/admin/agent-instances/{instance['instanceId']}/continuity-maintenance",
     headers=owner_headers,
@@ -418,6 +434,12 @@ workspace_url = (
 status, workspace = get(workspace_url)
 assert status == 200, workspace
 assert resource_text in workspace, workspace
+home = json.load(open("/tmp/agent-core-home-survival.json"))
+status, retained = get(f"http://127.0.0.1:5080/api/v2/agent-instances/{home['instanceId']}/workspace/{home['item']['itemId']}/content")
+assert status == 200 and retained == home["text"], (status, retained)
+status, listed_home = get(f"http://127.0.0.1:5080/api/v2/agent-instances/{home['instanceId']}/workspace")
+assert any(item["sha256Hex"] == home["item"]["sha256Hex"] for item in json.loads(listed_home)["items"])
+print("agent workspace survived source deletion and container recreation", home["instanceId"])
 print("admin survived", instance_id, managed_session_id, pub_version, resource_path)
 PY
 

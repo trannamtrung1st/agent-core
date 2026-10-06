@@ -87,6 +87,7 @@ Infrastructure stores persist the rows named below. API routes map commands and 
 | Attachment | session authorization in `SessionManager`; bytes in `IAttachmentStore` | upload, bind, TTL delete | attachment store | composer, history chips | runtime input |
 | Artifact | session tools and `SessionManager` through `IArtifactStore` | create under session authorization | artifact store | history refs | runtime output |
 | SessionWorkspace | `ISessionWorkspace`; `FileSessionWorkspace` in Infrastructure | session-owned file mutations from `SessionToolExecutor` and `SessionManager` | host filesystem; paths stay in Infrastructure | workspace tools, sandbox | runtime mutable files |
+| Agent Workspace | `AgentInstanceWorkspaceService`; `IAgentInstanceWorkspaceStore` | managed Agent Instance, explicit retain with CAS | SQLite metadata + local opaque blobs | Session tools and owner Admin; source Session deletion preserves copies | durable working material; archive read-only; hard delete purges |
 
 Known boundaries that stay separate:
 
@@ -278,3 +279,7 @@ Admin authors schedules through the existing TriggerRegistration store with `Adm
 ## P9.10 identity maintenance (accepted implementation)
 
 Semantic maintenance extends the existing structured Memory and Experience stores with atomic multi-source supersession and bounded lineage. Memory scope/kind/ownership cannot change; Experience stays separate from Memory. Permission is a default-off revisioned instance setting, independent of Thought activation. Existing tool policy and exact approvals govern guarded operations; historical content remains untrusted. Superseded sources remain inspectable and are excluded from normal recall. No second scheduler, runtime, generic mutation surface, or automatic Experience-to-Memory promotion is introduced.
+
+## Bounded Agent Instance workspace
+
+A managed Agent Instance owns a separate durable `/home`; SessionWorkspace remains isolated `/workspace` scratch, and Artifacts remain immutable Session deliverables. `AgentInstanceWorkspaceService` derives the owner from trusted Session metadata, checks managed/active eligibility, and uses `AdminLifecycleCoordinator` for lifecycle exclusion. Explicit retain copies scratch bytes into home; checkout copies home bytes into scratch without overwriting an existing destination. Read/list/search are bounded and do not inject the inventory into prompts. Compatibility instances have no home. Archive preserves owner inspection; hard deletion removes metadata and local blobs. Source Session ids are informational provenance with no cascading ownership. No shared/application/task workspace is introduced.

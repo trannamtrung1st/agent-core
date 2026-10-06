@@ -37,6 +37,9 @@ public interface ISessionWorkspace
         ReadOnlyMemory<byte> bytes,
         CancellationToken cancellationToken = default);
 
+    ValueTask WriteNewAsync(Guid sessionId, string logicalPath, ReadOnlyMemory<byte> bytes,
+        CancellationToken cancellationToken = default) => throw new NotSupportedException("Exclusive workspace creation is unavailable.");
+
     ValueTask<WorkspacePatchResult> PatchTextAsync(
         Guid sessionId,
         AgentDefinition definition,

@@ -151,10 +151,17 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
         return new WorkspaceContent(path, ContentType(physical), bytes);
     }
 
-    public async ValueTask WriteAsync(
+    public ValueTask WriteAsync(Guid sessionId, string logicalPath, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default) =>
+        WriteCoreAsync(sessionId, logicalPath, bytes, false, cancellationToken);
+
+    public ValueTask WriteNewAsync(Guid sessionId, string logicalPath, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default) =>
+        WriteCoreAsync(sessionId, logicalPath, bytes, true, cancellationToken);
+
+    private async ValueTask WriteCoreAsync(
         Guid sessionId,
         string logicalPath,
         ReadOnlyMemory<byte> bytes,
+        bool exclusive,
         CancellationToken cancellationToken = default)
     {
         ThrowIfDeleted(sessionId);
@@ -183,6 +190,7 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
             DenyEscapingLinks(parent, SessionRoot(sessionId));
             Directory.CreateDirectory(parent);
             DenyEscapingLinks(physical, SessionRoot(sessionId));
+            if (exclusive && File.Exists(physical)) throw AgentCoreErrors.Conflict("Checkout destination already exists.");
             var used = Measure(SessionWorkspaceDir(sessionId));
             var existing = File.Exists(physical) ? new FileInfo(physical).Length : 0;
             if (used - existing + bytes.Length > _maxWritableBytes)
@@ -193,7 +201,7 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
 
             await using var stream = new FileStream(
                 physical,
-                FileMode.Create,
+                exclusive ? FileMode.CreateNew : FileMode.Create,
                 FileAccess.Write,
                 FileShare.None,
                 4096,

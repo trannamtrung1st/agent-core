@@ -438,3 +438,17 @@ Trusted-local owner routes for an active managed instance, relative to `/api/v2/
 | `PUT /continuity-maintenance` | `{ expectedRevision, intervalSeconds: integer|null }`; null restores inheritance; returns saved/effective state |
 
 Both PUT fields are required; only an explicit `intervalSeconds: null` restores inheritance. Absent rows report null configured interval, inherited default and revision 0. Invalid or malformed intervals return 400 without mutation; stale revisions return 409. Startup operator bounds are authoritative. If a formerly valid saved interval is outside new bounds, `configuredIntervalAllowed=false` and the effective interval explicitly uses the default while retaining the configured value. The timestamp records an eligible evaluation claim, not Retrospection completion. Updates preserve it and atomically append `ExperienceChanged` owner audit metadata with operation `configureContinuityCadence`. No model tool, Thought registration, SignalR contract or consolidation permission changes.
+
+## Agent Instance workspace HTTP
+
+All routes use the existing trusted-local owner capability filter. Managed ownership is required; compatibility home returns unavailable (ValidationError). No host path or public download link is returned.
+
+| Method | Route | Contract |
+| --- | --- | --- |
+| GET | `/api/v2/agent-instances/{instanceId}/workspace` | Optional prefix, afterPath, limit (1–256); items, usage, counts, nextPath and Core quota |
+| GET | `/api/v2/agent-instances/{instanceId}/workspace/{itemId}/content` | Exact bytes; safe attachment filename, revision ETag, private no-store, nosniff |
+| DELETE | `/api/v2/agent-instances/{instanceId}/workspace/{itemId}?expectedRevision=…` | Matching current revision required; 204 on delete; 409 stale/archived |
+| POST | `/api/v2/sessions/{sessionId}/workspace/retain` | source, destination, optional expectedRevision/expectedSha256; durable item metadata |
+| POST | `/api/v2/sessions/{sessionId}/workspace/checkout` | source, optional destination/expectedRevision/expectedSha256; source metadata and exact scratch hash/size |
+
+Session execution-view GET list/content also accepts `/home` for eligible managed Sessions. Mutations reject ended/archived Sessions; archived instance inspection remains available. Item metadata is stable id, owner id, logical path, MIME type, byte size, lowercase SHA-256, revision, created/updated timestamps and source Session provenance. ItemId is not an ArtifactId, and home content is not authorized through Artifact endpoints. SignalR contracts are unchanged.

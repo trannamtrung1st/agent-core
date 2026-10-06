@@ -36,7 +36,8 @@ public sealed partial class SessionToolExecutor(
     Func<HarnessManagementService>? harnessAuthoring = null,
     AgentCore.Application.Experience.ExperienceService? experience = null,
     AgentCore.Application.Continuity.ContinuityService? continuity = null,
-    AgentCore.Application.Continuity.IdentityMaintenanceService? identityMaintenance = null)
+    AgentCore.Application.Continuity.IdentityMaintenanceService? identityMaintenance = null,
+    AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -315,6 +316,8 @@ public sealed partial class SessionToolExecutor(
                 ToolCatalog.WorkspaceSearch => FitResult(
                     remainingOutputBytes,
                     await SearchWorkspaceAsync(definition, sessionId, args, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.WorkspaceRetain => TextResult(await RetainWorkspaceAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.WorkspaceCheckout => TextResult(await CheckoutWorkspaceAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.WorkspaceMove => TextResult(
                     await MoveWorkspaceAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.ArtifactsCreate => TextResult(
@@ -615,7 +618,12 @@ public sealed partial class SessionToolExecutor(
         }
 
         await workspace.EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
-        var content = await workspace.ReadAsync(sessionId, definition, path, cancellationToken).ConfigureAwait(false);
+        AgentWorkspaceContent? home = null;
+        if (AgentCore.Application.Workspaces.AgentHomePath.IsHome(path) && agentWorkspace is not null)
+            home = await agentWorkspace.ReadAsync(await agentWorkspace.SessionOwnerAsync(sessionId, cancellationToken), path: path, cancellationToken: cancellationToken);
+        var content = home is null ? await ReadExecutionWorkspaceAsync(sessionId, definition, path, cancellationToken).ConfigureAwait(false)
+            : new WorkspaceContent(path, home.Item.ContentType, home.Bytes);
+        var homeItem = home?.Item;
         var take = Math.Min(content.Bytes.Length, Math.Max(0, remainingOutputBytes));
         var decoded = DecodeText(content.Bytes.AsSpan(0, take).ToArray());
         var byteTruncated = take < content.Bytes.Length;
@@ -626,6 +634,7 @@ public sealed partial class SessionToolExecutor(
             {
                 path = content.LogicalPath,
                 contentType = content.ContentType,
+                homeItem,
                 truncated = byteTruncated || truncated,
                 content = body
             }));
@@ -654,7 +663,7 @@ public sealed partial class SessionToolExecutor(
         }
 
         await workspace.EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
-        var nodes = await workspace.ListAsync(sessionId, definition, path, cancellationToken).ConfigureAwait(false);
+        var nodes = await ListExecutionWorkspaceAsync(sessionId, definition, path, cancellationToken).ConfigureAwait(false);
         var truncated = nodes.Count > WorkspaceLimits.MaxListEntries;
         var slice = truncated ? nodes.Take(WorkspaceLimits.MaxListEntries).ToArray() : nodes;
         return JsonSerializer.Serialize(new

@@ -46,7 +46,8 @@ internal static class EffectiveConfigurationComposer
             null,
             new AgentTrigger(Guid.Empty, TriggerKind.UserTurn, null),
             ModelSupportsTools: descriptor.Tools,
-            ModelSupportsVision: descriptor.Vision);
+            ModelSupportsVision: descriptor.Vision,
+            AgentWorkspaceAvailable: !instance.Compatibility && instanceActive);
         var offeredTools = ToolCatalog.For(definition, adminContext, configurationGate)
             .Select(item => item.Name)
             .OrderBy(item => item, StringComparer.Ordinal)

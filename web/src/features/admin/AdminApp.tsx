@@ -111,6 +111,7 @@ import { describeAdminError, formatAdminLoadError, reportAdminError, type AdminF
 import { AdminRetryAction, showAdminFailure } from "./adminFailure";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 import { startManagedPublicationChat } from "./adminManagedChat";
+import { InstanceWorkspaceSection } from "./InstanceWorkspaceSection";
 import { IdentityMaintenanceSection, ExperienceSection, ThoughtSection, InstanceRunsSection, type ExperienceSelection } from "./InstanceContinuitySection";
 import { InstanceSchedulesSection } from "./InstanceSchedulesSection";
 import type { AutomationSelection, RunSource } from "../chat/runPresentation";
@@ -2440,6 +2441,9 @@ export function InstanceDetail({
                     </Flex> }
                   ]} />
                 </Flex>
+              }] : []),
+              ...(!resolved.compatibility ? [{ key: "workspace", label: "Workspace", children:
+                <InstanceWorkspaceSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} />
               }] : []),
               ...(!resolved.compatibility ? [{ key: "runs", label: "Runs", children:
                 resolved.instanceLifecycle === "Active" ? <InstanceRunsSection instanceId={instanceId} open={activeTab === "runs"} inline onRun={viewRun} onClose={() => setActiveTab("automation")} /> : <Alert type="info" showIcon title="Runs are available when this instance is active" description="Unarchive the instance from Identity & version to inspect execution history." />

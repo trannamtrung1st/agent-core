@@ -228,7 +228,7 @@ public sealed partial class SessionToolExecutor
             IReadOnlyList<WorkspaceNode> nodes;
             try
             {
-                nodes = await store.ListAsync(sessionId, definition, logicalPath, cancellationToken).ConfigureAwait(false);
+                nodes = await ListExecutionWorkspaceAsync(sessionId, definition, logicalPath, cancellationToken).ConfigureAwait(false);
             }
             catch (AgentCoreException)
             {
@@ -284,7 +284,7 @@ public sealed partial class SessionToolExecutor
             {
                 try
                 {
-                    var content = await store.ReadAsync(sessionId, definition, node.LogicalPath, cancellationToken)
+                    var content = await ReadExecutionWorkspaceAsync(sessionId, definition, node.LogicalPath, cancellationToken)
                         .ConfigureAwait(false);
                     if (TryReadSearchText(content.Bytes, out var text)
                         && text.Contains(query, StringComparison.OrdinalIgnoreCase))
