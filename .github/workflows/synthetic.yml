@@ -10,6 +10,12 @@ on:
     paths-ignore:
       - "TODO.md"
 
+# A newer candidate replaces obsolete work only within the same branch or PR.
+# Keep PR runs separate from push runs and from other branches.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 # These gates intentionally have no job dependencies: separate runners shorten the
 # critical path without changing test workers, project coverage, or SQLite isolation.
 # Repeated tool/dependency setup is cheaper than serial developer feedback.
