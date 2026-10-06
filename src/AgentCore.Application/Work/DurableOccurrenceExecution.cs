@@ -91,6 +91,8 @@ public sealed class DurableOccurrenceExecution(
         var observationRequired = restoredObservation;
         string? blockedActionHash = restoredBlockedHash;
         var browserUnavailable = false;
+        if (!DurableToolCallCheckpoint.TryWrite(messages, observationRequired, blockedActionHash, out _))
+            return CheckpointCapacityFailure();
         if (resumed)
         {
             var normalizedSteps = DurableToolCallCheckpoint.NormalizeResumedStepCount(steps, messages);
@@ -102,7 +104,7 @@ public sealed class DurableOccurrenceExecution(
             if (normalizedSteps != steps)
             {
                 steps = normalizedSteps;
-                running = await SaveCheckpointAsync().ConfigureAwait(false);
+                if (!await SaveCheckpointAsync().ConfigureAwait(false)) return CheckpointCapacityFailure();
             }
         }
 
@@ -211,7 +213,7 @@ public sealed class DurableOccurrenceExecution(
 
             messages.Add(new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: pending));
             steps += pending.Count;
-            running = await SaveCheckpointAsync().ConfigureAwait(false);
+            if (!await SaveCheckpointAsync().ConfigureAwait(false)) return CheckpointCapacityFailure();
             foreach (var call in pending)
             {
                 var callOutcome = await ExecuteCallAsync(call, countStep: false).ConfigureAwait(false);
@@ -389,6 +391,9 @@ public sealed class DurableOccurrenceExecution(
             }
 
             var needsApproval = policy == ToolPolicyDecision.RequireApproval;
+            var resultBudget = Math.Min(RemainingOutput(outputBytes),
+                DurableToolCallCheckpoint.ToolResultBudget(messages, call, observationRequired, blockedActionHash));
+            if (resultBudget < 128) return CheckpointCapacityFailure();
             var dispatchFenced = !uncertainBrowserAct
                 && (needsApproval || ToolCatalog.ReplaySafetyOf(call.Name) != ToolReplaySafety.ReplaySafe);
             if (dispatchFenced)
@@ -430,7 +435,7 @@ public sealed class DurableOccurrenceExecution(
                     definition,
                     running.WorkItemId,
                     call,
-                    RemainingOutput(outputBytes),
+                    resultBudget,
                     toolCts.Token,
                     approvalGrant: needsApproval
                         ? new ToolApprovalGrant(running.Approval!.ApprovalId, call.Name, hash, Guid.Empty, Guid.Empty, Guid.Empty)
@@ -561,7 +566,7 @@ public sealed class DurableOccurrenceExecution(
             var actionHash = prepared.Preparation.ActionHash;
             var actionJson = prepared.Preparation.ActionJson;
 
-            running = await SaveCheckpointAsync().ConfigureAwait(false);
+            if (!await SaveCheckpointAsync().ConfigureAwait(false)) return CheckpointCapacityFailure();
             running = await store.MarkSideEffectAsync(
                 running.WorkItemId,
                 running.Revision,
@@ -592,25 +597,32 @@ public sealed class DurableOccurrenceExecution(
             bool dispatchFenced)
         {
             execution = ToolResultAdmission.AdmitForModel(model, execution);
+            var resultMessage = new ModelMessage(ModelRole.Tool, execution.Text, Parts: execution.Parts,
+                ToolCallId: call.Id, Name: call.Name);
+            if (!DurableToolCallCheckpoint.TryWrite(messages.Append(resultMessage).ToArray(),
+                observationRequired, blockedActionHash, out _))
+            {
+                var budget = DurableToolCallCheckpoint.ToolResultBudget(messages, call, observationRequired, blockedActionHash);
+                if (budget < 128) return CheckpointCapacityFailure();
+                var bounded = ToolJsonResults.FitJsonWithContentField(budget, execution.Text, (prefix, _) =>
+                    JsonSerializer.Serialize(new { truncated = true, reason = "checkpoint_capacity", resultPrefix = prefix }));
+                execution = ToolExecutionResult.FromText(bounded);
+                resultMessage = resultMessage with { Text = execution.Text, Parts = null };
+            }
             outputBytes += ToolOutputBudget.TextByteCount(execution);
             if (outputBytes > ToolLimits.MaxOutputBytes)
             {
                 return new DurableOccurrenceFailed(running, "tool-output-limit", "Tool output limit reached.");
             }
 
-            messages.Add(new ModelMessage(
-                ModelRole.Tool,
-                execution.Text,
-                Parts: execution.Parts,
-                ToolCallId: call.Id,
-                Name: call.Name));
+            messages.Add(resultMessage);
             remaining = deadline - time.GetUtcNow();
             if (remaining < TimeSpan.Zero)
             {
                 remaining = TimeSpan.Zero;
             }
 
-            running = await SaveCheckpointAsync().ConfigureAwait(false);
+            if (!await SaveCheckpointAsync().ConfigureAwait(false)) return CheckpointCapacityFailure();
             if (dispatchFenced && running.SideEffect.Disposition == WorkSideEffectDisposition.Succeeded)
             {
                 running = await store.ClearSideEffectAsync(
@@ -630,15 +642,17 @@ public sealed class DurableOccurrenceExecution(
             return null;
         }
 
-        ValueTask<WorkItem> SaveCheckpointAsync() =>
-            checkpoint(
-                running,
-                new WorkCheckpoint(
-                    DurableToolCallCheckpoint.Write(messages, observationRequired, blockedActionHash),
-                    steps,
-                    outputBytes,
-                    (int)Math.Max(remaining.TotalMilliseconds, 0)),
-                cancellationToken);
+        DurableOccurrenceFailed CheckpointCapacityFailure() => new(running, "checkpoint-capacity",
+            "Durable checkpoint capacity is exhausted; completed effects were not replayed.");
+
+        async ValueTask<bool> SaveCheckpointAsync()
+        {
+            if (!DurableToolCallCheckpoint.TryWrite(messages, observationRequired, blockedActionHash, out var payload))
+                return false;
+            running = await checkpoint(running, new WorkCheckpoint(payload, steps, outputBytes,
+                (int)Math.Max(remaining.TotalMilliseconds, 0)), cancellationToken).ConfigureAwait(false);
+            return true;
+        }
     }
 
     private async ValueTask<string> ResolveActionHashAsync(

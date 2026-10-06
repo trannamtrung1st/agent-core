@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
@@ -131,6 +132,27 @@ public static class DurableToolCallCheckpoint
             messages.Select(MessageDto.From).ToArray(),
             observationRequired,
             blockedActionHash));
+
+    public static bool TryWrite(IReadOnlyList<ModelMessage> messages, bool observationRequired,
+        string? blockedActionHash, out string payload)
+    {
+        payload = Write(messages, observationRequired, blockedActionHash);
+        return Encoding.UTF8.GetByteCount(payload) + RecoveryHeadroom(blockedActionHash) <= WorkLimits.MaxCheckpointBytes;
+    }
+
+    public static int ToolResultBudget(IReadOnlyList<ModelMessage> messages, ModelToolCall call,
+        bool observationRequired, string? blockedActionHash)
+    {
+        var withResult = messages.Append(new ModelMessage(ModelRole.Tool, string.Empty,
+            ToolCallId: call.Id, Name: call.Name)).ToArray();
+        var overhead = Encoding.UTF8.GetByteCount(Write(withResult, observationRequired, blockedActionHash));
+        // A UTF-8 byte can expand to six bytes in a JSON string (for example, a control character).
+        // Tool adapters receive a conservative text budget; admission still checks the exact document.
+        return Math.Max(0, WorkLimits.MaxCheckpointBytes - overhead - RecoveryHeadroom(blockedActionHash)) / 6;
+    }
+
+    // Recovery may need to persist a SHA-256 blocked-action hash without replaying an uncertain browser effect.
+    private static int RecoveryHeadroom(string? blockedActionHash) => blockedActionHash is null ? 64 : 0;
 
     private const string Phase = "model-turn";
 

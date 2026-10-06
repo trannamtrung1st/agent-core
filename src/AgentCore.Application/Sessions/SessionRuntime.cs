@@ -2751,7 +2751,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     new ModelFailed(new ProviderFailure(
                                         ProviderErrorCode.InvalidResponse,
                                         "Malformed assistant envelope.",
-                                        FailureReason: ProviderFailureReason.MissingDisplayText)),
+                                        FailureReason: repairReason)),
                                     generateToken)
                                 .ConfigureAwait(false);
                             finished = true;

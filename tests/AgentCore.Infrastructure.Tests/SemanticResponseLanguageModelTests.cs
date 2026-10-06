@@ -10,6 +10,21 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class SemanticResponseLanguageModelTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Artifact_reference_guidance_binds_both_native_schemas_and_compatibility_to_successful_session_tools(bool direct)
+    {
+        var contract = new ModelResponseContract(SpeechWillBeUsed: false, RequireChatResponse: direct);
+        using var schema = System.Text.Json.JsonDocument.Parse(AssistantResponseSchema.JsonSchemaFor(contract));
+        var description = schema.RootElement.GetProperty("properties").GetProperty("blocks").GetProperty("items")
+            .GetProperty("properties").GetProperty("artifactId").GetProperty("description").GetString();
+        Assert.Contains("successful artifacts.create", description, StringComparison.Ordinal);
+        Assert.Contains("workspace path or filename is not an artifact ID", description, StringComparison.Ordinal);
+        Assert.Contains(AssistantResponseSchema.ArtifactReferenceInstruction, AssistantResponseSchema.ResponseFunction(contract).Description, StringComparison.Ordinal);
+        Assert.Contains(AssistantResponseSchema.ArtifactReferenceInstruction, AssistantResponseSchema.CompatibilityInstruction(contract), StringComparison.Ordinal);
+    }
+
     private static readonly ModelResponseContract Contract = new(SpeechWillBeUsed: false);
     private static readonly ModelRequest Bare = new(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Hi")]);
     private static readonly ModelRequest Contracted = Bare with { ResponseContract = Contract };

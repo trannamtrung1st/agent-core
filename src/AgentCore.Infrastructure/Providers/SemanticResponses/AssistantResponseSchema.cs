@@ -38,7 +38,8 @@ internal static class AssistantResponseSchema
             + speech
             + "Optional custom speech uses [[speech:<spoken text>]] immediately before display text. "
             + "Use [[speech:none]] when the answer must stay visual-only. "
-            + "Optional rich blocks use [[md:...]], [[attachment:<id>]], or [[artifact:<id>]]. "
+            + "Rich blocks: [[md:...]], [[attachment:<id>]], [[artifact:<id>]]. "
+            + ArtifactReferenceInstruction + " "
             + "Do not include hidden reasoning. Do not emit JSON. "
             + terminal
             + agentStep
@@ -46,6 +47,9 @@ internal static class AssistantResponseSchema
     }
 
     public const string ResponseFunctionName = "agent_core_respond";
+
+    public const string ArtifactReferenceInstruction =
+        "Artifact IDs must come from successful artifacts.create or artifacts.create_from_workspace for this Session. Workspace paths/filenames are not artifact IDs; materialize the file first or use plain text.";
 
     public static ModelToolDefinition ResponseFunction(ModelResponseContract contract) => new(
         ResponseFunctionName,
@@ -150,7 +154,7 @@ internal static class AssistantResponseSchema
                   },
                   "artifactId": {
                     "type": ["string", "null"],
-                    "description": "Session artifact id when kind is artifactReference."
+                    "description": "Only an artifact ID returned by a successful artifacts.create or artifacts.create_from_workspace tool for this Session. A workspace path or filename is not an artifact ID; mention it in ordinary text or materialize it first."
                   }
                 }
               }
@@ -242,7 +246,7 @@ internal static class AssistantResponseSchema
                   },
                   "artifactId": {
                     "type": ["string", "null"],
-                    "description": "Session artifact id when kind is artifactReference."
+                    "description": "Only an artifact ID returned by a successful artifacts.create or artifacts.create_from_workspace tool for this Session. A workspace path or filename is not an artifact ID; mention it in ordinary text or materialize it first."
                   }
                 }
               }
@@ -256,6 +260,7 @@ internal static class AssistantResponseSchema
         var speech = contract.SpeechWillBeUsed
             ? " speech is required. Normally use {\"mode\":\"same\",\"text\":null}. Use {\"mode\":\"none\",\"text\":null} only for visual-only output. Use {\"mode\":\"custom\",\"text\":\"...\"} only when spoken wording must differ from displayText."
             : " For a text turn, speech must be {\"mode\":\"same\",\"text\":null}.";
+        speech += " " + ArtifactReferenceInstruction;
         return contract.RequireChatResponse
             ? "Submit the agent step for a direct user chat request. disposition must be Continue or Complete. action must be {\"kind\":\"chat.respond\"} with non-empty displayText. Wait, Blocked, and action null are invalid for this request. Memory entries are proposals." + speech
             : "Submit one agent step for the current session. For a normal user request: use tools and Skills as needed, then Complete with action {\"kind\":\"chat.respond\"} and a non-empty displayText answer; never call chat.respond with empty or whitespace-only displayText. disposition is Continue, Wait, Complete, or Blocked. action is {\"kind\":\"chat.respond\"} or null. Continue delivers chat.respond once when present and does not start another generation; it does not request more model thinking. Wait returns control without Chat only when an external condition must arrive first—not because a task is long, difficult, needs tools, or is unfinished. action null means no Chat this step. Memory entries are proposals. This call does not save memory and does not choose a destination." + speech;

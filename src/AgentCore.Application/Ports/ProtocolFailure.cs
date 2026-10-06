@@ -21,15 +21,23 @@ public static class ProtocolFailures
         Using the existing conversation and tool results, return only the final user-visible answer text. Do not emit JSON, call tools, repeat completed work, or request another action.
         """;
 
+    public const string InvalidBlocksInstruction =
+        """
+        The previous terminal answer was rejected because its rich block metadata was invalid.
+        Using the existing conversation and tool results, return only the final user-visible answer text. Do not emit JSON, rich blocks, call tools, repeat completed work, or request another action.
+        """;
+
     public static ProtocolFailureDisposition Disposition(string? reason) => reason switch
     {
         ProviderFailureReason.SpeechOmitted or ProviderFailureReason.SpeechMalformed => ProtocolFailureDisposition.Normalize,
-        ProviderFailureReason.MissingDisplayText => ProtocolFailureDisposition.Repairable,
+        ProviderFailureReason.MissingDisplayText or ProviderFailureReason.InvalidBlocks => ProtocolFailureDisposition.Repairable,
         _ => ProtocolFailureDisposition.Terminal
     };
 
-    public static string? RepairInstruction(string? reason) =>
-        Disposition(reason) == ProtocolFailureDisposition.Repairable && reason == ProviderFailureReason.MissingDisplayText
-            ? MissingDisplayTextInstruction
-            : null;
+    public static string? RepairInstruction(string? reason) => reason switch
+    {
+        ProviderFailureReason.MissingDisplayText => MissingDisplayTextInstruction,
+        ProviderFailureReason.InvalidBlocks => InvalidBlocksInstruction,
+        _ => null
+    };
 }

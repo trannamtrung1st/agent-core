@@ -301,6 +301,15 @@ public sealed class WorkItemContractTests
         Assert.Contains("\"ObservationRequired\":true", recovered.Checkpoint!.PayloadJson, StringComparison.Ordinal);
         Assert.Contains(hash, recovered.Checkpoint.PayloadJson, StringComparison.Ordinal);
 
+        // A legacy full checkpoint has no room for the recovery flag/hash. Fail closed rather than throw or replay.
+        var fullPayload = payload.Replace("\"Text\":\"\"", "\"Text\":\"" +
+            new string('x', WorkLimits.MaxCheckpointBytes - System.Text.Encoding.UTF8.GetByteCount(payload)) + "\"", StringComparison.Ordinal);
+        var fullCheckpoint = inFlight.SaveCheckpoint(inFlight.Revision, GenerationA, Checkpoint(fullPayload), null, Now.AddSeconds(3));
+        var capacity = fullCheckpoint.RecoverExpiredClaim(Now.AddMinutes(1), () => resumeId);
+        Assert.Equal(WorkItemStatus.Failed, capacity.Status);
+        Assert.Equal("checkpoint-capacity", capacity.Failure!.Code);
+        Assert.Equal(WorkSideEffectDisposition.Indeterminate, capacity.SideEffect.Disposition);
+
         var navigation = WorkActionHash.Compute("browser.navigate", JsonDocument.Parse("""{"url":"http://127.0.0.1:5088/"}""").RootElement);
         var navigatePayload = payload.Replace("browser.act", "browser.navigate", StringComparison.Ordinal);
         var navigateClaim = NewItem().TakeClaim(GenerationA, Now, Now.AddMinutes(1));

@@ -120,7 +120,10 @@ test('A stale Chat approval cannot adopt and a fresh operation recovers',async({
   const before=await review(page,id);const owner=await page.evaluate(()=>localStorage.getItem('agent-core.owner-capability'));
   const changed=await page.request.put(`/api/v2/admin/agent-instances/${id}/harness/policy`,{headers:{'X-AgentCore-Owner-Capability':owner!},
     data:{expectedRevision:before.instanceRevision,...before.policy}});expect(changed.ok()).toBe(true);
-  await approval.getByRole('button',{name:'Approve',exact:true}).click();await expect(page.getByText(/Nothing was saved/).last()).toBeVisible();
+  await approval.getByRole('button',{name:'Approve',exact:true}).click();
+  await expect(approval).toBeHidden();
+  await expect(page.getByText(/Nothing was saved/).last()).toBeVisible();
+  await expect(page.getByTestId('connection')).toHaveText('Ready');
   expect((await review(page,id)).activeVersion).toBe(7);
   await send(page,learn);await expect(approval).toBeVisible();await approval.getByRole('button',{name:'Approve',exact:true}).click();
   await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible();expect((await review(page,id)).activeVersion).toBeGreaterThan(7);

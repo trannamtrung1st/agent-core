@@ -564,10 +564,14 @@ public sealed class WorkItem
                     throw new ArgumentException("A resumed browser observation requires a new execution claim.");
                 }
 
-                var checkpoint = flagged
-                    ? Checkpoint
-                    : new WorkCheckpoint(
-                        WorkActionHash.MarkObservationRequired(Checkpoint.PayloadJson, SideEffect.ActionHash!),
+                var payload = flagged ? Checkpoint.PayloadJson
+                    : WorkActionHash.MarkObservationRequired(Checkpoint.PayloadJson, SideEffect.ActionHash!);
+                if (System.Text.Encoding.UTF8.GetByteCount(payload) > WorkLimits.MaxCheckpointBytes)
+                    return AsFailed(asOfUtc, "checkpoint-capacity",
+                        "Durable checkpoint capacity is exhausted; uncertain external effect was not replayed.",
+                        AsIndeterminate(asOfUtc), RequireDiagnosticId(allocateDiagnosticId));
+                var checkpoint = flagged ? Checkpoint : new WorkCheckpoint(
+                        payload,
                         Checkpoint.StepCount,
                         Checkpoint.OutputBytes,
                         Checkpoint.RemainingOverallBudgetMs);

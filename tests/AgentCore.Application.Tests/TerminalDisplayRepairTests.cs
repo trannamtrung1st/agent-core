@@ -1,4 +1,6 @@
 using System.Diagnostics.Metrics;
+using System.Text;
+using System.Text.Json;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
@@ -9,6 +11,8 @@ using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Providers.SemanticResponses;
+using AgentCore.Infrastructure.Workspaces;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 
@@ -17,7 +21,50 @@ namespace AgentCore.Application.Tests;
 public sealed class TerminalDisplayRepairTests
 {
     [Fact]
-    public async Task Missing_display_text_repairs_once_without_offering_browser_tools()
+    public async Task Substantial_workspace_document_materializes_and_follow_up_note_repairs_native_invalid_blocks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"agent-core-block-repair-{Guid.NewGuid():N}");
+        try
+        {
+            var workspace = new FileSessionWorkspace(Path.Combine(root, "ws"), Path.Combine(root, "templates"));
+            var artifacts = new InMemoryArtifactStore(TimeProvider.System);
+            var document = string.Concat(Enumerable.Repeat("# Scrum playbook\nObserve the current evidence before making changes.\n", 1_500));
+            var inner = new DocumentModel(document);
+            var model = new SemanticResponseLanguageModel(inner);
+            var executor = new SessionToolExecutor(workspace: workspace, artifacts: artifacts, configurationGate: ToolConfigurationGates.AllowAll);
+            await using var runtime = CreateCore(model, null, null,
+                [ToolCatalog.WorkspaceWrite, ToolCatalog.ArtifactsCreateFromWorkspace], executor, new SessionArtifactAuthorizer(artifacts));
+            await runtime.AttachAsync();
+            Assert.True(await runtime.SubmitUserTextAsync("Create a substantial Scrum playbook and materialize it."));
+            await runtime.WaitUntilIdleAsync();
+            var first = Assert.Single(runtime.Snapshot.Entries, e => e.Role == ConversationRole.Assistant);
+            Assert.Equal(EntryStatus.Completed, first.Status);
+            var artifact = Assert.Single(await artifacts.ListAsync(runtime.SessionId));
+            Assert.Equal(artifact.ArtifactId.ToString(), Assert.Single(first.Envelope!.Blocks).ArtifactId);
+            Assert.True(artifact.ByteSize > 64 * 1024);
+            Assert.True(await runtime.SubmitUserTextAsync("Write this down as a note first."));
+            await runtime.WaitUntilIdleAsync();
+            var answers = runtime.Snapshot.Entries.Where(e => e.Role == ConversationRole.Assistant).ToArray();
+            Assert.Equal(2, answers.Length);
+            Assert.All(answers, e => Assert.Equal(EntryStatus.Completed, e.Status));
+            Assert.Equal("Saved the note in notes.md.", answers[1].Text);
+            Assert.Empty(answers[1].Envelope!.Blocks);
+            Assert.Equal(document, Encoding.UTF8.GetString((await workspace.ReadAsync(runtime.SessionId,
+                runtime.Snapshot.Definition, "/workspace/working/notes.md")).Bytes));
+            Assert.Single(await artifacts.ListAsync(runtime.SessionId));
+            Assert.Equal([ToolCatalog.WorkspaceWrite, ToolCatalog.ArtifactsCreateFromWorkspace, ToolCatalog.WorkspaceWrite], inner.ToolCalls);
+            Assert.Equal(6, inner.Requests.Count);
+            AssertTerminalChannelOnly(inner.Requests[^1]);
+            Assert.Contains(inner.Requests[^1].Messages, m => m.Text == ProtocolFailures.InvalidBlocksInstruction);
+            Assert.Contains(inner.Requests[^1].Messages, m => m.Role == ModelRole.Tool && m.Text.Contains("notes.md", StringComparison.Ordinal));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Theory]
+    [InlineData(ProviderFailureReason.MissingDisplayText)]
+    [InlineData(ProviderFailureReason.InvalidBlocks)]
+    public async Task Terminal_presentation_failure_repairs_once_without_offering_browser_tools(string reason)
     {
         var browser = new CountingBrowser();
         var model = new RecordingModel(
@@ -29,7 +76,7 @@ public sealed class TerminalDisplayRepairTests
                 new ModelToolCallEvent(new ModelToolCall("obs-1", ToolCatalog.BrowserObserve, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
-            [Invalid(ProviderFailureReason.MissingDisplayText)],
+            [Invalid(reason)],
             Answer("Zigwheels lists the price."));
         await using var runtime = Create(model, browser, ToolCatalog.BrowserNavigate, ToolCatalog.BrowserObserve);
         await runtime.AttachAsync();
@@ -42,6 +89,7 @@ public sealed class TerminalDisplayRepairTests
         Assert.Equal(1, browser.ObserveCalls);
         var repair = model.Requests[2];
         AssertTerminalChannelOnly(repair);
+        Assert.Contains(repair.Messages, message => message.Text == ProtocolFailures.RepairInstruction(reason));
         Assert.Contains(
             repair.Messages,
             message => message.Role == ModelRole.Tool
@@ -73,8 +121,10 @@ public sealed class TerminalDisplayRepairTests
         Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Text.Contains("application protocol", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public async Task A_repair_completion_without_a_semantic_response_records_failure()
+    [Theory]
+    [InlineData(ProviderFailureReason.MissingDisplayText)]
+    [InlineData(ProviderFailureReason.InvalidBlocks)]
+    public async Task A_repair_completion_without_a_semantic_response_records_failure(string reason)
     {
         var outcomes = new List<string>();
         using var listener = new MeterListener();
@@ -97,7 +147,7 @@ public sealed class TerminalDisplayRepairTests
         });
         listener.Start();
         var model = new RecordingModel(
-            [Invalid(ProviderFailureReason.MissingDisplayText)],
+            [Invalid(reason)],
             [new ModelCompleted(ModelStopReason.Completed)]);
         await using var runtime = Create(model, browser: null);
         await runtime.AttachAsync();
@@ -111,14 +161,17 @@ public sealed class TerminalDisplayRepairTests
             EntryStatus.Failed,
             Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
         Assert.Equal(["started", "failed"], outcomes);
+        Assert.Equal(reason, runtime.Snapshot.Entries.Single(e => e.Role == ConversationRole.Assistant).Failure!.FailureReason);
     }
 
-    [Fact]
-    public async Task A_second_missing_display_text_is_terminal()
+    [Theory]
+    [InlineData(ProviderFailureReason.MissingDisplayText)]
+    [InlineData(ProviderFailureReason.InvalidBlocks)]
+    public async Task A_second_presentation_failure_is_terminal(string reason)
     {
         var model = new RecordingModel(
-            [Invalid(ProviderFailureReason.MissingDisplayText)],
-            [Invalid(ProviderFailureReason.MissingDisplayText)]);
+            [Invalid(reason)],
+            [Invalid(reason)]);
         await using var runtime = Create(model, browser: null);
         await runtime.AttachAsync();
 
@@ -130,6 +183,7 @@ public sealed class TerminalDisplayRepairTests
         Assert.Equal(EntryStatus.Failed, assistant.Status);
         Assert.Equal("attempted", assistant.Failure!.ProtocolRepair);
         Assert.Equal("failed", assistant.Failure.ProtocolRepairOutcome);
+        Assert.Equal(reason, assistant.Failure.FailureReason);
     }
 
     [Theory]
@@ -376,6 +430,7 @@ public sealed class TerminalDisplayRepairTests
     [InlineData(ProviderFailureReason.SpeechOmitted, ProtocolFailureDisposition.Normalize)]
     [InlineData(ProviderFailureReason.SpeechMalformed, ProtocolFailureDisposition.Normalize)]
     [InlineData(ProviderFailureReason.MissingDisplayText, ProtocolFailureDisposition.Repairable)]
+    [InlineData(ProviderFailureReason.InvalidBlocks, ProtocolFailureDisposition.Repairable)]
     [InlineData(ProviderFailureReason.UnknownAction, ProtocolFailureDisposition.Terminal)]
     [InlineData(ProviderFailureReason.ModelSuppliedDestination, ProtocolFailureDisposition.Terminal)]
     [InlineData(ProviderFailureReason.InvalidMemory, ProtocolFailureDisposition.Terminal)]
@@ -386,7 +441,7 @@ public sealed class TerminalDisplayRepairTests
         Assert.Equal(disposition, ProtocolFailures.Disposition(reason));
         if (disposition == ProtocolFailureDisposition.Repairable)
         {
-            Assert.Contains("visible reply was empty", ProtocolFailures.RepairInstruction(reason), StringComparison.Ordinal);
+            Assert.Contains("return only the final user-visible answer text", ProtocolFailures.RepairInstruction(reason), StringComparison.Ordinal);
         }
         else
         {
@@ -409,6 +464,7 @@ public sealed class TerminalDisplayRepairTests
     private static void AssertTerminalChannelOnly(ModelRequest request)
     {
         Assert.Null(request.ResponseContract);
+        Assert.Null(request.Tools);
         Assert.Contains(
             request.Messages,
             message => message.Role == ModelRole.System
@@ -430,11 +486,13 @@ public sealed class TerminalDisplayRepairTests
         new ModelCompleted(ModelStopReason.Completed)
     ];
 
-    private static SessionRuntime Create(
+    private static SessionRuntime CreateCore(
         ILanguageModel model,
         IBrowserSession? browser,
         FakeTimeProvider? clock,
-        params string[] tools)
+        string[] tools,
+        SessionToolExecutor? executor = null,
+        IArtifactReferenceAuthorizer? artifactAuthorizer = null)
     {
         var time = clock ?? new FakeTimeProvider(DateTimeOffset.Parse("2026-10-02T12:00:00Z"));
         var ids = new DeterministicIdGenerator(
@@ -487,11 +545,59 @@ public sealed class TerminalDisplayRepairTests
             ids,
             time,
             NullLogger<SessionRuntime>.Instance,
-            tools: new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll));
+            artifacts: artifactAuthorizer,
+            tools: executor ?? new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll));
     }
+
+    private static SessionRuntime Create(ILanguageModel model, IBrowserSession? browser, FakeTimeProvider? clock, params string[] tools) =>
+        CreateCore(model, browser, clock, tools);
 
     private static SessionRuntime Create(ILanguageModel model, IBrowserSession? browser, params string[] tools) =>
         Create(model, browser, clock: null, tools);
+
+    private sealed class DocumentModel(string document) : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
+        public List<ModelRequest> Requests { get; } = [];
+        public List<string> ToolCalls { get; } = [];
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            Requests.Add(request);
+            ModelToolCall? call = Requests.Count switch
+            {
+                1 => new("document", ToolCatalog.WorkspaceWrite, JsonSerializer.Serialize(new { path = "playbook.md", content = document })),
+                2 => new("artifact", ToolCatalog.ArtifactsCreateFromWorkspace, """{"path":"playbook.md","displayName":"Scrum playbook.md"}"""),
+                4 => new("note", ToolCatalog.WorkspaceWrite, JsonSerializer.Serialize(new { path = "notes.md", content = document })),
+                _ => null
+            };
+            if (call is not null)
+            {
+                ToolCalls.Add(call.Name);
+                yield return new ModelToolCallEvent(call);
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            }
+            else
+            {
+                string text;
+                if (Requests.Count == 3)
+                {
+                    using var result = JsonDocument.Parse(request.Messages.Last(m => m.Role == ModelRole.Tool).Text);
+                    var id = result.RootElement.GetProperty("artifactId").GetString();
+                    text = JsonSerializer.Serialize(new { disposition = "Complete", action = new { kind = "chat.respond" },
+                        displayText = "Saved the playbook.", speech = new { mode = "same" }, memory = Array.Empty<object>(),
+                        blocks = new[] { new { kind = "artifactReference", artifactId = id } } });
+                }
+                else if (Requests.Count == 5)
+                    text = """{"disposition":"Complete","action":{"kind":"chat.respond"},"displayText":"Saved the note.","speech":{"mode":"same"},"memory":[],"blocks":[{"kind":"widget"}]}""";
+                else
+                    text = "Saved the note in notes.md.";
+                yield return new ModelTextDelta(text);
+                yield return new ModelCompleted(ModelStopReason.Completed);
+            }
+            await Task.CompletedTask;
+        }
+    }
 
     private sealed class RecordingModel(params ModelGenerationEvent[][] steps) : ILanguageModel
     {
