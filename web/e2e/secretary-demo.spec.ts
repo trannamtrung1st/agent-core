@@ -233,7 +233,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await schedules.getByRole('button', { name: 'Refresh schedules', exact: true }).click();
     await expect(schedules.getByRole('region', { name: 'Schedule details', exact: true }).getByText('Completed', { exact: true })).toBeVisible({ timeout: 30_000 });
     await schedules.getByRole('button', { name: 'View last run', exact: true }).click();
-    const work = page.getByRole('region', { name: 'Runs', exact: true });
+    const work = page.getByRole('dialog', { name: 'Run details', exact: true });
     await expect(work.getByText('Schedule', { exact: true })).toBeVisible();
     await expect(work.getByRole('button', { name: /Create/ })).toHaveCount(0);
     await page.locator('.background-work-selected').getByRole('button', { name: /View (schedule|thought)/ }).click();
@@ -291,7 +291,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await initiative.getByRole('button', { name: 'Run now', exact: true }).click();
     await expect(initiative.getByText('Needs attention', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
     await initiative.getByRole('button', { name: 'View run', exact: true }).click();
-    await expect(work.getByText('Thought', { exact: true })).toHaveCount(2);
+    await expect(work.getByText('Thought', { exact: true })).toHaveCount(1);
     await expect(work.getByText('Needs attention', { exact: true }).first()).toBeVisible();
     await page.locator('.background-work-selected').getByRole('button', { name: /View (schedule|thought)/ }).click();
     await page.reload();

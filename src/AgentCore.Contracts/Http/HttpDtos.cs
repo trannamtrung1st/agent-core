@@ -295,7 +295,7 @@ public sealed record WorkItemResponse(
     bool AttentionRequired = false,
     int? AttemptCount = null,
     int? MaxAttempts = null,
-    string? SourceId = null, string? RegistrationId = null, string? ModelKey = null, string? ThoughtOutcome = null);
+    string? SourceId = null, string? RegistrationId = null, string? ModelKey = null, string? ThoughtOutcome = null, string? Intent = null);
 
 public sealed record WorkItemListResponse(IReadOnlyList<WorkItemResponse> Items);
 

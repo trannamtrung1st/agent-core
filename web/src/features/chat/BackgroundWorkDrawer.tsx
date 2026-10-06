@@ -11,7 +11,7 @@ import {
   RedoOutlined,
   StopOutlined
 } from "@ant-design/icons";
-import { Alert, App, Button, Drawer, Empty, Flex, Spin, Tag, Typography, theme } from "antd";
+import { Alert, App, Button, Drawer, Empty, Flex, Spin, Table, Tag, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
 import type { DrawerPageQuery, WorkItem, WorkItemResult } from "../../services/api";
 import { formatChatTime } from "./chatTime";
@@ -21,6 +21,8 @@ import { DrawerListFooter } from "./DrawerListFooter";
 import { useWorkReadState } from "./workReadState";
 
 import { runOriginLabel, runStatusLabel, thoughtOutcomeLabel, runSource, type RunSource } from "./runPresentation";
+
+const noRuns = async () => [];
 
 function retryLabel(item: WorkItem, fallback: string) {
   if (item.status === "retrying" && item.attemptCount && item.maxAttempts) {
@@ -55,8 +57,14 @@ export function BackgroundWorkDrawer({
   inline = false,
   selectedWorkItemId,
   loadOne,
-  onSource
+  onSource,
+  onRun,
+  detailsOnly = false,
+  afterClose
 }: {
+  onRun?: (workId: string) => void;
+  detailsOnly?: boolean;
+  afterClose?: () => void;
   inline?: boolean;
   selectedWorkItemId?: string;
   loadOne?: (owner: string, workId: string) => Promise<WorkItem>;
@@ -90,7 +98,7 @@ export function BackgroundWorkDrawer({
   const { token } = theme.useToken();
   const { modal } = App.useApp();
   const { items, updateItems, loading, loadingMore, hasMore, error, setError, loadMore, retry, captureScope } = useDrawerPages({
-    scope: sessionId, open, refreshKey, pollIntervalMs, load, id: item => item.workItemId
+    scope: sessionId, open, refreshKey, pollIntervalMs, load: detailsOnly ? noRuns : load, id: item => item.workItemId
   });
   const { isUnread, markRead } = useWorkReadState();
   const [markingRead, setMarkingRead] = useState(false);
@@ -196,7 +204,7 @@ export function BackgroundWorkDrawer({
   }, [sessionId]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || onRun) return;
     let current = true;
     async function readResults() {
       const completed = displayedItems.filter(item => item.status === "completed");
@@ -221,7 +229,7 @@ export function BackgroundWorkDrawer({
     }
     void readResults();
     return () => { current = false; };
-  }, [open, sessionId, items, selected, selectedWorkItemId, loadResult, resultRetry]);
+  }, [open, sessionId, items, selected, selectedWorkItemId, loadResult, resultRetry, onRun]);
 
   async function markAllRead() {
     const isCurrent = captureScope();
@@ -345,6 +353,10 @@ export function BackgroundWorkDrawer({
           {results[item.workItemId]?.completedAt ? <Typography.Text type="secondary">Completed <time dateTime={results[item.workItemId].completedAt}>{formatChatTime(results[item.workItemId].completedAt) ?? results[item.workItemId].completedAt}</time></Typography.Text> : null}
           <Typography.Text type="secondary">Updated <time dateTime={item.updatedAt}>{formatChatTime(item.updatedAt) ?? item.updatedAt}</time></Typography.Text>
           </Flex>
+          {item.intent ? <div className="background-work-detail">
+            <Typography.Text type="secondary" className="background-work-detail-label">{item.origin === "Thought activation" ? "Thinking prompt" : "Task"}</Typography.Text>
+            <Typography.Paragraph className="background-work-detail-body">{item.intent}</Typography.Paragraph>
+          </div> : null}
           {item.modelKey ? <Typography.Text type="secondary">Model: {item.modelKey}{item.thoughtOutcome ? ` · ${thoughtOutcomeLabel(item.thoughtOutcome)}` : ""}</Typography.Text> : null}
           {onSource && runSource(item) ? <Button className="admin-run-source" onClick={() => onSource(runSource(item)!)}>View {item.origin === "Retrospection" ? "experience" : runOriginLabel(item.origin).toLowerCase()}</Button> : null}
           <Typography.Text type="secondary" style={{ overflowWrap: "anywhere" }}>Run {item.workItemId}</Typography.Text>
@@ -409,6 +421,7 @@ export function BackgroundWorkDrawer({
             </Flex>
           ) : null}
 
+          {item.status === "completed" && !results[item.workItemId] && !resultErrors[item.workItemId] ? <Spin aria-label="Loading run result" /> : null}
           {resultErrors[item.workItemId] ? <Alert type="error" showIcon title="Run result could not be loaded" description={resultErrors[item.workItemId]} action={<Button onClick={() => setResultRetry(value => value + 1)}>Retry result</Button>} /> : null}
           {results[item.workItemId] ? (
             <div className="background-work-detail background-work-result">
@@ -490,9 +503,9 @@ export function BackgroundWorkDrawer({
 
   const content = (
       <Flex vertical gap={token.paddingSM}>
-        <Flex justify="flex-end">
+        {!detailsOnly ? <Flex justify="flex-end">
           <Button className="background-work-read-all" aria-label="Mark all as read" loading={markingRead} disabled={markingRead || loading || items.length === 0} onClick={() => void markAllRead()}>Mark all as read</Button>
-        </Flex>
+        </Flex> : null}
         {selectionError ? <Alert type="error" showIcon title="The selected run could not be loaded" description={selectionError} action={<Button onClick={() => void retrySelection()}>Retry selected run</Button>} /> : null}
         {error ? <Alert type="error" showIcon title={error} /> : null}
         {selectedWorkItemId && loadOne && !target && !selectionError ? <Spin aria-label="Loading selected run" /> : null}
@@ -501,10 +514,35 @@ export function BackgroundWorkDrawer({
             <Spin aria-label="Loading background work" />
           </Flex>
         ) : (
-          displayedItems.length ? <ul className="background-work-list">{displayedItems.map(renderItem)}</ul> :
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No runs yet. Runs appear when schedules, thoughts, events, or retrospection execute." className="background-work-empty" />
+          onRun ? <Table<WorkItem> aria-label="Runs table" className="admin-collection-table" size="small"
+            rowKey="workItemId" dataSource={displayedItems} pagination={false} scroll={{ x: 1090 }}
+            locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No runs yet. Runs appear when schedules, thoughts, events, or retrospection execute." /> }}
+            onRow={item => ({ "data-run-id": item.workItemId, tabIndex: -1, className: "admin-run-row",
+              onClick: event => {
+                if (event.target instanceof Element && event.target.closest("button")) return;
+                event.currentTarget.focus(); onRun(item.workItemId);
+              }
+            })}
+            columns={[
+              { title: "Type", key: "type", width: 130, render: (_, item) => runOriginLabel(item.origin) },
+              { title: "Task / prompt", dataIndex: "intent", key: "intent", width: 380, ellipsis: true,
+                render: (intent: string | null | undefined) => intent ? <span title={intent}>{intent}</span> : <Typography.Text type="secondary">—</Typography.Text> },
+              { title: "Run ID", key: "id", width: 290, ellipsis: true, render: (_, item) =>
+                <Button type="link" size="small" className="admin-collection-name" title={item.workItemId}
+                  aria-label={`View ${runOriginLabel(item.origin).toLowerCase()} run ${item.workItemId}`}
+                  onClick={() => onRun(item.workItemId)}>{item.workItemId}</Button> },
+              { title: "Status", key: "status", width: 150, render: (_, item) => {
+                const status = statusPresentation[item.status] ?? { icon: <InfoCircleOutlined /> };
+                return <Flex vertical align="flex-start" gap={token.paddingXS}>
+                  <Tag variant="filled" color={status.color} icon={status.icon} className="background-work-status" title={retryLabel(item, runStatusLabel(item.status))}>{runStatusLabel(item.status)}</Tag>
+                  {isUnread(item) ? <Typography.Text><BellOutlined /> Needs attention</Typography.Text> : null}
+                </Flex>;
+              } },
+              { title: "Updated", key: "updated", width: 140, render: (_, item) => <time dateTime={item.updatedAt}>{formatChatTime(item.updatedAt) ?? item.updatedAt}</time> }
+            ]} /> : displayedItems.length ? <ul className="background-work-list">{(detailsOnly ? (target ? [target] : []) : displayedItems).map(renderItem)}</ul> :
+            detailsOnly ? null : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No runs yet. Runs appear when schedules, thoughts, events, or retrospection execute." className="background-work-empty" />
         )}
-        {!loading ? <DrawerListFooter loadingMore={loadingMore} hasMore={hasMore} error={error} count={items.length}
+        {!loading && !detailsOnly ? <DrawerListFooter loadingMore={loadingMore} hasMore={hasMore} error={error} count={items.length}
           onLoadMore={() => void loadMore()} onRetry={retry} /> : null}
       </Flex>
   );
@@ -513,6 +551,6 @@ export function BackgroundWorkDrawer({
       <Typography.Text type="secondary">Execution history from schedules, thoughts, events, and retrospection.</Typography.Text></div>
     <div className="admin-definition-panel-body">{content}</div>
   </section>;
-  return <Drawer title={<Flex vertical gap={0}><Typography.Text strong id="background-work-drawer-title">Background work</Typography.Text><Typography.Text type="secondary" className="background-work-subtitle">Runs from schedules, thoughts, events, and retrospection</Typography.Text></Flex>} aria-labelledby="background-work-drawer-title" placement="right" size={wide ? 400 : 320} open={open} onClose={onClose}
-    onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } }} className="background-work-drawer">{content}</Drawer>;
+  return <Drawer title={<Flex vertical gap={0}><Typography.Text strong id="background-work-drawer-title">{detailsOnly ? "Run details" : "Background work"}</Typography.Text>{!detailsOnly ? <Typography.Text type="secondary" className="background-work-subtitle">Runs from schedules, thoughts, events, and retrospection</Typography.Text> : null}</Flex>} aria-labelledby="background-work-drawer-title" placement="right" size={detailsOnly ? "min(640px, 100vw)" : wide ? 400 : 320} afterOpenChange={visible => { if (!visible) afterClose?.(); }} open={open} onClose={onClose}
+    onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } }} className={`background-work-drawer${detailsOnly ? " run-details-drawer" : ""}`}>{content}</Drawer>;
 }

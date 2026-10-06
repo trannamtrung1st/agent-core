@@ -31,12 +31,13 @@ const loadInstanceWorkResult = (id: string, workId: string) =>
   request<WorkItemResult>(id, `work-items/${workId}/result`);
 
 const loadInstanceWorkItem = (id: string, workId: string) => request<WorkItem>(id, `work-items/${workId}`);
-export function InstanceRunsSection({ instanceId, open, wide = true, inline = false, selectedWorkItemId, onClose, onSource }: {
+export function InstanceRunsSection({ instanceId, open, wide = true, inline = false, selectedWorkItemId, onClose, onSource, onRun, detailsOnly, afterClose }: {
   instanceId: string; open: boolean; wide?: boolean; inline?: boolean; selectedWorkItemId?: string; onClose: () => void;
   onSource?: (source: RunSource) => void;
+  onRun?: (workId: string) => void; detailsOnly?: boolean; afterClose?: () => void;
 }) {
   return <BackgroundWorkDrawer sessionId={instanceId} open={open} wide={wide} inline={inline} selectedWorkItemId={selectedWorkItemId}
-    onClose={onClose} onSource={onSource} load={loadInstanceWork} loadOne={loadInstanceWorkItem} loadResult={loadInstanceWorkResult}
+    onClose={onClose} onSource={onSource} onRun={onRun} detailsOnly={detailsOnly} afterClose={afterClose} load={loadInstanceWork} loadOne={loadInstanceWorkItem} loadResult={loadInstanceWorkResult}
     cancel={(id, workId, expectedRevision) => request<WorkItem>(id, `work-items/${workId}/cancel`, "POST", { expectedRevision })}
     approve={(id, workId, approvalId, expectedRevision, expectedApprovalRevision, actionHash) => request<WorkItem>(id,
       `work-items/${workId}/approvals/${approvalId}/approve`, "POST", { expectedRevision, expectedApprovalRevision, actionHash })}

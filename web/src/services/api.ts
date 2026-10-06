@@ -63,6 +63,7 @@ export type SessionResponse = {
 };
 
 export type WorkItem = {
+  intent?: string | null;
   sourceId?: string | null;
   registrationId?: string | null;
   modelKey?: string | null;

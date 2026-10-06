@@ -2314,12 +2314,15 @@ export function InstanceDetail({
   const [experienceSelection, setExperienceSelection] = useState<ExperienceSelection>();
   const [eventSelection, setEventSelection] = useState<{ registrationId: string; request: number }>();
   const [selectedWorkItemId, setSelectedWorkItemId] = useState<string>();
+  const [runDetailsOpen, setRunDetailsOpen] = useState(false);
+  const runOpener = useRef<HTMLElement | null>(null);
+  const restoreRunFocus = useRef(false);
   useEffect(() => {
     updateActiveTab(tab ?? "identity");
     if (tab === "continuity") setContinuityTab(section ?? "memory");
     if (tab === "automation") setAutomationTab(section ?? "schedules");
   }, [instanceId, tab, section]);
-  useEffect(() => { setSourceSelection(undefined); setExperienceSelection(undefined); setEventSelection(undefined); setSelectedWorkItemId(undefined); }, [instanceId]);
+  useEffect(() => { setSourceSelection(undefined); setExperienceSelection(undefined); setEventSelection(undefined); setSelectedWorkItemId(undefined); setRunDetailsOpen(false); }, [instanceId]);
   const setActiveTab = (next: AdminInstanceTab, selectedSection?: AdminInstanceSection) => {
     const nextSection = selectedSection ?? (next === "continuity" ? continuityTab : next === "automation" ? automationTab : undefined);
     updateActiveTab(next);
@@ -2327,8 +2330,16 @@ export function InstanceDetail({
     if (next === "automation" && nextSection) setAutomationTab(nextSection);
     navigateToAppPath(adminInstancePath(instanceId, next, nextSection as AdminInstanceSection | undefined));
   };
-  const viewRun = (workId?: string) => { setSelectedWorkItemId(workId); setActiveTab("runs"); };
+  const viewRun = (workId?: string) => {
+    if (!workId) { setActiveTab("runs"); return; }
+    runOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    restoreRunFocus.current = false;
+    setSelectedWorkItemId(workId);
+    setRunDetailsOpen(true);
+  };
   const viewSource = (source: RunSource) => {
+    restoreRunFocus.current = false;
+    setRunDetailsOpen(false);
     if (source.kind === "event") {
       setEventSelection({ registrationId: source.registrationId, request: Date.now() }); setActiveTab("connections"); return;
     }
@@ -2431,7 +2442,7 @@ export function InstanceDetail({
                 </Flex>
               }] : []),
               ...(!resolved.compatibility ? [{ key: "runs", label: "Runs", children:
-                resolved.instanceLifecycle === "Active" ? <InstanceRunsSection instanceId={instanceId} open={activeTab === "runs"} inline selectedWorkItemId={selectedWorkItemId} onClose={() => setActiveTab("automation")} onSource={viewSource} /> : <Alert type="info" showIcon title="Runs are available when this instance is active" description="Unarchive the instance from Identity & version to inspect execution history." />
+                resolved.instanceLifecycle === "Active" ? <InstanceRunsSection instanceId={instanceId} open={activeTab === "runs"} inline onRun={viewRun} onClose={() => setActiveTab("automation")} /> : <Alert type="info" showIcon title="Runs are available when this instance is active" description="Unarchive the instance from Identity & version to inspect execution history." />
               }] : []),
               {
                 key: "connections",
@@ -2464,6 +2475,10 @@ export function InstanceDetail({
         />
         </div>
       ) : null}
+      {resolved?.instanceLifecycle === "Active" && !resolved.compatibility ? <InstanceRunsSection instanceId={instanceId}
+        open={runDetailsOpen} detailsOnly selectedWorkItemId={selectedWorkItemId} onSource={viewSource}
+        onClose={() => { restoreRunFocus.current = true; setRunDetailsOpen(false); }}
+        afterClose={() => { if (restoreRunFocus.current && runOpener.current?.isConnected) runOpener.current.focus({ preventScroll: true }); }} /> : null}
     </Flex>
   );
 }

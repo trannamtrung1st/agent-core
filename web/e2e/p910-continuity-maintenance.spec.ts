@@ -101,7 +101,8 @@ test('Thought consolidates separately owned Memory and Experience; lineage, opt-
   const maintenance = work.items.filter((w: { origin: string }) => w.origin === 'Thought activation');
   expect(maintenance).toHaveLength(2); expect(maintenance.every((w: { attentionRequired: boolean }) => !w.attentionRequired)).toBe(true);
   await thoughts.getByRole('button', { name: 'View run', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Runs', exact: true }).getByText('Thought', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Run details', exact: true }).getByText('Thought', { exact: true }).first()).toBeVisible();
+  await page.getByRole('dialog', { name: 'Run details', exact: true }).getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('tab', { name: 'Continuity', exact: true }).click();
   await page.getByRole('tab', { name: 'Memory', exact: true }).click();
   await page.getByRole('button', { name: 'Load items', exact: true }).click();

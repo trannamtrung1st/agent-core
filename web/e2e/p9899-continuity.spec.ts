@@ -124,7 +124,7 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   expect(runRequests).toBe(1);
   await page.unroute(runPattern);
   await initiative.getByRole('button', { name: 'View run', exact: true }).click();
-  const work = page.getByRole('region', { name: 'Runs', exact: true });
+  const work = page.getByRole('dialog', { name: 'Run details', exact: true });
   await expect(work.getByText('Thought', { exact: true })).toBeVisible();
   await work.getByRole('button', { name: 'Approve Thought', exact: true }).click();
   await page.getByRole('dialog', { name: 'Approve this action?', exact: true }).getByRole('button', { name: 'Approve action', exact: true }).click();

@@ -45,6 +45,7 @@ const completed: WorkItem = {
   status: "completed",
   revision: 5,
   progress: "Checking the oven",
+  intent: "A recorded task with a deliberately long prompt that remains available in full when its run opens.",
   cancellationAvailable: false
 };
 
@@ -405,6 +406,30 @@ describe("BackgroundWorkDrawer", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Approve Event" })).toBeDisabled());
     await act(async () => { finish({ ...queued, revision: 2, status: "cancelled", cancellationAvailable: false }); });
     expect(screen.getByRole("button", { name: "Approve Event" })).toBeEnabled();
+  });
+
+  it("keeps the run list compact and loads results only in the details drawer", async () => {
+    const onRun = vi.fn();
+    const loadResult = vi.fn().mockResolvedValue({ workItemId: completed.workItemId, text: "Only the selected result", completedAt: completed.updatedAt });
+    const load = vi.fn().mockResolvedValue([completed, queued, retrying]);
+    const common = { sessionId: "instance", open: true, wide: true, onClose: vi.fn(), load,
+      loadResult, cancel: vi.fn(), approve: vi.fn(), reject: vi.fn(), pollIntervalMs: 0 };
+    const view = render(<AntApp><BackgroundWorkDrawer {...common} inline onRun={onRun} /></AntApp>);
+    fireEvent.click(await screen.findByRole("button", { name: "View schedule run work-done" }));
+    expect(onRun).toHaveBeenCalledWith(completed.workItemId);
+    expect(loadResult).not.toHaveBeenCalled();
+    expect(screen.getByRole("table", { name: "Runs table" })).toBeVisible();
+    expect(screen.getByText("Retrying", { exact: true }).closest(".ant-tag")).toHaveAttribute("title", "Retrying · attempt 2 of 3");
+    expect(screen.getByText(completed.intent!)).toHaveAttribute("title", completed.intent);
+    expect(screen.queryByText(completed.progress!)).not.toBeInTheDocument();
+    view.unmount(); load.mockClear();
+    render(<AntApp><BackgroundWorkDrawer {...common} detailsOnly selectedWorkItemId={completed.workItemId} loadOne={async () => completed} /></AntApp>);
+    expect(await screen.findByText("Only the selected result")).toBeVisible();
+    expect(screen.getByRole("dialog", { name: "Run details" })).toBeVisible();
+    expect(load).not.toHaveBeenCalled();
+    expect(loadResult).toHaveBeenCalledWith("instance", completed.workItemId);
+    expect(screen.queryByRole("button", { name: "Mark all as read" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Run work-queued")).not.toBeInTheDocument();
   });
 
 });

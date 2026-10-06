@@ -19,6 +19,40 @@ public sealed class WorkItemApiTests
     private const string Preview = "POST https://example.com/items";
     private const string Hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
+    [Theory]
+    [InlineData(WorkSourceKind.Schedule, "Recorded task", "Recorded task")]
+    [InlineData(WorkSourceKind.ThoughtActivation, "Recorded thought", "Recorded thought")]
+    [InlineData(WorkSourceKind.ApplicationEvent, "Private event field", null)]
+    [InlineData(WorkSourceKind.Schedule, "overlong", null)]
+    [InlineData(WorkSourceKind.ThoughtActivation, "malformed", null)]
+    [InlineData(WorkSourceKind.ThoughtActivation, "nonstring", null)]
+    public async Task Intent_projection_exposes_only_bounded_authored_tasks_and_never_occurrence_evidence(
+        WorkSourceKind kind, string value, string? expected)
+    {
+        var db = Path.Combine(Path.GetTempPath(), $"work-intent-{Guid.NewGuid():N}.db");
+        try
+        {
+            await using var host = new DurableSqliteHostFactory(db, runScheduler: false);
+            var client = TestOwnerCapability.CreateOwnerClient(host);
+            var session = await CreateAsync(client, "examiner", 1);
+            var sessionId = Guid.Parse(session.SessionId);
+            var evidence = value switch
+            {
+                "malformed" => "{",
+                "nonstring" => "{\"intent\": {\"secret\": \"SECRET_EVIDENCE\"}}",
+                _ => JsonSerializer.Serialize(new { intent = value == "overlong" ? new string('x', 501) : value, secret = "SECRET_EVIDENCE" })
+            };
+            var item = await SeedAsync(host.Services.GetRequiredService<IWorkItemStore>(),
+                await OwnerAsync(host.Services, sessionId), sessionId, host.Services.GetRequiredService<TimeProvider>().GetUtcNow(), kind, evidence);
+            var response = await client.GetAsync($"/api/v2/sessions/{sessionId}/work-items/{item.WorkItemId}");
+            response.EnsureSuccessStatusCode();
+            var result = (await response.Content.ReadFromJsonAsync<WorkItemResponse>())!;
+            Assert.Equal(expected, result.Intent);
+            Assert.DoesNotContain("SECRET_EVIDENCE", await response.Content.ReadAsStringAsync());
+        }
+        finally { SqliteConnection.ClearAllPools(); File.Delete(db); }
+    }
+
     [Fact]
     public async Task Owner_can_list_inspect_cancel_decide_and_read_result_without_private_payloads()
     {
@@ -269,21 +303,21 @@ public sealed class WorkItemApiTests
         return (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
     }
 
-    private static async Task<WorkItem> SeedAsync(IWorkItemStore store, WorkOwner owner, Guid sessionId, DateTimeOffset createdAt)
+    private static async Task<WorkItem> SeedAsync(IWorkItemStore store, WorkOwner owner, Guid sessionId, DateTimeOffset createdAt, WorkSourceKind kind = WorkSourceKind.Schedule, string evidence = Evidence)
     {
         var item = WorkItem.Create(
             Guid.NewGuid(),
             owner,
             new WorkProvenance(
                 Guid.NewGuid(),
-                WorkSourceKind.Schedule,
+                kind,
                 registrationId: null,
                 sessionId,
                 sourceEventId: null,
                 $"work-{Guid.NewGuid():N}",
                 createdAt,
                 createdAt,
-                Evidence,
+                evidence,
                 "examiner",
                 1,
                 "Examiner"),

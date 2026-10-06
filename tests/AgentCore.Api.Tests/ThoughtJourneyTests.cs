@@ -82,6 +82,10 @@ public sealed class ThoughtJourneyTests
             Assert.Equal(workId.ToString("D"), detail.WorkItemId);
             Assert.Equal(registrationId.ToString("D"), detail.RegistrationId);
             Assert.Equal("Thought activation", detail.Origin);
+            Assert.Equal("synthetic-thought-improve", detail.Intent);
+            var listPath = $"/api/v2/admin/agent-instances/{instanceId}/work-items";
+            var listed = (await client.GetFromJsonAsync<WorkItemListResponse>(listPath))!;
+            Assert.Equal(detail.Intent, Assert.Single(listed.Items, row => row.WorkItemId == detail.WorkItemId).Intent);
             Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/admin/agent-instances/{instanceId}/work-items/{Guid.NewGuid()}")).StatusCode);
             var other = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9);
             Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/admin/agent-instances/{other.InstanceId}/work-items/{workId}")).StatusCode);
@@ -95,6 +99,8 @@ public sealed class ThoughtJourneyTests
             Assert.Equal("harness.skill.upsert", item.Approval!.ToolName);
             Assert.Equal(originalVersion, (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(instanceId))!.ActiveVersion);
             var edited = await client.PutAsJsonAsync(path + "/" + registrationId, Draft(r.Revision) with { ThinkingPrompt = "synthetic-thought-attention future prompt" }); edited.EnsureSuccessStatusCode();
+            var historical = (await client.GetFromJsonAsync<WorkItemResponse>(detailPath))!;
+            Assert.Equal("synthetic-thought-improve", historical.Intent);
             var scheduler = await s.GetRequiredService<TriggerScheduler>().RunOnceAsync(DateTimeOffset.UtcNow.AddHours(10));
             Assert.Equal(0, scheduler.Admitted);
             Assert.Single(await work.ListAsync(owner, 100), w => w.Provenance.SourceKind == WorkSourceKind.ThoughtActivation);

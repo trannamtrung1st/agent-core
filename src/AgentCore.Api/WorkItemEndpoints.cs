@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
 using AgentCore.Application.Ports;
@@ -5,6 +6,7 @@ using AgentCore.Application.Sessions;
 using AgentCore.Application.Work;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Work;
+using AgentCore.Domain.Triggers;
 
 namespace AgentCore.Api;
 
@@ -262,7 +264,27 @@ public static class WorkItemEndpoints
             item.AttemptCount,
             item.MaxAttempts,
             item.Provenance.SourceOccurrenceId.ToString("D"), item.Provenance.RegistrationId?.ToString("D"), item.Model.CatalogKey,
-            item.Provenance.SourceKind == WorkSourceKind.ThoughtActivation && item.Result is { } thought ? AgentCore.Application.Work.ThoughtCompletion.Outcome(thought.Text) : null);
+            item.Provenance.SourceKind == WorkSourceKind.ThoughtActivation && item.Result is { } thought ? AgentCore.Application.Work.ThoughtCompletion.Outcome(thought.Text) : null,
+            SourceIntent(item));
+    }
+
+    // Only the owner-authored task/prompt is public; occurrence evidence stays internal.
+    private static string? SourceIntent(WorkItem item)
+    {
+        if (item.Provenance.SourceKind is not (WorkSourceKind.Schedule or WorkSourceKind.ThoughtActivation))
+            return null;
+        try
+        {
+            using var evidence = JsonDocument.Parse(item.Provenance.EvidenceJson);
+            if (evidence.RootElement.ValueKind != JsonValueKind.Object
+                || !evidence.RootElement.TryGetProperty("intent", out var intent)
+                || intent.ValueKind != JsonValueKind.String)
+                return null;
+            var text = intent.GetString();
+            var maximum = item.Provenance.SourceKind == WorkSourceKind.ThoughtActivation ? ThoughtIntent.MaxPromptCharacters : TriggerLimits.MaxIntentCharacters;
+            return !string.IsNullOrWhiteSpace(text) && text.Length <= maximum ? text : null;
+        }
+        catch (JsonException) { return null; }
     }
 
     private static string ToStatus(WorkItemStatus status) => status switch
