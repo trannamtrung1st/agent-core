@@ -25,3 +25,11 @@ public sealed class IdentityMaintenanceSettingsRecord
     public bool AllowAgentConsolidation { get; set; }
     public long Revision { get; set; }
 }
+
+public sealed class ContinuityMaintenanceSettingsRecord
+{
+    public string AgentInstanceId { get; set; } = "";
+    public int? IntervalSeconds { get; set; }
+    public long Revision { get; set; }
+    public long? LastMaintenanceAtUtc { get; set; }
+}

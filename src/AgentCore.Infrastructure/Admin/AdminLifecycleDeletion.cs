@@ -178,6 +178,7 @@ public sealed class SqliteAdminLifecycleDeletion(
 
         await db.Experiences.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
         await db.IdentityMaintenanceSettings.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
+        await db.ContinuityMaintenanceSettings.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
         await db.ExperienceSettings.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
         var deletedThoughts = DeletedThoughts(db, key).Select(r => r.RegistrationId);
         await db.TriggerOccurrences.Where(o => o.AgentInstanceId == key && deletedThoughts.Contains(o.RegistrationId!)

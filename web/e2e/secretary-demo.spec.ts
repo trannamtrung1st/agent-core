@@ -143,7 +143,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     }
     await create.getByRole('button', { name: 'Create instance', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Morgan', exact: true })).toBeVisible();
-    instanceId = page.url().split('/').at(-1)!;
+    instanceId = new URL(page.url()).pathname.split('/')[3];
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Morgan', exact: true })).toBeVisible();
     await page.getByRole('tab', { name: 'Continuity', exact: true }).click();

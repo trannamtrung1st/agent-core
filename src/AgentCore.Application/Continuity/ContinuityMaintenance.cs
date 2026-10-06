@@ -11,9 +11,9 @@ namespace AgentCore.Application.Continuity;
 
 /// <summary>Host policy over durable snapshots; never mutates a live Session or its outcome.</summary>
 public sealed class ContinuityMaintenance(IAgentInstanceStore instances, IMemoryStore history,
-    IExperienceStore experiences, ExperienceService experience)
+    IExperienceStore experiences, ExperienceService experience, IContinuityMaintenanceStore settings,
+    ContinuityMaintenancePolicy policy, TimeProvider time)
 {
-    public static readonly TimeSpan Cadence = TimeSpan.FromMinutes(5);
     public async ValueTask RunOnceAsync(CancellationToken ct = default)
     {
         Guid? instanceCursor = null;
@@ -26,6 +26,11 @@ public sealed class ContinuityMaintenance(IAgentInstanceStore instances, IMemory
             {
                 if (instance.Compatibility || instance.Lifecycle != AgentInstanceLifecycle.Active
                     || !(await experiences.SettingsAsync(instance.InstanceId, ct)).Enabled) continue;
+                var cadence = await settings.ReadAsync(instance.InstanceId, ct);
+                var now = time.GetUtcNow();
+                if (cadence.LastMaintenanceAtUtc is { } last
+                    && now - last < TimeSpan.FromSeconds(policy.Effective(cadence.IntervalSeconds))) continue;
+                if (!await settings.TryClaimAsync(cadence, now, ct)) continue;
                 Guid? sessionCursor = null;
                 while (true)
                 {

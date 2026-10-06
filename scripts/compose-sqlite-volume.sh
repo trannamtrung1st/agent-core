@@ -184,6 +184,21 @@ status, workspace_body = request(workspace_url, headers=owner_headers)
 workspace_text = workspace_body.decode("utf-8") if isinstance(workspace_body, bytes) else workspace_body
 assert resource_bytes.decode("utf-8") in workspace_text, workspace_text
 
+status, cadence_body = request(
+    f"http://127.0.0.1:5080/api/v2/admin/agent-instances/{instance['instanceId']}/continuity-maintenance",
+    headers=owner_headers,
+)
+cadence = json.loads(cadence_body)
+assert cadence["effectiveIntervalSeconds"] == 300 and cadence["usesDefault"], cadence
+status, cadence_body = request(
+    f"http://127.0.0.1:5080/api/v2/admin/agent-instances/{instance['instanceId']}/continuity-maintenance",
+    method="PUT",
+    data=json.dumps({"expectedRevision": cadence["revision"], "intervalSeconds": 900}).encode(),
+    headers=owner_headers,
+)
+cadence = json.loads(cadence_body)
+assert cadence["configuredIntervalSeconds"] == 900 and cadence["revision"] == 1, cadence
+
 admin_state = {
     "draftId": draft_id,
     "publicationVersion": pub_version,
@@ -193,6 +208,7 @@ admin_state = {
     "resourcePath": resource_path,
     "contentSha256": content_sha256,
     "resourceText": resource_bytes.decode("utf-8"),
+    "cadenceRevision": cadence["revision"],
 }
 json.dump(admin_state, open("/tmp/agent-core-admin.json", "w"))
 print("admin", instance["instanceId"], managed["sessionId"], pub_version)
@@ -371,6 +387,15 @@ assert "PublicationCreated" in events or "publication.created" in events.lower()
 status, publications = get("http://127.0.0.1:5080/api/v2/admin/definitions/examiner/publications")
 assert status == 200, publications
 assert f'"version":{pub_version}' in publications.replace(" ", "") or f'"version": {pub_version}' in publications, publications
+
+status, cadence_body = get(
+    f"http://127.0.0.1:5080/api/v2/admin/agent-instances/{instance_id}/continuity-maintenance"
+)
+cadence = json.loads(cadence_body)
+assert status == 200 and cadence["configuredIntervalSeconds"] == 900, cadence
+assert cadence["effectiveIntervalSeconds"] == 900 and not cadence["usesDefault"], cadence
+assert cadence["revision"] == admin["cadenceRevision"], cadence
+print("continuity cadence survived", instance_id, cadence["effectiveIntervalSeconds"], cadence["revision"])
 
 resource_path = admin["resourcePath"]
 content_sha256 = admin["contentSha256"]

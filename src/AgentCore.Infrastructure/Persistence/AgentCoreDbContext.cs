@@ -222,11 +222,13 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
 
     public DbSet<ExperienceRecord> Experiences => Set<ExperienceRecord>();
     public DbSet<IdentityMaintenanceSettingsRecord> IdentityMaintenanceSettings => Set<IdentityMaintenanceSettingsRecord>();
+    public DbSet<ContinuityMaintenanceSettingsRecord> ContinuityMaintenanceSettings => Set<ContinuityMaintenanceSettingsRecord>();
     public DbSet<ExperienceSettingsRecord> ExperienceSettings => Set<ExperienceSettingsRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<IdentityMaintenanceSettingsRecord>().HasKey(r => r.AgentInstanceId);
+        modelBuilder.Entity<ContinuityMaintenanceSettingsRecord>().HasKey(r => r.AgentInstanceId);
         modelBuilder.Entity<ExperienceSettingsRecord>().HasKey(r => r.AgentInstanceId);
         var experience = modelBuilder.Entity<ExperienceRecord>();
         experience.HasKey(r => r.ExperienceId);

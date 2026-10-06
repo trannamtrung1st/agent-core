@@ -13,6 +13,7 @@ import { useAdminDetailLayout } from "./useAdminDetailLayout";
 
 import { thoughtOutcomeLabel, runStatusLabel, type AutomationSelection, type RunSource } from "../chat/runPresentation";
 import { useAutomationSelection } from "./useAutomationSelection";
+import { ContinuityMaintenanceSection } from "./ContinuityMaintenanceSection";
 import { AdminSessionPicker } from "./AdminSessionPicker";
 
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : "Not yet";
@@ -167,6 +168,7 @@ export function ExperienceSection({ instanceId, onWork, selection, active = true
           onChange={enabled => void mutate("experience/configuration", "PUT", { expectedRevision: review.settingsRevision, enabled })} />
           <Typography.Text>{review.enabled ? "Enabled · completed work may be retrospected" : "Disabled · experience is not supplied to the agent"}</Typography.Text>
           <Button onClick={() => void reload()} disabled={busy}>Refresh experience</Button></Flex>
+        <ContinuityMaintenanceSection instanceId={instanceId} />
         <Form layout="vertical" className="admin-config-form" onFinish={() => void mutate("experience/checkpoints", "POST", { sessionId: session.trim() })}>
           <Form.Item label="Source conversation" extra="Only completed observable work in this instance is eligible. A repeated checkpoint creates no duplicate.">
             <AdminSessionPicker instanceId={instanceId} value={session} onChange={setSession} disabled={busy || !review.enabled} />

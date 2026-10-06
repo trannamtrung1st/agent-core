@@ -100,6 +100,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<AgentCore.Application.Experience.ExperienceService>();
         services.TryAddSingleton<AgentCore.Application.Continuity.ContinuityService>();
         services.TryAddSingleton<AgentCore.Application.Continuity.IdentityMaintenanceService>();
+        services.TryAddSingleton(new AgentCore.Application.Continuity.ContinuityMaintenancePolicy());
         services.TryAddSingleton<AgentCore.Application.Continuity.ContinuityMaintenance>();
         services.TryAddSingleton<DurableWorkContextFactory>();
         services.TryAddSingleton<WorkCancellationRegistry>();
@@ -127,6 +128,7 @@ public static class InfrastructureServiceCollectionExtensions
             services.AddSingleton<ITriggerStore>(provider => new SqliteTriggerStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.AddSingleton<IExperienceStore, SqliteExperienceStore>();
+            services.AddSingleton<IContinuityMaintenanceStore, SqliteExperienceStore>();
             services.AddSingleton<IWorkItemStore>(provider => new SqliteWorkItemStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                 provider.GetRequiredService<IDiagnosticIdSource>()));
@@ -185,6 +187,7 @@ public static class InfrastructureServiceCollectionExtensions
                 return instances;
             });
             services.TryAddSingleton<IExperienceStore, InMemoryExperienceStore>();
+            services.TryAddSingleton<IContinuityMaintenanceStore>(provider => (InMemoryExperienceStore)provider.GetRequiredService<IExperienceStore>());
             services.TryAddSingleton<InMemoryDurableState>();
             services.TryAddSingleton(provider =>
                 new InMemoryTriggerStore(provider.GetRequiredService<InMemoryDurableState>(), provider.GetRequiredService<InMemoryAdminEventStore>()));

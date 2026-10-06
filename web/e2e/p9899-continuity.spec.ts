@@ -39,7 +39,7 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   await dialog.getByLabel('Skills', { exact: true }).check();
   await dialog.getByRole('button', { name: 'Create instance', exact: true }).click();
   await expect(page.getByRole('heading', { name: reviewerName, exact: true })).toBeVisible();
-  const id = page.url().split('/').at(-1)!;
+  const id = new URL(page.url()).pathname.split('/')[3];
   await page.getByRole("tab", { name: "Continuity", exact: true }).click();
   await page.getByRole("tab", { name: "Experience", exact: true }).click();
   const experience = page.getByRole('region', { name: 'Experience', exact: true });

@@ -27,7 +27,7 @@ async function create(page: Page, name: string, mode = 'Managed', scope = 'Knowl
   }
   await d.getByRole('button',{name:'Create instance',exact:true}).click();
   await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
-  const id=page.url().split('/').at(-1)!;
+  const id=new URL(page.url()).pathname.split('/')[3];
   await page.locator('.admin-header').getByRole('button',{name:/Chat$/}).first().click();
   await select(page,'Identity',name);
   return id;

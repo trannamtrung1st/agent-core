@@ -23,3 +23,8 @@ public sealed record ThoughtRegistrationResponse(string RegistrationId, long Rev
 public sealed record ThoughtReviewResponse(int MinIntervalSeconds, IReadOnlyList<ThoughtRegistrationResponse> Items);
 
 public sealed record IdentityMaintenanceConfigurationRequest(long ExpectedRevision, bool AllowAgentConsolidation);
+
+public sealed record ContinuityMaintenanceConfigurationRequest(long ExpectedRevision, int? IntervalSeconds);
+public sealed record ContinuityMaintenanceResponse(int? ConfiguredIntervalSeconds, int EffectiveIntervalSeconds,
+    int MinimumIntervalSeconds, int MaximumIntervalSeconds, int DefaultIntervalSeconds, bool UsesDefault,
+    bool ConfiguredIntervalAllowed, long Revision, string? LastMaintenanceAtUtc);

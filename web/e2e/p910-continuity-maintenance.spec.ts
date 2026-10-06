@@ -21,7 +21,7 @@ test('Thought consolidates separately owned Memory and Experience; lineage, opt-
   await select(page, 'Published version', 'v9 · Built-in · Published');
   await page.getByRole('button', { name: 'Create instance', exact: true }).click();
   await page.getByRole('tab', { name: 'Continuity', exact: true }).click();
-  const id = page.url().split('/').at(-1)!;
+  const id = new URL(page.url()).pathname.split('/')[3];
   const token = await page.evaluate(() => localStorage.getItem('agent-core.owner-capability'));
   const headers = { 'X-AgentCore-Owner-Capability': token! };
   const root = `/api/v2/admin/agent-instances/${id}`;

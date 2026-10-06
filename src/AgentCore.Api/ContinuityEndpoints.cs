@@ -3,6 +3,7 @@ using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Experience;
+using AgentCore.Application.Continuity;
 using AgentCore.Application.Models;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -22,6 +23,28 @@ internal static class ContinuityEndpoints
     {
         AdminScheduleEndpoints.Map(admin);
         var group = admin.MapGroup("/agent-instances/{instanceId:guid}");
+        group.MapGet("/continuity-maintenance", (Guid instanceId, ExperienceService service, IContinuityMaintenanceStore store,
+            ContinuityMaintenancePolicy policy, CancellationToken ct) => Respond(async () =>
+            {
+                await service.RequireInstanceAsync(instanceId, ct);
+                return Cadence(await store.ReadAsync(instanceId, ct), policy);
+            }));
+        group.MapPut("/continuity-maintenance", (Guid instanceId, HttpRequest http,
+            ExperienceService service, IContinuityMaintenanceStore store, ContinuityMaintenancePolicy policy,
+            IIdGenerator ids, TimeProvider time, CancellationToken ct) => Respond(async () =>
+            {
+                await service.RequireInstanceAsync(instanceId, ct);
+                if (!http.HasJsonContentType()) throw AgentCoreErrors.Validation("Continuity maintenance settings must be JSON.");
+                ContinuityMaintenanceConfigurationRequest request;
+                try { request = await http.ReadFromJsonAsync<ContinuityMaintenanceConfigurationRequest>(ct)
+                    ?? throw AgentCoreErrors.Validation("Continuity maintenance settings are required."); }
+                catch (Exception ex) when (ex is JsonException or BadHttpRequestException)
+                { throw AgentCoreErrors.Validation("Continuity maintenance interval must be a whole number of seconds or null."); }
+                policy.ValidateInterval(request.IntervalSeconds);
+                return Cadence(await store.ConfigureAsync(instanceId, request.ExpectedRevision, request.IntervalSeconds, ct,
+                    Audit(ids, time, instanceId, "configureContinuityCadence") with
+                    { Revision = request.ExpectedRevision + 1, SummaryJson = JsonSerializer.Serialize(new { instanceId, operation = "configureContinuityCadence", intervalSeconds = request.IntervalSeconds }) }), policy);
+            }));
         group.MapGet("/maintenance", (Guid instanceId, ExperienceService service, IExperienceStore store, CancellationToken ct) =>
             Respond(async () => { await service.RequireInstanceAsync(instanceId, ct); return await store.MaintenanceSettingsAsync(instanceId, ct); }));
         group.MapPut("/maintenance", (Guid instanceId, IdentityMaintenanceConfigurationRequest request,
@@ -83,6 +106,12 @@ internal static class ContinuityEndpoints
             { var o = await service.RunNowAsync(instanceId, registrationId, request.ExpectedRevision, ct); return new { occurrenceId = o.OccurrenceId }; }));
         MapWork(group);
     }
+
+    private static ContinuityMaintenanceResponse Cadence(ContinuityMaintenanceSettings settings, ContinuityMaintenancePolicy policy) =>
+        new(settings.IntervalSeconds, policy.Effective(settings.IntervalSeconds), policy.MinimumIntervalSeconds,
+            policy.MaximumIntervalSeconds, policy.DefaultIntervalSeconds, settings.IntervalSeconds is null,
+            policy.Allows(settings.IntervalSeconds), settings.Revision,
+            settings.LastMaintenanceAtUtc is { } last ? HttpMapping.Format(last) : null);
 
     private static void MapWork(RouteGroupBuilder group)
     {

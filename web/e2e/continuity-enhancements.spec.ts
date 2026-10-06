@@ -35,7 +35,7 @@ test('Admin authors scheduled work, runs through background execution, edits and
   await expect(schedules.getByLabel('Schedule task', { exact: true })).toBeHidden({ timeout: 30_000 });
   await schedules.getByRole('button', { name: 'View schedule: Review pending store orders', exact: true }).click();
   await expect(schedules.getByRole('region', { name: 'Schedule details', exact: true }).getByText('Admin owner', { exact: true })).toBeVisible();
-  const instanceId = page.url().split('/').pop()!;
+  const instanceId = new URL(page.url()).pathname.split('/')[3];
   const token = (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))!;
   const headers = { 'X-AgentCore-Owner-Capability': token };
   const before = await page.request.get(`/api/v2/admin/agent-instances/${instanceId}/schedules`, { headers });

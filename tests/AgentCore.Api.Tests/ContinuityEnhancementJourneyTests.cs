@@ -101,7 +101,8 @@ public sealed class ContinuityEnhancementJourneyTests
     {
         var db = Path.Combine(Path.GetTempPath(), $"continuity-maintenance-{Guid.NewGuid():N}.db");
         Guid instanceId, sessionId;
-        await using (var host = new ExperienceHost(db))
+        var clock = new MaintenanceClock(DateTimeOffset.UtcNow);
+        await using (var host = new ExperienceHost(db, clock: clock))
         {
             var s = host.Services;
             instanceId = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9)).InstanceId;
@@ -115,21 +116,24 @@ public sealed class ContinuityEnhancementJourneyTests
             var entry = new ConversationEntry(Guid.NewGuid(), 1, null, ConversationRole.Assistant, "", Guid.NewGuid(), EntryStatus.Completed, SessionMode.Text, 0, 0, DateTimeOffset.UtcNow);
             source = source with { Revision = source.Revision + 1, Status = SessionStatus.Attached, Entries = [entry], LastEntrySequence = 1 };
             await history.SaveAsync(source, source.Revision - 1);
+            clock.Advance();
             await maintenance.RunOnceAsync(); Assert.Empty(await s.GetRequiredService<IExperienceStore>().ListAsync(instanceId, 100));
             source = source with { Revision = source.Revision + 1, Entries = [entry with { Text = "Completed store audit", ReceivedTextEndExclusive = 21 }] };
             await history.SaveAsync(source, source.Revision - 1);
+            clock.Advance();
             await maintenance.RunOnceAsync(); await maintenance.RunOnceAsync();
             Assert.Single(await s.GetRequiredService<IExperienceStore>().ListAsync(instanceId, 100));
             Assert.Single(await s.GetRequiredService<IWorkItemStore>().ListAsync(new(instanceId, LocalUserProfile.Id), 100));
         }
-        await using var reopened = new ExperienceHost(db);
+        await using var reopened = new ExperienceHost(db, clock: clock);
         var services = reopened.Services;
-        Assert.Equal(1, await services.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100));
+        Assert.Equal(1, await services.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(clock.GetUtcNow(), 100));
         var first = Assert.Single(await services.GetRequiredService<IExperienceStore>().ListAsync(instanceId, 100)); Assert.NotNull(first.Content);
         var memory = services.GetRequiredService<IMemoryStore>(); var snapshot = (await memory.LoadAsync(sessionId))!;
         var second = snapshot.Entries.Single() with { EntryId = Guid.NewGuid(), Sequence = 2, ResponseId = Guid.NewGuid(), Text = "Completed second audit", ReceivedTextEndExclusive = 22 };
         snapshot = snapshot with { Revision = snapshot.Revision + 1, Status = SessionStatus.Attached, Entries = [.. snapshot.Entries, second], LastEntrySequence = 2 };
         await memory.SaveAsync(snapshot, snapshot.Revision - 1);
+        clock.Advance();
         await services.GetRequiredService<ContinuityMaintenance>().RunOnceAsync();
         Assert.Equal(2, (await services.GetRequiredService<IExperienceStore>().ListAsync(instanceId, 100)).Count);
         Assert.Equal(SessionStatus.Attached, (await memory.LoadMetadataAsync(sessionId))!.Status);
@@ -177,4 +181,10 @@ public sealed class ContinuityEnhancementJourneyTests
         await services.GetRequiredService<AdminScheduleService>().DeleteAsync(instanceId, registrationId, stored.Revision);
         Assert.Equal(TriggerRegistrationStatus.Cancelled, (await services.GetRequiredService<ITriggerStore>().GetAsync(owner, registrationId))!.Status);
     }
+    private sealed class MaintenanceClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+        public void Advance() => now += TimeSpan.FromMinutes(5);
+    }
+
 }

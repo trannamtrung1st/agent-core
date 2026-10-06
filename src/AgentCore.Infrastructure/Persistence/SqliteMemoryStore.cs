@@ -360,6 +360,17 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                     """, cancellationToken).ConfigureAwait(false);
             }
 
+            if (await ColumnExistsAsync(connection, "ContinuityMaintenanceSettings", "IntervalSeconds", cancellationToken).ConfigureAwait(false)
+                && await ColumnExistsAsync(connection, "ContinuityMaintenanceSettings", "LastMaintenanceAtUtc", cancellationToken).ConfigureAwait(false)
+                && await ColumnExistsAsync(connection, "ContinuityMaintenanceSettings", "Revision", cancellationToken).ConfigureAwait(false))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ('20261006095536_ConfigurableContinuityCadence', '10.0.12');
+                    """, cancellationToken).ConfigureAwait(false);
+            }
+
             await StampP7MigrationsWhenSchemaCompleteAsync(db, cancellationToken).ConfigureAwait(false);
 
             return;

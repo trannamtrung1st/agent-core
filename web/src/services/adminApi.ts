@@ -1222,3 +1222,9 @@ export type OwnerSchedule = { registrationId: string; revision: number; intent: 
 export type OwnerSchedulePolicy = { allowOneShot: boolean; allowDaily: boolean; allowWeekly: boolean; allowFixedInterval: boolean;
   allowIndefiniteRecurrence: boolean; oneShotHorizonDays: number; minRecurrenceDays: number; minFixedIntervalSeconds: number; maxActiveRegistrations: number };
 export type OwnerScheduleReview = { items: OwnerSchedule[]; policy?: OwnerSchedulePolicy | null };
+
+export type ContinuityMaintenanceSettings = {
+  configuredIntervalSeconds: number | null; effectiveIntervalSeconds: number;
+  minimumIntervalSeconds: number; maximumIntervalSeconds: number; defaultIntervalSeconds: number;
+  usesDefault: boolean; configuredIntervalAllowed: boolean; revision: number; lastMaintenanceAtUtc: string | null;
+};

@@ -427,3 +427,14 @@ Additional properties are rejected. Arguments cannot supply owner, scope, origin
 ### P9.10 maintenance provenance and approval projection
 
 Owner-protected learned-memory provenance adds optional `maintenanceAgentInstanceId`, `maintenanceSessionId` and `maintenanceWorkItemId` strings. Older items return null; these identify initiation independently of semantic owner and promotion lineage. Existing live approval details and durable `approvalPreview` now include Core-resolved Memory scope/kind/source subjects and User-wide effects. No model-supplied scope or approval-authority field is added. The durable approval preview is bounded to 12,000 characters.
+
+### Admin automatic continuity review cadence
+
+Trusted-local owner routes for an active managed instance, relative to `/api/v2/admin/agent-instances/{id}`:
+
+| Method/path | Contract |
+| --- | --- |
+| `GET /continuity-maintenance` | `{ configuredIntervalSeconds: number|null, effectiveIntervalSeconds, minimumIntervalSeconds, maximumIntervalSeconds, defaultIntervalSeconds, usesDefault, configuredIntervalAllowed, revision, lastMaintenanceAtUtc: string|null }` |
+| `PUT /continuity-maintenance` | `{ expectedRevision, intervalSeconds: integer|null }`; null restores inheritance; returns saved/effective state |
+
+Absent rows report null configured interval, inherited default and revision 0. Invalid or malformed intervals return 400 without mutation; stale revisions return 409. Startup operator bounds are authoritative. If a formerly valid saved interval is outside new bounds, `configuredIntervalAllowed=false` and the effective interval explicitly uses the default while retaining the configured value. The timestamp records an eligible evaluation claim, not Retrospection completion. Updates preserve it and atomically append `ExperienceChanged` owner audit metadata with operation `configureContinuityCadence`. No model tool, Thought registration, SignalR contract or consolidation permission changes.

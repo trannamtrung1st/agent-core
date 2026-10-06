@@ -145,6 +145,7 @@ internal sealed class ExperienceHost : DurableSqliteHostFactory
             if (clock is not null) { services.RemoveAll<TimeProvider>(); services.AddSingleton(clock); }
             services.RemoveAll<IStructuredMemoryStore>(); services.AddSingleton<IStructuredMemoryStore, SqliteStructuredMemoryStore>();
             services.RemoveAll<IExperienceStore>(); services.AddSingleton<IExperienceStore, SqliteExperienceStore>();
+            services.RemoveAll<IContinuityMaintenanceStore>(); services.AddSingleton<IContinuityMaintenanceStore, SqliteExperienceStore>();
             if (experienceStore is not null) { services.RemoveAll<IExperienceStore>(); services.AddSingleton(experienceStore); }
             configure?.Invoke(services);
             services.RemoveAll<IAdminLifecycleDeletion>(); services.AddSingleton<IAdminLifecycleDeletion, SqliteAdminLifecycleDeletion>();
