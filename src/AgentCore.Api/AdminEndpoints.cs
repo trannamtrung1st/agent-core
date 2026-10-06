@@ -187,7 +187,9 @@ internal static class AdminEndpoints
         group.MapGet("/tools", (IToolConfigurationGate gate) =>
         {
             var catalog = ToolRegistry.All.OrderBy(d => d.Name, StringComparer.Ordinal).ToArray();
-            return Results.Json(new AdminToolRegistryResponse(catalog.Select(d => d.Name).ToArray(), null,
+            var legacyNames = catalog.Where(d => d.OfferRule is ToolOfferRule.RoleAllowlist
+                or ToolOfferRule.SessionAttachmentsWhenRoleAllows or ToolOfferRule.ConfigurationWhenRoleAllows).Select(d => d.Name).ToArray();
+            return Results.Json(new AdminToolRegistryResponse(legacyNames, null,
                 catalog.Select(d => new AdminCapabilityDescriptor(d.Name, d.Category, d.Summary, d.Tags, d.Discoverable,
                     d.DefaultProjectionClass, d.OfferRule != ToolOfferRule.ConfigurationWhenRoleAllows || gate.IsConfigured(d.Name))).ToArray()));
         });

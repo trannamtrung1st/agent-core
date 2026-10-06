@@ -94,12 +94,18 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         Assert.Contains(payload.ToolNames, name => name == ToolCatalog.WorkspaceRead);
         Assert.Contains(ToolCatalog.AttachmentsRead, payload.ToolNames);
         Assert.Contains(ToolCatalog.BrowserNavigate, payload.ToolNames);
-        Assert.Contains(ToolCatalog.ContinuitySearch, payload.ToolNames);
-        Assert.Contains(ToolCatalog.ContinuityGet, payload.ToolNames);
-        Assert.Contains(ToolCatalog.ExperienceRecent, payload.ToolNames);
-        Assert.Contains(ToolCatalog.WorkComplete, payload.ToolNames);
-        Assert.Contains(ToolCatalog.AppMessageSend, payload.ToolNames);
-        Assert.Contains(HarnessChatTools.Inspect, payload.ToolNames);
+        Assert.DoesNotContain(ToolCatalog.ContinuitySearch, payload.ToolNames);
+        Assert.Contains(payload.Capabilities!, c => c.Name == ToolCatalog.ContinuitySearch);
+        Assert.DoesNotContain(ToolCatalog.ContinuityGet, payload.ToolNames);
+        Assert.Contains(payload.Capabilities!, c => c.Name == ToolCatalog.ContinuityGet);
+        Assert.DoesNotContain(ToolCatalog.ExperienceRecent, payload.ToolNames);
+        Assert.Contains(payload.Capabilities!, c => c.Name == ToolCatalog.ExperienceRecent);
+        Assert.DoesNotContain(ToolCatalog.WorkComplete, payload.ToolNames);
+        Assert.Contains(payload.Capabilities!, c => c.Name == ToolCatalog.WorkComplete);
+        Assert.DoesNotContain(ToolCatalog.AppMessageSend, payload.ToolNames);
+        Assert.Contains(payload.Capabilities!, c => c.Name == ToolCatalog.AppMessageSend);
+        Assert.DoesNotContain(HarnessChatTools.Inspect, payload.ToolNames);
+        Assert.Contains(payload.Capabilities!, c => c.Name == HarnessChatTools.Inspect);
         Assert.False(payload.Capabilities!.Single(c => c.Name == ToolCatalog.WorkComplete).Discoverable);
         Assert.Equal(payload.ToolNames.OrderBy(name => name, StringComparer.Ordinal), payload.ToolNames);
     }

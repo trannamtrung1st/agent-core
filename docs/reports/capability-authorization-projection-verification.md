@@ -12,7 +12,7 @@ Always projection is a separate authorized subset. Existing ToolPolicy eligibili
 
 Live admission commits through the Session mailbox and conversation execution store, fenced by epoch, response, revision, claim generation, Running state and cancellation. SQLite adds `LoadedCapabilityIdsJson` and `CapabilityLoadCount` through `20261006182813_CapabilityExecutionLoads`; historical rows default empty. EnsureCreated upgrade detection stamps only complete schemas. Durable WorkItems checkpoint loaded IDs/count explicitly, so compacted tool results cannot erase their state. Both paths recover the same execution's interfaces and start empty on a new turn/WorkItem. Legacy checkpoint serialization and reserve calculations stay compatible.
 
-Admin exposes grouped metadata, Selected/All access, authorized-only always choices, availability labels, counts and derived on-demand information. Diff and published review distinguish authorization from projection. Synthetic ToolOffered/ToolNotOffered checks use the projected interfaces; ExternalActionDenied continues checking execution authority. No new public load-state endpoint, realtime DTO, provider authorization logic, vector search or user-keyword capability router is introduced.
+Admin retains legacy-selectable `toolNames` and exposes the full registered `capabilities` catalog for new-mode authoring, grouped metadata, Selected/All access, authorized-only always choices, availability labels, counts and derived on-demand information. Diff and published review distinguish authorization from projection. Synthetic ToolOffered/ToolNotOffered checks use the projected interfaces; ExternalActionDenied continues checking execution authority. No new public load-state endpoint, realtime DTO, provider authorization logic, vector search or user-keyword capability router is introduced.
 
 Projection telemetry records authorized/eligible/projected counts, actual normalized schema bytes, bootstrap/always/context/Skill/loaded sources, load calls and matches, safe outcomes, configured provider alias and model catalog key. Raw query text is not a default log or metric tag. Source counts can overlap and remain informational.
 
@@ -30,9 +30,10 @@ All commands use installed dependencies. Backend commands ran with `--no-restore
 | EF `migrations has-pending-model-changes --project src/AgentCore.Infrastructure --startup-project src/AgentCore.Infrastructure --no-build` | No pending model changes. Installed EF tool 10.0.5 reports its version advisory against runtime 10.0.12. |
 | Focused migration / BrowserSettle / SQLite pin regressions | 10 passed. SQLite reopen, stale revision/claim, cancellation and recovery are also included in the full Infrastructure gate. |
 | New capability publication / Chat journey | Passed with real Admin and Chat controls; exact always policy, publication snapshot, next-continuation schema admission, exact 31-byte UTF-8/CRLF file and new-turn reset. |
-| Existing Playwright workspace / authoring journeys | `agent-workspace.spec.ts`, `agent-workspace-v2.spec.ts`, `z-admin-definition-lifecycle.spec.ts` passed. |
+| Legacy catalog follow-up | Preserved `toolNames` subset and complete new-mode metadata: 3 API tests and 15 focused frontend tests passed; All publication/Chat rerun passed. MCP confirmed legacy continuity exclusion, full-catalog inclusion, bootstrap metadata, 54 authorized grants and a 390px document at 390px viewport. |
+| Existing Playwright workspace / authoring journeys | `agent-workspace.spec.ts`, `agent-workspace-v2.spec.ts`, `z-admin-definition-lifecycle.spec.ts` and all four `secretary-demo.spec.ts` journeys passed. |
 | `COMPOSE_PROJECT_NAME=capability-projection-review bash scripts/compose-sqlite-volume.sh` | Passed: SQLite, durable work, home/scratch and Artifact bytes survived container recreation and source deletion. Only the disposable project's volume was removed afterward. |
-| Documentation / compatibility | Canonical owners updated; Markdown links, fences and complete JSON examples checked; `git diff --check` passed; no published `agents/` file changed. |
+| Documentation / compatibility | Canonical owners updated; 353 local links, 125 fragment links, balanced fences and 15 complete JSON examples checked; `git diff --check` passed; no published `agents/` file changed. |
 
 The broad suites cover registry/policy, Skills, browser, email, scheduling, attachments, continuity/maintenance, harness, app messaging, WorkItems, approvals, workspace, Synthetic tool loops and provider mappings. No hosted provider, live speech or real-store probe was enabled. Those explicit opt-in skips do not block key-free acceptance.
 
@@ -48,4 +49,4 @@ An early UI check sampled the closing dropdown animation and falsely reported ov
 
 ## Hosted receipt
 
-Pending the current enhancement's commit and all five existing Synthetic CI jobs. Final acceptance will record that exact behavior SHA and run URL here.
+Behavior commit: `6bd7b17299bb4878b89eb04cc97de60e9ce8e088`. [Hosted Synthetic run 37516499376](https://github.com/trannamtrung1st/agent-core/actions/runs/37516499376) is in progress. The initial hosted Secretary journey exposed a legacy `toolNames` compatibility regression. The field and legacy picker now preserve their original selectable subset, while new-mode authoring/evaluation consumes the complete metadata catalog. Acceptance remains pending the corrected behavior commit and all five jobs. Earlier workspace runs are separate evidence.

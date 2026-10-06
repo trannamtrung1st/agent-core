@@ -1631,8 +1631,10 @@ function DraftEditor({
   const [toolNames, setToolNames] = useState<string[]>([]);
   const [capabilityCatalog, setCapabilityCatalog] = useState<import("../../services/adminApi").AdminCapabilityDescriptor[]>([]);
   const [catalogReady, setCatalogReady] = useState(false);
+  const selectableCatalog = capabilities.capabilityMode ? capabilityCatalog : capabilityCatalog.filter(c => toolNames.includes(c.name));
+  const allCapabilityNames = capabilityCatalog.map(c => c.name);
   const authorizedNames = capabilities.capabilityMode === "All"
-    ? toolNames.filter(n => capabilities.workspaceSemantics === "agentWorkspaceV2" ? !["workspace.retain", "workspace.checkout"].includes(n) : n !== "workspace.cwd")
+    ? allCapabilityNames.filter(n => capabilities.workspaceSemantics === "agentWorkspaceV2" ? !["workspace.retain", "workspace.checkout"].includes(n) : n !== "workspace.cwd")
     : capabilities.toolAllowlist;
   const saveBlocked = candidateLocked || (editorView === "form" && !catalogReady);
   const [resources, setResources] = useState<AdminDefinitionDraftResource[]>([]);
@@ -1875,7 +1877,7 @@ function DraftEditor({
                       disabled={busy || candidateLocked || !catalogReady || toolRegistryLoading}
                       options={[{ value: "Legacy", label: "Legacy projection (compatibility)" }, { value: "Selected", label: "Selected capabilities" }, { value: "All", label: "All current capabilities" }]}
                       onChange={mode => onCapabilitiesChange({ ...capabilities, capabilityMode: mode === "Legacy" ? undefined : mode as "Selected" | "All",
-                        toolAllowlist: mode === "All" ? toolNames.filter(n => capabilities.workspaceSemantics === "agentWorkspaceV2" ? !["workspace.retain", "workspace.checkout"].includes(n) : n !== "workspace.cwd") : capabilities.toolAllowlist,
+                        toolAllowlist: mode === "All" ? allCapabilityNames.filter(n => capabilities.workspaceSemantics === "agentWorkspaceV2" ? !["workspace.retain", "workspace.checkout"].includes(n) : n !== "workspace.cwd") : capabilities.toolAllowlist,
                         alwaysCapabilities: capabilities.alwaysCapabilities ?? [] })} />
                   </label>
                   {capabilities.capabilityMode === "All" ? <Typography.Text type="secondary">All capabilities currently known to Core are included in the next publication as an immutable snapshot. Later capabilities are not automatically granted.</Typography.Text> : null}
@@ -1885,7 +1887,7 @@ function DraftEditor({
                       disabled={busy || candidateLocked || !catalogReady || capabilities.capabilityMode === "All"}
                       onChange={values => onCapabilitiesChange({ ...capabilities, toolAllowlist: values,
                         alwaysCapabilities: capabilities.alwaysCapabilities?.filter(n => values.includes(n)) })}
-                      options={[...new Set(capabilityCatalog.map(c => c.category))].sort().map(category => ({ label: category, options: capabilityCatalog.filter(c => c.category === category).map(c => ({ value: c.name, label: `${c.name}${c.configured ? "" : " · unavailable"}` })) }))}
+                      options={[...new Set(selectableCatalog.map(c => c.category))].sort().map(category => ({ label: category, options: selectableCatalog.filter(c => c.category === category).map(c => ({ value: c.name, label: `${c.name}${c.configured ? "" : " · unavailable"}` })) }))}
                       placeholder="Select registered capabilities" />
                   </label>
                   {capabilities.capabilityMode ? <>
@@ -2151,7 +2153,7 @@ function DraftEditor({
                 activeDraft={activeDraft}
                 dirty={dirty}
                 busy={busy}
-                toolNames={toolNames}
+                toolNames={capabilities.capabilityMode ? allCapabilityNames : toolNames}
                 onDraftRevisionChange={(draft) => onDraftRevisionChange(draft)}
                 onError={onError}
                 onEligibilityChange={setPublishEligible}

@@ -2,7 +2,7 @@
 
 ## Capability authoring and loading contracts
 
-`GET /api/v2/admin/tools` returns exact `toolNames`, compatibility `maxToolAllowlistEntries:null`, and a `capabilities` catalog of name/category/summary/tags/discoverable/defaultProjectionClass/configured. Context-only names are included for exact authorization snapshots and identified separately. No secret configuration values are returned.
+`GET /api/v2/admin/tools` retains legacy-selectable exact `toolNames`, compatibility `maxToolAllowlistEntries:null`, and a `capabilities` catalog of name/category/summary/tags/discoverable/defaultProjectionClass/configured. The full `capabilities` catalog includes context-only names for exact new-mode authorization snapshots and identifies them separately. Legacy `toolNames` excludes context-owned grants as before. No secret configuration values are returned.
 
 New candidate environment accepts `capabilities.mode` Selected or All, exact `resolvedCapabilities`, optional fingerprint, and `projection.alwaysCapabilities`. Server draft saves and publications resolve All against the trusted registry and write the fingerprint. Published runtime authority always uses the stored explicit names. `toolAllowlist` remains the compatibility input; new-mode grants cannot use both representations. Findings identify authorization/projection fields and duplicate, unregistered, unauthorized-projection or context-only errors. Missing optional configuration may be authorized in new mode. Candidate persistence rejects documents over 1 MiB with `candidate/document_too_large`.
 
