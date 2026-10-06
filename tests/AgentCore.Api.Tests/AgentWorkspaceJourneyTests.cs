@@ -229,6 +229,18 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
         Assert.Equal("Conflict", (await Tool(ToolCatalog.WorkspacePatch, new { path = "notes.md", expectedSha256 = hash, edits = new[] { new { oldText = "updated", newText = "lost" } } })).GetProperty("error").GetString());
         Assert.Contains("updated", (await Tool(ToolCatalog.WorkspaceRead, new { path = "notes.md" })).GetProperty("content").GetString());
         Assert.Contains("/home/project/notes.md", (await Tool(ToolCatalog.WorkspaceSearch, new { query = "updated" })).GetRawText());
+        foreach (var name in new[] { ToolCatalog.WorkspaceDelete, ToolCatalog.WorkspaceBatch })
+        {
+            var json = name == ToolCatalog.WorkspaceDelete ? "{\"path\":\"notes.md\"}" : "{\"operations\":[{\"op\":\"delete\",\"path\":\"notes.md\"}]}";
+            var args = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(json);
+            var prepared = await ToolActionPreparation.PrepareApprovalAsync(executor, new("preview", name, json), args,
+                definition: snapshot.Definition, sessionId: session, admission: new(false, TriggerKind.UserTurn, AgentInstanceId: owner, WorkspaceCwd: cwd));
+            Assert.Null(prepared.ErrorJson);
+            Assert.Equal(ToolActionHash.Compute(name, args), prepared.Preparation!.ActionHash);
+            Assert.Equal(json, prepared.Preparation.ActionJson);
+            Assert.Contains("/home/project/notes.md", prepared.Preparation.Details!["Exact operations"]);
+            Assert.DoesNotContain("/workspace", prepared.Preparation.Details["Path scope"]);
+        }
         Assert.Equal("notFound", (await Tool(ToolCatalog.WorkspaceCwd, new { operation = "set", path = "missing" })).GetProperty("error").GetString());
         Assert.Equal("invalid", (await Tool(ToolCatalog.WorkspaceCwd, new { operation = "set", path = "notes.md" })).GetProperty("error").GetString());
         Assert.True((await Tool(ToolCatalog.WorkspaceCwd, new { operation = "set", path = "/agent" })).TryGetProperty("error", out _));
@@ -247,6 +259,12 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
         Assert.Equal("Forbidden", (await Tool(ToolCatalog.WorkspaceMove, new { source = "/working/copy", destination = "/home/transferred" })).GetProperty("error").GetString());
         await Tool(ToolCatalog.WorkspaceCwd, new { operation = "set", path = "/working" });
         await Tool(ToolCatalog.WorkspaceWrite, new { path = "scratch.md", content = "scratch" });
+        const string deleteJson = "{\"path\":\"scratch.md\"}";
+        var deleteArgs = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(deleteJson);
+        var deletePreview = await ToolActionPreparation.PrepareApprovalAsync(executor, new("preview", ToolCatalog.WorkspaceDelete, deleteJson), deleteArgs,
+            definition: snapshot.Definition, sessionId: session, admission: new(false, TriggerKind.UserTurn, AgentInstanceId: owner, WorkspaceCwd: cwd));
+        Assert.Contains("/working/scratch.md", deletePreview.Preparation!.Details!["Exact operations"]);
+        Assert.DoesNotContain("/workspace", deletePreview.Preparation.Details["Exact operations"]);
         Assert.Equal("scratch", System.Text.Encoding.UTF8.GetString(await client.GetByteArrayAsync($"/api/v2/sessions/{session}/workspace/content?path=/working/scratch.md")));
         var artifact = await Tool(ToolCatalog.ArtifactsCreateFromWorkspace, new { path = "/home/project/notes.md", displayName = "notes.md" });
         Assert.Equal("updated café", System.Text.Encoding.UTF8.GetString(await client.GetByteArrayAsync($"/api/v2/sessions/{session}/artifacts/{artifact.GetProperty("artifactId").GetString()}/content")));

@@ -39,6 +39,17 @@ public sealed class WorkspaceStructureToolContractTests
         Assert.Contains("Earlier changes remain",preview.Details["Failure behavior"]);
     }
     [Fact]
+    public async Task Compatibility_approval_keeps_original_relative_operations_and_scratch_scope()
+    {
+        const string arguments = "{\"path\":\"notes.md\"}";
+        using var json = JsonDocument.Parse(arguments);
+        var prepared = await ToolActionPreparation.PrepareApprovalAsync(new SessionToolExecutor(),
+            new("legacy", ToolCatalog.WorkspaceDelete, arguments), json.RootElement, sessionId: Guid.NewGuid());
+        Assert.Null(prepared.ErrorJson);
+        Assert.Equal(arguments, prepared.Preparation!.Details!["Exact operations"]);
+        Assert.Contains("/workspace/working", prepared.Preparation.Details["Path scope"]);
+    }
+    [Fact]
     public void Home_uuid_names_do_not_select_an_owner_and_scratch_foreign_ids_remain_forbidden()
     {var session=Guid.NewGuid();var name=Guid.NewGuid().ToString("N");Assert.True(RolePermissions.AllowsLogicalPath("/home/"+name+"/work",session));Assert.False(RolePermissions.AllowsLogicalPath("/workspace/working/"+name+"/work",session));}
     [Theory] [InlineData("*.txt")] [InlineData("[ab].txt")] [InlineData("../work")] [InlineData("dir/../../work")]

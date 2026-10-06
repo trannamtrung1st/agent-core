@@ -43,6 +43,11 @@ public static class ToolActionPreparation
                 var parsed = WorkspaceStructureArguments.Parse(call.Name, normalized);
                 AgentCore.Application.Workspaces.WorkspaceStructuralPaths.Normalize(sessionId, parsed.Operations);
                 var preview = ToolApprovalPreview.Build(call.Name, args);
+                if (definition is not null && AgentCore.Domain.Definitions.WorkspaceSemantics.IsV2(definition))
+                {
+                    preview.Details["Exact operations"] = AgentWorkspacePaths.Project(normalized.GetRawText());
+                    preview.Details["Path scope"] = "Resolved /home paths use this managed identity; /working paths use this Session scratch.";
+                }
                 return (new(ToolActionHash.Compute(call.Name, args), preview.Summary, call.ArgumentsJson, preview.Details), null);
             }
             catch (AgentCore.Application.Sessions.AgentCoreException)
