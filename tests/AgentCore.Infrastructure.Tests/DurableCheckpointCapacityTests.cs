@@ -181,6 +181,25 @@ public sealed class DurableCheckpointCapacityTests
         Assert.Equal(summary, ThoughtCompletion.Summary(result));
     }
 
+    [Theory]
+    [InlineData(TriggerKind.ThoughtActivation)]
+    [InlineData(TriggerKind.ScheduledOccurrence)]
+    public void Maximum_completion_fits_at_the_exact_reserved_boundary(TriggerKind kind)
+    {
+        ModelMessage[] Seed(int length) => [new(ModelRole.User, new string('x', length))];
+        var reserve = DurableToolCallCheckpoint.CompletionReserve(kind);
+        var overhead = Encoding.UTF8.GetByteCount(DurableToolCallCheckpoint.Write(Seed(0)));
+        var seed = Seed(WorkLimits.MaxCheckpointBytes - reserve - 64 - overhead);
+        Assert.True(DurableToolCallCheckpoint.TryWriteWithReserve(seed, false, null, reserve, out _));
+        var args = kind == TriggerKind.ThoughtActivation
+            ? JsonSerializer.Serialize(new { summary = new string('\u0800', 2000), attentionRequired = true, outcome = "AttentionRequested" })
+            : JsonSerializer.Serialize(new { summary = new string('\u0800', WorkLimits.MaxResultCharacters), attentionRequired = false });
+        var terminal = new ModelMessage(ModelRole.Assistant, "", ToolCalls:
+            [new(DurableToolCallCheckpoint.CompletionCallId, ToolCatalog.WorkComplete, args)]);
+        Assert.True(DurableToolCallCheckpoint.TryWrite(seed.Append(terminal).ToArray(), false, null, out var payload));
+        Assert.Equal(WorkLimits.MaxCheckpointBytes - 64, Encoding.UTF8.GetByteCount(payload));
+    }
+
     private static ModelMessage[] NearCapacity(TriggerKind kind)
     {
         ModelMessage[] Build(int length) => [new(ModelRole.User, "Inspect current evidence."),

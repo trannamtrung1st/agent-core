@@ -33,8 +33,9 @@ public static class DurableToolCallCheckpoint
         var args = kind == TriggerKind.ThoughtActivation
             ? JsonSerializer.Serialize(new { summary = new string('x', max), attentionRequired = true, outcome = "AttentionRequested" })
             : JsonSerializer.Serialize(new { summary = new string('x', max), attentionRequired = false });
+        // Appending to a nonempty message array also adds one comma.
         return Encoding.UTF8.GetByteCount(Write([new(ModelRole.Assistant, "", ToolCalls:
-            [new(CompletionCallId, ToolCatalog.WorkComplete, args)])])) - Encoding.UTF8.GetByteCount(Write([]));
+            [new(CompletionCallId, ToolCatalog.WorkComplete, args)])])) - Encoding.UTF8.GetByteCount(Write([])) + 1;
     }
 
     private static int ComputeFinishRequiredReserve()
@@ -44,8 +45,9 @@ public static class DurableToolCallCheckpoint
         var max = schema.RootElement.GetProperty("properties").GetProperty("query").GetProperty("maxLength").GetInt32();
         var call = new ModelToolCall(new string('x', WorkLimits.MaxToolNameCharacters), ToolCatalog.ContinuitySearch,
             JsonSerializer.Serialize(new { query = new string('\u0001', max), limit = 10 }));
+        // Appending to a nonempty message array also adds one comma.
         return Encoding.UTF8.GetByteCount(Write([new(ModelRole.Assistant, "", ToolCalls: [call]),
-            new(ModelRole.Tool, FinishRequired, ToolCallId: call.Id, Name: call.Name)])) - Encoding.UTF8.GetByteCount(Write([]));
+            new(ModelRole.Tool, FinishRequired, ToolCallId: call.Id, Name: call.Name)])) - Encoding.UTF8.GetByteCount(Write([])) + 1;
     }
 
     public static bool TryWriteWithReserve(IReadOnlyList<ModelMessage> messages, bool observationRequired,
