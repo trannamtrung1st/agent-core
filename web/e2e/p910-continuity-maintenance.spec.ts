@@ -40,6 +40,9 @@ test('Thought consolidates separately owned Memory and Experience; lineage, opt-
     const session = (await response.json()).sessionId as string;
     sessions.push(session);
     await page.goto(`/c/${session}`);
+    // Ready also describes the initial empty shell. Profile appears only after
+    // bootstrap has attached this route and loaded its session catalog.
+    await expect(page.getByTestId('profile')).toHaveText('Synthetic');
     await expect(page.getByTestId("connection")).toHaveText("Ready");
     await page.getByLabel('Message', { exact: true }).fill(`synthetic-inferred-frontend:${subject}`);
     await page.getByRole('button', { name: 'Send', exact: true }).click();

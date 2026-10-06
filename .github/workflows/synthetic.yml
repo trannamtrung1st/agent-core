@@ -22,6 +22,9 @@ jobs:
       Browser__Headless: "true"
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Milestone evidence must test the candidate's exact behavior commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -150,6 +153,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Owner-capability path and SQLite volume survival
         run: ./scripts/compose-sqlite-volume.sh
