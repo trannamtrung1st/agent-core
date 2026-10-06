@@ -1,4 +1,8 @@
 using System.Net;
+using System.Diagnostics.Metrics;
+using System.Security.Cryptography;
+using System.Text;
+using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AgentCore.Application.Admin;
@@ -11,6 +15,7 @@ using AgentCore.Application.Tools;
 using AgentCore.Application.Work;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Experience;
 using AgentCore.Domain.Memory;
 using AgentCore.Domain.Work;
@@ -19,8 +24,211 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace AgentCore.Api.Tests;
 
+[Collection("identity-maintenance-telemetry")]
 public sealed class IdentityMaintenanceJourneyTests
 {
+    [Fact(Timeout = 60000)]
+    public async Task Shared_User_memory_exact_replay_crosses_instances_and_SQLite_restart()
+    {
+        using var metrics = new MaintenanceMetrics();
+        var db = Path.Combine(Path.GetTempPath(), $"p910-user-replay-{Guid.NewGuid():N}.db");
+        Guid firstId, secondId, resultId;
+        ModelToolCall call;
+        await using (var host = new ExperienceHost(db))
+        {
+            var s = host.Services;
+            var admin = s.GetRequiredService<AdminAgentInstanceService>();
+            firstId = (await admin.CreateManagedAsync("general-assistant", 9)).InstanceId;
+            secondId = (await admin.CreateManagedAsync("general-assistant", 9)).InstanceId;
+            var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 9))!;
+            definition = definition with { MemoryPolicy = definition.MemoryPolicy! with { UserRetrieval = true, UserPromotion = true } };
+            var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(firstId, SessionMode.Text);
+            var memory = s.GetRequiredService<IStructuredMemoryService>();
+            var profile = await s.GetRequiredService<IMemoryStore>().LoadProfileAsync(LocalUserProfile.Id);
+            var admission = SessionMemoryPrompt.CreateAdmissionContext("user_explicit", definition, profile, []);
+            var sources = new List<Guid>();
+            foreach (var subject in new[] { "Shared frontend language", "Shared frontend samples" })
+            {
+                var source = await memory.WriteAsync(new(session.SessionId), new(MemoryKind.Preference, subject, "Prefer TypeScript for frontend examples.", []), admission);
+                sources.Add((await memory.PromoteSessionToUserAsync(new(session.SessionId), source.MemoryId, new(LocalUserProfile.Id), true, admission)).MemoryId);
+            }
+            call = new("shared", ToolCatalog.MemoryConsolidate, JsonSerializer.Serialize(new { sourceMemoryIds = sources, kind = "Preference", subject = "Shared frontend preference", content = "Prefer TypeScript for frontend examples." }));
+            var args = JsonSerializer.Deserialize<JsonElement>(call.ArgumentsJson);
+            var service = Maintenance(s, definition);
+            var origin = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: firstId);
+            var tools = new SessionToolExecutor(identityMaintenance: service);
+            var prepared = await ToolActionPreparation.PrepareApprovalAsync(tools, call, args, default, definition, session.SessionId, origin);
+            Assert.Equal("User-wide", prepared.Preparation!.Details!["Scope"]);
+            Assert.Contains("other Agent Instances", prepared.Preparation.Details["Cross-agent effect"]);
+            Assert.Equal("Preference", prepared.Preparation.Details["Memory kind"]);
+            Assert.Contains("Shared frontend samples", prepared.Preparation.Details["Source subjects"]);
+            Assert.Equal(ToolActionHash.Compute(call.Name, args), prepared.Preparation.ActionHash);
+            var forget = new ModelToolCall("forget-shared", ToolCatalog.MemoryForget, JsonSerializer.Serialize(new { memoryId = sources[0] }));
+            var forgetPreview = await ToolActionPreparation.PrepareApprovalAsync(tools, forget, JsonSerializer.Deserialize<JsonElement>(forget.ArgumentsJson), default, definition, session.SessionId, origin);
+            Assert.Equal("User-wide", forgetPreview.Preparation!.Details!["Scope"]);
+            Assert.Contains("other Agent Instances", forgetPreview.Preparation.Details["Cross-agent effect"]);
+            var grant = new ToolApprovalGrant(Guid.NewGuid(), call.Name, ToolActionHash.Compute(call.Name, args), Guid.Empty, Guid.Empty, Guid.Empty);
+            var first = JsonSerializer.SerializeToElement(await service.ExecuteAsync(definition, session.SessionId, call, args, origin, grant, default));
+            resultId = first.GetProperty("memoryId").GetGuid();
+            var replay = JsonSerializer.SerializeToElement(await service.ExecuteAsync(definition, Guid.Empty, call, args, origin with { AgentInstanceId = secondId }, grant, default));
+            Assert.Equal(resultId, replay.GetProperty("memoryId").GetGuid());
+            var changed = JsonSerializer.SerializeToElement(new { sourceMemoryIds = sources, kind = "Preference", subject = "Shared frontend preference", content = "Prefer JavaScript instead." });
+            var conflict = await Assert.ThrowsAsync<AgentCoreException>(() => service.ExecuteAsync(definition, Guid.Empty, call, changed,
+                origin with { AgentInstanceId = secondId }, grant with { ActionHash = ToolActionHash.Compute(call.Name, changed) }, default).AsTask());
+            Assert.Equal(409, conflict.StatusCode);
+            var canonical = Assert.Single(await s.GetRequiredService<IStructuredMemoryStore>().ListActiveUserAsync(LocalUserProfile.Id));
+            Assert.Equal(resultId, canonical.MemoryId);
+            Assert.Equal(firstId, canonical.Provenance.MaintenanceAgentInstanceId);
+            Assert.Equal(session.SessionId, canonical.Provenance.MaintenanceSessionId);
+            Assert.Null(canonical.Provenance.OriginSessionId);
+            Assert.Null(canonical.Provenance.MaintenanceWorkItemId);
+        }
+        await using (var host = new ExperienceHost(db))
+        {
+            var s = host.Services;
+            var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 9))!;
+            definition = definition with { MemoryPolicy = definition.MemoryPolicy! with { UserRetrieval = true } };
+            var args = JsonSerializer.Deserialize<JsonElement>(call.ArgumentsJson);
+            var grant = new ToolApprovalGrant(Guid.NewGuid(), call.Name, ToolActionHash.Compute(call.Name, args), Guid.Empty, Guid.Empty, Guid.Empty);
+            var replay = JsonSerializer.SerializeToElement(await Maintenance(s, definition).ExecuteAsync(definition, Guid.Empty, call, args,
+                new(false, TriggerKind.UserTurn, AgentInstanceId: secondId), grant, default));
+            Assert.Equal(resultId, replay.GetProperty("memoryId").GetGuid());
+            Assert.Equal(firstId, (await s.GetRequiredService<IStructuredMemoryStore>().FindUserAsync(LocalUserProfile.Id, resultId))!.Provenance.MaintenanceAgentInstanceId);
+        }
+        Assert.Equal(4, metrics.Outcomes["attempted"]);
+        Assert.Equal(3, metrics.Outcomes["completed"]);
+        Assert.Equal(1, metrics.Outcomes["conflict"]);
+        Assert.Equal(3, metrics.Outcomes.Count);
+    }
+
+    [Theory(Timeout = 60000)]
+    [InlineData(MemoryScope.Session, "This Session")]
+    [InlineData(MemoryScope.IdentityUser, "This Agent Instance and trusted user profile")]
+    public async Task Scope_previews_keep_complete_bounded_sources_and_replacement_and_rejections_are_measured(MemoryScope scope, string expectedScope)
+    {
+        using var metrics = new MaintenanceMetrics();
+        await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"p910-preview-{Guid.NewGuid():N}.db"));
+        var s = host.Services;
+        var id = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9)).InstanceId;
+        var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 9))!;
+        var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(id, SessionMode.Text);
+        var memory = s.GetRequiredService<IStructuredMemoryService>();
+        var context = SessionMemoryPrompt.CreateAdmissionContext("agent_inferred", definition, await s.GetRequiredService<IMemoryStore>().LoadProfileAsync(LocalUserProfile.Id), []);
+        var sources = new List<Guid>();
+        foreach (var i in Enumerable.Range(0, 8))
+        {
+            var source = await memory.WriteAsync(new(session.SessionId), new(MemoryKind.Preference, $"Frontend samples {i} with project qualifiers, tested versions, temporal context and retained exceptions", "Prefer TypeScript for frontend examples.", []), context);
+            sources.Add(scope == MemoryScope.Session ? source.MemoryId : (await memory.PromoteToIdentityUserAsync(new(session.SessionId), source.MemoryId, new(id, LocalUserProfile.Id), true, context)).MemoryId);
+        }
+        var content = new string('a', 1900) + " final qualifier";
+        var call = new ModelToolCall("bounded-preview", ToolCatalog.MemoryConsolidate, JsonSerializer.Serialize(new { sourceMemoryIds = sources, kind = "Preference", subject = "Frontend samples", content }));
+        var args = JsonSerializer.Deserialize<JsonElement>(call.ArgumentsJson);
+        var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: id);
+        var service = Maintenance(s, definition);
+        var tools = new SessionToolExecutor(identityMaintenance: service);
+        var prepared = await ToolActionPreparation.PrepareApprovalAsync(tools, call, args, default, definition, session.SessionId, admission);
+        Assert.Equal(expectedScope, prepared.Preparation!.Details!["Scope"]);
+        Assert.False(prepared.Preparation.Details.ContainsKey("Cross-agent effect"));
+        Assert.EndsWith("final qualifier", prepared.Preparation.Details["Replacement"]);
+        foreach (var source in sources) Assert.Contains(source.ToString(), prepared.Preparation.Details["Source subjects"]);
+        var preview = prepared.Preparation.Preview + "\n" + string.Join("\n", prepared.Preparation.Details.Select(d => $"{d.Key}: {d.Value}"));
+        Assert.True(preview.Length > 2000);
+        var now = DateTimeOffset.UtcNow;
+        var durable = new WorkApproval(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1, call.Name, call.ArgumentsJson, prepared.Preparation.ActionHash,
+            preview, now.AddMinutes(5), WorkApprovalDecision.Pending, null, false, 1, now);
+        Assert.Equal(preview, durable.Preview);
+        Assert.Contains("forbidden", (await ToolActionPreparation.PrepareApprovalAsync(tools, call, args)).ErrorJson);
+        await Assert.ThrowsAsync<AgentCoreException>(() => service.ExecuteAsync(definition, session.SessionId, call, args, admission, null, default).AsTask());
+        Assert.Equal(1, metrics.Outcomes["rejected_by_policy"]);
+        var forget = new ModelToolCall("forget-preview", ToolCatalog.MemoryForget, JsonSerializer.Serialize(new { memoryId = sources[0] }));
+        var forgetArgs = JsonSerializer.Deserialize<JsonElement>(forget.ArgumentsJson);
+        var forgetPreview = await ToolActionPreparation.PrepareApprovalAsync(tools, forget, forgetArgs, default, definition, session.SessionId, admission);
+        Assert.Equal(expectedScope, forgetPreview.Preparation!.Details!["Scope"]);
+        await Assert.ThrowsAsync<AgentCoreException>(() => service.ExecuteAsync(definition, session.SessionId, forget, forgetArgs, admission, null, default).AsTask());
+        Assert.Equal(1, metrics.Outcomes["forget_rejected"]);
+        var grant = new ToolApprovalGrant(Guid.NewGuid(), forget.Name, ToolActionHash.Compute(forget.Name, forgetArgs), Guid.Empty, Guid.Empty, Guid.Empty);
+        var forgotten = JsonSerializer.SerializeToElement(await service.ExecuteAsync(definition, session.SessionId, forget, forgetArgs, admission, grant, default));
+        Assert.Equal("forgotten", forgotten.GetProperty("status").GetString());
+        await service.ExecuteAsync(definition, session.SessionId, forget, forgetArgs, admission, grant, default);
+        Assert.Equal(2, metrics.Outcomes["forget_completed"]);
+        Assert.Equal(4, metrics.Outcomes["attempted"]);
+        Assert.All(metrics.Outcomes.Keys, k => Assert.Contains(k, new[] { "attempted", "rejected_by_policy", "forget_rejected", "forget_completed" }));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Legacy_exact_retry_matches_the_original_operation_hash_and_keeps_unknown_initiator()
+    {
+        await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"p910-legacy-{Guid.NewGuid():N}.db"));
+        var s = host.Services;
+        var id = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9)).InstanceId;
+        var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 9))!;
+        var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(id, SessionMode.Text);
+        var memory = s.GetRequiredService<IStructuredMemoryService>();
+        var context = SessionMemoryPrompt.CreateAdmissionContext("agent_inferred", definition, await s.GetRequiredService<IMemoryStore>().LoadProfileAsync(LocalUserProfile.Id), []);
+        var sources = new List<StructuredMemoryItem>();
+        foreach (var title in new[] { "Legacy frontend language", "Legacy frontend samples" })
+        {
+            var source = await memory.WriteAsync(new(session.SessionId), new(MemoryKind.Preference, title, "Prefer TypeScript for frontend examples.", []), context);
+            sources.Add(await memory.PromoteToIdentityUserAsync(new(session.SessionId), source.MemoryId, new(id, LocalUserProfile.Id), true, context));
+        }
+        var lineage = sources.Select(m => m.MemoryId).Order().ToArray();
+        var kind = MemoryKind.Preference;
+        var subject = "Legacy frontend preference";
+        var content = "Prefer TypeScript for frontend examples.";
+        var legacyPayload = JsonSerializer.Serialize(new { sources[0].Scope, lineage, kind, subject, content }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var legacyId = new Guid(SHA256.HashData(Encoding.UTF8.GetBytes($"agent-core:identity-maintenance:v1:{id:D}:memory:" + legacyPayload)).AsSpan(0, 16));
+        var store = s.GetRequiredService<IStructuredMemoryStore>();
+        await store.ConsolidateAsync(sources, sources[0] with { MemoryId = legacyId, Subject = subject, SubjectKey = StructuredMemoryItem.SubjectKeyFor(subject),
+            Content = content, Provenance = new("agent_inferred", [], null, DateTimeOffset.UtcNow, DerivedFromMemoryIds: lineage, MaintenanceOrigin: "UserTurn") });
+        var args = JsonSerializer.SerializeToElement(new { sourceMemoryIds = lineage, kind = "Preference", subject, content });
+        var call = new ModelToolCall("legacy-retry", ToolCatalog.MemoryConsolidate, args.GetRawText());
+        var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: id);
+        var grant = new ToolApprovalGrant(Guid.NewGuid(), call.Name, ToolActionHash.Compute(call.Name, args), Guid.Empty, Guid.Empty, Guid.Empty);
+        var service = Maintenance(s, definition);
+        var retry = JsonSerializer.SerializeToElement(await service.ExecuteAsync(definition, session.SessionId, call, args, admission, grant, default));
+        Assert.Equal(legacyId, retry.GetProperty("memoryId").GetGuid());
+        Assert.Null((await store.FindIdentityUserAsync(id, LocalUserProfile.Id, legacyId))!.Provenance.MaintenanceAgentInstanceId);
+        // Even if a later owner edit matches a new proposal, the old operation identity cannot authorize replay of it.
+        var canonical = (await store.FindIdentityUserAsync(id, LocalUserProfile.Id, legacyId))!;
+        var edited = canonical with { MemoryId = Guid.NewGuid(), Content = "Prefer JavaScript instead.",
+            Provenance = canonical.Provenance with { SupersedesMemoryId = canonical.MemoryId } };
+        await store.SupersedeAsync(canonical with { Status = MemoryItemStatus.Superseded }, edited);
+        var changed = JsonSerializer.SerializeToElement(new { sourceMemoryIds = lineage, kind = "Preference", subject, content = "Prefer JavaScript instead." });
+        var conflict = await Assert.ThrowsAsync<AgentCoreException>(() => service.ExecuteAsync(definition, session.SessionId, call, changed, admission,
+            grant with { ActionHash = ToolActionHash.Compute(call.Name, changed) }, default).AsTask());
+        Assert.Equal(409, conflict.StatusCode);
+        Assert.Equal("Prefer JavaScript instead.", (await store.FindIdentityUserAsync(id, LocalUserProfile.Id, edited.MemoryId))!.Content);
+    }
+
+    private sealed class MaintenanceMetrics : IDisposable
+    {
+        private readonly MeterListener listener = new();
+        internal ConcurrentDictionary<string, long> Outcomes { get; } = new();
+        public MaintenanceMetrics()
+        {
+            listener.InstrumentPublished = (i, l) => { if (i.Name == "identity_maintenance_events") l.EnableMeasurementEvents(i); };
+            listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+            {
+                Assert.Equal(1, tags.Length);
+                Assert.Equal("outcome", tags[0].Key);
+                var outcome = Assert.IsType<string>(tags[0].Value);
+                Outcomes.AddOrUpdate(outcome, value, (_, old) => old + value);
+            });
+            listener.Start();
+        }
+        public void Dispose() => listener.Dispose();
+    }
+
+    private static IdentityMaintenanceService Maintenance(IServiceProvider s, AgentDefinition definition) => new(
+        s.GetRequiredService<ExperienceService>(), s.GetRequiredService<IExperienceStore>(), s.GetRequiredService<IStructuredMemoryStore>(),
+        s.GetRequiredService<IStructuredMemoryService>(), s.GetRequiredService<IMemoryStore>(), new MaintenanceDefinitions(definition), TimeProvider.System);
+
+    private sealed class MaintenanceDefinitions(AgentDefinition definition) : IAgentDefinitionStore
+    {
+        public ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken ct = default) => ValueTask.FromResult<IReadOnlyList<AgentDefinition>>([definition]);
+        public ValueTask<AgentDefinition?> GetAsync(string id, int? version = null, CancellationToken ct = default) => ValueTask.FromResult<AgentDefinition?>(definition);
+    }
+
     [Theory(Timeout = 90000)]
     [InlineData(false)] [InlineData(true)]
     public async Task Protected_Thought_approval_survives_restart_and_late_delete_or_opt_out_wins(bool optOut)
@@ -53,6 +261,9 @@ public sealed class IdentityMaintenanceJourneyTests
             workId = work.WorkItemId;
             Assert.Equal(WorkItemStatus.WaitingForApproval, work.Status);
             Assert.Equal(ToolCatalog.MemoryConsolidate, work.Approval!.ToolName);
+            Assert.Contains("Scope: This Agent Instance and trusted user profile", work.Approval.Preview);
+            Assert.Contains("Source subjects:", work.Approval.Preview);
+            Assert.Contains("Frontend samples", work.Approval.Preview);
             Assert.Equal(3, await s.GetRequiredService<IStructuredMemoryStore>().CountActiveIdentityUserAsync(id, LocalUserProfile.Id));
         }
         await using (var host = new ExperienceHost(db))
@@ -77,6 +288,7 @@ public sealed class IdentityMaintenanceJourneyTests
     [Fact(Timeout = 60000)]
     public async Task Contradictory_inferred_memory_Thought_noops_without_alerts_or_mutation()
     {
+        using var metrics = new MaintenanceMetrics();
         var db = Path.Combine(Path.GetTempPath(), $"p910-noop-{Guid.NewGuid():N}.db");
         await using var host = new ExperienceHost(db);
         var s = host.Services;
@@ -102,6 +314,7 @@ public sealed class IdentityMaintenanceJourneyTests
         Assert.Equal(WorkItemStatus.Completed, work.Status);
         Assert.Equal("NoAction", ThoughtCompletion.Outcome(work.Result!.Text));
         Assert.False(work.Result.AttentionRequired);
+        Assert.Empty(metrics.Outcomes);
         Assert.Empty(await store.ListAttentionAlertKeysAsync(work.WorkItemId));
         Assert.Equal(2, await s.GetRequiredService<IStructuredMemoryStore>().CountActiveIdentityUserAsync(id, LocalUserProfile.Id));
     }
@@ -182,7 +395,7 @@ public sealed class IdentityMaintenanceJourneyTests
             }
             sourceId = stored[0].MemoryId;
             var tools = s.GetRequiredService<SessionToolExecutor>();
-            var thought = new ToolExecutionAdmission(true, TriggerKind.ThoughtActivation, AgentInstanceId: id);
+            var thought = new ToolExecutionAdmission(true, TriggerKind.ThoughtActivation, AgentInstanceId: id, WorkItemId: Guid.NewGuid());
             memoryCall = new("maintenance-memory", ToolCatalog.MemoryConsolidate, JsonSerializer.Serialize(new { sourceMemoryIds = stored.Select(m => m.MemoryId), kind = "Preference", subject = "Frontend language", content = "Prefer TypeScript for frontend examples." }));
             var args = JsonSerializer.Deserialize<JsonElement>(memoryCall.ArgumentsJson);
             Assert.Equal(ToolPolicyDecision.Allow, await tools.EvaluateExecutionPolicyAsync(definition, Guid.Empty, memoryCall, args, thought, default));
@@ -196,7 +409,11 @@ public sealed class IdentityMaintenanceJourneyTests
             Assert.Equal("Superseded", historical.Status);
             Assert.Contains("TypeScript", historical.Content);
             var active = (await client.GetFromJsonAsync<AdminLearnedMemoryListResponse>(path + "/learned-memory?scope=IdentityUser"))!;
-            Assert.Equal(3, Assert.Single(active.Items).Provenance.DerivedFromMemoryIds!.Count);
+            var activeItem = Assert.Single(active.Items);
+            Assert.Equal(3, activeItem.Provenance.DerivedFromMemoryIds!.Count);
+            Assert.Equal(id.ToString("D"), activeItem.Provenance.MaintenanceAgentInstanceId);
+            Assert.Equal(thought.WorkItemId!.Value.ToString("D"), activeItem.Provenance.MaintenanceWorkItemId);
+            Assert.Null(activeItem.Provenance.MaintenanceSessionId);
             var fresh = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(id, SessionMode.Text);
             var recall = await SessionMemoryPrompt.LoadAsync(memory, fresh.SessionId, definition, profile, [], agentInstanceId: id);
             Assert.Equal(resultId, Assert.Single(recall).MemoryId);
@@ -270,3 +487,6 @@ public sealed class IdentityMaintenanceJourneyTests
         }
     }
 }
+
+[CollectionDefinition("identity-maintenance-telemetry", DisableParallelization = true)]
+public sealed class IdentityMaintenanceTelemetryCollection;

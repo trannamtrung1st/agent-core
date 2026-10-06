@@ -98,6 +98,31 @@ public sealed class IdentityConsolidationContractTests
 
     [Theory]
     [InlineData(false)] [InlineData(true)]
+    public async Task Shared_User_memory_preserves_first_initiator_and_rejects_changed_canonical_payload(bool sqlite)
+    {
+        await WithStores(sqlite, async (memories, _, _) =>
+        {
+            var sources = new[] { Memory("Shared A"), Memory("Shared B") }.Select(m => m with { Scope = MemoryScope.User, OwnerInstanceId = null }).ToArray();
+            foreach (var source in sources) await memories.InsertAsync(source);
+            var workId = Guid.NewGuid();
+            var result = Result(sources);
+            result = result with { Provenance = result.Provenance with {
+                MaintenanceOrigin = "Thought", MaintenanceAgentInstanceId = Instance, MaintenanceWorkItemId = workId } };
+            await memories.ConsolidateAsync(sources, result);
+            var replay = result with { Provenance = result.Provenance with { MaintenanceAgentInstanceId = Guid.NewGuid(), MaintenanceWorkItemId = Guid.NewGuid() } };
+            var canonical = await memories.ConsolidateAsync(sources, replay);
+            Assert.Equal(Instance, canonical.Provenance.MaintenanceAgentInstanceId);
+            Assert.Equal(workId, canonical.Provenance.MaintenanceWorkItemId);
+            Assert.Null(canonical.OwnerInstanceId);
+            Assert.Equal(Profile, canonical.OwnerProfileId);
+            Assert.Equal(result.MemoryId, Assert.Single(await memories.ListActiveUserAsync(Profile)).MemoryId);
+            await Assert.ThrowsAsync<AgentCoreException>(() => memories.ConsolidateAsync(sources, replay with { Content = "Changed preference" }).AsTask());
+            Assert.Equal(result.Content, (await memories.FindUserAsync(Profile, result.MemoryId))!.Content);
+        });
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
     public async Task Memory_conflict_and_late_delete_leave_every_source_unchanged(bool sqlite)
     {
         await WithStores(sqlite, async (memories, _, _) =>
@@ -204,6 +229,9 @@ public sealed class IdentityConsolidationContractTests
             }
             var memory = Assert.Single(await new SqliteStructuredMemoryStore(factory).ListActiveIdentityUserAsync(Instance, Profile));
             Assert.Empty(memory.Provenance.DerivedFromMemoryIds!);
+            Assert.Null(memory.Provenance.MaintenanceAgentInstanceId);
+            Assert.Null(memory.Provenance.MaintenanceSessionId);
+            Assert.Null(memory.Provenance.MaintenanceWorkItemId);
             var experiences = new SqliteExperienceStore(factory);
             Assert.False((await experiences.MaintenanceSettingsAsync(Instance)).AllowAgentConsolidation);
             Assert.Equal(ExperienceVisibility.Eligible, Assert.Single(await experiences.ListAsync(Instance, 10)).Visibility);

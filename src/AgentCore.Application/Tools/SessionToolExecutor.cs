@@ -80,12 +80,34 @@ public sealed partial class SessionToolExecutor(
         ModelToolCall call, JsonElement args, ToolExecutionAdmission? admission, CancellationToken ct)
     {
         if (!ToolCatalog.IsIdentityMaintenance(call.Name)) return EvaluateExecutionPolicy(definition, call.Name, admission: admission);
-        if (identityMaintenance is null) return ToolPolicyDecision.Deny;
-        try { return await identityMaintenance.PolicyAsync(definition, sessionId, call.Name, args, admission, ct); }
+        if (identityMaintenance is null) { RecordMaintenanceRejection(call.Name); return ToolPolicyDecision.Deny; }
+        try
+        {
+            var policy = await identityMaintenance.PolicyAsync(definition, sessionId, call.Name, args, admission, ct);
+            if (policy == ToolPolicyDecision.Deny) RecordMaintenanceRejection(call.Name);
+            return policy;
+        }
         // Malformed arguments are handled by the semantic executor before any mutation.
         // Preserve its actionable validation result so the model can repair the call.
         catch (AgentCoreException ex) when (ex.StatusCode == 400) { return ToolPolicyDecision.Allow; }
-        catch (AgentCoreException) { RuntimeTelemetry.RecordIdentityMaintenance("rejected_by_policy"); return ToolPolicyDecision.Deny; }
+        catch (AgentCoreException) { RecordMaintenanceRejection(call.Name); return ToolPolicyDecision.Deny; }
+    }
+
+    private static void RecordMaintenanceRejection(string tool) => RuntimeTelemetry.RecordIdentityMaintenance(
+        tool == ToolCatalog.MemoryForget ? "forget_rejected" : "rejected_by_policy");
+
+    public async ValueTask<(ToolApprovalPreparation? Preparation, string? ErrorJson)> PrepareIdentityMaintenanceApprovalAsync(
+        AgentDefinition? definition, Guid sessionId, ModelToolCall call, JsonElement args, ToolExecutionAdmission? admission, CancellationToken ct)
+    {
+        if (identityMaintenance is null || definition is null || admission is null)
+            return (null, Error("forbidden", "Trusted identity maintenance context is required."));
+        try
+        {
+            var preview = await identityMaintenance.ApprovalPreviewAsync(definition, sessionId, call.Name, args, admission, ct);
+            return (new(ToolActionHash.Compute(call.Name, args), preview.Summary, call.ArgumentsJson, preview.Details), null);
+        }
+        catch (AgentCoreException ex) { return (null, Error(ex.Code, ex.Message)); }
+        catch (ArgumentException) { return (null, Error("invalid", "Maintenance approval exceeds its content bound.")); }
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -141,11 +163,13 @@ public sealed partial class SessionToolExecutor(
         if (policy == ToolPolicyDecision.Deny
             || string.IsNullOrWhiteSpace(call.Name))
         {
+            if (ToolCatalog.IsIdentityMaintenance(call.Name)) RecordMaintenanceRejection(call.Name);
             return TextResult(Error("forbidden", "Tool is not permitted for this role."));
         }
 
         if (policy == ToolPolicyDecision.RequireApproval)
         {
+            if (ToolCatalog.IsIdentityMaintenance(call.Name)) RecordMaintenanceRejection(call.Name);
             return TextResult(Error("approval_required", "Tool execution requires explicit approval."));
         }
 
@@ -168,17 +192,20 @@ public sealed partial class SessionToolExecutor(
                     JsonOptions);
                 if (args.ValueKind != JsonValueKind.Object)
                 {
+                    if (ToolCatalog.IsIdentityMaintenance(call.Name)) RecordMaintenanceRejection(call.Name);
                     return TextResult(Error("invalid", "Tool arguments must be a JSON object."));
                 }
             }
         }
         catch (JsonException)
         {
+            if (ToolCatalog.IsIdentityMaintenance(call.Name)) RecordMaintenanceRejection(call.Name);
             return TextResult(Error("invalid", "Tool arguments were malformed."));
         }
 
         if (LooksLikeSessionMutation(args) || LooksLikeHostPath(args))
         {
+            if (ToolCatalog.IsIdentityMaintenance(call.Name)) RecordMaintenanceRejection(call.Name);
             return TextResult(Error("forbidden", "Tool arguments are not permitted."));
         }
 
@@ -190,6 +217,7 @@ public sealed partial class SessionToolExecutor(
             if (!string.Equals(boundHash, approvalGrant.ActionHash, StringComparison.Ordinal)
                 || !string.Equals(call.Name, approvalGrant.ToolName, StringComparison.Ordinal))
             {
+                if (ToolCatalog.IsIdentityMaintenance(call.Name)) RecordMaintenanceRejection(call.Name);
                 return TextResult(Error("stale_approval", "Approval no longer matches the requested action."));
             }
         }
@@ -198,7 +226,11 @@ public sealed partial class SessionToolExecutor(
         {
             if (ToolCatalog.IsIdentityMaintenance(call.Name))
             {
-                if (identityMaintenance is null || admission is null) return TextResult(Error("forbidden", "Identity maintenance is unavailable."));
+                if (identityMaintenance is null || admission is null)
+                {
+                    RecordMaintenanceRejection(call.Name);
+                    return TextResult(Error("forbidden", "Identity maintenance is unavailable."));
+                }
                 var result = await identityMaintenance.ExecuteAsync(definition, sessionId, call, args, admission, approvalGrant, cancellationToken);
                 return TextResult(AgentCore.Application.Continuity.ContinuityService.Serialize(result));
             }
@@ -361,7 +393,6 @@ public sealed partial class SessionToolExecutor(
         { return FitResult(remainingOutputBytes, Error("invalid", "Consolidation content is malformed or exceeds its bounds.")); }
         catch (AgentCoreException ex)
         {
-            if (ToolCatalog.IsIdentityMaintenance(call.Name)) RuntimeTelemetry.RecordIdentityMaintenance(ex.Code == "Conflict" ? "conflict" : call.Name == ToolCatalog.MemoryForget ? "forget_rejected" : "rejected_by_policy");
             return FitResult(remainingOutputBytes, ex.DiagnosticId is { } diagnosticId
                 ? JsonSerializer.Serialize(new { error = ex.Code, message = ex.Message, diagnosticId })
                 : Error(ex.Code, ex.Message));

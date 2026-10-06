@@ -56,6 +56,32 @@ test('Thought consolidates separately owned Memory and Experience; lineage, opt-
   const beforeMemory = await (await page.request.get(root + '/learned-memory?scope=IdentityUser', { headers })).json();
   expect(beforeMemory.items).toHaveLength(3);
   expect(beforeMemory.items.every((m: { provenance: { source: string } }) => m.provenance.source === 'agent_inferred')).toBe(true);
+  // The live approval resolves scope and subjects in Core before asking for consent.
+  const approvalSessionResponse = await page.request.post('/api/v2/sessions', { headers, data: { agentInstanceId: id, mode: 'text' } });
+  expect(approvalSessionResponse.ok()).toBe(true);
+  const approvalSession = (await approvalSessionResponse.json()).sessionId as string;
+  await page.goto(`/c/${approvalSession}`);
+  await expect(page.getByTestId('profile')).toHaveText('Synthetic');
+  await expect(page.getByTestId('connection')).toHaveText('Ready');
+  await page.getByLabel('Message', { exact: true }).fill('synthetic-maintain-memory');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  const approval = page.getByRole('dialog', { name: 'Approve identity consolidation', exact: true });
+  await expect(approval).toBeVisible({ timeout: 30_000 });
+  await expect(approval).toContainText('This Agent Instance and trusted user profile');
+  await expect(approval).toContainText('Memory kind');
+  await expect(approval).toContainText('Preference');
+  await expect(approval).toContainText('Source subjects');
+  await expect(approval).toContainText('Prefer TypeScript for frontend examples.');
+  for (const source of beforeMemory.items) {
+    await expect(approval).toContainText(source.memoryId);
+    await expect(approval).toContainText(source.subject);
+  }
+  await approval.getByRole('button', { name: 'Reject', exact: true }).click();
+  await expect(approval).toBeHidden();
+  await expect(page.getByText('The selected state could not be consolidated; no further change was made.', { exact: true })).toBeVisible();
+  expect((await (await page.request.get(root + '/learned-memory?scope=IdentityUser', { headers })).json()).items).toHaveLength(3);
+  expect((await page.request.post(`/api/v2/sessions/${approvalSession}/deactivate`, { headers })).ok()).toBe(true);
+
   await page.goto(`/admin/instances/${id}`);
   await page.getByRole('tab', { name: 'Automation', exact: true }).click();
   await page.getByRole('tab', { name: 'Thoughts', exact: true }).click();

@@ -338,6 +338,9 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.OwnerProfileId).HasMaxLength(36);
             entity.Property(row => row.OriginMemoryId).HasMaxLength(36);
             entity.Property(row => row.OriginSessionId).HasMaxLength(36);
+            entity.Property(row => row.MaintenanceAgentInstanceId).HasMaxLength(36);
+            entity.Property(row => row.MaintenanceSessionId).HasMaxLength(36);
+            entity.Property(row => row.MaintenanceWorkItemId).HasMaxLength(36);
             entity.HasIndex(row => new { row.SessionId, row.Status });
             entity.HasIndex(row => new { row.SessionId, row.Kind, row.SubjectKey })
                 .IsUnique()

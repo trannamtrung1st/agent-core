@@ -29,8 +29,13 @@ public static class ToolActionPreparation
         SessionToolExecutor tools,
         ModelToolCall call,
         JsonElement args,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        AgentCore.Domain.Definitions.AgentDefinition? definition = null,
+        Guid sessionId = default,
+        ToolExecutionAdmission? admission = null)
     {
+        if (ToolCatalog.IsIdentityMaintenance(call.Name))
+            return await tools.PrepareIdentityMaintenanceApprovalAsync(definition, sessionId, call, args, admission, cancellationToken);
         if (string.Equals(call.Name, ToolCatalog.HttpRequest, StringComparison.Ordinal))
         {
             var prepared = tools.PrepareHttpRequestApproval(args);

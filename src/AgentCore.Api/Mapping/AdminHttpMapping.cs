@@ -251,7 +251,8 @@ internal static class AdminHttpMapping
                 item.ProvenanceSource,
                 item.OriginSessionId?.ToString("D"),
                 item.OriginMemoryId?.ToString("D"),
-                item.RecordedAt.ToString("o"), (item.DerivedFromMemoryIds ?? []).Select(id => id.ToString("D")).ToArray(), item.MaintenanceOrigin),
+                item.RecordedAt.ToString("o"), (item.DerivedFromMemoryIds ?? []).Select(id => id.ToString("D")).ToArray(), item.MaintenanceOrigin,
+                item.MaintenanceAgentInstanceId?.ToString("D"), item.MaintenanceSessionId?.ToString("D"), item.MaintenanceWorkItemId?.ToString("D")),
             item.UpdatedAt.ToString("o"), item.Status.ToString());
 
     public static AdminLearnedMemoryResetResponse ToLearnedMemoryReset(AdminLearnedMemoryResetResult result) =>

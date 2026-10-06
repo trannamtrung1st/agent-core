@@ -76,10 +76,55 @@ public sealed class IdentityMaintenanceService(ExperienceService instances, IExp
         return ToolPolicyDecision.Deny;
     }
 
+    public async ValueTask<(string Summary, Dictionary<string, string> Details)> ApprovalPreviewAsync(
+        AgentDefinition definition, Guid sessionId, string tool, JsonElement args, ToolExecutionAdmission admission, CancellationToken ct)
+    {
+        if (await PolicyAsync(definition, sessionId, tool, args, admission, ct) == ToolPolicyDecision.Deny)
+            throw new AgentCoreException("PolicyDenied", "Identity maintenance is not permitted by current policy.", 403);
+        var preview = ToolApprovalPreview.Build(tool, args);
+        if (tool == ToolCatalog.ExperienceConsolidate) return preview;
+        var id = admission.AgentInstanceId!.Value;
+        var instance = await instances.RequireInstanceAsync(id, ct);
+        var current = (await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct))!;
+        var sources = tool == ToolCatalog.MemoryForget
+            ? new[] { await ResolveMemoryAsync(id, sessionId, ReadId(args, "memoryId"), definition, current, admission.Detached, ct) }
+            : await MemorySourcesAsync(id, sessionId, ReadIds(args, "sourceMemoryIds"), definition, current, admission.Detached, ct);
+        if (sources.Any(s => s.Scope != sources[0].Scope || s.Kind != sources[0].Kind))
+            throw AgentCoreErrors.Validation("Memory consolidation cannot cross scopes or kinds.");
+        preview.Details["Scope"] = sources[0].Scope switch
+        {
+            MemoryScope.User => "User-wide",
+            MemoryScope.IdentityUser => "This Agent Instance and trusted user profile",
+            _ => "This Session"
+        };
+        preview.Details["Memory kind"] = sources[0].Kind.ToString();
+        preview.Details["Source subjects"] = string.Join("\n", sources.Select(s => $"{s.MemoryId:D}: {s.Subject}"));
+        if (sources[0].Scope == MemoryScope.User)
+            preview.Details["Cross-agent effect"] = "This learned memory may be retrieved by other Agent Instances for this trusted user profile.";
+        return preview;
+    }
+
     public async ValueTask<object> ExecuteAsync(AgentDefinition definition, Guid sessionId, ModelToolCall call,
         JsonElement args, ToolExecutionAdmission admission, ToolApprovalGrant? grant, CancellationToken ct)
     {
         RuntimeTelemetry.RecordIdentityMaintenance("attempted");
+        try { return await ExecuteCoreAsync(definition, sessionId, call, args, admission, grant, ct); }
+        catch (AgentCoreException ex)
+        {
+            RuntimeTelemetry.RecordIdentityMaintenance(call.Name == ToolCatalog.MemoryForget ? "forget_rejected"
+                : ex.Code == "Conflict" ? "conflict" : "rejected_by_policy");
+            throw;
+        }
+        catch (ArgumentException)
+        {
+            RuntimeTelemetry.RecordIdentityMaintenance(call.Name == ToolCatalog.MemoryForget ? "forget_rejected" : "rejected_by_policy");
+            throw;
+        }
+    }
+
+    private async ValueTask<object> ExecuteCoreAsync(AgentDefinition definition, Guid sessionId, ModelToolCall call,
+        JsonElement args, ToolExecutionAdmission admission, ToolApprovalGrant? grant, CancellationToken ct)
+    {
         var policy = await PolicyAsync(definition, sessionId, call.Name, args, admission, ct);
         if (policy == ToolPolicyDecision.Deny) throw new AgentCoreException("PolicyDenied", "Identity maintenance is not permitted by current policy.", 403);
         if (policy == ToolPolicyDecision.RequireApproval && (grant is null || grant.ToolName != call.Name
@@ -94,7 +139,11 @@ public sealed class IdentityMaintenanceService(ExperienceService instances, IExp
         {
             Only(args, "memoryId");
             var memory = await ResolveMemoryAsync(id, sessionId, ReadId(args, "memoryId"), definition, current, admission.Detached, ct);
-            if (memory.Status == MemoryItemStatus.Deleted) return new { status = "already_forgotten", memoryId = memory.MemoryId, scope = memory.Scope.ToString() };
+            if (memory.Status == MemoryItemStatus.Deleted)
+            {
+                RuntimeTelemetry.RecordIdentityMaintenance("forget_completed");
+                return new { status = "already_forgotten", memoryId = memory.MemoryId, scope = memory.Scope.ToString() };
+            }
             if (memory.Status != MemoryItemStatus.Active) throw AgentCoreErrors.Conflict("Only a current active learned memory can be forgotten.");
             switch (memory.Scope)
             {
@@ -119,10 +168,30 @@ public sealed class IdentityMaintenanceService(ExperienceService instances, IExp
             var (subject, content, key, source) = StructuredMemoryService.ValidateContent(kind, ReadString(args, "subject"), ReadString(args, "content"), [], admissionContext);
             foreach (var s in sources) StructuredMemoryService.ValidateContent(s.Kind, s.Subject, s.Content, [], admissionContext);
             var lineage = sources.Select(s => s.MemoryId).Order().ToArray();
-            var operationId = OperationId(id, "memory", new { sources[0].Scope, lineage, kind, subject, content });
+            var owner = sources[0].Scope switch
+            {
+                MemoryScope.Session => $"session:{sources[0].SessionId:D}",
+                MemoryScope.IdentityUser => $"identity-user:{sources[0].OwnerInstanceId:D}:{sources[0].OwnerProfileId:D}",
+                MemoryScope.User => $"user:{sources[0].OwnerProfileId:D}",
+                _ => throw AgentCoreErrors.Validation("Memory scope is invalid.")
+            };
+            var operationId = OperationId(owner, "memory", new { sources[0].Scope, lineage, kind, subject, content });
             var result = sources[0] with { MemoryId = operationId, Subject = subject, Content = content, SubjectKey = key,
                 Status = MemoryItemStatus.Active, CreatedAt = now, UpdatedAt = now,
-                Provenance = new(source, [], null, now, DerivedFromMemoryIds: lineage, MaintenanceOrigin: origin) };
+                Provenance = new(source, [], null, now, DerivedFromMemoryIds: lineage, MaintenanceOrigin: origin,
+                    MaintenanceAgentInstanceId: id, MaintenanceSessionId: admission.Detached || sessionId == Guid.Empty ? null : sessionId,
+                    MaintenanceWorkItemId: admission.WorkItemId) };
+            // Preserve exact retries created by the initiating instance before owner-based IDs.
+            // Match the legacy operation hash, not just mutable canonical content/lineage.
+            var legacyId = OperationId(id, "memory", new { sources[0].Scope, lineage, kind, subject, content });
+            var legacy = sources[0].Scope switch
+            {
+                MemoryScope.Session => await memories.FindAsync(sources[0].SessionId, legacyId, ct),
+                MemoryScope.IdentityUser => await memories.FindIdentityUserAsync(id, LocalUserProfile.Id, legacyId, ct),
+                MemoryScope.User => await memories.FindUserAsync(LocalUserProfile.Id, legacyId, ct),
+                _ => null
+            };
+            if (legacy is not null) result = result with { MemoryId = legacy.MemoryId };
             var saved = await memories.ConsolidateAsync(sources, result, ct);
             RuntimeTelemetry.RecordIdentityMaintenance("completed");
             return new { status = "consolidated", memoryId = saved.MemoryId, scope = saved.Scope.ToString(), derivedFromMemoryIds = lineage };
@@ -182,6 +251,8 @@ public sealed class IdentityMaintenanceService(ExperienceService instances, IExp
     }
     private static Guid OperationId(Guid owner, string kind, object payload) => new(SHA256.HashData(Encoding.UTF8.GetBytes(
         $"agent-core:identity-maintenance:v1:{owner:D}:{kind}:" + JsonSerializer.Serialize(payload, Json))).AsSpan(0, 16));
+    private static Guid OperationId(string owner, string kind, object payload) => new(SHA256.HashData(Encoding.UTF8.GetBytes(
+        $"agent-core:identity-maintenance:v2:{owner}:{kind}:" + JsonSerializer.Serialize(payload, Json))).AsSpan(0, 16));
     public static Guid[] ReadIds(JsonElement args, string name)
     {
         if (!args.TryGetProperty(name, out var p) || p.ValueKind != JsonValueKind.Array) throw AgentCoreErrors.Validation("Source IDs must be an array.");

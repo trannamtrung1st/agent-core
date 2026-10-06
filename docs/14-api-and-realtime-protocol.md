@@ -421,3 +421,7 @@ Learned-memory responses add `status`, `provenance.derivedFromMemoryIds` and `pr
 | `memory.forget` | one `memoryId` UUID |
 
 Additional properties are rejected. Arguments cannot supply owner, scope, origin, approval or settings. Successful consolidation returns `status: consolidated`, result ID and exact parent IDs; successful forgetting returns `status: forgotten`, memoryId, scope and precise retained-source explanation. Exact tombstone retry returns `already_forgotten`. Normal tool-error and exact-hash approval contracts remain. Historical Admin detail is inspection, not an eligibility bypass for model-facing Continuity.
+
+### P9.10 maintenance provenance and approval projection
+
+Owner-protected learned-memory provenance adds optional `maintenanceAgentInstanceId`, `maintenanceSessionId` and `maintenanceWorkItemId` strings. Older items return null; these identify initiation independently of semantic owner and promotion lineage. Existing live approval details and durable `approvalPreview` now include Core-resolved Memory scope/kind/source subjects and User-wide effects. No model-supplied scope or approval-authority field is added. The durable approval preview is bounded to 12,000 characters.

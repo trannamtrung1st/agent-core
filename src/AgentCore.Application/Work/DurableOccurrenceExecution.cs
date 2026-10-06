@@ -360,7 +360,6 @@ public sealed class DurableOccurrenceExecution(
                 {
                     if (!ThoughtCompletion.TryParse(args, messages, out var thoughtResult, out var thoughtAttention, out var thoughtRejection))
                         return new DurableOccurrenceFailed(running, "invalid-completion", thoughtRejection);
-                    if (await tools.AllowsAgentConsolidationAsync(running.Owner.AgentInstanceId, cancellationToken) && ThoughtCompletion.Outcome(thoughtResult) == "NoAction") RuntimeTelemetry.RecordIdentityMaintenance("no_op");
                     RuntimeTelemetry.RecordThought(thoughtAttention ? "attention" : ThoughtCompletion.Outcome(thoughtResult));
                     return new DurableOccurrenceCompleted(running, thoughtResult, thoughtAttention);
                 }
@@ -544,7 +543,7 @@ public sealed class DurableOccurrenceExecution(
 
         async ValueTask<DurableOccurrenceOutcome?> SuspendForApprovalAsync(ModelToolCall call, JsonElement args, string hash)
         {
-            var prepared = await ToolActionPreparation.PrepareApprovalAsync(tools, call, args, cancellationToken)
+            var prepared = await ToolActionPreparation.PrepareApprovalAsync(tools, call, args, cancellationToken, definition, Guid.Empty, admission)
                 .ConfigureAwait(false);
             if (prepared.Preparation is null)
             {
@@ -557,6 +556,8 @@ public sealed class DurableOccurrenceExecution(
             }
 
             var preview = prepared.Preparation.Preview;
+            if (ToolCatalog.IsIdentityMaintenance(call.Name) && prepared.Preparation.Details is { } details)
+                preview += "\n" + string.Join("\n", details.Select(d => $"{d.Key}: {d.Value}"));
             var actionHash = prepared.Preparation.ActionHash;
             var actionJson = prepared.Preparation.ActionJson;
 

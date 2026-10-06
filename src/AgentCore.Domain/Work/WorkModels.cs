@@ -16,7 +16,7 @@ public static class WorkLimits
     public const int MaxFailureCodeCharacters = 64;
     public const int MaxResultCharacters = 16_000;
     public const int MaxCheckpointBytes = 65_536;
-    public const int MaxPreviewCharacters = 2_000;
+    public const int MaxPreviewCharacters = 12_000;
     public const int MaxPreparedActionBytes = 8_192;
     public const int MaxToolNameCharacters = 128;
     public const int ActionHashCharacters = 64;

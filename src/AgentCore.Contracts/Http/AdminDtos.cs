@@ -336,7 +336,8 @@ public sealed record AdminLearnedMemoryProvenanceResponse(
     string Source,
     string? OriginSessionId,
     string? OriginMemoryId,
-    string RecordedAt, IReadOnlyList<string>? DerivedFromMemoryIds = null, string? MaintenanceOrigin = null);
+    string RecordedAt, IReadOnlyList<string>? DerivedFromMemoryIds = null, string? MaintenanceOrigin = null,
+    string? MaintenanceAgentInstanceId = null, string? MaintenanceSessionId = null, string? MaintenanceWorkItemId = null);
 
 public sealed record AdminLearnedMemoryResetRequest(string Scope, string? SessionId, bool Confirm);
 

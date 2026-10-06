@@ -31,7 +31,10 @@ public sealed record MemoryProvenance(
     Guid? OriginMemoryId = null,
     Guid? OriginSessionId = null,
     IReadOnlyList<Guid>? DerivedFromMemoryIds = null,
-    string? MaintenanceOrigin = null);
+    string? MaintenanceOrigin = null,
+    Guid? MaintenanceAgentInstanceId = null,
+    Guid? MaintenanceSessionId = null,
+    Guid? MaintenanceWorkItemId = null);
 
 public sealed record StructuredMemoryItem(
     Guid MemoryId,

@@ -197,7 +197,10 @@ public sealed partial class SqliteStructuredMemoryStore(IDbContextFactory<AgentC
                 row.OriginMemoryId is null ? null : Guid.Parse(row.OriginMemoryId),
                 row.OriginSessionId is null ? null : Guid.Parse(row.OriginSessionId),
                 JsonSerializer.Deserialize<Guid[]>(row.DerivedFromMemoryIdsJson, Json) ?? [],
-                row.MaintenanceOrigin),
+                row.MaintenanceOrigin,
+                row.MaintenanceAgentInstanceId is null ? null : Guid.Parse(row.MaintenanceAgentInstanceId),
+                row.MaintenanceSessionId is null ? null : Guid.Parse(row.MaintenanceSessionId),
+                row.MaintenanceWorkItemId is null ? null : Guid.Parse(row.MaintenanceWorkItemId)),
             DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc),
             DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc),
             (MemoryScope)row.Scope,
@@ -227,7 +230,10 @@ public sealed partial class SqliteStructuredMemoryStore(IDbContextFactory<AgentC
             OriginMemoryId = item.Provenance.OriginMemoryId?.ToString("D"),
             OriginSessionId = item.Provenance.OriginSessionId?.ToString("D"),
             DerivedFromMemoryIdsJson = JsonSerializer.Serialize(item.Provenance.DerivedFromMemoryIds ?? [], Json),
-            MaintenanceOrigin = item.Provenance.MaintenanceOrigin
+            MaintenanceOrigin = item.Provenance.MaintenanceOrigin,
+            MaintenanceAgentInstanceId = item.Provenance.MaintenanceAgentInstanceId?.ToString("D"),
+            MaintenanceSessionId = item.Provenance.MaintenanceSessionId?.ToString("D"),
+            MaintenanceWorkItemId = item.Provenance.MaintenanceWorkItemId?.ToString("D")
         };
 
     private static void Copy(StructuredMemoryRecord row, StructuredMemoryItem item)
@@ -251,6 +257,9 @@ public sealed partial class SqliteStructuredMemoryStore(IDbContextFactory<AgentC
         row.OriginSessionId = mapped.OriginSessionId;
         row.DerivedFromMemoryIdsJson = mapped.DerivedFromMemoryIdsJson;
         row.MaintenanceOrigin = mapped.MaintenanceOrigin;
+        row.MaintenanceAgentInstanceId = mapped.MaintenanceAgentInstanceId;
+        row.MaintenanceSessionId = mapped.MaintenanceSessionId;
+        row.MaintenanceWorkItemId = mapped.MaintenanceWorkItemId;
     }
 
     public async ValueTask<StructuredMemoryItem?> FindIdentityUserAsync(

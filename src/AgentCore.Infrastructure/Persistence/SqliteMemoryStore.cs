@@ -349,6 +349,17 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                     """, cancellationToken).ConfigureAwait(false);
             }
 
+            if (await ColumnExistsAsync(connection, "StructuredMemories", "MaintenanceAgentInstanceId", cancellationToken).ConfigureAwait(false)
+                && await ColumnExistsAsync(connection, "StructuredMemories", "MaintenanceSessionId", cancellationToken).ConfigureAwait(false)
+                && await ColumnExistsAsync(connection, "StructuredMemories", "MaintenanceWorkItemId", cancellationToken).ConfigureAwait(false))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ('20261006042725_P910MaintenanceProvenance', '10.0.12');
+                    """, cancellationToken).ConfigureAwait(false);
+            }
+
             await StampP7MigrationsWhenSchemaCompleteAsync(db, cancellationToken).ConfigureAwait(false);
 
             return;

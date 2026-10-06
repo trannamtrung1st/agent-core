@@ -3094,7 +3094,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             _tools,
                                             call,
                                             args,
-                                            overallCts.Token)
+                                            overallCts.Token,
+                                            _snapshot.Definition, SessionId,
+                                            new ToolExecutionAdmission(false, trigger.Kind, AgentInstanceId: _snapshot.AgentInstanceId, SupportsTools: model.Capabilities.Tools))
                                         .ConfigureAwait(false);
                                     if (prepared.Preparation is null)
                                     {

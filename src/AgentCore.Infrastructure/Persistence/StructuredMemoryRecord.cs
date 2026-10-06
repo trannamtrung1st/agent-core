@@ -22,4 +22,7 @@ public sealed class StructuredMemoryRecord
     public string? OriginSessionId { get; set; }
     public string DerivedFromMemoryIdsJson { get; set; } = "[]";
     public string? MaintenanceOrigin { get; set; }
+    public string? MaintenanceAgentInstanceId { get; set; }
+    public string? MaintenanceSessionId { get; set; }
+    public string? MaintenanceWorkItemId { get; set; }
 }
