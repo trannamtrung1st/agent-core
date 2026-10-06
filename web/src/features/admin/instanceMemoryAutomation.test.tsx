@@ -267,6 +267,14 @@ describe("InstanceMemoryAutomationPanel", () => {
     expect(await screen.findByText("Trigger override")).toBeInTheDocument();
   });
 
+  it("uses the refreshed owner revision without discarding an unattended model draft", async () => {
+    const view = render(<App><InstanceMemoryAutomationPanel config={config} section="automation" /></App>);
+    await chooseSelectOption("Unattended model", "Synthetic");
+    view.rerender(<App><InstanceMemoryAutomationPanel config={{ ...config, instanceRevision: 4 }} section="automation" /></App>);
+    fireEvent.click(screen.getByRole("button", { name: "Save unattended model" }));
+    await waitFor(() => expect(setAdminUnattendedModel).toHaveBeenCalledWith(config.instanceId, 4, "synthetic-default", null));
+  });
+
   it("loads a stored unattended model and clears it only from the visible conversation default", async () => {
     vi.mocked(setAdminUnattendedModel).mockResolvedValue({
       instanceId: config.instanceId,

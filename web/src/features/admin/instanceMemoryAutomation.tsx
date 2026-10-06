@@ -87,6 +87,9 @@ function UnattendedModelForm({
   const [revision, setRevision] = useState(config.instanceRevision);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    setRevision(config.instanceRevision);
+  }, [config.instanceRevision]);
   const selected = models.find((model) => model.key === catalogKey);
   const source = catalogKey
     ? `Effective source: Unattended default (${selected?.displayName ?? catalogKey})`
@@ -113,18 +116,18 @@ function UnattendedModelForm({
   }
 
   return (
-    <Flex vertical gap={token.paddingXS} aria-label="Unattended model">
+    <Flex vertical gap={token.paddingSM} aria-label="Unattended model" className="admin-policy-form">
       <Typography.Text>{source}</Typography.Text>
       <Typography.Text type="secondary">
         Conversation default is {config.effectiveModel.displayName}. An unattended default applies to scheduled and
         reactive work unless a registration sets its own model.
       </Typography.Text>
       {error ? <Alert type="error" showIcon title={error} /> : null}
-      <ExecutionModelFields models={models} modelKey={catalogKey} reasoningEffort={effort} disabled={busy}
+      <ExecutionModelFields models={models} modelKey={catalogKey} reasoningEffort={effort} disabled={busy} showLabels
         modelLabel="Unattended model" effortLabel="Unattended reasoning effort" defaultLabel="Conversation default"
         onChange={(key, effort) => { setCatalogKey(key); setEffort(effort); }} />
       <Flex wrap gap={token.paddingXS}>
-        <Button type="primary" disabled={busy} onClick={() => void save()}>
+        <Button type="primary" loading={busy} disabled={busy} onClick={() => void save()}>
           Save unattended model
         </Button>
       </Flex>
@@ -584,35 +587,51 @@ export function InstanceMemoryAutomationPanel({ config, section }: { config: Adm
           key: "automation",
           label: "Automation",
           children: (
-            <Flex vertical gap={token.paddingSM} aria-label="Automation administration">
-              <Descriptions {...detailLayout} size="small" column={1} bordered>
-                <Descriptions.Item label="Effective trigger policy">{triggerPolicySummary(config)}</Descriptions.Item>
-              </Descriptions>
-              <UnattendedModelForm config={config} models={models} />
-              <Flex wrap gap={token.paddingXS}>
-                <Button onClick={() => void loadAutomation()} loading={automationBusy}>
-                  Review advanced registrations
-                </Button>
-              </Flex>
-              {automationError ? (
-                <AdminErrorNotice
-                  message={automationError.message}
-                  diagnosticId={automationError.diagnosticId}
-                  tone="danger"
-                />
-              ) : null}
-              {automationItems ? (
-                <Table
-                  className="admin-collection-table"
-                  scroll={{ x: 1850 }}
-                  size="small"
-                  rowKey="registrationId"
-                  dataSource={automationItems}
-                  columns={automationColumns}
-                  pagination={adminCollectionPagination}
-                  locale={{ emptyText: "No active or suspended registrations." }}
-                />
-              ) : null}
+            <Flex vertical gap={token.padding} aria-label="Automation administration">
+              <section className="admin-definition-panel" aria-label="Execution defaults">
+                <div className="admin-definition-panel-heading">
+                  <Typography.Title level={4}>Execution defaults</Typography.Title>
+                  <Typography.Text type="secondary">Model settings for scheduled and reactive work.</Typography.Text>
+                </div>
+                <Flex vertical gap={token.padding} className="admin-definition-panel-body">
+                  <Descriptions {...detailLayout} size="small" column={1} bordered>
+                    <Descriptions.Item label="Effective trigger policy">{triggerPolicySummary(config)}</Descriptions.Item>
+                  </Descriptions>
+                  <UnattendedModelForm config={config} models={models} />
+                </Flex>
+              </section>
+              <section className="admin-definition-panel" aria-label="Advanced registrations">
+                <Flex wrap align="center" justify="space-between" gap={token.paddingSM} className="admin-definition-panel-heading">
+                  <Typography.Title level={4}>Advanced registrations</Typography.Title>
+                  <Button onClick={() => void loadAutomation()} loading={automationBusy}>
+                    Review advanced registrations
+                  </Button>
+                </Flex>
+                <div className="admin-definition-panel-body">
+                  {!automationItems && !automationError ? (
+                    <Typography.Text type="secondary">Load registrations to inspect their status, model and provenance.</Typography.Text>
+                  ) : null}
+                  {automationError ? (
+                    <AdminErrorNotice
+                      message={automationError.message}
+                      diagnosticId={automationError.diagnosticId}
+                      tone="danger"
+                    />
+                  ) : null}
+                  {automationItems ? (
+                    <Table
+                      className="admin-collection-table"
+                      scroll={{ x: 1850 }}
+                      size="small"
+                      rowKey="registrationId"
+                      dataSource={automationItems}
+                      columns={automationColumns}
+                      pagination={adminCollectionPagination}
+                      locale={{ emptyText: "No active or suspended registrations." }}
+                    />
+                  ) : null}
+                </div>
+              </section>
             </Flex>
           )
         }

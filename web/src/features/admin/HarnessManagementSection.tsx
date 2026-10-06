@@ -62,12 +62,16 @@ export function HarnessManagementSection({ instanceId, onUpdated }: {
       {review ? <>
         <Flex wrap gap={token.paddingXS}><Typography.Text strong>Active version {review.activeVersion}</Typography.Text>
           <Tag>{review.policy.frozen ? "Frozen" : review.policy.mode === "Disabled" ? "Manual" : review.policy.mode}</Tag></Flex>
-        <Form layout="vertical">
+        <Form layout="vertical" className="admin-policy-form">
           <HarnessPolicyModeScopes mode={mode} scopes={scopes} busy={busy} onMode={setMode} onScopes={setScopes} />
           <Typography.Paragraph type="secondary">Managed may save knowledge and Skills automatically. Instructions and tool changes always need approval in Chat. Existing conversations keep their current version.</Typography.Paragraph>
-          <Button disabled={busy || (!changed && !review.policy.frozen) || (mode !== "Disabled" && scopes.length === 0)} onClick={() => void run("policy", {
-            expectedRevision: review.instanceRevision, mode, scopes: mode === "Disabled" ? [] : scopes, sources: [], eligibleTools: [], frozen: false
-          })}>Save authoring policy</Button>
+          <Flex wrap gap={token.paddingXS}>
+            <Button type="primary" disabled={busy || (!changed && !review.policy.frozen) || (mode !== "Disabled" && scopes.length === 0)} onClick={() => void run("policy", {
+              expectedRevision: review.instanceRevision, mode, scopes: mode === "Disabled" ? [] : scopes, sources: [], eligibleTools: [], frozen: false
+            })}>Save authoring policy</Button>
+            {enabled ? <Button disabled={busy} onClick={() => confirmAction(modal, { title: "Freeze self-management?", content: "Disable harness changes in Chat. The agent keeps using its active version.",
+              okText: "Freeze self-management", onOk: () => run("policy", { expectedRevision: review.instanceRevision, ...review.policy, mode: "Disabled", frozen: true }) })}>Freeze self-management</Button> : null}
+          </Flex>
         </Form>
         {review.policy.frozen ? <Alert type="info" showIcon title="Self-management is frozen" description="Chat continues normally. Save an enabled policy to allow new durable improvements." />
           : !enabled ? <Typography.Text type="secondary">Manual mode: Chat can discuss material without saving it to the harness.</Typography.Text> : null}
@@ -92,10 +96,8 @@ export function HarnessManagementSection({ instanceId, onUpdated }: {
             {e.limitation ? <Typography.Paragraph type="secondary">{e.limitation}</Typography.Paragraph> : null}
           </div>)}
           {!["Published", "Cancelled", "Failed"].includes(prep.status) ? <><Alert type="warning" showIcon title="Unfinished candidate" description="Discard this earlier candidate before teaching another improvement in Chat. The active version will stay unchanged." />
-            <Button disabled={busy} onClick={() => confirmAction(modal, { title: "Discard unfinished candidate?", content: "Cancel its authoring grant and pending approvals. The active version stays unchanged.", okText: "Discard candidate", onOk: () => run("cancel", { expectedRevision: review.instanceRevision }) })}>Discard unfinished candidate</Button></> : null}
+            <Flex wrap gap={token.paddingXS}><Button disabled={busy} onClick={() => confirmAction(modal, { title: "Discard unfinished candidate?", content: "Cancel its authoring grant and pending approvals. The active version stays unchanged.", okText: "Discard candidate", onOk: () => run("cancel", { expectedRevision: review.instanceRevision }) })}>Discard unfinished candidate</Button></Flex></> : null}
         </Flex> }]} /> : <Typography.Text type="secondary">No harness changes yet. Start by teaching reusable knowledge or a procedure in Chat.</Typography.Text>}
-        {enabled ? <Button disabled={busy} onClick={() => confirmAction(modal, { title: "Freeze self-management?", content: "Disable harness changes in Chat. The agent keeps using its active version.",
-          okText: "Freeze self-management", onOk: () => run("policy", { expectedRevision: review.instanceRevision, ...review.policy, mode: "Disabled", frozen: true }) })}>Freeze self-management</Button> : null}
       </> : null}
     </Flex></div>
   </section>;
