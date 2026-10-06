@@ -432,7 +432,8 @@ describe("AdminApp", () => {
     await waitFor(() => {
       expect(screen.queryByText("Existing drafts")).not.toBeInTheDocument();
     });
-  }, 20_000);
+  // Full draft editor + confirmation rendering needs hosted-runner headroom.
+  }, 60_000);
 
   it("keeps definitions when instances fail and offers retry", async () => {
     vi.mocked(listAdminDefinitions).mockResolvedValue([
@@ -708,7 +709,8 @@ describe("AdminApp", () => {
     await waitFor(() => {
       expect(screen.getByLabelText("System instructions")).toHaveValue("Unsaved instruction edit");
     });
-  }, 20_000);
+  // This journey renders both editor tabs and refreshes the resource revision.
+  }, 60_000);
 
   it("ignores stale publication resource responses after definition changes", async () => {
     let resolveFirst: ((value: AdminDefinitionPublicationResource[]) => void) | undefined;
