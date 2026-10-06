@@ -49,6 +49,37 @@ public sealed class IdentityConsolidationContractTests
 
     [Theory]
     [InlineData(false)] [InlineData(true)]
+    public async Task Experience_consolidation_rechecks_stored_ownership_before_superseding(bool sqlite)
+    {
+        await WithStores(sqlite, async (_, experiences, _) =>
+        {
+            var sources = new[] { Experience(), Experience() };
+            foreach (var source in sources) await experiences.AdmitAsync(source);
+            var otherInstance = Guid.NewGuid();
+            var otherProfile = Guid.NewGuid();
+            foreach (var fabricated in new[] {
+                sources.Select(s => s with { AgentInstanceId = otherInstance }).ToArray(),
+                sources.Select(s => s with { ProfileId = otherProfile }).ToArray() })
+            {
+                var result = Result(fabricated);
+                var conflict = await Assert.ThrowsAsync<AgentCoreException>(() => experiences.ConsolidateAsync(fabricated, result).AsTask());
+                Assert.Equal(409, conflict.StatusCode);
+                Assert.Null(await experiences.GetAsync(result.AgentInstanceId, result.ExperienceId));
+                foreach (var source in sources)
+                {
+                    var unchanged = (await experiences.GetAsync(Instance, source.ExperienceId))!;
+                    Assert.Equal(source.AgentInstanceId, unchanged.AgentInstanceId);
+                    Assert.Equal(source.ProfileId, unchanged.ProfileId);
+                    Assert.Equal(source.Revision, unchanged.Revision);
+                    Assert.Equal(ExperienceVisibility.Eligible, unchanged.Visibility);
+                    Assert.Equal(System.Text.Json.JsonSerializer.Serialize(source.Content), System.Text.Json.JsonSerializer.Serialize(unchanged.Content));
+                }
+            }
+        });
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
     public async Task Atomic_memory_reduces_capacity_preserves_lineage_and_retries(bool sqlite)
     {
         await WithStores(sqlite, async (memories, _, _) =>

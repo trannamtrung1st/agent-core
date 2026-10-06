@@ -75,6 +75,7 @@ public sealed partial class InMemoryExperienceStore
                 return ValueTask.FromResult(existing);
             }
             if (sources.Any(s => !records.TryGetValue(s.ExperienceId, out var current) || current.Revision != s.Revision
+                || current.AgentInstanceId != result.AgentInstanceId || current.ProfileId != result.ProfileId
                 || current.Visibility != ExperienceVisibility.Eligible || current.Content is null))
                 throw AgentCoreErrors.Conflict("Experience sources changed; reload before consolidating.");
             foreach (var source in sources) records[source.ExperienceId] = records[source.ExperienceId] with
