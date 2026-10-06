@@ -38,6 +38,42 @@ describe("appRoute", () => {
     );
   });
 
+  it("round-trips definition and nested instance tabs", () => {
+    for (const tab of ["versions", "drafts"] as const) {
+      expect(parseAppRoute(adminDefinitionPath("field guide", tab))).toEqual({
+        area: "admin", view: "definition", definitionId: "field guide", tab
+      });
+    }
+    const instanceId = "019944af-00d1-7000-8000-000000000001";
+    for (const tab of ["identity", "runs", "connections", "effective"] as const) {
+      expect(parseAppRoute(adminInstancePath(instanceId, tab))).toEqual({
+        area: "admin", view: "instance", instanceId, tab
+      });
+    }
+    for (const section of ["memory", "experience"] as const) {
+      expect(parseAppRoute(adminInstancePath(instanceId, "continuity", section))).toEqual({
+        area: "admin", view: "instance", instanceId, tab: "continuity", section
+      });
+    }
+    for (const section of ["schedules", "thoughts", "controls"] as const) {
+      expect(parseAppRoute(adminInstancePath(instanceId, "automation", section))).toEqual({
+        area: "admin", view: "instance", instanceId, tab: "automation", section
+      });
+    }
+  });
+
+  it("ignores unknown tabs and sections and handles malformed escaped identifiers", () => {
+    const base = "/admin/instances/019944af-00d1-7000-8000-000000000001";
+    expect(parseAppRoute(`${base}/automation/unknown`)).toEqual({
+      area: "admin", view: "instance", instanceId: base.split("/").at(-1), tab: "automation"
+    });
+    expect(parseAppRoute(`${base}/continuity/thoughts/`)).not.toHaveProperty("section");
+    expect(parseAppRoute(`${base}/unknown`)).not.toHaveProperty("tab");
+    expect(parseAppRoute("/admin/definitions/examiner/unknown")).not.toHaveProperty("tab");
+    expect(parseAppRoute("/admin/definitions/%E0%A4%A")).toEqual({ area: "chat" });
+    expect(adminInstancePath(base.split("/").at(-1)!, "runs", "thoughts")).toBe(`${base}/runs`);
+  });
+
   it("remembers the last chat url", () => {
     sessionStorage.clear();
     rememberChatUrl("/admin");

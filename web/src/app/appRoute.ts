@@ -1,16 +1,24 @@
 export type AppArea = "chat" | "admin";
 export type AdminCollection = "definitions" | "instances" | "event-sources";
 
+export const ADMIN_DEFINITION_TABS = ["versions", "drafts"] as const;
+export type AdminDefinitionTab = (typeof ADMIN_DEFINITION_TABS)[number];
+export const ADMIN_INSTANCE_TABS = ["identity", "continuity", "automation", "runs", "connections", "effective"] as const;
+export type AdminInstanceTab = (typeof ADMIN_INSTANCE_TABS)[number];
+export const ADMIN_CONTINUITY_TABS = ["memory", "experience"] as const;
+export const ADMIN_AUTOMATION_TABS = ["schedules", "thoughts", "controls"] as const;
+export type AdminInstanceSection = (typeof ADMIN_CONTINUITY_TABS)[number] | (typeof ADMIN_AUTOMATION_TABS)[number];
+
 export type AdminRoute =
   | { area: "admin"; view: "home"; collection?: AdminCollection }
-  | { area: "admin"; view: "definition"; definitionId: string }
-  | { area: "admin"; view: "instance"; instanceId: string };
+  | { area: "admin"; view: "definition"; definitionId: string; tab?: AdminDefinitionTab }
+  | { area: "admin"; view: "instance"; instanceId: string; tab?: AdminInstanceTab; section?: AdminInstanceSection };
 
 export type AppRoute = { area: "chat" } | AdminRoute;
 
 const ADMIN_HOME = "/admin";
-const ADMIN_DEFINITION_PATTERN = /^\/admin\/definitions\/([^/]+)\/?$/i;
-const ADMIN_INSTANCE_PATTERN = /^\/admin\/instances\/([0-9a-f-]{36})\/?$/i;
+const ADMIN_DEFINITION_PATTERN = /^\/admin\/definitions\/([^/]+)(?:\/([^/]+))?\/?$/i;
+const ADMIN_INSTANCE_PATTERN = /^\/admin\/instances\/([0-9a-f-]{36})(?:\/([^/]+)(?:\/([^/]+))?)?\/?$/i;
 
 export function parseAppRoute(pathname: string): AppRoute {
   if (pathname === ADMIN_HOME || pathname === `${ADMIN_HOME}/`) {
@@ -23,12 +31,21 @@ export function parseAppRoute(pathname: string): AppRoute {
 
   const definitionMatch = ADMIN_DEFINITION_PATTERN.exec(pathname);
   if (definitionMatch) {
-    return { area: "admin", view: "definition", definitionId: decodeURIComponent(definitionMatch[1]) };
+    let definitionId: string;
+    try { definitionId = decodeURIComponent(definitionMatch[1]); }
+    catch { return { area: "chat" }; }
+    const tab = definitionMatch[2]?.toLowerCase();
+    return { area: "admin", view: "definition", definitionId,
+      ...(ADMIN_DEFINITION_TABS.includes(tab as AdminDefinitionTab) ? { tab: tab as AdminDefinitionTab } : {}) };
   }
 
   const instanceMatch = ADMIN_INSTANCE_PATTERN.exec(pathname);
   if (instanceMatch) {
-    return { area: "admin", view: "instance", instanceId: instanceMatch[1].toLowerCase() };
+    const tab = instanceMatch[2]?.toLowerCase();
+    const section = instanceMatch[3]?.toLowerCase();
+    return { area: "admin", view: "instance", instanceId: instanceMatch[1].toLowerCase(),
+      ...(ADMIN_INSTANCE_TABS.includes(tab as AdminInstanceTab) ? { tab: tab as AdminInstanceTab } : {}),
+      ...(isInstanceSection(tab, section) ? { section: section as AdminInstanceSection } : {}) };
   }
 
   return { area: "chat" };
@@ -38,12 +55,18 @@ export function adminHomePath(collection: AdminCollection = "definitions"): stri
   return collection === "definitions" ? ADMIN_HOME : `${ADMIN_HOME}/${collection}`;
 }
 
-export function adminDefinitionPath(definitionId: string): string {
-  return `/admin/definitions/${encodeURIComponent(definitionId)}`;
+export function adminDefinitionPath(definitionId: string, tab?: AdminDefinitionTab): string {
+  return `/admin/definitions/${encodeURIComponent(definitionId)}${tab ? `/${tab}` : ""}`;
 }
 
-export function adminInstancePath(instanceId: string): string {
-  return `/admin/instances/${instanceId.toLowerCase()}`;
+function isInstanceSection(tab: string | undefined, section: string | undefined): boolean {
+  return section !== undefined && (tab === "continuity"
+    ? ADMIN_CONTINUITY_TABS.some(value => value === section)
+    : tab === "automation" && ADMIN_AUTOMATION_TABS.some(value => value === section));
+}
+
+export function adminInstancePath(instanceId: string, tab?: AdminInstanceTab, section?: AdminInstanceSection): string {
+  return `/admin/instances/${instanceId.toLowerCase()}${tab ? `/${tab}` : ""}${isInstanceSection(tab, section) ? `/${section}` : ""}`;
 }
 
 const LAST_CHAT_URL_KEY = "agent-core:last-chat-url";

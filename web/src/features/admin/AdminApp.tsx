@@ -100,7 +100,10 @@ import {
   navigateToAppPath,
   rememberChatUrl,
   type AdminRoute,
-  type AdminCollection
+  type AdminCollection,
+  type AdminDefinitionTab,
+  type AdminInstanceTab,
+  type AdminInstanceSection
 } from "../../app/appRoute";
 import { confirmAction } from "../../app/confirmAction";
 import { AdminDeletionBlockedAlert } from "./adminDeletionBlocked";
@@ -351,16 +354,17 @@ export function AdminApp({ route }: { route: AdminRoute }) {
     void reloadInventory();
   }, [reloadInventory]);
 
+  const routedInstanceId = route.view === "instance" ? route.instanceId : undefined;
   useEffect(() => {
-    if (route.view !== "instance") {
+    if (!routedInstanceId) {
       ++effectiveRequest.current;
       setEffectiveConfig({ kind: "loading" });
       return;
     }
 
-    void reloadEffectiveConfig(route.instanceId);
+    void reloadEffectiveConfig(routedInstanceId);
     return () => { ++effectiveRequest.current; };
-  }, [route, reloadEffectiveConfig]);
+  }, [routedInstanceId, reloadEffectiveConfig]);
 
   const returnToChat = () => {
     navigateToAppPath(lastChatUrl(), true);
@@ -485,6 +489,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
           <DefinitionDetail
             key={route.definitionId}
             definitionId={route.definitionId}
+            tab={route.tab}
             definitions={definitions}
             onBack={() => navigateToAppPath(adminHomePath())}
             onRetryDefinitions={reloadDefinitions}
@@ -499,6 +504,8 @@ export function AdminApp({ route }: { route: AdminRoute }) {
           <InstanceDetail
             key={route.instanceId}
             instanceId={route.instanceId}
+            tab={route.tab}
+            section={route.section}
             instances={instances}
             effective={effectiveConfig}
             onBack={() => navigateToAppPath(adminHomePath("instances"))}
@@ -891,12 +898,14 @@ function InventorySection({
 
 function DefinitionDetail({
   definitionId,
+  tab,
   definitions,
   onBack,
   onRetryDefinitions,
   onDeleted
 }: {
   definitionId: string;
+  tab?: AdminDefinitionTab;
   definitions: LoadState<AdminDefinitionInventoryItem[]>;
   onBack: () => void;
   onRetryDefinitions: () => Promise<void>;
@@ -904,12 +913,17 @@ function DefinitionDetail({
 }) {
   const { message, modal } = App.useApp();
   const { token } = theme.useToken();
-  const [detailTab, setDetailTab] = useState("versions");
+  const [detailTab, updateDetailTab] = useState<AdminDefinitionTab>(tab ?? "versions");
+  const setDetailTab = useCallback((next: AdminDefinitionTab) => {
+    updateDetailTab(next);
+    const path = adminDefinitionPath(definitionId, next);
+    if (window.location.pathname !== path) navigateToAppPath(path);
+  }, [definitionId]);
   const rows = definitions.kind === "ready"
     ? definitions.data.filter((item) => item.definitionId === definitionId)
     : [];
   const group = rows.length > 0 ? groupDefinitionInventory(rows)[0] : null;
-  useEffect(() => { if (group?.draftOnly) setDetailTab("drafts"); }, [group?.draftOnly]);
+  useEffect(() => { updateDetailTab(tab ?? (group?.draftOnly ? "drafts" : "versions")); }, [tab, group?.draftOnly]);
   const [lifecycleLoading, setLifecycleLoading] = useState(false);
   const [lifecycleError, setLifecycleErrorValue] = useState<string | null>(null);
   const [lifecycleDiagnosticId, setLifecycleDiagnosticId] = useState<string | null>(null);
@@ -930,6 +944,20 @@ function DefinitionDetail({
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [editorView, setEditorView] = useState<DefinitionEditorView>("form");
   const [busy, setBusy] = useState(false);
+  const draftRead = useRef({ sequence: 0, pending: false });
+  useEffect(() => {
+    const cancelPendingDraftRead = () => {
+      if (!draftRead.current.pending) return;
+      ++draftRead.current.sequence;
+      draftRead.current.pending = false;
+      setBusy(false);
+    };
+    window.addEventListener("popstate", cancelPendingDraftRead);
+    return () => {
+      ++draftRead.current.sequence;
+      window.removeEventListener("popstate", cancelPendingDraftRead);
+    };
+  }, []);
   const editorSurfaceRef = useRef<HTMLElement | null>(null);
   const openedUnpublishedDraftRef = useRef(false);
 
@@ -1029,24 +1057,34 @@ function DefinitionDetail({
     loadCandidate({});
   };
 
-  const selectDraft = useCallback(async (draftId: string) => {
+  const selectDraft = useCallback(async (draftId: string, updatePath = true) => {
+    const sequence = ++draftRead.current.sequence;
+    draftRead.current.pending = true;
     setBusy(true);
     setLifecycleError(null);
     try {
       const draft = await getAdminDefinitionDraft(draftId);
-      setDetailTab("drafts");
+      if (sequence !== draftRead.current.sequence) return;
+      // This read is complete; its own tab navigation must not cancel it.
+      draftRead.current.pending = false;
+      if (updatePath) setDetailTab("drafts");
+      else updateDetailTab("drafts");
       setActiveDraft(draft);
       loadCandidate(draft.candidate);
     } catch (error) {
-      reportLifecycleError(error, "Failed to load draft.");
+      if (sequence === draftRead.current.sequence) reportLifecycleError(error, "Failed to load draft.");
     } finally {
-      setBusy(false);
+      if (sequence === draftRead.current.sequence) {
+        draftRead.current.pending = false;
+        setBusy(false);
+      }
     }
-  }, [loadCandidate]);
+  }, [loadCandidate, setDetailTab]);
 
   useEffect(() => {
     if (
       definitions.kind !== "ready"
+      || tab !== undefined
       || (group !== null && !group.draftOnly)
       || openedUnpublishedDraftRef.current
       || activeDraft
@@ -1055,8 +1093,8 @@ function DefinitionDetail({
       return;
     }
     openedUnpublishedDraftRef.current = true;
-    void selectDraft(draftSummaries[0].draftId);
-  }, [definitions.kind, group, activeDraft, draftSummaries, selectDraft]);
+    void selectDraft(draftSummaries[0].draftId, false);
+  }, [definitions.kind, group, activeDraft, draftSummaries, selectDraft, tab]);
 
   const deleteLogicalDefinition = async () => {
     setBusy(true);
@@ -1320,7 +1358,7 @@ function DefinitionDetail({
       {definitions.kind === "ready" && !group && !lifecycleLoading && draftSummaries.length === 0 ? (
         <Result status="404" title="Definition not found" />
       ) : null}
-      {(group || draftSummaries.length > 0) && activeDraft ? (
+      {(group || draftSummaries.length > 0) && activeDraft && detailTab === "drafts" ? (
         <section ref={editorSurfaceRef} className="admin-draft-focused" aria-label="Draft editor">
           <Flex align="center" justify="space-between" gap={12} wrap="wrap" className="admin-draft-focused-toolbar">
             {dirty ? (
@@ -1430,7 +1468,7 @@ function DefinitionDetail({
               ) : null}
               {lifecycleLoading ? <Spin className="admin-draft-status" /> : null}
               <Tabs className="admin-draft-tabs" activeKey={detailTab}
-                onChange={setDetailTab} items={[
+                onChange={key => setDetailTab(key as AdminDefinitionTab)} items={[
                   { key: "versions", label: "Versions", children: <>
                     {group && !group.draftOnly ? (
                       <DefinitionVersionsTable key={definitionId}
@@ -2249,6 +2287,8 @@ function InstanceIdentityTags({
 
 export function InstanceDetail({
   instanceId,
+  tab,
+  section,
   instances,
   effective,
   onBack,
@@ -2257,6 +2297,8 @@ export function InstanceDetail({
   onInstanceDeleted
 }: {
   instanceId: string;
+  tab?: AdminInstanceTab;
+  section?: AdminInstanceSection;
   instances: LoadState<AdminInstanceInventoryItem[]>;
   effective: EffectiveConfigLoadState;
   onBack: () => void;
@@ -2265,31 +2307,48 @@ export function InstanceDetail({
   onInstanceDeleted: () => void;
 }) {
   const { token } = theme.useToken();
-  const [activeTab, setActiveTab] = useState("identity");
+  const [activeTab, updateActiveTab] = useState<AdminInstanceTab>(tab ?? "identity");
   const [continuityTab, setContinuityTab] = useState("memory");
   const [automationTab, setAutomationTab] = useState("schedules");
   const [sourceSelection, setSourceSelection] = useState<AutomationSelection>();
   const [experienceSelection, setExperienceSelection] = useState<ExperienceSelection>();
   const [eventSelection, setEventSelection] = useState<{ registrationId: string; request: number }>();
   const [selectedWorkItemId, setSelectedWorkItemId] = useState<string>();
-  useEffect(() => { setActiveTab("identity"); setSourceSelection(undefined); setExperienceSelection(undefined); setEventSelection(undefined); setSelectedWorkItemId(undefined); setContinuityTab("memory"); setAutomationTab("schedules"); }, [instanceId]);
+  useEffect(() => {
+    updateActiveTab(tab ?? "identity");
+    if (tab === "continuity") setContinuityTab(section ?? "memory");
+    if (tab === "automation") setAutomationTab(section ?? "schedules");
+  }, [instanceId, tab, section]);
+  useEffect(() => { setSourceSelection(undefined); setExperienceSelection(undefined); setEventSelection(undefined); setSelectedWorkItemId(undefined); }, [instanceId]);
+  const setActiveTab = (next: AdminInstanceTab, selectedSection?: AdminInstanceSection) => {
+    const nextSection = selectedSection ?? (next === "continuity" ? continuityTab : next === "automation" ? automationTab : undefined);
+    updateActiveTab(next);
+    if (next === "continuity" && nextSection) setContinuityTab(nextSection);
+    if (next === "automation" && nextSection) setAutomationTab(nextSection);
+    navigateToAppPath(adminInstancePath(instanceId, next, nextSection as AdminInstanceSection | undefined));
+  };
   const viewRun = (workId?: string) => { setSelectedWorkItemId(workId); setActiveTab("runs"); };
   const viewSource = (source: RunSource) => {
     if (source.kind === "event") {
       setEventSelection({ registrationId: source.registrationId, request: Date.now() }); setActiveTab("connections"); return;
     }
     if (source.kind === "retrospection") {
-      setExperienceSelection({ workItemId: source.workItemId, request: Date.now() }); setContinuityTab("experience"); setActiveTab("continuity"); return;
+      setExperienceSelection({ workItemId: source.workItemId, request: Date.now() }); setActiveTab("continuity", "experience"); return;
     }
     setSourceSelection({ ...source, request: Date.now() });
-    setAutomationTab(source.kind === "schedule" ? "schedules" : "thoughts");
-    setActiveTab("automation");
+    setActiveTab("automation", source.kind === "schedule" ? "schedules" : "thoughts");
   };
   const row = instances.kind === "ready"
     ? instances.data.find((item) => item.instanceId.toLowerCase() === instanceId.toLowerCase())
     : undefined;
 
   const resolved = effective.data?.instanceId === instanceId ? effective.data : null;
+  useEffect(() => {
+    if (!resolved || !tab) return;
+    const availableTab = resolved.compatibility && tab !== "connections" ? "effective"
+      : resolved.instanceLifecycle !== "Active" && tab === "automation" ? "identity" : tab;
+    if (availableTab !== tab) navigateToAppPath(adminInstancePath(instanceId, availableTab), true);
+  }, [resolved, instanceId, tab]);
   const headerIdentity = resolved
     ? {
         compatibility: resolved.compatibility,
@@ -2343,7 +2402,7 @@ export function InstanceDetail({
             className="admin-draft-tabs admin-instance-tabs"
             activeKey={resolved.compatibility && activeTab !== "connections" ? "effective"
               : resolved.instanceLifecycle !== "Active" && activeTab === "automation" ? "identity" : activeTab}
-            onChange={setActiveTab}
+            onChange={key => setActiveTab(key as AdminInstanceTab)}
             items={[
               ...(!resolved.compatibility ? [{
                 key: "identity",
@@ -2352,7 +2411,7 @@ export function InstanceDetail({
               }] : []),
               ...(!resolved.compatibility ? [{
                 key: "continuity", label: "Continuity",
-                children: <Flex vertical gap={token.padding}>{resolved.instanceLifecycle === "Active" ? <IdentityMaintenanceSection instanceId={instanceId} /> : null}<Tabs activeKey={continuityTab} onChange={setContinuityTab} aria-label="Continuity sections" items={[
+                children: <Flex vertical gap={token.padding}>{resolved.instanceLifecycle === "Active" ? <IdentityMaintenanceSection instanceId={instanceId} /> : null}<Tabs activeKey={continuityTab} onChange={key => setActiveTab("continuity", key as AdminInstanceSection)} aria-label="Continuity sections" items={[
                   { key: "memory", label: "Memory", children: <InstanceMemoryAutomationPanel config={resolved} section="memory" /> },
                   { key: "experience", label: "Experience", children: resolved.instanceLifecycle === "Active" ? <ExperienceSection instanceId={instanceId} active={activeTab === "continuity" && continuityTab === "experience"} onWork={viewRun} selection={activeTab === "continuity" && continuityTab === "experience" ? experienceSelection : undefined} /> : <Alert type="info" showIcon title="Experience is available when this instance is active" description="Unarchive the instance from Identity & version to inspect its experience." /> }
                 ]} /></Flex>
@@ -2361,7 +2420,7 @@ export function InstanceDetail({
                 key: "automation", label: "Automation",
                 children: <Flex vertical gap={16}>
                   <Typography.Text type="secondary">A Schedule or Thought produces a Run when it fires. Core decides how that run is executed.</Typography.Text>
-                  <Tabs activeKey={automationTab} onChange={setAutomationTab} aria-label="Automation sections" items={[
+                  <Tabs activeKey={automationTab} onChange={key => setActiveTab("automation", key as AdminInstanceSection)} aria-label="Automation sections" items={[
                     { key: "schedules", label: "Schedules", children: <InstanceSchedulesSection instanceId={instanceId} active={activeTab === "automation" && automationTab === "schedules"} onWork={viewRun} selection={activeTab === "automation" ? sourceSelection : undefined} /> },
                     { key: "thoughts", label: "Thoughts", children: <ThoughtSection instanceId={instanceId} active={activeTab === "automation" && automationTab === "thoughts"} onWork={viewRun} selection={activeTab === "automation" ? sourceSelection : undefined} /> },
                     { key: "controls", label: "Policies & models", children: <Flex vertical gap={16}>
