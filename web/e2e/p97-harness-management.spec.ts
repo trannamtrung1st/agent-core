@@ -114,17 +114,35 @@ test('Managed instruction changes still require approval in Chat',async({page})=
   await expect(page.getByText(/Nothing was saved/).last()).toBeVisible();expect((await review(page,id)).activeVersion).toBe(7);
 });
 
-test('A stale Chat approval cannot adopt and a fresh operation recovers',async({page})=>{
-  const id=await create(page,'Conflict learning','Assisted');await send(page,learn);
-  const approval=page.getByRole('dialog',{name:'Save this harness change?'});await expect(approval).toBeVisible();
-  const before=await review(page,id);const owner=await page.evaluate(()=>localStorage.getItem('agent-core.owner-capability'));
-  const changed=await page.request.put(`/api/v2/admin/agent-instances/${id}/harness/policy`,{headers:{'X-AgentCore-Owner-Capability':owner!},
-    data:{expectedRevision:before.instanceRevision,...before.policy}});expect(changed.ok()).toBe(true);
-  await approval.getByRole('button',{name:'Approve',exact:true}).click();
-  await expect(approval).toBeHidden();
-  await expect(page.getByText(/Nothing was saved/).last()).toBeVisible();
-  await expect(page.getByTestId('connection')).toHaveText('Ready');
-  expect((await review(page,id)).activeVersion).toBe(7);
-  await send(page,learn);await expect(approval).toBeVisible();await approval.getByRole('button',{name:'Approve',exact:true}).click();
-  await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible();expect((await review(page,id)).activeVersion).toBeGreaterThan(7);
+test('A stale Chat approval cannot adopt and a fresh operation recovers', async ({ page }) => {
+  // Both approval rounds must have room for their bounded completion waits.
+  test.setTimeout(90_000);
+  const id = await create(page, 'Conflict learning', 'Assisted');
+  await send(page, learn);
+  const approval = page.getByRole('dialog', { name: 'Save this harness change?' });
+  await expect(approval).toBeVisible({ timeout: 30_000 });
+  const policyRevision = approval.getByRole('listitem').filter({ hasText: 'Policy revision' });
+  const before = await review(page, id);
+  await expect(policyRevision).toHaveText(`Policy revision: ${before.policyRevision}`);
+  const owner = await page.evaluate(() => localStorage.getItem('agent-core.owner-capability'));
+  const changed = await page.request.put(`/api/v2/admin/agent-instances/${id}/harness/policy`, {
+    headers: { 'X-AgentCore-Owner-Capability': owner! },
+    data: { expectedRevision: before.instanceRevision, ...before.policy }
+  });
+  expect(changed.ok()).toBe(true);
+  const refreshed = await review(page, id);
+  expect(refreshed.policyRevision).toBeGreaterThan(before.policyRevision);
+  await approval.getByRole('button', { name: 'Approve', exact: true }).click();
+  await expect(approval).toBeHidden({ timeout: 20_000 });
+  await expect(page.getByText(/Nothing was saved/).last()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('connection')).toHaveText('Ready', { timeout: 20_000 });
+  expect((await review(page, id)).activeVersion).toBe(7);
+
+  await send(page, learn);
+  await expect(approval).toBeVisible({ timeout: 30_000 });
+  await expect(policyRevision).toHaveText(`Policy revision: ${refreshed.policyRevision}`);
+  await approval.getByRole('button', { name: 'Approve', exact: true }).click();
+  await expect(approval).toBeHidden({ timeout: 20_000 });
+  await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible({ timeout: 30_000 });
+  expect((await review(page, id)).activeVersion).toBeGreaterThan(7);
 });
