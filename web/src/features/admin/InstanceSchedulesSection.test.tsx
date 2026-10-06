@@ -121,23 +121,32 @@ describe("Owner schedule authoring", () => {
   });
   it("opens the exact source beyond pagination without discarding an editor draft", async () => {
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
-    const rows = Array.from({ length: 12 }, (_, index) => ({ ...row, registrationId: `schedule-${index}`, intent: `Task ${index}`, lastWorkItemId: `run-${index}` }));
+    const rows = Array.from({ length: 12 }, (_, index) => ({ ...row, registrationId: `schedule-${index}`, intent: `Task ${index}`,
+      lastWorkItemId: index === 11 ? "run-11" : null }));
     request.mockResolvedValue({ items: rows });
     const onWork = vi.fn();
     const ui = (selection?: { kind: "schedule"; registrationId: string; request: number }) => <ConfigProvider><App>
       <InstanceSchedulesSection instanceId="instance" onWork={onWork} selection={selection} /></App></ConfigProvider>;
     const view = render(ui());
-    await screen.findByRole("button", { name: "View schedule: Task 0" });
-    fireEvent.click(screen.getByRole("button", { name: "New schedule" }));
-    fireEvent.change(screen.getByLabelText("Schedule task"), { target: { value: "Unsaved task" } });
-    fireEvent.change(screen.getByRole("textbox", { name: "Search schedules" }), { target: { value: "Task 0" } });
+    const section = within(screen.getByRole("region", { name: "Schedules", hidden: true }));
+    // Exact accessible labels avoid repeatedly computing names/styles for every
+    // AntD table button. The selected source still has an explicit visibility check.
+    await section.findByLabelText("View schedule: Task 0");
+    expect(section.queryByLabelText("View schedule: Task 11")).not.toBeInTheDocument();
+    // Filter before opening the editor, retaining the same draft/source scenario
+    // without rerendering ten unrelated table rows for each form keystroke.
+    fireEvent.change(section.getByLabelText("Search schedules"), { target: { value: "Task 0" } });
+    fireEvent.click(section.getByText("New schedule", { exact: true }).closest("button")!);
+    fireEvent.change(section.getByLabelText("Schedule task"), { target: { value: "Unsaved task" } });
     view.rerender(ui({ kind: "schedule", registrationId: "schedule-11", request: 1 }));
-    const source = await screen.findByRole("button", { name: "View schedule: Task 11" });
+    const source = await section.findByLabelText("View schedule: Task 11");
     await waitFor(() => expect(source).toHaveAttribute("aria-expanded", "true"));
-    expect(screen.getByLabelText("Schedule task")).toHaveValue("Unsaved task");
-    expect(screen.getByRole("textbox", { name: "Search schedules" })).toHaveValue("");
-    expect(screen.getByText("Originally created from")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "View last run" }));
+    expect(source).toBeVisible();
+    expect(section.getByLabelText("Schedule task")).toHaveValue("Unsaved task");
+    expect(section.getByLabelText("Search schedules")).toHaveValue("");
+    const details = within(section.getByRole("region", { name: "Schedule details", hidden: true }));
+    expect(details.getByText("Originally created from")).toBeVisible();
+    fireEvent.click(details.getByText("View last run", { exact: true }).closest("button")!);
     expect(onWork).toHaveBeenCalledWith("run-11");
   });
 
