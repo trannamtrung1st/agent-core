@@ -20,8 +20,10 @@ namespace AgentCore.Application.Tests;
 
 public sealed class TerminalDisplayRepairTests
 {
-    [Fact]
-    public async Task Substantial_workspace_document_materializes_and_follow_up_note_repairs_native_invalid_blocks()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Substantial_workspace_document_materializes_and_follow_up_note_repairs_invalid_blocks(bool structured)
     {
         var root = Path.Combine(Path.GetTempPath(), $"agent-core-block-repair-{Guid.NewGuid():N}");
         try
@@ -29,7 +31,7 @@ public sealed class TerminalDisplayRepairTests
             var workspace = new FileSessionWorkspace(Path.Combine(root, "ws"), Path.Combine(root, "templates"));
             var artifacts = new InMemoryArtifactStore(TimeProvider.System);
             var document = string.Concat(Enumerable.Repeat("# Scrum playbook\nObserve the current evidence before making changes.\n", 1_500));
-            var inner = new DocumentModel(document);
+            var inner = new DocumentModel(document, structured);
             var model = new SemanticResponseLanguageModel(inner);
             var executor = new SessionToolExecutor(workspace: workspace, artifacts: artifacts, configurationGate: ToolConfigurationGates.AllowAll);
             await using var runtime = CreateCore(model, null, null,
@@ -42,6 +44,8 @@ public sealed class TerminalDisplayRepairTests
             var artifact = Assert.Single(await artifacts.ListAsync(runtime.SessionId));
             Assert.Equal(artifact.ArtifactId.ToString(), Assert.Single(first.Envelope!.Blocks).ArtifactId);
             Assert.True(artifact.ByteSize > 64 * 1024);
+            Assert.DoesNotContain("[[", first.Text, StringComparison.Ordinal);
+            Assert.DoesNotContain("[Unavailable artifact]", first.Text, StringComparison.Ordinal);
             Assert.True(await runtime.SubmitUserTextAsync("Write this down as a note first."));
             await runtime.WaitUntilIdleAsync();
             var answers = runtime.Snapshot.Entries.Where(e => e.Role == ConversationRole.Assistant).ToArray();
@@ -555,9 +559,9 @@ public sealed class TerminalDisplayRepairTests
     private static SessionRuntime Create(ILanguageModel model, IBrowserSession? browser, params string[] tools) =>
         Create(model, browser, clock: null, tools);
 
-    private sealed class DocumentModel(string document) : ILanguageModel
+    private sealed class DocumentModel(string document, bool structured) : ILanguageModel
     {
-        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: structured);
         public List<ModelRequest> Requests { get; } = [];
         public List<string> ToolCalls { get; } = [];
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
@@ -592,8 +596,16 @@ public sealed class TerminalDisplayRepairTests
                     text = """{"disposition":"Complete","action":{"kind":"chat.respond"},"displayText":"Saved the note.","speech":{"mode":"same"},"memory":[],"blocks":[{"kind":"widget"}]}""";
                 else
                     text = "Saved the note in notes.md.";
-                yield return new ModelTextDelta(text);
-                yield return new ModelCompleted(ModelStopReason.Completed);
+                if (!structured && Requests.Count is 3 or 5)
+                {
+                    yield return new ModelToolCallEvent(new("response", AssistantResponseSchema.ResponseFunctionName, text));
+                    yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                }
+                else
+                {
+                    yield return new ModelTextDelta(text);
+                    yield return new ModelCompleted(ModelStopReason.Completed);
+                }
             }
             await Task.CompletedTask;
         }

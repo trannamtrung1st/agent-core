@@ -25,6 +25,44 @@ public sealed class SemanticResponseLanguageModelTests
         Assert.Contains(AssistantResponseSchema.ArtifactReferenceInstruction, AssistantResponseSchema.CompatibilityInstruction(contract), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Function_and_marker_protocols_have_separate_guidance_and_typed_artifact_blocks(bool direct)
+    {
+        var contract = new ModelResponseContract(SpeechWillBeUsed: false, RequireChatResponse: direct);
+        var function = AssistantResponseSchema.CompatibilityInstruction(contract, responseFunction: true);
+        var marker = AssistantResponseSchema.CompatibilityInstruction(contract, responseFunction: false);
+        Assert.Contains("agent_core_respond", function, StringComparison.Ordinal);
+        Assert.Contains(AssistantResponseSchema.ArtifactReferenceInstruction, function, StringComparison.Ordinal);
+        Assert.Contains("typed artifactReference block", function, StringComparison.Ordinal);
+        Assert.Contains("memory proposals in memory", function, StringComparison.Ordinal);
+        Assert.Contains("never place compatibility control markers in displayText or ordinary output", function, StringComparison.Ordinal);
+        Assert.DoesNotContain("plain-text channel", function, StringComparison.Ordinal);
+        foreach (var syntax in new[] { "[[speech:", "[[memory:", "[[artifact:", "[[attachment:", "[[md:" })
+        {
+            Assert.DoesNotContain(syntax, function, StringComparison.Ordinal);
+            Assert.Contains(syntax, marker, StringComparison.Ordinal);
+        }
+        Assert.Contains(AssistantResponseSchema.ArtifactReferenceInstruction, marker, StringComparison.Ordinal);
+        using var schema = System.Text.Json.JsonDocument.Parse(AssistantResponseSchema.JsonSchemaFor(contract));
+        Assert.Contains(schema.RootElement.GetProperty("required").EnumerateArray(), p => p.GetString() == "blocks");
+        Assert.Contains(schema.RootElement.GetProperty("properties").GetProperty("blocks").GetProperty("items")
+            .GetProperty("properties").GetProperty("kind").GetProperty("enum").EnumerateArray(), p => p.GetString() == "artifactReference");
+        const string json = """{"disposition":"Complete","action":{"kind":"chat.respond"},"displayText":"Saved the document.","speech":{"mode":"same","text":null},"blocks":[{"kind":"artifactReference","artifactId":"artifact-1","text":null,"attachmentId":null}],"memory":[]}""";
+        var inner = new ScriptedInner([new ModelToolCallEvent(new("response", AssistantResponseSchema.ResponseFunctionName, json)),
+            new ModelCompleted(ModelStopReason.ToolCalls)], structured: false, tools: true);
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Bare with { ResponseContract = contract });
+        Assert.Contains(inner.LastRequest!.Messages, m => m.Role == ModelRole.System && m.Text == function);
+        var response = Assert.Single(events.OfType<ModelSemanticResponseReady>()).Response;
+        Assert.Equal("Saved the document.", response.DisplayText);
+        Assert.DoesNotContain("[[", response.DisplayText, StringComparison.Ordinal);
+        var block = Assert.Single(response.Blocks);
+        Assert.Equal(ModelResponseBlockKind.ArtifactReference, block.Kind);
+        Assert.Equal("artifact-1", block.ArtifactId);
+        Assert.DoesNotContain(events, e => e is ModelToolCallEvent or ModelFailed);
+    }
+
     private static readonly ModelResponseContract Contract = new(SpeechWillBeUsed: false);
     private static readonly ModelRequest Bare = new(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Hi")]);
     private static readonly ModelRequest Contracted = Bare with { ResponseContract = Contract };
@@ -753,7 +791,7 @@ public sealed class SemanticResponseLanguageModelTests
     public async Task Compatibility_plain_text_defaults_to_complete_chat_respond()
     {
         var inner = new ScriptedInner(
-            [new ModelTextDelta("Hello."), new ModelCompleted(ModelStopReason.Completed)]);
+            [new ModelTextDelta("Hello."), new ModelCompleted(ModelStopReason.Completed)], tools: false);
         var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
         var ready = Assert.Single(events.OfType<ModelSemanticResponseReady>()).Response;
         Assert.Equal("Hello.", ready.DisplayText);

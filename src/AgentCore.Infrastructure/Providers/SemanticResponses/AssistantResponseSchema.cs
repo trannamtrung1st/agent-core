@@ -11,30 +11,30 @@ internal static class AssistantResponseSchema
     public const int MaxBlocks = 32;
     public const int MaxBlockCharacters = 16 * 1024;
 
-    public const string CompatibilityInstructionPrefix =
-        "Infrastructure output format: write the visible answer as ordinary text. ";
+    public const string CompatibilityInstructionPrefix = "Infrastructure output format: ";
 
-    public static string CompatibilityInstruction(ModelResponseContract contract, bool responseFunction = false)
+    public static string CompatibilityInstruction(ModelResponseContract contract, bool responseFunction = false) =>
+        responseFunction ? ResponseFunctionInstruction(contract) : MarkerCompatibilityInstruction(contract);
+
+    private static string ResponseFunctionInstruction(ModelResponseContract contract) =>
+        CompatibilityInstructionPrefix
+        + "Call agent_core_respond for the terminal semantic response. "
+        + "Put rich content in blocks, speech in speech, and memory proposals in memory. "
+        + "Represent artifacts with a typed artifactReference block containing the returned artifactId. "
+        + "displayText is ordinary display text; never place compatibility control markers in displayText or ordinary output. "
+        + "Do not include hidden reasoning. "
+        + ResponseFunctionDescription(contract);
+
+    private static string MarkerCompatibilityInstruction(ModelResponseContract contract)
     {
         var speech = contract.SpeechWillBeUsed
-            ? responseFunction
-                ? "agent_core_respond must contain speech. Normally use {\"mode\":\"same\",\"text\":null}. Use {\"mode\":\"none\",\"text\":null} only when the answer should not be spoken. Use {\"mode\":\"custom\",\"text\":\"...\"} only when spoken wording must differ from displayText. "
-                : "A spoken projection may be needed; omit [[speech:...]] when the display is natural to say aloud. "
-            : responseFunction
-                ? "This is a text turn. agent_core_respond speech must be {\"mode\":\"same\",\"text\":null}. Do not copy displayText into speech.text. "
-                : "Omit [[speech:...]] unless spoken wording must differ from the display. ";
-        var memory = responseFunction
-            ? $"Call {ResponseFunctionName} with the structured answer. That call is the reliable memory proposal channel. [[memory:...]] alone is best effort. "
-            : "[[memory:...]] is best effort only. Do not claim that memory was saved. ";
-        var agentStep = responseFunction
-            ? contract.RequireChatResponse
-                ? "This is a direct user chat request: finish with disposition Complete or Continue and action chat.respond with non-empty displayText (never whitespace-only). action null and Wait are not valid for this request. Continue delivers chat.respond once when present and does not start another generation. "
-                : "For a normal user request: use available tools and Skills as needed; finish with disposition Complete and action chat.respond. chat.respond MUST include non-empty displayText (never whitespace-only). Use action null only when this step intentionally delivers no Chat. Wait only for a real external waiting condition—not because work is long, difficult, or unfinished. Continue does not request another model turn. "
-            : string.Empty;
+            ? "A spoken projection may be needed; omit [[speech:...]] when the display is natural to say aloud. "
+            : "Omit [[speech:...]] unless spoken wording must differ from the display. ";
         var terminal = contract.RequireChatResponse
             ? "This plain-text channel requires Complete or Continue with one chat.respond. "
             : "This plain-text channel is Complete with one chat.respond. ";
         return CompatibilityInstructionPrefix
+            + "write the visible answer as ordinary text. "
             + speech
             + "Optional custom speech uses [[speech:<spoken text>]] immediately before display text. "
             + "Use [[speech:none]] when the answer must stay visual-only. "
@@ -42,8 +42,7 @@ internal static class AssistantResponseSchema
             + ArtifactReferenceInstruction + " "
             + "Do not include hidden reasoning. Do not emit JSON. "
             + terminal
-            + agentStep
-            + memory;
+            + "[[memory:...]] is best effort only. Do not claim that memory was saved. ";
     }
 
     public const string ResponseFunctionName = "agent_core_respond";
