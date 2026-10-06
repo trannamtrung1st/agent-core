@@ -28,4 +28,6 @@ Both disposable hosts were stopped. Storage was isolated under `/tmp/capability-
 
 ## Hosted receipt
 
-The corrective behavior commit will be validated by the existing five-job Synthetic workflow. Its exact commit and final hosted results are recorded here after completion. The original enhancement acceptance remains recorded in [the original verification report](capability-authorization-projection-verification.md).
+Corrective behavior commit: `455110d91548cc82f85e6902e502a0e7575925b2`. [Hosted Synthetic run 37523229767](https://github.com/trannamtrung1st/agent-core/actions/runs/37523229767) completed successfully on that exact commit. All five jobs passed: backend, Compose smoke, dedicated acceptance (17 tests), core Playwright (102 tests), and frontend (94 files / 705 tests plus TypeScript and production build). Backend passed Domain 145, Infrastructure 767, Application 1,306 and API 387, with the existing 18 opt-in/runtime-availability skips. The original enhancement acceptance remains recorded in [the original verification report](capability-authorization-projection-verification.md).
+
+The review corrections are complete with no remaining required gate. This receipt is a documentation-only follow-up; no behavior changed after `455110d9`. Optional live-provider checks remain unrun by design, and historical milestone freezes remain unchanged.
