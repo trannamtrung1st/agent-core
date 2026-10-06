@@ -85,6 +85,46 @@ public sealed class SkillPinStoreTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Cancelled_capability_admission_leaves_revision_ids_and_count_unchanged(bool sqlite)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-capability-cancel-{Guid.NewGuid():N}.db");
+        var factory = new SqliteContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
+        try
+        {
+            IConversationTurnExecutionStore store;
+            if (sqlite)
+            {
+                await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
+                store = new SqliteConversationTurnExecutionStore(factory);
+            }
+            else store = new InMemoryConversationTurnExecutionStore();
+            var now = DateTimeOffset.Parse("2026-10-07T00:00:00Z");
+            var item = (await store.CreateAsync(Execution(Guid.NewGuid(), Guid.NewGuid(), now, []))).Item;
+            var claim = (await store.TryClaimAsync(item.ExecutionId, Guid.NewGuid(), now, now.AddMinutes(5)))!;
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+                await store.AdmitCapabilitiesAsync(claim.ExecutionId, claim.Revision, claim.Claim!.Generation,
+                    ["workspace.write"], now.AddSeconds(1), cancellation.Token));
+            var unchanged = (await store.GetAsync(claim.ExecutionId))!;
+            Assert.Equal(claim.Revision, unchanged.Revision);
+            Assert.Empty(unchanged.LoadedCapabilityIds);
+            Assert.Equal(0, unchanged.CapabilityLoadCount);
+            var admitted = await store.AdmitCapabilitiesAsync(claim.ExecutionId, claim.Revision, claim.Claim!.Generation,
+                ["workspace.read"], now.AddSeconds(2));
+            Assert.Equal(["workspace.read"], admitted.LoadedCapabilityIds);
+            Assert.Equal(1, admitted.CapabilityLoadCount);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
     private static ConversationTurnExecution Execution(
         Guid sessionId,
         Guid sourceEventId,

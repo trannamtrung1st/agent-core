@@ -28,7 +28,7 @@ public static class CapabilityDiscoveryMatcher
             throw AgentCoreErrors.Validation("Capability match limit must be from 1 to 8.");
         if (calls >= MaxCalls) return new([], [], "load_over_budget");
         var query = q.GetString()!.Trim().ToLowerInvariant();
-        var tokens = Regex.Matches(query, "[a-z0-9._]+").Select(m => m.Value).Where(t => t is not ("a" or "an" or "the" or "to" or "and" or "for" or "with" or "this" or "of" or "in" or "is" or "use")).Distinct().ToArray();
+        var tokens = Regex.Matches(query, "[a-z0-9._]+").Select(m => m.Value.Trim('.')).Where(t => t.Length > 0 && t is not ("a" or "an" or "the" or "to" or "and" or "for" or "with" or "this" or "of" or "in" or "is" or "use")).Distinct().ToArray();
         var projected = ToolProjectionService.Project(definition, context, gate).Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
         var matched = ToolCatalog.Eligible(definition, context, gate).Select(t => ToolRegistry.Get(t.Name)).Where(d => d.Discoverable)
             .Select(d => (Descriptor: d, Score: Score(d))).Where(p => p.Score > 0)
@@ -36,7 +36,7 @@ public static class CapabilityDiscoveryMatcher
         var loaded = matched.Where(p => !projected.Contains(p.Descriptor.Name)).Take(limit).Select(p => p.Descriptor.Name).ToArray();
         var already = matched.Where(p => projected.Contains(p.Descriptor.Name)).Take(limit).Select(p => p.Descriptor.Name).ToArray();
         return new(loaded, already, loaded.Length > 0 ? "load_matched" : already.Length > 0 ? "load_already_projected" : "load_no_match");
-        int Score(ToolDescriptor d) => query == d.Name ? 1000 : tokens.Sum(t => t == d.Category ? 100 : d.Tags.Contains(t) ? 50
+        int Score(ToolDescriptor d) => query == d.Name ? 1000 : tokens.Sum(t => t == d.Name ? 1000 : t == d.Category ? 100 : d.Tags.Contains(t) ? 50
             : d.Name.Split('.','_').Contains(t) ? 20 : Regex.IsMatch(d.Summary.ToLowerInvariant(), @"\b" + Regex.Escape(t) + @"\b") ? 1 : 0);
     }
 }

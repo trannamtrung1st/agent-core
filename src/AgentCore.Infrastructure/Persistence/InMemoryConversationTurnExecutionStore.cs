@@ -149,7 +149,7 @@ public sealed class InMemoryConversationTurnExecutionStore : IConversationTurnEx
 
     public ValueTask<ConversationTurnExecution> AdmitCapabilitiesAsync(Guid executionId, long expectedRevision, Guid generation,
         IReadOnlyList<string> names, DateTimeOffset updatedAtUtc, CancellationToken cancellationToken = default) =>
-        Mutate(executionId, item => item.AdmitCapabilities(expectedRevision, generation, names, updatedAtUtc));
+        Mutate(executionId, item => item.AdmitCapabilities(expectedRevision, generation, names, updatedAtUtc), cancellationToken);
 
     public ValueTask<ConversationTurnExecution?> TryClaimAsync(
         Guid executionId,
@@ -297,10 +297,12 @@ public sealed class InMemoryConversationTurnExecutionStore : IConversationTurnEx
 
     private ValueTask<ConversationTurnExecution> Mutate(
         Guid executionId,
-        Func<ConversationTurnExecution, ConversationTurnExecution> mutate)
+        Func<ConversationTurnExecution, ConversationTurnExecution> mutate,
+        CancellationToken cancellationToken = default)
     {
         lock (_state.Gate)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!_state.TurnExecutions.TryGetValue(executionId, out var current))
             {
                 throw AgentCoreErrors.NotFound("Turn execution was not found.");

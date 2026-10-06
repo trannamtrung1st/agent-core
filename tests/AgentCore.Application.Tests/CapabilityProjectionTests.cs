@@ -11,8 +11,10 @@ namespace AgentCore.Application.Tests;
 
 public sealed class CapabilityProjectionTests
 {
-    [Fact]
-    public async Task Runtime_load_persists_ids_and_next_continuation_executes_then_next_turn_resets()
+    [Theory]
+    [InlineData("workspace.write")]
+    [InlineData("Please use WORKSPACE.WRITE.")]
+    public async Task Runtime_load_persists_ids_and_next_continuation_executes_then_next_turn_resets(string query)
     {
         var d = await Definition(ToolCatalog.CapabilitiesLoad, ToolCatalog.WorkspaceWrite, ToolCatalog.WorkspaceRead);
         d = d with { Environment = d.Environment! with { Workspace = new() } };
@@ -26,7 +28,7 @@ public sealed class CapabilityProjectionTests
         var workspace = new AgentCore.Infrastructure.Workspaces.FileSessionWorkspace(root, root);
         await workspace.EnsureAsync(snapshot.SessionId, d);
         await memory.SaveAsync(snapshot, 0);
-        var model = new ScriptedLanguageModel();
+        var model = new LoadQueryModel(query);
         try
         {
             await using var runtime = new SessionRuntime(snapshot, model,
@@ -52,6 +54,20 @@ public sealed class CapabilityProjectionTests
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
+    private sealed class LoadQueryModel(string query) : ILanguageModel
+    {
+        private readonly ScriptedLanguageModel _inner = new();
+        public ModelCapabilities Capabilities => _inner.Capabilities;
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await foreach (var item in _inner.GenerateAsync(request, cancellationToken))
+                yield return item is ModelToolCallEvent { Call.Name: ToolCatalog.CapabilitiesLoad } load
+                    ? load with { Call = load.Call with { ArgumentsJson = JsonSerializer.Serialize(new { query, limit = 1 }) } }
+                    : item;
+        }
+    }
+
     internal static async Task<AgentDefinition> Definition(params string[] names)
     {
         var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../agents"));
@@ -127,6 +143,8 @@ public sealed class CapabilityProjectionTests
     }
     [Theory]
     [InlineData("email.search")]
+    [InlineData("please use email.search")]
+    [InlineData("Please use EMAIL.SEARCH.")]
     [InlineData("email")]
     [InlineData("mail messages")]
     public async Task Discovery_is_deterministic_and_only_authorized_configured_and_discoverable(string query)
@@ -198,6 +216,19 @@ public sealed class CapabilityProjectionTests
         using var description = JsonDocument.Parse(JsonSerializer.Serialize(new { query = word }));
         Assert.Equal([descriptor.Name], CapabilityDiscoveryMatcher.Load(only, Context(only), ToolConfigurationGates.AllowAll, description.RootElement, 0).Loaded);
     }
+    [Fact]
+    public async Task Discovery_ranks_embedded_exact_names_before_family_matches_and_keeps_authority_filtering()
+    {
+        var d = await Definition(ToolCatalog.CapabilitiesLoad, ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceWrite);
+        using var query = JsonDocument.Parse("{\"query\":\"workspace: use workspace.write and workspace.read, not email.send\",\"limit\":2}");
+        var result = CapabilityDiscoveryMatcher.Load(d, Context(d), ToolConfigurationGates.AllowAll, query.RootElement, 0);
+        Assert.Equal([ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceWrite], result.Loaded);
+        Assert.Equal("load_matched", result.Outcome);
+        Assert.DoesNotContain(ToolCatalog.EmailSend, result.Loaded);
+        using var limited = JsonDocument.Parse("{\"query\":\"workspace please use workspace.write\",\"limit\":1}");
+        Assert.Equal([ToolCatalog.WorkspaceWrite], CapabilityDiscoveryMatcher.Load(d, Context(d), ToolConfigurationGates.AllowAll, limited.RootElement, 0).Loaded);
+    }
+
     private sealed class LoadComparer : IEqualityComparer<CapabilityLoadResult>
     {
         public bool Equals(CapabilityLoadResult? a, CapabilityLoadResult? b) => a!.Outcome == b!.Outcome && a.Loaded.SequenceEqual(b.Loaded) && a.AlreadyProjected.SequenceEqual(b.AlreadyProjected);
