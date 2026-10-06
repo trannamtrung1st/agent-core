@@ -1477,4 +1477,6 @@ Orientation for what later work can build on. Detail and gate history are in `/d
 
 ## Bounded post-P9.10 Artifact delivery
 
+**Closed/frozen on verified behavior `3c784a4d`**, 2026-10-06. [Hosted Synthetic/Compose `37464818667`, attempt 2](https://github.com/trannamtrung1st/agent-core/actions/runs/37464818667/attempts/2) passed all five jobs after the backend-only rerun. Includes post-authorization GUID canonicalization; the initial unrelated SQLite concurrency failure remains recorded in the report.
+
 Artifact delivery completes Chat presentation of the existing session-owned Artifact store: canonical metadata, an accessible downloadable card, lazy owner-authenticated exact-byte download, bounded metadata deduplication, local Retry and retained read-only history. Verification/closure evidence: [Artifact delivery report](docs/reports/artifact-delivery-ux.md). P9.8/P9.9/P9.10 freezes stay unchanged; P10/P11 remain unopened.
