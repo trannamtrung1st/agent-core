@@ -135,11 +135,14 @@ public sealed class InteractionControllerTests
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("Hello");
         await VoiceTestHelpers.WaitForActiveResponseAsync(runtime);
+        await output.WaitForAsync(item => item.Payload is ResponseStartedOutput);
         var utterance = Guid.Parse("019944af-0000-7000-8000-0000000000ae");
         await runtime.SubmitSpeechAsync(new SpeechStarted(utterance), 0.9);
+        await output.WaitForAsync(item => item.Payload is PlaybackGainOutput { Gain: 0.2 });
         await runtime.WaitUntilMailboxDrainedAsync();
         time.Advance(TimeSpan.FromMilliseconds(250));
         await runtime.SubmitSpeechAsync(new SpeechPartial(utterance, 1, "something longer", 0.4), 0.9);
+        await output.WaitForAsync(item => item.Payload is TranscriptPartialOutput { Revision: 1 });
         await runtime.WaitUntilMailboxDrainedAsync();
         var candidate = runtime.Candidate;
         Assert.NotNull(candidate);
@@ -213,12 +216,17 @@ public sealed class InteractionControllerTests
         await runtimeVoice.AttachAsync();
         await runtimeVoice.SubmitUserTextAsync("Hello");
         await VoiceTestHelpers.WaitForActiveResponseAsync(runtimeVoice);
+        await outputVoice.WaitForAsync(item => item.Payload is ResponseStartedOutput);
         var brainBefore = brainVoice.Calls;
         var utterance = Guid.Parse("019944af-0000-7000-8000-0000000000af");
         await runtimeVoice.SubmitSpeechAsync(new SpeechStarted(utterance), 0.9);
+        // Await speech-start publication before advancing its logical duration.
+        // A momentarily drained mailbox can precede an asynchronous worker callback.
+        await outputVoice.WaitForAsync(item => item.Payload is PlaybackGainOutput { Gain: 0.2 });
         await runtimeVoice.WaitUntilMailboxDrainedAsync();
         timeVoice.Advance(TimeSpan.FromMilliseconds(250));
         await runtimeVoice.SubmitSpeechAsync(new SpeechPartial(utterance, 1, "something longer", 0.4), 0.9);
+        await outputVoice.WaitForAsync(item => item.Payload is TranscriptPartialOutput { Revision: 1 });
         await runtimeVoice.WaitUntilMailboxDrainedAsync();
         Assert.Equal(InteractionDecision.RequestInterruptionClassification, runtimeVoice.LastControllerDecision);
         await classifierVoice.Called;

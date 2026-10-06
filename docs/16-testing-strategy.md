@@ -43,6 +43,8 @@ Static inspection, compilation, a screenshot or `/health` alone is not functiona
 
 Tests advance logical time and release TaskCompletionSource gates, then await an explicit mailbox-drained/test-observer barrier. Do not use Thread.Sleep, random jitter or wall-clock timing assertions for core correctness. A barrier must wait for previously admitted messages, not assume all future worker callbacks have arrived; fixtures expose their publication acknowledgements. Keep production hooks small and internal/test-visible, not public debug endpoints.
 
+The ambiguous-interruption controller fixtures await response-start and duck-gain publication before advancing the speech duration, then await the matching partial-transcript publication before inspecting the decision. These acknowledgements prevent a transient idle observation from racing asynchronous speech processing; classifier and brain-isolation assertions remain required.
+
 Synthetic application profile includes a fixed default script (greeting, longer explanation, short response) and generated tone audio. For precise E2E scenarios, Api.Tests/Playwright host substitutes a scenario driver through DI selected at test-host startup. No arbitrary-event endpoint is exposed in normal deployment. Frontend development can trigger VAD and observe fixed scripted speech; it must label synthetic mode in the developer UI, not pretend to transcribe arbitrary content. Tests may script the source driver directly through their host harness. Real adapters are not even resolved in synthetic mode; assert no outbound HTTP was attempted.
 
 ## Synthetic full-stack mode
