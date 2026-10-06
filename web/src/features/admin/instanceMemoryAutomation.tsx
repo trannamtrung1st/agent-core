@@ -81,6 +81,7 @@ function UnattendedModelForm({
   config: AdminEffectiveConfiguration;
   models: ModelDescriptor[];
 }) {
+  const { token } = theme.useToken();
   const [catalogKey, setCatalogKey] = useState(config.unattendedModelCatalogKey ?? "");
   const [effort, setEffort] = useState(config.unattendedReasoningEffort ?? "");
   const [revision, setRevision] = useState(config.instanceRevision);
@@ -112,7 +113,7 @@ function UnattendedModelForm({
   }
 
   return (
-    <Flex vertical gap={8} aria-label="Unattended model">
+    <Flex vertical gap={token.paddingXS} aria-label="Unattended model">
       <Typography.Text>{source}</Typography.Text>
       <Typography.Text type="secondary">
         Conversation default is {config.effectiveModel.displayName}. An unattended default applies to scheduled and
@@ -122,9 +123,11 @@ function UnattendedModelForm({
       <ExecutionModelFields models={models} modelKey={catalogKey} reasoningEffort={effort} disabled={busy}
         modelLabel="Unattended model" effortLabel="Unattended reasoning effort" defaultLabel="Conversation default"
         onChange={(key, effort) => { setCatalogKey(key); setEffort(effort); }} />
-      <Button type="primary" disabled={busy} onClick={() => void save()}>
-        Save unattended model
-      </Button>
+      <Flex wrap gap={token.paddingXS}>
+        <Button type="primary" disabled={busy} onClick={() => void save()}>
+          Save unattended model
+        </Button>
+      </Flex>
     </Flex>
   );
 }
@@ -581,14 +584,16 @@ export function InstanceMemoryAutomationPanel({ config, section }: { config: Adm
           key: "automation",
           label: "Automation",
           children: (
-            <Flex vertical gap={12} aria-label="Automation administration">
+            <Flex vertical gap={token.paddingSM} aria-label="Automation administration">
               <Descriptions {...detailLayout} size="small" column={1} bordered>
                 <Descriptions.Item label="Effective trigger policy">{triggerPolicySummary(config)}</Descriptions.Item>
               </Descriptions>
               <UnattendedModelForm config={config} models={models} />
-              <Button onClick={() => void loadAutomation()} loading={automationBusy}>
-                Review advanced registrations
-              </Button>
+              <Flex wrap gap={token.paddingXS}>
+                <Button onClick={() => void loadAutomation()} loading={automationBusy}>
+                  Review advanced registrations
+                </Button>
+              </Flex>
               {automationError ? (
                 <AdminErrorNotice
                   message={automationError.message}

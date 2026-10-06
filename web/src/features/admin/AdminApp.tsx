@@ -1388,7 +1388,7 @@ function DefinitionDetail({
             </div>
             <div className="admin-definition-panel-body">
               {group && !group.draftOnly ? (
-                <Flex gap={token.paddingXS} align="center" className="admin-draft-create">
+                <Flex wrap gap={token.paddingXS} align="center" className="admin-draft-create">
                   <Select
                     aria-label="Base version"
                     value={forkSource}

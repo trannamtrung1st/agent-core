@@ -2148,21 +2148,12 @@ body,
     grid-column: auto;
   }
 
-  .admin-instance-version-actions {
-    align-items: stretch;
-  }
-
-  .admin-instance-version-actions .ant-select,
-  .admin-instance-version-actions .ant-btn {
-    width: 100%;
+  .admin-content .ant-btn {
     min-height: 40px;
   }
 
-  .admin-draft-create {
-    align-items: stretch;
-  }
-
-  .admin-draft-create .ant-btn {
+  .admin-instance-version-actions .ant-select {
+    width: 100%;
     min-height: 40px;
   }
 
@@ -2195,16 +2186,6 @@ body,
   .admin-resource-file,
   .admin-eval-prompt {
     grid-column: auto;
-  }
-
-  .admin-draft-form-section > .ant-btn {
-    align-self: stretch;
-    min-height: 40px;
-  }
-
-  .admin-draft-actions .ant-btn,
-  .admin-publish-actions .ant-btn {
-    min-height: 40px;
   }
 
   .admin-draft-tabs > .ant-tabs-nav,
@@ -2359,9 +2340,6 @@ body,
     font-size: 12px;
   }
 
-  .admin-collection-table .ant-btn {
-    min-height: 40px;
-  }
 }
 
 .operational-list-footer {
@@ -2370,13 +2348,6 @@ body,
 
 .background-work-attention {
   flex-wrap: wrap;
-}
-
-@media (max-width: 767px) {
-  .admin-instance-continuity .ant-btn,
-  .admin-memory-actions .ant-btn {
-    min-height: 40px;
-  }
 }
 
 .background-work-item { padding-inline: var(--ac-space-default); border-block-end: 1px solid var(--ac-color-border); }
