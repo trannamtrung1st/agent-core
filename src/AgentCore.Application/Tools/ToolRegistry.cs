@@ -82,12 +82,31 @@ public static class ToolRegistry
                 "Copy a durable /home file to separate session /workspace/working scratch before editing or using session tools. Does not overwrite an existing destination. Optionally check expectedRevision or expectedSha256. Publish a fresh session Artifact when the user needs a downloadable deliverable.",
                 """{"type":"object","additionalProperties":false,"properties":{"source":{"type":"string"},"destination":{"type":"string"},"expectedRevision":{"type":"integer","minimum":1},"expectedSha256":{"type":"string"}},"required":["source"]}""",
                 ToolEffect.Write, scope: ToolResourceScope.Session),
+            [ToolCatalog.WorkspaceMkdir] = Descriptor(
+                ToolCatalog.WorkspaceMkdir,
+                "Create a directory and parents in scratch or managed /home. Existing directories succeed unchanged. Home requires expectedTreeSha256 from workspace.list. Concrete paths only.",
+                """{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string"},"expectedTreeSha256":{"type":"string"}},"required":["path"]}""",
+                ToolEffect.Write, scope: ToolResourceScope.Session, replaySafety: ToolReplaySafety.ReplaySafe),
+            [ToolCatalog.WorkspaceCopy] = Descriptor(
+                ToolCatalog.WorkspaceCopy,
+                "Copy a file or entire directory tree, including binary files and empty directories, within one workspace scope. Destination must not exist; no merging. Home requires current expectedTreeSha256. No globs or cross-scope copies; use retain/checkout for that.",
+                """{"type":"object","additionalProperties":false,"properties":{"source":{"type":"string"},"destination":{"type":"string"},"expectedTreeSha256":{"type":"string"}},"required":["source","destination"]}""",
+                ToolEffect.Write, scope: ToolResourceScope.Session),
             [ToolCatalog.WorkspaceMove] = Descriptor(
                 ToolCatalog.WorkspaceMove,
-                "Move a workspace file to another relative path. Does not overwrite an existing destination.",
-                """{"type":"object","properties":{"source":{"type":"string"},"destination":{"type":"string"}},"required":["source","destination"]}""",
-                ToolEffect.Write,
-                scope: ToolResourceScope.Session),
+                "Move or rename a file or complete directory within one workspace scope. Destination must not exist. No merging, globs, or moves into descendants. Home requires current expectedTreeSha256 from workspace.list.",
+                """{"type":"object","additionalProperties":false,"properties":{"source":{"type":"string"},"destination":{"type":"string"},"expectedTreeSha256":{"type":"string"}},"required":["source","destination"]}""",
+                ToolEffect.Write, scope: ToolResourceScope.Session),
+            [ToolCatalog.WorkspaceDelete] = Descriptor(
+                ToolCatalog.WorkspaceDelete,
+                "Delete a concrete file or empty directory. Non-empty directories require recursive:true. Requires exact approval. Home requires current expectedTreeSha256. Workspace roots and protected entries cannot be deleted.",
+                """{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string"},"recursive":{"type":"boolean"},"expectedTreeSha256":{"type":"string"}},"required":["path"]}""",
+                ToolEffect.Destructive, scope: ToolResourceScope.Session),
+            [ToolCatalog.WorkspaceBatch] = Descriptor(
+                ToolCatalog.WorkspaceBatch,
+                "Perform 1–16 ordered mkdir/copy/move/delete operations (16 KiB maximum), all in one scope. The entire sequence is preflighted before mutation and requires exact approval. Stop on unexpected execution failure; earlier changes remain. This is not atomic rollback. Home requires current expectedTreeSha256. Concrete paths only; no globs.",
+                """{"type":"object","additionalProperties":false,"properties":{"operations":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"object","additionalProperties":false,"properties":{"op":{"type":"string","enum":["mkdir","copy","move","delete"]},"path":{"type":"string"},"source":{"type":"string"},"destination":{"type":"string"},"recursive":{"type":"boolean"}},"required":["op"]}},"expectedTreeSha256":{"type":"string"}} ,"required":["operations"]}""",
+                ToolEffect.Destructive, scope: ToolResourceScope.Session),
             [ToolCatalog.ArtifactsCreate] = Descriptor(
                 ToolCatalog.ArtifactsCreate,
                 "Create a session-owned artifact from UTF-8 content.",

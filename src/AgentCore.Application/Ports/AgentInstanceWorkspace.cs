@@ -2,7 +2,7 @@ using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Application.Ports;
 
-public sealed record AgentWorkspacePage(IReadOnlyList<AgentWorkspaceItem> Items, long UsedBytes, int TotalItems, string? NextPath);
+public sealed record AgentWorkspacePage(IReadOnlyList<AgentWorkspaceItem> Items, long UsedBytes, int TotalItems, string? NextPath, string? TreeSha256 = null);
 public sealed record AgentWorkspaceContent(AgentWorkspaceItem Item, byte[] Bytes);
 public sealed record AgentWorkspaceCheckout(AgentWorkspaceItem Source, string Destination, long ByteSize, string Sha256Hex);
 
@@ -16,4 +16,6 @@ public interface IAgentInstanceWorkspaceStore
     ValueTask DeleteAsync(Guid instanceId, Guid itemId, long expectedRevision, CancellationToken cancellationToken = default);
     ValueTask DeleteInstanceContentAsync(Guid instanceId, CancellationToken cancellationToken = default);
     ValueTask DeleteInstanceAsync(Guid instanceId, CancellationToken cancellationToken = default);
+    ValueTask<WorkspaceStructureResult> StructureAsync(Guid instanceId, IReadOnlyList<WorkspaceStructuralOperation> operations,
+        string expectedTreeSha256, CancellationToken cancellationToken = default) => throw new NotSupportedException("Home filesystem operations are unavailable.");
 }

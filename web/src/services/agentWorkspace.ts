@@ -3,10 +3,11 @@ import { adminProblemMessage } from "./adminApi";
 
 export type AgentWorkspaceItem = {
   itemId: string; agentInstanceId: string; logicalPath: string; contentType: string; byteSize: number;
+  directory?: boolean;
   sha256Hex: string; revision: number; createdAt: string; updatedAt: string; sourceSessionId: string | null;
 };
 export type AgentWorkspacePage = { items: AgentWorkspaceItem[]; usedBytes: number; totalItems: number;
-  nextPath: string | null; maxFileBytes: number; maxInstanceBytes: number };
+  treeSha256?: string; nextPath: string | null; maxFileBytes: number; maxInstanceBytes: number };
 const path = (id: string) => `/api/v2/agent-instances/${encodeURIComponent(id)}/workspace`;
 
 export async function listAgentWorkspace(id: string, afterPath?: string): Promise<AgentWorkspacePage> {

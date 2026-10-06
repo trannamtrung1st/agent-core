@@ -18,7 +18,7 @@ public static class AgentWorkspaceEndpoints
             {
                 var page = await workspace.ListAsync(instanceId, prefix ?? "/home", afterPath, limit ?? AgentWorkspaceLimits.MaxPageItems, ct);
                 return Results.Json(new AgentWorkspacePageResponse(page.Items.Select(MapItem).ToArray(), page.UsedBytes, page.TotalItems, page.NextPath,
-                    AgentWorkspaceLimits.MaxFileBytes, AgentWorkspaceLimits.MaxInstanceBytes));
+                    AgentWorkspaceLimits.MaxFileBytes, AgentWorkspaceLimits.MaxInstanceBytes, page.TreeSha256));
             }
             catch (AgentCoreException ex) { return ProblemResults.From(ex); }
         });
@@ -58,5 +58,5 @@ public static class AgentWorkspaceEndpoints
     }
 
     private static AgentWorkspaceItemResponse MapItem(AgentWorkspaceItem item) => new(item.ItemId, item.AgentInstanceId, item.LogicalPath,
-        item.ContentType, item.ByteSize, item.Sha256Hex, item.Revision, item.CreatedAt, item.UpdatedAt, item.SourceSessionId);
+        item.ContentType, item.ByteSize, item.Sha256Hex, item.Revision, item.CreatedAt, item.UpdatedAt, item.SourceSessionId, item.Directory);
 }

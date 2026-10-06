@@ -438,7 +438,9 @@ home = json.load(open("/tmp/agent-core-home-survival.json"))
 status, retained = get(f"http://127.0.0.1:5080/api/v2/agent-instances/{home['instanceId']}/workspace/{home['item']['itemId']}/content")
 assert status == 200 and retained == home["text"], (status, retained)
 status, listed_home = get(f"http://127.0.0.1:5080/api/v2/agent-instances/{home['instanceId']}/workspace")
-assert any(item["sha256Hex"] == home["item"]["sha256Hex"] for item in json.loads(listed_home)["items"])
+assert any(item["sha256Hex"] == home["item"]["sha256Hex"] and not item["directory"] for item in json.loads(listed_home)["items"])
+assert any(item["logicalPath"] == "/home/reports" and item["directory"] for item in json.loads(listed_home)["items"])
+assert len(json.loads(listed_home)["treeSha256"]) == 64
 print("agent workspace survived source deletion and container recreation", home["instanceId"])
 print("admin survived", instance_id, managed_session_id, pub_version, resource_path)
 PY

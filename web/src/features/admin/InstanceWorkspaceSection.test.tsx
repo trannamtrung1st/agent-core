@@ -13,7 +13,7 @@ beforeEach(() => { vi.resetAllMocks(); vi.mocked(listAgentWorkspace).mockResolve
 describe("Agent Workspace inspection", () => {
   it("loads metadata, downloads and requires modal confirmation before guarded deletion", async () => {
     render(view()); await screen.findByText(item.logicalPath);
-    expect(screen.getByText("123 B of 250.0 MB · 1 file")).toBeInTheDocument();
+    expect(screen.getByText("123 B of 250.0 MB · 1 item")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: `Download ${item.logicalPath}` }));
     await waitFor(() => expect(downloadAgentWorkspaceItem).toHaveBeenCalledWith("a", item, expect.any(AbortSignal)));
     await waitFor(() => expect(screen.getByRole("button", { name: `Delete ${item.logicalPath}` })).toBeEnabled());
@@ -24,6 +24,17 @@ describe("Agent Workspace inspection", () => {
     fireEvent.click(screen.getByRole("button", { name: `Delete ${item.logicalPath}` }));
     fireEvent.click(await screen.findByRole("button", { name: "Delete file" }));
     await waitFor(() => expect(deleteAgentWorkspaceItem).toHaveBeenCalledWith("a", item));
+  });
+  it("shows folders, disables file downloads and confirms only empty-folder deletion", async () => {
+    const folder = { ...item, itemId: "folder", logicalPath: "/home/empty", contentType: "inode/directory", byteSize: 0, directory: true };
+    vi.mocked(listAgentWorkspace).mockResolvedValue({ ...page, items: [folder], usedBytes: 0 });
+    render(view()); await screen.findByText(folder.logicalPath);
+    expect(screen.getByText("Folder")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Download ${folder.logicalPath}` })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: `Delete ${folder.logicalPath}` }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete folder" }));
+    await waitFor(() => expect(deleteAgentWorkspaceItem).toHaveBeenCalledWith("a", folder));
+    expect(downloadAgentWorkspaceItem).not.toHaveBeenCalled();
   });
   it("shows empty, loading and retry without a false empty state on failure", async () => {
     vi.mocked(listAgentWorkspace).mockRejectedValueOnce(new Error("Temporary failure"));

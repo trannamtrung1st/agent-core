@@ -37,7 +37,7 @@ public sealed class AgentWorkspaceStoreTests
             await Assert.ThrowsAsync<AgentCoreException>(async () => await store.DeleteAsync(a, item.ItemId, 1));
             await Assert.ThrowsAsync<AgentCoreException>(async () => await store.RetainAsync(a, "/home/too-large", "text/plain", new byte[33], sourceSession, null, null));
             await Assert.ThrowsAsync<AgentCoreException>(async () => await store.RetainAsync(a, "/home/aggregate-limit", "text/plain", new byte[30], sourceSession, null, null));
-            Assert.Single((await store.ListAsync(a, "/home", null, 10)).Items);
+            Assert.Single((await store.ListAsync(a, "/home", null, 10)).Items, i => !i.Directory);
             Assert.Single(Directory.GetFiles(Path.Combine(root, "blobs", a.ToString("N"))));
             if (factory is not null)
             {

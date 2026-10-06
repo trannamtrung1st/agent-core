@@ -109,9 +109,58 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
     }
 
-    private static async Task<Guid> CreateInstance(HttpClient client)
+    [Fact]
+    public async Task Native_structure_checks_exact_approval_generation_scope_and_archive()
     {
-        var response = await client.PostAsJsonAsync("/api/v2/admin/agent-instances", new AdminCreateAgentInstanceRequest("general-assistant", 13)); response.EnsureSuccessStatusCode();
+        var client = Owner(); var owner = await CreateInstance(client, 14); var session = await CreateSession(client, owner);
+        (await client.PutAsync($"/api/v2/sessions/{session}/workspace/content?path=inbox/report.txt", new ByteArrayContent("exact"u8.ToArray()))).EnsureSuccessStatusCode();
+        (await client.PostAsJsonAsync($"/api/v2/sessions/{session}/workspace/retain", new WorkspaceRetainRequest("inbox/report.txt", "/home/inbox/report.txt"))).EnsureSuccessStatusCode();
+        var executor = _factory.Services.GetRequiredService<SessionToolExecutor>();
+        var definition = (await _factory.Services.GetRequiredService<IMemoryStore>().LoadAsync(session))!.Definition;
+        var before = (await client.GetFromJsonAsync<AgentWorkspacePageResponse>($"/api/v2/agent-instances/{owner}/workspace"))!;
+        Assert.Contains(before.Items, i => i.Directory && i.LogicalPath == "/home/inbox");
+        var arguments = System.Text.Json.JsonSerializer.Serialize(new {
+            operations = new[] { new { op="mkdir",path="/home/projects" }, new { op="mkdir",path="/home/empty" } }, expectedTreeSha256=before.TreeSha256 });
+        var call = new ModelToolCall("structure", ToolCatalog.WorkspaceBatch, arguments);
+        Assert.Contains("approval_required", (await executor.ExecuteAsync(definition,session,call,8192)).Text!);
+        using var json = System.Text.Json.JsonDocument.Parse(arguments);
+        var grant = new ToolApprovalGrant(Guid.NewGuid(),call.Name,ToolActionHash.Compute(call.Name,json.RootElement),Guid.NewGuid(),Guid.NewGuid(),Guid.NewGuid());
+        Assert.Contains("approval", (await executor.ExecuteAsync(definition,session,call with { ArgumentsJson=arguments.Replace("projects","changed") },8192,approvalGrant:grant)).Text!);
+        Assert.Contains("\"completedCount\":2", (await executor.ExecuteAsync(definition,session,call,8192,approvalGrant:grant)).Text!);
+        Assert.Contains("Conflict", (await executor.ExecuteAsync(definition,session,call,8192,approvalGrant:grant)).Text!);
+        var current = (await client.GetFromJsonAsync<AgentWorkspacePageResponse>($"/api/v2/agent-instances/{owner}/workspace"))!;
+        var copied = await executor.ExecuteAsync(definition,session,new("copy",ToolCatalog.WorkspaceCopy,System.Text.Json.JsonSerializer.Serialize(new {source="/home/inbox",destination="/home/projects/report",expectedTreeSha256=current.TreeSha256})),8192);
+        Assert.Contains("\"completed\":true",copied.Text!);
+        Assert.Equal("exact"u8.ToArray(),await client.GetByteArrayAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/projects/report/report.txt"));
+        Assert.Contains("Forbidden",(await executor.ExecuteAsync(definition,session,new("cross",ToolCatalog.WorkspaceCopy,"""{"source":"/home/inbox/report.txt","destination":"/workspace/working/leak"}"""),8192)).Text!);
+        foreach(var args in new[] { """{"path":"/home/test","agentInstanceId":"spoof"}""", """{"path":"/home/../escape"}""", """{"path":"/home/.env"}""", """{"path":"/home/a","path":"/home/b"}""" })
+            Assert.Contains("error",(await executor.ExecuteAsync(definition,session,new("bad",ToolCatalog.WorkspaceMkdir,args),8192)).Text!);
+        (await client.PatchAsJsonAsync($"/api/v2/admin/agent-instances/{owner}/lifecycle",new AdminUpdateAgentInstanceLifecycleRequest(1,"Archived"))).EnsureSuccessStatusCode();
+        current = (await client.GetFromJsonAsync<AgentWorkspacePageResponse>($"/api/v2/agent-instances/{owner}/workspace"))!;
+        Assert.Contains("Conflict",(await executor.ExecuteAsync(definition,session,new("mkdir",ToolCatalog.WorkspaceMkdir,System.Text.Json.JsonSerializer.Serialize(new {path="/home/archived",expectedTreeSha256=current.TreeSha256})),8192)).Text!);
+    }
+
+    [Fact]
+    public async Task Home_tool_listing_does_not_hide_later_folders_after_a_large_first_folder()
+    {
+        var client = Owner(); var owner = await CreateInstance(client, 14); var session = await CreateSession(client, owner);
+        var store = _factory.Services.GetRequiredService<IAgentInstanceWorkspaceStore>();
+        for (var i=0; i<270; i++) await store.RetainAsync(owner, $"/home/a/file{i:D3}.txt", "text/plain", "x"u8.ToArray(), null, null, null);
+        await store.RetainAsync(owner, "/home/z/last.txt", "text/plain", "last"u8.ToArray(), null, null, null);
+        var executor = _factory.Services.GetRequiredService<SessionToolExecutor>();
+        var definition = (await _factory.Services.GetRequiredService<IMemoryStore>().LoadAsync(session))!.Definition;
+        using var result = System.Text.Json.JsonDocument.Parse((await executor.ExecuteAsync(definition,session,new("list",ToolCatalog.WorkspaceList,"""{"path":"/home"}"""),8192)).Text!);
+        var paths = result.RootElement.GetProperty("entries").EnumerateArray().Select(e=>e.GetProperty("path").GetString()!).ToArray();
+        Assert.Equal(["/home/a","/home/z"], paths);
+        Assert.Equal((await store.ListAsync(owner,"/home",null,1)).TreeSha256,result.RootElement.GetProperty("treeSha256").GetString());
+        var copy = await executor.ExecuteAsync(definition,session,new("copy-many",ToolCatalog.WorkspaceCopy,System.Text.Json.JsonSerializer.Serialize(new {source="/home/a",destination="/home/copied",expectedTreeSha256=result.RootElement.GetProperty("treeSha256").GetString()})),8192);
+        Assert.Contains("\"filesAffected\":270",copy.Text!);
+        Assert.Equal("x"u8.ToArray(),await client.GetByteArrayAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/copied/file269.txt"));
+    }
+
+    private static async Task<Guid> CreateInstance(HttpClient client, int version = 13)
+    {
+        var response = await client.PostAsJsonAsync("/api/v2/admin/agent-instances", new AdminCreateAgentInstanceRequest("general-assistant", version)); response.EnsureSuccessStatusCode();
         return Guid.Parse((await response.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>())!.InstanceId);
     }
     private static async Task<Guid> CreateSession(HttpClient client, Guid owner)

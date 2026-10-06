@@ -90,23 +90,57 @@ public sealed class AgentInstanceWorkspaceService(
     }
 
     // Detached executions may only retrieve when Core supplies a proven managed owner. Scratch boundary actions require a session.
-    public async ValueTask<IReadOnlyList<WorkspaceNode>> ListNodesAsync(Guid owner, string prefix, CancellationToken ct)
+    public async ValueTask<WorkspaceStructureResult> StructureAsync(Guid sessionId, IReadOnlyList<WorkspaceStructuralOperation> operations,
+        string? expectedTreeSha256, CancellationToken cancellationToken = default)
     {
-        var page = await ListAsync(owner, prefix, cancellationToken: ct);
-        var nodes = new Dictionary<string, WorkspaceNode>(StringComparer.Ordinal);
-        foreach (var item in page.Items)
+        var snapshot = await SessionAsync(sessionId, true, cancellationToken);
+        var owner = snapshot.AgentInstanceId ?? throw AgentCoreErrors.Validation("Durable home is unavailable for this execution.");
+        operations = WorkspaceStructuralPaths.Normalize(sessionId, operations);
+        if (expectedTreeSha256 is null || expectedTreeSha256.Length != 64
+            || !expectedTreeSha256.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+            throw AgentCoreErrors.Validation("List /home and supply its current expectedTreeSha256 before restructuring durable work.");
+        return await lifecycle.WithInstanceAsync(owner, async ct =>
         {
-            if (item.LogicalPath == prefix) nodes[prefix] = new(prefix, false, item.ByteSize, false);
-            else
-            {
-                var rest = item.LogicalPath[(prefix.Length + 1)..];
-                var slash = rest.IndexOf('/');
-                var path = slash < 0 ? item.LogicalPath : prefix + "/" + rest[..slash];
-                nodes[path] = new(path, slash >= 0, slash >= 0 ? 0 : item.ByteSize, false);
-            }
-        }
-        return nodes.Values.OrderBy(n => n.LogicalPath, StringComparer.Ordinal).ToArray();
+            await RequireAsync(owner, true, ct); await SessionAsync(sessionId, true, ct);
+            return await store.StructureAsync(owner, operations, expectedTreeSha256, ct);
+        }, cancellationToken);
     }
+
+    public async ValueTask<IReadOnlyList<WorkspaceNode>> ListNodesAsync(Guid owner, string prefix, CancellationToken ct) =>
+        (await ListProjectionAsync(owner, prefix, ct)).Nodes;
+
+    // Keep metadata and its whole-tree token in one lifecycle-protected projection.
+    // Read every bounded metadata page so a large first folder cannot hide later root entries.
+    public ValueTask<(IReadOnlyList<WorkspaceNode> Nodes, string? TreeSha256)> ListProjectionAsync(Guid owner, string prefix, CancellationToken cancellationToken) =>
+        lifecycle.WithInstanceAsync<(IReadOnlyList<WorkspaceNode>, string?)>(owner, async ct =>
+        {
+            await RequireAsync(owner, false, ct);
+            prefix = AgentHomePath.Normalize(prefix, false);
+            var page = await store.ListAsync(owner, prefix, null, AgentWorkspaceLimits.MaxPageItems, ct);
+            var token = page.TreeSha256;
+            var nodes = new Dictionary<string, WorkspaceNode>(StringComparer.Ordinal);
+            var scanned = 0;
+            while (true)
+            {
+                scanned += page.Items.Count;
+                if (scanned > WorkspaceStructureLimits.MaxEntries) throw AgentCoreErrors.WorkspaceQuotaExceeded();
+                foreach (var item in page.Items)
+                {
+                    if (item.LogicalPath == prefix)
+                    {
+                        if (!item.Directory) nodes[prefix] = new(prefix, false, item.ByteSize, false);
+                        continue;
+                    }
+                    var rest = item.LogicalPath[(prefix.Length + 1)..];
+                    var slash = rest.IndexOf('/');
+                    var path = slash < 0 ? item.LogicalPath : prefix + "/" + rest[..slash];
+                    nodes[path] = new(path, slash >= 0 || item.Directory, slash >= 0 ? 0 : item.ByteSize, false);
+                }
+                if (page.NextPath is null) return (nodes.Values.OrderBy(n => n.LogicalPath, StringComparer.Ordinal).ToArray(), token);
+                page = await store.ListAsync(owner, prefix, page.NextPath, AgentWorkspaceLimits.MaxPageItems, ct);
+                if (page.TreeSha256 != token) throw AgentCoreErrors.Conflict("Home changed during listing. Reload its current tree.");
+            }
+        }, cancellationToken);
 
     private async ValueTask<AgentInstance> RequireAsync(Guid owner, bool mutation, CancellationToken ct)
     {

@@ -115,37 +115,6 @@ public sealed partial class SessionToolExecutor
         });
     }
 
-    private async Task<string> MoveWorkspaceAsync(Guid sessionId, JsonElement args, CancellationToken cancellationToken)
-    {
-        if (workspace is null)
-        {
-            return Error("unavailable", "Workspace is unavailable.");
-        }
-
-        if (!TryString(args, "source", out var source) || !TryString(args, "destination", out var destination))
-        {
-            return Error("invalid", "source and destination are required.");
-        }
-
-        if (!TryResolveWorkspacePath(source, sessionId, out source, out var sourceError))
-        {
-            return sourceError;
-        }
-
-        if (!TryResolveWorkspacePath(destination, sessionId, out destination, out var destinationError))
-        {
-            return destinationError;
-        }
-
-        if (string.Equals(source, destination, StringComparison.Ordinal))
-        {
-            return Error("invalid", "source and destination are the same path.");
-        }
-
-        await workspace.MoveAsync(sessionId, source, destination, cancellationToken).ConfigureAwait(false);
-        return JsonSerializer.Serialize(new { source, destination });
-    }
-
     private async Task<string> SearchWorkspaceAsync(
         AgentDefinition definition,
         Guid sessionId,

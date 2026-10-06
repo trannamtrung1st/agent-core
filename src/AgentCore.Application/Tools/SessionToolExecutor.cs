@@ -318,8 +318,8 @@ public sealed partial class SessionToolExecutor(
                     await SearchWorkspaceAsync(definition, sessionId, args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.WorkspaceRetain => TextResult(await RetainWorkspaceAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.WorkspaceCheckout => TextResult(await CheckoutWorkspaceAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
-                ToolCatalog.WorkspaceMove => TextResult(
-                    await MoveWorkspaceAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.WorkspaceMkdir or ToolCatalog.WorkspaceCopy or ToolCatalog.WorkspaceMove or ToolCatalog.WorkspaceDelete or ToolCatalog.WorkspaceBatch => TextResult(
+                    await StructureWorkspaceAsync(definition, sessionId, call.Name, args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.ArtifactsCreate => TextResult(
                     await CreateArtifactAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.ArtifactsCreateFromWorkspace => TextResult(
@@ -663,13 +663,21 @@ public sealed partial class SessionToolExecutor(
         }
 
         await workspace.EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
-        var nodes = await ListExecutionWorkspaceAsync(sessionId, definition, path, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<WorkspaceNode> nodes;
+        string? treeSha256 = null;
+        if (AgentCore.Application.Workspaces.AgentHomePath.IsHome(path) && agentWorkspace is not null)
+        {
+            var projection = await agentWorkspace.ListProjectionAsync(await agentWorkspace.SessionOwnerAsync(sessionId, cancellationToken), path, cancellationToken);
+            nodes = projection.Nodes; treeSha256 = projection.TreeSha256;
+        }
+        else nodes = await ListExecutionWorkspaceAsync(sessionId, definition, path, cancellationToken).ConfigureAwait(false);
         var truncated = nodes.Count > WorkspaceLimits.MaxListEntries;
         var slice = truncated ? nodes.Take(WorkspaceLimits.MaxListEntries).ToArray() : nodes;
         return JsonSerializer.Serialize(new
         {
             path,
             truncated,
+            treeSha256,
             entries = slice.Select(node => new
             {
                 path = node.LogicalPath,

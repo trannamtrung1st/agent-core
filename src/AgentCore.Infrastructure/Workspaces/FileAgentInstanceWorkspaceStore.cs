@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 namespace AgentCore.Infrastructure.Workspaces;
 
 // Logical names never enter blob paths. SQLite and the key-free InMemory profile share these exact semantics.
-public sealed class FileAgentInstanceWorkspaceStore(
+public sealed partial class FileAgentInstanceWorkspaceStore(
     string blobRoot, TimeProvider time, IIdGenerator ids,
     IDbContextFactory<AgentCoreDbContext>? contexts = null,
     long maxFileBytes = AgentWorkspaceLimits.MaxFileBytes,
@@ -33,7 +33,7 @@ public sealed class FileAgentInstanceWorkspaceStore(
                 .Where(i => afterPath is null || string.CompareOrdinal(i.LogicalPath, afterPath) > 0)
                 .OrderBy(i => i.LogicalPath, StringComparer.Ordinal).Take(limit + 1).ToArray();
             return new AgentWorkspacePage(matches.Take(limit).ToArray(), all.Sum(r => r.ByteSize), all.Count,
-                matches.Length > limit ? matches[limit - 1].LogicalPath : null);
+                matches.Length > limit ? matches[limit - 1].LogicalPath : null, TreeHash(all));
         }, cancellationToken);
     }
 
@@ -44,6 +44,7 @@ public sealed class FileAgentInstanceWorkspaceStore(
             var row = (await RowsAsync(instanceId, ct)).SingleOrDefault(r => itemId.HasValue ? r.ItemId == itemId.Value.ToString("D") : FromRow(r).LogicalPath == path)
                 ?? throw AgentCoreErrors.NotFound("Home file was not found.");
             var item = FromRow(row);
+            if (item.Directory) throw AgentCoreErrors.Validation("Read requires a file; list the directory instead.");
             var physical = BlobPath(instanceId, row.BlobKey);
             if (!File.Exists(physical)) throw AgentCoreErrors.NotFound("Home content was not found.");
             if (new FileInfo(physical).Length != item.ByteSize || item.ByteSize > maxFileBytes) throw AgentCoreErrors.Conflict("Home content integrity check failed.");
@@ -61,6 +62,7 @@ public sealed class FileAgentInstanceWorkspaceStore(
             var key = path.ToUpperInvariant();
             var old = rows.SingleOrDefault(r => r.PathKey == key);
             var previous = old is null ? null : FromRow(old);
+            if (previous?.Directory == true) throw AgentCoreErrors.Conflict("A directory occupies the retained file path.");
             if (previous is not null && (previous.LogicalPath != path
                 || expectedRevision is null && expectedSha256 is null
                 || expectedRevision.HasValue && expectedRevision != previous.Revision
@@ -72,7 +74,8 @@ public sealed class FileAgentInstanceWorkspaceStore(
             foreach (var row in rows.Where(r => r != old))
             {
                 var other = FromRow(row).LogicalPath;
-                if (other.StartsWith(path + "/", StringComparison.OrdinalIgnoreCase) || path.StartsWith(other + "/", StringComparison.OrdinalIgnoreCase))
+                if (other.StartsWith(path + "/", StringComparison.OrdinalIgnoreCase)
+                    || path.StartsWith(other + "/", StringComparison.OrdinalIgnoreCase) && !FromRow(row).Directory)
                     throw AgentCoreErrors.Conflict("Home file conflicts with an existing directory or file.");
                 var a = path.Split('/'); var b = other.Split('/');
                 for (var n = 0; n < Math.Min(a.Length, b.Length) - 1; n++)
@@ -81,8 +84,10 @@ public sealed class FileAgentInstanceWorkspaceStore(
                     if (a[n] != b[n]) throw AgentCoreErrors.Conflict("Case-only home directory collisions are denied.");
                 }
             }
+            var parents = ParentRows(instanceId, path, rows);
             if (bytes.Length > maxFileBytes || rows.Sum(r => r.ByteSize) - (previous?.ByteSize ?? 0) + bytes.Length > maxInstanceBytes
-                || previous is null && rows.Count >= AgentWorkspaceLimits.MaxItems)
+                || previous is null && rows.Count(r => !FromRow(r).Directory) >= AgentWorkspaceLimits.MaxItems
+                || rows.Count + parents.Count + (previous is null ? 1 : 0) > WorkspaceStructureLimits.MaxEntries)
             {
                 OperationalDiagnostics.RecordResourceLimit("agentWorkspace");
                 throw AgentCoreErrors.WorkspaceQuotaExceeded();
@@ -108,7 +113,7 @@ public sealed class FileAgentInstanceWorkspaceStore(
                 File.Move(temp, physical);
                 var next = new AgentWorkspaceRow { ItemId = item.ItemId.ToString("D"), AgentInstanceId = instanceId.ToString("D"), PathKey = key,
                     ByteSize = item.ByteSize, Revision = item.Revision, BlobKey = blob, MetadataJson = JsonSerializer.Serialize(item) };
-                await CommitAsync(instanceId, old, next, ct);
+                await CommitRowsAsync(instanceId, old is null ? [] : [old], [..parents, next], ct);
             }
             catch
             {
@@ -124,12 +129,16 @@ public sealed class FileAgentInstanceWorkspaceStore(
     public ValueTask DeleteAsync(Guid instanceId, Guid itemId, long expectedRevision, CancellationToken cancellationToken = default) =>
         WithAsync(instanceId, async ct =>
         {
-            var old = (await RowsAsync(instanceId, ct)).SingleOrDefault(r => r.ItemId == itemId.ToString("D"))
+            var rows = await RowsAsync(instanceId, ct);
+            var old = rows.SingleOrDefault(r => r.ItemId == itemId.ToString("D"))
                 ?? throw AgentCoreErrors.NotFound("Home file was not found.");
             if (old.Revision != expectedRevision) throw AgentCoreErrors.Conflict("Home file revision is stale. Reload before deleting.");
-            var physical = BlobPath(instanceId, old.BlobKey);
+            var item = FromRow(old);
+            if (item.Directory && rows.Any(r => FromRow(r).LogicalPath.StartsWith(item.LogicalPath + "/", StringComparison.Ordinal)))
+                throw AgentCoreErrors.Conflict("Non-empty directory deletion requires an explicit recursive filesystem action.");
+            var physical = item.Directory ? null : BlobPath(instanceId, old.BlobKey);
             await CommitAsync(instanceId, old, null, ct);
-            DeleteFile(physical);
+            if (physical is not null) DeleteFile(physical);
             return 0;
         }, cancellationToken).AsVoid();
 

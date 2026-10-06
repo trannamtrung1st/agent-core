@@ -8,6 +8,18 @@ public static class ToolApprovalPreview
         string toolName,
         JsonElement args)
     {
+        if (toolName is ToolCatalog.WorkspaceDelete or ToolCatalog.WorkspaceBatch)
+        {
+            WorkspaceStructureArguments.Parse(toolName, args);
+            return (toolName == ToolCatalog.WorkspaceDelete ? "Delete workspace content" : "Restructure workspace content",
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["Exact operations"] = args.GetRawText(),
+                    ["Path scope"] = "Relative paths use /workspace/working; explicit /home uses this managed identity.",
+                    ["Failure behavior"] = "Entire preflight before mutation. Earlier changes remain if execution stops; reload before retrying."
+                });
+        }
+
         if (ToolCatalog.IsIdentityMaintenance(toolName))
         {
             var details = new Dictionary<string, string>(StringComparer.Ordinal);

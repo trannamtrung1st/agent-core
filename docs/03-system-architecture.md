@@ -283,3 +283,19 @@ Semantic maintenance extends the existing structured Memory and Experience store
 ## Bounded Agent Instance workspace
 
 A managed Agent Instance owns a separate durable `/home`; SessionWorkspace remains isolated `/workspace` scratch, and Artifacts remain immutable Session deliverables. `AgentInstanceWorkspaceService` derives the owner from trusted Session metadata, checks managed/active eligibility, and uses `AdminLifecycleCoordinator` for lifecycle exclusion. Explicit retain copies scratch bytes into home; checkout copies home bytes into scratch without overwriting an existing destination. Read/list/search are bounded and do not inject the inventory into prompts. Compatibility instances have no home. Archive preserves owner inspection; hard deletion removes metadata and local blobs. Source Session ids are informational provenance with no cascading ownership. No shared/application/task workspace is introduced.
+
+## Bounded workspace virtual filesystem
+
+Workspace tools manage files/directories. Sandbox tools execute programs. The native vocabulary is `list`, `read`, `write`, `patch`, `search`, `mkdir`, `copy`, `move`, `delete`, and `batch`; retain/checkout remain intentional copy boundaries between scratch and durable home. `write`/`patch` edit scratch content; home content replacement retains its revision/hash guard.
+
+A shared pure Application `WorkspaceTreePlanner` models the complete ordered result before any structural mutation. `FileSessionWorkspace` uses a physical tree and a per-Session filesystem gate; `FileAgentInstanceWorkspaceStore` uses logical directory metadata and immutable opaque blobs under the existing per-instance/lifecycle gates. This shares scope/path/conflict/parent/dependency/quota rules without exposing physical names or coupling the two storage adapters. The Session Runtime continues to own conversation state through its mailbox.
+
+Empty directories are first-class entries. Copy preserves complete trees and exact file bytes; move includes rename and keeps complete descendants. Destinations never overwrite or merge. Root/internal entries, scope changes, mutation globs, traversal and symlinks are rejected. Non-empty directory deletion requires explicit `recursive:true` and approval. Batches accept at most 16 operations, preflight all dependencies and cumulative bounds, execute in order, and stop on unexpected failure. Earlier changes remain; preflight does not promise atomic rollback. Whole-home tree tokens prevent stale durable plans. See [interfaces](04-backend-interfaces.md#workspace-structure-ports), [tools](12-backend-implementation-spec.md#native-workspace-filesystem-tools) and [verification](reports/workspace-filesystem-final-verification.md).
+
+```mermaid
+flowchart LR
+    Runtime[Session Runtime tool policy and exact approval] --> Planner[Shared logical tree preflight]
+    Planner --> Scratch[Session filesystem gate and physical scratch]
+    Planner --> Home[Instance lifecycle gate and logical home metadata]
+    Home --> Blobs[Immutable opaque file blobs]
+```

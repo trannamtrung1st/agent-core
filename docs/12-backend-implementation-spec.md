@@ -311,3 +311,23 @@ The post-P9.10 home feature uses a dedicated Application workspace service and I
 Home mutation is explicit: write/patch/move continue to accept scratch only. Retain copies exact bytes/content type and returns stable metadata. Replacement and owner deletion require optimistic revision/hash checks; concurrent replacements have one winner. File/directory and case-only path collisions are rejected across platforms. Core limits are 50 MiB per file, 250 MiB per instance, 4096 items, 512 path characters, eight path segments and 256 entries per page. Quota failures record the existing resource-limit diagnostic category.
 
 Archive preserves home and makes it read-only; Session durable deletion removes scratch and Artifacts without touching retained copies. Managed-instance hard deletion purges home through the existing coordinated lifecycle. Local bytes are written/flushed to a temporary blob, renamed to an immutable opaque key, then metadata commits. Failed commits remove the new blob; superseded/unreachable partial blobs are boundedly cleaned on reopen. No home write admits learned memory. Prompt context contains only a compact capability hint; inventory/content retrieval is tool-driven.
+
+## Native workspace filesystem tools
+
+Workspace tools manage files/directories. Sandbox tools execute programs. The bounded native vocabulary is `list`, `read`, `write`, `patch`, `search`, `mkdir`, `copy`, `move`, `delete`, and `batch`. Relative paths resolve from `/workspace/working`. Explicit managed `/home` supports mkdir/copy/move/delete/batch within that owner; file content edits use checkout and guarded retain. Read-only `/agent` and `/attachments` remain protected. Mutation arguments are concrete paths; `*`, `?`, bracket globs and parent traversal are rejected.
+
+| Tool | Effect / replay | Semantics |
+| --- | --- | --- |
+| `workspace.mkdir` | Write / ReplaySafe | Creates missing parents and meaningful empty directory; existing exact directory succeeds unchanged. |
+| `workspace.copy` | Write / NonReplayable | Exact file bytes or complete tree including empty directories; destination must not exist. |
+| `workspace.move` | Write / NonReplayable | Moves/renames a file or complete tree; no overwrite, merge, self/descendant or cross-scope target. |
+| `workspace.delete` | Destructive / NonReplayable | File or empty folder; non-empty folder requires `recursive:true`; exact approval. |
+| `workspace.batch` | Destructive / NonReplayable | 1–16 ordered mkdir/copy/move/delete operations; entire preflight; exact approval even without delete. |
+
+Requests are bounded to 16 KiB, logical paths to 512 characters/eight segments, traversal to 8192 entries. Copy is checked against cumulative byte/file/entry quotas before execution; moves add no file bytes and deletes free capacity for later steps. Home remains 50 MiB/file, 250 MiB/owner and 4096 files. Scratch retains its existing 250 MiB aggregate limit. Home directory entries consume the entry bound and zero file bytes.
+
+List `/home` and pass the returned `treeSha256` as `expectedTreeSha256` for every durable structural action. It binds the plan to the complete tree; concurrent retain invalidates it. No copy/move crosses roots; retain/checkout remain explicit file copy boundaries. Batch preflight models earlier operations for later dependencies and rejects any invalid step before applying anything. Unexpected execution errors stop the sequence and return partial state with completed/failed/notExecuted outcomes; there is no batch rollback promise. Each home operation commits metadata transactionally, independently of other operations in a batch.
+
+All five tools use registry/allowlist/offer/execution policy, resource admission, normal cancellation, exact-action hashes and observability. Recursive scratch operations guard every traversed child and physical ancestor; home operations guard every referenced blob before admission. Linked entries are unsupported. Session write/patch/list/read share the structural gate; active managed owner/lifecycle checks remain in Application. NonReplayable operations are never automatically repeated after indeterminate completion.
+
+Immutable `general-assistant` v14 adds the four new tools and the folder/batch guidance; it keeps the existing 32-tool bound by omitting `artifacts.create`. File-based `artifacts.create_from_workspace` remains available. Earlier versions remain immutable. Deterministic `synthetic-workspace-filesystem:` fixture commands exercise the same native model/tool/approval loop; they do not add an API or bypass policy.

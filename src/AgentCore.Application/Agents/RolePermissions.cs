@@ -78,6 +78,9 @@ public static class RolePermissions
             return false;
         }
 
+        // Home identifiers are logical names; its Application service derives identity ownership.
+        // Session GUID segments still retain the existing scratch isolation rule.
+        if (AgentCore.Application.Workspaces.AgentHomePath.IsHome(normalized)) return true;
         foreach (var token in normalized.Split('/', StringSplitOptions.RemoveEmptyEntries))
         {
             if (Guid.TryParse(token, out var found) && found != sessionId)

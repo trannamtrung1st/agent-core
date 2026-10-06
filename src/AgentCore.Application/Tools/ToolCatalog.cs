@@ -15,6 +15,10 @@ public static class ToolCatalog
     public const string WorkspaceSearch = "workspace.search";
     public const string WorkspaceRetain = "workspace.retain";
     public const string WorkspaceCheckout = "workspace.checkout";
+    public const string WorkspaceMkdir = "workspace.mkdir";
+    public const string WorkspaceCopy = "workspace.copy";
+    public const string WorkspaceDelete = "workspace.delete";
+    public const string WorkspaceBatch = "workspace.batch";
     public const string WorkspaceMove = "workspace.move";
     public const string ArtifactsCreate = "artifacts.create";
     public const string ArtifactsCreateFromWorkspace = "artifacts.create_from_workspace";

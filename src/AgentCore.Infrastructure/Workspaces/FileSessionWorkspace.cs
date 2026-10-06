@@ -13,7 +13,7 @@ using AgentCore.Infrastructure.Persistence;
 
 namespace AgentCore.Infrastructure.Workspaces;
 
-public sealed class FileSessionWorkspace : ISessionWorkspace
+public sealed partial class FileSessionWorkspace : ISessionWorkspace
 {
     private static readonly string[] WritableTrees = ["/workspace/working", "/workspace/artifacts", "/workspace/state"];
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -110,7 +110,7 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
 
         if (path.StartsWith("/workspace", StringComparison.Ordinal))
         {
-            return ListPhysical(sessionId, path);
+            return await WithFilesystemAsync(sessionId, () => ValueTask.FromResult(ListPhysical(sessionId, path)), cancellationToken);
         }
 
         throw AgentCoreErrors.Forbidden("Path is not permitted for this role.");
@@ -140,15 +140,14 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
             throw AgentCoreErrors.Forbidden("Path is not permitted for this role.");
         }
 
-        var physical = MapWorkspaceFile(sessionId, path);
-        DenyEscapingLinks(physical, SessionRoot(sessionId));
-        if (!File.Exists(physical) || Directory.Exists(physical))
+        return await WithFilesystemAsync(sessionId, async () =>
         {
-            throw AgentCoreErrors.NotFound("Workspace path was not found.");
-        }
-
-        var bytes = await File.ReadAllBytesAsync(physical, cancellationToken).ConfigureAwait(false);
-        return new WorkspaceContent(path, ContentType(physical), bytes);
+            var physical = MapWorkspaceFile(sessionId, path);
+            DenyEscapingLinks(physical, SessionRoot(sessionId));
+            if (!File.Exists(physical) || Directory.Exists(physical)) throw AgentCoreErrors.NotFound("Workspace path was not found.");
+            var bytes = await File.ReadAllBytesAsync(physical, cancellationToken).ConfigureAwait(false);
+            return new WorkspaceContent(path, ContentType(physical), bytes);
+        }, cancellationToken);
     }
 
     public ValueTask WriteAsync(Guid sessionId, string logicalPath, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default) =>
@@ -182,7 +181,7 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
         try
         {
             ThrowIfDeleted(sessionId);
-            var linked = CancellationTokenSource.CreateLinkedTokenSource(Writer(sessionId).Token, cancellationToken);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(Writer(sessionId).Token, cancellationToken);
             linked.Token.ThrowIfCancellationRequested();
             var physical = MapWorkspaceFile(sessionId, path);
             var parent = Path.GetDirectoryName(physical)!;
@@ -259,7 +258,7 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
         try
         {
             ThrowIfDeleted(sessionId);
-            var linked = CancellationTokenSource.CreateLinkedTokenSource(Writer(sessionId).Token, cancellationToken);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(Writer(sessionId).Token, cancellationToken);
             linked.Token.ThrowIfCancellationRequested();
             var physical = MapWorkspaceFile(sessionId, path);
             DenyEscapingLinks(physical, SessionRoot(sessionId));
@@ -322,56 +321,8 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
         string destinationLogicalPath,
         CancellationToken cancellationToken = default)
     {
-        ThrowIfDeleted(sessionId);
-        var source = Normalize(sourceLogicalPath);
-        var destination = Normalize(destinationLogicalPath);
-        RolePermissions.EnsureLogicalPathAllowed(source, sessionId);
-        RolePermissions.EnsureLogicalPathAllowed(destination, sessionId);
-        if (!IsWritableFile(source) || !IsWritableFile(destination))
-        {
-            throw AgentCoreErrors.Forbidden("Execution view writes are limited to /workspace.");
-        }
-
-        if (IsForbiddenPersist(source) || IsForbiddenPersist(destination))
-        {
-            throw AgentCoreErrors.Forbidden("Runtime internals and secret files cannot be stored in the workspace.");
-        }
-
-        if (string.Equals(source, destination, StringComparison.Ordinal))
-        {
-            throw AgentCoreErrors.Validation("source and destination are the same path.");
-        }
-
-        var gate = Gate(sessionId);
-        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            ThrowIfDeleted(sessionId);
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(Writer(sessionId).Token, cancellationToken);
-            linked.Token.ThrowIfCancellationRequested();
-            var sourcePhysical = MapWorkspaceFile(sessionId, source);
-            var destinationPhysical = MapWorkspaceFile(sessionId, destination);
-            DenyEscapingLinks(sourcePhysical, SessionRoot(sessionId));
-            DenyEscapingLinks(destinationPhysical, SessionRoot(sessionId));
-            if (!File.Exists(sourcePhysical) || Directory.Exists(sourcePhysical))
-            {
-                throw AgentCoreErrors.NotFound("Workspace path was not found.");
-            }
-
-            if (File.Exists(destinationPhysical) || Directory.Exists(destinationPhysical))
-            {
-                throw AgentCoreErrors.Conflict("Destination already exists.");
-            }
-
-            var parent = Path.GetDirectoryName(destinationPhysical)!;
-            DenyEscapingLinks(parent, SessionRoot(sessionId));
-            Directory.CreateDirectory(parent);
-            File.Move(sourcePhysical, destinationPhysical);
-        }
-        finally
-        {
-            gate.Release();
-        }
+        var result = await StructureAsync(sessionId, [new("move", Source: sourceLogicalPath, Destination: destinationLogicalPath)], cancellationToken);
+        if (!result.Completed) throw AgentCoreErrors.Conflict(result.Message!);
     }
 
     public async ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)

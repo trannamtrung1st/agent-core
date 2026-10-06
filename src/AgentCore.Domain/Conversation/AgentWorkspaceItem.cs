@@ -10,7 +10,8 @@ public sealed record AgentWorkspaceItem(
     long Revision,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    Guid? SourceSessionId);
+    Guid? SourceSessionId,
+    bool Directory = false);
 
 public static class AgentWorkspaceLimits
 {

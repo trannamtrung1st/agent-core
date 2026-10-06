@@ -34,6 +34,20 @@ public static class ToolActionPreparation
         Guid sessionId = default,
         ToolExecutionAdmission? admission = null)
     {
+        if (call.Name is ToolCatalog.WorkspaceDelete or ToolCatalog.WorkspaceBatch)
+        {
+            try
+            {
+                var parsed = WorkspaceStructureArguments.Parse(call.Name, args);
+                AgentCore.Application.Workspaces.WorkspaceStructuralPaths.Normalize(sessionId, parsed.Operations);
+                var preview = ToolApprovalPreview.Build(call.Name, args);
+                return (new(ToolActionHash.Compute(call.Name, args), preview.Summary, call.ArgumentsJson, preview.Details), null);
+            }
+            catch (AgentCore.Application.Sessions.AgentCoreException)
+            {
+                return (null, """{"error":"invalid","message":"Filesystem approval requires valid bounded concrete paths and structural operations."}""");
+            }
+        }
         if (ToolCatalog.IsIdentityMaintenance(call.Name))
             return await tools.PrepareIdentityMaintenanceApprovalAsync(definition, sessionId, call, args, admission, cancellationToken);
         if (string.Equals(call.Name, ToolCatalog.HttpRequest, StringComparison.Ordinal))

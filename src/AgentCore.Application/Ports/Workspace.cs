@@ -54,5 +54,15 @@ public interface ISessionWorkspace
         string destinationLogicalPath,
         CancellationToken cancellationToken = default);
 
+    async ValueTask<WorkspaceStructureResult> StructureAsync(Guid sessionId, IReadOnlyList<WorkspaceStructuralOperation> operations,
+        CancellationToken cancellationToken = default)
+    {
+        // Preserve existing narrow adapters; full physical adapters override this for directory/batch support.
+        if (operations.Count != 1 || operations[0] is not { Op: "move", Source: not null, Destination: not null } move)
+            throw new NotSupportedException("Structural filesystem operations are unavailable.");
+        await MoveAsync(sessionId, move.Source, move.Destination, cancellationToken);
+        return new(true, 1, 1, null, [new(0, "move", "file", "completed", 1, 0, 0)]);
+    }
+
     ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
 }

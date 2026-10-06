@@ -52,12 +52,12 @@ export function InstanceWorkspaceSection({ instanceId, archived }: { instanceId:
   return <section className="admin-definition-panel" aria-label="Agent Workspace">
     <div className="admin-definition-panel-heading">
       <Typography.Title level={4}>Workspace</Typography.Title>
-      <Typography.Text type="secondary">Files intentionally kept by this agent across conversations.</Typography.Text>
+      <Typography.Text type="secondary">Files and folders intentionally kept by this agent across conversations.</Typography.Text>
     </div>
     <div className="admin-definition-panel-body"><Flex vertical gap={token.padding}>
       {archived ? <Alert type="info" showIcon title="Archived workspace is read-only" description="Retained files remain available to download." /> : null}
       <Flex justify="space-between" align="center" wrap gap={token.paddingXS}>
-        <Typography.Text type="secondary">{page ? `${artifactSize(page.usedBytes)} of ${artifactSize(page.maxInstanceBytes)} · ${page.totalItems} ${page.totalItems === 1 ? "file" : "files"}` : ""}</Typography.Text>
+        <Typography.Text type="secondary">{page ? `${artifactSize(page.usedBytes)} of ${artifactSize(page.maxInstanceBytes)} · ${page.totalItems} ${page.totalItems === 1 ? "item" : "items"}` : ""}</Typography.Text>
         <Button disabled={loading || !!busy} onClick={() => void reload()}>Reload workspace</Button>
       </Flex>
       {error ? <Alert type="error" showIcon title={error.message} action={<Button onClick={() => void reload()}>Retry workspace</Button>}
@@ -69,15 +69,15 @@ export function InstanceWorkspaceSection({ instanceId, archived }: { instanceId:
           locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search ? "No matching files" : "No retained files yet"} /> }}
           columns={[
             { title: "Path", dataIndex: "logicalPath", ellipsis: true, width: 260, render: (value: string) => <span title={value}>{value}</span> },
-            { title: "Type", dataIndex: "contentType", width: 100, render: (value: string) => <span title={value}>{artifactKind(value)}</span> },
+            { title: "Type", dataIndex: "contentType", width: 100, render: (value: string, item) => <span title={value}>{item.directory ? "Folder" : artifactKind(value)}</span> },
             { title: "Size", dataIndex: "byteSize", align: "right", width: 90, render: artifactSize },
             { title: "Updated", dataIndex: "updatedAt", width: 165, render: (value: string) => <time dateTime={value}>{new Date(value).toLocaleString()}</time> },
             { title: "Source", dataIndex: "sourceSessionId", ellipsis: true, width: 140, render: (value: string | null) => value ? <span title={`Conversation ${value}`}>Conversation {value}</span> : "—" },
             { title: "Actions", width: 180, render: (_, item) => <Flex wrap gap={token.paddingXS}>
-              <Button aria-label={`Download ${item.logicalPath}`} disabled={!!busy} onClick={() => void save(item)}>Download</Button>
+              <Button aria-label={`Download ${item.logicalPath}`} disabled={!!busy || item.directory} onClick={() => void save(item)}>Download</Button>
               <Button danger aria-label={`Delete ${item.logicalPath}`} disabled={archived || !!busy || loading} onClick={() => confirmAction(modal, {
-                title: "Delete retained file?", content: `Delete ${item.logicalPath} from this agent's workspace. Existing conversation Artifacts are kept.`,
-                okText: "Delete file", danger: true, onOk: () => remove(item)
+                title: item.directory ? "Delete empty folder?" : "Delete retained file?", content: `Delete ${item.logicalPath} from this agent's workspace. Existing conversation Artifacts are kept.`,
+                okText: item.directory ? "Delete folder" : "Delete file", danger: true, onOk: () => remove(item)
               })}>Delete</Button>
             </Flex> }
           ]} />
