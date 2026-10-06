@@ -320,7 +320,7 @@ Workspace tools manage files/directories. Sandbox tools execute programs. The bo
 | --- | --- | --- |
 | `workspace.mkdir` | Write / ReplaySafe | Creates missing parents and meaningful empty directory; existing exact directory succeeds unchanged. |
 | `workspace.copy` | Write / NonReplayable | Exact file bytes or complete tree including empty directories; destination must not exist. |
-| `workspace.move` | Write / NonReplayable | Moves/renames a file or complete tree; no overwrite, merge, self/descendant or cross-scope target. |
+| `workspace.move` | Write / NonReplayable | Structural opt-in: moves/renames a file or complete tree; no overwrite, merge, self/descendant or cross-scope target. Older definitions keep scratch-file-only behavior. |
 | `workspace.delete` | Destructive / NonReplayable | File or empty folder; non-empty folder requires `recursive:true`; exact approval. |
 | `workspace.batch` | Destructive / NonReplayable | 1–16 ordered mkdir/copy/move/delete operations; entire preflight; exact approval even without delete. |
 

@@ -23,8 +23,12 @@ public sealed partial class FileSessionWorkspace
         finally { gate.Release(); }
     }
 
-    public async ValueTask<WorkspaceStructureResult> StructureAsync(Guid sessionId,
-        IReadOnlyList<WorkspaceStructuralOperation> operations, CancellationToken cancellationToken = default)
+    public ValueTask<WorkspaceStructureResult> StructureAsync(Guid sessionId,
+        IReadOnlyList<WorkspaceStructuralOperation> operations, CancellationToken cancellationToken = default) =>
+        StructureCoreAsync(sessionId, operations, fileMoveOnly: false, cancellationToken);
+
+    private async ValueTask<WorkspaceStructureResult> StructureCoreAsync(Guid sessionId,
+        IReadOnlyList<WorkspaceStructuralOperation> operations, bool fileMoveOnly, CancellationToken cancellationToken)
     {
         operations = WorkspaceStructuralPaths.Normalize(sessionId, operations);
         ThrowIfDeleted(sessionId);
@@ -36,6 +40,8 @@ public sealed partial class FileSessionWorkspace
             var ct = linked.Token; ct.ThrowIfCancellationRequested();
             var entries = SnapshotPhysicalTree(sessionId, ct);
             var plan = WorkspaceTreePlanner.Plan(entries, operations, "/workspace", _maxWritableBytes, _maxWritableBytes, ct);
+            if (fileMoveOnly && plan.Any(step => step.Operation.Op != "move" || step.SourceTree.Any(entry => entry.Directory)))
+                throw AgentCoreErrors.Forbidden("Legacy workspace.move authorizes scratch files only.");
             foreach (var step in plan)
             {
                 foreach (var path in new[] { step.Operation.Path, step.Operation.Source, step.Operation.Destination }.OfType<string>()) ValidateStructurePath(sessionId, path);

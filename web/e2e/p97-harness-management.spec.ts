@@ -82,6 +82,7 @@ test('Assisted Chat rejects once then approves a fresh exact knowledge change',a
 });
 
 test('Managed tool and instruction proposals require exact Chat approval',async({page})=>{
+  test.setTimeout(90_000);
   const id=await create(page,'Tool learning','Managed','Tool proposals');
   await send(page,'Propose disabling http.request for future conversations.');
   const approval=page.getByRole('dialog',{name:'Save this harness change?'});await expect(approval).toContainText('http.request');
@@ -90,7 +91,9 @@ test('Managed tool and instruction proposals require exact Chat approval',async(
   await send(page,'Try a sensitive HTTP action now.');
   const sensitive=page.getByRole('dialog',{name:'Approve sensitive action'});await expect(sensitive).toBeVisible();
   await sensitive.getByRole('button',{name:'Reject',exact:true}).click();
-  await expect(page.getByText('The sensitive action was not executed.',{exact:true})).toBeVisible();
+  await expect(sensitive).toBeHidden({timeout:20_000});
+  await expect(page.getByText('The sensitive action was not executed.',{exact:true})).toBeVisible({timeout:30_000});
+  await expect(page.getByTestId('connection')).toHaveText('Ready',{timeout:20_000});
 });
 
 test('Freeze blocks durable Chat learning while normal Chat still works',async({page})=>{

@@ -329,7 +329,7 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
         string destinationLogicalPath,
         CancellationToken cancellationToken = default)
     {
-        var result = await StructureAsync(sessionId, [new("move", Source: sourceLogicalPath, Destination: destinationLogicalPath)], cancellationToken);
+        var result = await StructureCoreAsync(sessionId, [new("move", Source: sourceLogicalPath, Destination: destinationLogicalPath)], fileMoveOnly: true, cancellationToken);
         if (!result.Completed) throw AgentCoreErrors.Conflict(result.Message!);
     }
 

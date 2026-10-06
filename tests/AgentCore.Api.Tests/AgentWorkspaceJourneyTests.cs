@@ -161,6 +161,43 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
         Assert.Equal("x"u8.ToArray(),await client.GetByteArrayAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/copied/file269.txt"));
     }
 
+    [Theory]
+    [InlineData(12)] [InlineData(13)] [InlineData(14)]
+    public async Task Move_authority_requires_structural_opt_in_without_widening_older_definitions(int version)
+    {
+        var client = Owner(); var owner = await CreateInstance(client, version); var session = await CreateSession(client, owner);
+        var definition = (await _factory.Services.GetRequiredService<IMemoryStore>().LoadAsync(session))!.Definition;
+        var structural = version == 14;
+        Assert.Equal(structural, WorkspaceFilesystemPolicy.AllowsStructure(definition));
+        Assert.Equal(structural, WorkspaceFilesystemPolicy.AllowsStructure(definition with { Version = 999 }));
+        var offered = Assert.Single(ToolCatalog.For(definition, null, _factory.Services.GetRequiredService<IToolConfigurationGate>()), t => t.Name == ToolCatalog.WorkspaceMove);
+        Assert.Equal(structural, offered.ParametersJson.Contains("expectedTreeSha256", StringComparison.Ordinal));
+        Assert.Equal(structural, offered.Description.Contains("directory", StringComparison.Ordinal));
+        var executor = _factory.Services.GetRequiredService<SessionToolExecutor>();
+        async Task<string> Move(string source, string destination, string? token = null) =>
+            (await executor.ExecuteAsync(definition, session, new("move", ToolCatalog.WorkspaceMove,
+                System.Text.Json.JsonSerializer.Serialize(new { source, destination, expectedTreeSha256 = token },
+                    new System.Text.Json.JsonSerializerOptions { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull })), 8192)).Text!;
+        (await client.PutAsync($"/api/v2/sessions/{session}/workspace/content?path=draft.txt", new ByteArrayContent("file"u8.ToArray()))).EnsureSuccessStatusCode();
+        using var fileMove = System.Text.Json.JsonDocument.Parse(await Move("draft.txt", "reports/draft.txt"));
+        Assert.False(fileMove.RootElement.TryGetProperty("error", out _));
+        Assert.Equal(structural, fileMove.RootElement.TryGetProperty("completed", out _));
+        Assert.Equal("file"u8.ToArray(), await client.GetByteArrayAsync($"/api/v2/sessions/{session}/workspace/content?path=reports/draft.txt"));
+        var treeMove = await Move("reports", "renamed");
+        Assert.Equal(!structural, treeMove.Contains("Forbidden", StringComparison.Ordinal));
+        Assert.Equal("file"u8.ToArray(), await client.GetByteArrayAsync($"/api/v2/sessions/{session}/workspace/content?path={(structural ? "renamed" : "reports")}/draft.txt"));
+        var store = _factory.Services.GetRequiredService<IAgentInstanceWorkspaceStore>();
+        await store.RetainAsync(owner, "/home/project/kept.txt", "text/plain", "durable"u8.ToArray(), session, null, null);
+        var before = await store.ListAsync(owner, "/home", null, 256);
+        var homeMove = await Move("/home/project", "/home/moved", before.TreeSha256);
+        Assert.Equal(!structural, homeMove.Contains("Forbidden", StringComparison.Ordinal));
+        var fileSource = structural ? "/home/moved/kept.txt" : "/home/project/kept.txt";
+        var current = await store.ListAsync(owner, "/home", null, 256);
+        Assert.Equal(!structural, (await Move(fileSource, "/home/renamed.txt", current.TreeSha256)).Contains("Forbidden", StringComparison.Ordinal));
+        Assert.Equal("durable"u8.ToArray(), (await store.ReadAsync(owner, null, structural ? "/home/renamed.txt" : fileSource)).Bytes);
+        if (!structural) Assert.Equal(before.TreeSha256, (await store.ListAsync(owner, "/home", null, 256)).TreeSha256);
+    }
+
     private static async Task<Guid> CreateInstance(HttpClient client, int version = 13)
     {
         var response = await client.PostAsJsonAsync("/api/v2/admin/agent-instances", new AdminCreateAgentInstanceRequest("general-assistant", version)); response.EnsureSuccessStatusCode();

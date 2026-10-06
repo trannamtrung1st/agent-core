@@ -12,6 +12,8 @@ Structural operations stay within one logical scope; retain/checkout remain the 
 
 Delete and batch are destructive and use normal exact-action approval; copy/move/delete/batch are non-replayable. Idempotent mkdir may safely replay. Existing ownership, archive/teardown exclusion, cancellation, diagnostics and Artifact/sandbox contracts remain authoritative. Workspace tools manage files/directories; sandbox tools execute programs. This introduces no shell, links, watchers, mounts, shared/remote workspace, automatic organization, history or P10/P11 work.
 
+Structural authority requires explicit new structural capabilities in the pinned definition. Legacy `workspace.move` remains scratch-file-only in its model descriptor and execution; definition version numbers are not an authorization predicate. General-assistant v12/v13 do not gain durable home or directory move authority from a registry upgrade. Scratch approval/tree-state fingerprints are deferred: scratch approval binds paths and recursive intent while `/home` binds the whole-tree token. Every batch remains conservatively Destructive.
+
 These decisions are the implementation baseline. Resolve package patches at implementation time to the latest supported compatible releases; do not scatter transient patch pins across these docs. .NET 10 is LTS and pairs with C# 14. See the [official support policy](https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core) and [.NET 10 download/version information](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
 
 | Area | Decision | Rationale / trade-off | Future migration path |

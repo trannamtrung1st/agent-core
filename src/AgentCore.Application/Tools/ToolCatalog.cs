@@ -98,7 +98,7 @@ public static class ToolCatalog
                 continue;
             }
 
-            offered.Add(descriptor.ModelDefinition);
+            offered.Add(WorkspaceFilesystemPolicy.ForDefinition(definition, descriptor));
         }
 
         if (ToolRegistry.TryGet(AttachmentsRead, out var attachmentDescriptor)
@@ -118,7 +118,7 @@ public static class ToolCatalog
                 continue;
             }
 
-            offered.Add(descriptor.ModelDefinition);
+            offered.Add(WorkspaceFilesystemPolicy.ForDefinition(definition, descriptor));
         }
 
         AddWorkComplete(offered, seen, definition, context, configurationGate);
@@ -148,7 +148,7 @@ public static class ToolCatalog
                 continue;
             }
 
-            offered.Add(descriptor.ModelDefinition);
+            offered.Add(WorkspaceFilesystemPolicy.ForDefinition(definition, descriptor));
         }
 
         AddWorkComplete(offered, seen, definition, context, configurationGate);
@@ -172,7 +172,7 @@ public static class ToolCatalog
                 continue;
             }
 
-            offered.Add(descriptor.ModelDefinition);
+            offered.Add(WorkspaceFilesystemPolicy.ForDefinition(definition, descriptor));
         }
 
         AddWorkComplete(offered, seen, definition, context, configurationGate);
