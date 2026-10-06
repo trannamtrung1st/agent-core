@@ -116,7 +116,7 @@ export function InstanceSchedulesSection({ instanceId, onWork, selection, active
         void mutate(editor === "new" ? "schedules" : `schedules/${editor}`, body, editor === "new" ? "POST" : "PUT");
       }}>
         <Form.Item label="Task" extra={`${draft.intent.length} / 500 characters`}><Input.TextArea aria-label="Schedule task" rows={3} maxLength={500} value={draft.intent} disabled={busy} onChange={e => setDraft({ ...draft, intent: e.target.value })} /></Form.Item>
-        <Flex wrap gap={token.padding}>
+        <Flex wrap gap={token.padding} className="admin-form-row">
           <Form.Item label="Timing"><Select aria-label="Schedule timing" style={{ minWidth: "10rem" }} value={timing.kind} disabled={busy}
             options={[{ value: "oneShot", label: "Once", disabled: policy?.allowOneShot === false }, { value: "daily", label: "Daily", disabled: policy?.allowDaily === false }, { value: "weekly", label: "Weekly", disabled: policy?.allowWeekly === false }, { value: "fixedInterval", label: "Fixed interval", disabled: policy?.allowFixedInterval === false }]}
             onChange={kind => setDraft({ ...draft, schedule: { kind, timeZone: timing.timeZone, interval: kind === "fixedInterval" ? 3600 : 1, localTime: "09:00", weekdays: kind === "weekly" ? [1] : null } })} /></Form.Item>
@@ -135,7 +135,7 @@ export function InstanceSchedulesSection({ instanceId, onWork, selection, active
           options={["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((label, value) => ({ label, value }))} onChange={weekdays => setTiming({ weekdays })} /></Form.Item> : null}
         {timing.kind !== "oneShot" ? <>
           {policy?.allowIndefiniteRecurrence === false ? <Alert type="info" showIcon title="This Definition requires an end date or occurrence limit." /> : null}
-          <Flex wrap gap={token.padding}>
+          <Flex wrap gap={token.padding} className="admin-form-row">
             <Form.Item label={timing.kind === "fixedInterval" ? "End at" : "End date"}
               extra={timing.kind === "fixedInterval" ? `Times shown in ${viewerZone}. Saved in UTC.` : undefined}>
               <DatePicker aria-label={timing.kind === "fixedInterval" ? "Schedule end at" : "Schedule end date"}

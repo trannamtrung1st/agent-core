@@ -376,7 +376,7 @@ export function ThoughtSection({ instanceId, onWork, selection, active = true }:
             <Input.TextArea aria-label="Thinking prompt" rows={4} maxLength={2000} value={draft.thinkingPrompt} disabled={busy}
               onChange={e => setDraft({ ...draft, thinkingPrompt: e.target.value })} />
           </Form.Item>
-          <Flex wrap gap={token.padding}>
+          <Flex wrap gap={token.padding} className="admin-form-row">
             <Form.Item label="Interval" validateStatus={invalidInterval ? "error" : undefined}
               help={invalidInterval ? `Choose an interval from ${minimumInterval} seconds to 7 days.` : undefined}
               extra={`Minimum ${minimumInterval} seconds. Short intervals are useful for demos; frequent runs use more model and tool resources.`}>

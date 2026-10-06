@@ -17,7 +17,7 @@ export function ExecutionModelFields({ models, modelKey, reasoningEffort, disabl
       options={[{ value: "", label: defaultLabel }, ...models.map(model => ({ value: model.key, label: model.displayName }))]}
       onChange={key => onChange(key, "")} />
     {selected && selected.supportedReasoningEfforts.length > 0 ? <Flex vertical gap={token.paddingXS}>
-      {showLabels ? <label htmlFor={effortId}>{effortLabel}</label> : null}
+      <label htmlFor={effortId}>{effortLabel}</label>
       <Select id={effortId} aria-label={effortLabel} value={reasoningEffort} disabled={disabled}
       options={[{ value: "", label: "Model default" }, ...selected.supportedReasoningEfforts.map(value => ({ value, label: value }))]}
       onChange={effort => onChange(modelKey, effort)} />

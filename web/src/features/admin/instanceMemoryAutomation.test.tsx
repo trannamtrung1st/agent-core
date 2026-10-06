@@ -267,6 +267,18 @@ describe("InstanceMemoryAutomationPanel", () => {
     expect(await screen.findByText("Trigger override")).toBeInTheDocument();
   });
 
+  it("does not present an unsaved or rejected model selection as effective", async () => {
+    vi.mocked(setAdminUnattendedModel).mockRejectedValueOnce(new Error("Save unavailable"));
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: "Automation" }));
+    await chooseSelectOption("Unattended model", "Synthetic");
+    expect(screen.getByText("Effective source: Conversation default (Synthetic)")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save unattended model" }));
+    expect(await screen.findByText("Save unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Effective source: Conversation default (Synthetic)")).toBeInTheDocument();
+    expect(screen.queryByText("Effective source: Unattended default (Synthetic)")).not.toBeInTheDocument();
+  });
+
   it("uses the refreshed owner revision without discarding an unattended model draft", async () => {
     const view = render(<App><InstanceMemoryAutomationPanel config={config} section="automation" /></App>);
     await chooseSelectOption("Unattended model", "Synthetic");

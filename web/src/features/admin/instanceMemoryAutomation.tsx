@@ -83,16 +83,18 @@ function UnattendedModelForm({
 }) {
   const { token } = theme.useToken();
   const [catalogKey, setCatalogKey] = useState(config.unattendedModelCatalogKey ?? "");
+  const [savedCatalogKey, setSavedCatalogKey] = useState(config.unattendedModelCatalogKey ?? "");
   const [effort, setEffort] = useState(config.unattendedReasoningEffort ?? "");
   const [revision, setRevision] = useState(config.instanceRevision);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     setRevision(config.instanceRevision);
-  }, [config.instanceRevision]);
-  const selected = models.find((model) => model.key === catalogKey);
-  const source = catalogKey
-    ? `Effective source: Unattended default (${selected?.displayName ?? catalogKey})`
+    setSavedCatalogKey(config.unattendedModelCatalogKey ?? "");
+  }, [config.instanceRevision, config.unattendedModelCatalogKey]);
+  const selected = models.find((model) => model.key === savedCatalogKey);
+  const source = savedCatalogKey
+    ? `Effective source: Unattended default (${selected?.displayName ?? savedCatalogKey})`
     : `Effective source: Conversation default (${config.effectiveModel.displayName})`;
 
   async function save() {
@@ -106,6 +108,7 @@ function UnattendedModelForm({
         effort || null
       );
       setRevision(updated.revision);
+      setSavedCatalogKey(updated.unattendedModelCatalogKey ?? "");
       setCatalogKey(updated.unattendedModelCatalogKey ?? "");
       setEffort(updated.unattendedReasoningEffort ?? "");
     } catch (reason: unknown) {

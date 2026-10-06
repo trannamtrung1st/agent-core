@@ -2235,6 +2235,8 @@ body,
 .admin-content .ant-form .ant-select,
 .admin-config-form .ant-select { width: 100%; min-width: 0; }
 .admin-config-form .ant-form-item { margin-block-end: var(--ac-space-section); }
+.admin-config-form .admin-form-row { margin-block-end: var(--ac-space-section); }
+.admin-config-form .admin-form-row > .ant-form-item { margin-block-end: 0; }
 .admin-config-form .ant-typography { max-width: 72ch; }
 .admin-source-choice { flex: 1 1 20rem; width: 100%; max-width: 48rem; min-width: 0; }
 .admin-memory-scope { flex: 0 1 12rem; min-width: 0; max-width: 100%; }
