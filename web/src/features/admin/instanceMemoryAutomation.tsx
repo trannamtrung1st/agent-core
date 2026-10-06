@@ -199,6 +199,7 @@ function triggerPolicySummary(config: AdminEffectiveConfiguration): string {
 
 export function InstanceMemoryAutomationPanel({ config, section }: { config: AdminEffectiveConfiguration; section?: "memory" | "automation" }) {
   const { message, modal } = App.useApp();
+  const { token } = theme.useToken();
   const detailLayout = useAdminDetailLayout();
   const [memoryScope, setMemoryScope] = useState<AdminLearnedMemoryScope>("IdentityUser");
   const [sessionId, setSessionId] = useState("");
@@ -486,13 +487,39 @@ export function InstanceMemoryAutomationPanel({ config, section }: { config: Adm
 
   const resetTitle = memoryResetConfirmTitle(memoryScope, config.instanceId, sessionId);
 
+  const memoryActions = (
+    <Flex className="admin-memory-actions" gap={token.paddingXS} wrap="wrap">
+      <Button
+        onClick={() => void loadMemory()}
+        loading={memoryLoading}
+        disabled={!scopePermitted || !selectionReady || memoryMutating || memoryLoading}
+      >
+        Load items
+      </Button>
+      <Button
+        danger
+        disabled={!memoryActionsEnabled}
+        onClick={() =>
+          confirmAction(modal, {
+            title: resetTitle,
+            okText: "Reset scope",
+            danger: true,
+            onOk: () => void resetMemoryScope()
+          })
+        }
+      >
+        Reset scope
+      </Button>
+    </Flex>
+  );
+
   const sections = [
 
         {
           key: "memory",
           label: "Memory",
           children: (
-            <Flex vertical gap={12} aria-label="Learned memory administration">
+            <Flex vertical gap={token.paddingSM} aria-label="Learned memory administration">
               <Descriptions {...detailLayout} size="small" column={1} bordered>
                 <Descriptions.Item label="Effective memory policy">{memoryPolicySummary(config)}</Descriptions.Item>
               </Descriptions>
@@ -507,8 +534,8 @@ export function InstanceMemoryAutomationPanel({ config, section }: { config: Adm
                   Effective memory policy does not allow administration for {memoryScope} scope.
                 </Typography.Text>
               ) : null}
-              <Flex gap={8} wrap="wrap" align="start">
-                <Flex vertical gap={8}>
+              <Flex gap={token.paddingXS} wrap="wrap" align={memoryScope === "Session" ? "start" : "flex-end"}>
+                <Flex vertical gap={token.paddingXS}>
                   <Typography.Text>Memory scope</Typography.Text>
                   <Select
                     aria-label="Memory scope"
@@ -528,31 +555,9 @@ export function InstanceMemoryAutomationPanel({ config, section }: { config: Adm
                     <AdminSessionPicker instanceId={config.instanceId} value={sessionId} disabled={selectionLocked}
                       onChange={value => { setSessionId(value); bumpMemoryLoadGeneration(); }} />
                   </div>
-                ) : null}
+                ) : memoryActions}
               </Flex>
-              <Flex gap={8} wrap="wrap">
-                <Button
-                  onClick={() => void loadMemory()}
-                  loading={memoryLoading}
-                  disabled={!scopePermitted || !selectionReady || memoryMutating || memoryLoading}
-                >
-                  Load items
-                </Button>
-                <Button
-                  danger
-                  disabled={!memoryActionsEnabled}
-                  onClick={() =>
-                    confirmAction(modal, {
-                      title: resetTitle,
-                      okText: "Reset scope",
-                      danger: true,
-                      onOk: () => void resetMemoryScope()
-                    })
-                  }
-                >
-                  Reset scope
-                </Button>
-              </Flex>
+              {memoryScope === "Session" ? memoryActions : null}
               {memoryError ? (
                 <AdminErrorNotice message={memoryError.message} diagnosticId={memoryError.diagnosticId} tone="danger" />
               ) : null}

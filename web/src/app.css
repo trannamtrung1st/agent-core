@@ -2373,7 +2373,8 @@ body,
 }
 
 @media (max-width: 767px) {
-  .admin-instance-continuity .ant-btn {
+  .admin-instance-continuity .ant-btn,
+  .admin-memory-actions .ant-btn {
     min-height: 40px;
   }
 }

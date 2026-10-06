@@ -1306,7 +1306,7 @@ P9.6 closes when Browser Capability v1 provides the bounded semantic, visual, or
 
 # P9.8 — Session Retrospection / Agent Experience
 
-**Status: implemented; local acceptance evidence in [the continuity candidate report](docs/reports/p9.8-p9.9-freeze-candidate.md).** The purpose is durable work continuity: an Agent Instance should be able to understand what it has experienced while working, as well as what it knows.
+**Status: closed/frozen on behavior SHA `0a3330db`; local and hosted acceptance evidence is recorded in [final verification](docs/reports/p9.8-p9.9-final-verification.md).** The purpose is durable work continuity: an Agent Instance should be able to understand what it has experienced while working, as well as what it knows.
 
 - Derive bounded retrospection from completed or recent Sessions and meaningful executions. Capture useful experience such as goal/purpose, meaningful actions attempted, important decisions, successes/failures, user corrections or feedback, unresolved work, relevant tool/environment difficulties, and useful lessons or follow-up observations.
 - Keep experience/retrospection distinct from raw conversation history, semantic compaction/session summaries, learned memory, trusted persona, instructions, and authoritative knowledge. Retrospection may inform later memory promotion, but observations do not automatically become durable learned memory.
@@ -1328,7 +1328,7 @@ optional existing memory admission
 
 # P9.9 — Autonomous Thought Activation / Agent Initiative
 
-**Status: implemented; local acceptance evidence in [the continuity candidate report](docs/reports/p9.8-p9.9-freeze-candidate.md).** Add a bounded decision step so an Agent Instance can be activated periodically to think and decide whether useful action exists. The first primitive is a configurable interval/time-based activation with a user-configured thinking prompt. For example: periodically review recent Sessions and retrospectives, investigate a meaningful recurring harness problem when justified, or do nothing.
+**Status: closed/frozen on behavior SHA `0a3330db`; local and hosted acceptance evidence is recorded in [final verification](docs/reports/p9.8-p9.9-final-verification.md).** Add a bounded decision step so an Agent Instance can be activated periodically to think and decide whether useful action exists. The first primitive is a configurable interval/time-based activation with a user-configured thinking prompt. For example: periodically review recent Sessions and retrospectives, investigate a meaningful recurring harness problem when justified, or do nothing.
 
 ```text
 scheduled task = trigger → predetermined work
