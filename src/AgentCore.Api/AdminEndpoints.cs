@@ -643,6 +643,13 @@ internal static class AdminEndpoints
             }
         });
 
+        group.MapGet("/agent-instances/{instanceId:guid}/learned-memory/{memoryId:guid}", async (
+            Guid instanceId, Guid memoryId, string scope, Guid? sessionId, AdminMemoryService memory, CancellationToken ct) =>
+        {
+            try { return Results.Json(AdminHttpMapping.ToLearnedMemoryItem(await memory.GetAsync(instanceId, AdminMemoryHttp.ParseScope(scope), sessionId, memoryId, ct))); }
+            catch (AgentCoreException ex) { return ProblemResults.From(ex); }
+        });
+
         group.MapDelete("/agent-instances/{instanceId:guid}/learned-memory/{memoryId:guid}", async (
             Guid instanceId,
             Guid memoryId,

@@ -22,6 +22,15 @@ internal static class ContinuityEndpoints
     {
         AdminScheduleEndpoints.Map(admin);
         var group = admin.MapGroup("/agent-instances/{instanceId:guid}");
+        group.MapGet("/maintenance", (Guid instanceId, ExperienceService service, IExperienceStore store, CancellationToken ct) =>
+            Respond(async () => { await service.RequireInstanceAsync(instanceId, ct); return await store.MaintenanceSettingsAsync(instanceId, ct); }));
+        group.MapPut("/maintenance", (Guid instanceId, IdentityMaintenanceConfigurationRequest request,
+            ExperienceService service, IExperienceStore store, IIdGenerator ids, TimeProvider time, CancellationToken ct) => Respond(async () =>
+            {
+                await service.RequireInstanceAsync(instanceId, ct);
+                return await store.ConfigureMaintenanceAsync(instanceId, request.ExpectedRevision, request.AllowAgentConsolidation, ct,
+                    Audit(ids, time, instanceId, "configureConsolidation", request.AllowAgentConsolidation));
+            }));
         group.MapGet("/experience", (Guid instanceId, ExperienceService service, IExperienceStore store, IWorkItemStore work, CancellationToken ct) =>
             Respond(async () => await ExperienceReview(instanceId, service, store, work, ct)));
         group.MapPut("/experience/configuration", (Guid instanceId, ExperienceConfigurationRequest request,
@@ -132,7 +141,8 @@ internal static class ContinuityEndpoints
                 settings.Enabled && r.Content is not null && r.Visibility == ExperienceVisibility.Eligible,
                 r.Content is { } c ? new(c.Goal, c.Attempts, c.Decisions, c.Outcomes, c.Corrections, c.Unresolved, c.Difficulties, c.Lessons) : null,
                 w?.Failure?.DiagnosticId?.ToString("D"), w?.Failure?.Summary, HttpMapping.Format(r.SourceAtUtc),
-                r.CheckpointAtUtc is { } checkpointAt ? HttpMapping.Format(checkpointAt) : null));
+                r.CheckpointAtUtc is { } checkpointAt ? HttpMapping.Format(checkpointAt) : null,
+                (r.DerivedFromExperienceIds ?? []).Select(id => id.ToString("D")).ToArray(), r.MaintenanceOrigin));
         }
         return new(settings.Enabled, settings.Revision, ExperienceService.MaxContextCharacters, rows);
     }

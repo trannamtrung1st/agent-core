@@ -9,13 +9,14 @@ type ApprovalModalProps = {
 
 export function ApprovalModal({ approval, onApprove, onReject }: ApprovalModalProps) {
   const open = approval != null;
+  const semantic = approval?.toolName.startsWith("harness.") || ["memory.consolidate", "experience.consolidate", "memory.forget"].includes(approval?.toolName ?? "");
   const detailEntries = approval ? Object.entries(approval.details) : [];
 
   return (
     <Modal
       open={open}
-      className={approval?.toolName.startsWith("harness.") ? "harness-chat-approval" : undefined}
-      title={approval?.toolName.startsWith("harness.") ? "Save this harness change?" : "Approve sensitive action"}
+      className={semantic ? "harness-chat-approval" : undefined}
+      title={approval?.toolName.startsWith("harness.") ? "Save this harness change?" : approval?.toolName === "memory.forget" ? "Forget this learned-memory item?" : semantic ? "Approve identity consolidation" : "Approve sensitive action"}
       okText="Approve"
       cancelText="Reject"
       onOk={onApprove}
@@ -33,7 +34,7 @@ export function ApprovalModal({ approval, onApprove, onReject }: ApprovalModalPr
                 <li key={key}>
                   <Typography.Text strong>{key}</Typography.Text>
                   {": "}
-                  {approval.toolName.startsWith("harness.") ? <Typography.Paragraph className="harness-procedure" style={{ maxHeight: "40vh", overflow: "auto", overflowWrap: "anywhere" }}>{value}</Typography.Paragraph> : <Typography.Text>{value}</Typography.Text>}
+                  {semantic ? <Typography.Paragraph className="harness-procedure" style={{ maxHeight: "40vh", overflow: "auto", overflowWrap: "anywhere" }}>{value}</Typography.Paragraph> : <Typography.Text>{value}</Typography.Text>}
                 </li>
               ))}
             </ul>

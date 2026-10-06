@@ -107,6 +107,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield return new ModelCompleted(ModelStopReason.ToolCalls);
             yield break;
         }
+        if (IdentityMaintenanceScript.Generate(request) is { } maintenanceEvents)
+        {
+            foreach (var item in maintenanceEvents) yield return item;
+            yield break;
+        }
         if (ThoughtActivationScript.Generate(request) is { } thoughtEvents)
         {
             foreach (var item in thoughtEvents) yield return item;
@@ -250,6 +255,13 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
         var chunks = Select(request, lastUser);
         var proposals = TakeMemoryTurn();
+        if (lastUser.StartsWith("synthetic-inferred-frontend:", StringComparison.Ordinal))
+        {
+            var subject = lastUser.Split(':', 2)[1].Trim();
+            proposals = [new MemoryProposal(MemoryProposalOperation.Upsert, AgentCore.Domain.Memory.MemoryKind.Preference,
+                "Frontend " + subject, "Prefer TypeScript for frontend examples.", MemoryScopeHint.IdentityUser, MemoryProposalSource.AgentInferred)];
+            chunks = ["Observed a durable frontend preference."];
+        }
         if (RequestsNativeJson(request))
         {
             cancellationToken.ThrowIfCancellationRequested();

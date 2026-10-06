@@ -4,8 +4,8 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Domain.Experience;
 
-public enum ExperienceSourceKind { Session, WorkItem }
-public enum ExperienceVisibility { Eligible, Suppressed, Deleted }
+public enum ExperienceSourceKind { Session = 0, WorkItem = 1, Consolidation = 2 }
+public enum ExperienceVisibility { Eligible = 0, Suppressed = 1, Deleted = 2, Superseded = 3 }
 
 public sealed record ExperienceSettings(Guid AgentInstanceId, bool Enabled, long Revision);
 
@@ -32,4 +32,14 @@ public sealed record AgentExperience(Guid ExperienceId, Guid AgentInstanceId, Gu
     DateTimeOffset CreatedAtUtc, ExperienceContent? Content = null,
     ExperienceVisibility Visibility = ExperienceVisibility.Eligible, long Revision = 1,
     string? GenerationDefinitionId = null, int? GenerationDefinitionVersion = null, AgentIdentity? GenerationPersona = null,
-    DateTimeOffset? CheckpointAtUtc = null);
+    DateTimeOffset? CheckpointAtUtc = null,
+    IReadOnlyList<Guid>? DerivedFromExperienceIds = null,
+    string? MaintenanceOrigin = null);
+
+public sealed record IdentityMaintenanceSettings(Guid AgentInstanceId, bool AllowAgentConsolidation, long Revision);
+
+public static class IdentityMaintenanceLimits
+{
+    public const int MinSources = 2;
+    public const int MaxSources = 8;
+}

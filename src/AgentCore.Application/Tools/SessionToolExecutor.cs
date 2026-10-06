@@ -35,7 +35,8 @@ public sealed partial class SessionToolExecutor(
     IWorkCaptureStore? workCaptures = null,
     Func<HarnessManagementService>? harnessAuthoring = null,
     AgentCore.Application.Experience.ExperienceService? experience = null,
-    AgentCore.Application.Continuity.ContinuityService? continuity = null)
+    AgentCore.Application.Continuity.ContinuityService? continuity = null,
+    AgentCore.Application.Continuity.IdentityMaintenanceService? identityMaintenance = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -72,6 +73,21 @@ public sealed partial class SessionToolExecutor(
         ToolApprovalGrant? grant = null,
         ToolExecutionAdmission? admission = null) =>
         ToolPolicy.EvaluateExecution(definition, toolName, _configurationGate, grant, admission);
+    public ValueTask<bool> AllowsAgentConsolidationAsync(Guid? id, CancellationToken ct) =>
+        identityMaintenance?.AllowsAutonomousAsync(id, ct) ?? ValueTask.FromResult(false);
+
+    public async ValueTask<ToolPolicyDecision> EvaluateExecutionPolicyAsync(AgentDefinition definition, Guid sessionId,
+        ModelToolCall call, JsonElement args, ToolExecutionAdmission? admission, CancellationToken ct)
+    {
+        if (!ToolCatalog.IsIdentityMaintenance(call.Name)) return EvaluateExecutionPolicy(definition, call.Name, admission: admission);
+        if (identityMaintenance is null) return ToolPolicyDecision.Deny;
+        try { return await identityMaintenance.PolicyAsync(definition, sessionId, call.Name, args, admission, ct); }
+        // Malformed arguments are handled by the semantic executor before any mutation.
+        // Preserve its actionable validation result so the model can repair the call.
+        catch (AgentCoreException ex) when (ex.StatusCode == 400) { return ToolPolicyDecision.Allow; }
+        catch (AgentCoreException) { RuntimeTelemetry.RecordIdentityMaintenance("rejected_by_policy"); return ToolPolicyDecision.Deny; }
+    }
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -180,6 +196,12 @@ public sealed partial class SessionToolExecutor(
 
         try
         {
+            if (ToolCatalog.IsIdentityMaintenance(call.Name))
+            {
+                if (identityMaintenance is null || admission is null) return TextResult(Error("forbidden", "Identity maintenance is unavailable."));
+                var result = await identityMaintenance.ExecuteAsync(definition, sessionId, call, args, admission, approvalGrant, cancellationToken);
+                return TextResult(AgentCore.Application.Continuity.ContinuityService.Serialize(result));
+            }
             if (call.Name is ToolCatalog.ContinuitySearch or ToolCatalog.ContinuityGet)
             {
                 if (continuity is null || admission?.AgentInstanceId is not Guid ownerId)
@@ -335,8 +357,11 @@ public sealed partial class SessionToolExecutor(
         {
             return TextResult(Error("invalid", "Continuity arguments are invalid."));
         }
+        catch (ArgumentException) when (ToolCatalog.IsIdentityMaintenance(call.Name))
+        { return FitResult(remainingOutputBytes, Error("invalid", "Consolidation content is malformed or exceeds its bounds.")); }
         catch (AgentCoreException ex)
         {
+            if (ToolCatalog.IsIdentityMaintenance(call.Name)) RuntimeTelemetry.RecordIdentityMaintenance(ex.Code == "Conflict" ? "conflict" : call.Name == ToolCatalog.MemoryForget ? "forget_rejected" : "rejected_by_policy");
             return FitResult(remainingOutputBytes, ex.DiagnosticId is { } diagnosticId
                 ? JsonSerializer.Serialize(new { error = ex.Code, message = ex.Message, diagnosticId })
                 : Error(ex.Code, ex.Message));

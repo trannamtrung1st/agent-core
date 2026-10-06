@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type Key } from "react";
 import { Alert, App, Button, Descriptions, Empty, Flex, Form, Input, InputNumber, Select, Spin, Switch, Table, Tag, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
 import { drawerPageSearch, listModels, type DrawerPageQuery, type ModelDescriptor, type WorkItem, type WorkItemResult } from "../../services/api";
-import { instanceContinuityRequest as request, type ExperienceItem, type ExperienceReview, type ThoughtDraft, type ThoughtRegistration, type ThoughtReview } from "../../services/adminApi";
+import { instanceContinuityRequest as request, type IdentityMaintenanceSettings, type ExperienceItem, type ExperienceReview, type ThoughtDraft, type ThoughtRegistration, type ThoughtReview } from "../../services/adminApi";
 import { BackgroundWorkDrawer } from "../chat/BackgroundWorkDrawer";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
@@ -46,6 +46,50 @@ export function InstanceRunsSection({ instanceId, open, wide = true, inline = fa
 function Failure({ error, reload }: { error: AdminFailureNotice | null; reload: () => void }) {
   return error ? <Alert type="error" showIcon title={error.message} action={<Button onClick={reload}>Reload</Button>}
     description={error.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: error.diagnosticId }} /> : undefined} /> : null;
+}
+
+export function IdentityMaintenanceSection({ instanceId }: { instanceId: string }) {
+  const { token } = theme.useToken();
+  const [settings, setSettings] = useState<IdentityMaintenanceSettings | null>(null);
+  const [error, setError] = useState<AdminFailureNotice | null>(null);
+  const [busy, setBusy] = useState(false);
+  const order = useResponseOrder();
+  const reload = useCallback(async () => {
+    const generation = ++order.current.generation;
+    setBusy(true);
+    try {
+      const value = await request<IdentityMaintenanceSettings>(instanceId, "maintenance");
+      if (generation === order.current.generation) { setSettings(value); setError(null); }
+    } catch (reason) {
+      if (generation === order.current.generation) setError(describeAdminError(reason, "Unable to load consolidation settings. Reload and try again."));
+    } finally { if (generation === order.current.generation) setBusy(false); }
+  }, [instanceId, order]);
+  useEffect(() => { setSettings(null); void reload(); }, [reload]);
+  async function configure(allowAgentConsolidation: boolean) {
+    if (!settings || order.current.mutating) return;
+    order.current.mutating = true;
+    const generation = ++order.current.generation;
+    setBusy(true); setError(null);
+    try {
+      const value = await request<IdentityMaintenanceSettings>(instanceId, "maintenance", "PUT", { expectedRevision: settings.revision, allowAgentConsolidation });
+      if (generation === order.current.generation) setSettings(value);
+    } catch (reason) {
+      if (generation === order.current.generation) setError(describeAdminError(reason, "Consolidation settings changed or could not be saved. Reload and try again."));
+    } finally { order.current.mutating = false; if (generation === order.current.generation) setBusy(false); }
+  }
+  return <section className="admin-definition-panel" aria-label="Identity maintenance">
+    <div className="admin-definition-panel-heading"><Typography.Title level={4}>Identity maintenance</Typography.Title>
+      <Typography.Text type="secondary">Keep redundant learned state coherent while retaining its sources.</Typography.Text></div>
+    <div className="admin-definition-panel-body"><Flex vertical gap={token.paddingXS}>
+      <Flex wrap align="center" gap={token.paddingXS}>
+        <Switch aria-label="Allow agent consolidation" checked={settings?.allowAgentConsolidation ?? false} loading={busy} disabled={!settings || busy || !!error}
+          onChange={value => void configure(value)} />
+        <Typography.Text>Allow agent consolidation</Typography.Text>
+      </Flex>
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>Permits safe consolidation of repeated Experience and inferred identity memory through normal Thought runs. It does not schedule runs, change memory scope, or permit silent forgetting. Protected changes require exact approval.</Typography.Paragraph>
+      <Failure error={error} reload={() => void reload()} />
+    </Flex></div>
+  </section>;
 }
 
 export type ExperienceSelection = { workItemId: string; request: number };
@@ -153,13 +197,13 @@ export function ExperienceSection({ instanceId, onWork, selection, active = true
               onFilter: (value, item) => item.status === value,
               render: (status: string) => <Tag color={status === "Failed" ? "error" : undefined}>{status}</Tag> },
             { title: "Context", key: "context", width: 170,
-              filters: ["Eligible for context", "Suppressed", "Not in context"].map(value => ({ text: value, value })),
+              filters: ["Eligible for context", "Suppressed", "Superseded", "Not in context"].map(value => ({ text: value, value })),
               onFilter: (value, item) => experienceContext(item) === value,
               render: (_, item) => <Tag>{experienceContext(item)}</Tag> },
             { title: "Source", dataIndex: "sourceKind", width: 150,
-              filters: [{ text: "Session", value: "Session" }, { text: "Background work", value: "WorkItem" }],
+              filters: [{ text: "Session", value: "Session" }, { text: "Background work", value: "WorkItem" }, { text: "Consolidated", value: "Consolidation" }],
               onFilter: (value, item) => item.sourceKind === value,
-              render: (kind: string) => kind === "Session" ? "Session" : "Background work" },
+              render: (kind: string) => kind === "Consolidation" ? "Consolidated" : kind === "Session" ? "Session" : "Background work" },
             { title: "Checkpoint captured", key: "checkpointAt", width: 220, defaultSortOrder: "descend",
               sorter: (a, b) => Number(a.generationWorkItemId === selection?.workItemId) - Number(b.generationWorkItemId === selection?.workItemId) || (a.checkpointAt ?? a.sourceCreatedAt ?? a.sourceAt).localeCompare(b.checkpointAt ?? b.sourceCreatedAt ?? b.sourceAt),
               render: (_, item) => item.checkpointAt ? date(item.checkpointAt) : <Typography.Text type="secondary" title={`Source created: ${date(item.sourceCreatedAt ?? item.sourceAt)}`}>Not recorded</Typography.Text> }
@@ -167,9 +211,9 @@ export function ExperienceSection({ instanceId, onWork, selection, active = true
           expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, item) => setExpanded(open ? [item.experienceId] : []),
             expandedRowRender: item => <Flex vertical gap={token.padding} style={{ whiteSpace: "normal" }}>
               <ExperienceDetails item={item} />
-              <Button style={{ alignSelf: "flex-start" }} onClick={() => onWork(item.generationWorkItemId)}>View generation run</Button>
+              {item.generationWorkItemId !== "00000000-0000-0000-0000-000000000000" ? <Button style={{ alignSelf: "flex-start" }} onClick={() => onWork(item.generationWorkItemId)}>View generation run</Button> : null}
               <Flex wrap gap={token.paddingXS}>
-                <Button disabled={busy} onClick={() => void mutate(`experience/${item.experienceId}`, "PUT", { expectedRevision: item.revision, visibility: item.visibility === "Suppressed" ? "Eligible" : "Suppressed" })}>
+                <Button disabled={busy || item.visibility === "Superseded" || item.visibility === "Deleted"} onClick={() => void mutate(`experience/${item.experienceId}`, "PUT", { expectedRevision: item.revision, visibility: item.visibility === "Suppressed" ? "Eligible" : "Suppressed" })}>
                   {item.visibility === "Suppressed" ? "Include in context" : "Suppress experience"}</Button>
                 <Button danger disabled={busy} onClick={() => confirmAction(modal, { title: "Delete this experience?", content: "The source work remains available. This checkpoint will not be regenerated.", okText: "Delete experience", danger: true,
                   onOk: () => mutate(`experience/${item.experienceId}`, "PUT", { expectedRevision: item.revision, visibility: "Deleted" }) })}>Delete experience</Button>
@@ -185,7 +229,7 @@ export function ExperienceSection({ instanceId, onWork, selection, active = true
 const experienceGoal = (item: ExperienceItem) => item.content?.goal ?? (item.status === "Failed" ? "Retrospection failed"
   : item.status === "Cancelled" ? "Retrospection cancelled" : "Retrospection in progress");
 const experienceContext = (item: ExperienceItem) => item.eligibleForContext ? "Eligible for context"
-  : item.visibility === "Suppressed" ? "Suppressed" : "Not in context";
+  : item.visibility === "Superseded" ? "Superseded" : item.visibility === "Deleted" ? "Deleted" : item.visibility === "Suppressed" ? "Suppressed" : "Not in context";
 
 function ExperienceDetails({ item }: { item: ExperienceItem }) {
   const { token } = theme.useToken();
@@ -202,7 +246,12 @@ function ExperienceDetails({ item }: { item: ExperienceItem }) {
             </ul> }))]} /> : null}
     <Descriptions title="Provenance" bordered column={1} size="small" {...detailLayout}
       items={[
-        { key: "source", label: `Source ${item.sourceKind === "Session" ? "Session" : "background work"}`, children: item.sourceId },
+        { key: "visibility", label: "State", children: <Tag>{item.visibility}</Tag> },
+        ...(item.derivedFromExperienceIds?.length ? [
+          { key: "lineage", label: `Consolidated from ${item.derivedFromExperienceIds.length} experiences`, children: <ul style={{ margin: 0, paddingInlineStart: token.padding }}>{item.derivedFromExperienceIds.map(id => <li key={id}>{id}</li>)}</ul> },
+          { key: "origin", label: "Maintenance origin", children: item.maintenanceOrigin ?? "Not recorded" }
+        ] : []),
+        { key: "source", label: item.sourceKind === "Consolidation" ? "Maintenance operation" : `Source ${item.sourceKind === "Session" ? "Session" : "background work"}`, children: item.sourceId },
         { key: "checkpoint", label: "Checkpoint", children: item.throughCursor },
         { key: "definition", label: "Definition", children: `${item.definitionId} · v${item.definitionVersion}` },
         { key: "model", label: "Model", children: item.modelKey },

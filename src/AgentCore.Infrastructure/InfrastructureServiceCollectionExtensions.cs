@@ -99,6 +99,7 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IInitiativeEvaluator>()));
         services.TryAddSingleton<AgentCore.Application.Experience.ExperienceService>();
         services.TryAddSingleton<AgentCore.Application.Continuity.ContinuityService>();
+        services.TryAddSingleton<AgentCore.Application.Continuity.IdentityMaintenanceService>();
         services.TryAddSingleton<AgentCore.Application.Continuity.ContinuityMaintenance>();
         services.TryAddSingleton<DurableWorkContextFactory>();
         services.TryAddSingleton<WorkCancellationRegistry>();
@@ -400,7 +401,8 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetService<IWorkCaptureStore>(),
             () => provider.GetRequiredService<HarnessManagementService>(),
             provider.GetRequiredService<AgentCore.Application.Experience.ExperienceService>(),
-            provider.GetRequiredService<AgentCore.Application.Continuity.ContinuityService>()));
+            provider.GetRequiredService<AgentCore.Application.Continuity.ContinuityService>(),
+            provider.GetRequiredService<AgentCore.Application.Continuity.IdentityMaintenanceService>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),

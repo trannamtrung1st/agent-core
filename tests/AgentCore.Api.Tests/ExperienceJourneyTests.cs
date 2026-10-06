@@ -132,10 +132,12 @@ internal sealed class ExperienceHost : DurableSqliteHostFactory
     private readonly TimeProvider? clock;
     private readonly IExperienceStore? experienceStore;
     private readonly Action<IServiceCollection>? configure;
-    internal ExperienceHost(string db, ILanguageModel? languageModel = null, TimeProvider? clock = null, IExperienceStore? experienceStore = null, Action<IServiceCollection>? configure = null) : base(db, runScheduler: false, languageModel: languageModel) { this.db = db; this.clock = clock; this.experienceStore = experienceStore; this.configure = configure; }
+    private readonly Action<Microsoft.Extensions.Configuration.IConfigurationBuilder>? configuration;
+    internal ExperienceHost(string db, ILanguageModel? languageModel = null, TimeProvider? clock = null, IExperienceStore? experienceStore = null, Action<IServiceCollection>? configure = null, Action<Microsoft.Extensions.Configuration.IConfigurationBuilder>? configuration = null) : base(db, runScheduler: false, languageModel: languageModel) { this.db = db; this.clock = clock; this.experienceStore = experienceStore; this.configure = configure; this.configuration = configuration; }
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         base.ConfigureWebHost(builder);
+        if (configuration is not null) builder.ConfigureAppConfiguration((_, c) => configuration(c));
         builder.ConfigureTestServices(services =>
         {
             foreach (var hosted in services.Where(s => s.ImplementationType is { } t &&

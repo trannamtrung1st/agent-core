@@ -129,7 +129,7 @@ Covered in the matrix table. Load more skipped with the page-size rationale abov
 
 ## Retirement-match dispositions (final)
 
-See [batch-05 retirement-search](../../local/tdp-workspace/evidence/antd-migration/run-20260916T173700-eb3104/batch-05/retirement-search.md) (workspace evidence; not committed). Committed outcomes: no `styles.css`, no Martian fonts/plates, no custom Select, DESIGN.md/Impeccable/frontend skill are AntD. This item resolved remaining canonical docs so they no longer prescribe avoiding component frameworks or Pixel Dialogue Field as the live UI. Historical rationale in docs/10 may name Pixel Dialogue Field as the retired cost. TDP `inputs/**` remain immutable snapshots.
+Historical workspace evidence (not committed or available as a repository link): `local/tdp-workspace/evidence/antd-migration/run-20260916T173700-eb3104/batch-05/retirement-search.md`. Committed outcomes: no `styles.css`, no Martian fonts/plates, no custom Select, DESIGN.md/Impeccable/frontend skill are AntD. This item resolved remaining canonical docs so they no longer prescribe avoiding component frameworks or Pixel Dialogue Field as the live UI. Historical rationale in docs/10 may name Pixel Dialogue Field as the retired cost. TDP `inputs/**` remain immutable snapshots.
 
 ## Skills applied
 

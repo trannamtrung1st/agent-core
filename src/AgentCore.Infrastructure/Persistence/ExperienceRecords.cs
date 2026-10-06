@@ -18,3 +18,10 @@ public sealed class ExperienceSettingsRecord
     public bool Enabled { get; set; }
     public long Revision { get; set; }
 }
+
+public sealed class IdentityMaintenanceSettingsRecord
+{
+    public string AgentInstanceId { get; set; } = "";
+    public bool AllowAgentConsolidation { get; set; }
+    public long Revision { get; set; }
+}

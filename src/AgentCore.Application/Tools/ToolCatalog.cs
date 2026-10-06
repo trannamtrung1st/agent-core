@@ -41,6 +41,10 @@ public static class ToolCatalog
     public const string BrowserCapture = "browser.capture";
     public const string ContinuitySearch = "continuity.search";
     public const string ContinuityGet = "continuity.get";
+    public const string MemoryConsolidate = "memory.consolidate";
+    public const string MemoryForget = "memory.forget";
+    public const string ExperienceConsolidate = "experience.consolidate";
+    public static bool IsIdentityMaintenance(string name) => name is MemoryConsolidate or MemoryForget or ExperienceConsolidate;
     public const string ExperienceRecent = "experience.recent";
     public const string WorkComplete = "work.complete";
 
@@ -175,7 +179,7 @@ public static class ToolCatalog
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
-        foreach (var name in new[] { ContinuitySearch, ContinuityGet })
+        foreach (var name in new[] { ContinuitySearch, ContinuityGet, MemoryConsolidate, MemoryForget, ExperienceConsolidate })
             if (ToolRegistry.TryGet(name, out var continuityDescriptor)
                 && ToolPolicy.IsOffered(continuityDescriptor, definition, context, configurationGate) && seen.Add(name))
                 offered.Add(continuityDescriptor.ModelDefinition);

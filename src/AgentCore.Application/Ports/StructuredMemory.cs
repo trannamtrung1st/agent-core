@@ -42,6 +42,8 @@ public sealed record MemorySearchQuery(string? Text, MemoryKind? Kind);
 
 public interface IStructuredMemoryStore
 {
+    ValueTask<StructuredMemoryItem> ConsolidateAsync(IReadOnlyList<StructuredMemoryItem> sources, StructuredMemoryItem result, CancellationToken ct = default);
+
     ValueTask<StructuredMemoryItem?> FindAsync(
         Guid sessionId,
         Guid memoryId,

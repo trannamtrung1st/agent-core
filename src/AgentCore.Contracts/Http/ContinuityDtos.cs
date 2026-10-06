@@ -9,7 +9,8 @@ public sealed record ExperienceContentResponse(string Goal, IReadOnlyList<string
 public sealed record ExperienceResponse(string ExperienceId, string SourceKind, string SourceId, long ThroughCursor,
     string SourceAt, string DefinitionId, int DefinitionVersion, string GenerationWorkItemId, string ModelKey,
     string Status, string Visibility, long Revision, bool EligibleForContext, ExperienceContentResponse? Content,
-    string? DiagnosticId, string? FailureSummary, string? SourceCreatedAt = null, string? CheckpointAt = null);
+    string? DiagnosticId, string? FailureSummary, string? SourceCreatedAt = null, string? CheckpointAt = null,
+    IReadOnlyList<string>? DerivedFromExperienceIds = null, string? MaintenanceOrigin = null);
 public sealed record ExperienceReviewResponse(bool Enabled, long SettingsRevision, int ContextBudgetCharacters,
     IReadOnlyList<ExperienceResponse> Items);
 public sealed record ThoughtRegistrationRequest(long ExpectedRevision, bool Enabled, int IntervalSeconds,
@@ -20,3 +21,5 @@ public sealed record ThoughtRegistrationResponse(string RegistrationId, long Rev
     string? NextRunAt, string? LastRunAt, string? LastOutcome, string? LastWorkItemId, string? ExecutionStatus,
     string? EffectiveModelKey);
 public sealed record ThoughtReviewResponse(int MinIntervalSeconds, IReadOnlyList<ThoughtRegistrationResponse> Items);
+
+public sealed record IdentityMaintenanceConfigurationRequest(long ExpectedRevision, bool AllowAgentConsolidation);

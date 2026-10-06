@@ -87,7 +87,7 @@ public sealed class DurableOccurrenceExecution(
             CaptureScope: running.WorkItemId.ToString("D"),
             WorkItemId: running.WorkItemId,
             Harness: triggerKind == TriggerKind.ThoughtActivation ? await tools.HarnessContextAsync(running.Owner.AgentInstanceId, cancellationToken) : null,
-            SupportsTools: model.Capabilities.Tools);
+            SupportsTools: model.Capabilities.Tools, Model: running.Model);
         var observationRequired = restoredObservation;
         string? blockedActionHash = restoredBlockedHash;
         var browserUnavailable = false;
@@ -292,7 +292,7 @@ public sealed class DurableOccurrenceExecution(
                     HarnessSources = messages.Where(m => m.Role == ModelRole.Tool).SelectMany(m =>
                         messages.SelectMany(a => a.ToolCalls ?? []).Where(c => c.Id == m.ToolCallId)
                             .SelectMany(c => HarnessChatTools.Sources(c, m.Text))).ToArray() };
-            var policy = tools.EvaluateExecutionPolicy(definition, call.Name, admission: admission);
+            var policy = await tools.EvaluateExecutionPolicyAsync(definition, Guid.Empty, call, args, admission, cancellationToken);
             if (policy == ToolPolicyDecision.Deny)
                 return await AppendResultAsync(call, ToolExecutionResult.FromText(
                     ToolResources.IsSessionTool(call.Name) && !ToolCatalog.IsBrowserTool(call.Name) && !HarnessChatTools.IsHarness(call.Name)
@@ -360,6 +360,7 @@ public sealed class DurableOccurrenceExecution(
                 {
                     if (!ThoughtCompletion.TryParse(args, messages, out var thoughtResult, out var thoughtAttention, out var thoughtRejection))
                         return new DurableOccurrenceFailed(running, "invalid-completion", thoughtRejection);
+                    if (await tools.AllowsAgentConsolidationAsync(running.Owner.AgentInstanceId, cancellationToken) && ThoughtCompletion.Outcome(thoughtResult) == "NoAction") RuntimeTelemetry.RecordIdentityMaintenance("no_op");
                     RuntimeTelemetry.RecordThought(thoughtAttention ? "attention" : ThoughtCompletion.Outcome(thoughtResult));
                     return new DurableOccurrenceCompleted(running, thoughtResult, thoughtAttention);
                 }

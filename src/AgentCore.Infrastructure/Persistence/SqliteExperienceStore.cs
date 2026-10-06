@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class SqliteExperienceStore(IDbContextFactory<AgentCoreDbContext> contexts) : IExperienceStore
+public sealed partial class SqliteExperienceStore(IDbContextFactory<AgentCoreDbContext> contexts) : IExperienceStore
 {
     public async ValueTask<ExperienceSettings> SettingsAsync(Guid id, CancellationToken ct = default)
     {
@@ -84,7 +84,9 @@ public sealed class SqliteExperienceStore(IDbContextFactory<AgentCoreDbContext> 
     public async ValueTask<AgentExperience> SetVisibilityAsync(Guid id, Guid recordId, long expectedRevision, ExperienceVisibility visibility, CancellationToken ct = default, AdminEventAppend? audit = null)
     {
         var r = await GetAsync(id, recordId, ct) ?? throw AgentCoreErrors.NotFound("Experience was not found.");
-        if (r.Visibility == ExperienceVisibility.Deleted) throw AgentCoreErrors.Validation("Deleted experience cannot be restored.");
+        if (visibility == ExperienceVisibility.Superseded || (r.Visibility == ExperienceVisibility.Superseded && visibility != ExperienceVisibility.Deleted))
+                throw AgentCoreErrors.Validation("Superseded experience cannot be restored or assigned manually.");
+            if (r.Visibility == ExperienceVisibility.Deleted) throw AgentCoreErrors.Validation("Deleted experience cannot be restored.");
         var saved = r with { Visibility = visibility, Content = visibility == ExperienceVisibility.Deleted ? null : r.Content, Revision = r.Revision + 1 };
         if (r.Revision != expectedRevision || !await SaveCasAsync(saved, expectedRevision, ct, audit)) throw AgentCoreErrors.Conflict("Experience revision is stale.");
         return saved;

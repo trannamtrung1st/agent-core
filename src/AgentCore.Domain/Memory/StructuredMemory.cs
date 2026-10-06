@@ -29,7 +29,9 @@ public sealed record MemoryProvenance(
     Guid? SupersedesMemoryId,
     DateTimeOffset RecordedAt,
     Guid? OriginMemoryId = null,
-    Guid? OriginSessionId = null);
+    Guid? OriginSessionId = null,
+    IReadOnlyList<Guid>? DerivedFromMemoryIds = null,
+    string? MaintenanceOrigin = null);
 
 public sealed record StructuredMemoryItem(
     Guid MemoryId,

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AdminEffectiveConfiguration } from "../../services/adminApi";
 import { InstanceDetail } from "./AdminApp";
 vi.mock("./InstanceContinuitySection", () => ({
+  IdentityMaintenanceSection: () => <div>Identity maintenance permission</div>,
   ExperienceSection: ({ selection }: { selection?: { workItemId: string } }) => <div>Experience controls {selection?.workItemId}</div>,
   ThoughtSection: ({ onWork, selection }: { onWork: (id: string) => void; selection?: { registrationId: string } }) => <div>Thought controls {selection?.registrationId}<button onClick={() => onWork("thought-run")}>Inspect thought fixture</button></div>,
   InstanceRunsSection: ({ selectedWorkItemId, onSource }: { selectedWorkItemId?: string; onSource: (source: { kind: string; registrationId: string }) => void }) => <div>Run history {selectedWorkItemId}<button onClick={() => onSource({ kind: "thought", registrationId: "original-thought" })}>Back to thought fixture</button><button onClick={() => onSource({ kind: "event", registrationId: "event-source" })}>Back to event fixture</button></div>

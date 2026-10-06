@@ -8,6 +8,24 @@ public static class ToolApprovalPreview
         string toolName,
         JsonElement args)
     {
+        if (ToolCatalog.IsIdentityMaintenance(toolName))
+        {
+            var details = new Dictionary<string, string>(StringComparer.Ordinal);
+            details["Applies to"] = "Future learned-state retrieval; source history is retained.";
+            if (toolName == ToolCatalog.MemoryForget)
+            {
+                details["Memory ID"] = ReadString(args, "memoryId") ?? "";
+                return ("Forget this learned-memory item", details);
+            }
+            var sources = toolName == ToolCatalog.MemoryConsolidate ? "sourceMemoryIds" : "sourceExperienceIds";
+            if (args.TryGetProperty(sources, out var ids)) details["Sources"] = ids.ToString();
+            details["Replacement"] = toolName == ToolCatalog.MemoryConsolidate
+                ? (ReadString(args, "subject") ?? "") + ": " + (ReadString(args, "content") ?? "")
+                : args.ToString();
+            if (details["Replacement"].Length > 8000) throw new ArgumentException("Maintenance approval exceeds its content bound.");
+            return (toolName == ToolCatalog.MemoryConsolidate ? "Consolidate selected learned memories" : "Consolidate selected experiences", details);
+        }
+
         if (HarnessChatTools.Operations.TryGetValue(toolName, out var operation))
         {
             var details = new Dictionary<string, string>(StringComparer.Ordinal);

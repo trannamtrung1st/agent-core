@@ -120,6 +120,13 @@ jobs:
           PLAYWRIGHT_SQLITE_PATH=../data/playwright/p9899-continuity.db \
             pnpm exec playwright test --project=p9899-continuity
 
+      - name: P9.10 identity maintenance Playwright
+        working-directory: web
+        run: |
+          PLAYWRIGHT_SQLITE_PATH=../data/playwright/p910-maintenance.db \
+          PLAYWRIGHT_FAITHFUL_MANUAL=1 \
+            pnpm exec playwright test --project=p910-continuity-maintenance
+
       - name: Secretary journey Playwright
         working-directory: web
         run: |

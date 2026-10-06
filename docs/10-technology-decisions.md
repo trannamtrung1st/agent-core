@@ -322,3 +322,9 @@ The narrow accepted thought-activation exception does not introduce an autonomou
 ## Decision: unified Continuity and owner-authored schedules
 
 Accepted by the continuity-enhancements v2 implementation request. Use deterministic lexical ranking and bounded candidate scans, no vector infrastructure. Keep existing Memory/Experience persistence and approval/Definition policy. Extend the existing trigger store's transactional owner save/manual admission to schedules; provenance includes CurrentUserTurn, AdminOwner, AdminThought and ApplicationEvent. Optional candidate classification, semantic ranking and a generic Continuity Admin search are deferred. This follow-on does not move P9.8/P9.9 freezes or start P10/P11. Verification status belongs to the implementation report.
+
+## Decision: P9.10 semantic identity maintenance
+
+Long-lived identity state supports accumulation and bounded maintenance. Reuse the existing structured Memory and Experience stores, transactions, exact approvals and durable Thought/WorkItem loop. Consolidation preserves immediate multi-parent provenance and supersedes sources; it never compacts source Sessions or rewrites trusted instructions. Experience generalization stays an observation in its own store. A single instance-owned, default-off CAS setting controls safe autonomous consolidation independently of activation.
+
+Stable deterministic result identities derive from the trusted owner, operation kind, sorted source identities and canonical proposed payload. Exact retries return the established result; deleted or suppressed results remain unavailable. This provides idempotent local semantic effects through restart without claiming exactly-once external effects. No new scheduler, runtime, continuous cognition, automatic forgetting or generic model-facing CRUD is introduced. Existing P9.8/P9.9 freezes remain on `0a3330db`.

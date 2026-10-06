@@ -401,3 +401,23 @@ Validation returns 400, policy/owner refusal 403, missing owned resource 404, st
 ### Model-facing Continuity contracts
 
 `continuity.search` accepts required `query` (up to 200 characters) and optional `limit` (1–10). `continuity.get` accepts `kind` (`Memory`, `Experience`, `Session`), UUID `id`, optional nonnegative `afterEntrySequence` and `limit` (1–20). Unknown arguments and owner overrides are rejected. Core obtains instance/profile from execution admission and uses the pinned Definition. Both tools are read-only and offered only to eligible managed, tool-capable executions with Continuity context. Responses include an explicit untrusted-history label and bounded result JSON. Result provenance records instance/profile, source kind/id, Definition/version when available, cursor, scope and observation time. Detail includes content, hasMore and nullable nextAfter. Sensitivity, deletion and suppression are rechecked during inspection. The legacy experience.recent executor remains compatible; automatic recall and offered unified inspection use Continuity.
+
+## P9.10 identity maintenance contracts
+
+Maintenance routes require the trusted-local owner capability and active managed instance ownership. Historical Memory detail follows the existing owner/scope inspection rules, including archived instance inspection. No SignalR envelope change is introduced.
+
+| Method/path relative to `/api/v2/admin/agent-instances/{id}` | Contract |
+| --- | --- |
+| `GET /maintenance` | `{ agentInstanceId, allowAgentConsolidation, revision }`; absent row means false/revision 0 |
+| `PUT /maintenance` | `{ expectedRevision, allowAgentConsolidation }`; returns saved state; stale revision 409; same audit/transaction as existing owner configuration |
+| `GET /learned-memory/{memoryId}?scope=IdentityUser` | Owned exact historical detail; Session scope also requires `sessionId`; Active/Superseded/Deleted status, content-free tombstone |
+
+Learned-memory responses add `status`, `provenance.derivedFromMemoryIds` and `provenance.maintenanceOrigin`. Experience responses add `derivedFromExperienceIds` and `maintenanceOrigin`; sourceKind includes Consolidation and visibility includes Superseded. Existing enum numeric values are preserved. Deleted Experience is still omitted from normal review.
+
+| Semantic tool | Required arguments |
+| --- | --- |
+| `memory.consolidate` | `sourceMemoryIds` (2–8 unique UUIDs), exact `kind`, `subject` (1–128 characters), `content` (1–2000 characters) |
+| `experience.consolidate` | `sourceExperienceIds` (2–8 unique UUIDs), `goal`, `attempts`, `decisions`, `outcomes`, `corrections`, `unresolved`, `difficulties`, `lessons`; existing Experience content bounds |
+| `memory.forget` | one `memoryId` UUID |
+
+Additional properties are rejected. Arguments cannot supply owner, scope, origin, approval or settings. Successful consolidation returns `status: consolidated`, result ID and exact parent IDs; successful forgetting returns `status: forgotten`, memoryId, scope and precise retained-source explanation. Exact tombstone retry returns `already_forgotten`. Normal tool-error and exact-hash approval contracts remain. Historical Admin detail is inspection, not an eligibility bypass for model-facing Continuity.

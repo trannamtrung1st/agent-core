@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class SqliteStructuredMemoryStore(IDbContextFactory<AgentCoreDbContext> contexts) : IStructuredMemoryStore
+public sealed partial class SqliteStructuredMemoryStore(IDbContextFactory<AgentCoreDbContext> contexts) : IStructuredMemoryStore
 {
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -195,7 +195,9 @@ public sealed class SqliteStructuredMemoryStore(IDbContextFactory<AgentCoreDbCon
                 row.SupersedesMemoryId is null ? null : Guid.Parse(row.SupersedesMemoryId),
                 DateTimeOffset.FromUnixTimeMilliseconds(row.ProvenanceRecordedAtUtc),
                 row.OriginMemoryId is null ? null : Guid.Parse(row.OriginMemoryId),
-                row.OriginSessionId is null ? null : Guid.Parse(row.OriginSessionId)),
+                row.OriginSessionId is null ? null : Guid.Parse(row.OriginSessionId),
+                JsonSerializer.Deserialize<Guid[]>(row.DerivedFromMemoryIdsJson, Json) ?? [],
+                row.MaintenanceOrigin),
             DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc),
             DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc),
             (MemoryScope)row.Scope,
@@ -223,7 +225,9 @@ public sealed class SqliteStructuredMemoryStore(IDbContextFactory<AgentCoreDbCon
             OwnerInstanceId = item.OwnerInstanceId?.ToString("D"),
             OwnerProfileId = item.OwnerProfileId?.ToString("D"),
             OriginMemoryId = item.Provenance.OriginMemoryId?.ToString("D"),
-            OriginSessionId = item.Provenance.OriginSessionId?.ToString("D")
+            OriginSessionId = item.Provenance.OriginSessionId?.ToString("D"),
+            DerivedFromMemoryIdsJson = JsonSerializer.Serialize(item.Provenance.DerivedFromMemoryIds ?? [], Json),
+            MaintenanceOrigin = item.Provenance.MaintenanceOrigin
         };
 
     private static void Copy(StructuredMemoryRecord row, StructuredMemoryItem item)
@@ -245,6 +249,8 @@ public sealed class SqliteStructuredMemoryStore(IDbContextFactory<AgentCoreDbCon
         row.OwnerProfileId = mapped.OwnerProfileId;
         row.OriginMemoryId = mapped.OriginMemoryId;
         row.OriginSessionId = mapped.OriginSessionId;
+        row.DerivedFromMemoryIdsJson = mapped.DerivedFromMemoryIdsJson;
+        row.MaintenanceOrigin = mapped.MaintenanceOrigin;
     }
 
     public async ValueTask<StructuredMemoryItem?> FindIdentityUserAsync(

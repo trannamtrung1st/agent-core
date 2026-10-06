@@ -2428,6 +2428,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ApplicationConnectionStatus: applicationConnectionStatus,
                     TrustedConnection: trustedConnection,
                     Harness: trigger.Kind == TriggerKind.UserTurn ? await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, evaluationToken) : null,
+                    AllowAgentConsolidation: await _tools.AllowsAgentConsolidationAsync(_snapshot.AgentInstanceId, evaluationToken),
                     ContinuityContext: await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, _snapshot.SessionId, _snapshot.Definition, evaluationToken));
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
@@ -3028,9 +3029,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                         if (args.ValueKind == JsonValueKind.Object)
                         {
-                            var policy = _tools.EvaluateExecutionPolicy(
+                            var policy = await _tools.EvaluateExecutionPolicyAsync(
                                 _snapshot.Definition,
-                                call.Name,
+                                _snapshot.SessionId, call, args,
                                 admission: new ToolExecutionAdmission(
                                     Detached: false,
                                     trigger.Kind,
@@ -3039,7 +3040,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     TrustedConnection: await LiveTrustedConnectionAsync(trigger.Kind, overallCts.Token)
                                         .ConfigureAwait(false),
                                     Harness: await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, overallCts.Token),
-                                    SupportsTools: model.Capabilities.Tools));
+                                    SupportsTools: model.Capabilities.Tools), overallCts.Token);
                             if (policy == ToolPolicyDecision.Deny || string.IsNullOrWhiteSpace(call.Name))
                             {
                                 if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal))
@@ -3191,7 +3192,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                                 CaptureScope: request.ResponseId.ToString(),
                                                 HarnessSources: harnessSources.ToArray(),
                                                 OwnerTurnText: trigger.Kind == TriggerKind.UserTurn ? trigger.Text : null,
-                                                SupportsTools: model.Capabilities.Tools))
+                                                SupportsTools: model.Capabilities.Tools,
+                                                Model: _snapshot.ModelSelection is { } choice ? new AgentCore.Domain.Work.WorkModelPin(choice.CatalogKey, choice.ProviderAlias, choice.ModelId, choice.ReasoningEffort) : null))
                                         .ConfigureAwait(false);
                                     if (executionResult.ReplaceTriggerProposal)
                                     {

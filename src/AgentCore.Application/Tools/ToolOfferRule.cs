@@ -9,5 +9,6 @@ public enum ToolOfferRule
     OccurrenceCapability,
     ExperienceAuthority,
     ContinuityAuthority,
-    HarnessAuthority
+    HarnessAuthority,
+    IdentityMaintenanceAuthority
 }

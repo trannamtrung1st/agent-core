@@ -10,6 +10,9 @@ public static class EffectReceipts
         (receipts ?? []).OfType<EffectReceipt>().Take(20).Select(receipt => (receipt.Tool, receipt.Status) switch
         {
             (ToolCatalog.BrowserClose, "closed" or "already_closed") => new EffectReceipt(ToolCatalog.BrowserClose, receipt.Status, "Browser closed"),
+            (ToolCatalog.MemoryConsolidate, "consolidated") => new EffectReceipt(ToolCatalog.MemoryConsolidate, "consolidated", "Learned memories consolidated"),
+            (ToolCatalog.ExperienceConsolidate, "consolidated") => new EffectReceipt(ToolCatalog.ExperienceConsolidate, "consolidated", "Experience consolidated"),
+            (ToolCatalog.MemoryForget, "forgotten") => new EffectReceipt(ToolCatalog.MemoryForget, "forgotten", "Learned memory forgotten; source history retained"),
             (ToolCatalog.EmailSend, "sent") => new EffectReceipt(ToolCatalog.EmailSend, "sent", "Email sent"),
             _ => null
         }).OfType<EffectReceipt>().ToArray();
@@ -22,6 +25,13 @@ public static class EffectReceipts
             if (document.RootElement.ValueKind != JsonValueKind.Object)
             {
                 return false;
+            }
+
+            if (ToolCatalog.IsIdentityMaintenance(tool) && TryString(document.RootElement, "status", out var maintenanceStatus)
+                && (maintenanceStatus == "consolidated" && tool != ToolCatalog.MemoryForget || maintenanceStatus == "forgotten" && tool == ToolCatalog.MemoryForget))
+            {
+                receipt = ModelSafe([new EffectReceipt(tool, maintenanceStatus, "")]).Single();
+                return true;
             }
 
             if (string.Equals(tool, ToolCatalog.BrowserClose, StringComparison.Ordinal)

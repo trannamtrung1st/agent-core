@@ -23,7 +23,9 @@ public sealed record AdminLearnedMemoryItem(
     Guid? OriginSessionId,
     Guid? OriginMemoryId,
     DateTimeOffset RecordedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    MemoryItemStatus Status = MemoryItemStatus.Active,
+    IReadOnlyList<Guid>? DerivedFromMemoryIds = null, string? MaintenanceOrigin = null);
 
 public sealed record AdminLearnedMemoryListResult(
     AdminLearnedMemoryScope Scope,
@@ -65,6 +67,21 @@ public sealed class AdminMemoryService(
                 .ConfigureAwait(false),
             _ => throw AgentCoreErrors.Validation("scope is invalid.")
         };
+    }
+
+    public async ValueTask<AdminLearnedMemoryItem> GetAsync(Guid instanceId, AdminLearnedMemoryScope scope,
+        Guid? sessionId, Guid memoryId, CancellationToken ct = default)
+    {
+        await EnsureDeleteAllowedAsync(instanceId, scope, sessionId, ct);
+        var profile = await localProfiles.GetLocalProfileAsync(ct);
+        var item = scope switch
+        {
+            AdminLearnedMemoryScope.Session => await structuredStore.FindAsync(sessionId!.Value, memoryId, ct),
+            AdminLearnedMemoryScope.IdentityUser => await structuredStore.FindIdentityUserAsync(instanceId, profile.ProfileId, memoryId, ct),
+            AdminLearnedMemoryScope.User => await structuredStore.FindUserAsync(profile.ProfileId, memoryId, ct),
+            _ => null
+        };
+        return item is null ? throw AgentCoreErrors.NotFound("Owned learned memory was not found.") : Map(item);
     }
 
     public async ValueTask EnsureDeleteAllowedAsync(
@@ -369,5 +386,5 @@ public sealed class AdminMemoryService(
             item.Provenance.OriginSessionId,
             item.Provenance.OriginMemoryId,
             item.Provenance.RecordedAt,
-            item.UpdatedAt);
+            item.UpdatedAt, item.Status, item.Provenance.DerivedFromMemoryIds, item.Provenance.MaintenanceOrigin);
 }

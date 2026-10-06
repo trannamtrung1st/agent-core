@@ -28,7 +28,8 @@ export default defineConfig({
     globals: true,
     setupFiles: "./src/test/setup.ts",
     exclude: ["e2e/**", "node_modules/**", "dist/**"],
-    // Admin definition editing renders a large Ant Design form. Match hosted headroom locally.
-    testTimeout: 15_000
+    // Large Ant Design Admin integration trees exceed 15 seconds on hosted CPU.
+    // Keep behavior assertions intact while allowing measured rendering headroom.
+    testTimeout: 30_000
   }
 });

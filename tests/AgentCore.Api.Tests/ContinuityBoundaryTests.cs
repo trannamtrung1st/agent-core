@@ -58,6 +58,9 @@ public sealed class ContinuityBoundaryTests
 
     private sealed class CancelledExperienceReads(IExperienceStore inner) : IExperienceStore
     {
+        public ValueTask<IdentityMaintenanceSettings> MaintenanceSettingsAsync(Guid id, CancellationToken ct = default) => inner.MaintenanceSettingsAsync(id, ct);
+        public ValueTask<IdentityMaintenanceSettings> ConfigureMaintenanceAsync(Guid id, long revision, bool allow, CancellationToken ct = default, AdminEventAppend? audit = null) => inner.ConfigureMaintenanceAsync(id, revision, allow, ct, audit);
+        public ValueTask<AgentExperience> ConsolidateAsync(IReadOnlyList<AgentExperience> sources, AgentExperience result, CancellationToken ct = default) => inner.ConsolidateAsync(sources, result, ct);
         public ValueTask<ExperienceSettings> SettingsAsync(Guid id, CancellationToken ct = default) => throw new OperationCanceledException("Secondary read cancelled", ct);
         public ValueTask<ExperienceSettings> ConfigureAsync(Guid id, long revision, bool enabled, CancellationToken ct = default, AdminEventAppend? audit = null) => inner.ConfigureAsync(id, revision, enabled, ct, audit);
         public ValueTask<AgentExperience> AdmitAsync(AgentExperience record, CancellationToken ct = default) => inner.AdmitAsync(record, ct);

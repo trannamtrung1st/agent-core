@@ -330,13 +330,13 @@ public sealed record AdminLearnedMemoryItemResponse(
     string Subject,
     string Content,
     AdminLearnedMemoryProvenanceResponse Provenance,
-    string UpdatedAt);
+    string UpdatedAt, string Status = "Active");
 
 public sealed record AdminLearnedMemoryProvenanceResponse(
     string Source,
     string? OriginSessionId,
     string? OriginMemoryId,
-    string RecordedAt);
+    string RecordedAt, IReadOnlyList<string>? DerivedFromMemoryIds = null, string? MaintenanceOrigin = null);
 
 public sealed record AdminLearnedMemoryResetRequest(string Scope, string? SessionId, bool Confirm);
 

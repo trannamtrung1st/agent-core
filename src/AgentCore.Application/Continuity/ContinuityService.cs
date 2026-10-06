@@ -99,7 +99,7 @@ public sealed class ContinuityService(ExperienceService experience, IExperienceS
             var e = await experiences.GetAsync(instanceId, id, ct);
             if (e is null || !(await experiences.SettingsAsync(instanceId, ct)).Enabled || !await EligibleExperience(e, instanceId, ct))
                 throw AgentCoreErrors.NotFound("Eligible continuity item was not found.");
-            var raw = JsonSerializer.Serialize(e.Content, Json);
+            var raw = JsonSerializer.Serialize(new { e.Content, e.DerivedFromExperienceIds, e.SourceKind, e.MaintenanceOrigin }, Json);
             return new(ProjectExperience(e), Clip(raw, 4000), raw.Length > 4000);
         }
         var s = await history.LoadMetadataAsync(id, ct);
@@ -149,7 +149,7 @@ public sealed class ContinuityService(ExperienceService experience, IExperienceS
             && (m.Scope == MemoryScope.User || m.Scope == MemoryScope.IdentityUser && m.OwnerInstanceId == id)))
         {
             if (SessionMemoryPrompt.Project([m], admission).Count == 0) continue;
-            var source = await history.LoadMetadataAsync(m.Provenance.OriginSessionId ?? m.SessionId, ct);
+            var source = m.Provenance.DerivedFromMemoryIds is { Count: > 0 } ? null : await history.LoadMetadataAsync(m.Provenance.OriginSessionId ?? m.SessionId, ct);
             if (source?.DurablyDeletedAt is not null) continue;
             eligible.Add(m);
         }
@@ -157,6 +157,9 @@ public sealed class ContinuityService(ExperienceService experience, IExperienceS
     }
     private async ValueTask<ContinuityItem> ProjectMemory(StructuredMemoryItem m, Guid id, CancellationToken ct)
     {
+        if (m.Provenance.DerivedFromMemoryIds is { Count: > 0 })
+            return new(m.MemoryId, ContinuityKind.Memory, Clip(m.Subject + ": " + m.Content, 700), m.UpdatedAt,
+                new(id, LocalUserProfile.Id, m.MemoryId, null, null, null, m.Scope.ToString(), m.Provenance.RecordedAt, "Consolidation"));
         var sourceId = m.Provenance.OriginSessionId ?? m.SessionId;
         var source = await history.LoadMetadataAsync(sourceId, ct);
         return new(m.MemoryId, ContinuityKind.Memory, Clip(m.Subject + ": " + m.Content, 700), m.UpdatedAt,

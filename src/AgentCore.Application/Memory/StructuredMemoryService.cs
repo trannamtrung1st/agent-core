@@ -736,6 +736,34 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
         MemoryAdmissionContext admission,
         Guid? supersedes)
     {
+        var (collapsed, body, subjectKey, source) = ValidateContent(kind, subject, content, sourceEntryIds, admission);
+
+        var now = time.GetUtcNow();
+        var entries = new List<Guid>(sourceEntryIds.Count);
+        foreach (var entryId in sourceEntryIds)
+        {
+            if (entryId != Guid.Empty && !entries.Contains(entryId))
+            {
+                entries.Add(entryId);
+            }
+        }
+
+        return new StructuredMemoryItem(
+            ids.NewId(),
+            owner.SessionId,
+            kind,
+            MemoryItemStatus.Active,
+            collapsed,
+            body,
+            subjectKey,
+            new MemoryProvenance(source, entries, supersedes, now),
+            now,
+            now);
+    }
+
+    public static (string Subject, string Content, string SubjectKey, string Source) ValidateContent(
+        MemoryKind kind, string subject, string content, IReadOnlyList<Guid> sourceEntryIds, MemoryAdmissionContext admission)
+    {
         if (!Enum.IsDefined(kind))
         {
             throw AgentCoreErrors.Validation("Memory kind is not supported.");
@@ -767,27 +795,9 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
             throw new AgentCoreException("MemoryRejected", "Memory content was rejected.", 400);
         }
 
-        var now = time.GetUtcNow();
-        var entries = new List<Guid>(sourceEntryIds.Count);
-        foreach (var entryId in sourceEntryIds)
-        {
-            if (entryId != Guid.Empty && !entries.Contains(entryId))
-            {
-                entries.Add(entryId);
-            }
-        }
-
-        return new StructuredMemoryItem(
-            ids.NewId(),
-            owner.SessionId,
-            kind,
-            MemoryItemStatus.Active,
-            collapsed,
-            body,
-            subjectKey,
-            new MemoryProvenance(source, entries, supersedes, now),
-            now,
-            now);
+        if (Occupied(admission).Contains(subjectKey))
+            throw new AgentCoreException("MemoryRejected", "Memory cannot replace trusted profile or identity state.", 400);
+        return (collapsed, body, subjectKey, source);
     }
 
     public static bool ContainsSensitive(string value) =>

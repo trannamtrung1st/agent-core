@@ -18,6 +18,12 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         }
 
+        if (descriptor.OfferRule == ToolOfferRule.IdentityMaintenanceAuthority)
+            return admission is { AgentInstanceId: not null, SupportsTools: true }
+                && (admission is { Detached: false, TriggerKind: TriggerKind.UserTurn }
+                    || admission is { Detached: true, TriggerKind: TriggerKind.ThoughtActivation })
+                ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
+
         if (descriptor.OfferRule == ToolOfferRule.ContinuityAuthority)
             return admission is { AgentInstanceId: not null, SupportsTools: true } ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
         if (descriptor.OfferRule == ToolOfferRule.ExperienceAuthority)
@@ -143,6 +149,12 @@ public static class ToolPolicy
         {
             return false;
         }
+
+        if (descriptor.OfferRule == ToolOfferRule.IdentityMaintenanceAuthority)
+            return context is { ModelSupportsTools: true } && !string.IsNullOrEmpty(context.ContinuityContext)
+                && (context is { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn }
+                    || context is { DetachedExecution: true, Trigger.Kind: TriggerKind.ThoughtActivation, AllowAgentConsolidation: true }
+                        && descriptor.Name != ToolCatalog.MemoryForget);
 
         if (descriptor.OfferRule == ToolOfferRule.ContinuityAuthority)
             return context is { ModelSupportsTools: true } && !string.IsNullOrEmpty(context.ContinuityContext);

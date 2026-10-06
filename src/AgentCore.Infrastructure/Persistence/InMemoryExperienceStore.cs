@@ -6,7 +6,7 @@ using AgentCore.Domain.Experience;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class InMemoryExperienceStore(InMemoryAdminEventStore? events = null, IWorkItemStore? work = null) : IExperienceStore
+public sealed partial class InMemoryExperienceStore(InMemoryAdminEventStore? events = null, IWorkItemStore? work = null) : IExperienceStore
 {
     private readonly object gate = new();
     private readonly Dictionary<Guid, ExperienceSettings> settings = [];
@@ -70,6 +70,8 @@ public sealed class InMemoryExperienceStore(InMemoryAdminEventStore? events = nu
         {
             var r = Required(id, recordId);
             if (r.Revision != expectedRevision) throw AgentCoreErrors.Conflict("Experience revision is stale.");
+            if (visibility == ExperienceVisibility.Superseded || (r.Visibility == ExperienceVisibility.Superseded && visibility != ExperienceVisibility.Deleted))
+                throw AgentCoreErrors.Validation("Superseded experience cannot be restored or assigned manually.");
             if (r.Visibility == ExperienceVisibility.Deleted) throw AgentCoreErrors.Validation("Deleted experience cannot be restored.");
             if (audit is not null) events?.AppendWithinLock(audit);
             records[recordId] = r = r with { Visibility = visibility, Content = visibility == ExperienceVisibility.Deleted ? null : r.Content, Revision = r.Revision + 1 };
@@ -81,7 +83,7 @@ public sealed class InMemoryExperienceStore(InMemoryAdminEventStore? events = nu
         records[r.ExperienceId] = r with { Visibility = ExperienceVisibility.Deleted, Content = null, Revision = r.Revision + 1 }; }
         return ValueTask.CompletedTask; }
     internal void Purge(Guid id)
-    { lock (gate) { settings.Remove(id); foreach (var r in records.Values.Where(r => r.AgentInstanceId == id).ToArray()) records.Remove(r.ExperienceId); } }
+    { lock (gate) { settings.Remove(id); maintenanceSettings.Remove(id); foreach (var r in records.Values.Where(r => r.AgentInstanceId == id).ToArray()) records.Remove(r.ExperienceId); } }
     private AgentExperience Required(Guid id, Guid recordId) => records.GetValueOrDefault(recordId) is { } r && r.AgentInstanceId == id
         ? r : throw AgentCoreErrors.NotFound("Experience was not found.");
 }

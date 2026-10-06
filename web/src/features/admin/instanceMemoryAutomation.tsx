@@ -1,6 +1,6 @@
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, App, Button, Descriptions, Flex, Select, Table, Tabs, Typography } from "antd";
+import { Alert, App, Button, Descriptions, Flex, Select, Table, Tabs, Tag, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
 import type { ColumnsType } from "antd/es/table";
 import { listModels, type ModelDescriptor } from "../../services/api";
@@ -11,6 +11,7 @@ import {
   type AdminLearnedMemoryScope,
   cancelAdminAutomationRegistration,
   deleteAdminLearnedMemory,
+  getAdminLearnedMemory,
   listAdminAutomationRegistrations,
   listAdminLearnedMemory,
   resetAdminLearnedMemoryScope,
@@ -29,6 +30,40 @@ import {
 
 import { ExecutionModelFields } from "./ExecutionModelFields";
 import { AdminSessionPicker } from "./AdminSessionPicker";
+
+export function MemoryLineageDetails({ instanceId, row, scope, sessionId }: { instanceId: string; row: AdminLearnedMemoryItem; scope: AdminLearnedMemoryScope; sessionId?: string }) {
+  const { token } = theme.useToken();
+  const layout = useAdminDetailLayout();
+  const [sources, setSources] = useState<AdminLearnedMemoryItem[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<AdminFailureNotice | null>(null);
+  const parents = row.provenance.derivedFromMemoryIds ?? [];
+  async function inspect() {
+    setBusy(true); setError(null);
+    try { setSources(await Promise.all(parents.slice(0, 8).map(id => getAdminLearnedMemory(instanceId, id, scope, sessionId)))); }
+    catch (reason) { setError(describeAdminError(reason, "Unable to inspect sources. Try again.")); }
+    finally { setBusy(false); }
+  }
+  return <Flex vertical gap={token.padding} role="region" aria-label="Learned memory details">
+    <Descriptions bordered column={1} size="small" {...layout} items={[
+      { key: "state", label: "State", children: <Tag>{row.status ?? "Active"}</Tag> },
+      { key: "id", label: "Memory ID", children: row.memoryId },
+      { key: "subject", label: "Subject", children: row.subject || "Removed" },
+      { key: "content", label: "Content", children: row.content || "Removed" },
+      ...(parents.length ? [
+        { key: "lineage", label: `Consolidated from ${parents.length} memories`, children: <ul style={{ margin: 0, paddingInlineStart: token.padding }}>{parents.map(id => <li key={id}>{id}</li>)}</ul> },
+        { key: "origin", label: "Maintenance origin", children: row.provenance.maintenanceOrigin ?? "Not recorded" }
+      ] : [])
+    ]} />
+    {parents.length ? <Button style={{ alignSelf: "flex-start" }} loading={busy} onClick={() => void inspect()}>{error ? "Retry sources" : "View sources"}</Button> : null}
+    {error ? <AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} tone="danger" /> : null}
+    {sources?.map(source => <Descriptions key={source.memoryId} title={source.subject || "Forgotten learned memory"} bordered column={1} size="small" {...layout} items={[
+      { key: "id", label: "Source ID", children: source.memoryId },
+      { key: "state", label: "State", children: <Tag>{source.status ?? "Active"}</Tag> },
+      { key: "content", label: "Content", children: source.content || "Removed from learned-memory retrieval" }
+    ]} />)}
+  </Flex>;
+}
 
 const MEMORY_SCOPES: AdminLearnedMemoryScope[] = ["Session", "IdentityUser", "User"];
 
@@ -354,7 +389,7 @@ export function InstanceMemoryAutomationPanel({ config, section }: { config: Adm
       title: "Provenance",
       key: "provenance",
       width: 200,
-      render: (_, row) => row.provenance.source
+      render: (_, row) => row.provenance.derivedFromMemoryIds?.length ? `Consolidated from ${row.provenance.derivedFromMemoryIds.length} memories` : row.provenance.source
     },
     {
       title: "Actions",
@@ -367,7 +402,8 @@ export function InstanceMemoryAutomationPanel({ config, section }: { config: Adm
           disabled={!memoryActionsEnabled}
           onClick={() =>
             confirmAction(modal, {
-              title: "Delete this learned-memory item?",
+              title: "Forget this learned-memory item?",
+              content: "Removes this item from future learned-memory retrieval. Source conversations and other retained continuity records are not deleted.",
               okText: "Delete",
               danger: true,
               onOk: () => void deleteMemoryItem(row.memoryId)
@@ -528,6 +564,7 @@ export function InstanceMemoryAutomationPanel({ config, section }: { config: Adm
                   rowKey="memoryId"
                   dataSource={memoryItems}
                   columns={memoryColumns}
+                  expandable={{ expandedRowRender: row => <MemoryLineageDetails key={`${memoryScope}:${sessionId}:${row.memoryId}`} instanceId={config.instanceId} row={row} scope={memoryScope} sessionId={memoryScope === "Session" ? sessionId.trim() : undefined} /> }}
                   pagination={adminCollectionPagination}
                   locale={{ emptyText: "No active learned-memory items in this scope." }}
                 />

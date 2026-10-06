@@ -830,6 +830,7 @@ export type AdminLearnedMemoryScope = "Session" | "IdentityUser" | "User";
 
 export type AdminLearnedMemoryItem = {
   memoryId: string;
+  status?: "Active" | "Superseded" | "Deleted";
   kind: string;
   subject: string;
   content: string;
@@ -838,6 +839,8 @@ export type AdminLearnedMemoryItem = {
     originSessionId: string | null;
     originMemoryId: string | null;
     recordedAt: string;
+    derivedFromMemoryIds?: string[];
+    maintenanceOrigin?: string | null;
   };
   updatedAt: string;
 };
@@ -880,6 +883,14 @@ export async function listAdminLearnedMemory(
   }
   const payload = (await response.json()) as { items: AdminLearnedMemoryItem[] };
   return payload.items;
+}
+
+export async function getAdminLearnedMemory(instanceId: string, memoryId: string, scope: AdminLearnedMemoryScope, sessionId?: string): Promise<AdminLearnedMemoryItem> {
+  const params = new URLSearchParams({ scope });
+  if (sessionId) params.set("sessionId", sessionId);
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/learned-memory/${memoryId}?${params}`);
+  if (!response.ok) throw await adminProblemMessage(response, "Unable to inspect memory sources.");
+  return response.json() as Promise<AdminLearnedMemoryItem>;
 }
 
 export async function deleteAdminLearnedMemory(
@@ -1167,11 +1178,13 @@ export type ExperienceContent = {
   unresolved: string[]; difficulties: string[]; lessons: string[];
 };
 export type ExperienceItem = {
-  experienceId: string; sourceKind: "Session" | "WorkItem"; sourceId: string; throughCursor: number;
+  experienceId: string; sourceKind: "Session" | "WorkItem" | "Consolidation"; sourceId: string; throughCursor: number;
   sourceAt: string; sourceCreatedAt?: string; checkpointAt?: string | null; definitionId: string; definitionVersion: number; generationWorkItemId: string;
-  modelKey: string; status: string; visibility: "Eligible" | "Suppressed"; revision: number;
+  modelKey: string; status: string; visibility: "Eligible" | "Suppressed" | "Superseded" | "Deleted"; revision: number;
+  derivedFromExperienceIds?: string[]; maintenanceOrigin?: string | null;
   eligibleForContext: boolean; content: ExperienceContent | null; diagnosticId: string | null; failureSummary: string | null;
 };
+export type IdentityMaintenanceSettings = { agentInstanceId: string; allowAgentConsolidation: boolean; revision: number };
 export type ExperienceReview = { enabled: boolean; settingsRevision: number; contextBudgetCharacters: number; items: ExperienceItem[] };
 export type ThoughtRegistration = {
   registrationId: string; revision: number; enabled: boolean; status: string; intervalSeconds: number;

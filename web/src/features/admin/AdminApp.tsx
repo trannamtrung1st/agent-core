@@ -108,7 +108,7 @@ import { describeAdminError, formatAdminLoadError, reportAdminError, type AdminF
 import { AdminRetryAction, showAdminFailure } from "./adminFailure";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 import { startManagedPublicationChat } from "./adminManagedChat";
-import { ExperienceSection, ThoughtSection, InstanceRunsSection, type ExperienceSelection } from "./InstanceContinuitySection";
+import { IdentityMaintenanceSection, ExperienceSection, ThoughtSection, InstanceRunsSection, type ExperienceSelection } from "./InstanceContinuitySection";
 import { InstanceSchedulesSection } from "./InstanceSchedulesSection";
 import type { AutomationSelection, RunSource } from "../chat/runPresentation";
 import { InstanceMemoryAutomationPanel } from "./instanceMemoryAutomation";
@@ -2264,6 +2264,7 @@ export function InstanceDetail({
   onInstanceChanged: () => void;
   onInstanceDeleted: () => void;
 }) {
+  const { token } = theme.useToken();
   const [activeTab, setActiveTab] = useState("identity");
   const [continuityTab, setContinuityTab] = useState("memory");
   const [automationTab, setAutomationTab] = useState("schedules");
@@ -2351,10 +2352,10 @@ export function InstanceDetail({
               }] : []),
               ...(!resolved.compatibility ? [{
                 key: "continuity", label: "Continuity",
-                children: <Tabs activeKey={continuityTab} onChange={setContinuityTab} aria-label="Continuity sections" items={[
+                children: <Flex vertical gap={token.padding}>{resolved.instanceLifecycle === "Active" ? <IdentityMaintenanceSection instanceId={instanceId} /> : null}<Tabs activeKey={continuityTab} onChange={setContinuityTab} aria-label="Continuity sections" items={[
                   { key: "memory", label: "Memory", children: <InstanceMemoryAutomationPanel config={resolved} section="memory" /> },
                   { key: "experience", label: "Experience", children: resolved.instanceLifecycle === "Active" ? <ExperienceSection instanceId={instanceId} active={activeTab === "continuity" && continuityTab === "experience"} onWork={viewRun} selection={activeTab === "continuity" && continuityTab === "experience" ? experienceSelection : undefined} /> : <Alert type="info" showIcon title="Experience is available when this instance is active" description="Unarchive the instance from Identity & version to inspect its experience." /> }
-                ]} />
+                ]} /></Flex>
               }] : []),
               ...(!resolved.compatibility && resolved.instanceLifecycle === "Active" ? [{
                 key: "automation", label: "Automation",

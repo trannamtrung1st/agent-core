@@ -337,6 +337,18 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                     VALUES ('20261005003621_P9899Experience', '10.0.12');
                     """, cancellationToken).ConfigureAwait(false);
             }
+            if (await ColumnExistsAsync(connection, "StructuredMemories", "DerivedFromMemoryIdsJson", cancellationToken).ConfigureAwait(false)
+                && await ColumnExistsAsync(connection, "StructuredMemories", "MaintenanceOrigin", cancellationToken).ConfigureAwait(false)
+                && await ColumnExistsAsync(connection, "IdentityMaintenanceSettings", "AllowAgentConsolidation", cancellationToken).ConfigureAwait(false)
+                && await ColumnExistsAsync(connection, "IdentityMaintenanceSettings", "Revision", cancellationToken).ConfigureAwait(false))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ('20261006013730_P910IdentityMaintenance', '10.0.12');
+                    """, cancellationToken).ConfigureAwait(false);
+            }
+
             await StampP7MigrationsWhenSchemaCompleteAsync(db, cancellationToken).ConfigureAwait(false);
 
             return;

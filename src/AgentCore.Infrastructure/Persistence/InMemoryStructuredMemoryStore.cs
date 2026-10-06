@@ -4,7 +4,7 @@ using AgentCore.Domain.Memory;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class InMemoryStructuredMemoryStore : IStructuredMemoryStore
+public sealed partial class InMemoryStructuredMemoryStore : IStructuredMemoryStore
 {
     private readonly object _gate = new();
     private readonly Dictionary<Guid, StructuredMemoryItem> _items = [];

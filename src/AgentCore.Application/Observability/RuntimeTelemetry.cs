@@ -147,6 +147,8 @@ public static class RuntimeTelemetry
 
     private static readonly Counter<long> ExperienceEvents = Meter.CreateCounter<long>("experience_events");
     private static readonly Counter<long> ThoughtEvents = Meter.CreateCounter<long>("thought_events");
+    private static readonly Counter<long> IdentityMaintenanceEvents = Meter.CreateCounter<long>("identity_maintenance_events");
+    public static void RecordIdentityMaintenance(string outcome) => IdentityMaintenanceEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
     public static void RecordExperience(string outcome) => ExperienceEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
     public static void RecordThought(string outcome) => ThoughtEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
     private static readonly Counter<long> WorkEvents = Meter.CreateCounter<long>("work_events");

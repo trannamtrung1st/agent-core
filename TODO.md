@@ -1469,3 +1469,7 @@ Orientation for what later work can build on. Detail and gate history are in `/d
 # Current implementation status
 
 **P9.8 and P9.9 are closed/frozen on behavior SHA `0a3330db`.** All implementation slices A-F, canonical documentation, Admin UX, Synthetic demo and mandatory local gates are complete. [Acceptance mapping](docs/reports/p9.8-p9.9-freeze-candidate.md) covers all 36 criteria; [final verification](docs/reports/p9.8-p9.9-final-verification.md) records 2367 passing backend tests, 601 frontend tests and 88 browser tests. [Hosted Synthetic and Compose](https://github.com/trannamtrung1st/agent-core/actions/runs/37260497161) passed on that exact SHA, including the explicit continuity browser gate. P9.7 remains frozen on `8f5afa00`, and earlier P8/P8.5/P9/P9.5/P9.6 freezes remain unchanged. P10/P11 remain unopened and requirement-triggered.
+
+## P9.10 — Identity state consolidation (in progress)
+
+Accepted follow-on: bounded atomic Memory and Experience consolidation with explicit lineage, learned-memory forgetting under exact authority, and opt-in safe Thought maintenance through existing WorkItems. P9.8/P9.9 freeze SHAs remain unchanged. Local, hosted Synthetic and Real semantic acceptance must be recorded before freeze.

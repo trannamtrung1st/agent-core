@@ -5,6 +5,10 @@ namespace AgentCore.Application.Ports;
 
 public interface IExperienceStore
 {
+    ValueTask<IdentityMaintenanceSettings> MaintenanceSettingsAsync(Guid instanceId, CancellationToken ct = default);
+    ValueTask<IdentityMaintenanceSettings> ConfigureMaintenanceAsync(Guid instanceId, long expectedRevision, bool allow, CancellationToken ct = default, AdminEventAppend? audit = null);
+    ValueTask<AgentExperience> ConsolidateAsync(IReadOnlyList<AgentExperience> sources, AgentExperience result, CancellationToken ct = default);
+
     ValueTask<ExperienceSettings> SettingsAsync(Guid instanceId, CancellationToken ct = default);
     ValueTask<ExperienceSettings> ConfigureAsync(Guid instanceId, long expectedRevision, bool enabled, CancellationToken ct = default, AdminEventAppend? audit = null);
     ValueTask<AgentExperience> AdmitAsync(AgentExperience proposed, CancellationToken ct = default);
