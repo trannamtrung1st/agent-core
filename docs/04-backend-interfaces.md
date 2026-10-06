@@ -8,6 +8,8 @@ Domain owns `CapabilityAuthorization` and `CapabilityProjectionPolicy`. Applicat
 
 `IConversationTurnExecutionStore.AdmitCapabilitiesAsync` atomically guards revision, claim generation, Running status and cancellation; Domain carries `LoadedCapabilityIds` and `CapabilityLoadCount` through recovery transitions. No loaded IDs enter mutable Agent Instance preferences or provider DTOs. WorkItems reuse their bounded checkpoint and claim guards.
 
+Accepted live occurrences have no conversation execution record: their load admission uses response/epoch-owned mailbox state and rechecks the current trusted connection. This preserves the existing non-replayable receipt; the persistence boundary is documented in [Persistence and Configuration](15-persistence-and-configuration.md).
+
 
 ## Managed workspace refinement ports
 

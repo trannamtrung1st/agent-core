@@ -10,6 +10,17 @@ namespace AgentCore.Application.Sessions;
 
 public sealed partial class SessionRuntime
 {
+    private sealed record LiveOccurrenceCapabilities(Guid ResponseId, Guid Epoch, IReadOnlyList<string> Ids, int Calls);
+    private LiveOccurrenceCapabilities? _liveOccurrenceCapabilities;
+
+    private IReadOnlyList<string> LoadedCapabilitiesFor(Guid responseId) =>
+        _boundConversationExecution?.ResponseId == responseId ? _boundConversationExecution.LoadedCapabilityIds
+        : _liveOccurrenceCapabilities is { } live && live.ResponseId == responseId && live.Epoch == _epoch ? live.Ids : [];
+
+    private int CapabilityLoadCountFor(Guid responseId) =>
+        _boundConversationExecution?.ResponseId == responseId ? _boundConversationExecution.CapabilityLoadCount
+        : _liveOccurrenceCapabilities is { } live && live.ResponseId == responseId && live.Epoch == _epoch ? live.Calls : 0;
+
     private async Task<AgentContext> CapabilityProjectionContextAsync(AgentTrigger trigger, ILanguageModel model,
         IReadOnlyList<string> skills, IReadOnlyList<string> loaded, CancellationToken ct) =>
         new(_snapshot.Definition, _snapshot.Entries, _snapshot.Summary, _profile, _snapshot.Mode, _snapshot.PendingTopic,
@@ -39,7 +50,25 @@ public sealed partial class SessionRuntime
         try
         {
             if (_deactivated || _responseTerminal || _activeResponseId != input.ResponseId || _epoch != input.Epoch
-                || input.Context.Epoch != _epoch || input.RequestCancellation.IsCancellationRequested
+                || input.Context.Epoch != _epoch || input.RequestCancellation.IsCancellationRequested) return;
+            if (_activeResponseTriggerKind is { } occurrenceKind && ToolResources.IsOccurrence(occurrenceKind)
+                && _liveOccurrenceCapabilities is { } live && live.ResponseId == input.ResponseId && live.Epoch == input.Epoch)
+            {
+                using var occurrenceToken = CancellationTokenSource.CreateLinkedTokenSource(ct, input.RequestCancellation);
+                using var arguments = JsonDocument.Parse(input.ArgumentsJson);
+                var occurrenceContext = input.ProjectionContext with { Definition = _snapshot.Definition, LoadedCapabilityIds = live.Ids,
+                    TrustedConnection = await LiveTrustedConnectionAsync(occurrenceKind, occurrenceToken.Token) };
+                if (!ToolPolicy.IsOffered(_snapshot.Definition, occurrenceContext, ToolCatalog.CapabilitiesLoad, _tools.ConfigurationGate)) return;
+                var load = CapabilityDiscoveryMatcher.Load(_snapshot.Definition, occurrenceContext, _tools.ConfigurationGate, arguments.RootElement, live.Calls);
+                occurrenceToken.Token.ThrowIfCancellationRequested();
+                matches = load.Loaded.Count;
+                var updatedLive = load.Outcome == "load_over_budget" ? live
+                    : live with { Ids = live.Ids.Concat(load.Loaded).Distinct(StringComparer.Ordinal).ToArray(), Calls = live.Calls + 1 };
+                _liveOccurrenceCapabilities = updatedLive;
+                result = new(load.ToJson(), updatedLive.Ids, load.Outcome);
+                return;
+            }
+            if (_activeResponseTriggerKind != TriggerKind.UserTurn
                 || _boundConversationExecution is not { Status: ConversationTurnExecutionStatus.Running, Claim: not null, CancellationRequested: false } bound
                 || bound.ResponseId != input.ResponseId || _turnExecutions is null) return;
             var current = await _turnExecutions.GetAsync(bound.ExecutionId, ct);

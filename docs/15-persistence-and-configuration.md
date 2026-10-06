@@ -6,6 +6,8 @@ Migration `CapabilityExecutionLoads` adds nullable `ConversationTurnExecutions.L
 
 Durable WorkItems retain explicit loaded IDs/count alongside result messages in their existing bounded checkpoint payload, preserving normal revision/claim/cancellation fencing. Recovered loaded names are filtered against pinned authority and current eligibility. No persistent per-Agent load set, new workspace state, PCM, provider schema or query log is added. Publication JSON carries exact authorization/projection policy without a new Definition table.
 
+Already-accepted live occurrences retain the existing non-replayable `AcceptedLive` receipt. Their bounded loaded IDs/count are response/epoch-owned Session mailbox state, rechecking the current connection on admission; they survive continuation within that runtime and reset for each occurrence. They never inherit a completed user turn's IDs. Live user turns and durable WorkItems use their existing persisted execution records for same-execution reclaim; this change does not make accepted live occurrence receipts replayable.
+
 
 ## Workspace refinement storage and lifecycle
 

@@ -30,6 +30,67 @@ public sealed class TriggerOccurrenceRoutingTests
     private static readonly Guid ProfileId = Guid.Parse("019944af-00c1-7000-8000-0000000000b1");
     private static readonly DateTimeOffset Now = new(2026, 9, 23, 8, 0, 0, TimeSpan.Zero);
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Live_occurrence_loads_only_when_connected_and_each_response_starts_fresh(bool connected)
+    {
+        var model = new LiveCapabilityModel();
+        var harness = await StartAsync(model: model, capabilities: true, connected: connected);
+        await using var runtime = harness.Runtime;
+        Assert.True(await runtime.SubmitPersistedUserTextAsync("Load an interface", Guid.NewGuid()));
+        await runtime.WaitUntilIdleAsync();
+        var router = Router(harness, [runtime.SessionId], runtime);
+        for (var index = 0; index < 2; index++)
+        {
+            var admitted = await Ingress(harness).PublishOrderStatusAsync(harness.Owner, Guid.NewGuid(), "CAP-" + index, "shipped", null);
+            Assert.Equal(DurableEventOutcome.Admitted, admitted.Outcome);
+            await router.RouteOnceAsync();
+            await runtime.WaitUntilIdleAsync();
+            Assert.Equal(OccurrenceRoutingDisposition.AcceptedLive, (await harness.Store.GetOccurrenceAsync(harness.Owner, admitted.Occurrence!.OccurrenceId))!.Disposition);
+        }
+        Assert.Equal(6, model.Requests.Count);
+        var pairIndex = 0;
+        foreach (var pair in model.Requests.Chunk(2))
+        {
+            var allowed = pairIndex++ == 0 || connected;
+            Assert.Equal(allowed, pair[0].Tools!.Any(t => t.Name == ToolCatalog.CapabilitiesLoad));
+            Assert.DoesNotContain(pair[0].Tools!, t => t.Name == ToolCatalog.EmailSearch);
+            Assert.Equal(allowed, pair[1].Tools!.Any(t => t.Name == ToolCatalog.EmailSearch));
+            var result = Assert.Single(pair[1].Messages, m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.CapabilitiesLoad);
+            if (allowed)
+            {
+                Assert.Contains("email.search", result.Text);
+                Assert.DoesNotContain("error", result.Text);
+            }
+            else Assert.Contains("forbidden", result.Text);
+        }
+    }
+
+    private sealed class LiveCapabilityModel : ILanguageModel
+    {
+        public List<ModelRequest> Requests { get; } = [];
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true);
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            await Task.Yield();
+            cancellationToken.ThrowIfCancellationRequested();
+            if (Requests.Count % 2 == 1)
+            {
+                yield return new ModelToolCallEvent(new("live-load", ToolCatalog.CapabilitiesLoad, "{\"query\":\"email.search\"}"));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            }
+            else
+            {
+                yield return new ModelDisplayDelta("Observed loaded interface");
+                yield return new ModelSemanticResponseReady(new("Observed loaded interface", new(ModelSpeechMode.Same, null), []));
+                yield return new ModelCompleted(ModelStopReason.Completed);
+            }
+        }
+    }
+
     [Fact]
     public async Task Valid_order_event_routes_once_and_invalid_payloads_do_not()
     {
@@ -878,9 +939,17 @@ public sealed class TriggerOccurrenceRoutingTests
         int version = 2,
         ILanguageModel? model = null,
         IModelCatalog? catalog = null,
-        ILanguageModelResolver? resolver = null)
+        ILanguageModelResolver? resolver = null, bool capabilities = false, bool connected = true)
     {
         var definition = await LoadAsync(definitionId, version);
+        var connections = new InMemoryApplicationConnectionStore();
+        if (capabilities)
+        {
+            definition = definition with { Environment = new(Capabilities: new("Selected", [ToolCatalog.CapabilitiesLoad, ToolCatalog.EmailSearch]), Projection: new([])) };
+            await connections.SaveAsync(new(Guid.NewGuid(), InstanceId, AgentCore.Domain.Connections.ApplicationConnectionKinds.NopCommerce,
+                "Fixture", "http://127.0.0.1:5088", ["http://127.0.0.1:5088"], connected ? AgentCore.Domain.Connections.ApplicationConnectionStatus.Connected : AgentCore.Domain.Connections.ApplicationConnectionStatus.NotConnected,
+                InstanceId, 1, Now, Now, null), 0);
+        }
         var time = new FakeTimeProvider(Now);
         var store = new InMemoryTriggerStore();
         var guard = await GuardAsync(store, includeInstance: true, definitionId, version);
@@ -902,7 +971,8 @@ public sealed class TriggerOccurrenceRoutingTests
             ProfileId,
             Now,
             Now,
-            AgentInstanceId: InstanceId);
+            AgentInstanceId: InstanceId,
+            ModelSelection: capabilities ? new("synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.SystemDefault, null) : null);
         var memory = new InMemoryMemoryStore();
         await memory.SaveAsync(snapshot, 0);
         var output = new CapturingSessionOutput();
@@ -916,7 +986,10 @@ public sealed class TriggerOccurrenceRoutingTests
             time,
             NullLogger<SessionRuntime>.Instance,
             modelResolver: resolver,
-            catalog: catalog);
+            catalog: catalog,
+            tools: capabilities ? new SessionToolExecutor(configurationGate: ToolConfigurationGates.AllowAll, applicationConnections: connections) : null,
+            applicationConnections: capabilities ? connections : null,
+            turnExecutions: capabilities ? new InMemoryConversationTurnExecutionStore() : null);
         await runtime.AttachAsync();
         return new Harness(runtime, store, guard.Guard, guard.Instances, time, new TriggerOwner(InstanceId, ProfileId), output);
     }

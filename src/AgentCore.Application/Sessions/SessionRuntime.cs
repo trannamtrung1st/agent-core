@@ -820,6 +820,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var turn = ++_turnGeneration;
         var trigger = new AgentTrigger(delivery.OccurrenceId, kind, delivery.EvidenceJson);
         _activeOccurrencePin = delivery.Model;
+        _liveOccurrenceCapabilities = new(responseId, _epoch, [], 0);
         LaunchBrain(context, trigger, responseId, turn);
     }
 
@@ -2632,7 +2633,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var messages = request.Messages.ToList();
         var authorizedTools = request.Tools;
         var pinnedSkills = activeSkillIds.ToArray();
-        var loadedCapabilities = _boundConversationExecution?.LoadedCapabilityIds ?? [];
+        var loadedCapabilities = LoadedCapabilitiesFor(request.ResponseId);
         var workspaceCwd = WorkspaceSemantics.IsV2(_snapshot.Definition)
             ? await RequestWorkspaceCwdAsync(cause, request.ResponseId, null, cancellationToken).ConfigureAwait(false) : null;
         if (WorkspaceSemantics.IsV2(_snapshot.Definition) && workspaceCwd is null) return;
@@ -2731,7 +2732,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             model),
                         pageBlocked,
                         terminalBrowserContinuation);
-                CapabilityProjectionTelemetry.Record(_snapshot.Definition, projectionContext, _tools.ConfigurationGate, working.Tools, _boundConversationExecution?.PinnedModel.CatalogKey, _boundConversationExecution?.CapabilityLoadCount ?? 0);
+                var projectionModel = _boundConversationExecution is { } binding && binding.ResponseId == request.ResponseId
+                    ? binding.PinnedModel.CatalogKey : ToolResources.IsOccurrence(trigger.Kind)
+                        ? _activeOccurrencePin?.CatalogKey : _snapshot.ModelSelection?.CatalogKey;
+                CapabilityProjectionTelemetry.Record(_snapshot.Definition, projectionContext, _tools.ConfigurationGate, working.Tools, projectionModel, CapabilityLoadCountFor(request.ResponseId));
                 try
                 {
                 await foreach (var evt in model.GenerateAsync(working, generateToken).ConfigureAwait(false))
