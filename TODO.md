@@ -864,7 +864,7 @@ The frozen P9 proof is a Restricted, session-scoped ephemeral browser (`ProfileM
 - [ ] Add an external tool or integration provider only when that second implementation justifies the seam.
 - [ ] Define extension identity and versioning only to the degree that extension requires.
 - [ ] Reuse shared policy primitives. Do not invent a second policy or one universal configuration object.
-- [ ] Close the bounded post-P9.10 Agent Workspace enhancement against its focused/full/browser/Compose and exact-SHA hosted gates. The concrete workflow is retained work reused in a later Session and republished as a fresh Artifact; `SessionWorkspace` stays scratch. See `docs/reports/agent-instance-workspace-final-verification.md`.
+- [x] Close the bounded post-P9.10 Agent Workspace enhancement on behavior `b21484d4`, with [exact-SHA hosted Synthetic/Compose 37474445339 green](https://github.com/trannamtrung1st/agent-core/actions/runs/37474445339). The concrete workflow is retained work reused in a later Session and republished as a fresh Artifact; `SessionWorkspace` stays scratch. See `docs/reports/agent-instance-workspace-final-verification.md`.
 - [ ] Revisit richer reusable evaluation suites only when multiple provider implementations make them useful.
 
 P9 is not a plugin marketplace, a prepared-worker package system, a visual workflow builder, a multi-agent engine, a distributed job platform, tenant RBAC, Kubernetes, or a microservice split. OpenWeb is a post-closure local/demo host policy. It is not part of the frozen `bba1de4` proof, and it is not a model-controlled unrestricted agent.

@@ -1,5 +1,7 @@
 # Agent Core MVP
 
+Managed Agent Instances can intentionally retain bounded working files under `/home`, reuse them in later Sessions, check out separate scratch copies, safely retain revisions and publish fresh downloadable Session Artifacts. Admin Workspace provides owner inspection, download and guarded deletion. This bounded post-P9.10 enhancement is frozen on `b21484d4` with [hosted Synthetic/Compose green](https://github.com/trannamtrung1st/agent-core/actions/runs/37474445339); see [final verification](docs/reports/agent-instance-workspace-final-verification.md). Session scratch, learned memory, Definition resources and Artifacts keep their separate ownership. P10/P11 remain unopened.
+
 Agent Core is a lightweight runtime for creating persistent AI identities capable of natural, real-time conversation.
 
 An agent can represent a customer service representative, examiner, tutor, friend, interviewer, receptionist, or another role. The goal of the MVP is not to build a general-purpose autonomous-agent platform. The goal is to prove that one reusable Agent Core can inhabit different identities and interact naturally through text and voice.

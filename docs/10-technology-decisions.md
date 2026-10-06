@@ -1,8 +1,8 @@
 # Technology Decisions
 
-## Decision: bounded Agent Instance workspace (implementation in progress)
+## Decision: bounded Agent Instance workspace (observed)
 
-The accepted post-P9.10 enhancement adds a managed-instance-owned `/home`, with SQLite metadata and local immutable blobs. Session `/workspace` remains scratch. Explicit `workspace.retain` copies scratch bytes into home with revision/hash compare-and-swap; `workspace.checkout` creates a separate session copy. Home read/list/search is bounded and tool-driven. Compatibility instances have no home. Archive preserves owner inspection; hard delete cleans the home through existing lifecycle coordination. Artifacts remain immutable session-owned deliverables. This does not reopen frozen continuity phases or start P10/P11. Verification is tracked in `docs/reports/agent-instance-workspace-final-verification.md`.
+The verified post-P9.10 enhancement adds a managed-instance-owned `/home`, with SQLite metadata and local immutable blobs. Session `/workspace` remains scratch. Explicit `workspace.retain` copies scratch bytes into home with revision/hash compare-and-swap; `workspace.checkout` creates a separate session copy. Home read/list/search is bounded and tool-driven. Compatibility instances have no home. Archive preserves owner inspection; hard delete cleans the home through existing lifecycle coordination. Artifacts remain immutable session-owned deliverables. This does not reopen frozen continuity phases or start P10/P11. Behavior is frozen on `b21484d4` with exact-SHA hosted Synthetic/Compose green; see [final verification](reports/agent-instance-workspace-final-verification.md).
 
 These decisions are the implementation baseline. Resolve package patches at implementation time to the latest supported compatible releases; do not scatter transient patch pins across these docs. .NET 10 is LTS and pairs with C# 14. See the [official support policy](https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core) and [.NET 10 download/version information](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
 

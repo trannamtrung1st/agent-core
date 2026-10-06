@@ -1,10 +1,10 @@
 # Agent Instance workspace — final verification
 
-Status: final regression and exact-commit hosted verification in progress. This is a bounded post-P9.10 enhancement; historical P9.8/P9.9/P9.10 freeze SHAs remain unchanged and P10/P11 remain unopened.
+Status: closed/frozen on behavior candidate `b21484d4740e2395c6b0b362e64a9e8fb7d5b0cb`, with [hosted Synthetic/Compose run 37474445339](https://github.com/trannamtrung1st/agent-core/actions/runs/37474445339) green on 2026-10-06. This is a bounded post-P9.10 enhancement; historical P9.8/P9.9/P9.10 freeze SHAs remain unchanged and P10/P11 remain unopened.
 
 ## Candidate and scope
 
-The implementation reconciled the proposal baseline `3c784a4d` with subsequent Artifact closure documentation and Admin test headroom changes on current main. The behavior candidate and its hosted Synthetic/Compose run will be recorded after publication. Local checks alone do not establish closure.
+The implementation reconciled the proposal baseline `3c784a4d` with subsequent Artifact closure documentation and Admin test headroom changes on current main. Published behavior SHA: `b21484d4740e2395c6b0b362e64a9e8fb7d5b0cb`. The exact-SHA hosted workflow passed all five jobs: backend, frontend, primary browser, acceptance browser and Compose. Later closure documentation does not move this behavior freeze.
 
 A managed Agent Instance owns bounded durable `/home` working material. Session `/workspace` remains scratch. Explicit retain copies exact bytes into home; explicit checkout creates an independent session copy. Revision/hash compare-and-swap prevents silent replacement. Compatibility instances have no home; archive preserves inspection and disables mutation. Permitted hard deletion removes the owning instance's metadata and bytes. No Definition, memory, Artifact or Session ownership is changed.
 
@@ -47,7 +47,7 @@ Direct Playwright MCP additionally exercised visible Workspace navigation, exact
 
 ## Verification gates
 
-Raw local logs and viewport captures are under ignored `local/agent-workspace-evidence/`; executable fixtures are committed. Final hosted results and behavior SHA follow publication.
+Raw local logs and viewport captures are under ignored `local/agent-workspace-evidence/`; executable fixtures are committed. Hosted results are attached to the exact-SHA run above.
 
 | Local gate | Observed result |
 | --- | --- |
@@ -57,16 +57,18 @@ Raw local logs and viewport captures are under ignored `local/agent-workspace-ev
 | API suite (`dotnet test …Api.Tests.csproj`) | 376 passed, 2 explicit live-provider skips; canonical and SQLite reopen journeys included |
 | Order-event adapter suite (solution run) | 4 passed |
 | Workspace focused coverage | Path rules 15 passed; store contracts 6 cases included in full Infrastructure; API journeys 3 passed; UI 5 passed |
-| Primary Synthetic/browser Playwright | 97/98 passed; failed pre-existing publication-toast scenario subsequently passed on fresh host, alongside final canonical workspace journey (2/2) |
+| Primary Synthetic/browser Playwright | Initial local run 97/98; failed pre-existing publication-toast scenario subsequently passed on fresh host, alongside final canonical workspace journey (2/2). Exact-SHA hosted primary gate: 98/98 passed |
 | P9.8/P9.9 continuity Playwright | 2/2 passed, including Experience/Thought and responsive owner controls |
 | P9.10 identity-maintenance Playwright | 1/1 passed, including consolidation, lineage, opt-out, explicit forget and reload |
-| Node 22 frontend serial unit gate | 700/702 passed; two existing candidate-editor timeouts; isolated entire candidate-editor file rerun passed 9/9 |
+| Node 22 frontend serial unit gate | Final candidate run: 702/702 passed across 94 files; exact-SHA hosted frontend gate also 702/702 |
 | Production `pnpm run build` | Passed; existing large-bundle warning remains |
 | `COMPOSE_PROJECT_NAME=agent-workspace-verify ./scripts/compose-sqlite-volume.sh` | Passed twice, including final orphan-recovery implementation; retained home/hash/exact bytes survived container recreation after source deletion |
 | `git diff --check`; local documentation links/fences | Passed; 11 affected docs checked |
+
+Hosted backend results match local counts: Domain 145, Application 1234, Infrastructure 747 and API 376 passed, with the same 18 explicit opt-in/live/Docker skips. Hosted acceptance passed Manual-A 1, Admin lifecycle 1, P7.6 Admin 1, P9.7 harness 7, P9.8/P9.9 continuity 2, P9.10 maintenance 1 and Secretary 4. Hosted Compose verified the retained home item after container recreation/source deletion. No provider credentials were required or used by the Synthetic gates.
 
 The first broad local run used excessive concurrent workers and an unexpected Node 26 default, yielding unrelated Admin/jsdom timeouts and unavailable localStorage. The subsequent Node 22 concurrent run also timed out. These are failed setup/regression attempts, not passing evidence. The final frontend gate uses the existing hosted command with `--maxWorkers=1` and Node 22. A backend broad run exposed an existing response-terminal race; a later API run timed out starting a disposable Kestrel process while other gates competed for resources. The primary browser run passed 97/98, with an existing draft-publication toast check failing; that scenario is rerun against a fresh host. No important assertion or policy gate was weakened to close the enhancement.
 
 ## Stop boundary
 
-After the exact behavior candidate passes hosted Synthetic/Compose, return to product/demo validation. Do not start application/task/shared workspaces, agent sharing/delegation, cloud sync, remote storage, generalized host filesystem, P10 or P11 without a separate concrete requirement.
+The exact behavior candidate passed hosted Synthetic/Compose, so this bounded slice is closed. Application/task/shared workspaces, agent sharing/delegation, cloud sync, remote storage, generalized host filesystem, P10 and P11 require separate concrete requirements. Later authorized enhancements must preserve this report as historical evidence of this slice.
