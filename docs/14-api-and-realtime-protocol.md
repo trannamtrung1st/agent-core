@@ -329,8 +329,8 @@ Phases A–H are observed on the runtime (including Docker `sandbox.run`). Phase
 | POST /api/v2/sessions/{id}/model | Catalog-level session model mutation (`key` Default or a catalog key, optional `reasoningEffort`). Server resolves and persists concrete `SessionModelSelection`. Rejects `SessionBusy` while generating. Terminal sessions are read-only |
 | GET /api/v2/sessions/{id}/knowledge/{identity} | Approved knowledge retrieval with citation metadata; 403 if the pinned role does not allow `knowledge.retrieve` or the identity |
 | GET /api/v2/sessions/{id}/workspace | Execution-view listing (`prefix` query, default `/`); owner capability |
-| GET /api/v2/sessions/{id}/workspace/content?path= | Read logical path (`/agent`, `/attachments`, `/workspace`); host paths never returned |
-| PUT /api/v2/sessions/{id}/workspace/content?path= | Write under `/workspace/working|artifacts|state` only; 250 MiB session cap; 403 for RO overlays, secrets, traversal, symlinks |
+| GET /api/v2/sessions/{id}/workspace/content?path= | Read authorized logical path; legacy `/agent`, `/attachments`, `/workspace` and managed `/home`; new mode uses `/home` or `/working` plus read-only overlays; host paths never returned |
+| PUT /api/v2/sessions/{id}/workspace/content?path= | Legacy writes use `/workspace/working|artifacts|state`; new mode writes `/working` or direct `/home` with durable replacement CAS; 250 MiB scope quotas; read-only overlays/secrets/escaping paths/symlinks remain forbidden |
 | POST /api/v2/sessions/{id}/attachments/{attachmentId}/materialize | Explicit working copy plus Artifact metadata; originals unchanged; SHA-256 preserved; deterministic `name-2` collisions |
 | GET /api/v2/sessions/{id}/artifacts | List session-owned artifacts; owner capability |
 | GET /api/v2/sessions/{id}/artifacts/{artifactId} | Canonical `displayName`, `contentType`, `byteSize` plus existing provenance; owner capability; cross-session 404 |

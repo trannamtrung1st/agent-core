@@ -1,6 +1,6 @@
 # Agent Workspace refinement verification
 
-The requested enhancement evolves the completed workspace baseline `181580c96d57761463b8525328660be3903005df`. It does not reopen a historical phase or start P10/P11. Hosted verification is pending until the behavior commit passes all Synthetic workflow jobs.
+The requested enhancement evolves the completed workspace baseline `181580c96d57761463b8525328660be3903005df`. It does not reopen a historical phase or start P10/P11. Behavior candidate `7bc2789d68508bb64988183a2ada2db2b507557e` is published. Hosted verification remains pending until all Synthetic workflow jobs pass on the final candidate; [initial run](https://github.com/trannamtrung1st/agent-core/actions/runs/37506514847) verifies that behavior.
 
 ## Architecture and compatibility
 
@@ -45,7 +45,7 @@ The owner Workspace tab says Agent Workspace, `/home`, and Durable across sessio
 | Managed + historical API workspace journeys | `dotnet test tests/AgentCore.Api.Tests --no-restore --nologo -m:1 -p:UseSharedCompilation=false --filter FullyQualifiedName~AgentWorkspaceJourneyTests` | 10 passed, including new-mode SQLite reopen, nested scratch cleanup and historical move/retain behavior |
 | Managed policy and existing tool contracts | Focused Application workspace Artifact/structure filter | 22 passed; explicit policy enables native move independently of unrelated grants, legacy descriptor stays narrow |
 | Transfer parity/quotas/CAS | Focused Infrastructure cross-store tree copy and definition skill round-trip filter | 3 passed; binary equality, empty folders, no mutation on quota failure, guarded replacement and SQLite reopen |
-| Frontend unit suite | CI Node 22 executable runs `node_modules/vitest/vitest.mjs --run --maxWorkers=1` | Pending final result |
+| Frontend unit suite | CI Node 22 executable runs `node_modules/vitest/vitest.mjs --run --maxWorkers=1` | 94 files / 705 tests passed |
 | Frontend build | `pnpm run build` | Passed; existing Rollup annotation/chunk warnings |
 | New and compatibility browser workspace gates | Node 22 Playwright; `agent-workspace-v2.spec.ts`, `agent-workspace.spec.ts`, `workspace-filesystem.spec.ts`, project synthetic, task ports 5086/5176 | 4 passed; exact downloaded bytes, same-Session cwd, fresh default, durable home after source deletion, folder controls, structural approvals |
 | Compose SQLite survival | `COMPOSE_PROJECT_NAME=agent-core-workspace-refinement ./scripts/compose-sqlite-volume.sh` | Passed; new-mode binary home and scratch survive recreation; unguarded overwrite rejected; deleting source/new Session keeps home and isolates scratch; existing Admin/continuity/Artifact boundaries pass |
