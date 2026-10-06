@@ -19,25 +19,31 @@ export function EventSubscriptionsSection({ instanceId, selection }: { instanceI
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  const order = useRef({ generation: 0, mutating: false, queuedRead: false });
 
   useEffect(() => {
+    if (order.current.mutating) {
+      order.current.queuedRead = true;
+      return;
+    }
     let current = true;
+    const generation = ++order.current.generation;
     setLoading(true);
     setError(null);
     void Promise.all([listEventSources(), listEventSubscriptions(instanceId)])
       .then(([nextSources, nextSubscriptions]) => {
-        if (current) {
+        if (current && generation === order.current.generation) {
           setSources(nextSources);
           setSubscriptions(nextSubscriptions);
         }
       })
       .catch((reason: unknown) => {
-        if (current) {
+        if (current && generation === order.current.generation) {
           setError(describeAdminError(reason, "Unable to load event subscriptions.").message);
         }
       })
       .finally(() => {
-        if (current) {
+        if (current && generation === order.current.generation) {
           setLoading(false);
         }
       });
@@ -58,10 +64,13 @@ export function EventSubscriptionsSection({ instanceId, selection }: { instanceI
   }, [selection, loading, subscriptions]);
 
   async function subscribe() {
-    if (!sourceId) {
+    if (!sourceId || order.current.mutating) {
       return;
     }
 
+    order.current.mutating = true;
+    ++order.current.generation;
+    setLoading(false);
     setBusy(true);
     setError(null);
     try {
@@ -74,7 +83,12 @@ export function EventSubscriptionsSection({ instanceId, selection }: { instanceI
     } catch (reason: unknown) {
       setError(describeAdminError(reason, "This agent could not subscribe.").message);
     } finally {
+      order.current.mutating = false;
       setBusy(false);
+      if (order.current.queuedRead) {
+        order.current.queuedRead = false;
+        setRetryKey(value => value + 1);
+      }
     }
   }
 
@@ -92,7 +106,7 @@ export function EventSubscriptionsSection({ instanceId, selection }: { instanceI
       <div className="admin-definition-panel-body">
         <Flex vertical gap={token.paddingSM}>
           {loading ? <Spin aria-label="Loading event subscriptions" /> : null}
-          {selection && !loading && !error && !subscriptions.some(item => item.registrationId === selection.registrationId) ? <Alert type="info" showIcon title="This event subscription is no longer available" /> : null}
+          {selection && !loading && !busy && !error && !subscriptions.some(item => item.registrationId === selection.registrationId) ? <Alert type="info" showIcon title="This event subscription is no longer available" /> : null}
           {error ? <Alert type="error" showIcon title={error} action={<Button disabled={busy || loading} onClick={() => setRetryKey(value => value + 1)}>Retry subscriptions</Button>} /> : null}
           {!loading ? (
             <>

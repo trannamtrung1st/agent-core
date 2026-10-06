@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntApp } from "antd";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EventSubscriptionsSection } from "./EventSubscriptionsSection";
@@ -13,6 +13,8 @@ import { createEventSubscription, listEventSources, listEventSubscriptions } fro
 
 const instanceId = "019944af-00d1-7000-8000-000000000001";
 const sourceId = "22222222-2222-2222-2222-222222222222";
+const source = { sourceId, displayName: "Demo Store", kind: "Webhook", sourceKey: "key", status: "Active", revision: 1 };
+const subscription = { registrationId: "target", sourceId, eventType: "order.placed", status: "Active", revision: 1 };
 
 describe("EventSubscriptionsSection", () => {
   beforeEach(() => {
@@ -99,5 +101,39 @@ describe("EventSubscriptionsSection", () => {
     await screen.findByText("order.placed");
     await waitFor(() => expect(document.querySelector('[data-event-registration-id="target"]')).toHaveFocus());
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+  it("admits one subscription for rapid clicks before the pending render", async () => {
+    vi.mocked(listEventSources).mockResolvedValue([source]);
+    vi.mocked(listEventSubscriptions).mockResolvedValue([]);
+    let resolve!: (value: typeof subscription) => void;
+    vi.mocked(createEventSubscription).mockReturnValue(new Promise(value => { resolve = value; }));
+    render(<AntApp><EventSubscriptionsSection instanceId={instanceId} /></AntApp>);
+    await screen.findByText("No order.placed subscription yet.");
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Event source" }));
+    fireEvent.click(await screen.findByText("Demo Store · Active"));
+    const button = screen.getByRole("button", { name: "Subscribe to order.placed" });
+    act(() => { button.click(); button.click(); });
+    expect(createEventSubscription).toHaveBeenCalledTimes(1);
+    await act(async () => { resolve(subscription); });
+    expect(await screen.findByText("order.placed")).toBeVisible();
+  });
+  it("queues source navigation behind an owner write and focuses the reconciled subscription", async () => {
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
+    vi.mocked(listEventSources).mockResolvedValue([source]);
+    vi.mocked(listEventSubscriptions).mockResolvedValue([]);
+    let resolve!: (value: typeof subscription) => void;
+    vi.mocked(createEventSubscription).mockReturnValue(new Promise(value => { resolve = value; }));
+    const view = render(<AntApp><EventSubscriptionsSection instanceId={instanceId} /></AntApp>);
+    await screen.findByText("No order.placed subscription yet.");
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Event source" }));
+    fireEvent.click(await screen.findByText("Demo Store · Active"));
+    fireEvent.click(screen.getByRole("button", { name: "Subscribe to order.placed" }));
+    view.rerender(<AntApp><EventSubscriptionsSection instanceId={instanceId} selection={{ registrationId: "target", request: 1 }} /></AntApp>);
+    expect(listEventSubscriptions).toHaveBeenCalledTimes(1);
+    vi.mocked(listEventSubscriptions).mockResolvedValue([subscription]);
+    await act(async () => { resolve(subscription); });
+    await waitFor(() => expect(listEventSubscriptions).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(document.querySelector('[data-event-registration-id="target"]')).toHaveFocus());
+    expect(screen.queryByText("This event subscription is no longer available")).not.toBeInTheDocument();
   });
 });

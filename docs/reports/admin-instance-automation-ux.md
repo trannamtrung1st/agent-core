@@ -122,3 +122,21 @@ PLAYWRIGHT_FAITHFUL_MANUAL=1 PLAYWRIGHT_API_PORT=5084 PLAYWRIGHT_WEB_PORT=5184 P
 ```
 
 Verdict remains **UI/UX READY** for the requested local enhancement. Backend admission/execution/storage behavior and historical milestone acceptance are unchanged. No new hosted-provider verification was requested or performed. Intentional concurrent changes remain excluded from this follow-up.
+
+
+## Event subscription concurrency review (2026-10-06)
+
+A further consistency review found that Event subscriptions lacked the synchronous mutation guard used by the other owner controls. Two rapid clicks could submit overlapping requests before React rendered the disabled state. Returning from a Run could also refresh the selected subscription while a write was pending. Two focused regressions failed before the repair. Subscription writes now admit once, invalidate older reads, and queue source-navigation refreshes until the write completes. The selected registration is focused after reconciliation; a pending write does not show a false unavailable-source notice.
+
+Verification under `local/admin-automation-ux/`:
+
+| Check | Result / log |
+| --- | --- |
+| New regressions before repair | 2 failed, `event-write-before.log` |
+| Event subscriptions and shared run presentation | 15 passed, `event-write-after.log` |
+| Production frontend build | Passed, `event-write-build.log`; existing bundle-size warning |
+| Synthetic event/background-work and store-connection browser regression | 3 passed, `event-review-playwright.log` |
+
+Playwright MCP created a Secretary v2 instance through Admin, selected an active source, held the subscription POST and clicked Subscribe twice synchronously. It observed one POST, disabled Subscribe, and one saved registration after switching to Runs and back to Connections and releasing the request (HTTP 200). At 390px the document had no horizontal overflow. Earlier manual attempts with General Assistant v9 and Examiner v1 received the expected application-event capability rejection (HTTP 400); those fixture choices were corrected to Secretary v2. The component regression separately verifies queued source selection and exact registration focus.
+
+This is a frontend ordering repair; the six-tab information architecture, wire contracts and backend admission policy remain unchanged. Local verification is green. The [hosted gate for 831a7c41](https://github.com/trannamtrung1st/agent-core/actions/runs/37394990476) was still running at the final review check: Compose smoke and backend gates passed, with frontend and browser gates outstanding. Hosted CI green remains the freeze condition.
