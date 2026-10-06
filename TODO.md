@@ -1473,3 +1473,8 @@ Orientation for what later work can build on. Detail and gate history are in `/d
 ## P9.10 — Identity state consolidation (closed/frozen)
 
 **Closed/frozen on verified candidate `71a9e6fd`**, including configurable continuity maintenance cadence. [Hosted Synthetic and Compose `37452986171`](https://github.com/trannamtrung1st/agent-core/actions/runs/37452986171) passed all five jobs on that exact commit on 2026-10-06. [Final verification](docs/reports/p9.10-final-verification.md) records AC1–AC20, Real semantic evidence, CI repairs, 2,468 passing hosted backend tests, 683 frontend tests, 112 browser tests and Compose volume survival. Stop P9.10 expansion. P9.8/P9.9 freeze SHAs remain unchanged; P10/P11 and optional Continuity v2 phase 6 remain requirement-triggered/deferred.
+
+
+## Bounded post-P9.10 Artifact delivery
+
+Artifact delivery completes Chat presentation of the existing session-owned Artifact store: canonical metadata, an accessible downloadable card, lazy owner-authenticated exact-byte download, bounded metadata deduplication, local Retry and retained read-only history. Verification/closure evidence: [Artifact delivery report](docs/reports/artifact-delivery-ux.md). P9.8/P9.9/P9.10 freezes stay unchanged; P10/P11 remain unopened.

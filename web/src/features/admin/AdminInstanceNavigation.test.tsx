@@ -7,7 +7,11 @@ vi.mock("./InstanceContinuitySection", () => ({
   IdentityMaintenanceSection: () => <div>Identity maintenance permission</div>,
   ExperienceSection: ({ selection }: { selection?: { workItemId: string } }) => <div>Experience controls {selection?.workItemId}</div>,
   ThoughtSection: ({ onWork, selection }: { onWork: (id: string) => void; selection?: { registrationId: string } }) => <div>Thought controls {selection?.registrationId}<button onClick={() => onWork("thought-run")}>Inspect thought fixture</button></div>,
-  InstanceRunsSection: ({ selectedWorkItemId, onSource }: { selectedWorkItemId?: string; onSource: (source: { kind: string; registrationId: string }) => void }) => <div>Run history {selectedWorkItemId}<button onClick={() => onSource({ kind: "thought", registrationId: "original-thought" })}>Back to thought fixture</button><button onClick={() => onSource({ kind: "event", registrationId: "event-source" })}>Back to event fixture</button></div>
+  InstanceRunsSection: ({ open, detailsOnly, selectedWorkItemId, onSource, onRun }: {
+    open: boolean; detailsOnly?: boolean; selectedWorkItemId?: string;
+    onSource?: (source: { kind: string; registrationId: string }) => void;
+    onRun?: (id: string) => void;
+  }) => !open ? null : detailsOnly ? <div role="dialog" aria-label="Run details">Run history {selectedWorkItemId}<button onClick={() => onSource?.({ kind: "thought", registrationId: "original-thought" })}>Back to thought fixture</button><button onClick={() => onSource?.({ kind: "event", registrationId: "event-source" })}>Back to event fixture</button></div> : <div>Run history<button onClick={() => onRun?.("event-run")}>Inspect run fixture</button></div>
 }));
 vi.mock("./EventSubscriptionsSection", () => ({ EventSubscriptionsSection: ({ selection }: { selection?: { registrationId: string } }) => <div>Event controls {selection?.registrationId}</div> }));
 vi.mock("./ApplicationConnectionSection", () => ({ ApplicationConnectionSection: () => null }));
@@ -85,13 +89,16 @@ describe("Managed instance information architecture", () => {
     expect(screen.getByText("Schedule controls")).toBeVisible();
     fireEvent.click(screen.getByRole("tab", { name: "Thoughts" }));
     fireEvent.click(screen.getByRole("button", { name: "Inspect thought fixture" }));
-    expect(screen.getByRole("tab", { name: "Runs" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText(/Run history thought-run/)).toBeVisible();
+    // Current Runs baseline opens shared details without switching the source tab.
+    expect(screen.getByRole("tab", { name: "Automation" })).toHaveAttribute("aria-selected", "true");
+    expect(within(screen.getByRole("dialog", { name: "Run details" })).getByText(/Run history thought-run/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Back to thought fixture" }));
     expect(screen.getByRole("tab", { name: "Automation" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Thoughts" })).toHaveAttribute("aria-selected", "true");
     expect(within(screen.getByRole("tabpanel", { name: "Thoughts" })).getByText(/original-thought/)).toBeVisible();
     fireEvent.click(screen.getByRole("tab", { name: "Runs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Inspect run fixture" }));
+    expect(within(screen.getByRole("dialog", { name: "Run details" })).getByText(/Run history event-run/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Back to event fixture" }));
     expect(screen.getByRole("tab", { name: "Connections" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText(/Event controls event-source/)).toBeVisible();

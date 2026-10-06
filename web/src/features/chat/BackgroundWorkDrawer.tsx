@@ -327,6 +327,7 @@ export function BackgroundWorkDrawer({
       icon: <InfoCircleOutlined />
     };
     const busy = busyId !== null;
+    const source = onSource ? runSource(item) : null;
 
     return (
       <li key={item.workItemId} data-work-item-id={item.workItemId} tabIndex={item.workItemId === selectedWorkItemId ? -1 : undefined}
@@ -358,7 +359,6 @@ export function BackgroundWorkDrawer({
             <Typography.Paragraph className="background-work-detail-body">{item.intent}</Typography.Paragraph>
           </div> : null}
           {item.modelKey ? <Typography.Text type="secondary">Model: {item.modelKey}{item.thoughtOutcome ? ` · ${thoughtOutcomeLabel(item.thoughtOutcome)}` : ""}</Typography.Text> : null}
-          {onSource && runSource(item) ? <Button className="admin-run-source" onClick={() => onSource(runSource(item)!)}>View {item.origin === "Retrospection" ? "experience" : runOriginLabel(item.origin).toLowerCase()}</Button> : null}
           <Typography.Text type="secondary" style={{ overflowWrap: "anywhere" }}>Run {item.workItemId}</Typography.Text>
           {item.sourceId && item.origin === "Retrospection" ? <Typography.Text type="secondary" style={{ overflowWrap: "anywhere" }}>Checkpoint: {item.sourceId}</Typography.Text> : null}
           {item.progress ? (
@@ -437,63 +437,69 @@ export function BackgroundWorkDrawer({
             </div>
           ) : null}
 
-          {item.needsApproval || item.cancellationAvailable ? (
-            <Flex gap={token.paddingXS} wrap="wrap" justify="flex-end" className="background-work-actions">
-              {item.needsApproval && item.approvalId && item.actionHash ? (
-                <>
-                  <Button
-                    type="primary"
-                    disabled={busy}
-                    aria-label={`Approve ${runOriginLabel(item.origin)}`}
-                    onClick={() =>
-                      confirmAction(modal, {
-                        title: "Approve this action?",
-                        content: "The action will continue immediately.",
-                        okText: "Approve action",
-                        cancelText: "Keep waiting",
-                        onOk: () => confirmDecision(item, "approve")
-                      })
-                    }
-                  >
-                    Approve
-                  </Button>
-                  <Button
-                    disabled={busy}
-                    aria-label={`Reject ${runOriginLabel(item.origin)}`}
-                    onClick={() =>
-                      confirmAction(modal, {
-                        title: "Reject this action?",
-                        content: "The run will continue without this action.",
-                        okText: "Reject action",
-                        cancelText: "Keep waiting",
-                        danger: true,
-                        onOk: () => confirmDecision(item, "reject")
-                      })
-                    }
-                  >
-                    Reject
-                  </Button>
-                </>
-              ) : null}
-              {item.cancellationAvailable ? (
-                <Button
-                  danger
-                  disabled={busy}
-                  aria-label={`Cancel ${runOriginLabel(item.origin)}`}
-                  onClick={() =>
-                    confirmAction(modal, {
-                      title: "Cancel this work?",
-                      content: "Any external action that already completed cannot be undone.",
-                      okText: "Cancel work",
-                      cancelText: "Keep",
-                      danger: true,
-                      onOk: () => confirmCancel(item)
-                    })
-                  }
-                >
-                  Cancel
-                </Button>
-              ) : null}
+          {source || item.needsApproval || item.cancellationAvailable ? (
+            <Flex component="section" vertical gap={token.paddingXS} aria-label="Run actions">
+              <Typography.Text strong>Actions</Typography.Text>
+              <Flex gap={token.paddingSM} wrap="wrap" justify="space-between" align="center">
+                {source ? <Button className="admin-run-source" onClick={() => onSource?.(source)}>View {item.origin === "Retrospection" ? "experience" : runOriginLabel(item.origin).toLowerCase()}</Button> : null}
+                {item.needsApproval || item.cancellationAvailable ? <Flex gap={token.paddingXS} wrap="wrap" justify="flex-end" className="background-work-actions" style={{ marginInlineStart: "auto" }}>
+                  {item.needsApproval && item.approvalId && item.actionHash ? (
+                    <>
+                      <Button
+                        type="primary"
+                        disabled={busy}
+                        aria-label={`Approve ${runOriginLabel(item.origin)}`}
+                        onClick={() =>
+                          confirmAction(modal, {
+                            title: "Approve this action?",
+                            content: "The action will continue immediately.",
+                            okText: "Approve action",
+                            cancelText: "Keep waiting",
+                            onOk: () => confirmDecision(item, "approve")
+                          })
+                        }
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        disabled={busy}
+                        aria-label={`Reject ${runOriginLabel(item.origin)}`}
+                        onClick={() =>
+                          confirmAction(modal, {
+                            title: "Reject this action?",
+                            content: "The run will continue without this action.",
+                            okText: "Reject action",
+                            cancelText: "Keep waiting",
+                            danger: true,
+                            onOk: () => confirmDecision(item, "reject")
+                          })
+                        }
+                      >
+                        Reject
+                      </Button>
+                    </>
+                  ) : null}
+                  {item.cancellationAvailable ? (
+                    <Button
+                      danger
+                      disabled={busy}
+                      aria-label={`Cancel ${runOriginLabel(item.origin)}`}
+                      onClick={() =>
+                        confirmAction(modal, {
+                          title: "Cancel this work?",
+                          content: "Any external action that already completed cannot be undone.",
+                          okText: "Cancel work",
+                          cancelText: "Keep",
+                          danger: true,
+                          onOk: () => confirmCancel(item)
+                        })
+                      }
+                    >
+                      Cancel
+                    </Button>
+                  ) : null}
+                </Flex> : null}
+              </Flex>
             </Flex>
           ) : null}
         </Flex>

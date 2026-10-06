@@ -1,5 +1,6 @@
-import { Button, Flex, Typography, theme } from "antd";
+import { Flex, Typography, theme } from "antd";
 import type { HistoryBlock, HistoryEntry, MemoryReceiptView } from "../../state/sessionStore";
+import { ArtifactView } from "./ArtifactView";
 import { HistoryAttachmentView } from "./AttachmentPreview";
 import { formatChatTime, statusLabel } from "./chatTime";
 import { ChatMessageStatus } from "./ChatMessageStatus";
@@ -182,12 +183,9 @@ function RichBlock({ sessionId, block }: { sessionId: string | null; block: Hist
   }
 
   if (block.kind === "artifact" && block.artifactId) {
-    const label = block.text || block.fallbackText || block.artifactId;
     return (
       <div className="entry-block" data-kind="artifact">
-        <Button type="text" className="file-chip" aria-label={`Artifact ${label}`}>
-          Artifact · {label}
-        </Button>
+        <ArtifactView key={`${sessionId}:${block.artifactId}`} sessionId={sessionId} artifactId={block.artifactId} />
       </div>
     );
   }

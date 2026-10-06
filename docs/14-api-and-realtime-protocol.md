@@ -324,13 +324,13 @@ Phases A–H are observed on the runtime (including Docker `sandbox.run`). Phase
 | PUT /api/v2/sessions/{id}/workspace/content?path= | Write under `/workspace/working|artifacts|state` only; 250 MiB session cap; 403 for RO overlays, secrets, traversal, symlinks |
 | POST /api/v2/sessions/{id}/attachments/{attachmentId}/materialize | Explicit working copy plus Artifact metadata; originals unchanged; SHA-256 preserved; deterministic `name-2` collisions |
 | GET /api/v2/sessions/{id}/artifacts | List session-owned artifacts; owner capability |
-| GET /api/v2/sessions/{id}/artifacts/{artifactId} | Artifact metadata; cross-session 404 |
-| GET /api/v2/sessions/{id}/artifacts/{artifactId}/content | Authorized download; SessionId is not a credential |
+| GET /api/v2/sessions/{id}/artifacts/{artifactId} | Canonical `displayName`, `contentType`, `byteSize` plus existing provenance; owner capability; cross-session 404 |
+| GET /api/v2/sessions/{id}/artifacts/{artifactId}/content | Exact stored bytes with stored content type and attachment Content-Disposition using canonical display name; owner capability; cross-session 404 |
 | DELETE /api/v2/sessions | Bulk durable delete for demo/catalog reset. Optional `includeArchived=true` matches catalog listing; tears down live runtimes first; returns `{ deletedCount }` |
 | DELETE /api/v2/sessions/{id} | Server-owned durable deletion of session-owned data (no client revision); tears down live runtime first |
 | DELETE /api/v1/sessions/{id} | Unchanged terminal-end |
 
-Ended rows: reopen/rename/archive/unarchive fail closed or no-op without resurrecting a runtime. GET session and GET `/messages` remain available for a read-only UI. GET attachment list/metadata/content remains available for that view; upload, stage, abort, and materialize stay rejected. Versioned durable delete remains available.
+Ended rows: reopen/rename/archive/unarchive fail closed or no-op without resurrecting a runtime. GET session and GET `/messages` remain available for a read-only UI. GET attachment and Artifact list/metadata/content remain available for that view; upload, stage, abort, and materialize stay rejected. Versioned durable delete remains available.
 
 **Rich envelope (observed).** Parent `ResponseId` carries `reply.text`, optional `reply.speech`, Markdown, attachment/artifact reference blocks, independent display and speech receipts. Unknown blocks fallback. Artifact refs in C use fixtures (`fixture-artifact-1`). Reconnect history uses the received display prefix while streaming or interrupted, the full durable display text after Completed/Failed, and display-delivered blocks only.
 

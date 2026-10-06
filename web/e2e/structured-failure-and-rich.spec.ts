@@ -22,7 +22,8 @@ test("rich envelope shows differing spoken text without another message and does
   await expect(page.getByText("Shown display.")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("Extra block")).toBeVisible();
   await expect(page.getByText("fixture-attachment-1")).toBeVisible();
-  await expect(page.getByRole("button", { name: /Artifact fixture-artifact-1/ })).toBeVisible();
+  await expect(page.getByText("File unavailable")).toBeVisible();
+  await expect(page.getByText("fixture-artifact-1")).toHaveCount(0);
   await expect(page.getByText("[Unsupported content]")).toBeVisible();
   await expect(page.locator(".spoken-text")).toContainText("Hidden speech");
   // Text-delivered speech projects as "Speech text"; "Spoken" is reserved for voice delivery.

@@ -575,6 +575,39 @@ body,
   min-width: 0;
 }
 
+.entry-block[data-kind="artifact"] {
+  min-width: 0;
+  width: 100%;
+}
+
+.artifact-card {
+  width: min(100%, 32rem);
+  box-sizing: border-box;
+}
+
+.artifact-card > .anticon,
+.artifact-card > .ant-btn {
+  flex-shrink: 0;
+}
+
+.artifact-details {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.artifact-card .artifact-filename {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-description {
+  font-size: 12px;
+}
+
 .background-work-subtitle,
 .schedule-subtitle {
   font-size: 12px;

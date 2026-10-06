@@ -145,7 +145,7 @@ describe("Conversation", () => {
     expect(screen.queryByText("Interrupted")).not.toBeInTheDocument();
   });
 
-  it("renders extra markdown, attachment, and artifact blocks without speech text", () => {
+  it("renders extra markdown, attachment, and artifact blocks without speech text", async () => {
     render(
       <Conversation
         agentName="Alex"
@@ -191,7 +191,8 @@ describe("Conversation", () => {
     expect(screen.getByText("Shown display.")).toBeInTheDocument();
     expect(screen.getByText("Extra block")).toBeInTheDocument();
     expect(screen.getByText("notes.txt")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Artifact fixture-artifact-1" })).toBeInTheDocument();
+    expect(await screen.findByText("File unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("fixture-artifact-1")).not.toBeInTheDocument();
     expect(screen.queryByText("Hidden speech")).not.toBeInTheDocument();
   });
 
@@ -223,7 +224,7 @@ describe("Conversation", () => {
     expect(screen.getByText("[Unsupported content]")).toBeInTheDocument();
   });
 
-  it("renders sanitized markdown, artifact labels, and rejects script links as text", () => {
+  it("renders sanitized markdown, artifact labels, and rejects script links as text", async () => {
     render(
       <Conversation
         agentName="Alex"
@@ -258,7 +259,8 @@ describe("Conversation", () => {
     );
     expect(screen.getByText("Hi")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "x" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Artifact fixture-artifact-1" })).toBeInTheDocument();
+    expect(await screen.findByText("File unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("fixture-artifact-1")).not.toBeInTheDocument();
     expect(screen.queryByText("Spoken hello")).not.toBeInTheDocument();
   });
 

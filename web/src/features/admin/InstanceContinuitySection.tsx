@@ -214,12 +214,14 @@ export function ExperienceSection({ instanceId, onWork, selection, active = true
           expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, item) => setExpanded(open ? [item.experienceId] : []),
             expandedRowRender: item => <Flex vertical gap={token.padding} style={{ whiteSpace: "normal" }}>
               <ExperienceDetails item={item} />
-              {item.generationWorkItemId !== "00000000-0000-0000-0000-000000000000" ? <Button style={{ alignSelf: "flex-start" }} onClick={() => onWork(item.generationWorkItemId)}>View generation run</Button> : null}
-              <Flex wrap gap={token.paddingXS}>
-                <Button disabled={busy || item.visibility === "Superseded" || item.visibility === "Deleted"} onClick={() => void mutate(`experience/${item.experienceId}`, "PUT", { expectedRevision: item.revision, visibility: item.visibility === "Suppressed" ? "Eligible" : "Suppressed" })}>
-                  {item.visibility === "Suppressed" ? "Include in context" : "Suppress experience"}</Button>
-                <Button danger disabled={busy} onClick={() => confirmAction(modal, { title: "Delete this experience?", content: "The source work remains available. This checkpoint will not be regenerated.", okText: "Delete experience", danger: true,
-                  onOk: () => mutate(`experience/${item.experienceId}`, "PUT", { expectedRevision: item.revision, visibility: "Deleted" }) })}>Delete experience</Button>
+              <Flex wrap align="center" justify="space-between" gap={token.padding}>
+                {item.generationWorkItemId !== "00000000-0000-0000-0000-000000000000" ? <Button onClick={() => onWork(item.generationWorkItemId)}>View generation run</Button> : null}
+                <Flex wrap gap={token.paddingXS}>
+                  <Button disabled={busy || item.visibility === "Superseded" || item.visibility === "Deleted"} onClick={() => void mutate(`experience/${item.experienceId}`, "PUT", { expectedRevision: item.revision, visibility: item.visibility === "Suppressed" ? "Eligible" : "Suppressed" })}>
+                    {item.visibility === "Suppressed" ? "Include in context" : "Suppress experience"}</Button>
+                  <Button danger disabled={busy} onClick={() => confirmAction(modal, { title: "Delete this experience?", content: "The source work remains available. This checkpoint will not be regenerated.", okText: "Delete experience", danger: true,
+                    onOk: () => mutate(`experience/${item.experienceId}`, "PUT", { expectedRevision: item.revision, visibility: "Deleted" }) })}>Delete experience</Button>
+                </Flex>
               </Flex>
             </Flex>
           }} />
