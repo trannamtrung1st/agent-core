@@ -22,7 +22,7 @@ export function InstanceWorkspaceSection({ instanceId, archived }: { instanceId:
       const result = await listAgentWorkspace(instanceId, afterPath);
       if (generation === order.current) setPage(previous => afterPath && previous ? { ...result, items: [...previous.items, ...result.items] } : result);
     } catch (reason) {
-      if (generation === order.current) setError(describeAdminError(reason, "Unable to load workspace. Retry to reload the files."));
+      if (generation === order.current) setError(describeAdminError(reason, "Unable to load workspace. Retry to reload the workspace."));
     } finally { if (generation === order.current) setLoading(false); }
   }, [instanceId]);
   useEffect(() => {
@@ -37,7 +37,7 @@ export function InstanceWorkspaceSection({ instanceId, archived }: { instanceId:
       await deleteAgentWorkspaceItem(instanceId, item);
       if (generation === order.current) await reload();
     } catch (reason) {
-      if (generation === order.current) setError(describeAdminError(reason, "The file changed or could not be deleted. Reload before trying again."));
+      if (generation === order.current) setError(describeAdminError(reason, "The item changed or could not be deleted. Reload before trying again."));
     } finally { if (identity.current === instanceId) setBusy(null); }
   }
   async function save(item: AgentWorkspaceItem) {
@@ -64,9 +64,9 @@ export function InstanceWorkspaceSection({ instanceId, archived }: { instanceId:
         description={error.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: error.diagnosticId }} /> : undefined} /> : null}
       {loading && !page ? <Spin aria-label="Loading workspace" /> : null}
       {page ? <>
-        <AdminCollectionToolbar value={search} onChange={setSearch} label="retained files" />
+        <AdminCollectionToolbar value={search} onChange={setSearch} label="workspace items" />
         <Table<AgentWorkspaceItem> size="small" rowKey="itemId" loading={loading} dataSource={items} pagination={pagination} scroll={{ x: 840 }}
-          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search ? "No matching files" : "No retained files yet"} /> }}
+          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search ? "No matching items" : "No workspace items yet"} /> }}
           columns={[
             { title: "Path", dataIndex: "logicalPath", ellipsis: true, width: 260, render: (value: string) => <span title={value}>{value}</span> },
             { title: "Type", dataIndex: "contentType", width: 100, render: (value: string, item) => <span title={value}>{item.directory ? "Folder" : artifactKind(value)}</span> },
@@ -81,7 +81,7 @@ export function InstanceWorkspaceSection({ instanceId, archived }: { instanceId:
               })}>Delete</Button>
             </Flex> }
           ]} />
-        {page.nextPath ? <Button disabled={loading || !!busy} onClick={() => void reload(page.nextPath!)}>Load more files</Button> : null}
+        {page.nextPath ? <Button disabled={loading || !!busy} onClick={() => void reload(page.nextPath!)}>Load more items</Button> : null}
       </> : null}
     </Flex></div>
   </section>;

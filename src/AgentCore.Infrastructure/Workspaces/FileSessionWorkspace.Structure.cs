@@ -8,11 +8,18 @@ namespace AgentCore.Infrastructure.Workspaces;
 public sealed partial class FileSessionWorkspace
 {
     internal Func<int, CancellationToken, ValueTask>? BeforeStructuralOperation { get; set; }
+    internal Func<CancellationToken, ValueTask>? BeforeFilesystemRead { get; set; }
 
-    private async ValueTask<T> WithFilesystemAsync<T>(Guid sessionId, Func<ValueTask<T>> action, CancellationToken ct)
+    private async ValueTask<T> WithFilesystemAsync<T>(Guid sessionId, Func<CancellationToken, ValueTask<T>> action, CancellationToken ct)
     {
         var gate = Gate(sessionId); await gate.WaitAsync(ct);
-        try { ThrowIfDeleted(sessionId); return await action(); }
+        try
+        {
+            ThrowIfDeleted(sessionId);
+            using var linked = LinkWriter(sessionId, ct);
+            linked.Token.ThrowIfCancellationRequested();
+            return await action(linked.Token);
+        }
         finally { gate.Release(); }
     }
 
@@ -25,7 +32,7 @@ public sealed partial class FileSessionWorkspace
         try
         {
             ThrowIfDeleted(sessionId);
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(Writer(sessionId).Token, cancellationToken);
+            using var linked = LinkWriter(sessionId, cancellationToken);
             var ct = linked.Token; ct.ThrowIfCancellationRequested();
             var entries = SnapshotPhysicalTree(sessionId, ct);
             var plan = WorkspaceTreePlanner.Plan(entries, operations, "/workspace", _maxWritableBytes, _maxWritableBytes, ct);

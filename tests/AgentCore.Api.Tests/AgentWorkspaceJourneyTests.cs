@@ -155,6 +155,9 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
         Assert.Equal((await store.ListAsync(owner,"/home",null,1)).TreeSha256,result.RootElement.GetProperty("treeSha256").GetString());
         var copy = await executor.ExecuteAsync(definition,session,new("copy-many",ToolCatalog.WorkspaceCopy,System.Text.Json.JsonSerializer.Serialize(new {source="/home/a",destination="/home/copied",expectedTreeSha256=result.RootElement.GetProperty("treeSha256").GetString()})),8192);
         Assert.Contains("\"filesAffected\":270",copy.Text!);
+        using var copiedResult = System.Text.Json.JsonDocument.Parse(copy.Text!);
+        Assert.Equal("/home/a",copiedResult.RootElement.GetProperty("operations")[0].GetProperty("source").GetString());
+        Assert.Equal(64,copiedResult.RootElement.GetProperty("treeSha256").GetString()!.Length);
         Assert.Equal("x"u8.ToArray(),await client.GetByteArrayAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/copied/file269.txt"));
     }
 

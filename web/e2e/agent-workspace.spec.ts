@@ -56,7 +56,7 @@ test("managed home survives deleted source, checks out a revision and delivers a
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`home-${width}.png`), fullPage: true });
   }
-  await page.goto(`/admin/instances/${b}/workspace`); await expect(page.getByText("No retained files yet")).toBeVisible();
+  await page.goto(`/admin/instances/${b}/workspace`); await expect(page.getByText("No workspace items yet")).toBeVisible();
   expect((await request.get(`/api/v2/agent-instances/${b}/workspace/${second.itemId}/content`, { headers })).status()).toBe(404);
   await page.goto(`/admin/instances/${a}/workspace`); await expect(page.getByText(home, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: `Delete ${home}`, exact: true }).click();

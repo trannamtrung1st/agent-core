@@ -39,10 +39,10 @@ describe("Agent Workspace inspection", () => {
   it("shows empty, loading and retry without a false empty state on failure", async () => {
     vi.mocked(listAgentWorkspace).mockRejectedValueOnce(new Error("Temporary failure"));
     render(view()); await screen.findByRole("button", { name: "Retry workspace" });
-    expect(screen.queryByText("No retained files yet")).not.toBeInTheDocument();
+    expect(screen.queryByText("No workspace items yet")).not.toBeInTheDocument();
     vi.mocked(listAgentWorkspace).mockResolvedValue({ ...page, items: [], totalItems: 0, usedBytes: 0 });
     fireEvent.click(screen.getByRole("button", { name: "Retry workspace" }));
-    await screen.findByText("No retained files yet");
+    await screen.findByText("No workspace items yet");
   });
   it("keeps archived downloads and disables durable deletion", async () => {
     render(view("a", true)); await screen.findByText(item.logicalPath);
@@ -62,9 +62,9 @@ describe("Agent Workspace inspection", () => {
     const name = "/home/" + "very-long-name-".repeat(8) + ".md";
     vi.mocked(listAgentWorkspace).mockResolvedValue({ ...page, items: [{ ...item, logicalPath: name }] });
     render(view()); expect(await screen.findByText(name)).toHaveAttribute("title", name);
-    fireEvent.change(screen.getByRole("textbox", { name: "Search retained files" }), { target: { value: "absent" } });
-    await screen.findByText("No matching files");
-    fireEvent.change(screen.getByRole("textbox", { name: "Search retained files" }), { target: { value: "" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Search workspace items" }), { target: { value: "absent" } });
+    await screen.findByText("No matching items");
+    fireEvent.change(screen.getByRole("textbox", { name: "Search workspace items" }), { target: { value: "" } });
     await screen.findByRole("button", { name: `Download ${name}` });
   });
 });

@@ -28,6 +28,7 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
     private readonly long _maxWritableBytes;
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _locks = new();
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _writers = new();
+    private readonly object _writerFence = new();
     private readonly ConcurrentDictionary<Guid, byte> _deleted = new();
 
     public FileSessionWorkspace(
@@ -110,7 +111,13 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
 
         if (path.StartsWith("/workspace", StringComparison.Ordinal))
         {
-            return await WithFilesystemAsync(sessionId, () => ValueTask.FromResult(ListPhysical(sessionId, path)), cancellationToken);
+            return await WithFilesystemAsync(sessionId, ct =>
+            {
+                ct.ThrowIfCancellationRequested();
+                var nodes = ListPhysical(sessionId, path);
+                ct.ThrowIfCancellationRequested();
+                return ValueTask.FromResult(nodes);
+            }, cancellationToken);
         }
 
         throw AgentCoreErrors.Forbidden("Path is not permitted for this role.");
@@ -140,12 +147,13 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
             throw AgentCoreErrors.Forbidden("Path is not permitted for this role.");
         }
 
-        return await WithFilesystemAsync(sessionId, async () =>
+        return await WithFilesystemAsync(sessionId, async ct =>
         {
             var physical = MapWorkspaceFile(sessionId, path);
             DenyEscapingLinks(physical, SessionRoot(sessionId));
             if (!File.Exists(physical) || Directory.Exists(physical)) throw AgentCoreErrors.NotFound("Workspace path was not found.");
-            var bytes = await File.ReadAllBytesAsync(physical, cancellationToken).ConfigureAwait(false);
+            if (BeforeFilesystemRead is not null) await BeforeFilesystemRead(ct);
+            var bytes = await File.ReadAllBytesAsync(physical, ct).ConfigureAwait(false);
             return new WorkspaceContent(path, ContentType(physical), bytes);
         }, cancellationToken);
     }
@@ -181,7 +189,7 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
         try
         {
             ThrowIfDeleted(sessionId);
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(Writer(sessionId).Token, cancellationToken);
+            using var linked = LinkWriter(sessionId, cancellationToken);
             linked.Token.ThrowIfCancellationRequested();
             var physical = MapWorkspaceFile(sessionId, path);
             var parent = Path.GetDirectoryName(physical)!;
@@ -258,7 +266,7 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
         try
         {
             ThrowIfDeleted(sessionId);
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(Writer(sessionId).Token, cancellationToken);
+            using var linked = LinkWriter(sessionId, cancellationToken);
             linked.Token.ThrowIfCancellationRequested();
             var physical = MapWorkspaceFile(sessionId, path);
             DenyEscapingLinks(physical, SessionRoot(sessionId));
@@ -327,8 +335,13 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
 
     public async ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
-        _deleted[sessionId] = 1;
-        if (_writers.TryRemove(sessionId, out var writers))
+        CancellationTokenSource? writers;
+        lock (_writerFence)
+        {
+            _deleted[sessionId] = 1;
+            _writers.TryRemove(sessionId, out writers);
+        }
+        if (writers is not null)
         {
             await writers.CancelAsync().ConfigureAwait(false);
             writers.Dispose();
@@ -873,8 +886,15 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
 
     private SemaphoreSlim Gate(Guid sessionId) => _locks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
 
-    private CancellationTokenSource Writer(Guid sessionId) =>
-        _writers.GetOrAdd(sessionId, _ => new CancellationTokenSource());
+    private CancellationTokenSource LinkWriter(Guid sessionId, CancellationToken cancellationToken)
+    {
+        lock (_writerFence)
+        {
+            ThrowIfDeleted(sessionId);
+            return CancellationTokenSource.CreateLinkedTokenSource(
+                _writers.GetOrAdd(sessionId, _ => new CancellationTokenSource()).Token, cancellationToken);
+        }
+    }
 
     private void ThrowIfDeleted(Guid sessionId)
     {

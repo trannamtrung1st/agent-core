@@ -79,9 +79,10 @@ public sealed class WorkspaceStructureTests
     {
         using var f = await Fixture.Create(profile);
         f.Hook((i, _) => i == 1 ? ValueTask.FromException(new IOException("host private details")) : ValueTask.CompletedTask);
-        var result = await f.Run(new WorkspaceStructuralOperation("mkdir",Path:f.P("kept")),new("mkdir",Path:f.P("never")));
+        var result = await f.Run(new WorkspaceStructuralOperation("mkdir",Path:f.P("kept")),new("mkdir",Path:f.P("never")),new("mkdir",Path:f.P("also-never")));
         Assert.False(result.Completed); Assert.Equal(1, result.CompletedCount); Assert.Equal(1,result.FailedIndex);
         Assert.True(result.MutationsMayHaveOccurred); Assert.DoesNotContain("host private",result.Message);
+        Assert.Equal(3,result.OperationCount); Assert.Equal(["completed","failed","notExecuted"],result.Results.Select(r => r.Status).ToArray());
         Assert.Contains(f.P("kept"),await f.Paths()); Assert.DoesNotContain(f.P("never"),await f.Paths());
         f.Hook(null);
         using var cancel = new CancellationTokenSource(); cancel.Cancel();
@@ -150,6 +151,19 @@ public sealed class WorkspaceStructureTests
         await f.Scratch!.DeleteSessionAsync(f.Id);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pending);
         await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Write("late","x"u8.ToArray()));
+    }
+
+    [Fact]
+    public async Task Session_teardown_cancels_a_read_which_holds_the_shared_filesystem_gate()
+    {
+        using var f = await Fixture.Create(0); await f.Write("read", "content"u8.ToArray());
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        f.Scratch!.BeforeFilesystemRead = async ct => { entered.TrySetResult(); await release.Task.WaitAsync(ct); };
+        var read = f.Read("read"); await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await f.Scratch.DeleteSessionAsync(f.Id).AsTask().WaitAsync(TimeSpan.FromSeconds(10));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await read);
+        Assert.False(Directory.Exists(Path.Combine(f.Root,"scratch",f.Id.ToString("N"))));
     }
 
     private static readonly AgentDefinition Definition = new(1,"examiner",1,new AgentIdentity("Alex","Examiner","Practice.","Calm"),["Practice"],"Instructions",new BehaviorPolicy("acknowledgeThenContinue",true,true),new ConversationPolicy("concise",true,"en",256),new InitiativePolicy(true,8000,30000,1,["longSilence"]),new VoiceConfiguration(true,"default",1),new ProviderPreferences("primary-llm","primary-stt","primary-tts"),new Dictionary<string,string>());

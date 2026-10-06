@@ -64,7 +64,7 @@ export function HarnessManagementSection({ instanceId, onUpdated }: {
           <Tag>{review.policy.frozen ? "Frozen" : review.policy.mode === "Disabled" ? "Manual" : review.policy.mode}</Tag></Flex>
         <Form layout="vertical" className="admin-config-form">
           <HarnessPolicyModeScopes mode={mode} scopes={scopes} busy={busy} onMode={setMode} onScopes={setScopes} />
-          <Typography.Paragraph type="secondary">Managed may save knowledge and Skills automatically. Instructions and tool changes always need approval in Chat. Existing conversations keep their current version.</Typography.Paragraph>
+          <Typography.Paragraph type="secondary">Existing conversations keep their current version.</Typography.Paragraph>
           <Flex wrap gap={token.paddingXS}>
             <Button type="primary" disabled={busy || (!changed && !review.policy.frozen) || (mode !== "Disabled" && scopes.length === 0)} onClick={() => void run("policy", {
               expectedRevision: review.instanceRevision, mode, scopes: mode === "Disabled" ? [] : scopes, sources: [], eligibleTools: [], frozen: false
@@ -107,7 +107,7 @@ export function HarnessPolicyModeScopes({ mode, scopes, busy, onMode, onScopes }
   mode: HarnessMode; scopes: HarnessScope[]; busy: boolean; onMode: (mode: HarnessMode) => void; onScopes: (scopes: HarnessScope[]) => void
 }) {
   return <>
-    <Form.Item label="Authoring mode" help="Assisted asks for approval in Chat. Managed may save granted knowledge and Skills automatically.">
+    <Form.Item label="Authoring mode" help="Assisted asks before saving. Managed may auto-save allowed knowledge and Skills; other changes need approval.">
       <Select aria-label="Authoring mode" value={mode} disabled={busy} onChange={onMode} options={[
         { value: "Disabled", label: "Manual (off)" }, { value: "Assisted", label: "Assisted" }, { value: "Managed", label: "Managed" }
       ]} />

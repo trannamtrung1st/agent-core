@@ -12,12 +12,12 @@ const path = (id: string) => `/api/v2/agent-instances/${encodeURIComponent(id)}/
 
 export async function listAgentWorkspace(id: string, afterPath?: string): Promise<AgentWorkspacePage> {
   const response = await ownerFetch(`${path(id)}${afterPath ? `?afterPath=${encodeURIComponent(afterPath)}` : ""}`);
-  if (!response.ok) throw await adminProblemMessage(response, "Unable to load workspace. Retry to reload the files.");
+  if (!response.ok) throw await adminProblemMessage(response, "Unable to load workspace. Retry to reload the workspace.");
   return response.json() as Promise<AgentWorkspacePage>;
 }
 export async function deleteAgentWorkspaceItem(id: string, item: AgentWorkspaceItem): Promise<void> {
   const response = await ownerFetch(`${path(id)}/${encodeURIComponent(item.itemId)}?expectedRevision=${item.revision}`, { method: "DELETE" });
-  if (!response.ok) throw await adminProblemMessage(response, "The file could not be deleted. Reload the workspace and try again.");
+  if (!response.ok) throw await adminProblemMessage(response, "The item could not be deleted. Reload the workspace and try again.");
 }
 export async function downloadAgentWorkspaceItem(id: string, item: AgentWorkspaceItem, signal?: AbortSignal): Promise<void> {
   const response = await ownerFetch(`${path(id)}/${encodeURIComponent(item.itemId)}/content`, { signal });
