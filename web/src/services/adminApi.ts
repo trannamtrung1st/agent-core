@@ -841,6 +841,9 @@ export type AdminLearnedMemoryItem = {
     recordedAt: string;
     derivedFromMemoryIds?: string[];
     maintenanceOrigin?: string | null;
+    maintenanceAgentInstanceId?: string | null;
+    maintenanceSessionId?: string | null;
+    maintenanceWorkItemId?: string | null;
   };
   updatedAt: string;
 };
