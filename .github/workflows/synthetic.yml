@@ -10,11 +10,14 @@ on:
     paths-ignore:
       - "TODO.md"
 
+# These gates intentionally have no job dependencies: separate runners shorten the
+# critical path without changing test workers, project coverage, or SQLite isolation.
+# Repeated tool/dependency setup is cheaper than serial developer feedback.
 jobs:
-  offline:
-    name: Synthetic offline gates
+  backend:
+    name: Synthetic backend
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     env:
       DOTNET_NOLOGO: "1"
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
@@ -30,17 +33,11 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: pnpm
-          cache-dependency-path: |
-            web/pnpm-lock.yaml
-            tests/realtime-js/package-lock.json
+          cache: npm
+          cache-dependency-path: tests/realtime-js/package-lock.json
 
       - name: Restore JavaScript protocol fixture
         working-directory: tests/realtime-js
@@ -64,6 +61,30 @@ jobs:
       - name: Backend API tests
         run: dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --nologo
 
+  frontend:
+    name: Synthetic frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Milestone evidence must test the candidate's exact behavior commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
       - name: Frontend install, unit tests, and build
         working-directory: web
         run: |
@@ -72,6 +93,47 @@ jobs:
           # Keep fresh file isolation and existing timeouts; serialize the unit gate.
           pnpm run test --run --maxWorkers=1
           pnpm run build
+
+  playwright-core:
+    name: Synthetic Playwright core
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      CI: "true"
+      Browser__Headless: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Milestone evidence must test the candidate's exact behavior commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      # Backend browser tools use the .NET Playwright browser revision as well.
+      # Build the actual host and install its Chromium on each isolated browser runner.
+      - name: Build Synthetic API host
+        run: dotnet build src/AgentCore.Api/AgentCore.Api.csproj --nologo
+
+      - name: Install .NET Playwright Chromium
+        run: pwsh src/AgentCore.Api/bin/Debug/net10.0/playwright.ps1 install --with-deps chromium
+
+      - name: Install frontend dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
 
       - name: Install Playwright Chromium
         working-directory: web
@@ -85,6 +147,63 @@ jobs:
             --project=browser-stt \
             --project=browser-browser
         # Chromium fake media devices only: text, capture PCM, playback, and duplex mute/disconnect. No keys, mic, speaker, or GPU.
+
+      - name: Upload Playwright failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-core-failure
+          path: |
+            web/test-results
+            web/playwright-report
+          if-no-files-found: ignore
+
+  # Acceptance projects stay sequential on their own runner, retaining each
+  # project's dedicated database and server lifecycle. Do not merge the invocations.
+  playwright-acceptance:
+    name: Synthetic Playwright acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      CI: "true"
+      Browser__Headless: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Milestone evidence must test the candidate's exact behavior commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      # Backend browser tools use the .NET Playwright browser revision as well.
+      # Build the actual host and install its Chromium on each isolated browser runner.
+      - name: Build Synthetic API host
+        run: dotnet build src/AgentCore.Api/AgentCore.Api.csproj --nologo
+
+      - name: Install .NET Playwright Chromium
+        run: pwsh src/AgentCore.Api/bin/Debug/net10.0/playwright.ps1 install --with-deps chromium
+
+      - name: Install frontend dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        working-directory: web
+        run: pnpm exec playwright install chromium --with-deps
 
       - name: Faithful Manual-A wall-clock Playwright
         working-directory: web
@@ -141,7 +260,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-failure
+          name: playwright-acceptance-failure
           path: |
             web/test-results
             web/playwright-report
