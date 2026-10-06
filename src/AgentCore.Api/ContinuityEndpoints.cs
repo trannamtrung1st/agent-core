@@ -39,7 +39,7 @@ internal static class ContinuityEndpoints
                 try { request = await http.ReadFromJsonAsync<ContinuityMaintenanceConfigurationRequest>(ct)
                     ?? throw AgentCoreErrors.Validation("Continuity maintenance settings are required."); }
                 catch (Exception ex) when (ex is JsonException or BadHttpRequestException)
-                { throw AgentCoreErrors.Validation("Continuity maintenance interval must be a whole number of seconds or null."); }
+                { throw AgentCoreErrors.Validation("Continuity maintenance settings require expectedRevision and intervalSeconds (whole seconds or null)."); }
                 policy.ValidateInterval(request.IntervalSeconds);
                 return Cadence(await store.ConfigureAsync(instanceId, request.ExpectedRevision, request.IntervalSeconds, ct,
                     Audit(ids, time, instanceId, "configureContinuityCadence") with

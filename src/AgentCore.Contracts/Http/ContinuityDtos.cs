@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace AgentCore.Contracts.Http;
 
 public sealed record ExperienceConfigurationRequest(long ExpectedRevision, bool Enabled);
@@ -24,7 +26,9 @@ public sealed record ThoughtReviewResponse(int MinIntervalSeconds, IReadOnlyList
 
 public sealed record IdentityMaintenanceConfigurationRequest(long ExpectedRevision, bool AllowAgentConsolidation);
 
-public sealed record ContinuityMaintenanceConfigurationRequest(long ExpectedRevision, int? IntervalSeconds);
+public sealed record ContinuityMaintenanceConfigurationRequest(
+    [property: JsonRequired] long ExpectedRevision,
+    [property: JsonRequired] int? IntervalSeconds);
 public sealed record ContinuityMaintenanceResponse(int? ConfiguredIntervalSeconds, int EffectiveIntervalSeconds,
     int MinimumIntervalSeconds, int MaximumIntervalSeconds, int DefaultIntervalSeconds, bool UsesDefault,
     bool ConfiguredIntervalAllowed, long Revision, string? LastMaintenanceAtUtc);

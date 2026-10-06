@@ -10,6 +10,7 @@ public sealed partial class SqliteExperienceStore : IContinuityMaintenanceStore
 {
     public async ValueTask<ContinuityMaintenanceSettings> ReadAsync(Guid id, CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
         await using var db = await contexts.CreateDbContextAsync(ct);
         var row = await db.ContinuityMaintenanceSettings.AsNoTracking().SingleOrDefaultAsync(r => r.AgentInstanceId == id.ToString("D"), ct);
         return row is null ? new(id, null, 0, null) : new(id, row.IntervalSeconds, row.Revision,
@@ -19,6 +20,7 @@ public sealed partial class SqliteExperienceStore : IContinuityMaintenanceStore
     async ValueTask<ContinuityMaintenanceSettings> IContinuityMaintenanceStore.ConfigureAsync(Guid id, long expectedRevision,
         int? intervalSeconds, CancellationToken ct, AdminEventAppend? audit)
     {
+        ct.ThrowIfCancellationRequested();
         if (expectedRevision < 0 || intervalSeconds is <= 0) throw AgentCoreErrors.Validation("Continuity maintenance settings are invalid.");
         await using var db = await contexts.CreateDbContextAsync(ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
@@ -35,6 +37,7 @@ public sealed partial class SqliteExperienceStore : IContinuityMaintenanceStore
 
     public async ValueTask<bool> TryClaimAsync(ContinuityMaintenanceSettings expected, DateTimeOffset now, CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
         await using var db = await contexts.CreateDbContextAsync(ct);
         var key = expected.AgentInstanceId.ToString("D");
         var stamp = now.ToUnixTimeMilliseconds();

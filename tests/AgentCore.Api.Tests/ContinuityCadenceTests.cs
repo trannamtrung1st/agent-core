@@ -42,6 +42,10 @@ public sealed class ContinuityCadenceTests
                 Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync(path, new ContinuityMaintenanceConfigurationRequest(0, invalid))).StatusCode);
             Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsync(path, new StringContent("{\"expectedRevision\":0,\"intervalSeconds\":\"five\"}", System.Text.Encoding.UTF8, "application/json"))).StatusCode);
             Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsync(path, new StringContent("not-json"))).StatusCode);
+            foreach (var malformed in new[] { "{\"expectedRevision\":0}", "{\"intervalSeconds\":900}",
+                "{\"expectedRevision\":0,\"interval\":\"15 minutes\"}", "{\"expectedRevision\":0,\"intervalSeconds\":60.5}" })
+                Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsync(path,
+                    new StringContent(malformed, System.Text.Encoding.UTF8, "application/json"))).StatusCode);
             var savedResponse = await client.PutAsJsonAsync(path, new ContinuityMaintenanceConfigurationRequest(0, 900)); savedResponse.EnsureSuccessStatusCode();
             var saved = (await savedResponse.Content.ReadFromJsonAsync<ContinuityMaintenanceResponse>())!;
             Assert.Equal(900, saved.EffectiveIntervalSeconds); Assert.Equal(900, saved.ConfiguredIntervalSeconds);

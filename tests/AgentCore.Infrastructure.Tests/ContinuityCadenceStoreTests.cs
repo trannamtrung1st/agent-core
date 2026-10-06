@@ -33,6 +33,9 @@ public sealed class ContinuityCadenceStoreTests
             Assert.Equal(400, (await Assert.ThrowsAsync<AgentCoreException>(() => store.ConfigureAsync(id, 1, 0).AsTask())).StatusCode);
             using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => store.ConfigureAsync(id, 1, 60, cancelled.Token).AsTask());
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => store.ConfigureAsync(id, -1, 0, cancelled.Token).AsTask());
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => store.ReadAsync(id, cancelled.Token).AsTask());
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => store.TryClaimAsync(configured, now.AddMinutes(5), cancelled.Token).AsTask());
             IContinuityMaintenanceStore reopened = factory is null ? store : new SqliteExperienceStore(factory);
             Assert.Equal(configured, await reopened.ReadAsync(id));
             Assert.True(await reopened.TryClaimAsync(configured, now.AddMinutes(15)));
