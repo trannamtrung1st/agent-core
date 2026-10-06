@@ -46,6 +46,25 @@ public sealed class SkillPinStoreTests
             var reloadedCount = await reopened.GetAsync(admitted.ExecutionId);
             Assert.Equal(1, reloadedCount!.SkillLoadCount);
 
+            var loadedCapabilities = await reopened.AdmitCapabilitiesAsync(admitted.ExecutionId, admitted.Revision,
+                admitted.Claim!.Generation, ["workspace.read", "email.search"], now.AddMinutes(3));
+            var afterReopen = await new SqliteConversationTurnExecutionStore(factory).GetAsync(loadedCapabilities.ExecutionId);
+            Assert.Equal(["workspace.read", "email.search"], afterReopen!.LoadedCapabilityIds);
+            Assert.Equal(1, afterReopen.CapabilityLoadCount);
+            await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(async () =>
+                await reopened.AdmitCapabilitiesAsync(admitted.ExecutionId, admitted.Revision, admitted.Claim.Generation, ["workspace.write"], now.AddMinutes(4)));
+
+            Assert.Equal(1, await reopened.RecoverExpiredClaimsAsync(now.AddMinutes(7)));
+            var reclaim = (await reopened.TryClaimAsync(admitted.ExecutionId, Guid.NewGuid(), now.AddMinutes(7), now.AddMinutes(12)))!;
+            Assert.Equal(afterReopen.LoadedCapabilityIds, reclaim.LoadedCapabilityIds);
+            Assert.Equal(1, reclaim.CapabilityLoadCount);
+            await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(async () =>
+                await reopened.AdmitCapabilitiesAsync(reclaim.ExecutionId, reclaim.Revision, admitted.Claim.Generation, ["workspace.write"], now.AddMinutes(8)));
+            var cancelled = await reopened.RequestCancellationAsync(sessionId, reclaim.ExecutionId, reclaim.Revision, now.AddMinutes(8));
+            await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(async () =>
+                await reopened.AdmitCapabilitiesAsync(cancelled.ExecutionId, cancelled.Revision, reclaim.Claim!.Generation, ["workspace.write"], now.AddMinutes(9)));
+            Assert.Equal(afterReopen.LoadedCapabilityIds, (await reopened.GetAsync(cancelled.ExecutionId))!.LoadedCapabilityIds);
+
             var empty = await reopened.CreateAsync(Execution(
                 sessionId,
                 Guid.Parse("019944af-00d1-7000-8000-0000000000b3"),
@@ -53,6 +72,8 @@ public sealed class SkillPinStoreTests
                 []));
             var reloadedEmpty = await reopened.GetAsync(empty.Item.ExecutionId);
             Assert.Empty(reloadedEmpty!.PinnedActiveSkillIds);
+            Assert.Empty(reloadedEmpty.LoadedCapabilityIds);
+            Assert.Equal(0, reloadedEmpty.CapabilityLoadCount);
         }
         finally
         {

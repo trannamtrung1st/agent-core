@@ -1629,11 +1629,12 @@ function DraftEditor({
   const [toolRegistryLoading, setToolRegistryLoading] = useState(false);
   const [toolRegistryError, setToolRegistryError] = useState<AdminFailureNotice | null>(null);
   const [toolNames, setToolNames] = useState<string[]>([]);
-  const [maxToolAllowlistEntries, setMaxToolAllowlistEntries] = useState<number | null>(null);
-  const selectedToolCount = capabilities.toolAllowlist.length;
-  const toolLimitExceeded = maxToolAllowlistEntries !== null && selectedToolCount > maxToolAllowlistEntries;
-  const toolLimitReached = maxToolAllowlistEntries !== null && selectedToolCount >= maxToolAllowlistEntries;
-  const saveBlocked = candidateLocked || (editorView === "form" && (toolLimitExceeded || maxToolAllowlistEntries === null));
+  const [capabilityCatalog, setCapabilityCatalog] = useState<import("../../services/adminApi").AdminCapabilityDescriptor[]>([]);
+  const [catalogReady, setCatalogReady] = useState(false);
+  const authorizedNames = capabilities.capabilityMode === "All"
+    ? toolNames.filter(n => capabilities.workspaceSemantics === "agentWorkspaceV2" ? !["workspace.retain", "workspace.checkout"].includes(n) : n !== "workspace.cwd")
+    : capabilities.toolAllowlist;
+  const saveBlocked = candidateLocked || (editorView === "form" && !catalogReady);
   const [resources, setResources] = useState<AdminDefinitionDraftResource[]>([]);
   const [resourcesLoading, setResourcesLoading] = useState(false);
   const [logicalPath, setLogicalPath] = useState("");
@@ -1668,10 +1669,11 @@ function DraftEditor({
     try {
       const registry = await getAdminToolRegistry();
       setToolNames(registry.toolNames);
-      setMaxToolAllowlistEntries(registry.maxToolAllowlistEntries);
+      setCapabilityCatalog(registry.capabilities ?? registry.toolNames.map(name => ({ name, category: name.split(".")[0], summary: name, tags: [], discoverable: true, defaultProjectionClass: "onDemand", configured: true })));
+      setCatalogReady(true);
     } catch (error) {
       setToolNames([]);
-      setMaxToolAllowlistEntries(null);
+      setCatalogReady(false);
       setToolRegistryError(describeAdminError(error, "Failed to load tool registry."));
     } finally {
       setToolRegistryLoading(false);
@@ -1868,29 +1870,36 @@ function DraftEditor({
                   />
                 ) : null}
                   <label className="admin-draft-field">
-                    <Flex align="center" gap={8}>
-                      <Typography.Text strong>Tool allowlist</Typography.Text>
-                      {maxToolAllowlistEntries !== null ? <Typography.Text type={toolLimitExceeded ? "danger" : "secondary"} aria-live="polite">{selectedToolCount} / {maxToolAllowlistEntries}</Typography.Text> : null}
-                      {toolRegistryLoading ? <Spin size="small" /> : null}
-                    </Flex>
-                    <Select
-                      aria-label="Tool allowlist"
-                      mode="multiple"
-                      maxTagCount="responsive"
-                      value={capabilities.toolAllowlist}
-                      onChange={(values) =>
-                        maxToolAllowlistEntries !== null && (values.length <= maxToolAllowlistEntries || values.length < selectedToolCount)
-                          && onCapabilitiesChange({ ...capabilities, toolAllowlist: values })
-                      }
-                      disabled={busy || candidateLocked || toolRegistryLoading || toolRegistryError !== null}
-                      status={toolLimitExceeded ? "error" : undefined}
-                      options={toolNames.map((name) => ({ value: name, label: name,
-                        disabled: toolLimitReached && !capabilities.toolAllowlist.includes(name) }))}
-                      placeholder="Select registered tools"
-                    />
-                    {toolLimitExceeded ? <Typography.Text type="danger" role="alert">{selectedToolCount} tools selected; maximum is {maxToolAllowlistEntries}.</Typography.Text>
-                      : toolLimitReached ? <Typography.Text type="secondary">Maximum {maxToolAllowlistEntries} tools per definition. Remove one before adding another.</Typography.Text> : null}
+                    <Typography.Text strong>Capability access</Typography.Text>
+                    <Select aria-label="Capability access" value={capabilities.capabilityMode ?? "Legacy"}
+                      disabled={busy || candidateLocked || !catalogReady || toolRegistryLoading}
+                      options={[{ value: "Legacy", label: "Legacy projection (compatibility)" }, { value: "Selected", label: "Selected capabilities" }, { value: "All", label: "All current capabilities" }]}
+                      onChange={mode => onCapabilitiesChange({ ...capabilities, capabilityMode: mode === "Legacy" ? undefined : mode as "Selected" | "All",
+                        toolAllowlist: mode === "All" ? toolNames.filter(n => capabilities.workspaceSemantics === "agentWorkspaceV2" ? !["workspace.retain", "workspace.checkout"].includes(n) : n !== "workspace.cwd") : capabilities.toolAllowlist,
+                        alwaysCapabilities: capabilities.alwaysCapabilities ?? [] })} />
                   </label>
+                  {capabilities.capabilityMode === "All" ? <Typography.Text type="secondary">All capabilities currently known to Core are included in the next publication as an immutable snapshot. Later capabilities are not automatically granted.</Typography.Text> : null}
+                  <label className="admin-draft-field">
+                    <Typography.Text strong>{capabilities.capabilityMode ? "Authorized capabilities" : "Tool allowlist"}</Typography.Text>
+                    <Select aria-label="Tool allowlist" mode="multiple" maxTagCount="responsive" value={authorizedNames}
+                      disabled={busy || candidateLocked || !catalogReady || capabilities.capabilityMode === "All"}
+                      onChange={values => onCapabilitiesChange({ ...capabilities, toolAllowlist: values,
+                        alwaysCapabilities: capabilities.alwaysCapabilities?.filter(n => values.includes(n)) })}
+                      options={[...new Set(capabilityCatalog.map(c => c.category))].sort().map(category => ({ label: category, options: capabilityCatalog.filter(c => c.category === category).map(c => ({ value: c.name, label: `${c.name}${c.configured ? "" : " · unavailable"}` })) }))}
+                      placeholder="Select registered capabilities" />
+                  </label>
+                  {capabilities.capabilityMode ? <>
+                    <label className="admin-draft-field">
+                      <Typography.Text strong>Always available to the model</Typography.Text>
+                      <Select aria-label="Always projected capabilities" mode="multiple" maxTagCount="responsive"
+                        value={capabilities.alwaysCapabilities ?? []} disabled={busy || candidateLocked || !catalogReady || toolRegistryLoading}
+                        onChange={values => onCapabilitiesChange({ ...capabilities, alwaysCapabilities: values })}
+                        options={capabilityCatalog.filter(c => authorizedNames.includes(c.name) && c.discoverable).map(c => ({ value: c.name, label: `${c.name}${c.configured ? "" : " · unavailable"}` }))} />
+                    </label>
+                    <Typography.Text aria-live="polite">Authorized: {authorizedNames.length} · Always projected: {capabilities.alwaysCapabilities?.length ?? 0}</Typography.Text>
+                    <Typography.Text type="secondary">Available on demand when configured and eligible: {capabilityCatalog.filter(c => authorizedNames.includes(c.name) && c.discoverable && !(capabilities.alwaysCapabilities ?? []).includes(c.name)).map(c => c.name).join(", ") || "None"}. Context-only capabilities remain controlled by Core.</Typography.Text>
+                  </> : <Typography.Text type="secondary">{authorizedNames.length} authorized tools. Switch capability access to configure projection and discovery.</Typography.Text>}
+
                 </section>
                 <section className="admin-draft-form-section" aria-label="Workspace behavior">
                   <Typography.Title level={5}>Workspace behavior</Typography.Title>

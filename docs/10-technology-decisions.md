@@ -1,12 +1,19 @@
 # Technology Decisions
 
+## Decision: scalable capability authorization and contextual projection
+
+The accepted capability enhancement removes the arbitrary 32-grant validation limit without replacing it. Selected and All publication modes persist exact names and an authorization fingerprint. All is current-catalog authoring intent, never wildcard runtime permission. The new projection policy chooses an authorized always set; remaining loadability derives from registry discoverability and current eligibility. Optional missing configuration may coexist with new-mode authority; runtime still denies execution. Legacy publication configuration rules remain compatible.
+
+Use deterministic lexical discovery through one `capabilities.load` bootstrap. Project active Skill requirements and execution-local loaded IDs; preserve current execution policy and approvals. Context-only tools cannot be forced into an always set (the loader may dedupe there). No embeddings, LLM routing, keyword capability routing, parallel permission list or model-tool ceiling. Measure normalized schema bytes before considering any future provider/model projection budget. Historical workspace decisions and freezes stay historical; dynamic projection is now this separate authorized enhancement.
+
+
 ## Decision: explicit managed working environment
 
 The user-authorized refinement opts new managed definitions into `agentWorkspaceV2`; it does not rewrite v12/v13/v14 or inferred version ranges. General Assistant v15 removes retain/checkout and adds one cwd tool, reducing its allowlist from 32 to 31. These legacy tools remain registered and executable only where authorized by compatibility definitions. Public compatibility creation/default selection continues to select the latest legacy contract; explicit new-mode creation requires a managed Agent Instance.
 
 Choose transient mailbox-owned Session cwd with `/home` initialization and deterministic reset on runtime reconstruction. Reject moving/deleting cwd or ancestors. Resolve relative model paths from cwd within one authorized logical root; expose only `/home` and `/working` for the writable scopes. HTTP execution-view paths use stable `/home` defaults, independent of runtime cwd. Sandbox remains explicitly scratch-oriented: its relative paths resolve from `/working`, which maps to the existing private mount contract. A richer `/home` sandbox mount is deferred.
 
-Keep metadata/immutable blobs for home and nest new managed scratch beneath its owner. Do not migrate historical directories implicitly. Individual cross-scope binary/tree copy replaces retain/checkout for new definitions; existing durable destinations retain CAS. Cross-scope move and cross-store batches are excluded. The static Definition limit stays 32 and Admin receives it from the canonical Domain constant. Future contextual projection from a larger authorized capability set may reduce model-visible tools; that redesign and increasing this bound are deferred. Earlier decisions below remain the historical compatibility baseline.
+Keep metadata/immutable blobs for home and nest new managed scratch beneath its owner. Do not migrate historical directories implicitly. Individual cross-scope binary/tree copy replaces retain/checkout for new definitions; existing durable destinations retain CAS. Cross-scope move and cross-store batches are excluded. The workspace refinement originally retained a static 32-grant bound; the later capability decision above removes that bound and implements contextual projection as a separate authorized slice. Earlier decisions below remain the historical compatibility baseline.
 
 
 ## Decision: bounded Agent Instance workspace (observed)

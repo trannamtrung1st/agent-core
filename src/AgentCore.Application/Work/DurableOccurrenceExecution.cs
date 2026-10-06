@@ -36,7 +36,7 @@ public sealed class DurableOccurrenceExecution(
         DateTimeOffset asOfUtc,
         IIdGenerator ids,
         CancellationToken cancellationToken,
-        bool trustedConnection = false)
+        bool trustedConnection = false, AgentContext? projectionContextSnapshot = null)
     {
         var occurrenceBrowser = ToolResources.IsOccurrence(triggerKind);
         var browserScope = occurrenceBrowser
@@ -61,6 +61,15 @@ public sealed class DurableOccurrenceExecution(
             out var restoredObservation,
             out var restoredBlockedHash);
         var messages = resumed ? savedMessages!.ToList() : request.Messages.ToList();
+        var restoredCapabilities = resumed ? DurableToolCallCheckpoint.ReadCapabilityState(running.Checkpoint) : (Ids: (IReadOnlyList<string>)[], Calls: 0);
+        var loadedCapabilities = restoredCapabilities.Ids.ToHashSet(StringComparer.Ordinal);
+        var loadCalls = restoredCapabilities.Calls;
+        var projectionContext = projectionContextSnapshot ?? new AgentContext(definition, [], "", null, AgentCore.Domain.Conversation.SessionMode.Text, null, false, null,
+            new AgentTrigger(running.WorkItemId, triggerKind, null), DetachedExecution: true, TrustedConnection: trustedConnection,
+            ModelSupportsTools: model.Capabilities.Tools, ModelSupportsVision: model.Capabilities.Vision,
+            ActiveSkillIds: AgentCore.Application.Agents.DeterministicSkillSelector.SelectActiveIds(definition, string.Join(" ", request.Messages.Where(m => m.Role == ModelRole.User).Select(m => m.Text))),
+            Harness: await tools.HarnessContextAsync(running.Owner.AgentInstanceId, cancellationToken),
+            ContinuityContext: await tools.ContinuityContextAsync(running.Owner.AgentInstanceId, null, running.WorkItemId, definition, cancellationToken));
         var steps = resumed ? running.Checkpoint!.StepCount : 0;
         var outputBytes = resumed ? running.Checkpoint!.OutputBytes : 0;
         var remaining = resumed
@@ -91,7 +100,7 @@ public sealed class DurableOccurrenceExecution(
         var observationRequired = restoredObservation;
         string? blockedActionHash = restoredBlockedHash;
         var browserUnavailable = false;
-        if (!DurableToolCallCheckpoint.TryWrite(messages, observationRequired, blockedActionHash, out _))
+        if (!DurableToolCallCheckpoint.TryWrite(messages, observationRequired, blockedActionHash, out _, CheckpointCapabilityIds(), loadCalls))
             return CheckpointCapacityFailure();
         if (resumed)
         {
@@ -124,7 +133,10 @@ public sealed class DurableOccurrenceExecution(
             var finished = false;
             var failed = false;
             messages = await WorkCaptureRehydration.ApplyAsync(messages, captures, overallCts.Token).ConfigureAwait(false);
-            var working = request with { Messages = messages };
+            projectionContext = projectionContext with { LoadedCapabilityIds = loadedCapabilities.ToArray() };
+            var working = request with { Messages = messages, Tools = definition.Environment?.Capabilities is null ? request.Tools
+                : tools.ProjectTools(definition, projectionContext) };
+            CapabilityProjectionTelemetry.Record(definition, projectionContext, tools.ConfigurationGate, working.Tools, running.Model.CatalogKey, loadCalls);
             try
             {
                 await foreach (var update in model.GenerateAsync(working, overallCts.Token).ConfigureAwait(false))
@@ -215,7 +227,7 @@ public sealed class DurableOccurrenceExecution(
             if (terminalBatch) pending[0] = pending[0] with { Id = DurableToolCallCheckpoint.CompletionCallId };
             var batch = messages.Append(new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: pending)).ToArray();
             if (!terminalBatch && !DurableToolCallCheckpoint.TryWriteWithReserve(batch, observationRequired,
-                blockedActionHash, DurableToolCallCheckpoint.CompletionReserve(triggerKind), out _))
+                blockedActionHash, DurableToolCallCheckpoint.CompletionReserve(triggerKind), out _, CheckpointCapabilityIds(), loadCalls))
                 return CheckpointCapacityFailure();
             messages.Add(batch[^1]);
             steps += pending.Count;
@@ -309,6 +321,19 @@ public sealed class DurableOccurrenceExecution(
                     ToolResources.IsSessionTool(call.Name) && !ToolCatalog.IsBrowserTool(call.Name) && !HarnessChatTools.IsHarness(call.Name)
                     ? """{"error":"forbidden","message":"Session context is required."}"""
                     : """{"error":"forbidden","message":"Tool is not permitted in this execution origin."}"""), false);
+            if (call.Name == ToolCatalog.CapabilitiesLoad)
+            {
+                try
+                {
+                    var plan = CapabilityDiscoveryMatcher.Load(definition, projectionContext with { LoadedCapabilityIds = loadedCapabilities.ToArray() }, tools.ConfigurationGate, args, loadCalls);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (plan.Outcome != "load_over_budget") loadCalls++;
+                    loadedCapabilities.UnionWith(plan.Loaded);
+                    RuntimeTelemetry.RecordCapabilityLoad(plan.Outcome, plan.Loaded.Count);
+                    return await AppendResultAsync(call, ToolExecutionResult.FromText(plan.ToJson()), false);
+                }
+                catch (AgentCore.Application.Sessions.AgentCoreException) { return await AppendResultAsync(call, ToolExecutionResult.FromText("""{"error":"invalid","message":"Capability load requires a bounded concrete query."}"""), false); }
+            }
             var hash = await ResolveActionHashAsync(call, args, cancellationToken).ConfigureAwait(false);
             if (browserUnavailable && ToolCatalog.IsBrowserTool(call.Name))
             {
@@ -383,7 +408,7 @@ public sealed class DurableOccurrenceExecution(
             }
 
             var resultBudget = Math.Min(RemainingOutput(outputBytes),
-                DurableToolCallCheckpoint.ToolResultBudget(messages, call, observationRequired, blockedActionHash, triggerKind));
+                DurableToolCallCheckpoint.ToolResultBudget(messages, call, observationRequired, blockedActionHash, triggerKind, CheckpointCapabilityIds(), loadCalls));
             if (resultBudget < 128)
                 return await AppendResultAsync(call, ToolExecutionResult.FromText(DurableToolCallCheckpoint.FinishRequired), false);
 
@@ -613,9 +638,9 @@ public sealed class DurableOccurrenceExecution(
             var reserve = DurableToolCallCheckpoint.CompletionReserve(triggerKind)
                 + (IsFinishRequired(execution.Text) ? 0 : DurableToolCallCheckpoint.FinishRequiredReserve());
             if (!DurableToolCallCheckpoint.TryWriteWithReserve(messages.Append(resultMessage).ToArray(),
-                observationRequired, blockedActionHash, reserve, out _))
+                observationRequired, blockedActionHash, reserve, out _, CheckpointCapabilityIds(), loadCalls))
             {
-                var budget = DurableToolCallCheckpoint.ToolResultBudget(messages, call, observationRequired, blockedActionHash, triggerKind);
+                var budget = DurableToolCallCheckpoint.ToolResultBudget(messages, call, observationRequired, blockedActionHash, triggerKind, CheckpointCapabilityIds(), loadCalls);
                 if (budget < 128) return CheckpointCapacityFailure();
                 var bounded = ToolJsonResults.FitJsonWithContentField(budget, execution.Text, (prefix, _) =>
                     JsonSerializer.Serialize(new { truncated = true, reason = "checkpoint_capacity", resultPrefix = prefix }));
@@ -665,9 +690,12 @@ public sealed class DurableOccurrenceExecution(
         DurableOccurrenceFailed CheckpointCapacityFailure() => new(running, "checkpoint-capacity",
             "Durable checkpoint capacity is exhausted; completed effects were not replayed.");
 
+        IReadOnlyList<string>? CheckpointCapabilityIds() => definition.Environment?.Capabilities is null ? null : loadedCapabilities.ToArray();
+
         async ValueTask<bool> SaveCheckpointAsync()
         {
-            if (!DurableToolCallCheckpoint.TryWrite(messages, observationRequired, blockedActionHash, out var payload))
+            if (!DurableToolCallCheckpoint.TryWrite(messages, observationRequired, blockedActionHash, out var payload,
+                definition.Environment?.Capabilities is null ? null : CheckpointCapabilityIds(), loadCalls))
                 return false;
             running = await checkpoint(running, new WorkCheckpoint(payload, steps, outputBytes,
                 (int)Math.Max(remaining.TotalMilliseconds, 0)), cancellationToken).ConfigureAwait(false);

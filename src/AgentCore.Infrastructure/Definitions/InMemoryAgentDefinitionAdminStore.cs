@@ -306,7 +306,7 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
                 throw AgentCoreErrors.Conflict("Publication version collides with an existing version.");
             }
 
-            var payload = AgentDefinitionAdminSnapshots.Freeze(draft.Candidate.ToPublished(nextVersion));
+            var payload = AgentDefinitionAdminSnapshots.Freeze(AgentCore.Application.Tools.CapabilityAuthorizationResolver.ResolveCandidate(draft.Candidate).ToPublished(nextVersion));
             AgentDefinitionValidator.Validate(payload);
             var publication = AgentDefinitionAdminSnapshots.Freeze(new AgentDefinitionPublication(
                 draft.DefinitionId,

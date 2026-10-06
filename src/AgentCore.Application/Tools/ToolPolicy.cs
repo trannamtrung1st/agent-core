@@ -18,6 +18,8 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         }
 
+        if (definition.Environment?.Capabilities is not null && !RolePermissions.AllowsTool(definition, toolName)) return ToolPolicyDecision.Deny;
+
         if (descriptor.OfferRule == ToolOfferRule.IdentityMaintenanceAuthority)
             return admission is { AgentInstanceId: not null, SupportsTools: true }
                 && (admission is { Detached: false, TriggerKind: TriggerKind.UserTurn }
@@ -39,6 +41,12 @@ public static class ToolPolicy
             return HarnessChatTools.NeedsApproval(toolName, admission.Harness!) && grant is null
                 ? ToolPolicyDecision.RequireApproval : ToolPolicyDecision.Allow;
         }
+
+        if (toolName == ToolCatalog.CapabilitiesLoad)
+            return definition.Environment?.Capabilities is not null && admission is { SupportsTools: true }
+                && (admission is { Detached: false, TriggerKind: TriggerKind.UserTurn }
+                    || admission.TrustedConnection && ToolResources.IsOccurrence(admission.TriggerKind))
+                ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
 
         if (toolName == ToolCatalog.WorkspaceCwd && !WorkspaceSemantics.IsV2(definition)
             || toolName is ToolCatalog.WorkspaceRetain or ToolCatalog.WorkspaceCheckout && WorkspaceSemantics.IsV2(definition))
@@ -134,6 +142,8 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (definition.Environment?.Capabilities is not null && !RolePermissions.AllowsTool(definition, descriptor.Name)) return false;
+
         if (context is not null && !context.ModelSupportsTools)
         {
             return false;
@@ -170,6 +180,11 @@ public static class ToolPolicy
                     || (context.DetachedExecution && context.Trigger.Kind == TriggerKind.ThoughtActivation))
                 && !(context.Trigger.Kind == TriggerKind.ThoughtActivation && descriptor.Name is "harness.tool.select" or "harness.tool.configure")
                 && HarnessChatTools.Allows(descriptor.Name, context.Harness);
+
+        if (descriptor.Name == ToolCatalog.CapabilitiesLoad)
+            return definition.Environment?.Capabilities is not null && context is { ModelSupportsTools: true }
+                && (context is { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn }
+                    || context.TrustedConnection && ToolResources.IsOccurrence(context.Trigger.Kind));
 
         if (descriptor.Name == ToolCatalog.WorkspaceCwd && (!WorkspaceSemantics.IsV2(definition) || context?.AgentWorkspaceAvailable != true)
             || descriptor.Name is ToolCatalog.WorkspaceRetain or ToolCatalog.WorkspaceCheckout && WorkspaceSemantics.IsV2(definition))

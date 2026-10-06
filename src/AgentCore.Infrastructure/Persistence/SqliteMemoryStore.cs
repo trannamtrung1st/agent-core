@@ -1391,6 +1391,15 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 cancellationToken).ConfigureAwait(false);
         }
 
+        var capabilityIds = await ColumnExistsAsync(connection, "ConversationTurnExecutions", "LoadedCapabilityIdsJson", cancellationToken);
+        var capabilityCount = await ColumnExistsAsync(connection, "ConversationTurnExecutions", "CapabilityLoadCount", cancellationToken);
+        if (capabilityIds != capabilityCount) throw new AgentCoreException("SessionPersistenceUnavailable", "ConversationTurnExecutions capability load schema is incomplete.", 503);
+        if (capabilityIds)
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20261006182813_CapabilityExecutionLoads', '10.0.12');
+                """, cancellationToken).ConfigureAwait(false);
+
         if (await ColumnExistsAsync(connection, "ConversationEntries", "ApplicationMessageEffectKey", cancellationToken)
             .ConfigureAwait(false))
         {

@@ -640,46 +640,36 @@ describe("definition candidate editor", () => {
     expect(updateAdminDefinitionDraft).not.toHaveBeenCalled();
   });
 
-  it("counts tools from the canonical registry and permits removal at its cap", async () => {
-    const tools = Array.from({ length: 34 }, (_, i) => `workspace.tool${i}`);
-    mockDraft({ ...storedCandidate, environment: { ...storedCandidate.environment, toolAllowlist: tools.slice(0, 31) } });
-    vi.mocked(getAdminToolRegistry).mockResolvedValue({ toolNames: tools, maxToolAllowlistEntries: 32 });
-    await openDraft();
-    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Capabilities" })); });
-    expect(await screen.findByText("31 / 32")).toBeInTheDocument();
-    fireEvent.mouseDown(screen.getByLabelText("Tool allowlist"));
-    fireEvent.change(screen.getByLabelText("Tool allowlist"), { target: { value: tools[31] } });
-    await act(async () => { fireEvent.click(await screen.findByTitle(tools[31])); });
-    expect(screen.getByText("32 / 32")).toBeInTheDocument();
-    expect(screen.getByText("Maximum 32 tools per definition. Remove one before adding another.")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Tool allowlist"), { target: { value: tools[32] } });
-    expect((await screen.findByTitle(tools[32])).closest(".ant-select-item-option")).toHaveClass("ant-select-item-option-disabled");
-    await act(async () => { fireEvent.click(screen.getByTitle(tools[32])); });
-    expect(screen.getByText("32 / 32")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Tool allowlist"), { target: { value: tools[31] } });
-    await act(async () => { fireEvent.click(await screen.findByTitle(tools[31])); });
-    expect(screen.getByText("31 / 32")).toBeInTheDocument();
-  });
-
-  it("blocks Form save for an invalid loaded candidate but preserves Advanced JSON", async () => {
-    const tools = Array.from({ length: 34 }, (_, i) => `workspace.tool${i}`);
-    mockDraft({ ...storedCandidate, environment: { ...storedCandidate.environment, toolAllowlist: tools.slice(0, 33), workspace: { semantics: "agentWorkspaceV2" } } });
-    vi.mocked(getAdminToolRegistry).mockResolvedValue({ toolNames: tools, maxToolAllowlistEntries: 32 });
+  it("permits more than 32 authorized tools without a replacement count ceiling", async () => {
+    const tools = Array.from({ length: 40 }, (_, i) => `workspace.tool${i}`);
+    mockDraft({ ...storedCandidate, environment: { ...storedCandidate.environment, toolAllowlist: tools.slice(0, 33) } });
+    vi.mocked(getAdminToolRegistry).mockResolvedValue({ toolNames: tools, maxToolAllowlistEntries: null });
     await openDraft();
     setText("System instructions", "Keep this edit");
     await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Capabilities" })); });
-    expect(await screen.findByText("33 tools selected; maximum is 32.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled();
-    expect(screen.getByTitle("Agent Workspace · /home by default")).toBeInTheDocument();
+    expect(await screen.findByText("33 authorized tools. Switch capability access to configure projection and discovery.")).toBeInTheDocument();
     fireEvent.mouseDown(screen.getByLabelText("Tool allowlist"));
-    fireEvent.change(screen.getByLabelText("Tool allowlist"), { target: { value: tools[32] } });
-    await act(async () => { fireEvent.click(await screen.findByTitle(tools[32])); });
-    expect(screen.getByText("32 / 32")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Tool allowlist"), { target: { value: tools[33] } });
+    await act(async () => { fireEvent.click(await screen.findByTitle(tools[33])); });
+    expect(screen.getByText("34 authorized tools. Switch capability access to configure projection and discovery.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save draft" })).toBeEnabled();
+  });
+
+  it("preserves capability authorization and always projection through Form save", async () => {
+    mockDraft({ ...storedCandidate, environment: { ...storedCandidate.environment, toolAllowlist: undefined,
+      capabilities: { mode: "Selected", resolvedCapabilities: ["workspace.read", "knowledge.retrieve"] },
+      projection: { alwaysCapabilities: ["workspace.read"] } } });
+    vi.mocked(getAdminToolRegistry).mockResolvedValue({ toolNames: ["workspace.read", "knowledge.retrieve"], maxToolAllowlistEntries: null });
+    await openDraft();
+    setText("System instructions", "Keep this edit");
+    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Capabilities" })); });
+    expect(await screen.findByText("Authorized: 2 · Always projected: 1")).toBeInTheDocument();
+    expect(screen.getByLabelText("Always projected capabilities")).toBeInTheDocument();
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save draft" })); });
-    expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(draftId, 2, expect.objectContaining({
-      environment: expect.objectContaining({ workspace: { semantics: "agentWorkspaceV2" } })
-    }));
+    expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(draftId, 2, expect.objectContaining({ environment: expect.objectContaining({
+      capabilities: { mode: "Selected", resolvedCapabilities: ["workspace.read", "knowledge.retrieve"] },
+      projection: { alwaysCapabilities: ["workspace.read"] }
+    }) }));
   });
 
   it("saves from JSON using the same draft revision", async () => {

@@ -48,7 +48,7 @@ internal static class EffectiveConfigurationComposer
             ModelSupportsTools: descriptor.Tools,
             ModelSupportsVision: descriptor.Vision,
             AgentWorkspaceAvailable: !instance.Compatibility && instanceActive);
-        var offeredTools = ToolCatalog.For(definition, adminContext, configurationGate)
+        var offeredTools = (definition.Environment?.Capabilities is null ? ToolCatalog.For(definition, adminContext, configurationGate) : ToolCatalog.Eligible(definition, adminContext, configurationGate))
             .Select(item => item.Name)
             .OrderBy(item => item, StringComparer.Ordinal)
             .ToArray();

@@ -1,5 +1,12 @@
 # Persistence and Configuration
 
+## Execution-local capability loads
+
+Migration `CapabilityExecutionLoads` adds nullable `ConversationTurnExecutions.LoadedCapabilityIdsJson` and non-null `CapabilityLoadCount` default zero. Existing rows remain empty. In-memory and SQLite stores use the same Domain revision/claim/state/cancellation admission. Loaded state survives requeue/reclaim of the same execution and is fresh on a new execution. Upgraded EnsureCreated databases stamp the migration only when both fields exist; partial schemas fail closed.
+
+Durable WorkItems retain explicit loaded IDs/count alongside result messages in their existing bounded checkpoint payload, preserving normal revision/claim/cancellation fencing. Recovered loaded names are filtered against pinned authority and current eligibility. No persistent per-Agent load set, new workspace state, PCM, provider schema or query log is added. Publication JSON carries exact authorization/projection policy without a new Definition table.
+
+
 ## Workspace refinement storage and lifecycle
 
 Home continues to use existing AgentWorkspace metadata, first-class directory rows and immutable blobs beneath `Persistence:AgentWorkspaceRoot`; no schema migration is needed. New opted-in managed scratch maps internally to `Persistence:WorkspaceRoot/agent-<instanceN>/sessions/session-<sessionN>/workspace/working`. The private `workspace` subdirectory preserves sandbox/adapter layout. Existing legacy or already materialized historical Session directories remain at their old location; there is no automatic move or client-visible alias.

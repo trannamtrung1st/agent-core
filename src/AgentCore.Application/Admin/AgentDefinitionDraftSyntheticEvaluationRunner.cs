@@ -51,7 +51,11 @@ public sealed class AgentDefinitionDraftSyntheticEvaluationRunner(
         }
 
         var definition = candidate.ToPublished(1);
-        var policy = ToolPolicy.EvaluateExecution(definition, scenario.ToolName, configurationGate);
+        var context = DefinitionEvaluationHarness.ToolContext(definition, scenario.Prompt);
+        var policy = ToolPolicy.EvaluateExecution(definition, scenario.ToolName, configurationGate,
+            admission: context is null ? null : new ToolExecutionAdmission(false, TriggerKind.UserTurn));
+        if (context is not null && scenario.CheckType is DefinitionEvaluationCheckType.ToolOffered or DefinitionEvaluationCheckType.ToolNotOffered
+            && !ToolCatalog.For(definition, context, configurationGate).Any(t => t.Name == scenario.ToolName)) policy = ToolPolicyDecision.Deny;
         var observed = behavior.ToolObservations
             .Where(item => string.Equals(item.ToolName, scenario.ToolName, StringComparison.Ordinal))
             .ToArray();

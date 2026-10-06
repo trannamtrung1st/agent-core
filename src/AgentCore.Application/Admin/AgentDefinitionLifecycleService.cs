@@ -64,6 +64,7 @@ public sealed class AgentDefinitionLifecycleService(
             throw AgentCoreErrors.Validation("definitionId must match the candidate definitionId.");
         }
 
+        candidate = AgentCore.Application.Tools.CapabilityAuthorizationResolver.ResolveCandidate(candidate);
         AgentDefinitionCandidateValidator.ValidateForPersistence(candidate, aliases);
         var draft = await WithDefinitionGateAsync(
             definitionId,
@@ -173,6 +174,7 @@ public sealed class AgentDefinitionLifecycleService(
                     throw AgentCoreErrors.Validation("definitionId cannot change on update.");
                 }
 
+                candidate = AgentCore.Application.Tools.CapabilityAuthorizationResolver.ResolveCandidate(candidate);
                 AgentDefinitionCandidateValidator.ValidateForPersistence(candidate, aliases);
                 var updated = await admin.UpdateDraftAsync(
                     new AgentDefinitionDraftUpdate(draftId, expectedRevision, candidate, time.GetUtcNow(), history),

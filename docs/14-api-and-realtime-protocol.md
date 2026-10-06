@@ -1,8 +1,26 @@
 # HTTP API and Realtime Protocol
 
+## Capability authoring and loading contracts
+
+`GET /api/v2/admin/tools` returns exact `toolNames`, compatibility `maxToolAllowlistEntries:null`, and a `capabilities` catalog of name/category/summary/tags/discoverable/defaultProjectionClass/configured. Context-only names are included for exact authorization snapshots and identified separately. No secret configuration values are returned.
+
+New candidate environment accepts `capabilities.mode` Selected or All, exact `resolvedCapabilities`, optional fingerprint, and `projection.alwaysCapabilities`. Server draft saves and publications resolve All against the trusted registry and write the fingerprint. Published runtime authority always uses the stored explicit names. `toolAllowlist` remains the compatibility input; new-mode grants cannot use both representations. Findings identify authorization/projection fields and duplicate, unregistered, unauthorized-projection or context-only errors. Missing optional configuration may be authorized in new mode. Candidate persistence rejects documents over 1 MiB with `candidate/document_too_large`.
+
+```json
+{
+  "capabilities": { "mode": "Selected", "resolvedCapabilities": ["capabilities.load", "workspace.read", "workspace.write"] },
+  "projection": { "alwaysCapabilities": ["workspace.read"] }
+}
+```
+
+This snippet is the new environment fragment. All authoring uses `mode: "All"` and an explicit resolved array; the server replaces that array with the current exact registry snapshot before saving/publishing.
+
+The existing model tool/result protocol carries `capabilities.load` with `{query,limit?}`; results provide loaded name/summary pairs, alreadyProjected names and an empty unavailable list. Provider adapters receive real schemas only on continuation. No new SignalR DTO/event, version or public load-state endpoint is introduced. Discovery context and execution-time policy remain authoritative.
+
+
 ## Managed workspace refinement HTTP and tool contracts
 
-`GET /api/v2/admin/tools` returns `toolNames` plus canonical `maxToolAllowlistEntries:32`. The registry may contain more than 32 tools. Candidate findings expose field/code/message/severity. Invalid authoring HTTP requests retain standard Problem Details and `code:ValidationError`, with `field:"environment.toolAllowlist"`, `validationCode` (tool_limit_exceeded, duplicate_tool, invalid_tool_name, unregistered_tool or unconfigured_tool), and precise detail.
+The current capability catalog and structured findings are specified above. Historical workspace authoring used the former 32-grant bound; that count ceiling has been removed.
 
 For a pinned new-mode managed Session, workspace GET list/content and PUT content accept `/home` and `/working`; relative HTTP paths resolve from `/home` independently of runtime cwd. Legacy paths remain unchanged for old definitions. PUT keeps the raw byte body and Content-Type; optional `expectedRevision`/`expectedSha256` query values guard existing durable replacement. It cannot mutate ended/archived owners. HTTP retain/checkout remain compatibility endpoints and are not new model tools. Artifacts remain Session scoped and newly published bytes are independent of home ItemIds.
 

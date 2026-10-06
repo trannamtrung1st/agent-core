@@ -10,6 +10,8 @@ export type DraftEnvironment = {
   toolAllowlist: string[];
   workspaceTemplateId: string;
   workspaceSemantics?: string;
+  capabilityMode?: "Selected" | "All";
+  alwaysCapabilities?: string[];
   knowledgeSources: DraftKnowledgeSource[];
   allowUnreadUnsupportedAttachmentTypes: boolean;
 };
@@ -68,7 +70,9 @@ export function readDraftEnvironment(candidate: unknown): DraftEnvironment {
 
   return {
     harness: readStringList(environment.harness),
-    toolAllowlist: readStringList(environment.toolAllowlist),
+    toolAllowlist: readStringList(asRecord(environment.capabilities)?.resolvedCapabilities ?? environment.toolAllowlist),
+    capabilityMode: asRecord(environment.capabilities)?.mode as "Selected" | "All" | undefined,
+    alwaysCapabilities: environment.projection ? readStringList(asRecord(environment.projection)?.alwaysCapabilities) : undefined,
     workspaceTemplateId: templateId,
     workspaceSemantics: typeof workspace?.semantics === "string" ? workspace.semantics : undefined,
     knowledgeSources: readKnowledgeSources(environment.knowledgeSources),
@@ -87,6 +91,8 @@ function normalizeDraftEnvironment(env: DraftEnvironment): DraftEnvironment {
     toolAllowlist: [...env.toolAllowlist].sort(),
     workspaceTemplateId: env.workspaceTemplateId,
     workspaceSemantics: env.workspaceSemantics,
+    capabilityMode: env.capabilityMode,
+    alwaysCapabilities: env.alwaysCapabilities?.slice().sort(),
     knowledgeSources: env.knowledgeSources.map((item) => ({
       identity: item.identity,
       title: item.title,
@@ -124,7 +130,7 @@ export function applyDraftEnvironmentToCandidate(
     environment: {
       harness: environment.harness.map((item) => item.trim()).filter(Boolean),
       knowledgeSources,
-      toolAllowlist: environment.toolAllowlist,
+      ...(environment.capabilityMode ? { capabilities: { mode: environment.capabilityMode, resolvedCapabilities: environment.toolAllowlist }, projection: { alwaysCapabilities: environment.alwaysCapabilities ?? [] } } : { toolAllowlist: environment.toolAllowlist }),
       workspace,
       attachments: {
         allowUnreadUnsupportedTypes: environment.allowUnreadUnsupportedAttachmentTypes

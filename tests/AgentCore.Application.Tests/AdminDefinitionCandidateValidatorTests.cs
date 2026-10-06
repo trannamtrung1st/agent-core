@@ -103,7 +103,6 @@ public sealed class AdminDefinitionCandidateValidatorTests
     }
 
     [Theory]
-    [InlineData("limit", "tool_limit_exceeded")]
     [InlineData("duplicate", "duplicate_tool")]
     [InlineData("malformed", "invalid_tool_name")]
     [InlineData("unknown", "unregistered_tool")]
@@ -111,7 +110,6 @@ public sealed class AdminDefinitionCandidateValidatorTests
     {
         IReadOnlyList<string> tools = scenario switch
         {
-            "limit" => Enumerable.Range(0, 33).Select(n => "tool." + n).ToArray(),
             "duplicate" => ["workspace.read", "workspace.read"],
             "malformed" => ["Workspace Read"],
             _ => ["unknown.tool"]
@@ -119,6 +117,28 @@ public sealed class AdminDefinitionCandidateValidatorTests
         var candidate = AgentDefinitionCandidate.FromDefinition(SampleDefinitions.Support) with
         { Environment = new RoleEnvironment(ToolAllowlist: tools) };
         Assert.Contains(Publish(candidate), f => f.Field == "environment.toolAllowlist" && f.Code == code);
+    }
+
+    [Fact]
+    public void Capability_authoring_separates_authorization_configuration_and_projection_errors()
+    {
+        var candidate = AgentDefinitionCandidate.FromDefinition(SampleDefinitions.Support) with
+        { Environment = new(Capabilities: new("Selected", [ToolCatalog.EmailSearch]), Projection: new([])) };
+        Assert.Empty(AgentDefinitionCandidateValidator.CollectPublicationFindings(candidate, SyntheticProviderAliases.Default,
+            TestModelCatalogs.Synthetic(), ToolConfigurationGates.Unconfigured));
+        Assert.Contains(Publish(candidate with { Environment = candidate.Environment with { Projection = new([ToolCatalog.WorkspaceRead]) } }),
+            f => f.Field == "environment.projection.alwaysCapabilities" && f.Code == "unauthorized_projection");
+        Assert.Contains(Publish(candidate with { Environment = new(Capabilities: new("Selected", [ToolCatalog.WorkComplete]), Projection: new([ToolCatalog.WorkComplete])) }),
+            f => f.Code == "context_only_capability");
+        Assert.Contains(Publish(candidate with { Environment = new(Capabilities: new("Selected", ["unregistered.name"])) }), f => f.Code == "unregistered_capability");
+        Assert.Contains(Publish(candidate with { Environment = new(Capabilities: new("Selected", [ToolCatalog.EmailSearch, ToolCatalog.EmailSearch])) }), f => f.Code == "duplicate_tool");
+        Assert.Contains(Publish(candidate with { Environment = new(Capabilities: new("Selected", null!)) }), f => f.Code == "domain_shape");
+        Assert.Contains(Publish(candidate with { SystemInstructions = new string('x', AgentDefinitionCandidateValidator.MaxCandidateBytes + 1) }), f => f.Code == "document_too_large");
+        foreach (var names in new IReadOnlyList<string>[] { [], [ToolCatalog.WorkspaceRead], ToolRegistry.AllKnownNames().Where(n => n != ToolCatalog.WorkspaceCwd).ToArray() })
+        {
+            var findings = Publish(candidate with { Environment = new(Capabilities: new("Selected", names)) });
+            Assert.Empty(findings);
+        }
     }
 
     private static AgentDefinitionCandidate Candidate(SkillSpec skill, IReadOnlyList<string>? tools = null) =>

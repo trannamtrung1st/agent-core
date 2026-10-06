@@ -184,15 +184,12 @@ internal static class AdminEndpoints
             }
         });
 
-        group.MapGet("/tools", () =>
+        group.MapGet("/tools", (IToolConfigurationGate gate) =>
         {
-            var names = ToolRegistry.All
-                .Where(tool => tool.OfferRule is ToolOfferRule.RoleAllowlist
-                    or ToolOfferRule.SessionAttachmentsWhenRoleAllows
-                    or ToolOfferRule.ConfigurationWhenRoleAllows)
-                .Select(tool => tool.Name)
-                .OrderBy(name => name, StringComparer.Ordinal).ToArray();
-            return Results.Json(new AdminToolRegistryResponse(names, AgentDefinitionValidator.MaxToolAllowlistEntries));
+            var catalog = ToolRegistry.All.OrderBy(d => d.Name, StringComparer.Ordinal).ToArray();
+            return Results.Json(new AdminToolRegistryResponse(catalog.Select(d => d.Name).ToArray(), null,
+                catalog.Select(d => new AdminCapabilityDescriptor(d.Name, d.Category, d.Summary, d.Tags, d.Discoverable,
+                    d.DefaultProjectionClass, d.OfferRule != ToolOfferRule.ConfigurationWhenRoleAllows || gate.IsConfigured(d.Name))).ToArray()));
         });
 
         group.MapGet("/events", async (

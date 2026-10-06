@@ -390,7 +390,7 @@ public sealed class DurableReminderExecutor(
             asOfUtc,
             ids,
             cancellationToken,
-            context.TrustedConnection).ConfigureAwait(false);
+            context.TrustedConnection, context).ConfigureAwait(false);
         if (await TryCommitCancellationAsync(item.Provenance.SourceOccurrenceId, generation).ConfigureAwait(false))
         {
             return true;

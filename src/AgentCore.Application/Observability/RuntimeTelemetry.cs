@@ -154,6 +154,16 @@ public static class RuntimeTelemetry
     private static readonly Counter<long> WorkEvents = Meter.CreateCounter<long>("work_events");
     private static readonly Counter<long> AgentSteps = Meter.CreateCounter<long>("agent_steps");
     private static readonly Counter<long> ActiveSkills = Meter.CreateCounter<long>("active_skills");
+    private static readonly Counter<long> CapabilityLoads = Meter.CreateCounter<long>("capability_loads");
+    private static readonly Histogram<long> CapabilityProjection = Meter.CreateHistogram<long>("capability_projection");
+    public static void RecordCapabilityLoad(string outcome, int matches = 0)
+    {
+        CapabilityLoads.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
+        CapabilityProjection.Record(matches, new KeyValuePair<string, object?>("kind", "capabilityLoadMatchCount"));
+    }
+    public static void RecordCapabilityProjection(string kind, long count, string? provider, string? model) =>
+        CapabilityProjection.Record(count, new KeyValuePair<string, object?>("kind", kind), new("provider", provider), new("model", model));
+
     private static readonly Counter<long> SkillLoads = Meter.CreateCounter<long>("skill_loads");
     private static readonly Counter<long> ApplicationMessages = Meter.CreateCounter<long>("application_messages");
 

@@ -1,5 +1,10 @@
 # Observability and Operations
 
+## Capability projection measurements
+
+`AgentCore.Runtime` records `capability_projection` histograms by low-cardinality `kind`, configured provider and catalog model key: authorizedCapabilityCount, eligibleCapabilityCount, projectedCapabilityCount, projectedToolSchemaBytes (normalized definitions including names/descriptions/schemas), coreBootstrapCount, definitionAlwaysCount, contextProjectedCount, skillProjectedCount, loadedProjectedCount and capabilityLoadInvocationCount. `capability_loads` counts safe outcomes load_matched, load_no_match, load_already_projected, load_over_budget and load_stale. capabilityLoadMatchCount measures each invocation's matches. Raw discovery queries and schemas are not default log or metric tags. Counts from overlapping projection sources are informational and need not sum to the deduped total.
+
+
 ## Latency model
 
 Treat perceived voice latency as independent stages: speech detection + STT partial/final latency + Interaction Controller latency + LLM first-token latency + speech-segmentation delay + TTS first-audio latency + transport/buffering + browser playback. Streaming overlaps parts of this chain; the measured critical path, not a naive sum of overlapping spans, explains the user's wait. Capture each stage to find the bottleneck instead of reporting voice latency as one number.

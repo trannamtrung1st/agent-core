@@ -60,7 +60,8 @@ public sealed record AgentContext(
     string? ExperienceContext = null,
     string? ContinuityContext = null,
     bool AllowAgentConsolidation = false,
-    bool AgentWorkspaceAvailable = false)
+    bool AgentWorkspaceAvailable = false,
+    IReadOnlyList<string>? LoadedCapabilityIds = null)
 {
     public AgentIdentity EffectiveIdentity => Persona ?? Definition.Identity;
 }

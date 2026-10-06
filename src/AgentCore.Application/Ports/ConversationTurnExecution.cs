@@ -49,6 +49,9 @@ public interface IConversationTurnExecutionStore
         DateTimeOffset updatedAtUtc,
         CancellationToken cancellationToken = default);
 
+    ValueTask<ConversationTurnExecution> AdmitCapabilitiesAsync(Guid executionId, long expectedRevision, Guid generation,
+        IReadOnlyList<string> names, DateTimeOffset updatedAtUtc, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
     ValueTask<ConversationTurnExecution?> TryClaimAsync(
         Guid executionId,
         Guid generation,

@@ -46,6 +46,8 @@ public sealed partial class SessionToolExecutor(
         configurationGate ?? ToolConfigurationGates.Unconfigured;
 
     internal IToolConfigurationGate ConfigurationGate => _configurationGate;
+    internal IReadOnlyList<ModelToolDefinition> ProjectTools(AgentDefinition definition, AgentContext context) =>
+        BrowserNavigateOffer.Apply(ToolCatalog.For(definition, context, _configurationGate), browser);
 
     private readonly ITriggerCommandAuthorizer _triggerAuthorizer =
         triggerAuthorizer ?? new HeuristicTriggerCommandAuthorizer();

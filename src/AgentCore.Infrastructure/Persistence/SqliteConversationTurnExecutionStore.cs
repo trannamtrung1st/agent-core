@@ -122,6 +122,10 @@ public sealed class SqliteConversationTurnExecutionStore(IDbContextFactory<Agent
             item => item.AdmitActiveSkills(expectedRevision, generation, skillIds, updatedAtUtc),
             cancellationToken);
 
+    public ValueTask<ConversationTurnExecution> AdmitCapabilitiesAsync(Guid executionId, long expectedRevision, Guid generation,
+        IReadOnlyList<string> names, DateTimeOffset updatedAtUtc, CancellationToken cancellationToken = default) =>
+        MutateAsync(executionId, item => item.AdmitCapabilities(expectedRevision, generation, names, updatedAtUtc), cancellationToken);
+
     public async ValueTask<ConversationTurnExecution?> TryClaimAsync(
         Guid executionId,
         Guid generation,

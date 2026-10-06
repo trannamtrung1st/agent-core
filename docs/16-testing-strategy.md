@@ -1,10 +1,17 @@
 # Testing Strategy
 
+## Capability authorization and projection acceptance
+
+Verify >32 Selected/All grants, exact immutable All publication snapshots, unknown/duplicate rejection, always subset/context-only checks and legacy offers. Projection checks cover bootstrap, trusted context, attachments, active Skills, loaded tools, deduplication, configuration and tool-less models. Discovery checks cover exact/category/tag/description match, unauthorized/non-discoverable hiding, bounds/no-match/already-projected and restricted occurrence policy.
+
+Exercise a Synthetic live load→next schema→workspace write loop and new-turn reset, SQLite reopen plus stale revision/claim/cancellation, durable checkpoint retry/reclaim, and Admin Selected/All + always policy save/publish. Browser evidence uses the real Admin and Chat controls, including narrow/wide layout and configuration-unavailable labels. Broad backend/frontend, existing Synthetic workspace/approval and authoring regressions must pass. Record exact results in the [capability enhancement report](reports/capability-authorization-projection-verification.md); earlier workspace CI receipts do not verify this slice.
+
+
 ## Managed workspace refinement regression matrix
 
 `AgentWorkspaceJourneyTests` exercises explicit v15 cwd, relative home writes/read/search, CAS patch rejection, missing/file/unauthorized cwd, ancestor mutation rejection, binary/tree cross-copy including empty folders, cross-move denial, home Artifact bytes, new-Session defaults, isolation, source deletion and SQLite host reopen with owner-nested scratch cleanup. Its historical v12/v13/v14 tests remain compatibility evidence. `AgentWorkspaceStoreTests` runs in-memory/SQLite transfer parity, destination quota preflight, file replacement CAS, conflicts, binary equality and empty-directory reopen.
 
-Candidate/Domain/API authoring tests assert canonical max and precise limit/duplicate/malformed/unregistered/unconfigured findings. Admin editor tests verify 31→32 cap, disabled new options, removable selected options, invalid loaded 33, blocked Form Save and policy preservation. `agent-workspace-v2.spec.ts` uses the normal Synthetic model/tool loop to create home work, change cwd, copy scratch results back, download a fresh Artifact, check same-Session cwd, delete source and restore home in a new Session; folder downloads stay disabled at desktop/tablet/mobile. Legacy Agent Workspace and structural/Artifact/search/sandbox/approval suites remain required regressions.
+Candidate/Domain/API authoring tests assert exact grant validation and precise duplicate/malformed/unregistered/unconfigured findings. Admin editor tests permit more than 32 grants and verify Selected/All access, projection subset selection, unavailable configuration labels and policy preservation. The earlier workspace review used the former 32-grant cap; capability authorization supersedes that restriction. `agent-workspace-v2.spec.ts` uses the normal Synthetic model/tool loop to create home work, change cwd, copy scratch results back, download a fresh Artifact, check same-Session cwd, delete source and restore home in a new Session; folder downloads stay disabled at desktop/tablet/mobile. Legacy Agent Workspace and structural/Artifact/search/sandbox/approval suites remain required regressions.
 
 The Compose smoke additionally creates a new-mode managed binary home file and scratch file, rejects an unguarded overwrite, recreates the container, compares bytes, deletes the source Session and proves fresh scratch isolation plus durable home. Key-free hosted Synthetic jobs must pass on the behavior commit. Exact commands, results and residual gaps belong to [the refinement report](reports/agent-workspace-refinement-verification.md).
 

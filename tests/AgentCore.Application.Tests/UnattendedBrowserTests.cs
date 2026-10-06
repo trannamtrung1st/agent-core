@@ -21,6 +21,50 @@ public sealed class UnattendedBrowserTests
     private const string RepairRef = "el_abcdefghijklmnopqrstuv";
 
     [Fact]
+    public async Task Capability_load_reclaims_same_work_checkpoint_and_new_work_starts_empty()
+    {
+        var browser = new RecordingBrowser();
+        var connections = await ConnectedStoreAsync(OwnerId);
+        var definition = Definition() with { Environment = new(Capabilities: new("Selected", [ToolCatalog.CapabilitiesLoad, ToolCatalog.EmailSearch, ToolCatalog.WorkComplete]), Projection: new([])) };
+        var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
+        var generation = Guid.NewGuid();
+        var store = new InMemoryWorkItemStore();
+        await store.CreateAsync(WorkItem.Create(WorkId, new(OwnerId, ProfileId), Provenance(now),
+            new("synthetic-default", "synthetic", "synthetic-small", null), 3, now));
+        var claimed = (await store.TryClaimAsync(WorkId, generation, now, now.AddMinutes(1)))!;
+        var firstModel = new RecordingScriptModel(false,
+            () => ToolRound(Call(ToolCatalog.CapabilitiesLoad, "{\"query\":\"email.search\"}")),
+            () => [new ModelFailed(new ProviderFailure(ProviderErrorCode.Unavailable, "Temporary failure"))]);
+        var first = await new DurableOccurrenceExecution(Executor(browser, connections), TimeProvider.System).RunAsync(claimed,
+            new(Guid.NewGuid(), [new(ModelRole.User, "review")]), firstModel, definition, TriggerKind.ScheduledOccurrence,
+            (item, body, ct) => store.CheckpointAsync(item.WorkItemId, item.Revision, generation, body, null, now, ct),
+            store, generation, now, Ids(), CancellationToken.None, trustedConnection: true);
+        var retry = Assert.IsType<DurableOccurrenceRetry>(first);
+        Assert.DoesNotContain(firstModel.Requests[0].Tools!, t => t.Name == ToolCatalog.EmailSearch);
+        Assert.Contains(firstModel.Requests[1].Tools!, t => t.Name == ToolCatalog.EmailSearch);
+        var state = DurableToolCallCheckpoint.ReadCapabilityState(retry.Running.Checkpoint);
+        Assert.Equal([ToolCatalog.EmailSearch], state.Ids);
+        Assert.Equal(1, state.Calls);
+        Assert.Equal(1, (await store.RecoverExpiredClaimsAsync(now.AddMinutes(1))).RecoveredCount);
+        var nextGeneration = Guid.NewGuid();
+        var reclaimed = (await store.TryClaimAsync(WorkId, nextGeneration, now.AddMinutes(1), now.AddMinutes(5)))!;
+        await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(() => store.CheckpointAsync(WorkId, reclaimed.Revision, generation,
+            reclaimed.Checkpoint!, null, now.AddMinutes(1)).AsTask());
+        var resumedModel = new RecordingScriptModel(false, () => CompleteRound("Recovered exact interfaces"));
+        var continued = await new DurableOccurrenceExecution(Executor(browser, connections), TimeProvider.System).RunAsync(reclaimed,
+            new(Guid.NewGuid(), [new(ModelRole.User, "review")]), resumedModel, definition, TriggerKind.ScheduledOccurrence,
+            (item, body, ct) => store.CheckpointAsync(item.WorkItemId, item.Revision, nextGeneration, body, null, now.AddMinutes(1), ct),
+            store, nextGeneration, now.AddMinutes(1), Ids(), CancellationToken.None, trustedConnection: true);
+        var completed = Assert.IsType<DurableOccurrenceCompleted>(continued);
+        Assert.Equal("Recovered exact interfaces", completed.Text);
+        Assert.Contains(Assert.Single(resumedModel.Requests).Tools!, t => t.Name == ToolCatalog.EmailSearch);
+        Assert.Equal(1, DurableToolCallCheckpoint.ReadCapabilityState(completed.Running.Checkpoint).Calls);
+        var fresh = new RecordingScriptModel(false, () => CompleteRound("Fresh work"));
+        await RunSecretaryModeAsync(browser, connections, definition, OwnerId, ProfileId, Guid.NewGuid(), Guid.NewGuid(), "fresh-capabilities", TriggerKind.ScheduledOccurrence, fresh);
+        Assert.DoesNotContain(Assert.Single(fresh.Requests).Tools!, t => t.Name == ToolCatalog.EmailSearch);
+    }
+
+    [Fact]
     public async Task Four_secretary_modes_share_one_instance_profile_and_definition()
     {
         var secretary = await LoadSecretaryV2Async();

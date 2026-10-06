@@ -7,6 +7,10 @@ public static class ToolRegistry
     private static readonly IReadOnlyDictionary<string, ToolDescriptor> Registered =
         new Dictionary<string, ToolDescriptor>(StringComparer.Ordinal)
         {
+            [ToolCatalog.CapabilitiesLoad] = Descriptor(ToolCatalog.CapabilitiesLoad,
+                "Discover and load authorized, eligible interfaces for this execution. Describe a concrete goal; load only when current tools are insufficient.",
+                """{"type":"object","additionalProperties":false,"properties":{"query":{"type":"string","minLength":1,"maxLength":200},"limit":{"type":"integer","minimum":1,"maximum":8}},"required":["query"]}""",
+                ToolEffect.ReadOnly, ToolOfferRule.CurrentExecutionCapability),
             [ToolCatalog.MemoryConsolidate] = Descriptor(ToolCatalog.MemoryConsolidate,
                 "Consolidate two to eight inspected, clearly redundant owned active memories into one, preserving exact scope/kind, qualifiers and user intent. Verify every source has the exact same provenance.scope and Memory kind before calling; different scopes/kinds are not candidates. Never call to discover a scope rejection or resolve contradictions by guessing. Sources are superseded with lineage. Guarded changes require exact approval.",
                 $$$"""{"type":"object","additionalProperties":false,"properties":{"sourceMemoryIds":{"type":"array","minItems":{{{AgentCore.Domain.Experience.IdentityMaintenanceLimits.MinSources}}},"maxItems":{{{AgentCore.Domain.Experience.IdentityMaintenanceLimits.MaxSources}}},"uniqueItems":true,"items":{"type":"string","format":"uuid"}},"kind":{"type":"string","enum":["Fact","Preference","Goal","Decision","OpenLoop"]},"subject":{"type":"string","minLength":1,"maxLength":128},"content":{"type":"string","minLength":1,"maxLength":2000}},"required":["sourceMemoryIds","kind","subject","content"]}""",

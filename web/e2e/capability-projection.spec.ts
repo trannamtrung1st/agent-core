@@ -1,0 +1,83 @@
+import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+import { completeDefinitionDraftPublishGate, publishDraftFromInstructions } from "./admin-definition-gate-helpers";
+import { draftEditorSection } from "./admin-draft-editor-helpers";
+
+test("Admin pins All with always projection and Chat loads only the needed interface", async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.goto("/");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("agent-core.owner-capability"))).not.toBeNull();
+  const token = await page.evaluate(() => localStorage.getItem("agent-core.owner-capability"));
+  const headers = { "X-AgentCore-Owner-Capability": token! };
+  const builtIn = JSON.parse(await readFile(new URL("../../agents/general-assistant-v15.json", import.meta.url), "utf8"));
+  const id = `capability-journey-${Date.now()}`;
+  const { id: _id, version: _version, ...candidate } = builtIn;
+  candidate.definitionId = id;
+  delete candidate.environment.toolAllowlist;
+  candidate.environment.knowledgeSources = [];
+  candidate.skills = [];
+  candidate.environment.capabilities = { mode: "Selected", resolvedCapabilities: ["capabilities.load", "workspace.read", "workspace.list", "knowledge.retrieve"] };
+  candidate.environment.projection = { alwaysCapabilities: ["workspace.list", "knowledge.retrieve"] };
+  const create = await page.request.post("/api/v2/admin/definition-drafts", { headers, data: { definitionId: id, candidate } });
+  expect(create.ok(), await create.text()).toBe(true);
+  const draft = await create.json();
+  await page.goto(`/admin/definitions/${id}/drafts`);
+  await page.getByRole("button", { name: /^Draft rev / }).first().click();
+  const editor = draftEditorSection(page);
+  await editor.getByRole("tab", { name: "Capabilities" }).click();
+  await editor.getByLabel("Always projected capabilities").click();
+  await editor.getByLabel("Always projected capabilities").fill("workspace.write");
+  await expect(page.locator('.ant-select-item-option[title="workspace.write"]')).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await editor.getByLabel("Capability access").click();
+  await page.getByTitle("All current capabilities", { exact: true }).click();
+  await expect(editor.getByText(/Later capabilities are not automatically granted/)).toBeVisible();
+  await expect(editor.getByLabel("Always projected capabilities")).toBeVisible();
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(editor.getByLabel("Capability access")).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await editor.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expect(page.getByText("Draft saved.", { exact: true })).toBeVisible();
+  const saved = await (await page.request.get(`/api/v2/admin/definition-drafts/${draft.draftId}`, { headers })).json();
+  expect(saved.candidate.environment.capabilities.mode).toBe("All");
+  expect(saved.candidate.environment.capabilities.resolvedCapabilities.length).toBeGreaterThan(32);
+  expect(saved.candidate.environment.projection.alwaysCapabilities).toEqual(["workspace.list", "knowledge.retrieve"]);
+  await completeDefinitionDraftPublishGate(page, editor, "capabilities.load", { skipToolAllowlist: true });
+  await publishDraftFromInstructions(page, editor);
+  const ownerResponse = await page.request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: id, version: 1 } });
+  expect(ownerResponse.ok(), await ownerResponse.text()).toBe(true);
+  const owner = (await ownerResponse.json()).instanceId;
+  const sessionResponse = await page.request.post("/api/v2/sessions", { headers, data: { agentInstanceId: owner, mode: "text", modelCatalogKey: "scripted-alpha" } });
+  expect(sessionResponse.ok()).toBe(true);
+  const session = (await sessionResponse.json()).sessionId;
+  await page.goto(`/c/${session}`);
+  await expect(page.getByTestId("connection")).toHaveText("Ready");
+  async function send(command: string) {
+    const count = await page.locator(".chat-message-assistant").count();
+    await expect(async () => {
+      await page.getByLabel("Message").fill(`synthetic-capability-projection:${command}`);
+      await expect(page.getByLabel("Message")).toHaveValue(`synthetic-capability-projection:${command}`);
+      await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+    }).toPass();
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await expect(page.locator(".chat-message-assistant")).toHaveCount(count + 1);
+    await expect(page.locator(".chat-message-assistant").last()).toContainText(command === "inspect" ? "Initial projected capabilities:" : "Capability projection results:", { timeout: 30_000 });
+    return page.locator(".chat-message-assistant").last();
+  }
+  const initial = await send("inspect");
+  await expect(initial).toContainText("capabilities.load");
+  await expect(initial).not.toContainText("workspace.write");
+  await expect(initial).not.toContainText("browser.navigate");
+  const written = await send("write");
+  await expect(written).toContainText('"name":"workspace.write"');
+  await expect(written).not.toContainText('"error":');
+  const output = await page.request.get(`/api/v2/sessions/${session}/workspace/content?path=/home/loaded-capability.txt`, { headers });
+  expect(await output.body()).toEqual(Buffer.from("Loaded exact capability café\r\n"));
+  await expect(await send("inspect")).not.toContainText("workspace.write");
+  expect(errors).toEqual([]);
+});

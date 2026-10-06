@@ -1,8 +1,15 @@
 # Frontend Implementation Specification
 
+## Admin capability access and projection
+
+The existing Ant Design draft Capabilities section supports Legacy compatibility projection, Selected capabilities and All current capabilities. Selected uses grouped exact-name choices. All displays an informational count and explains that publication pins the current catalog without granting future registrations. The separate always-projected selector contains authorized discoverable choices and preserves configured-unavailable selections. Capability status distinguishes unavailable configuration from authority. Derived on-demand/context information is read-only; there is no loadable permission editor.
+
+Counts are informational and have no 32-option disable/save behavior. Catalog failure retains the existing retry notice and blocks Form saving. Advanced JSON and Form round-trip both new policy fields; diff review includes authorization mode, exact grants and always projection. Existing form-section spacing, responsive tags and Ant Design defaults own layout; no extra UI kit or page-specific styling is introduced.
+
+
 ## Workspace refinement authoring and inspection
 
-Admin registry loading supplies `{toolNames,maxToolAllowlistEntries}`; React uses the server value, including when the registry has more choices than a Definition permits. The existing Ant Design multi-select displays selected/max count with live status. At the cap, unselected options are disabled and selected tools remain removable. Additions never silently remove a capability. A loaded excessive candidate stays intact, shows `33 tools selected; maximum is 32`, and blocks Form Save until corrected. Registry unavailability blocks Form Save with retry; Advanced JSON may still submit an invalid candidate and receives authoritative backend findings.
+Capability access, grouped catalog and always projection use the current authoring contract above. The historical workspace refinement used a 32-grant selector; the capability enhancement replaces that bound with informational counts.
 
 The workspace semantics selector preserves the explicit `agentWorkspaceV2` policy through Form/JSON edits. New managed definitions expose cwd and omit retain/checkout; legacy authoring keeps its existing policy. The owner Workspace tab uses `Agent Workspace`, `/home` and `Durable across sessions`, lists first-class folders, permits file downloads and leaves directory downloads disabled. It reuses established responsive Ant Design tables and archived read-only policy; no scratch management surface or second UI kit is added.
 

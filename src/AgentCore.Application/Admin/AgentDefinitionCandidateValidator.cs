@@ -11,6 +11,7 @@ namespace AgentCore.Application.Admin;
 
 internal static class AgentDefinitionCandidateValidator
 {
+    internal const int MaxCandidateBytes = 1_048_576;
     private static readonly string[] SecretSentinels =
     [
         "OPENROUTER_API_KEY",
@@ -56,6 +57,7 @@ internal static class AgentDefinitionCandidateValidator
         IToolConfigurationGate configurationGate,
         IReadOnlyList<string>? sourceTools = null)
     {
+        candidate = CapabilityAuthorizationResolver.ResolveCandidate(candidate);
         var findings = new List<DefinitionValidationFinding>();
         findings.AddRange(CollectPersistenceFindings(candidate, aliases));
         if (findings.Count > 0)
@@ -79,6 +81,9 @@ internal static class AgentDefinitionCandidateValidator
         AgentDefinitionCandidate candidate,
         ProviderAliasSet aliases)
     {
+        if (System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(candidate).Length > MaxCandidateBytes)
+            return [Blocking("candidate", "document_too_large", "Definition candidate must fit within 1 MiB.")];
+        candidate = CapabilityAuthorizationResolver.ResolveCandidate(candidate);
         var findings = new List<DefinitionValidationFinding>();
         findings.AddRange(CollectStructureFindings(candidate));
         if (findings.Count > 0)
@@ -86,6 +91,9 @@ internal static class AgentDefinitionCandidateValidator
             return findings;
         }
 
+        if (candidate.Environment?.Capabilities is not null)
+            foreach (var name in candidate.Environment.ToolList)
+                if (!ToolRegistry.TryGet(name, out _)) findings.Add(Blocking("environment.capabilities.resolvedCapabilities", "unregistered_capability", $"Capability '{name}' is not registered."));
         findings.AddRange(CollectAliasFindings(candidate.ToPublished(1), aliases));
         if (findings.Count > 0)
         {
@@ -101,6 +109,14 @@ internal static class AgentDefinitionCandidateValidator
         try
         {
             ValidateRequiredGraph(candidate);
+            if (candidate.Environment?.Capabilities is { } authority)
+            {
+                var always = candidate.Environment.Projection?.AlwaysCapabilities ?? [];
+                if (always.Any(n => !authority.ResolvedCapabilities.Contains(n, StringComparer.Ordinal)))
+                    return [Blocking("environment.projection.alwaysCapabilities", "unauthorized_projection", "Always projected capabilities must be authorized.")];
+                if (always.Count != always.Distinct(StringComparer.Ordinal).Count())
+                    return [Blocking("environment.projection.alwaysCapabilities", "duplicate_projection", "Always projected capabilities must be unique.")];
+            }
             AgentDefinitionValidator.ValidateCandidate(candidate);
             return [];
         }
@@ -111,7 +127,7 @@ internal static class AgentDefinitionCandidateValidator
         catch (ToolAllowlistValidationException)
         {
             return AgentDefinitionValidator.ToolAllowlistFindings(candidate.Environment!.ToolList)
-                .Select(f => Blocking("environment.toolAllowlist", f.Code, f.Message));
+                .Select(f => Blocking(candidate.Environment?.Capabilities is null ? "environment.toolAllowlist" : "environment.capabilities.resolvedCapabilities", f.Code, f.Message));
         }
         catch (ArgumentException ex)
         {
@@ -187,6 +203,9 @@ internal static class AgentDefinitionCandidateValidator
         IToolConfigurationGate configurationGate,
         IReadOnlyList<string>? sourceTools)
     {
+        foreach (var name in definition.Environment?.Projection?.AlwaysCapabilities ?? [])
+            if (ToolRegistry.TryGet(name, out var d) && !d.Discoverable && name != ToolCatalog.CapabilitiesLoad)
+                yield return Blocking("environment.projection.alwaysCapabilities", "context_only_capability", $"{name} is controlled by execution context.");
         foreach (var toolName in RoleEnvironments.Of(definition).ToolList)
         {
             if (!ToolRegistry.TryGet(toolName, out var descriptor))
@@ -198,7 +217,7 @@ internal static class AgentDefinitionCandidateValidator
                 continue;
             }
 
-            var publishable = descriptor.OfferRule switch
+            var publishable = definition.Environment?.Capabilities is not null || descriptor.OfferRule switch
             {
                 ToolOfferRule.RoleAllowlist => true,
                 ToolOfferRule.SessionAttachmentsWhenRoleAllows => true,

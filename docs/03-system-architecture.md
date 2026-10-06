@@ -1,5 +1,14 @@
 # System Architecture
 
+## Capability authority and projection
+
+Capability-aware Definitions pin `environment.capabilities` (`mode: Selected|All`, exact `resolvedCapabilities`, SHA-256 `authorizationFingerprint`) separately from `environment.projection.alwaysCapabilities`. All resolves the current trusted registry when a draft is saved and again at publication, excluding workspace interfaces incompatible with its explicit workspace policy. Runtime never resolves All again. Future registrations require a new reviewed publication. Legacy `toolAllowlist` remains supported with historical runtime offers; no Definition authorization count ceiling remains.
+
+`ToolProjectionService` evolves `ToolCatalog.For`; the existing eligibility flow and execution-time `ToolPolicy` stay authoritative. New-mode projection unions authorized bootstrap, always, deterministic context, active Skill requirements and execution-loaded names, then filters configuration, model support and execution eligibility. Skills and projection never grant authority. Trusted registry metadata distinguishes discoverable ordinary tools from context-only tools. No user-text keyword capability router or provider authorization logic exists.
+
+Live capability loads pass response/epoch/cancellation and execution revision/claim checks through the Session mailbox. Their exact IDs and invocation count are saved before continuation. Durable work checkpoints explicit loaded IDs/count alongside tool messages; retry/reclaim reconstructs loaded IDs from that bounded execution state and rechecks eligibility. A new turn/WorkItem starts clean. The same execution retains loaded families. Discovery is permitted for live UserTurn and trusted connected occurrences (live or detached); unconnected occurrences, continuity-only and unconnected Thought cannot use it. Harness capabilities remain context-only under existing authority.
+
+
 ## Managed workspace refinement
 
 An explicit `environment.workspace.semantics: "agentWorkspaceV2"` policy selects the managed working environment. `/home` is durable Agent Instance working material; `/working` is current Session scratch; Artifacts are separate immutable downloads. The policy, pinned Definition and trusted managed Session owner determine authority. Version numbers never do. Existing published definitions keep their contracts, including `/workspace/working`, scratch-relative paths and authorized retain/checkout.

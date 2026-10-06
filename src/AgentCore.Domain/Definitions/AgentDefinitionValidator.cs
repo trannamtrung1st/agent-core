@@ -5,7 +5,6 @@ namespace AgentCore.Domain.Definitions;
 
 public static class AgentDefinitionValidator
 {
-    public const int MaxToolAllowlistEntries = 32;
 
     private static readonly Regex IdPattern = new("^[a-z0-9-]{1,64}$", RegexOptions.Compiled);
     private static readonly Regex ToolPattern = new("^[a-z][a-z0-9._]{0,63}$", RegexOptions.Compiled);
@@ -326,6 +325,19 @@ public static class AgentDefinitionValidator
             && environment.ToolList.Any(t => t is "workspace.retain" or "workspace.checkout"))
             throw new ArgumentException("Agent Workspace v2 uses workspace.copy; retain/checkout are legacy tools.");
 
+        if (environment.Capabilities is { } authority)
+        {
+            if (authority.ResolvedCapabilities is null) throw new ArgumentException("capabilities.resolvedCapabilities is required.");
+            if (authority.Mode is not ("Selected" or "All")) throw new ArgumentException("capabilities.mode must be Selected or All.");
+            if (environment.ToolAllowlist is { Count: > 0 }) throw new ArgumentException("Capability-aware definitions must not also supply toolAllowlist.");
+            if (environment.Projection is { AlwaysCapabilities: null }) throw new ArgumentException("projection.alwaysCapabilities is required.");
+            var always = environment.Projection?.AlwaysCapabilities ?? [];
+            var finding = ToolAllowlistFindings(always).FirstOrDefault();
+            if (finding is not null) throw new ArgumentException("projection.alwaysCapabilities: " + finding.Message);
+            if (always.Any(name => !authority.ResolvedCapabilities.Contains(name, StringComparer.Ordinal)))
+                throw new ArgumentException("projection.alwaysCapabilities must be authorized.");
+        }
+        else if (environment.Projection is not null) throw new ArgumentException("projection requires capability authorization.");
         var template = environment.WorkspacePolicy.TemplateId;
         if (template is not null && !IdPattern.IsMatch(template))
         {
@@ -336,8 +348,6 @@ public static class AgentDefinitionValidator
     public static IReadOnlyList<ToolAllowlistFinding> ToolAllowlistFindings(IReadOnlyList<string> tools)
     {
         var findings = new List<ToolAllowlistFinding>();
-        if (tools.Count > MaxToolAllowlistEntries)
-            findings.Add(new("tool_limit_exceeded", $"{tools.Count} tools selected; maximum is {MaxToolAllowlistEntries}."));
         if (tools.Count != tools.Distinct(StringComparer.Ordinal).Count())
             findings.Add(new("duplicate_tool", "Tool allowlist contains duplicate tools."));
         if (tools.Any(tool => tool is null || !ToolPattern.IsMatch(tool)))

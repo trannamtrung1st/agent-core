@@ -82,24 +82,25 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
-    public async Task Admin_tools_lists_definition_grants_without_contextual_runtime_capabilities()
+    public async Task Admin_catalog_distinguishes_discoverable_and_context_only_capabilities()
     {
         var client = OwnerClient();
         var response = await client.GetAsync("/api/v2/admin/tools");
         response.EnsureSuccessStatusCode();
         var payload = await response.Content.ReadFromJsonAsync<AdminToolRegistryResponse>();
         Assert.NotNull(payload);
-        Assert.Equal(AgentDefinitionValidator.MaxToolAllowlistEntries, payload!.MaxToolAllowlistEntries);
-        Assert.True(payload.ToolNames.Count > payload.MaxToolAllowlistEntries);
+        Assert.Null(payload!.MaxToolAllowlistEntries);
+        Assert.True(payload.ToolNames.Count > 32);
         Assert.Contains(payload.ToolNames, name => name == ToolCatalog.WorkspaceRead);
         Assert.Contains(ToolCatalog.AttachmentsRead, payload.ToolNames);
         Assert.Contains(ToolCatalog.BrowserNavigate, payload.ToolNames);
-        Assert.DoesNotContain(ToolCatalog.ContinuitySearch, payload.ToolNames);
-        Assert.DoesNotContain(ToolCatalog.ContinuityGet, payload.ToolNames);
-        Assert.DoesNotContain(ToolCatalog.ExperienceRecent, payload.ToolNames);
-        Assert.DoesNotContain(ToolCatalog.WorkComplete, payload.ToolNames);
-        Assert.DoesNotContain(ToolCatalog.AppMessageSend, payload.ToolNames);
-        Assert.DoesNotContain(HarnessChatTools.Inspect, payload.ToolNames);
+        Assert.Contains(ToolCatalog.ContinuitySearch, payload.ToolNames);
+        Assert.Contains(ToolCatalog.ContinuityGet, payload.ToolNames);
+        Assert.Contains(ToolCatalog.ExperienceRecent, payload.ToolNames);
+        Assert.Contains(ToolCatalog.WorkComplete, payload.ToolNames);
+        Assert.Contains(ToolCatalog.AppMessageSend, payload.ToolNames);
+        Assert.Contains(HarnessChatTools.Inspect, payload.ToolNames);
+        Assert.False(payload.Capabilities!.Single(c => c.Name == ToolCatalog.WorkComplete).Discoverable);
         Assert.Equal(payload.ToolNames.OrderBy(name => name, StringComparer.Ordinal), payload.ToolNames);
     }
 
@@ -563,7 +564,6 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Theory]
-    [InlineData(33, "tool_limit_exceeded")]
     [InlineData(2, "duplicate_tool")]
     [InlineData(1, "invalid_tool_name")]
     public async Task Admin_definition_authoring_returns_precise_tool_shape_failure(int count, string expectedCode)
@@ -1915,6 +1915,37 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
 
     private static JsonSerializerOptions JsonOptions() =>
         new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true };
+
+    [Theory]
+    [InlineData("All")]
+    [InlineData("Selected")]
+    public async Task Capability_publication_pins_catalog_and_always_subset_without_configuration_requirements(string mode)
+    {
+        var client = OwnerClient();
+        var id = "capability-" + mode.ToLowerInvariant() + "-publication";
+        var candidate = SampleDraftCandidate(id) with { Environment = new RoleEnvironment(
+            Workspace: new(Semantics: WorkspaceSemantics.AgentWorkspaceV2), Capabilities: new(mode, mode == "All" ? [] : ToolRegistry.All.Select(d => d.Name).Where(n => n is not (ToolCatalog.WorkspaceRetain or ToolCatalog.WorkspaceCheckout)).ToArray()),
+            Projection: new([ToolCatalog.WorkspaceRead])) };
+        var create = await client.PostAsJsonAsync("/api/v2/admin/definition-drafts",
+            new AdminCreateDefinitionDraftRequest(id, JsonSerializer.SerializeToElement(candidate, JsonOptions())));
+        create.EnsureSuccessStatusCode();
+        var draft = (await create.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>())!;
+        var validation = await client.PostAsync($"/api/v2/admin/definition-drafts/{draft.DraftId}/validate", null);
+        validation.EnsureSuccessStatusCode();
+        var findings = (await validation.Content.ReadFromJsonAsync<AdminDefinitionDraftValidationResponse>())!;
+        Assert.False(findings.HasBlockingFindings);
+        var publish = await client.PostAsJsonAsync($"/api/v2/admin/definition-drafts/{draft.DraftId}/publish", new AdminPublishDefinitionDraftRequest(draft.Revision));
+        publish.EnsureSuccessStatusCode();
+        var definitions = _factory.Services.GetRequiredService<IAgentDefinitionStore>();
+        var published = (await definitions.GetAsync(id, 1))!;
+        Assert.Equal(mode, published.Environment!.Capabilities!.Mode);
+        Assert.True(published.Environment.ToolList.Count > 32);
+        Assert.Contains(ToolCatalog.EmailSend, published.Environment.ToolList);
+        Assert.Contains(HarnessChatTools.Inspect, published.Environment.ToolList);
+        Assert.Equal(64, published.Environment.Capabilities.AuthorizationFingerprint!.Length);
+        Assert.Equal([ToolCatalog.WorkspaceRead], published.Environment.Projection!.AlwaysCapabilities);
+        Assert.DoesNotContain(ToolCatalog.WorkspaceRetain, published.Environment.ToolList);
+    }
 
     private static AgentDefinitionCandidate SampleDraftCandidate(string definitionId) =>
         new(

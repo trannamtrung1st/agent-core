@@ -25,6 +25,7 @@ public static class RolePermissions
         }
 
         var normalized = tool.Trim();
+        if (definition.Environment?.Capabilities is not null) return definition.Environment.ToolList.Contains(normalized, StringComparer.Ordinal);
         if (string.Equals(normalized, ToolCatalog.AttachmentsRead, StringComparison.Ordinal)
             || string.Equals(normalized, ToolCatalog.SkillsLoad, StringComparison.Ordinal)
             || string.Equals(normalized, ToolCatalog.AppMessageSend, StringComparison.Ordinal)

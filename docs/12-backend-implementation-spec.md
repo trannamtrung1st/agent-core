@@ -1,5 +1,14 @@
 # Backend Implementation Specification
 
+## Capability authorization, projection and discovery
+
+New-mode environment stores `capabilities: {mode,resolvedCapabilities,authorizationFingerprint}` and `projection: {alwaysCapabilities}`. The legacy `toolAllowlist` cannot simultaneously carry grants. Domain validates exact syntax/duplicates and projection subset; Application validates registration and context-only projection restrictions with structured findings. All draft/publication resolution is trusted, deterministic and snapshot-based. New-mode configuration absence is eligibility, not invalid authority. Persisted candidate documents are bounded to 1 MiB; this document-size guard does not impose a capability count limit.
+
+`ToolCatalog.For` delegates projection to `ToolProjectionService` using the existing ToolPolicy-checked eligibility catalog. Legacy definitions keep their broad historical offers; capability-aware definitions project bootstrap + always + trusted context + active Skill required + execution-loaded tools, deduped by exact name. Browser start guidance and response-specific narrowing still apply. Unlike the legacy immutable initial request tool upper bound, new-mode continuations rebuild from pinned authority and current trusted context after a load or Skill activation.
+
+`capabilities.load` returns compact metadata and updates fenced execution state before real schemas appear on the next generation. It never executes a matched capability, changes authority, bypasses approval or reveals unauthorized/unconfigured tools. Loaded interfaces reset each turn/WorkItem and survives retry/reclaim of that same execution. Live state uses the existing conversation execution store; durable work uses explicit loaded IDs/count in the checkpoint payload. Ordinary execution still rechecks registry, authority, configuration, scope, owner, lifecycle, occurrence/trust, approval and replay policy even for an unprojected or previously loaded name.
+
+
 ## Agent Workspace v2 tools and policy
 
 Set `environment.workspace` to `{ "semantics": "agentWorkspaceV2" }` to opt a managed definition in. Null/missing semantics preserves legacy behavior; unknown values fail validation. New-mode allowlists exclude retain/checkout. General Assistant v15 has 31 tools, including one `workspace.cwd`.
@@ -10,7 +19,7 @@ Ordinary write creates home files, accepting optional expectedRevision/expectedS
 
 Publish user downloads with `artifacts.create_from_workspace` from either root. Normal model guidance describes durable work directly in home and explicit scratch processing/copy for sandbox. Tool policy and execution both check the pinned policy and actual managed eligibility; background work does not receive Session cwd.
 
-Canonical allowlist validation distinguishes tool_limit_exceeded, duplicate_tool and invalid_tool_name; candidate validation retains unregistered_tool and unconfigured_tool. Findings name `environment.toolAllowlist`; authoring Problem Details retains `code:ValidationError` and adds `field`/`validationCode` plus useful detail. The 32 limit is unchanged.
+Canonical allowlist validation distinguishes tool_limit_exceeded, duplicate_tool and invalid_tool_name; candidate validation retains unregistered_tool and unconfigured_tool. Findings name `environment.toolAllowlist`; authoring Problem Details retains `code:ValidationError` and adds `field`/`validationCode` plus useful detail. The former 32 limit has been removed by the capability enhancement above.
 
 
 [Interfaces](04-backend-interfaces.md) owns ports, [Architecture](03-system-architecture.md) owns concurrency, and [Controller](05-interaction-controller.md) owns turn-taking. This document owns Agent Definition, text-first context construction and the initial HTTP model adapter. The canonical MVP composes STT → Interaction Controller → text Agent Runtime / LLM → Speech Segmenter → TTS; it requires no multimodal audio-reasoning model.
@@ -343,4 +352,4 @@ List `/home` and pass the returned `treeSha256` as `expectedTreeSha256` for ever
 
 All five tools use registry/allowlist/offer/execution policy, resource admission, normal cancellation, exact-action hashes and observability. Recursive scratch operations guard every traversed child and physical ancestor; home operations guard every referenced blob before admission. Linked entries are unsupported. Session write/patch/list/read share the structural gate; active managed owner/lifecycle checks remain in Application. NonReplayable operations are never automatically repeated after indeterminate completion.
 
-Immutable `general-assistant` v14 adds the four new tools and the folder/batch guidance; it keeps the existing 32-tool bound by omitting `artifacts.create`. File-based `artifacts.create_from_workspace` remains available. Earlier versions remain immutable. Deterministic `synthetic-workspace-filesystem:` fixture commands exercise the same native model/tool/approval loop; they do not add an API or bypass policy.
+Immutable `general-assistant` v14 adds the four new tools and the folder/batch guidance; it was authored under the former 32-tool bound by omitting `artifacts.create`. File-based `artifacts.create_from_workspace` remains available. Earlier versions remain immutable. Deterministic `synthetic-workspace-filesystem:` fixture commands exercise the same native model/tool/approval loop; they do not add an API or bypass policy.

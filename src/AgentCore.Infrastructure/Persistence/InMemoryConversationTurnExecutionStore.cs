@@ -147,6 +147,10 @@ public sealed class InMemoryConversationTurnExecutionStore : IConversationTurnEx
             executionId,
             item => item.AdmitActiveSkills(expectedRevision, generation, skillIds, updatedAtUtc));
 
+    public ValueTask<ConversationTurnExecution> AdmitCapabilitiesAsync(Guid executionId, long expectedRevision, Guid generation,
+        IReadOnlyList<string> names, DateTimeOffset updatedAtUtc, CancellationToken cancellationToken = default) =>
+        Mutate(executionId, item => item.AdmitCapabilities(expectedRevision, generation, names, updatedAtUtc));
+
     public ValueTask<ConversationTurnExecution?> TryClaimAsync(
         Guid executionId,
         Guid generation,

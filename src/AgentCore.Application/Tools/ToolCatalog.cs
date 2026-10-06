@@ -38,6 +38,7 @@ public static class ToolCatalog
     public const string TriggerList = "trigger.list";
     public const string TriggerUpdate = "trigger.update";
     public const string TriggerCancel = "trigger.cancel";
+    public const string CapabilitiesLoad = "capabilities.load";
     public const string SkillsLoad = "skills.load";
     public const string AppMessageSend = "app.message.send";
     public const string BrowserNavigate = "browser.navigate";
@@ -64,7 +65,10 @@ public static class ToolCatalog
     public static bool AuthorizesBrowser(IReadOnlyList<ModelToolDefinition>? tools) =>
         tools?.Any(tool => IsBrowserTool(tool.Name)) == true;
 
-    public static IReadOnlyList<ModelToolDefinition> For(
+    public static IReadOnlyList<ModelToolDefinition> For(AgentDefinition definition, AgentContext? context, IToolConfigurationGate gate) =>
+        ToolProjectionService.Project(definition, context, gate);
+
+    internal static IReadOnlyList<ModelToolDefinition> Eligible(
         AgentDefinition definition,
         AgentContext? context,
         IToolConfigurationGate configurationGate)

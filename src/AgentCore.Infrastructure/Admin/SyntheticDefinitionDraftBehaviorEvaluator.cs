@@ -24,7 +24,8 @@ public sealed class SyntheticDefinitionDraftBehaviorEvaluator(
         var definition = candidate.ToPublished(1);
         var selection = SessionModelBinder.PinDefault(catalog, definition);
         var modelSelection = $"synthetic-offline/scripted/{selection.CatalogKey}";
-        var tools = ToolCatalog.For(definition, context: null, configurationGate);
+        var context = DefinitionEvaluationHarness.ToolContext(definition, scenario.Prompt);
+        var tools = ToolCatalog.For(definition, context, configurationGate);
         var messages = new List<ModelMessage>
         {
             new(ModelRole.System, PromptContextBuilder.BuildIdentitySystem(definition, definition.Identity)),
@@ -48,7 +49,12 @@ public sealed class SyntheticDefinitionDraftBehaviorEvaluator(
                         assistantText = (assistantText ?? string.Empty) + delta.Text;
                         break;
                     case ModelToolCallEvent toolCall:
-                        var policy = ToolPolicy.EvaluateExecution(definition, toolCall.Call.Name, configurationGate);
+                        var policy = ToolPolicy.EvaluateExecution(definition, toolCall.Call.Name, configurationGate,
+                            admission: context is null ? null : new ToolExecutionAdmission(false, TriggerKind.UserTurn));
+                        // The offline script deliberately probes a name even when its interface is hidden.
+                        // Schema checks observe projection; denial checks still observe execution authority.
+                        if (context is not null && scenario.CheckType is DefinitionEvaluationCheckType.ToolOffered or DefinitionEvaluationCheckType.ToolNotOffered
+                            && !tools.Any(t => t.Name == toolCall.Call.Name)) policy = ToolPolicyDecision.Deny;
                         toolObservations.Add(new DefinitionDraftSyntheticToolObservation(toolCall.Call.Name, policy));
                         messages.Add(new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: [toolCall.Call]));
                         messages.Add(new ModelMessage(

@@ -302,7 +302,7 @@ public sealed class SqliteAgentDefinitionAdminStore(
                 publish.ActorKind);
         }
 
-        var payload = draft.Candidate.ToPublished(nextVersion);
+        var payload = AgentCore.Application.Tools.CapabilityAuthorizationResolver.ResolveCandidate(draft.Candidate).ToPublished(nextVersion);
         AgentDefinitionValidator.Validate(payload);
         var publication = new AgentDefinitionPublication(
             draft.DefinitionId,

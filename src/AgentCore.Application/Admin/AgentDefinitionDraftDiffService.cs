@@ -294,7 +294,7 @@ public sealed class AgentDefinitionDraftDiffService(
             ? "(none)"
             : string.Join(", ", environment.KnowledgeList.Select(item => item.Identity));
         var template = environment.WorkspacePolicy.TemplateId ?? "(none)";
-        return $"tools=[{tools}]; harness=[{harness}]; knowledge=[{knowledge}]; template={template}";
+        return $"authorization={environment.Capabilities?.Mode ?? "Legacy"}; tools=[{tools}]; always=[{string.Join(", ", environment.Projection?.AlwaysCapabilities ?? [])}]; harness=[{harness}]; knowledge=[{knowledge}]; template={template}";
     }
 
     private static string FormatResources(IReadOnlyList<AgentDefinitionDraftResource> resources)

@@ -143,7 +143,9 @@ function DefinitionVersionDetails({ row, renderResources }: {
             candidate={candidate} view={view} jsonText={candidateToJson(candidate)} busy={false} readOnly
             onViewChange={setView} onCandidateChange={() => {}} onJsonTextChange={() => {}} /> },
           { key: "capabilities", label: "Capabilities", children: <Descriptions {...detailLayout} bordered column={1} size="small">
-            <Descriptions.Item label="Tool allowlist">{environment?.toolAllowlist.join(", ") || "None"}</Descriptions.Item>
+            <Descriptions.Item label="Capability access">{environment?.capabilityMode ?? "Legacy projection"}</Descriptions.Item>
+            <Descriptions.Item label="Authorized capabilities">{environment?.toolAllowlist.join(", ") || "None"}</Descriptions.Item>
+            {environment?.capabilityMode ? <Descriptions.Item label="Always projected">{environment.alwaysCapabilities?.join(", ") || "None"}</Descriptions.Item> : null}
             <Descriptions.Item label="Harness references">{environment?.harness.join(", ") || "None"}</Descriptions.Item>
             <Descriptions.Item label="Workspace template">{environment?.workspaceTemplateId || "None"}</Descriptions.Item>
             <Descriptions.Item label="Attachment handling">{environment?.allowUnreadUnsupportedAttachmentTypes ? "Allow unread unsupported types" : "Reject unread unsupported types"}</Descriptions.Item>

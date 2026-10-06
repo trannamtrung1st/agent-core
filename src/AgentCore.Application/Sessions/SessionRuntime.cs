@@ -1173,6 +1173,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case WorkspaceCwdRequested workspaceCwd:
                     HandleWorkspaceCwd(workspaceCwd);
                     break;
+                case CapabilityLoadRequested capabilityLoad:
+                    await HandleCapabilityLoadAsync(capabilityLoad, cancellationToken).ConfigureAwait(false);
+                    break;
                 case SkillLoadRequested skillLoad:
                     await HandleSkillLoadAsync(skillLoad, cancellationToken).ConfigureAwait(false);
                     break;
@@ -1214,6 +1217,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             }
 
             if (input is WorkspaceCwdRequested workspaceCwd) workspaceCwd.Completed.TrySetResult(null);
+            if (input is CapabilityLoadRequested capabilityLoad) capabilityLoad.Completed.TrySetResult(new(SkillLoadAdmission.Error("stale", "Capability load is no longer owned by this execution."), null, "load_stale"));
             if (input is SkillLoadRequested skillLoad)
             {
                 skillLoad.Completed.TrySetResult(SkillLoadMailboxResult.Failed(
@@ -2628,6 +2632,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var messages = request.Messages.ToList();
         var authorizedTools = request.Tools;
         var pinnedSkills = activeSkillIds.ToArray();
+        var loadedCapabilities = _boundConversationExecution?.LoadedCapabilityIds ?? [];
         var workspaceCwd = WorkspaceSemantics.IsV2(_snapshot.Definition)
             ? await RequestWorkspaceCwdAsync(cause, request.ResponseId, null, cancellationToken).ConfigureAwait(false) : null;
         if (WorkspaceSemantics.IsV2(_snapshot.Definition) && workspaceCwd is null) return;
@@ -2646,10 +2651,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var terminalBrowserContinuation = false;
         string? continuationInstruction = null;
         var evidence = new BrowserEvidenceProgress();
+        var budgetTools = _snapshot.Definition.Environment?.Capabilities is null
+            ? WithOfferedTools(request, authorizedTools, trigger, model).Tools
+            : ToolCatalog.Eligible(_snapshot.Definition,
+                await CapabilityProjectionContextAsync(trigger, model, pinnedSkills, loadedCapabilities, cancellationToken), _tools.ConfigurationGate);
         var budget = ToolExecutionBudget.Resolve(new ToolBudgetSignal(
             InteractiveBrowser: trigger.Kind == TriggerKind.UserTurn
-                && ToolCatalog.AuthorizesBrowser(
-                    WithOfferedTools(request, authorizedTools, trigger, model).Tools),
+                && ToolCatalog.AuthorizesBrowser(budgetTools),
             BoundApplicationBrowser: false));
         var toolDeadline = request.Tools is { Count: > 0 };
         using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -2679,6 +2687,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 retryingGeneration = false;
                 BrowserObservationCompaction.Compact(messages);
                 messages = PromptContextBuilder.WithActiveSkillSystem(messages, _snapshot.Definition, pinnedSkills).ToList();
+                AgentContext? projectionContext = null;
+                if (_snapshot.Definition.Environment?.Capabilities is not null)
+                {
+                    projectionContext = await CapabilityProjectionContextAsync(trigger, model, pinnedSkills, loadedCapabilities, generateToken);
+                    authorizedTools = _tools.ProjectTools(_snapshot.Definition, projectionContext);
+                }
                 var pageBlocked = browserPageOrigin is not null && blockedBrowserOrigins.Contains(browserPageOrigin);
                 var prompt = messages;
                 if (inRepair)
@@ -2717,6 +2731,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             model),
                         pageBlocked,
                         terminalBrowserContinuation);
+                CapabilityProjectionTelemetry.Record(_snapshot.Definition, projectionContext, _tools.ConfigurationGate, working.Tools, _boundConversationExecution?.PinnedModel.CatalogKey, _boundConversationExecution?.CapabilityLoadCount ?? 0);
                 try
                 {
                 await foreach (var evt in model.GenerateAsync(working, generateToken).ConfigureAwait(false))
@@ -3068,6 +3083,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 OperationalDiagnostics.RecordToolDenial(call.Name);
                                 executionResult = ToolExecutionResult.FromText(
                                     """{"error":"forbidden","message":"Tool is not permitted for this role."}""");
+                            }
+                            else if (string.Equals(call.Name, ToolCatalog.CapabilitiesLoad, StringComparison.Ordinal) && projectionContext is not null)
+                            {
+                                var loaded = await RequestCapabilityLoadAsync(cause, request.ResponseId, call.ArgumentsJson, projectionContext, overallCts.Token);
+                                executionResult = ToolExecutionResult.FromText(loaded.ToolResultJson);
+                                if (loaded.LoadedIds is not null) loadedCapabilities = loaded.LoadedIds;
                             }
                             else if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal))
                             {

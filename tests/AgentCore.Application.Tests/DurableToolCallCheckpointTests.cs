@@ -9,6 +9,29 @@ namespace AgentCore.Application.Tests;
 public sealed class DurableToolCallCheckpointTests
 {
     [Fact]
+    public void Capability_state_survives_compacted_results_and_legacy_defaults_to_empty()
+    {
+        var payload = DurableToolCallCheckpoint.Write([new(ModelRole.Tool, "{\"truncated\":true}", ToolCallId: "load", Name: ToolCatalog.CapabilitiesLoad)],
+            loadedCapabilityIds: [ToolCatalog.EmailSearch], capabilityLoadCount: 3);
+        var state = DurableToolCallCheckpoint.ReadCapabilityState(new(payload, 1, 0, 1000));
+        Assert.Equal([ToolCatalog.EmailSearch], state.Ids);
+        Assert.Equal(3, state.Calls);
+        var legacy = DurableToolCallCheckpoint.ReadCapabilityState(new(DurableToolCallCheckpoint.Write([]), 0, 0, 1000));
+        Assert.Empty(legacy.Ids);
+        Assert.Equal(0, legacy.Calls);
+        Assert.False(DurableToolCallCheckpoint.TryWrite([new(ModelRole.User, new string('x', WorkLimits.MaxCheckpointBytes))], false, null, out _, state.Ids, state.Calls));
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(9)]
+    public void Capability_checkpoint_rejects_invalid_load_counts(int calls)
+    {
+        var payload = DurableToolCallCheckpoint.Write([], loadedCapabilityIds: [ToolCatalog.EmailSearch], capabilityLoadCount: calls);
+        Assert.Throws<AgentCore.Application.Sessions.AgentCoreException>(() => DurableToolCallCheckpoint.ReadCapabilityState(new(payload, 0, 0, 1000)));
+    }
+
+    [Fact]
     public void PendingCalls_returns_unanswered_calls_from_latest_assistant_batch()
     {
         var messages = new List<ModelMessage>

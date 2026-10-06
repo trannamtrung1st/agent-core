@@ -7,7 +7,9 @@ public sealed record RoleEnvironment(
     IReadOnlyList<KnowledgeSourceRef>? KnowledgeSources = null,
     IReadOnlyList<string>? ToolAllowlist = null,
     WorkspaceTemplatePolicy? Workspace = null,
-    AttachmentStorePolicy? Attachments = null)
+    AttachmentStorePolicy? Attachments = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CapabilityAuthorization? Capabilities = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CapabilityProjectionPolicy? Projection = null)
 {
     public static RoleEnvironment Empty { get; } = new();
 
@@ -15,7 +17,7 @@ public sealed record RoleEnvironment(
 
     public IReadOnlyList<KnowledgeSourceRef> KnowledgeList => KnowledgeSources ?? [];
 
-    public IReadOnlyList<string> ToolList => ToolAllowlist ?? [];
+    public IReadOnlyList<string> ToolList => Capabilities?.ResolvedCapabilities ?? ToolAllowlist ?? [];
 
     public WorkspaceTemplatePolicy WorkspacePolicy => Workspace ?? new WorkspaceTemplatePolicy(null);
 
@@ -46,3 +48,6 @@ public static class RoleEnvironments
     public static RoleEnvironment Of(AgentDefinition definition) =>
         definition.Environment ?? RoleEnvironment.Empty;
 }
+
+public sealed record CapabilityAuthorization(string Mode, IReadOnlyList<string> ResolvedCapabilities, string? AuthorizationFingerprint = null);
+public sealed record CapabilityProjectionPolicy(IReadOnlyList<string> AlwaysCapabilities);

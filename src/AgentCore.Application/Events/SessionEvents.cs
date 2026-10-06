@@ -646,3 +646,7 @@ public static class PublicHistory
             voiceAvailable,
             definition.ConversationPolicy.Language);
 }
+
+public sealed record CapabilityLoadRequested(EventContext Context, Guid ResponseId, Guid Epoch, string ArgumentsJson,
+    AgentContext ProjectionContext, CancellationToken RequestCancellation, TaskCompletionSource<CapabilityLoadMailboxResult> Completed) : SessionInput(Context);
+public sealed record CapabilityLoadMailboxResult(string ToolResultJson, IReadOnlyList<string>? LoadedIds, string Outcome);

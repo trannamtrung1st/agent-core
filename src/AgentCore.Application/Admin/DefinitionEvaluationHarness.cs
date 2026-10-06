@@ -8,6 +8,11 @@ public static class DefinitionEvaluationHarness
 {
     public const string SystemPrefix = "DefinitionEvaluationHarness";
 
+    public static AgentContext? ToolContext(AgentCore.Domain.Definitions.AgentDefinition definition, string prompt) =>
+        definition.Environment?.Capabilities is null ? null : new(definition, [], "", null,
+            AgentCore.Domain.Conversation.SessionMode.Text, null, false, null,
+            new(Guid.Empty, TriggerKind.UserTurn, prompt));
+
     public static string BuildDirective(DefinitionEvaluationScenario scenario)
     {
         var builder = new StringBuilder(SystemPrefix);

@@ -178,7 +178,8 @@ export async function deleteAdminDefinition(
   }
 }
 
-export type AdminToolRegistry = { toolNames: string[]; maxToolAllowlistEntries: number };
+export type AdminCapabilityDescriptor = { name: string; category: string; summary: string; tags: string[]; discoverable: boolean; defaultProjectionClass: string; configured: boolean };
+export type AdminToolRegistry = { toolNames: string[]; maxToolAllowlistEntries: number | null; capabilities?: AdminCapabilityDescriptor[] };
 
 export async function getAdminToolRegistry(): Promise<AdminToolRegistry> {
   const response = await ownerFetch("/api/v2/admin/tools");
@@ -186,8 +187,7 @@ export async function getAdminToolRegistry(): Promise<AdminToolRegistry> {
     throw await adminProblemMessage(response, `Admin tool registry failed (${response.status})`);
   }
   const payload = (await response.json()) as AdminToolRegistry;
-  if (!Number.isInteger(payload.maxToolAllowlistEntries) || payload.maxToolAllowlistEntries < 1)
-    throw new Error("Admin tool registry is missing its allowlist limit. Reload the server and retry.");
+  if (!Array.isArray(payload.toolNames)) throw new Error("Admin capability catalog is unavailable. Retry loading it.");
   return payload;
 }
 

@@ -292,10 +292,12 @@ public sealed class DynamicSkillActivationTests
         Assert.Equal(0, pinned.SkillLoadCount);
     }
 
-    [Fact]
-    public async Task Recovery_reads_the_stored_pin_and_does_not_reselect_keywords()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Recovery_reads_the_stored_pin_and_does_not_reselect_keywords(bool capabilities)
     {
-        var model = new TerminalLanguageModel();
+        var model = new TerminalLanguageModel(capabilities);
         var turns = new InMemoryConversationTurnExecutionStore();
         var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-30T12:00:00Z"));
         var ids = new DeterministicIdGenerator(
@@ -305,6 +307,7 @@ public sealed class DynamicSkillActivationTests
         var definition = Definition(
             Skill("refund.handle", "REFUND_PROCEDURE", ["refund"]),
             Skill("order.lookup", "ORDER_PROCEDURE", ["order"]));
+        if (capabilities) definition = definition with { Environment = new(Capabilities: new("Selected", [ToolCatalog.CapabilitiesLoad, ToolCatalog.WorkspaceRead]), Projection: new([])) };
         var sessionId = ids.NewSessionId();
         var userId = Guid.Parse("019944af-00aa-7000-8000-0000000000aa");
         var user = new ConversationEntry(
@@ -364,6 +367,7 @@ public sealed class DynamicSkillActivationTests
             generation,
             ["order.lookup"],
             now.AddSeconds(1));
+        if (capabilities) admitted = await turns.AdmitCapabilitiesAsync(admitted.ExecutionId, admitted.Revision, generation, [ToolCatalog.WorkspaceRead], now.AddSeconds(1));
         Assert.Equal(1, await turns.RecoverExpiredClaimsAsync(now.AddMinutes(1)));
         Assert.Equal(["order.lookup"], admitted.PinnedActiveSkillIds);
 
@@ -387,6 +391,69 @@ public sealed class DynamicSkillActivationTests
         var reloaded = await turns.GetBySourceEventAsync(sessionId, userId);
         Assert.Equal(["order.lookup"], reloaded!.PinnedActiveSkillIds);
         Assert.Equal(1, reloaded.SkillLoadCount);
+        if (capabilities)
+        {
+            Assert.Equal([ToolCatalog.WorkspaceRead], reloaded.LoadedCapabilityIds);
+            Assert.Equal(1, reloaded.CapabilityLoadCount);
+            Assert.Contains(Assert.Single(model.Requests).Tools!, t => t.Name == ToolCatalog.WorkspaceRead);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Late_capability_load_cannot_mutate_cancelled_or_superseded_response(bool supersede)
+    {
+        var definition = Definition() with { Environment = new(Capabilities: new("Selected", [ToolCatalog.CapabilitiesLoad, ToolCatalog.WorkspaceRead]), Projection: new([])) };
+        var turns = new InMemoryConversationTurnExecutionStore();
+        var model = new LateCapabilityModel();
+        await using var runtime = Create(model, turns, definition);
+        await runtime.AttachAsync();
+        var first = Guid.NewGuid();
+        Assert.True(await runtime.SubmitPersistedUserTextAsync("first", first));
+        await model.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var execution = (await turns.GetBySourceEventAsync(runtime.SessionId, first))!;
+        var second = Guid.NewGuid();
+        if (supersede) Assert.True(await runtime.SubmitPersistedUserTextAsync("second", second));
+        else await runtime.CancelResponseAsync(execution.ResponseId);
+        model.Release.TrySetResult();
+        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        var stale = (await turns.GetBySourceEventAsync(runtime.SessionId, first))!;
+        Assert.Empty(stale.LoadedCapabilityIds);
+        Assert.Equal(0, stale.CapabilityLoadCount);
+        if (supersede)
+        {
+            var current = (await turns.GetBySourceEventAsync(runtime.SessionId, second))!;
+            Assert.Empty(current.LoadedCapabilityIds);
+            Assert.Equal(0, current.CapabilityLoadCount);
+            Assert.DoesNotContain(ToolCatalog.WorkspaceRead, model.CurrentTools!);
+        }
+    }
+    private sealed class LateCapabilityModel : ILanguageModel
+    {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public string[]? CurrentTools { get; private set; }
+        private int _calls;
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true);
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Increment(ref _calls) == 1)
+            {
+                Entered.TrySetResult();
+                await Release.Task; // Deliberately non-cooperative late provider callback.
+                yield return new ModelToolCallEvent(new("late-load", ToolCatalog.CapabilitiesLoad, "{\"query\":\"workspace.read\"}"));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            }
+            else
+            {
+                CurrentTools = request.Tools?.Select(t => t.Name).ToArray();
+                yield return new ModelDisplayDelta("Current response");
+                yield return new ModelSemanticResponseReady(new("Current response", new(ModelSpeechMode.Same, null), []));
+                yield return new ModelCompleted(ModelStopReason.Completed);
+            }
+        }
     }
 
     private static string Text(ModelRequest request) =>
@@ -551,11 +618,11 @@ public sealed class DynamicSkillActivationTests
         }
     }
 
-    private sealed class TerminalLanguageModel : ILanguageModel
+    private sealed class TerminalLanguageModel(bool tools = false) : ILanguageModel
     {
         public List<ModelRequest> Requests { get; } = [];
 
-        public ModelCapabilities Capabilities { get; } = new(true, true);
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: tools);
 
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
             ModelRequest request,

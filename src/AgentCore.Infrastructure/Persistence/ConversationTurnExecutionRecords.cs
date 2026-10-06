@@ -52,5 +52,8 @@ public sealed class ConversationTurnExecutionRecord
 
     public string? PinnedActiveSkillIdsJson { get; set; }
 
+    public string? LoadedCapabilityIdsJson { get; set; }
+    public int CapabilityLoadCount { get; set; }
+
     public int SkillLoadCount { get; set; }
 }

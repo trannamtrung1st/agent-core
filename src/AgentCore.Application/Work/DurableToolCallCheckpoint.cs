@@ -51,8 +51,8 @@ public static class DurableToolCallCheckpoint
     }
 
     public static bool TryWriteWithReserve(IReadOnlyList<ModelMessage> messages, bool observationRequired,
-        string? blockedActionHash, int reserve, out string payload) =>
-        TryWrite(messages, observationRequired, blockedActionHash, out payload)
+        string? blockedActionHash, int reserve, out string payload, IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0) =>
+        TryWrite(messages, observationRequired, blockedActionHash, out payload, loadedCapabilityIds, capabilityLoadCount)
         && Encoding.UTF8.GetByteCount(payload) + RecoveryHeadroom(blockedActionHash) + reserve <= WorkLimits.MaxCheckpointBytes;
 
     public static IReadOnlyList<ModelToolCall> PendingCalls(IReadOnlyList<ModelMessage> messages)
@@ -173,26 +173,27 @@ public static class DurableToolCallCheckpoint
     public static string Write(
         IReadOnlyList<ModelMessage> messages,
         bool observationRequired = false,
-        string? blockedActionHash = null) =>
+        string? blockedActionHash = null, IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0) =>
         JsonSerializer.Serialize(new Document(
             Phase,
             messages.Select(MessageDto.From).ToArray(),
             observationRequired,
-            blockedActionHash), CheckpointJson);
+            blockedActionHash, loadedCapabilityIds, capabilityLoadCount), CheckpointJson);
 
     public static bool TryWrite(IReadOnlyList<ModelMessage> messages, bool observationRequired,
-        string? blockedActionHash, out string payload)
+        string? blockedActionHash, out string payload, IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0)
     {
-        payload = Write(messages, observationRequired, blockedActionHash);
+        payload = Write(messages, observationRequired, blockedActionHash, loadedCapabilityIds, capabilityLoadCount);
         return Encoding.UTF8.GetByteCount(payload) + RecoveryHeadroom(blockedActionHash) <= WorkLimits.MaxCheckpointBytes;
     }
 
     public static int ToolResultBudget(IReadOnlyList<ModelMessage> messages, ModelToolCall call,
-        bool observationRequired, string? blockedActionHash, TriggerKind kind = TriggerKind.ScheduledOccurrence)
+        bool observationRequired, string? blockedActionHash, TriggerKind kind = TriggerKind.ScheduledOccurrence,
+        IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0)
     {
         var withResult = messages.Append(new ModelMessage(ModelRole.Tool, string.Empty,
             ToolCallId: call.Id, Name: call.Name)).ToArray();
-        var overhead = Encoding.UTF8.GetByteCount(Write(withResult, observationRequired, blockedActionHash));
+        var overhead = Encoding.UTF8.GetByteCount(Write(withResult, observationRequired, blockedActionHash, loadedCapabilityIds, capabilityLoadCount));
         // A UTF-8 byte can expand to six bytes in a JSON string (for example, a control character).
         // Tool adapters receive a conservative text budget; admission still checks the exact document.
         return Math.Max(0, WorkLimits.MaxCheckpointBytes - overhead - RecoveryHeadroom(blockedActionHash) - CompletionReserve(kind) - FinishRequiredReserve()) / 6;
@@ -269,11 +270,24 @@ public static class DurableToolCallCheckpoint
         }
     }
 
+    public static (IReadOnlyList<string> Ids, int Calls) ReadCapabilityState(WorkCheckpoint? checkpoint)
+    {
+        if (checkpoint is null) return ([], 0);
+        var document = JsonSerializer.Deserialize<Document>(checkpoint.PayloadJson);
+        var ids = document?.LoadedCapabilityIds ?? [];
+        var calls = document?.CapabilityLoadCount ?? 0;
+        if (calls is < 0 or > 8 || ids.Count > 64 || AgentCore.Domain.Definitions.AgentDefinitionValidator.ToolAllowlistFindings(ids).Count > 0)
+            throw AgentCore.Application.Sessions.AgentCoreErrors.Conflict("Capability checkpoint state is invalid.");
+        return (ids, calls);
+    }
+
     private sealed record Document(
         string Phase,
         MessageDto[] Messages,
         bool ObservationRequired = false,
-        string? BlockedActionHash = null);
+        string? BlockedActionHash = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? LoadedCapabilityIds = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int CapabilityLoadCount = 0);
 
     private sealed record MessageDto(
         string Role,

@@ -178,6 +178,8 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
 
+        var capabilities = CapabilityProjectionScript.Generate(request);
+        if (capabilities is not null) { foreach (var item in capabilities) yield return item; yield break; }
         var workspaceV2 = AgentWorkspaceV2Script.Generate(request);
         if (workspaceV2 is not null)
         {

@@ -705,8 +705,11 @@ public sealed class HarnessManagementService(
             case "tool.select":
                 await lifecycle.UpdateDraftAsync(draft.DraftId, draft.Revision, candidate with { Environment = environment with
                 {
-                    ToolAllowlist = operation.Enabled == true ? environment.ToolList.Append(operation.Id!).Distinct().ToArray()
-                        : environment.ToolList.Where(t => t != operation.Id).ToArray()
+                    ToolAllowlist = environment.Capabilities is null ? (operation.Enabled == true ? environment.ToolList.Append(operation.Id!).Distinct().ToArray()
+                        : environment.ToolList.Where(t => t != operation.Id).ToArray()) : null,
+                    Capabilities = environment.Capabilities is null ? null : new CapabilityAuthorization("Selected", operation.Enabled == true
+                        ? environment.ToolList.Append(operation.Id!).Distinct().ToArray() : environment.ToolList.Where(t => t != operation.Id).ToArray()),
+                    Projection = environment.Projection is null ? null : new CapabilityProjectionPolicy(environment.Projection.AlwaysCapabilities.Where(t => operation.Enabled == true || t != operation.Id).ToArray())
                 } }, ct, history: DraftEvent(instance, draft, operation.Kind, "CandidateCommitted"));
                 break;
             case "tool.configure":

@@ -1,5 +1,14 @@
 # Backend Interfaces
 
+## Capability projection interfaces
+
+Domain owns `CapabilityAuthorization` and `CapabilityProjectionPolicy`. Application `CapabilityAuthorizationResolver` materializes Selected/All grants as exact publication snapshots. `ToolDescriptor` supplies trusted category, bounded summary, tags, discoverability and projection class. `ToolProjectionService` produces ordinary `ModelToolDefinition[]`; `PromptContextBuilder.OfferTools` stays a thin caller. Provider ports remain unchanged.
+
+`capabilities.load` accepts only `{query,limit?}` (1–200 characters, default four / maximum eight matches). Search ranks exact name, category, tags and description overlap deterministically within authorized, discoverable, currently eligible tools. Results contain loaded names/summaries, bounded already-projected names and no configuration details or schemas. Eight load invocations bound one execution; this is an operational discovery bound, not an authority or projected-schema ceiling.
+
+`IConversationTurnExecutionStore.AdmitCapabilitiesAsync` atomically guards revision, claim generation, Running status and cancellation; Domain carries `LoadedCapabilityIds` and `CapabilityLoadCount` through recovery transitions. No loaded IDs enter mutable Agent Instance preferences or provider DTOs. WorkItems reuse their bounded checkpoint and claim guards.
+
+
 ## Managed workspace refinement ports
 
 `WorkspaceTemplatePolicy.Semantics` is null for compatibility or `agentWorkspaceV2` for explicit managed opt-in. `WorkspaceSemantics.IsV2` is the shared pure predicate. `ToolExecutionAdmission.WorkspaceCwd` carries a runtime snapshot; `ToolExecutionResult.WorkspaceCwd` is a typed proposed metadata effect. Only the fenced Session mailbox commits that effect. `workspace.cwd` uses one get/set contract, remains independently allowlisted, and requires actual managed workspace availability.
