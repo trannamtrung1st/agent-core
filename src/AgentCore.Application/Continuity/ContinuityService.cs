@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text;
 using System.Text.RegularExpressions;
 using AgentCore.Application.Experience;
 using AgentCore.Application.Agents;
@@ -129,6 +130,22 @@ public sealed class ContinuityService(ExperienceService experience, IExperienceS
         catch (AgentCoreException ex) when (ex.StatusCode == 404) { return ""; }
         var body = JsonSerializer.Serialize(items, Json);
         return TrustLabel + "\nBEGIN_CORE_CONTINUITY_JSON\n" + body + "\nEND_CORE_CONTINUITY_JSON";
+    }
+
+    public static string SearchResult(IReadOnlyList<ContinuityItem> items, int budget)
+    {
+        var kept = new List<ContinuityItem>();
+        foreach (var item in items)
+        {
+            var candidate = Serialize(new { trust = TrustLabel, result = kept.Append(item).ToArray(), truncated = kept.Count + 1 < items.Count });
+            if (Encoding.UTF8.GetByteCount(candidate) > budget) break;
+            kept.Add(item);
+        }
+        if (items.Count > 0 && kept.Count == 0)
+            return Work.DurableToolCallCheckpoint.FinishRequiredResult(budget);
+        var json = Serialize(new { trust = TrustLabel, result = kept, truncated = kept.Count < items.Count });
+        return Encoding.UTF8.GetByteCount(json) <= budget ? json
+            : Work.DurableToolCallCheckpoint.FinishRequiredResult(budget);
     }
 
     public static string Serialize(object value) => JsonSerializer.Serialize(value, Json);

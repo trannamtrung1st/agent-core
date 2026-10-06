@@ -245,7 +245,9 @@ public sealed partial class SessionToolExecutor(
                         return TextResult(Error("invalid", "Unsupported continuity argument."));
                     var query = args.GetProperty("query").GetString();
                     var limit = args.TryGetProperty("limit", out var l) ? l.GetInt32() : 10;
-                    result = await continuity.SearchAsync(ownerId, query, limit, admission.Detached ? null : sessionId, definition, cancellationToken);
+                    var items = await continuity.SearchAsync(ownerId, query, limit, admission.Detached ? null : sessionId, definition, cancellationToken);
+                    return TextResult(AgentCore.Application.Continuity.ContinuityService.SearchResult(items,
+                        Math.Min(remainingOutputBytes, AgentCore.Application.Continuity.ContinuityService.MaxCharacters)));
                 }
                 else
                 {

@@ -108,7 +108,7 @@ public sealed class PromptContextBuilder(
         {
             messages.Add(new ModelMessage(ModelRole.System, sections.AttachmentManifestSystem));
         }
-        if (context.ModelSupportsTools && !string.IsNullOrWhiteSpace(context.ContinuityContext))
+        if (context.ModelSupportsTools && (context.AllowAgentConsolidation || !string.IsNullOrWhiteSpace(context.ContinuityContext)))
             messages.Add(new ModelMessage(ModelRole.System, AgentCore.Application.Continuity.IdentityMaintenanceService.Guidance));
         if (!string.IsNullOrWhiteSpace(context.ContinuityContext))
         {

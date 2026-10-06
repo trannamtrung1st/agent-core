@@ -211,7 +211,13 @@ public sealed class DurableOccurrenceExecution(
                 return new DurableOccurrenceFailed(running, "tool-step-limit", "Tool step limit reached.");
             }
 
-            messages.Add(new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: pending));
+            var terminalBatch = pending.Count == 1 && pending[0].Name == ToolCatalog.WorkComplete;
+            if (terminalBatch) pending[0] = pending[0] with { Id = DurableToolCallCheckpoint.CompletionCallId };
+            var batch = messages.Append(new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: pending)).ToArray();
+            if (!terminalBatch && !DurableToolCallCheckpoint.TryWriteWithReserve(batch, observationRequired,
+                blockedActionHash, DurableToolCallCheckpoint.CompletionReserve(triggerKind), out _))
+                return CheckpointCapacityFailure();
+            messages.Add(batch[^1]);
             steps += pending.Count;
             if (!await SaveCheckpointAsync().ConfigureAwait(false)) return CheckpointCapacityFailure();
             foreach (var call in pending)
@@ -283,6 +289,9 @@ public sealed class DurableOccurrenceExecution(
                     false)
                     .ConfigureAwait(false);
             }
+
+            if (call.Name != ToolCatalog.WorkComplete && messages.Any(m => m.Role == ModelRole.Tool
+                && IsFinishRequired(m.Text))) return CheckpointCapacityFailure();
 
             // A persisted uncertain external effect remains terminal even if current policy denies the call.
             // Policy changes cannot erase the recovery fence or turn it into a replayable retry.
@@ -373,6 +382,11 @@ public sealed class DurableOccurrenceExecution(
                 return new DurableOccurrenceCompleted(running, summary, attentionRequired);
             }
 
+            var resultBudget = Math.Min(RemainingOutput(outputBytes),
+                DurableToolCallCheckpoint.ToolResultBudget(messages, call, observationRequired, blockedActionHash, triggerKind));
+            if (resultBudget < 128)
+                return await AppendResultAsync(call, ToolExecutionResult.FromText(DurableToolCallCheckpoint.FinishRequired), false);
+
             if (policy == ToolPolicyDecision.RequireApproval && !ApprovedFor(running, call, hash))
             {
                 if (running.Approval is { } decided
@@ -391,9 +405,6 @@ public sealed class DurableOccurrenceExecution(
             }
 
             var needsApproval = policy == ToolPolicyDecision.RequireApproval;
-            var resultBudget = Math.Min(RemainingOutput(outputBytes),
-                DurableToolCallCheckpoint.ToolResultBudget(messages, call, observationRequired, blockedActionHash));
-            if (resultBudget < 128) return CheckpointCapacityFailure();
             var dispatchFenced = !uncertainBrowserAct
                 && (needsApproval || ToolCatalog.ReplaySafetyOf(call.Name) != ToolReplaySafety.ReplaySafe);
             if (dispatchFenced)
@@ -599,10 +610,12 @@ public sealed class DurableOccurrenceExecution(
             execution = ToolResultAdmission.AdmitForModel(model, execution);
             var resultMessage = new ModelMessage(ModelRole.Tool, execution.Text, Parts: execution.Parts,
                 ToolCallId: call.Id, Name: call.Name);
-            if (!DurableToolCallCheckpoint.TryWrite(messages.Append(resultMessage).ToArray(),
-                observationRequired, blockedActionHash, out _))
+            var reserve = DurableToolCallCheckpoint.CompletionReserve(triggerKind)
+                + (IsFinishRequired(execution.Text) ? 0 : DurableToolCallCheckpoint.FinishRequiredReserve());
+            if (!DurableToolCallCheckpoint.TryWriteWithReserve(messages.Append(resultMessage).ToArray(),
+                observationRequired, blockedActionHash, reserve, out _))
             {
-                var budget = DurableToolCallCheckpoint.ToolResultBudget(messages, call, observationRequired, blockedActionHash);
+                var budget = DurableToolCallCheckpoint.ToolResultBudget(messages, call, observationRequired, blockedActionHash, triggerKind);
                 if (budget < 128) return CheckpointCapacityFailure();
                 var bounded = ToolJsonResults.FitJsonWithContentField(budget, execution.Text, (prefix, _) =>
                     JsonSerializer.Serialize(new { truncated = true, reason = "checkpoint_capacity", resultPrefix = prefix }));
@@ -640,6 +653,13 @@ public sealed class DurableOccurrenceExecution(
             }
 
             return null;
+        }
+
+        static bool IsFinishRequired(string text)
+        {
+            try { using var json = JsonDocument.Parse(text); return json.RootElement.ValueKind == JsonValueKind.Object && json.RootElement.TryGetProperty("error", out var error)
+                && error.ValueKind == JsonValueKind.String && error.GetString() == "finish_required"; }
+            catch (JsonException) { return false; }
         }
 
         DurableOccurrenceFailed CheckpointCapacityFailure() => new(running, "checkpoint-capacity",

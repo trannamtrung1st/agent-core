@@ -166,6 +166,7 @@ public sealed class InteractionControllerTests
     {
         var harness = await LiveGeneratingAsync();
         var r1 = harness.Runtime.ActiveResponseId;
+        await harness.Model.FirstCallStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await harness.Runtime.SubmitUserTextAsync("Second turn");
         var deadline = DateTime.UtcNow.AddSeconds(10);
         while (DateTime.UtcNow < deadline
@@ -377,6 +378,7 @@ public sealed class InteractionControllerTests
 public sealed class GatedThenLiveModel : ILanguageModel
 {
     public TaskCompletionSource Gate { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public TaskCompletionSource FirstCallStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public int Calls { get; private set; }
 
@@ -405,6 +407,7 @@ public sealed class GatedThenLiveModel : ILanguageModel
 
         if (call == 1)
         {
+            FirstCallStarted.TrySetResult();
             yield return new ModelTextDelta("R1a");
             await Gate.Task.ConfigureAwait(false);
             yield return new ModelTextDelta("R1b");

@@ -1,5 +1,7 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Encodings.Web;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Work;
@@ -8,6 +10,49 @@ namespace AgentCore.Application.Work;
 
 public static class DurableToolCallCheckpoint
 {
+    public const string CompletionCallId = "work-complete";
+    public const string FinishRequired = """{"error":"finish_required","reason":"checkpoint_capacity","message":"Finish from evidence already collected; do not request more tools."}""";
+    public static string FinishRequiredResult(int budget) => Encoding.UTF8.GetByteCount(FinishRequired) <= budget ? FinishRequired
+        : budget >= "{\"error\":\"finish_required\"}".Length ? "{\"error\":\"finish_required\"}"
+        : ToolJsonResults.MinimalValidJson(Math.Max(0, budget));
+    // Checkpoints are data, never HTML. Relaxed encoding keeps the compact terminal base64 alphabet unescaped.
+    private static readonly JsonSerializerOptions CheckpointJson = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+    private static readonly Lazy<int> ThoughtReserve = new(() => ComputeCompletionReserve(TriggerKind.ThoughtActivation));
+    private static readonly Lazy<int> OccurrenceReserve = new(() => ComputeCompletionReserve(TriggerKind.ScheduledOccurrence));
+    private static readonly Lazy<int> CapacityResponseReserve = new(ComputeFinishRequiredReserve);
+    public static int CompletionReserve(TriggerKind kind) => kind == TriggerKind.ThoughtActivation ? ThoughtReserve.Value : OccurrenceReserve.Value;
+    public static int FinishRequiredReserve() => CapacityResponseReserve.Value;
+
+    private static int ComputeCompletionReserve(TriggerKind kind)
+    {
+        var contract = kind == TriggerKind.ThoughtActivation ? ThoughtCompletion.Contract
+            : ToolRegistry.All.Single(t => t.Name == ToolCatalog.WorkComplete).ModelDefinition;
+        using var schema = JsonDocument.Parse(contract.ParametersJson);
+        var max = schema.RootElement.GetProperty("properties").GetProperty("summary").GetProperty("maxLength").GetInt32();
+        var args = kind == TriggerKind.ThoughtActivation
+            ? JsonSerializer.Serialize(new { summary = new string('x', max), attentionRequired = true, outcome = "AttentionRequested" })
+            : JsonSerializer.Serialize(new { summary = new string('x', max), attentionRequired = false });
+        return Encoding.UTF8.GetByteCount(Write([new(ModelRole.Assistant, "", ToolCalls:
+            [new(CompletionCallId, ToolCatalog.WorkComplete, args)])])) - Encoding.UTF8.GetByteCount(Write([]));
+    }
+
+    private static int ComputeFinishRequiredReserve()
+    {
+        // One bounded Continuity search can be refused without consuming mandatory terminal space.
+        using var schema = JsonDocument.Parse(ToolRegistry.All.Single(t => t.Name == ToolCatalog.ContinuitySearch).ModelDefinition.ParametersJson);
+        var max = schema.RootElement.GetProperty("properties").GetProperty("query").GetProperty("maxLength").GetInt32();
+        var call = new ModelToolCall(new string('x', WorkLimits.MaxToolNameCharacters), ToolCatalog.ContinuitySearch,
+            JsonSerializer.Serialize(new { query = new string('\u0001', max), limit = 10 }));
+        return Encoding.UTF8.GetByteCount(Write([new(ModelRole.Assistant, "", ToolCalls: [call]),
+            new(ModelRole.Tool, FinishRequired, ToolCallId: call.Id, Name: call.Name)])) - Encoding.UTF8.GetByteCount(Write([]));
+    }
+
+    public static bool TryWriteWithReserve(IReadOnlyList<ModelMessage> messages, bool observationRequired,
+        string? blockedActionHash, int reserve, out string payload) =>
+        TryWrite(messages, observationRequired, blockedActionHash, out payload)
+        && Encoding.UTF8.GetByteCount(payload) + RecoveryHeadroom(blockedActionHash) + reserve <= WorkLimits.MaxCheckpointBytes;
+
     public static IReadOnlyList<ModelToolCall> PendingCalls(IReadOnlyList<ModelMessage> messages)
     {
         var batchIndex = FindLatestAssistantToolBatchIndex(messages);
@@ -131,7 +176,7 @@ public static class DurableToolCallCheckpoint
             Phase,
             messages.Select(MessageDto.From).ToArray(),
             observationRequired,
-            blockedActionHash));
+            blockedActionHash), CheckpointJson);
 
     public static bool TryWrite(IReadOnlyList<ModelMessage> messages, bool observationRequired,
         string? blockedActionHash, out string payload)
@@ -141,14 +186,14 @@ public static class DurableToolCallCheckpoint
     }
 
     public static int ToolResultBudget(IReadOnlyList<ModelMessage> messages, ModelToolCall call,
-        bool observationRequired, string? blockedActionHash)
+        bool observationRequired, string? blockedActionHash, TriggerKind kind = TriggerKind.ScheduledOccurrence)
     {
         var withResult = messages.Append(new ModelMessage(ModelRole.Tool, string.Empty,
             ToolCallId: call.Id, Name: call.Name)).ToArray();
         var overhead = Encoding.UTF8.GetByteCount(Write(withResult, observationRequired, blockedActionHash));
         // A UTF-8 byte can expand to six bytes in a JSON string (for example, a control character).
         // Tool adapters receive a conservative text budget; admission still checks the exact document.
-        return Math.Max(0, WorkLimits.MaxCheckpointBytes - overhead - RecoveryHeadroom(blockedActionHash)) / 6;
+        return Math.Max(0, WorkLimits.MaxCheckpointBytes - overhead - RecoveryHeadroom(blockedActionHash) - CompletionReserve(kind) - FinishRequiredReserve()) / 6;
     }
 
     // Recovery may need to persist a SHA-256 blocked-action hash without replaying an uncertain browser effect.
@@ -216,7 +261,7 @@ public static class DurableToolCallCheckpoint
             blockedActionHash = document.BlockedActionHash;
             return true;
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or FormatException)
         {
             return false;
         }
@@ -241,7 +286,7 @@ public static class DurableToolCallCheckpoint
                 message.Text,
                 message.ToolCallId,
                 message.Name,
-                message.ToolCalls?.Select(call => new ToolCallDto(call.Id, call.Name, call.ArgumentsJson)).ToArray());
+                message.ToolCalls?.Select(ToolCallDto.From).ToArray());
         // Parts stay out of the checkpoint. A browser.capture result keeps its artifact id in text and is reloaded from IWorkCaptureStore.
 
         public ModelMessage ToMessage() =>
@@ -250,8 +295,45 @@ public static class DurableToolCallCheckpoint
                 Text,
                 ToolCallId: ToolCallId,
                 Name: Name,
-                ToolCalls: ToolCalls?.Select(call => new ModelToolCall(call.Id, call.Name, call.ArgumentsJson)).ToArray());
+                ToolCalls: ToolCalls?.Select(call => new ModelToolCall(call.Id, call.Name, call.Completion?.ArgumentsJson() ?? call.ArgumentsJson!)).ToArray());
     }
 
-    private sealed record ToolCallDto(string Id, string Name, string ArgumentsJson);
+    // Optional compact completion data preserves old checkpoints and avoids double JSON escaping of a
+    // maximum valid summary. UTF-16 base64 has a fixed bound for every .NET character, independent of content.
+    private sealed record ToolCallDto(string Id, string Name, string? ArgumentsJson,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CompletionDto? Completion = null)
+    {
+        public static ToolCallDto From(ModelToolCall call)
+        {
+            if (call.Name == ToolCatalog.WorkComplete)
+            {
+                try
+                {
+                    using var json = JsonDocument.Parse(call.ArgumentsJson);
+                    var args = json.RootElement;
+                    if (args.ValueKind != JsonValueKind.Object) return new(call.Id, call.Name, call.ArgumentsJson);
+                    string summary; bool attention;
+                    var thought = args.TryGetProperty("outcome", out var outcome);
+                    if (thought ? ThoughtCompletion.TryParse(args, [], out var result, out attention, out _)
+                        : WorkCompletionRequest.TryParse(args, out result, out attention, out _))
+                    {
+                        summary = thought ? ThoughtCompletion.Summary(result) : result;
+                        return new(call.Id, call.Name, null, new(Convert.ToBase64String(Encoding.Unicode.GetBytes(summary)), attention,
+                            thought ? outcome.GetString() : null));
+                    }
+                }
+                catch (JsonException) { }
+            }
+            return new(call.Id, call.Name, call.ArgumentsJson);
+        }
+    }
+    private sealed record CompletionDto(string SummaryUtf16, bool AttentionRequired, string? Outcome)
+    {
+        public string ArgumentsJson()
+        {
+            var summary = Encoding.Unicode.GetString(Convert.FromBase64String(SummaryUtf16));
+            return Outcome is null ? JsonSerializer.Serialize(new { summary, attentionRequired = AttentionRequired })
+                : JsonSerializer.Serialize(new { summary, attentionRequired = AttentionRequired, outcome = Outcome });
+        }
+    }
 }
