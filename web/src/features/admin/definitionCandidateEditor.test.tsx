@@ -1,4 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
+import { applyCandidateJson, candidateForPersistence, candidateToJson, type DefinitionCandidate } from "./definitionCandidate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminApp } from "./AdminApp";
 import { DefinitionCandidateEditor } from "./definitionCandidateEditor";
@@ -203,20 +205,44 @@ async function openDraft() {
   await waitFor(() => {
     expect(screen.getByRole("button", { name: /Draft rev 2/ })).toBeInTheDocument();
   });
-  fireEvent.click(screen.getByRole("button", { name: /Draft rev 2/ }));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Draft rev 2/ })); });
   await waitFor(() => {
     expect(screen.getByLabelText("System instructions")).toBeInTheDocument();
     expect(screen.getByTitle("Scripted Alpha")).toBeInTheDocument();
   });
 }
 
+// Exercise the controlled form without loading inventory, version tables, resources,
+// and publication gates. The AdminApp tests below retain save/revision and tab wiring.
+async function renderCandidate(candidate: DefinitionCandidate = storedCandidate) {
+  vi.mocked(listAdminAuthoringOptions).mockResolvedValue(authoringOptions);
+  const changed = vi.fn<(candidate: DefinitionCandidate) => void>();
+  function ControlledEditor() {
+    const [value, setValue] = useState(candidate);
+    const [view, setView] = useState<"form" | "json">("form");
+    return <DefinitionCandidateEditor
+      candidate={value} view={view} jsonText={candidateToJson(value)} busy={false}
+      onCandidateChange={next => { changed(next); setValue(next); }}
+      onJsonTextChange={text => {
+        const parsed = applyCandidateJson(text);
+        if (parsed.ok) { changed(parsed.candidate); setValue(parsed.candidate); }
+      }}
+      onViewChange={setView}
+    />;
+  }
+  await act(async () => { render(<ControlledEditor />); });
+  expect(await screen.findByTitle("Scripted Alpha")).toBeInTheDocument();
+  return changed;
+}
+
 async function chooseOption(label: string, optionName: string) {
-  fireEvent.mouseDown(screen.getByRole("combobox", { name: label }));
-  fireEvent.click(await screen.findByTitle(optionName));
+  fireEvent.mouseDown(screen.getByLabelText(label));
+  const option = await screen.findByTitle(optionName);
+  await act(async () => { fireEvent.click(option); });
 }
 
 function setSpin(label: string, value: string) {
-  fireEvent.change(screen.getByRole("spinbutton", { name: label }), { target: { value } });
+  fireEvent.change(screen.getByLabelText(label), { target: { value } });
 }
 
 function setText(label: string, value: string) {
@@ -229,7 +255,7 @@ describe("definition candidate editor", () => {
   });
 
   it("round-trips a skill through form and JSON and keeps a forked skill", async () => {
-    mockDraft({
+    const changed = await renderCandidate({
       ...storedCandidate,
       skills: [
         {
@@ -243,7 +269,6 @@ describe("definition candidate editor", () => {
         }
       ]
     });
-    await openDraft();
 
     expect(screen.getByText(/Required capabilities are requirements, not grants/)).toBeInTheDocument();
     expect(screen.getByLabelText("Skill 1 procedure")).toHaveValue("ORDER_PROCEDURE");
@@ -275,35 +300,34 @@ describe("definition candidate editor", () => {
     expect(screen.getByLabelText("Skill 2 procedure")).toHaveValue("REFUND_PROCEDURE_EDITED");
     expect(screen.getByLabelText("Skill 1 procedure")).toHaveValue("ORDER_PROCEDURE");
 
-    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
-    await waitFor(() => {
-      expect(updateAdminDefinitionDraft).toHaveBeenCalled();
-    });
-    const saved = vi.mocked(updateAdminDefinitionDraft).mock.calls[0]?.[2] as {
+    const saved = candidateForPersistence(changed.mock.lastCall![0]) as {
       skills: Array<{ id: string; procedure: string; requiredCapabilities: string[] }>;
     };
     expect(saved.skills.map((skill) => skill.id)).toEqual(["order.lookup", "refund.handle"]);
     expect(saved.skills[1]?.procedure).toBe("REFUND_PROCEDURE_EDITED");
     expect(saved.skills[1]?.requiredCapabilities).toEqual(["workspace.read", "chat.respond"]);
-    // The full suite under local load exceeded the 15s default.
-  }, 60_000);
+  });
 
   it("edits every supported candidate area through the form and saves that candidate", async () => {
-    mockDraft();
+    mockDraft({ ...storedCandidate, skills: [{
+      id: "refund.handle", name: "Refund", description: "Handle a refund",
+      procedure: "REFUND_PROCEDURE", activationKeywords: ["refund", "return"],
+      requiredCapabilities: ["workspace.read", "chat.respond"], resourcePaths: ["notes/refund.md"]
+    }] });
     await openDraft();
 
     expect(screen.getByLabelText("Definition ID")).toHaveTextContent("examiner");
     expect(screen.queryByRole("textbox", { name: "Definition ID" })).not.toBeInTheDocument();
-    expect(screen.getByRole("spinbutton", { name: "Silence threshold" })).toHaveAccessibleDescription(
+    expect(screen.getByLabelText("Silence threshold")).toHaveAccessibleDescription(
       "Milliseconds. 1,000 to 120,000."
     );
-    expect(screen.getByRole("spinbutton", { name: "Cooldown" })).toHaveAccessibleDescription(
+    expect(screen.getByLabelText("Cooldown")).toHaveAccessibleDescription(
       "Milliseconds. 5,000 to 600,000."
     );
-    expect(screen.getByRole("spinbutton", { name: "Max inactivity" })).toHaveAccessibleDescription(
+    expect(screen.getByLabelText("Max inactivity")).toHaveAccessibleDescription(
       "Milliseconds. Empty uses 900,000."
     );
-    expect(screen.getByRole("spinbutton", { name: "Silence threshold" })).toHaveValue("3000");
+    expect(screen.getByLabelText("Silence threshold")).toHaveValue("3000");
     expect(screen.getByLabelText("Conversation language")).toHaveAccessibleDescription(
       "auto, or a BCP 47 tag such as en."
     );
@@ -318,14 +342,15 @@ describe("definition candidate editor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add goal" }));
     setText("Goal 2", "Keep answers short");
     setText("System instructions", "Edited instructions");
+    setText("Skill 1 procedure", "REFUND_PROCEDURE_EDITED");
     await chooseOption("Interruption style", "Answer the new turn");
-    fireEvent.click(screen.getByRole("switch", { name: "Acknowledge interruption" }));
-    fireEvent.click(screen.getByRole("switch", { name: "Avoid unsupported claims" }));
+    fireEvent.click(screen.getByLabelText("Acknowledge interruption"));
+    fireEvent.click(screen.getByLabelText("Avoid unsupported claims"));
     await chooseOption("Response length", "Balanced");
     setText("Conversation language", "en");
     setSpin("Max output tokens", "512");
-    fireEvent.click(screen.getByRole("switch", { name: "Ask one question at a time" }));
-    fireEvent.click(screen.getByRole("switch", { name: "Initiative enabled" }));
+    fireEvent.click(screen.getByLabelText("Ask one question at a time"));
+    fireEvent.click(screen.getByLabelText("Initiative enabled"));
     setSpin("Silence threshold", "4000");
     setSpin("Cooldown", "20000");
     setSpin("Max prompts per silence", "2");
@@ -336,21 +361,21 @@ describe("definition candidate editor", () => {
     await chooseOption("Reasoning", "Medium");
     await chooseOption("Model", "Scripted Beta");
     await chooseOption("Language-model provider", "backup-llm");
-    fireEvent.click(screen.getByRole("switch", { name: "Voice enabled" }));
+    fireEvent.click(screen.getByLabelText("Voice enabled"));
     setText("Voice id", "alloy");
     setSpin("Speaking rate", "1.2");
-    fireEvent.click(screen.getByRole("switch", { name: "Session memory" }));
-    fireEvent.click(screen.getByRole("switch", { name: "Identity user promotion" }));
-    fireEvent.click(screen.getByRole("switch", { name: "Identity user retrieval" }));
-    fireEvent.click(screen.getByRole("switch", { name: "User promotion" }));
-    fireEvent.click(screen.getByRole("switch", { name: "User retrieval" }));
-    fireEvent.click(screen.getByRole("switch", { name: "Automation enabled" }));
-    fireEvent.click(screen.getByRole("switch", { name: "Allow user scheduling" }));
-    fireEvent.click(screen.getByRole("switch", { name: "Allow one-shot" }));
-    fireEvent.click(screen.getByRole("switch", { name: "Allow daily" }));
-    fireEvent.click(screen.getByRole("switch", { name: "Allow weekly" }));
-    fireEvent.click(screen.getByRole("switch", { name: "Allow indefinite recurrence" }));
-    fireEvent.click(screen.getByRole("switch", { name: "Allow fixed interval" }));
+    fireEvent.click(screen.getByLabelText("Session memory"));
+    fireEvent.click(screen.getByLabelText("Identity user promotion"));
+    fireEvent.click(screen.getByLabelText("Identity user retrieval"));
+    fireEvent.click(screen.getByLabelText("User promotion"));
+    fireEvent.click(screen.getByLabelText("User retrieval"));
+    fireEvent.click(screen.getByLabelText("Automation enabled"));
+    fireEvent.click(screen.getByLabelText("Allow user scheduling"));
+    fireEvent.click(screen.getByLabelText("Allow one-shot"));
+    fireEvent.click(screen.getByLabelText("Allow daily"));
+    fireEvent.click(screen.getByLabelText("Allow weekly"));
+    fireEvent.click(screen.getByLabelText("Allow indefinite recurrence"));
+    fireEvent.click(screen.getByLabelText("Allow fixed interval"));
     setSpin("Max active registrations", "8");
     setSpin("One-shot horizon days", "14");
     setSpin("Minimum recurrence days", "2");
@@ -359,7 +384,7 @@ describe("definition candidate editor", () => {
     setText("Metadata key 1", "team");
     setText("Metadata value 1", "platform");
 
-    fireEvent.click(screen.getByRole("tab", { name: "Capabilities" }));
+    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Capabilities" })); });
     const harness = screen.getByLabelText("Harness labels");
     fireEvent.mouseDown(harness);
     fireEvent.change(harness, { target: { value: "lab-harness" } });
@@ -370,9 +395,9 @@ describe("definition candidate editor", () => {
     setText("Knowledge title 1", "Refund Policy");
     setText("Knowledge citation 1", "refund-policy@v3");
     setText("Workspace template id", "examiner-default");
-    fireEvent.click(screen.getByRole("switch", { name: "Allow unread unsupported attachment types" }));
+    fireEvent.click(screen.getByLabelText("Allow unread unsupported attachment types"));
 
-    fireEvent.click(screen.getByRole("tab", { name: "Definition" }));
+    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Definition" })); });
     fireEvent.click(screen.getByRole("radio", { name: "Advanced JSON" }));
     const json = screen.getByRole("textbox", { name: "Advanced JSON" }) as HTMLTextAreaElement;
     const parsed = JSON.parse(json.value) as {
@@ -489,29 +514,29 @@ describe("definition candidate editor", () => {
     expect(parsed.environment.attachments.allowUnreadUnsupportedTypes).toBe(true);
     expect(parsed.untouchedMarker).toEqual({ nested: "preserve-me" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save draft" })); });
     await waitFor(() => {
       expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(draftId, 2, expect.any(Object));
     });
-    expect(vi.mocked(updateAdminDefinitionDraft).mock.calls.at(-1)?.[2]).toEqual(parsed);
+    expect(vi.mocked(updateAdminDefinitionDraft).mock.calls.at(-1)?.[2]).toEqual({
+      ...parsed,
+      skills: [{ id: "refund.handle", name: "Refund", description: "Handle a refund",
+        procedure: "REFUND_PROCEDURE_EDITED", activationKeywords: ["refund", "return"],
+        requiredCapabilities: ["workspace.read", "chat.respond"], resourcePaths: ["notes/refund.md"] }]
+    });
     expect(publishAdminDefinitionDraft).not.toHaveBeenCalled();
-    // Walking every field re-renders the Admin shell. A local run took about 46s.
-    // Hosted run 36424818606 killed this test at the previous 60s budget.
+    // This integration walks every field and the revision-protected save.
+    // Leaf round-trips above avoid repeatedly loading the Admin shell.
   }, 180_000);
 
-  it("saves a voice-enabled draft with default speech aliases", async () => {
-    mockDraft();
-    await openDraft();
+  it("emits a voice-enabled candidate with default speech aliases", async () => {
+    const changed = await renderCandidate();
 
-    fireEvent.click(screen.getByRole("switch", { name: "Voice enabled" }));
+    fireEvent.click(screen.getByLabelText("Voice enabled"));
     expect(screen.getByTitle("primary-stt")).toBeInTheDocument();
     expect(screen.getByTitle("primary-tts")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
-    await waitFor(() => {
-      expect(updateAdminDefinitionDraft).toHaveBeenCalled();
-    });
-    const saved = vi.mocked(updateAdminDefinitionDraft).mock.calls.at(-1)?.[2] as {
+    const saved = changed.mock.lastCall?.[0] as {
       voice?: { enabled?: boolean };
       providerPreferences?: { speechRecognizer?: string; speechSynthesizer?: string };
     };
@@ -522,7 +547,7 @@ describe("definition candidate editor", () => {
     });
   });
 
-  it("clears speech aliases when voice is turned off so the draft can be saved", async () => {
+  it("clears speech aliases when voice is turned off", async () => {
     mockDraft({
       ...storedCandidate,
       voice: { enabled: true, voiceId: "verse", speakingRate: 1 },
@@ -533,16 +558,15 @@ describe("definition candidate editor", () => {
         interruptionClassifier: "heuristic"
       }
     });
+
     await openDraft();
 
-    fireEvent.click(screen.getByRole("switch", { name: "Voice enabled" }));
+    fireEvent.click(screen.getByLabelText("Voice enabled"));
     expect(screen.queryByTitle("primary-stt")).not.toBeInTheDocument();
     expect(screen.queryByTitle("primary-tts")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
-    await waitFor(() => {
-      expect(updateAdminDefinitionDraft).toHaveBeenCalled();
-    });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save draft" })); });
+    await waitFor(() => expect(updateAdminDefinitionDraft).toHaveBeenCalled());
     const saved = vi.mocked(updateAdminDefinitionDraft).mock.calls.at(-1)?.[2] as {
       voice?: { enabled?: boolean };
       providerPreferences?: { speechRecognizer?: string | null; speechSynthesizer?: string | null };
@@ -556,8 +580,7 @@ describe("definition candidate editor", () => {
   });
 
   it("round-trips form and JSON without dropping untouched fields", async () => {
-    mockDraft();
-    await openDraft();
+    await renderCandidate();
 
     setText("Definition name", "Guide");
     fireEvent.click(screen.getByRole("radio", { name: "Advanced JSON" }));
@@ -580,7 +603,6 @@ describe("definition candidate editor", () => {
     expect(screen.getByLabelText("Definition tone")).toHaveValue("Calm");
     expect(screen.getByLabelText("Voice id")).toHaveValue("verse");
     expect(screen.getByTitle("Scripted Alpha")).toBeInTheDocument();
-    expect(screen.getByText("Unsaved changes — save before using Test & Publish.")).toBeInTheDocument();
   });
 
   it("keeps dirty edits across views and does not save invalid JSON", async () => {
@@ -597,7 +619,7 @@ describe("definition candidate editor", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Advanced JSON" }), { target: { value: "{ " } });
     expect(screen.getByText("Advanced JSON is invalid")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save draft" })); });
     fireEvent.click(screen.getByRole("button", { name: "Publish…" }));
     expect(updateAdminDefinitionDraft).not.toHaveBeenCalled();
     expect(publishAdminDefinitionDraft).not.toHaveBeenCalled();
@@ -606,13 +628,13 @@ describe("definition candidate editor", () => {
     expect(screen.getByRole("textbox", { name: "Advanced JSON" })).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "System instructions" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Capabilities" }));
+    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Capabilities" })); });
     expect(screen.getByText(/Fix Advanced JSON on the Definition tab before changing capabilities/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add knowledge source" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Add knowledge source" }));
 
-    fireEvent.click(screen.getByRole("tab", { name: "Resources" }));
-    fireEvent.click(screen.getByRole("tab", { name: "Definition" }));
+    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Resources" })); });
+    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Definition" })); });
     expect(screen.getByRole("textbox", { name: "Advanced JSON" })).toHaveValue("{ ");
     expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled();
     expect(updateAdminDefinitionDraft).not.toHaveBeenCalled();
@@ -626,7 +648,7 @@ describe("definition candidate editor", () => {
     const edited = JSON.parse(json.value) as { systemInstructions: string; untouchedMarker: { nested: string } };
     edited.systemInstructions = "Saved from JSON";
     fireEvent.change(json, { target: { value: JSON.stringify(edited, null, 2) } });
-    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save draft" })); });
     await waitFor(() => {
       expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(
         draftId,

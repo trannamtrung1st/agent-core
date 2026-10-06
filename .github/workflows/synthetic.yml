@@ -65,7 +65,9 @@ jobs:
         working-directory: web
         run: |
           pnpm install --frozen-lockfile
-          pnpm run test --run --maxWorkers=2
+          # Large Admin AntD trees compete for CPU in jsdom on hosted runners.
+          # Keep fresh file isolation and existing timeouts; serialize the unit gate.
+          pnpm run test --run --maxWorkers=1
           pnpm run build
 
       - name: Install Playwright Chromium

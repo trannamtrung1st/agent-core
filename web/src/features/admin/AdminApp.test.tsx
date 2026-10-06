@@ -1176,7 +1176,7 @@ describe("AdminApp", () => {
     });
 
     await act(async () => {
-      render(<AdminApp route={{ area: "admin", view: "instance", instanceId }} />);
+      render(<antd.App><InstanceManagedControls config={managedEffective} onUpdated={vi.fn()} onDeleted={vi.fn()} /></antd.App>);
     });
 
     await waitFor(() => {
@@ -1184,7 +1184,7 @@ describe("AdminApp", () => {
     });
 
     fireEvent.change(screen.getByLabelText("Persona role"), { target: { value: "Coach" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save persona" }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save persona" })); });
 
     await waitFor(() => {
       expect(updateAdminAgentInstancePersona).toHaveBeenCalledWith(managedEffective.instanceId, {
@@ -1206,7 +1206,7 @@ describe("AdminApp", () => {
     vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
 
     await act(async () => {
-      render(<AdminApp route={{ area: "admin", view: "instance", instanceId }} />);
+      render(<antd.App><InstanceManagedControls config={managedEffective} onUpdated={vi.fn()} onDeleted={vi.fn()} /></antd.App>);
     });
 
     await waitFor(() => {
@@ -1234,7 +1234,7 @@ describe("AdminApp", () => {
     vi.mocked(updateAdminAgentInstancePersona).mockClear();
 
     await act(async () => {
-      render(<AdminApp route={{ area: "admin", view: "instance", instanceId }} />);
+      render(<antd.App><InstanceManagedControls config={managedEffective} onUpdated={vi.fn()} onDeleted={vi.fn()} /></antd.App>);
     });
 
     await waitFor(() => {
@@ -1261,7 +1261,7 @@ describe("AdminApp", () => {
         )
       }
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save persona" }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save persona" })); });
 
     await waitFor(() => {
       expect(screen.getAllByText(/unknown fields/).length).toBeGreaterThan(0);

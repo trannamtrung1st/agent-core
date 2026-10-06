@@ -74,7 +74,7 @@ describe("EventSourcesSection", () => {
 
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
-    fireEvent.click(screen.getByRole("button", { name: "Copy webhook URL for Demo Store" }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Copy webhook URL for Demo Store" })); });
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(webhookUrl(sourceKey)));
     expect(webhookUrl(sourceKey)).toBe(`${window.location.origin}/api/v1/hooks/${sourceKey}`);
 
@@ -82,15 +82,18 @@ describe("EventSourcesSection", () => {
     const rotate = await screen.findByRole("dialog");
     fireEvent.click(within(rotate).getByRole("button", { name: "Keep" }));
     expect(rotateEventSource).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Rotate credential for Demo Store" }));
-    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Rotate credential" }));
+    const rotateConfirmation = await screen.findByRole("dialog");
+    await act(async () => { fireEvent.click(within(rotateConfirmation).getByRole("button", { name: "Rotate credential" })); });
     await waitFor(() => expect(rotateEventSource).toHaveBeenCalledWith(sourceId));
+    expect(await screen.findByLabelText("Event source credential")).toHaveValue("rotated-credential-value");
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(screen.queryByText("rotated-credential-value")).not.toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "Revoke Demo Store" }));
     const revoke = await screen.findByRole("dialog");
-    fireEvent.click(within(revoke).getByRole("button", { name: "Revoke source" }));
+    await act(async () => { fireEvent.click(within(revoke).getByRole("button", { name: "Revoke source" })); });
     await waitFor(() => expect(revokeEventSource).toHaveBeenCalledWith(sourceId));
     expect(await screen.findByText("Revoked")).toBeInTheDocument();
     expect(screen.getByText("Webhook")).toBeInTheDocument();
