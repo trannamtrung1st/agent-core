@@ -9,8 +9,19 @@ const initial = { configuredIntervalSeconds: null, effectiveIntervalSeconds: 300
   maximumIntervalSeconds: 86400, defaultIntervalSeconds: 300, usesDefault: true, configuredIntervalAllowed: true,
   revision: 0, lastMaintenanceAtUtc: null };
 const view = (id = 'instance-a') => <ConfigProvider><App><ContinuityMaintenanceSection instanceId={id} /></App></ConfigProvider>;
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
-beforeEach(() => { vi.clearAllMocks(); request.mockResolvedValue(initial); });
+afterEach(async () => {
+  cleanup();
+  // AntD Form schedules delayed validation updates that can outlive unmount.
+  // Drain them while jsdom still exists, before restoring real timers.
+  await act(async () => { await vi.runOnlyPendingTimersAsync(); });
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+beforeEach(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.clearAllMocks();
+  request.mockResolvedValue(initial);
+});
 
 describe('Automatic continuity review', () => {
   it('keeps effective default until a revisioned edit saves and can restore inheritance', async () => {
