@@ -69,7 +69,11 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   await expect(model).toBeFocused();
   await page.keyboard.type("Scripted Alpha");
   await page.keyboard.press("Enter");
-  await expect(automation.getByText("Effective source: Unattended default (Scripted Alpha)")).toBeVisible();
+  await expect(automation.locator(".ant-select").filter({
+    has: page.getByRole("combobox", { name: "Unattended model", exact: true })
+  })).toContainText("Scripted Alpha");
+  await expect(automation.getByText(/Effective source: Conversation default/)).toBeVisible();
+  await expect(automation.getByText("Effective source: Unattended default (Scripted Alpha)")).toHaveCount(0);
   const saved = page.waitForResponse(
     (response) => response.url().includes("/unattended-model") && response.request().method() === "POST"
   );
@@ -77,6 +81,7 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   const savedResponse = await saved;
   expect(savedResponse.ok()).toBeTruthy();
   expect((await savedResponse.json()).unattendedModelCatalogKey).toBe("scripted-alpha");
+  await expect(automation.getByText("Effective source: Unattended default (Scripted Alpha)")).toBeVisible();
   await expect(automation.getByRole("alert")).toHaveCount(0);
   const reloaded = page.waitForResponse(
     (response) => response.url().includes("/effective-config") && response.request().method() === "GET" && response.ok()

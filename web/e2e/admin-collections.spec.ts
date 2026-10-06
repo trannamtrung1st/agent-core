@@ -11,11 +11,23 @@ test("Definition tabs keep draft creation compact and return to the draft list",
   await expect(page.getByRole("region", { name: "Definition versions", exact: true })).toBeHidden();
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
-    const select = await page.locator(".admin-draft-version-select").boundingBox();
-    const button = await page.getByRole("button", { name: /Fork v/ }).boundingBox();
+    const selector = page.locator(".admin-draft-version-select");
+    const fork = page.getByRole("button", { name: /Fork v/ });
+    await expect(selector).toBeVisible();
+    await expect(selector.getByRole("combobox")).toBeEnabled();
+    await expect(fork).toBeVisible();
+    await expect(fork).toBeEnabled();
+    const select = await selector.boundingBox();
+    const button = await fork.boundingBox();
     expect(select!.width).toBeLessThanOrEqual(320);
-    expect(Math.abs(button!.y - select!.y)).toBeLessThan(1);
-    expect(Math.abs(button!.x - select!.x - select!.width - 8)).toBeLessThan(1);
+    if (width === 1440) {
+      expect(Math.abs(button!.y - select!.y)).toBeLessThan(1);
+      expect(Math.abs(button!.x - select!.x - select!.width - 8)).toBeLessThan(1);
+    } else {
+      expect(Math.abs(button!.y - select!.y - select!.height - 8)).toBeLessThan(1);
+      expect(Math.abs(button!.x - select!.x)).toBeLessThan(1);
+      expect(button!.height).toBeGreaterThanOrEqual(40);
+    }
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
   }
   await forkBuiltInV1Draft(page);
