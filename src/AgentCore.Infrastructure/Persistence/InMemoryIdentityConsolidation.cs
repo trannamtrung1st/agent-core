@@ -40,14 +40,19 @@ public sealed partial class InMemoryExperienceStore
 {
     private readonly Dictionary<Guid, IdentityMaintenanceSettings> maintenanceSettings = [];
     public ValueTask<IdentityMaintenanceSettings> MaintenanceSettingsAsync(Guid id, CancellationToken ct = default)
-    { lock (gate) return ValueTask.FromResult(maintenanceSettings.GetValueOrDefault(id) ?? new(id, false, 0)); }
+    {
+        ct.ThrowIfCancellationRequested();
+        lock (gate) return ValueTask.FromResult(maintenanceSettings.GetValueOrDefault(id) ?? new(id, false, 0));
+    }
     public ValueTask<IdentityMaintenanceSettings> ConfigureMaintenanceAsync(Guid id, long expectedRevision, bool allow,
         CancellationToken ct = default, AdminEventAppend? audit = null)
     {
+        if (expectedRevision < 0) throw AgentCoreErrors.Validation("Maintenance revision is invalid.");
+        ct.ThrowIfCancellationRequested();
         lock (gate)
         {
             var current = maintenanceSettings.GetValueOrDefault(id) ?? new(id, false, 0);
-            if (expectedRevision < 0 || current.Revision != expectedRevision) throw AgentCoreErrors.Conflict("Maintenance settings revision is stale.");
+            if (current.Revision != expectedRevision) throw AgentCoreErrors.Conflict("Maintenance settings revision is stale.");
             var saved = current with { AllowAgentConsolidation = allow, Revision = current.Revision + 1 };
             if (audit is not null) events?.AppendWithinLock(audit);
             maintenanceSettings[id] = saved;

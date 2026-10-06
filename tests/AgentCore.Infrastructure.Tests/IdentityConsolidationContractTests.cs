@@ -27,6 +27,28 @@ public sealed class IdentityConsolidationContractTests
 
     [Theory]
     [InlineData(false)] [InlineData(true)]
+    public async Task Invalid_or_cancelled_maintenance_configuration_preserves_revision_and_opt_out(bool sqlite)
+    {
+        await WithStores(sqlite, async (_, experiences, _) =>
+        {
+            var invalid = await Assert.ThrowsAsync<AgentCoreException>(() => experiences.ConfigureMaintenanceAsync(Instance, -1, true).AsTask());
+            Assert.Equal(400, invalid.StatusCode);
+            using var cancelled = new CancellationTokenSource();
+            cancelled.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => experiences.ConfigureMaintenanceAsync(Instance, 0, true, cancelled.Token).AsTask());
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => experiences.MaintenanceSettingsAsync(Instance, cancelled.Token).AsTask());
+            var unchanged = await experiences.MaintenanceSettingsAsync(Instance);
+            Assert.Equal(0, unchanged.Revision);
+            Assert.False(unchanged.AllowAgentConsolidation);
+            var saved = await experiences.ConfigureMaintenanceAsync(Instance, 0, true);
+            var stale = await Assert.ThrowsAsync<AgentCoreException>(() => experiences.ConfigureMaintenanceAsync(Instance, 0, false).AsTask());
+            Assert.Equal(409, stale.StatusCode);
+            Assert.Equal(saved, await experiences.MaintenanceSettingsAsync(Instance));
+        });
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
     public async Task Atomic_memory_reduces_capacity_preserves_lineage_and_retries(bool sqlite)
     {
         await WithStores(sqlite, async (memories, _, _) =>

@@ -165,6 +165,7 @@ public sealed class IdentityMaintenanceJourneyTests
             Assert.Equal(HttpStatusCode.Unauthorized, (await host.CreateClient().GetAsync(path + "/maintenance")).StatusCode);
             var settings = await client.GetFromJsonAsync<IdentityMaintenanceSettings>(path + "/maintenance");
             Assert.False(settings!.AllowAgentConsolidation);
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync(path + "/maintenance", new IdentityMaintenanceConfigurationRequest(-1, true))).StatusCode);
             (await client.PutAsJsonAsync(path + "/maintenance", new IdentityMaintenanceConfigurationRequest(0, true))).EnsureSuccessStatusCode();
             Assert.Equal(HttpStatusCode.Conflict, (await client.PutAsJsonAsync(path + "/maintenance", new IdentityMaintenanceConfigurationRequest(0, false))).StatusCode);
             var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync(instance.DefinitionId, 9))!;
