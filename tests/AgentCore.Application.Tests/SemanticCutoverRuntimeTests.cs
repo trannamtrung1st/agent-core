@@ -176,6 +176,39 @@ public sealed class SemanticCutoverRuntimeTests
         Assert.Equal("Other", assistant.Text);
     }
 
+    [Theory]
+    [InlineData("D")]
+    [InlineData("B")]
+    [InlineData("N")]
+    public async Task Authorized_case_variant_artifact_is_canonical_in_live_and_durable_response(string format)
+    {
+        var output = new CapturingSessionOutput();
+        var store = new InMemoryMemoryStore();
+        var artifacts = new InMemoryArtifactStore(TimeProvider.System);
+        var blocks = new List<ModelResponseBlock>();
+        var model = new SemanticLanguageModel("See file", new ModelSpeechProjection(ModelSpeechMode.None, null), blocks);
+        await using var runtime = Create(output, model, store: store, artifacts: new SessionArtifactAuthorizer(artifacts));
+        var artifact = await artifacts.CreateAsync(runtime.SessionId, "notes.txt", "text/plain", "exact bytes"u8.ToArray(), null, null);
+        blocks.Add(new ModelResponseBlock(ModelResponseBlockKind.ArtifactReference,
+            ArtifactId: artifact.ArtifactId.ToString(format).ToUpperInvariant()));
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Show the file");
+        await runtime.WaitUntilIdleAsync();
+        var canonicalId = artifact.ArtifactId.ToString("D");
+        var live = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Completed, live.Status);
+        var block = Assert.Single(live.Envelope!.Blocks);
+        Assert.Equal(ResponseBlockKind.ArtifactReference, block.Kind);
+        Assert.Equal(canonicalId, block.ArtifactId);
+        Assert.Equal(canonicalId, block.DisplayText);
+        Assert.Equal(canonicalId, block.FallbackText);
+        var delivered = Assert.Single(output.Items, item => item.Payload is BlockUpsertOutput { Kind: "artifact" });
+        Assert.Equal(canonicalId, ((BlockUpsertOutput)delivered.Payload).ArtifactId);
+        var durable = await store.LoadAsync(runtime.SessionId);
+        Assert.Equal(canonicalId, Assert.Single(Assert.Single(durable!.Entries,
+            entry => entry.Role == ConversationRole.Assistant).Envelope!.Blocks).ArtifactId);
+    }
+
     [Fact]
     public async Task Streamed_text_turn_reloads_as_one_durable_response()
     {
@@ -299,7 +332,8 @@ public sealed class SemanticCutoverRuntimeTests
         ILanguageModel model,
         bool voice = false,
         ISpeechSynthesizer? synthesizer = null,
-        InMemoryMemoryStore? store = null)
+        InMemoryMemoryStore? store = null,
+        IArtifactReferenceAuthorizer? artifacts = null)
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));
         var ids = new DeterministicIdGenerator(
@@ -334,7 +368,8 @@ public sealed class SemanticCutoverRuntimeTests
             time,
             NullLogger<SessionRuntime>.Instance,
             recognizer: synthesizer is null ? null : new SyntheticSpeechRecognizer(),
-            synthesizer: synthesizer);
+            synthesizer: synthesizer,
+            artifacts: artifacts);
     }
 
     private sealed class RecordingLanguageModel : ILanguageModel

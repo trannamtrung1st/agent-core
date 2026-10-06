@@ -68,3 +68,9 @@ Concurrent workspace edits appeared during verification in `web/src/features/adm
 
 
 The user subsequently explicitly authorized committing and pushing all current changes to `main`, including the external UI changes above. That authorization supersedes the earlier publication prerequisite and Artifact-only staging scope. Historical verification results remain as recorded; hosted acceptance must verify the combined published behavior.
+
+## GUID identity closure repair
+
+Review of published candidate `82e21a2f` found that authorized uppercase GUID references could disagree with lowercase metadata IDs. `SemanticResponseMapper` now canonicalizes real GUIDs after Session authorization and before constructing the response block. Existing authorization, unknown-reference fallback and the non-GUID fixture remain unchanged. Uppercase hyphenated, braced and compact references now produce lowercase hyphenated Artifact IDs in the live block and persisted envelope; the frontend keeps its strict metadata identity validation.
+
+The integrated Session-runtime regression reproduced all three variants as failures before the repair. After repair, the affected Application tests passed **25/25**, including real stored Artifact authorization, realtime block emission and durable envelope reread. Both existing Synthetic browser download journeys passed for this repair (2/2), including exact bytes/name, reconnect, reload, ended history, local retry and responsive layouts. `git diff --check` passed. Full hosted Synthetic/Compose acceptance must pass on the repair commit before closure; partial results on workflow `37463287222` for the earlier candidate do not establish that gate.

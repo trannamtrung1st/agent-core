@@ -85,6 +85,10 @@ public static class SemanticResponseMapper
                     return Fallback(blockId, ResponseEnvelopeParser.UnauthorizedArtifactFallback);
                 }
 
+                // Authorization accepts GUID identity; publish the same representation as the Artifact API.
+                // Keep the explicitly authorized non-GUID fixture reference unchanged.
+                if (Guid.TryParse(artifactId, out var id)) artifactId = id.ToString("D");
+
                 return new ResponseBlock(
                     blockId,
                     ResponseBlockKind.ArtifactReference,
