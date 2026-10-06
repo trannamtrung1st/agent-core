@@ -1,6 +1,6 @@
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, App, Button, Descriptions, Flex, Input, Select, Table, Tabs, Typography } from "antd";
+import { Alert, App, Button, Descriptions, Flex, Select, Table, Tabs, Typography } from "antd";
 import { confirmAction } from "../../app/confirmAction";
 import type { ColumnsType } from "antd/es/table";
 import { listModels, type ModelDescriptor } from "../../services/api";
@@ -28,6 +28,7 @@ import {
 } from "./instanceMemoryAutomationLogic";
 
 import { ExecutionModelFields } from "./ExecutionModelFields";
+import { AdminSessionPicker } from "./AdminSessionPicker";
 
 const MEMORY_SCOPES: AdminLearnedMemoryScope[] = ["Session", "IdentityUser", "User"];
 
@@ -470,31 +471,30 @@ export function InstanceMemoryAutomationPanel({ config, section }: { config: Adm
                   Effective memory policy does not allow administration for {memoryScope} scope.
                 </Typography.Text>
               ) : null}
-              <Flex gap={8} wrap="wrap" align="end">
-                <Select
-                  aria-label="Memory scope"
-                  value={memoryScope}
-                  disabled={selectionLocked}
-                  onChange={(value) => {
-                    setMemoryScope(value);
-                    bumpMemoryLoadGeneration();
-                  }}
-                  options={MEMORY_SCOPES.map((value) => ({ value, label: value }))}
-                  style={{ minWidth: 160 }}
-                />
-                {memoryScope === "Session" ? (
-                  <Input
-                    aria-label="Session id"
-                    placeholder="Session id (required for Session scope)"
-                    value={sessionId}
+              <Flex gap={8} wrap="wrap" align="start">
+                <Flex vertical gap={8}>
+                  <Typography.Text>Memory scope</Typography.Text>
+                  <Select
+                    aria-label="Memory scope"
+                    value={memoryScope}
                     disabled={selectionLocked}
-                    onChange={(event) => {
-                      setSessionId(event.target.value);
+                    onChange={(value) => {
+                      setMemoryScope(value);
                       bumpMemoryLoadGeneration();
                     }}
-                    style={{ minWidth: 280 }}
+                    options={MEMORY_SCOPES.map((value) => ({ value, label: value }))}
+                    style={{ minWidth: 160 }}
                   />
+                </Flex>
+                {memoryScope === "Session" ? (
+                  <div className="admin-memory-source">
+                    <Typography.Text>Source conversation</Typography.Text>
+                    <AdminSessionPicker instanceId={config.instanceId} value={sessionId} disabled={selectionLocked}
+                      onChange={value => { setSessionId(value); bumpMemoryLoadGeneration(); }} />
+                  </div>
                 ) : null}
+              </Flex>
+              <Flex gap={8} wrap="wrap">
                 <Button
                   onClick={() => void loadMemory()}
                   loading={memoryLoading}

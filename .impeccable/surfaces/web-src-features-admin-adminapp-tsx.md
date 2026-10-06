@@ -9,6 +9,9 @@ related_targets:
   - web/src/features/admin/InstanceSchedulesSection.tsx
   - web/src/features/admin/instanceMemoryAutomation.tsx
   - web/src/features/admin/definitionDraftPublishGatePanel.tsx
+  - web/src/features/admin/AdminSessionPicker.tsx
+  - web/src/features/admin/ApplicationConnectionSection.tsx
+  - web/src/features/admin/EventSourcesSection.tsx
   - web/src/features/admin/AdminCollectionToolbar.tsx
   - web/src/features/admin/useAdminDetailLayout.ts
   - web/src/app/confirmAction.ts
@@ -29,4 +32,6 @@ FIRST VIEWPORT: Inventory collections use the available width and shared search/
 
 FORM: Use existing dark Ant Design panels and token gaps. Collection summaries stay on one line with ellipsis and table-local horizontal scrolling. Experience, Schedule and Thought links expand one record at a time; shared detail labels align in a 12rem top-aligned column at 768px+ and stack below 768px. Expanded content stays within the visible table width. Version details use the existing right-side drawer, full-width on mobile, with focus returned on close. Wrap scopes/actions, observations and evidence; retain separate observation bullets, 40px narrow table actions and 72ch evidence measure. Label Core checks, partial Agent assessments, tested revisions and external limitations. Preserve safe diagnostics and publication readback after freeze.
 
-FINISH: Bounded desktop/768/390 inspection and one correction/confirmation pass. Verify exact Schedule/Thought/Event/Experience source navigation in both directions, preserving drafts and restoring focus. Verify search, pagination, expansion and no-match recovery, revisioned operations, confirmation cancellation/focus return and retained drafts after errors. Compare shared detail label edges across representative consumers and verify no document overflow with long content. No new UI kit or spacing system. `/docs` remains authoritative for behavior.
+ADMIN POLISH: Collection introductions and creation actions match the active tab. Draft actions remain sticky above editor tabs; focused fields clear the bar. Memory and Experience share conversation browsing by title/date with manual Session ID entry and adjacent refresh/paging/retry. Memory scope/source labels align at the top and actions have their own row. Schedules use direct Ant Design date/time pickers, explicit viewer-zone text and readable previews; recurring end dates remain date-only. Inline read failures expose Retry and diagnostics without a false empty state. Clipboard recovery stays inside the one-time credential dialog. Visited tabs preserve drafts while hidden polling pauses. `/docs/13-frontend-implementation-spec.md` owns these behaviors.
+
+FINISH: Bounded desktop/768/390 inspection and one correction/confirmation pass. Verify exact Schedule/Thought/Event/Experience source navigation in both directions, preserving drafts and restoring focus. Verify search, pagination, expansion and no-match recovery, revisioned operations, confirmation cancellation/focus return and retained drafts after errors. Compare shared detail label edges across representative consumers and verify no document overflow with long content. Check sticky actions at 1440/768/390, source browsing and manual entry in both consumers, local-time schedule saving, failed-read retry, clipboard recovery and absence of hidden polling. No new UI kit or spacing system. `/docs` remains authoritative for behavior.

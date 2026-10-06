@@ -99,4 +99,30 @@ describe("EventSourcesSection", () => {
     expect(screen.getByText("Webhook")).toBeInTheDocument();
     expect(screen.queryByText("secret-credential-value")).not.toBeInTheDocument();
   });
+  it("does not present a failed inventory read as empty and retries", async () => {
+    vi.mocked(listEventSources).mockRejectedValueOnce(new Error("Sources unavailable")).mockResolvedValueOnce([]);
+    renderSection();
+    expect(await screen.findByText("Sources unavailable")).toBeVisible();
+    expect(screen.queryByText("No event sources yet.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("No event sources yet.")).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Event source name" })).toBeVisible();
+  });
+
+  it("keeps clipboard failure and manual copy inside the one-time credential dialog", async () => {
+    vi.mocked(listEventSources).mockResolvedValue([]);
+    vi.mocked(createEventSource).mockResolvedValue({ sourceId, sourceKey, token: "one-time-token", status: "Active" });
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockRejectedValue(new Error("Denied")) } });
+    renderSection();
+    fireEvent.change(await screen.findByLabelText("Event source name"), { target: { value: "Store" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create event source" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Copy event source credential" }));
+    expect(await within(dialog).findByText("Copy failed. Select the value and copy it manually.")).toBeVisible();
+    expect(within(dialog).getByLabelText("Event source credential")).toHaveValue("one-time-token");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.queryByLabelText("Event source credential")).not.toBeInTheDocument());
+    expect(screen.queryByText(/Copy failed/)).not.toBeInTheDocument();
+  });
+
 });

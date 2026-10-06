@@ -307,6 +307,7 @@ test("Version inspection creates no draft and the shared actions publish from Te
   await page.getByRole("dialog", { name: "Version details", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.getByRole("button", { name: /Back to inventory/ }).click();
+  await page.getByRole('tab', { name: 'Instances', exact: true }).click();
   await page.getByRole("button", { name: "New instance", exact: true }).click();
   const instanceDialog = page.getByRole("dialog", { name: "New instance", exact: true });
   await instanceDialog.getByLabel("Definition", { exact: true }).click();

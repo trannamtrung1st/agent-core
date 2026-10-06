@@ -203,7 +203,7 @@ describe('Instance continuity owner controls', () => {
     render(view('owner-instance', 'both'));
     expect(await screen.findByText('No experience yet. Enable experience and retrospect a completed task.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Retrospect now' })).toBeDisabled();
-    expect(screen.getByLabelText('Retrospection source Session')).toBeDisabled();
+    expect(screen.getByLabelText('Source conversation')).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Create thought' })).toBeDisabled();
     expect(screen.getByText(/No thoughts configured/)).toBeVisible();
     expect(request.mock.calls.every(call => call[0] === 'owner-instance')).toBe(true);
@@ -344,13 +344,14 @@ describe('Instance continuity owner controls', () => {
     const ui = (selection?: { workItemId: string; request: number }) => <ConfigProvider><App><ExperienceSection instanceId="owner-instance" onWork={onWork} selection={selection} /></App></ConfigProvider>;
     const view = render(ui());
     await screen.findByRole('button', { name: 'View experience: Atlas review 21' });
-    fireEvent.change(screen.getByLabelText('Retrospection source Session'), { target: { value: 'Unsaved session' } });
+    fireEvent.click(screen.getByRole("button", { name: "Enter Session ID" }));
+    fireEvent.change(screen.getByLabelText('Session ID'), { target: { value: 'Unsaved session' } });
     fireEvent.change(screen.getByRole('textbox', { name: 'Search experience' }), { target: { value: 'Atlas review 21' } });
     view.rerender(ui({ workItemId: 'work-1', request: 1 }));
     const selected = await screen.findByRole('button', { name: 'View experience: Atlas review 1' });
     await waitFor(() => expect(selected).toHaveFocus());
     expect(selected).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByLabelText('Retrospection source Session')).toHaveValue('Unsaved session');
+    expect(screen.getByLabelText('Session ID')).toHaveValue('Unsaved session');
     fireEvent.click(screen.getByRole('button', { name: 'View generation run' }));
     expect(onWork).toHaveBeenCalledWith('work-1');
   });

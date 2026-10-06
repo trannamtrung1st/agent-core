@@ -16,7 +16,8 @@ test("p7e admin memory and automation tabs exercise owner-protected APIs", async
   await memoryAutomation.getByRole("tab", { name: "Memory" }).click();
   await memoryAutomation.getByRole("combobox", { name: "Memory scope" }).click();
   await page.locator(".ant-select-item-option", { hasText: "Session" }).click();
-  await memoryAutomation.getByRole("textbox", { name: "Session id" }).fill(firstSession.sessionId);
+  await memoryAutomation.getByRole("button", { name: "Enter Session ID", exact: true }).click();
+  await memoryAutomation.getByRole("textbox", { name: "Session ID" }).fill(firstSession.sessionId);
 
   const sessionMemoryResponse = page.waitForResponse(
     (response) =>

@@ -9,7 +9,8 @@ import {
   rotateEventSource,
   type AdminEventSource
 } from "../../services/adminApi";
-import { describeAdminError } from "./adminErrors";
+import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
+import { AdminRetryAction } from "./adminFailure";
 
 export function webhookUrl(sourceKey: string): string {
   return `${window.location.origin}/api/v1/hooks/${sourceKey}`;
@@ -22,7 +23,10 @@ export function EventSourcesSection() {
   const { search, setSearch, pagination } = useAdminCollectionSearch();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AdminFailureNotice | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [readRequest, setReadRequest] = useState(0);
+  const [credentialError, setCredentialError] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [credential, setCredential] = useState<string | null>(null);
 
@@ -34,11 +38,12 @@ export function EventSourcesSection() {
       .then((items) => {
         if (current) {
           setSources(items);
+          setLoaded(true);
         }
       })
       .catch((reason: unknown) => {
         if (current) {
-          setError(describeAdminError(reason, "Unable to load event sources.").message);
+          setError(describeAdminError(reason, "Unable to load event sources."));
         }
       })
       .finally(() => {
@@ -49,14 +54,17 @@ export function EventSourcesSection() {
     return () => {
       current = false;
     };
-  }, []);
+  }, [readRequest]);
 
-  async function copyText(value: string, success: string) {
+  async function copyText(value: string, success: string, inCredentialDialog = false) {
+    if (inCredentialDialog) setCredentialError(null);
     try {
       await navigator.clipboard.writeText(value);
       message.success(success);
     } catch {
-      setError("Copy failed. Select the value and copy it manually.");
+      const guidance = "Copy failed. Select the value and copy it manually.";
+      if (inCredentialDialog) setCredentialError(guidance);
+      else setError({ message: guidance });
     }
   }
 
@@ -77,9 +85,10 @@ export function EventSourcesSection() {
         ...current.filter((item) => item.sourceId !== issued.sourceId)
       ]);
       setDisplayName("");
+      setCredentialError(null);
       setCredential(issued.token);
     } catch (reason: unknown) {
-      setError(describeAdminError(reason, "The event source could not be created.").message);
+      setError(describeAdminError(reason, "The event source could not be created."));
     } finally {
       setBusy(false);
     }
@@ -97,9 +106,10 @@ export function EventSourcesSection() {
             : item
         )
       );
+      setCredentialError(null);
       setCredential(issued.token);
     } catch (reason: unknown) {
-      setError(describeAdminError(reason, "The credential could not be rotated.").message);
+      setError(describeAdminError(reason, "The credential could not be rotated."));
     } finally {
       setBusy(false);
     }
@@ -113,7 +123,7 @@ export function EventSourcesSection() {
       setSources((current) => current.map((item) => (item.sourceId === saved.sourceId ? saved : item)));
       message.success("Event source revoked.");
     } catch (reason: unknown) {
-      setError(describeAdminError(reason, "The event source could not be revoked.").message);
+      setError(describeAdminError(reason, "The event source could not be revoked."));
     } finally {
       setBusy(false);
     }
@@ -130,8 +140,9 @@ export function EventSourcesSection() {
       <div className="admin-definition-panel-body">
         <Flex vertical gap={token.paddingSM}>
           {loading ? <Spin aria-label="Loading event sources" /> : null}
-          {error ? <Alert type="error" showIcon title={error} /> : null}
-          {!loading ? (
+          {error ? <Alert type="error" showIcon title={error.message}
+            action={<AdminRetryAction onRetry={() => setReadRequest(value => value + 1)} diagnosticId={error.diagnosticId} />} /> : null}
+          {!loading && loaded ? (
             <>
               <Form
                 layout="vertical"
@@ -139,7 +150,7 @@ export function EventSourcesSection() {
                   void create();
                 }}
               >
-                <Form.Item label="Display name">
+                <Form.Item label="Event source name">
                   <Input
                     aria-label="Event source name"
                     value={displayName}
@@ -229,17 +240,18 @@ export function EventSourcesSection() {
             okText="Done"
             cancelButtonProps={{ style: { display: "none" } }}
             destroyOnHidden
-            onOk={() => setCredential(null)}
-            onCancel={() => setCredential(null)}
+            onOk={() => { setCredential(null); setCredentialError(null); }}
+            onCancel={() => { setCredential(null); setCredentialError(null); }}
           >
             <Flex vertical gap={token.paddingXS}>
               <Typography.Paragraph>
                 Copy this credential now. It authenticates the emitter and will not be shown again.
               </Typography.Paragraph>
+              {credentialError ? <Alert type="error" showIcon title={credentialError} /> : null}
               <Input.TextArea readOnly aria-label="Event source credential" value={credential ?? ""} autoSize />
               <Button
                 aria-label="Copy event source credential"
-                onClick={() => void copyText(credential ?? "", "Event source credential copied.")}
+                onClick={() => void copyText(credential ?? "", "Event source credential copied.", true)}
               >
                 Copy credential
               </Button>

@@ -364,6 +364,7 @@ describe("AdminApp", () => {
     await waitFor(() => {
       expect(screen.getByText("Draft")).toBeInTheDocument();
     });
+    fireEvent.click(screen.getByRole("tab", { name: "Instances" }));
     fireEvent.click(screen.getByRole("button", { name: "New instance" }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("Examiner · examiner")).toBeInTheDocument();
@@ -1399,6 +1400,7 @@ describe("AdminApp", () => {
     await act(async () => {
       render(<AdminApp route={{ area: "admin", view: "home" }} />);
     });
+    fireEvent.click(screen.getByRole("tab", { name: "Instances" }));
     fireEvent.click(await screen.findByRole("button", { name: "New instance" }));
     fireEvent.mouseDown(screen.getByLabelText("Published version"));
     await waitFor(() => {
@@ -1634,6 +1636,7 @@ describe("AdminApp", () => {
     await act(async () => {
       render(<AdminApp route={{ area: "admin", view: "home" }} />);
     });
+    fireEvent.click(screen.getByRole("tab", { name: "Instances" }));
     fireEvent.click(screen.getByRole("button", { name: "New instance" }));
     expect(screen.getByText("v5 · Durable · Published")).toBeInTheDocument();
     expect(screen.queryByText(/is deprecated/)).not.toBeInTheDocument();
@@ -1677,6 +1680,7 @@ describe("AdminApp", () => {
     await act(async () => {
       render(<AdminApp route={{ area: "admin", view: "home" }} />);
     });
+    fireEvent.click(screen.getByRole("tab", { name: "Instances" }));
     fireEvent.click(screen.getByRole("button", { name: "New instance" }));
     fireEvent.mouseDown(screen.getByLabelText("Published version"));
     fireEvent.click(await screen.findByText("v6 · Durable · Deprecated"));

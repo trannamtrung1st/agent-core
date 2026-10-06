@@ -10,7 +10,8 @@ import {
   revokeApplication,
   type ApplicationConnection
 } from "../../services/adminApi";
-import { describeAdminError } from "./adminErrors";
+import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
+import { AdminRetryAction } from "./adminFailure";
 
 const detailCopy: Record<string, string> = {
   sign_in_required: "Sign in is required in the application browser.",
@@ -42,7 +43,9 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
   const [connection, setConnection] = useState<ApplicationConnection | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AdminFailureNotice | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [readRequest, setReadRequest] = useState(0);
   const [displayName, setDisplayName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
 
@@ -54,12 +57,12 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
       .then((next) => {
         if (current) {
           setConnection(next);
+          setLoaded(true);
         }
       })
       .catch((reason: unknown) => {
         if (current) {
-          setConnection(null);
-          setError(describeAdminError(reason, "Unable to load the application connection.").message);
+          setError(describeAdminError(reason, "Unable to load the application connection."));
         }
       })
       .finally(() => {
@@ -70,7 +73,7 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
     return () => {
       current = false;
     };
-  }, [instanceId]);
+  }, [instanceId, readRequest]);
 
   async function run(action: () => Promise<ApplicationConnection>, success: string) {
     setBusy(true);
@@ -79,7 +82,7 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
       setConnection(await action());
       message.success(success);
     } catch (reason: unknown) {
-      setError(describeAdminError(reason, "The application connection could not be updated.").message);
+      setError(describeAdminError(reason, "The application connection could not be updated."));
     } finally {
       setBusy(false);
     }
@@ -100,8 +103,9 @@ export function ApplicationConnectionSection({ instanceId }: { instanceId: strin
       <div className="admin-definition-panel-body">
         <Flex vertical gap={token.paddingSM}>
           {loading ? <Spin aria-label="Loading application connection" /> : null}
-          {error ? <Alert type="error" showIcon title={error} /> : null}
-          {!loading ? (
+          {error ? <Alert type="error" showIcon title={error.message}
+            action={<AdminRetryAction onRetry={() => setReadRequest(value => value + 1)} diagnosticId={error.diagnosticId} />} /> : null}
+          {!loading && loaded ? (
             <>
               <Typography.Text strong>{connectionStatusLabel(status)}</Typography.Text>
               <Flex vertical>

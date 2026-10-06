@@ -131,6 +131,8 @@ The shipped appearance is Ant Design `darkAlgorithm`: black layout, conversation
 - Background Work and Schedules share an operational drawer language: quiet headers, semantic execution rows, semantic filled icon-and-text status chips, elevated detail insets, and trailing actions where needed.
 - Admin collections use compact tables with local horizontal scrolling; Experience, Schedules and Thoughts expand one record at a time. Read-only details share aligned labels on wider screens and stacked labels on mobile.
 
+- Admin uses contextual creation, sticky draft actions, shared conversation source selection, explicit time-zone previews and inline recovery on the same Ant Design baseline.
+
 ## Colors
 
 Dark operate neutrals with one primary accent and one success accent for live microphone state.
@@ -190,7 +192,7 @@ One session: black rail + conversation column + sticky composer. Column is `min(
 
 Audit: Message placeholder left edge equals the Model name left edge; Model hover fill matches session-row inset and does not overlap the next control. Never zero a text button's padding to force alignment, and never use negative margin to grow a hover fill.
 
-Ownership: `AdminCollectionToolbar` and `useAdminCollectionSearch` share collection search/pagination; `useAdminDetailLayout` shares responsive label alignment. Product components compose Ant Design Table and Descriptions directly. These helpers are product layout policies, not a replacement component library.
+Ownership: `AdminCollectionToolbar` and `useAdminCollectionSearch` share collection search/pagination; `useAdminDetailLayout` shares responsive label alignment. `AdminSessionPicker` shares conversation browsing and manual entry across Memory and Experience; its stack owns compact sibling gaps. Memory owns the wrapping scope/source row and a separate action row. `.admin-draft-actions` owns sticky draft chrome, spacing and borders; fields use scroll clearance beneath that bar. Product components compose Ant Design Table and Descriptions directly. These helpers are product layout policies, not a replacement component library.
 
 ## Elevation & Depth
 
@@ -250,6 +252,12 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 - Header: identity (agent name, 12px timestamp, and role), Speech locale, compact icon actions, and status metadata. The 32×32px actions use a 6px radius and `{colors.fill}` hover. Background Work uses an 18px inbox icon plus an attention badge; Schedules, Admin, and the direct confirmed End action use 16px icons. End opens the shared centered confirmation. Profile and conversation status remain visible. When an Agent Instance has an application connection, a 12px secondary row under the agent name shows its display name, status, and Manage. No row appears when there is no connection. Header actions stay on the identity row. No Model appears in the live header.
 
 ### Admin collections and record details
+- Collection introductions and creation actions follow the selected collection: New definition for Definitions, New instance for Instances, and the existing creation form within Event sources. Keep the shared header and tab structure.
+- Draft Save / Publish / Delete actions stay in one sticky bar above the editor tabs, with a container-tone background, hairline separators and compact gaps. Its existing top inset is section spacing; the bottom inset is compact spacing. Keep wrapping action groups and the existing 40px minimum narrow-screen targets. Focused fields scroll clear of the bar.
+- Memory and Experience reuse `AdminSessionPicker`, a product composition of direct Ant Design Select, Input, Button, Flex and Alert. Browse by readable conversation title/date; keep manual Session ID entry, refresh and older-page actions near the selector. Source identifiers wrap below the field. Memory scope and source labels align at the top on wider screens and wrap into a stack on mobile; Load items and Reset scope sit in a separate action row.
+- Schedule run/end instants use Ant Design date/time pickers with the viewer time zone stated below the field and a readable preview below the timing group. Recurring end dates use date-only pickers; local time and named time zone remain separate fields. Interval fields reserve enough label width. Keep compact controls and section gaps; use native picker focus and keyboard affordances.
+- Unavailable reads use an inline Ant Design error Alert with Retry and safe diagnostic details rather than an empty-result presentation. Keep failed-copy guidance inside the one-time credential dialog, near the selectable value. Visible field labels must be included in accessible control names.
+- Visited instance tabs retain drafts while hidden polling pauses; returning refreshes the visible section. Preserve the existing tabs rather than remounting a form to stop requests. Eligibility, UTC conversion, ownership checks and polling behavior remain specified in `/docs`.
 - Definitions, Instances, Event sources and versions use compact tables with searchable labels, column filters/sorting where offered, and shared pagination. Learned-memory and automation tables reuse the density and scrolling; their existing scope/load controls remain the entry point.
 - Experience, Schedules and Thoughts use a searchable summary table with one expanded record at a time. Goal/task/prompt links expose the full title and expanded state; long summaries ellipsize. The narrow search toolbar includes a horizontal-scroll hint. Its clear affordance and existing no-match/empty states remain visible.
 - Expanded records use bordered single-column Descriptions and wrapping trailing action groups, separated by the enclosing token gap. Observation bullets remain distinct. Provenance is a separate grid with the same label edge. Do not join observations into a dense punctuation-separated paragraph.
@@ -298,6 +306,8 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 - **Do** format schedule occurrences for the viewer locale in the schedule’s named time zone; keep the zone identifier visible beside the readable time.
 - **Do** show run timestamps with the shared chat time formatter and a `time` element. Use readable origin labels (`Schedule`, `Thought`, `Event`, `Retrospection`) while retaining transport values internally.
 - **Do** keep the unattended model and its effective-source sentence in Automation → Policies & models. Show a webhook credential once in a dialog, then clear it on Done or Escape. The resting connection section keeps the public key and status only.
+
+- **Do** reuse AdminSessionPicker across Memory and Experience, align scope/source labels at the top, keep actions in a wrapping row, and preserve sticky draft actions with field scroll clearance. Date/time fields disclose the viewer zone; errors and copy recovery stay on their affected surface.
 
 ### Don't:
 - **Don't** reproduce Pixel Dialogue Field, Obsidian Mint, Martian Mono, field textures, presence plates, or a custom Select.

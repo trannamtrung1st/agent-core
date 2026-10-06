@@ -23,6 +23,7 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   await send(page, 'Hello');
   await expect(page.getByText('Hello from synthetic.', { exact: true }).last()).toBeVisible();
   await page.getByRole('button', { name: 'Open Admin' }).click();
+  await page.getByRole('tab', { name: 'Instances', exact: true }).click();
   await page.getByRole('button', { name: 'New instance', exact: true }).click();
   await select(page, 'Definition', 'General Assistant · general-assistant');
   await select(page, 'Published version', 'v9 · Built-in · Published');
@@ -65,7 +66,8 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   await page.getByRole("tab", { name: "Experience", exact: true }).click();
   // Persisted pause admits automatic retrospection; explicit request resolves to that checkpoint.
   await expect(experience.getByRole('button', { name: 'View experience: Review observable completed work', exact: true }).first()).toBeVisible({ timeout: 30_000 });
-  await experience.getByLabel('Retrospection source Session', { exact: true }).fill(sessionId);
+  await experience.getByRole("button", { name: "Enter Session ID", exact: true }).click();
+  await experience.getByLabel('Session ID', { exact: true }).fill(sessionId);
   await experience.getByRole('button', { name: 'Retrospect now', exact: true }).click();
   await expect(experience.getByRole('button', { name: 'View experience: Review observable completed work', exact: true }).first()).toBeVisible({ timeout: 30_000 });
   await page.getByRole('tab', { name: 'Continuity', exact: true }).click();

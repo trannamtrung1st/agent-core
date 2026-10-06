@@ -13,6 +13,7 @@ import { useAdminDetailLayout } from "./useAdminDetailLayout";
 
 import { thoughtOutcomeLabel, runStatusLabel, type AutomationSelection, type RunSource } from "../chat/runPresentation";
 import { useAutomationSelection } from "./useAutomationSelection";
+import { AdminSessionPicker } from "./AdminSessionPicker";
 
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : "Not yet";
 
@@ -48,7 +49,7 @@ function Failure({ error, reload }: { error: AdminFailureNotice | null; reload: 
 }
 
 export type ExperienceSelection = { workItemId: string; request: number };
-export function ExperienceSection({ instanceId, onWork, selection }: { instanceId: string; onWork: (workId?: string) => void; selection?: ExperienceSelection }) {
+export function ExperienceSection({ instanceId, onWork, selection, active = true }: { instanceId: string; active?: boolean; onWork: (workId?: string) => void; selection?: ExperienceSelection }) {
   const { token } = theme.useToken();
   const { modal } = App.useApp();
   const [review, setReview] = useState<ExperienceReview | null>(null);
@@ -86,9 +87,9 @@ export function ExperienceSection({ instanceId, onWork, selection }: { instanceI
     catch (reason) { if (generation === order.current.generation) setError(describeAdminError(reason, "Experience could not be loaded.")); }
     finally { if (generation === order.current.generation) setLoading(false); }
   }, [instanceId, order]);
-  useEffect(() => { void reload(); }, [reload, selection?.request]);
+  useEffect(() => { if (active) void reload(); }, [reload, selection?.request, active]);
   useEffect(() => {
-    if (loading || !review?.items.some(item => ["Pending", "Queued", "Running", "WaitingToRetry"].includes(item.status))) return;
+    if (!active || loading || !review?.items.some(item => ["Pending", "Queued", "Running", "WaitingToRetry"].includes(item.status))) return;
     const timer = window.setInterval(() => {
       if (order.current.mutating) return;
       const generation = ++order.current.generation;
@@ -97,7 +98,7 @@ export function ExperienceSection({ instanceId, onWork, selection }: { instanceI
         .catch(reason => { if (generation === order.current.generation) setError(describeAdminError(reason, "Experience status could not be refreshed.")); });
     }, 2000);
     return () => window.clearInterval(timer);
-  }, [instanceId, review, order, loading]);
+  }, [instanceId, review, order, loading, active]);
   async function mutate(path: string, method: string, body: unknown) {
     if (order.current.mutating) return;
     order.current.mutating = true; ++order.current.generation;
@@ -123,8 +124,8 @@ export function ExperienceSection({ instanceId, onWork, selection }: { instanceI
           <Typography.Text>{review.enabled ? "Enabled · completed work may be retrospected" : "Disabled · experience is not supplied to the agent"}</Typography.Text>
           <Button onClick={() => void reload()} disabled={busy}>Refresh experience</Button></Flex>
         <Form layout="vertical" onFinish={() => void mutate("experience/checkpoints", "POST", { sessionId: session.trim() })}>
-          <Form.Item label="Source Session id" extra="Only completed observable work in this instance is eligible. A repeated checkpoint creates no duplicate.">
-            <Input aria-label="Retrospection source Session" placeholder="Session id from conversation details" value={session} onChange={e => setSession(e.target.value)} disabled={busy || !review.enabled} />
+          <Form.Item label="Source conversation" extra="Only completed observable work in this instance is eligible. A repeated checkpoint creates no duplicate.">
+            <AdminSessionPicker instanceId={instanceId} value={session} onChange={setSession} disabled={busy || !review.enabled} />
           </Form.Item>
           <Flex wrap gap={token.paddingXS}><Button htmlType="submit" disabled={busy || !review.enabled || !session.trim()}>Retrospect now</Button>
             <Button onClick={() => onWork()}>View runs</Button>
@@ -224,7 +225,7 @@ function thoughtIntervalLabel(seconds: number) {
 const blank: ThoughtDraft = { expectedRevision: 0, enabled: false, intervalSeconds: 3600, thinkingPrompt: "", modelKey: null, reasoningEffort: null };
 const thoughtOutcome = (item: ThoughtRegistration) => ["Queued", "Running", "WaitingForApproval", "WaitingToRetry"].includes(item.executionStatus ?? "") ? runStatusLabel(item.executionStatus)
   : thoughtOutcomeLabel(item.lastOutcome ?? item.executionStatus);
-export function ThoughtSection({ instanceId, onWork, selection }: { instanceId: string; onWork: (workId?: string) => void; selection?: AutomationSelection }) {
+export function ThoughtSection({ instanceId, onWork, selection, active = true }: { instanceId: string; active?: boolean; onWork: (workId?: string) => void; selection?: AutomationSelection }) {
   const { search, setSearch, pagination } = useAdminCollectionSearch();
   const [expanded, setExpanded] = useState<Key[]>([]);
   const detailLayout = useAdminDetailLayout();
@@ -266,8 +267,13 @@ export function ThoughtSection({ instanceId, onWork, selection }: { instanceId: 
   useEffect(() => {
     if (selection?.kind === "thought") void reload();
   }, [selection, reload]);
+  const previousActive = useRef(active);
   useEffect(() => {
-    if (loading) return;
+    if (active && !previousActive.current) void reload();
+    previousActive.current = active;
+  }, [active, reload]);
+  useEffect(() => {
+    if (loading || !active) return;
     const timer = window.setInterval(() => {
       if (order.current.mutating) return;
       const generation = ++order.current.generation;
@@ -275,7 +281,7 @@ export function ThoughtSection({ instanceId, onWork, selection }: { instanceId: 
         .catch(reason => { if (generation === order.current.generation) setError(describeAdminError(reason, "Thought status could not be refreshed.")); });
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [instanceId, order, loading, applyReview]);
+  }, [instanceId, order, loading, applyReview, active]);
   async function action(path: string, body: unknown, method = "POST") {
     const runId = /^thoughts\/([^/]+)\/run$/.exec(path)?.[1];
     if (order.current.mutating || (runId && runId in startingRunsRef.current)) return;
@@ -333,7 +339,7 @@ export function ThoughtSection({ instanceId, onWork, selection }: { instanceId: 
                   onChange={unit => { setDraft({ ...draft, intervalSeconds: Math.round(draft.intervalSeconds / intervalUnit) * unit }); setIntervalUnit(unit); }} />
               </Flex>
             </Form.Item>
-            <Form.Item label="Enabled"><Switch aria-label="Enable thought activation" checked={draft.enabled} disabled={busy} onChange={enabled => setDraft({ ...draft, enabled })} /></Form.Item>
+            <Form.Item label="Enable thought activation"><Switch aria-label="Enable thought activation" checked={draft.enabled} disabled={busy} onChange={enabled => setDraft({ ...draft, enabled })} /></Form.Item>
           </Flex>
           <Form.Item label="Execution model" extra="Uses this instance's unattended default unless you choose a model. More frequent runs use more model and tool resources.">
             <ExecutionModelFields models={models} modelKey={draft.modelKey ?? ""} reasoningEffort={draft.reasoningEffort ?? ""} disabled={busy}

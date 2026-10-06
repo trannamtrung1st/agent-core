@@ -141,4 +141,21 @@ describe("Owner schedule authoring", () => {
     expect(onWork).toHaveBeenCalledWith("run-11");
   });
 
+  it("pauses polling while hidden and retains the unsaved task when shown", async () => {
+    const ui = (active: boolean) => <App><InstanceSchedulesSection instanceId="instance" active={active} onWork={vi.fn()} /></App>;
+    const mounted = render(ui(true));
+    await screen.findByText(/No schedules yet/);
+    fireEvent.click(screen.getByRole("button", { name: "New schedule" }));
+    fireEvent.change(screen.getByLabelText("Schedule task"), { target: { value: "Retained draft" } });
+    mounted.rerender(ui(false));
+    const before = request.mock.calls.length;
+    vi.useFakeTimers();
+    try { await act(async () => { await vi.advanceTimersByTimeAsync(10000); }); }
+    finally { vi.useRealTimers(); }
+    expect(request.mock.calls.length).toBe(before);
+    mounted.rerender(ui(true));
+    await waitFor(() => expect(request.mock.calls.length).toBeGreaterThan(before));
+    expect(screen.getByLabelText("Schedule task")).toHaveValue("Retained draft");
+  });
+
 });

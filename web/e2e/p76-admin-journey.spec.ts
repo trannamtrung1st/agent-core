@@ -131,6 +131,7 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
 
   await page.getByRole("button", { name: "Back to inventory" }).click();
   await expect(page).toHaveURL(/\/admin$/);
+  await page.getByRole('tab', { name: 'Instances', exact: true }).click();
   await page.getByRole("button", { name: "New instance" }).click();
   const instanceDialog = page.getByRole("dialog", { name: "New instance" });
   await selectOption(page, instanceDialog.getByRole("combobox", { name: "Definition", exact: true }), definitionId);

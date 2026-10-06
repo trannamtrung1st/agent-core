@@ -105,4 +105,15 @@ describe("ApplicationConnectionSection", () => {
     expect(await screen.findByText("Not connected")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /webhook/i })).not.toBeInTheDocument();
   });
+  it("keeps a failed read unknown and recovers in place", async () => {
+    vi.mocked(getApplicationConnection).mockRejectedValueOnce(new Error("Connection read unavailable")).mockResolvedValueOnce(null);
+    renderSection();
+    expect(await screen.findByText("Connection read unavailable")).toBeVisible();
+    expect(screen.queryByText("Not connected")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("Not connected")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+  });
+
 });

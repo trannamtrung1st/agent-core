@@ -8,6 +8,7 @@ test('Admin authors scheduled work, runs through background execution, edits and
   page.on('pageerror', error => errors.push(error.message));
   page.on('requestfailed', request => { if (!request.failure()?.errorText.includes('ERR_ABORTED')) errors.push(request.url()); });
   await page.goto('/admin');
+  await page.getByRole('tab', { name: 'Instances', exact: true }).click();
   await page.getByRole('button', { name: 'New instance', exact: true }).click();
   await page.getByRole('combobox', { name: 'Definition', exact: true }).click();
   await page.getByRole('combobox', { name: 'Definition', exact: true }).fill('general-assistant');

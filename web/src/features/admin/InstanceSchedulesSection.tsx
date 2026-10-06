@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type Key } from "react";
-import { Alert, App, Button, Descriptions, Empty, Flex, Form, Input, InputNumber, Select, Spin, Switch, Table, Tag, Typography, theme } from "antd";
+import { Alert, App, Button, DatePicker, Descriptions, Empty, Flex, Form, Input, InputNumber, Select, Spin, Switch, Table, Tag, Typography, theme } from "antd";
+import dayjs from "dayjs";
 import { confirmAction } from "../../app/confirmAction";
 import { listModels, type ModelDescriptor } from "../../services/api";
 import { instanceContinuityRequest as request, type OwnerSchedule, type OwnerScheduleDraft, type OwnerScheduleReview, type ScheduleTiming } from "../../services/adminApi";
@@ -18,7 +19,7 @@ const date = (value: string | null) => value ? new Date(value).toLocaleString() 
 const blank = (): OwnerScheduleDraft => ({ expectedRevision: 0, enabled: true, intent: "", modelKey: null, reasoningEffort: null,
   schedule: { kind: "daily", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", interval: 1, localTime: "09:00" } });
 
-export function InstanceSchedulesSection({ instanceId, onWork, selection }: { instanceId: string; onWork: (workId?: string) => void; selection?: AutomationSelection }) {
+export function InstanceSchedulesSection({ instanceId, onWork, selection, active = true }: { instanceId: string; active?: boolean; onWork: (workId?: string) => void; selection?: AutomationSelection }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
   const { search, setSearch, pagination } = useAdminCollectionSearch();
   const [expanded, setExpanded] = useState<Key[]>([]);
@@ -54,9 +55,14 @@ export function InstanceSchedulesSection({ instanceId, onWork, selection }: { in
     return () => { order.current.generation++; };
   }, [reload]);
   useEffect(() => {
-    if (loading) return;
+    if (loading || !active) return;
     const timer = window.setInterval(() => { void reload(); }, 5000); return () => window.clearInterval(timer);
-  }, [loading, reload]);
+  }, [loading, reload, active]);
+  const previousActive = useRef(active);
+  useEffect(() => {
+    if (active && !previousActive.current) void reload();
+    previousActive.current = active;
+  }, [active, reload]);
   useEffect(() => {
     if (selection?.kind === "schedule") void reload(true);
   }, [selection, reload]);
@@ -77,6 +83,9 @@ export function InstanceSchedulesSection({ instanceId, onWork, selection }: { in
   }
   const tableVersion = useAutomationSelection(selection, "schedule", review?.items.map(item => item.registrationId) ?? [], setSearch, setExpanded);
   const timing = draft.schedule;
+  const viewerZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const previewTime = (value?: string | null) => value && Number.isFinite(Date.parse(value))
+    ? `${new Date(value).toLocaleString()} (${viewerZone})` : null;
   const policy = review?.policy;
   const minimum = timing.kind === "fixedInterval" ? policy?.minFixedIntervalSeconds ?? 60 : timing.kind === "weekly" ? Math.ceil((policy?.minRecurrenceDays ?? 1) / 7) : policy?.minRecurrenceDays ?? 1;
   const kindAllowed = !policy || ({ oneShot: policy.allowOneShot, daily: policy.allowDaily, weekly: policy.allowWeekly, fixedInterval: policy.allowFixedInterval })[timing.kind];
@@ -100,7 +109,9 @@ export function InstanceSchedulesSection({ instanceId, onWork, selection }: { in
         description={error.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: error.diagnosticId }} /> : undefined} /> : null}
       <Flex wrap gap={token.paddingXS}><Button disabled={busy} onClick={() => { setDraft(blank()); setEditor("new"); }}>New schedule</Button>
         <Button disabled={busy} onClick={() => void reload()}>Refresh schedules</Button><Button onClick={() => onWork()}>View runs</Button></Flex>
-      {editor ? <Form layout="vertical" onFinish={() => {
+      {editor ? <Form layout="vertical" onKeyDown={event => {
+        if (event.key === "Enter" && (event.target as HTMLElement).closest(".ant-picker")) event.preventDefault();
+      }} onFinish={() => {
         const body = { ...draft, schedule: timing.kind === "fixedInterval" && !timing.anchorAtUtc ? { ...timing, anchorAtUtc: new Date(Date.now() + timing.interval * 1000).toISOString() } : timing };
         void mutate(editor === "new" ? "schedules" : `schedules/${editor}`, body, editor === "new" ? "POST" : "PUT");
       }}>
@@ -109,27 +120,42 @@ export function InstanceSchedulesSection({ instanceId, onWork, selection }: { in
           <Form.Item label="Timing"><Select aria-label="Schedule timing" style={{ minWidth: "10rem" }} value={timing.kind} disabled={busy}
             options={[{ value: "oneShot", label: "Once", disabled: policy?.allowOneShot === false }, { value: "daily", label: "Daily", disabled: policy?.allowDaily === false }, { value: "weekly", label: "Weekly", disabled: policy?.allowWeekly === false }, { value: "fixedInterval", label: "Fixed interval", disabled: policy?.allowFixedInterval === false }]}
             onChange={kind => setDraft({ ...draft, schedule: { kind, timeZone: timing.timeZone, interval: kind === "fixedInterval" ? 3600 : 1, localTime: "09:00", weekdays: kind === "weekly" ? [1] : null } })} /></Form.Item>
-          {timing.kind === "oneShot" ? <Form.Item label="Run at (UTC)" extra="Enter an ISO timestamp, for example 2026-10-06T02:00:00Z."><Input aria-label="Schedule run at" value={timing.atUtc ?? ""} disabled={busy} onChange={e => setTiming({ atUtc: e.target.value })} /></Form.Item> :
-            <Form.Item label={timing.kind === "fixedInterval" ? "Interval (seconds)" : timing.kind === "daily" ? "Every (days)" : "Every (weeks)"}>
-              <InputNumber aria-label="Schedule interval" min={minimum} max={maximum} precision={0} value={timing.interval} disabled={busy} onChange={value => setTiming({ interval: value ?? 0 })} /></Form.Item>}
+          {timing.kind === "oneShot" ? <Form.Item label="Run at" extra={`Times shown in ${viewerZone}. Saved in UTC.`}>
+            <DatePicker aria-label="Schedule run at" showTime={{ format: "HH:mm" }} format="YYYY-MM-DD HH:mm"
+              value={timing.atUtc ? dayjs(timing.atUtc) : null} disabled={busy}
+              onChange={value => setTiming({ atUtc: value?.toISOString() ?? null })} />
+          </Form.Item> :
+            <Form.Item style={{ minWidth: "9rem" }} label={timing.kind === "fixedInterval" ? "Interval (seconds)" : timing.kind === "daily" ? "Every (days)" : "Every (weeks)"}>
+              <InputNumber aria-label={timing.kind === "fixedInterval" ? "Schedule interval (seconds)" : timing.kind === "daily" ? "Schedule every (days)" : "Schedule every (weeks)"} min={minimum} max={maximum} precision={0} value={timing.interval} disabled={busy} onChange={value => setTiming({ interval: value ?? 0 })} /></Form.Item>}
           {timing.kind === "daily" || timing.kind === "weekly" ? <><Form.Item label="Local time"><Input aria-label="Schedule local time" type="time" value={timing.localTime ?? "09:00"} disabled={busy} onChange={e => setTiming({ localTime: e.target.value })} /></Form.Item>
             <Form.Item label="Time zone"><Input aria-label="Schedule time zone" value={timing.timeZone} disabled={busy} onChange={e => setTiming({ timeZone: e.target.value })} /></Form.Item></> : null}
-          <Form.Item label="Enabled"><Switch aria-label="Enable schedule" checked={draft.enabled} disabled={busy} onChange={enabled => setDraft({ ...draft, enabled })} /></Form.Item>
+          <Form.Item label="Enable schedule"><Switch aria-label="Enable schedule" checked={draft.enabled} disabled={busy} onChange={enabled => setDraft({ ...draft, enabled })} /></Form.Item>
         </Flex>
         {timing.kind === "weekly" ? <Form.Item label="Weekdays"><Select mode="multiple" aria-label="Schedule weekdays" value={timing.weekdays ?? []} disabled={busy}
           options={["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((label, value) => ({ label, value }))} onChange={weekdays => setTiming({ weekdays })} /></Form.Item> : null}
         {timing.kind !== "oneShot" ? <>
           {policy?.allowIndefiniteRecurrence === false ? <Alert type="info" showIcon title="This Definition requires an end date or occurrence limit." /> : null}
           <Flex wrap gap={token.padding}>
-            <Form.Item label={timing.kind === "fixedInterval" ? "End at (UTC)" : "End date"}>
-              <Input aria-label="Schedule end" type={timing.kind === "fixedInterval" ? "text" : "date"} value={(timing.kind === "fixedInterval" ? timing.endAtUtc : timing.endDate) ?? ""} disabled={busy}
-                onChange={e => setTiming(timing.kind === "fixedInterval" ? { endAtUtc: e.target.value || null } : { endDate: e.target.value || null })} />
+            <Form.Item label={timing.kind === "fixedInterval" ? "End at" : "End date"}
+              extra={timing.kind === "fixedInterval" ? `Times shown in ${viewerZone}. Saved in UTC.` : undefined}>
+              <DatePicker aria-label={timing.kind === "fixedInterval" ? "Schedule end at" : "Schedule end date"}
+                showTime={timing.kind === "fixedInterval" ? { format: "HH:mm" } : false}
+                format={timing.kind === "fixedInterval" ? "YYYY-MM-DD HH:mm" : "YYYY-MM-DD"}
+                value={timing.kind === "fixedInterval" ? timing.endAtUtc ? dayjs(timing.endAtUtc) : null : timing.endDate ? dayjs(timing.endDate) : null}
+                disabled={busy} onChange={value => setTiming(timing.kind === "fixedInterval"
+                  ? { endAtUtc: value?.toISOString() ?? null } : { endDate: value?.format("YYYY-MM-DD") ?? null })} />
             </Form.Item>
             <Form.Item label="Maximum occurrences" extra="Leave both bounds empty only if the Definition permits ongoing recurrence.">
               <InputNumber aria-label="Schedule maximum occurrences" min={1} precision={0} value={timing.maxOccurrences} disabled={busy} onInput={text => setTiming({ maxOccurrences: text.trim() ? Number(text) : null })} onChange={value => setTiming({ maxOccurrences: value })} />
             </Form.Item>
           </Flex>
         </> : null}
+        {timing.kind === "oneShot" && previewTime(timing.atUtc) ? <Typography.Paragraph type="secondary" role="status">
+          Runs on {previewTime(timing.atUtc)}.
+        </Typography.Paragraph> : null}
+        {timing.kind === "fixedInterval" && previewTime(timing.endAtUtc) ? <Typography.Paragraph type="secondary" role="status">
+          Stops on {previewTime(timing.endAtUtc)}.
+        </Typography.Paragraph> : null}
         <Form.Item label="Execution model" extra="Uses the instance unattended default unless you select a model. Each admitted run keeps its model."><ExecutionModelFields models={models}
           modelKey={draft.modelKey ?? ""} reasoningEffort={draft.reasoningEffort ?? ""} disabled={busy} modelLabel="Schedule execution model" effortLabel="Schedule reasoning effort" defaultLabel="Unattended default"
           onChange={(modelKey, reasoningEffort) => setDraft({ ...draft, modelKey: modelKey || null, reasoningEffort: reasoningEffort || null })} /></Form.Item>

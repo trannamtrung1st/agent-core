@@ -400,12 +400,14 @@ export function AdminApp({ route }: { route: AdminRoute }) {
               <div>
                 <Typography.Title level={2} className="admin-home-title">Agent inventory</Typography.Title>
                 <Typography.Paragraph type="secondary" className="admin-home-subtitle">
-                  Inspect definitions, including drafts that have not been published, and the instances pinned to them.
+                  {collection === "definitions" ? "Inspect published definitions and drafts, then open a version or continue editing."
+                    : collection === "instances" ? "Manage agent identities, continuity, automation, and their pinned definition versions."
+                    : "Manage event sources and their credentials, then subscribe instances from Connections."}
                 </Typography.Paragraph>
               </div>
               <Flex gap={8} wrap="wrap">
-                <NewDefinitionButton groups={definitionGroups} />
-                <NewInstanceButton groups={definitionGroups.filter((group) => group.versions.length > 0)} />
+                {collection === "definitions" ? <NewDefinitionButton groups={definitionGroups} /> : null}
+                {collection === "instances" ? <NewInstanceButton groups={definitionGroups.filter((group) => group.versions.length > 0)} /> : null}
               </Flex>
             </Flex>
             <Tabs className="admin-collection-tabs" activeKey={collection}
@@ -2351,7 +2353,7 @@ export function InstanceDetail({
                 key: "continuity", label: "Continuity",
                 children: <Tabs activeKey={continuityTab} onChange={setContinuityTab} aria-label="Continuity sections" items={[
                   { key: "memory", label: "Memory", children: <InstanceMemoryAutomationPanel config={resolved} section="memory" /> },
-                  { key: "experience", label: "Experience", children: resolved.instanceLifecycle === "Active" ? <ExperienceSection instanceId={instanceId} onWork={viewRun} selection={activeTab === "continuity" && continuityTab === "experience" ? experienceSelection : undefined} /> : <Alert type="info" showIcon title="Experience is available when this instance is active" description="Unarchive the instance from Identity & version to inspect its experience." /> }
+                  { key: "experience", label: "Experience", children: resolved.instanceLifecycle === "Active" ? <ExperienceSection instanceId={instanceId} active={activeTab === "continuity" && continuityTab === "experience"} onWork={viewRun} selection={activeTab === "continuity" && continuityTab === "experience" ? experienceSelection : undefined} /> : <Alert type="info" showIcon title="Experience is available when this instance is active" description="Unarchive the instance from Identity & version to inspect its experience." /> }
                 ]} />
               }] : []),
               ...(!resolved.compatibility && resolved.instanceLifecycle === "Active" ? [{
@@ -2359,8 +2361,8 @@ export function InstanceDetail({
                 children: <Flex vertical gap={16}>
                   <Typography.Text type="secondary">A Schedule or Thought produces a Run when it fires. Core decides how that run is executed.</Typography.Text>
                   <Tabs activeKey={automationTab} onChange={setAutomationTab} aria-label="Automation sections" items={[
-                    { key: "schedules", label: "Schedules", children: <InstanceSchedulesSection instanceId={instanceId} onWork={viewRun} selection={activeTab === "automation" ? sourceSelection : undefined} /> },
-                    { key: "thoughts", label: "Thoughts", children: <ThoughtSection instanceId={instanceId} onWork={viewRun} selection={activeTab === "automation" ? sourceSelection : undefined} /> },
+                    { key: "schedules", label: "Schedules", children: <InstanceSchedulesSection instanceId={instanceId} active={activeTab === "automation" && automationTab === "schedules"} onWork={viewRun} selection={activeTab === "automation" ? sourceSelection : undefined} /> },
+                    { key: "thoughts", label: "Thoughts", children: <ThoughtSection instanceId={instanceId} active={activeTab === "automation" && automationTab === "thoughts"} onWork={viewRun} selection={activeTab === "automation" ? sourceSelection : undefined} /> },
                     { key: "controls", label: "Policies & models", children: <Flex vertical gap={16}>
                       <HarnessManagementSection instanceId={instanceId} eligibleTools={resolved.effectiveToolAllowlist} onUpdated={onInstanceChanged} />
                       <InstanceMemoryAutomationPanel config={resolved} section="automation" />

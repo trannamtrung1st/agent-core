@@ -1968,6 +1968,12 @@ body,
 }
 
 .admin-draft-actions {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 10;
+  background: var(--ac-color-container);
+  padding-block: var(--ac-space-compact);
+  border-block-end: 1px solid var(--ac-color-border);
   display: flex;
   flex-direction: column;
   gap: var(--ac-space-compact);
@@ -2379,3 +2385,8 @@ body,
 .admin-run-source { align-self: flex-start; }
 
 .admin-selected-source { outline: 2px solid var(--ac-color-primary); outline-offset: 2px; }
+
+/* Session-scoped continuity shares one flexible conversation source layout. */
+.admin-session-picker { min-width: 0; }
+.admin-memory-source { flex: 1 1 18rem; min-width: 0; display: flex; flex-direction: column; gap: var(--ac-space-compact); }
+.admin-draft-editor [id], .admin-draft-editor .ant-input { scroll-margin-block-start: 10rem; }

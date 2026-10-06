@@ -341,7 +341,8 @@ describe("InstanceMemoryAutomationPanel", () => {
       expect(screen.getByRole("button", { name: "Load items" })).not.toHaveClass("ant-btn-loading")
     );
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Session id" }), {
+    fireEvent.click(screen.getByRole("button", { name: "Enter Session ID" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Session ID" }), {
       target: { value: "873f07d1-e264-4c81-a31b-7e59e940b842" }
     });
     fireEvent.click(screen.getByRole("button", { name: "Load items" }));
@@ -370,7 +371,8 @@ describe("InstanceMemoryAutomationPanel", () => {
     );
 
     await chooseMemoryScope("Session");
-    fireEvent.change(screen.getByRole("textbox", { name: "Session id" }), {
+    fireEvent.click(screen.getByRole("button", { name: "Enter Session ID" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Session ID" }), {
       target: { value: "873f07d1-e264-4c81-a31b-7e59e940b842" }
     });
     fireEvent.click(screen.getByRole("button", { name: "Load items" }));

@@ -11,6 +11,7 @@ async function create(page: Page, name: string, mode = 'Managed', scope = 'Knowl
   await page.getByRole('button',{name:'Send',exact:true}).click();
   await expect(page.getByText('Hello from synthetic.',{exact:true}).last()).toBeVisible();
   await page.getByRole('button',{name:'Open Admin'}).click();
+  await page.getByRole('tab', { name: 'Instances', exact: true }).click();
   await page.getByRole('button',{name:'New instance',exact:true}).click();
   await select(page,'Definition','General Assistant · general-assistant');
   await select(page,'Published version','v7 · Built-in · Published');

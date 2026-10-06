@@ -130,6 +130,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await completeDefinitionDraftPublishGate(page, editor);
     await publishDraftFromInstructions(page, editor);
     await page.goto('/admin');
+    await page.getByRole('tab', { name: 'Instances', exact: true }).click();
     await page.getByRole('button', { name: 'New instance', exact: true }).click();
     const create = page.getByRole('dialog', { name: 'New instance', exact: true });
     await create.getByRole('combobox', { name: 'Definition', exact: true }).click();
@@ -162,7 +163,8 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await openInstance(page);
     const experience = page.getByRole('region', { name: 'Experience', exact: true });
     await expect(experience.getByRole('button', { name: 'View experience: Review observable completed work', exact: true })).toHaveCount(1, { timeout: 30_000 });
-    await experience.getByLabel('Retrospection source Session', { exact: true }).fill(sourceSessionId);
+    await experience.getByRole("button", { name: "Enter Session ID", exact: true }).click();
+    await experience.getByLabel('Session ID', { exact: true }).fill(sourceSessionId);
     const retrospect = () => Promise.all([
       page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/experience/checkpoints') && r.ok()),
       experience.getByRole('button', { name: 'Retrospect now', exact: true }).click()
