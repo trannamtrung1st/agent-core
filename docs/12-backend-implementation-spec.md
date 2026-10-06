@@ -21,7 +21,7 @@ Ordinary write creates home files, accepting optional expectedRevision/expectedS
 
 Publish user downloads with `artifacts.create_from_workspace` from either root. Normal model guidance describes durable work directly in home and explicit scratch processing/copy for sandbox. Tool policy and execution both check the pinned policy and actual managed eligibility; background work does not receive Session cwd.
 
-Canonical allowlist validation distinguishes tool_limit_exceeded, duplicate_tool and invalid_tool_name; candidate validation retains unregistered_tool and unconfigured_tool. Findings name `environment.toolAllowlist`; authoring Problem Details retains `code:ValidationError` and adds `field`/`validationCode` plus useful detail. The former 32 limit has been removed by the capability enhancement above.
+Canonical legacy allowlist validation distinguishes `duplicate_tool` and `invalid_tool_name`; candidate validation retains unregistered_tool and unconfigured_tool. Findings name `environment.toolAllowlist`; authoring Problem Details retains `code:ValidationError` and adds `field`/`validationCode` plus useful detail. The former 32 limit has been removed by the capability enhancement above.
 
 
 [Interfaces](04-backend-interfaces.md) owns ports, [Architecture](03-system-architecture.md) owns concurrency, and [Controller](05-interaction-controller.md) owns turn-taking. This document owns Agent Definition, text-first context construction and the initial HTTP model adapter. The canonical MVP composes STT → Interaction Controller → text Agent Runtime / LLM → Speech Segmenter → TTS; it requires no multimodal audio-reasoning model.

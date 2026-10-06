@@ -1,6 +1,6 @@
 # Capability authorization and projection verification
 
-This follow-on implements `local/proposals/agent_core_capability_authorization_projection_final_proposal.md` on the reviewed workspace baseline `d78aaa35`. It composes with the accepted Agent Workspace refinement and does not reopen frozen milestones or start P10/P11. Local gates are verified below. Hosted Synthetic acceptance is pending the enhancement's own behavior commit and run; earlier workspace receipts are not evidence for this change.
+This follow-on implements `local/proposals/agent_core_capability_authorization_projection_final_proposal.md` on the reviewed workspace baseline `d78aaa35`. It composes with the accepted Agent Workspace refinement and does not reopen frozen milestones or start P10/P11. The enhancement is accepted on behavior commit `bd83f58c4f608b91eab4fc21079674ca02f283fc` after local runtime verification and all five hosted Synthetic jobs passed. Earlier workspace receipts are separate evidence.
 
 ## Authority and projection
 
@@ -33,13 +33,13 @@ All commands use installed dependencies. Backend commands ran with `--no-restore
 | Legacy catalog follow-up | Preserved `toolNames` subset and complete new-mode metadata: 3 API tests and 15 focused frontend tests passed; All publication/Chat rerun passed. MCP confirmed legacy continuity exclusion, full-catalog inclusion, bootstrap metadata, 54 authorized grants and a 390px document at 390px viewport. |
 | Existing Playwright workspace / authoring journeys | `agent-workspace.spec.ts`, `agent-workspace-v2.spec.ts`, `z-admin-definition-lifecycle.spec.ts` and all four `secretary-demo.spec.ts` journeys passed. |
 | `COMPOSE_PROJECT_NAME=capability-projection-review bash scripts/compose-sqlite-volume.sh` | Passed: SQLite, durable work, home/scratch and Artifact bytes survived container recreation and source deletion. Only the disposable project's volume was removed afterward. |
-| Documentation / compatibility | Canonical owners updated; 353 local links, 125 fragment links, balanced fences and 15 complete JSON examples checked; `git diff --check` passed; no published `agents/` file changed. |
+| Documentation / compatibility | Canonical owners updated; 371 local links, 125 fragment links, balanced fences and 15 complete JSON examples checked; `git diff --check` passed; no published `agents/` file changed. |
 
 The broad suites cover registry/policy, Skills, browser, email, scheduling, attachments, continuity/maintenance, harness, app messaging, WorkItems, approvals, workspace, Synthetic tool loops and provider mappings. No hosted provider, live speech or real-store probe was enabled. Those explicit opt-in skips do not block key-free acceptance.
 
 ## Observed browser actions
 
-The disposable Synthetic host used API 5086 / Vite 5176 and isolated storage under `/tmp/capability-projection-review`. No user catalog or running nopCommerce service was modified.
+The disposable Synthetic host used API 5086 / Vite 5176 and isolated storage under `/tmp/capability-projection-review`. No user catalog or running nopCommerce service was modified. The disposable API and Vite hosts were stopped after final verification.
 
 CLI Playwright created a self-contained Selected draft, confirmed an unauthorized `workspace.write` was absent from the always selector, switched to All, checked 1440px and 390px widths, saved, validated, ran the required Synthetic scenario and published. The resulting managed Chat first exposed bootstrap/always/context tools without `workspace.write` or browser schemas. A load request admitted exactly `workspace.write`; the next generation wrote `Loaded exact capability café\r\n`. HTTP download matched all 31 UTF-8 bytes. A new inspect turn omitted the loaded interface.
 
@@ -49,4 +49,6 @@ An early UI check sampled the closing dropdown animation and falsely reported ov
 
 ## Hosted receipt
 
-The initial behavior commit `6bd7b17299bb4878b89eb04cc97de60e9ce8e088` and [Hosted Synthetic run 37516499376](https://github.com/trannamtrung1st/agent-core/actions/runs/37516499376) exposed a legacy `toolNames` compatibility regression. Commit `bcb7749358d0f862c8419acad5a10077e477af85` preserves the original selectable subset while new-mode authoring/evaluation consumes the complete metadata catalog. Final review also corrected connected live-occurrence load admission and response isolation; the routed regression exercises both connection states after a persisted user turn. Acceptance remains pending all five jobs on that final behavior commit. Earlier workspace runs are separate evidence.
+The initial behavior commit `6bd7b17299bb4878b89eb04cc97de60e9ce8e088` and [Hosted Synthetic run 37516499376](https://github.com/trannamtrung1st/agent-core/actions/runs/37516499376) exposed a legacy `toolNames` compatibility regression. Commit `bcb7749358d0f862c8419acad5a10077e477af85` preserves the original selectable subset while new-mode authoring/evaluation consumes the complete metadata catalog. Final review also corrected connected live-occurrence load admission and response isolation; the routed regression exercises both connection states after a persisted user turn. Final behavior commit: `bd83f58c4f608b91eab4fc21079674ca02f283fc`. [Hosted Synthetic run 37520008675](https://github.com/trannamtrung1st/agent-core/actions/runs/37520008675) completed successfully on that exact commit. All five jobs passed: Compose smoke, backend, core Playwright (102 passed), dedicated acceptance (17 passed), and frontend (94 files / 705 tests plus TypeScript and production build). Hosted backend counts are Domain 145, Infrastructure 765, Application 1,302 and API 387 passed, with 18 skips; the six additional hosted Infrastructure skips are Docker sandbox runtime/image probes that passed locally. Order Events (four passed locally) is not a separate hosted workflow project. Earlier workspace runs are separate evidence.
+
+The final receipt and documentation consistency corrections are documentation-only follow-up changes. No behavior changed after the accepted commit. All required enhancement gates are complete; historical freezes remain unchanged and P10/P11 remain unopened.
