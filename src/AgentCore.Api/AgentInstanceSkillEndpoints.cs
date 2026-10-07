@@ -20,7 +20,7 @@ internal static class AgentInstanceSkillEndpoints
         g.MapPatch("/{key}", (Guid instanceId, string key, JsonElement body, AgentInstanceSkillService s, CancellationToken ct) => Respond(() => Write(s.WriteAsync(instanceId, "update", key, Revision(body), InstanceSkillTools.ReadInput(body), ct: ct))));
         g.MapPut("/{key}/enabled", (Guid instanceId, string key, JsonElement body, AgentInstanceSkillService s, CancellationToken ct) => Respond(() => Write(s.WriteAsync(instanceId, "set_enabled", key, Revision(body), enabled: body.GetProperty("enabled").GetBoolean(), ct: ct))));
         g.MapDelete("/{key}", (Guid instanceId, string key, long expectedRevision, AgentInstanceSkillService s, CancellationToken ct) => Respond(() => Write(s.WriteAsync(instanceId, "delete", key, expectedRevision, ct: ct))));
-        g.MapPost("/{key}/customize", (Guid instanceId, string key, JsonElement body, AgentInstanceSkillService s, CancellationToken ct) => Respond(() => Write(s.WriteAsync(instanceId, "customize", key, Revision(body), ct: ct))));
+        g.MapPost("/{key}/customize", (Guid instanceId, string key, JsonElement body, AgentInstanceSkillService s, CancellationToken ct) => Respond(() => Customize(s.CustomizeAsync(instanceId, key, Revision(body), ct: ct))));
     }
     private static AgentInstanceSkillResponse Wire(InstanceSkillView v) => new(v.Key, v.Origin.ToString(), v.Name, v.Description,
         v.Procedure, v.Projection.ToString(), v.Enabled, v.RequiredCapabilities, v.Revision, v.DefinitionVersion,
@@ -28,6 +28,11 @@ internal static class AgentInstanceSkillEndpoints
         v.CreatedBy?.ToString(), v.CreatedAt, v.UpdatedAt);
     private static async ValueTask<AgentInstanceSkillResponse> Read(ValueTask<InstanceSkillView> action) => Wire(await action);
     private static async ValueTask<AgentInstanceSkillResponse> Write(ValueTask<InstanceSkillView> action) => Wire(await action);
+    private static async ValueTask<AgentInstanceSkillCustomizeResponse> Customize(ValueTask<InstanceSkillCustomization> action)
+    {
+        var result = await action;
+        return new(Wire(result.InstanceSkill), new(result.DefinitionSkill.Key, result.DefinitionSkill.Enabled, result.DefinitionSkill.Revision));
+    }
     private static long Revision(JsonElement body) => body.GetProperty("expectedRevision").GetInt64();
     private static async Task<IResult> Respond<T>(Func<ValueTask<T>> action)
     {

@@ -13,5 +13,6 @@ export const inspectInstanceSkill = (id: string, key: string) => request<Instanc
 export const createInstanceSkill = (id: string, input: SkillInput) => request<InstanceSkill>(path(id), 'POST', input);
 export const updateInstanceSkill = (id: string, skill: InstanceSkill, input: SkillInput) => request<InstanceSkill>(path(id, skill.key), 'PATCH', { ...input, expectedRevision: skill.revision });
 export const toggleInstanceSkill = (id: string, skill: InstanceSkill, enabled: boolean) => request<InstanceSkill>(path(id, skill.key) + '/enabled', 'PUT', { expectedRevision: skill.revision, enabled });
-export const customizeInstanceSkill = (id: string, skill: InstanceSkill) => request<InstanceSkill>(path(id, skill.key) + '/customize', 'POST', { expectedRevision: skill.revision });
+export type SkillCustomization = { instanceSkill: InstanceSkill; definitionSkill: { key: string; enabled: boolean; revision: number } };
+export const customizeInstanceSkill = (id: string, skill: InstanceSkill) => request<SkillCustomization>(path(id, skill.key) + '/customize', 'POST', { expectedRevision: skill.revision });
 export const deleteInstanceSkill = (id: string, skill: InstanceSkill) => request<InstanceSkill>(path(id, skill.key) + `?expectedRevision=${skill.revision}`, 'DELETE');

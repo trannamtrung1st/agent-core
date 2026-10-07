@@ -200,7 +200,9 @@ _, skill_body = request(skills_url, headers=owner_headers)
 source = next(row for row in json.loads(skill_body) if row["origin"] == "Definition")
 _, copied_body = request(skills_url + "/" + urllib.parse.quote(source["key"], safe="") + "/customize", method="POST",
     data=json.dumps({"expectedRevision": source["revision"]}).encode(), headers=owner_headers)
-copied_skill = json.loads(copied_body)
+customized = json.loads(copied_body)
+copied_skill = customized["instanceSkill"]
+assert customized["definitionSkill"] == {"key": source["key"], "enabled": False, "revision": source["revision"] + 1}
 assert copied_skill["origin"] == "Instance" and copied_skill["sourceDefinitionSkillId"] == "browser.record.lookup"
 _, accounting_body = request(skills_url, method="POST", headers=owner_headers,
     data=json.dumps({"name": "Accounting", "description": "Check totals", "procedure": "COMPOSE_ACCOUNTING_PROCEDURE",

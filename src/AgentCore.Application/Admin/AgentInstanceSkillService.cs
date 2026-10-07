@@ -13,6 +13,9 @@ public sealed record InstanceSkillView(string Key, SkillOrigin Origin, string Na
     int? DefinitionVersion, string? SourceDefinitionId, int? SourceDefinitionVersion, string? SourceDefinitionSkillId,
     IReadOnlyList<string> MissingCapabilities, SkillAuthor? CreatedBy = null, DateTimeOffset? CreatedAt = null, DateTimeOffset? UpdatedAt = null);
 
+public sealed record DefinitionSkillMutationState(string Key, bool Enabled, long Revision);
+public sealed record InstanceSkillCustomization(InstanceSkillView InstanceSkill, DefinitionSkillMutationState DefinitionSkill);
+
 public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAgentDefinitionStore definitions, IIdGenerator ids, TimeProvider time)
 {
     public async ValueTask<IReadOnlyList<InstanceSkillView>> ListAsync(Guid instanceId, AgentDefinition? context = null, CancellationToken ct = default)
@@ -26,7 +29,19 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
         (await ListAsync(instanceId, context, ct)).SingleOrDefault(s => s.Key == key) ?? throw AgentCoreErrors.NotFound("Skill was not found.");
 
     public async ValueTask<InstanceSkillView> WriteAsync(Guid id, string operation, string? key = null, long? expectedRevision = null,
-        InstanceSkillInput? input = null, bool? enabled = null, SkillAuthor actor = SkillAuthor.Admin, AgentDefinition? context = null, CancellationToken ct = default)
+        InstanceSkillInput? input = null, bool? enabled = null, SkillAuthor actor = SkillAuthor.Admin, AgentDefinition? context = null, CancellationToken ct = default) =>
+        (await WriteCoreAsync(id, operation, key, expectedRevision, input, enabled, actor, context, ct)).Skill;
+
+    public async ValueTask<InstanceSkillCustomization> CustomizeAsync(Guid id, string key, long expectedRevision,
+        SkillAuthor actor = SkillAuthor.Admin, AgentDefinition? context = null, CancellationToken ct = default)
+    {
+        var result = await WriteCoreAsync(id, "customize", key, expectedRevision, actor: actor, context: context, ct: ct);
+        return new(result.Skill, result.DefinitionSkill ?? throw AgentCoreErrors.Persistence("Customization source state is missing."));
+    }
+
+    private async ValueTask<(InstanceSkillView Skill, DefinitionSkillMutationState? DefinitionSkill)> WriteCoreAsync(
+        Guid id, string operation, string? key = null, long? expectedRevision = null, InstanceSkillInput? input = null,
+        bool? enabled = null, SkillAuthor actor = SkillAuthor.Admin, AgentDefinition? context = null, CancellationToken ct = default)
     {
         var owner = await RequireAsync(id, ct);
         if (owner.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Validation("Archived instances cannot change Skills.");
@@ -100,8 +115,9 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
             definition.Version, JsonSerializer.Serialize(new { instanceId = id.ToString("D"), operation, skillKey = key ?? "instance:" + local!.SkillId.ToString("D") })) : null;
         ct.ThrowIfCancellationRequested();
         await instances.MutateSkillsAsync(new(id, owner.Revision, state, local, delete, oldSkillRevision, oldStateRevision, history), ct);
-        if (delete is not null) return current!;
-        return Views(definition, next).Single(s => s.Key == (local is not null ? "instance:" + local.SkillId.ToString("D") : key));
+        if (delete is not null) return (current!, null);
+        var written = Views(definition, next).Single(s => s.Key == (local is not null ? "instance:" + local.SkillId.ToString("D") : key));
+        return (written, operation == "customize" ? new("definition:" + state!.DefinitionSkillId, state.Enabled, state.Revision) : null);
     }
     private static void Validate(InstanceSkillInput input, AgentDefinition definition)
     {

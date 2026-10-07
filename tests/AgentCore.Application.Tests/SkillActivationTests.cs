@@ -86,7 +86,11 @@ public sealed class SkillActivationTests
         var service = new AgentInstanceSkillService(store, defs, ids, clock);
         var initial = Assert.Single(await service.ListAsync(owner.InstanceId));
         Assert.True(initial.Enabled); Assert.Equal("definition:review", initial.Key);
-        var copied = await service.WriteAsync(owner.InstanceId, "customize", initial.Key, initial.Revision, actor: SkillAuthor.Agent);
+        var customized = await service.CustomizeAsync(owner.InstanceId, initial.Key, initial.Revision, actor: SkillAuthor.Agent);
+        var copied = customized.InstanceSkill;
+        Assert.Equal(initial.Key, customized.DefinitionSkill.Key);
+        Assert.False(customized.DefinitionSkill.Enabled);
+        Assert.Equal(initial.Revision + 1, customized.DefinitionSkill.Revision);
         Assert.Equal(SkillOrigin.Instance, copied.Origin); Assert.Equal("review", copied.SourceDefinitionSkillId);
         Assert.False((await service.InspectAsync(owner.InstanceId, initial.Key)).Enabled);
         Assert.Equal("ORIGINAL", copied.Procedure);

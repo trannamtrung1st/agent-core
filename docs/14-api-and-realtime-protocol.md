@@ -492,7 +492,7 @@ All HTTP routes below are under `/api/v2/admin/agent-instances/{instanceId}/skil
 | PATCH `/{key}` | Update local content with `expectedRevision` |
 | PUT `/{key}/enabled` | `{expectedRevision, enabled}` for either origin |
 | DELETE `/{key}?expectedRevision=N` | Delete local Skill only |
-| POST `/{key}/customize` | `{expectedRevision}`; atomic independent copy plus source disable |
+| POST `/{key}/customize` | `{expectedRevision}`; atomic independent copy plus source disable; returns `{instanceSkill,definitionSkill:{key,enabled:false,revision}}` |
 
 Create/update content is `{name, description, procedure, projection, enabled, requiredCapabilities}` with projection exactly `Always`/`OnDemand`; update additionally requires the current revision. Responses use camelCase and string origin/projection. Views include key, origin, description, revision, current Definition version or local source provenance, and `missingCapabilities`. Invalid/wrong-origin/resource-bound customization is 400; missing owner/key is 404; stale revision is 409; missing owner capability is 401. Archived owners are read-only. Admin mutations append safe operation/key history atomically; model writes retain Agent provenance without false Admin events.
 

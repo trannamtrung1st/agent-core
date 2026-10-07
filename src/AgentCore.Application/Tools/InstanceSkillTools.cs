@@ -27,7 +27,7 @@ public static class InstanceSkillTools
             if (op is "create" or "update" or "set_enabled") Add("enabled", new() { ["type"] = "boolean" });
             var schema = new JsonObject { ["type"] = "object", ["additionalProperties"] = false, ["properties"] = properties, ["required"] = required };
             yield return new(new("skills." + op,
-                $"{op} Skills of the current trusted Agent Instance. Definition content is read-only. Customize creates an independent Instance copy and disables the source. Writes apply to future executions; use current revisions from inspect. Required capabilities never grant authority.", schema.ToJsonString()),
+                $"{op} Skills of the current trusted Agent Instance. Definition content is read-only. Customize returns instanceSkill (the independent copy) and definitionSkill (the disabled source key, enabled state and revision). Writes apply to future executions; use current revisions from inspect. Required capabilities never grant authority.", schema.ToJsonString()),
                 op is "list" or "inspect" ? ToolEffect.ReadOnly : ToolEffect.Write, ToolOfferRule.RoleAllowlist,
                 ToolResourceScope.Owner, op is "list" or "inspect" ? ToolReplaySafety.ReplaySafe : ToolReplaySafety.NonReplayable);
         }
@@ -58,6 +58,8 @@ public sealed partial class SessionToolExecutor
             object result;
             if (op == "list") result = (await instanceSkills.ListAsync(id, definition, ct)).Select(s => new { s.Key, s.Origin, s.Name, s.Description, s.Projection, s.Enabled, s.Revision, s.RequiredCapabilities, s.MissingCapabilities, s.SourceDefinitionId, s.SourceDefinitionVersion, s.SourceDefinitionSkillId }).ToArray();
             else if (op == "inspect") result = await instanceSkills.InspectAsync(id, args.GetProperty("key").GetString()!, definition, ct);
+            else if (op == "customize") result = await instanceSkills.CustomizeAsync(id, args.GetProperty("key").GetString()!,
+                args.GetProperty("expectedRevision").GetInt64(), SkillAuthor.Agent, definition, ct);
             else result = await instanceSkills.WriteAsync(id, op, args.TryGetProperty("key", out var key) ? key.GetString() : null,
                 args.TryGetProperty("expectedRevision", out var rev) ? rev.GetInt64() : null,
                 op is "create" or "update" ? InstanceSkillTools.ReadInput(args) : null,
