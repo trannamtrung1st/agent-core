@@ -69,3 +69,20 @@ All five jobs completed successfully: Synthetic backend, Synthetic frontend, Syn
 ## Closure and limits
 
 The proposal's architecture, continuity, UI and quality gates are complete. Changed-doc hygiene passes: 20 Markdown files, 489 local links/anchors, 15 complete JSON examples; balanced fences and git diff --check pass. The final evidence update preserves these counts. Synthetic demonstrates structural execution and authority boundaries; hosted-model judgement and real external business outcomes are not asserted. The existing frontend bundle-size warning remains. This convergence does not open P10/P11 or move historical milestone freeze SHAs.
+
+
+## Post-closure consistency and runtime review — 2026-10-07
+
+Reviewed from `ca911d9660af6b1e803c220d140367b3a36e9529` on `main`. The original cutover SHA and hosted evidence above remain historical closure evidence. This bounded follow-up fixes two reproduced UI defects and synchronizes contract/design references; it does not introduce a new runtime or milestone.
+
+- Completed/Expired Automation rows incorrectly disabled deletion even though current-revision backend deletion preserves accepted Runs. Delete now remains available for these terminal sources; edit/enable/run remain unavailable. Two component regressions reproduce the previous failure and pass after the correction.
+- Immediate focus restoration raced the confirmation dialog's closing animation and left keyboard focus on the page body. The existing shared `confirmAction` composition now accepts Ant Design's `afterClose` callback; confirmed Automation deletion restores New automation focus after the dialog closes. Cancellation retains the default opener restoration.
+- Corrected the backend port's exact latest-run method name, per-Automation Event dedupe key and executable `experience.source`/`experience.record` description. Testing guidance and the shared design context no longer recommend retired Events/Schedules/Thought/Retrospection navigation/labels. Refreshed the design sidecar narrative from the existing context, preserving tokens and component metadata.
+
+Final local checks passed: 17 Automation component tests, three UnifiedAutomationJourney API scenarios, 11 migration/store/tool-authority Infrastructure tests, both browser journeys in unified-event-automation.spec.ts, and TypeScript/Vite production build. The existing bundle-size warning remains. The first new browser test used an incorrect exact outcome-text selector; it was corrected to match the actual model/outcome line, then both scenarios passed. The initial build found an unused test parameter, corrected before the successful build.
+
+Playwright MCP against an isolated native Synthetic/SQLite host exercised a real one-shot activation through quiet NoAction completion, confirmed deletion, empty configuration and retained immutable Run instructions/result after navigation/reload. A final repeated deletion confirmed New automation focus after dialog closure. Console errors: zero; affected API reads/mutations succeeded. The repeatable browser regression verifies the same lifecycle and reload, alongside actual Event ingress/deduplication and exact source navigation. Local verification hosts were stopped; no user database was reset.
+
+Changed-document hygiene passed for five Markdown files and 66 local links/anchors, with balanced fences and no complete JSON examples in these changed files. `git diff --check` and design-sidecar JSON/unchanged token-component checks passed.
+
+Hosted verification for this follow-up is pending the committed candidate. The original five-job green workflow does not prove this later behavior change.

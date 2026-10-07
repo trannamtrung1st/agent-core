@@ -8,11 +8,12 @@ export interface ConfirmActionOptions {
   cancelText?: string;
   danger?: boolean;
   onOk?: () => void | Promise<void>;
+  afterClose?: () => void;
 }
 
 /** Centered confirmation modal — use instead of Popconfirm for destructive or high-friction actions. */
 export function confirmAction(modal: HookAPI, options: ConfirmActionOptions): void {
-  const { title, content, okText, cancelText, danger, onOk } = options;
+  const { title, content, okText, cancelText, danger, onOk, afterClose } = options;
   modal.confirm({
     title,
     content,
@@ -21,6 +22,7 @@ export function confirmAction(modal: HookAPI, options: ConfirmActionOptions): vo
     centered: true,
     mask: { closable: true },
     ...(danger ? { okType: "danger", okButtonProps: { danger: true } } : {}),
-    onOk
+    onOk,
+    afterClose
   });
 }

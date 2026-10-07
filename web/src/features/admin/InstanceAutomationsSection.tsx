@@ -81,7 +81,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
     try {
       const saved = await request<Automation>(instanceId, path, method, body); accepted = true;
       if (saved?.automationId && method === "PUT") setSavedSelection({ kind: "automation", automationId: saved.automationId, request: Date.now() });
-      if (method === "DELETE") { setExpanded([]); setSavedSelection(undefined); requestAnimationFrame(() => newButton.current?.focus()); }
+      if (method === "DELETE") { setExpanded([]); setSavedSelection(undefined); }
       if (path === "automations" || method === "PUT") { setEditor(null); setDraft(blank()); }
       apply(await request<AutomationReview>(instanceId, "automations"));
       if (path === "automations" && saved?.automationId) requestAnimationFrame(() =>
@@ -232,8 +232,13 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
               <Button disabled={busy || terminal.includes(item.status)} onClick={() => void mutate(`automations/${item.automationId}`, {
                 expectedRevision: item.revision, enabled: !item.enabled, name: item.name, instructions: item.instructions, trigger: item.trigger, modelKey: item.modelKey, reasoningEffort: item.reasoningEffort
               }, "PUT")}>{item.enabled ? "Disable automation" : "Enable automation"}</Button>
-              <Button danger disabled={busy || terminal.includes(item.status)} onClick={() => confirmAction(modal, { title: "Delete this automation?", content: "Stops future runs. Existing runs remain available in Runs.", okText: "Delete automation", danger: true,
-                onOk: () => mutate(`automations/${item.automationId}`, { expectedRevision: item.revision }, "DELETE") })}>Delete automation</Button>
+              <Button danger disabled={busy || item.status === "Cancelled"} onClick={() => {
+                let confirmed = false;
+                confirmAction(modal, { title: "Delete this automation?", content: "Stops future runs. Existing runs remain available in Runs.", okText: "Delete automation", danger: true,
+                  onOk: async () => { confirmed = true; await mutate(`automations/${item.automationId}`, { expectedRevision: item.revision }, "DELETE"); },
+                  afterClose: () => { if (confirmed) requestAnimationFrame(() => newButton.current?.focus()); }
+                });
+              }}>Delete automation</Button>
               {item.lastWorkItemId ? <Button onClick={() => onWork(item.lastWorkItemId!)}>View last run</Button> : null}</Flex>
             </Flex>
           }} />

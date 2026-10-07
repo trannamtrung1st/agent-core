@@ -18,6 +18,25 @@ beforeEach(() => {
   request.mockResolvedValue({ items: [] });
 });
 describe("Owner schedule authoring", () => {
+  it.each(["Completed", "Expired"])("deletes %s automations with the current revision", async status => {
+    const completed = { ...row, status, enabled: false, lastWorkItemId: "retained-run", executionStatus: "Completed" };
+    let removed = false;
+    request.mockImplementation(async (_instance, _path, method) => {
+      if (method === "DELETE") { removed = true; return { cancelled: true }; }
+      return { items: removed ? [] : [completed] };
+    });
+    render(view());
+    fireEvent.click(await screen.findByRole("button", { name: `View automation: ${row.name}` }));
+    const details = within(screen.getByRole("region", { name: "Automation details" }));
+    expect(details.getByRole("button", { name: "Run automation now" })).toBeDisabled();
+    expect(details.getByRole("button", { name: "View last run" })).toBeEnabled();
+    fireEvent.click(details.getByRole("button", { name: "Delete automation" }));
+    const confirmation = await screen.findByRole("dialog");
+    fireEvent.click(within(confirmation).getByRole("button", { name: "Delete automation" }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith("instance", "automations/scheduled", "DELETE", { expectedRevision: 2 }));
+    await screen.findByText(/No automations yet/);
+    await waitFor(() => expect(screen.getByRole("button", { name: "New automation" })).toHaveFocus());
+  });
   it.each([["WaitingForApproval", "Needs approval"], ["WaitingToRetry", "Retrying"]])("uses readable run state for %s", async (executionStatus, label) => {
     request.mockResolvedValue({ items: [{ ...row, executionStatus, lastWorkItemId: "last-run" }] });
     render(view());

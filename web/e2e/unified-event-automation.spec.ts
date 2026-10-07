@@ -1,5 +1,53 @@
 import { expect, test } from '@playwright/test';
 
+test('Completed Automation can be deleted while its quiet Run remains inspectable after reload', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('response', response => { if (response.status() >= 500) errors.push(`${response.status()} ${response.url()}`); });
+  await page.goto('/admin/instances');
+  await page.waitForFunction(() => localStorage.getItem('agent-core.owner-capability'));
+  const owner = (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))!;
+  const headers = { 'X-AgentCore-Owner-Capability': owner };
+  const created = await page.request.post('/api/v2/admin/agent-instances', { headers, data: {
+    definitionId: 'secretary', version: 4,
+    persona: { name: 'Completed Automation review', role: 'Reviewer', description: 'Disposable Synthetic lifecycle verification', tone: 'Clear' }
+  } });
+  expect(created.ok()).toBe(true);
+  const instanceId = (await created.json()).instanceId;
+  const path = `/api/v2/admin/agent-instances/${instanceId}`;
+  const name = 'Completed source cleanup';
+  const instructions = 'Review only. Do nothing when nothing needs action.';
+  const saved = await page.request.post(path + '/automations', { headers, data: {
+    expectedRevision: 0, enabled: true, name, instructions,
+    trigger: { kind: 'schedule', schedule: { kind: 'oneShot', timeZone: 'UTC', atUtc: new Date(Date.now() + 4000).toISOString() } }
+  } });
+  expect(saved.ok()).toBe(true);
+  const automationId = (await saved.json()).automationId;
+  await page.goto(`/admin/instances/${instanceId}/automation`);
+  const automations = page.getByRole('region', { name: 'Automations', exact: true });
+  await expect(automations.getByText(/Completed · No action/).first()).toBeVisible({ timeout: 30000 });
+  await automations.getByRole('button', { name: `View automation: ${name}`, exact: true }).click();
+  const details = automations.getByRole('region', { name: 'Automation details', exact: true });
+  await expect(details.getByRole('button', { name: 'Run automation now', exact: true })).toBeDisabled();
+  await details.getByRole('button', { name: 'Delete automation', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete automation', exact: true }).click();
+  await expect(automations.getByText(/No automations yet/)).toBeVisible();
+  await expect(automations.getByRole('button', { name: 'New automation', exact: true })).toBeFocused();
+  await page.reload();
+  expect((await (await page.request.get(path + '/automations', { headers })).json()).items).toHaveLength(0);
+  const work = (await (await page.request.get(path + '/work-items', { headers })).json()).items;
+  expect(work).toHaveLength(1);
+  expect(work[0].automationId).toBe(automationId);
+  expect(work[0].instructions).toBe(instructions);
+  expect(work[0].status).toBe('completed');
+  await page.getByRole('tab', { name: 'Runs', exact: true }).click();
+  await page.getByRole('button', { name: `View automation · schedule run ${work[0].workItemId}`, exact: true }).click();
+  const run = page.getByRole('dialog', { name: 'Run details', exact: true });
+  await expect(run.getByText(instructions, { exact: true })).toBeVisible();
+  await expect(run.getByText(/Model:.*No action/)).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test('Connections ingress activates configured Event instructions once and Runs returns to the exact Automation', async ({ page }) => {
   test.setTimeout(90000);
   const errors: string[] = [];
