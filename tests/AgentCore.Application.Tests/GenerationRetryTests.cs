@@ -14,6 +14,61 @@ namespace AgentCore.Application.Tests;
 
 public sealed class GenerationRetryTests
 {
+    [Theory]
+    [InlineData(ProviderFailureReason.SetupTimeout)]
+    [InlineData(ProviderFailureReason.StreamIdle)]
+    public async Task Initial_timeout_retries_once_and_completes(string reason)
+    {
+        var model = new ScriptedModel(
+            [new ModelFailed(TimeoutFailure(reason))],
+            Answer("Recovered answer."));
+        await using var runtime = Create(model, browser: null);
+        await runtime.AttachAsync();
+        Assert.True(await runtime.SubmitUserTextAsync("hello"));
+        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(2, model.Calls);
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Completed, assistant.Status);
+        Assert.Equal("Recovered answer.", assistant.Text);
+    }
+
+    [Theory]
+    [InlineData(ProviderFailureReason.TotalTimeout)]
+    [InlineData(null)]
+    public async Task Total_or_unclassified_timeout_is_terminal(string? reason)
+    {
+        var model = new ScriptedModel([new ModelFailed(TimeoutFailure(reason))]);
+        await using var runtime = Create(model, browser: null);
+        await runtime.AttachAsync();
+        Assert.True(await runtime.SubmitUserTextAsync("hello"));
+        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(1, model.Calls);
+        Assert.Equal(EntryStatus.Failed,
+            Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
+    }
+
+    [Fact]
+    public async Task Repeated_setup_timeout_is_terminal_with_safe_diagnostic_reason()
+    {
+        var model = new ScriptedModel(
+            [new ModelFailed(TimeoutFailure(ProviderFailureReason.SetupTimeout))],
+            [new ModelFailed(TimeoutFailure(ProviderFailureReason.SetupTimeout))]);
+        await using var runtime = Create(model, browser: null);
+        await runtime.AttachAsync();
+        Assert.True(await runtime.SubmitUserTextAsync("hello"));
+        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(2, model.Calls);
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Failed, assistant.Status);
+        Assert.Equal(ProviderFailureReason.SetupTimeout, assistant.Failure!.FailureReason);
+    }
+
+    private static ProviderFailure TimeoutFailure(string? reason) =>
+        new(ProviderErrorCode.Timeout, "Provider deadline expired.", FailureReason: reason);
+
     [Fact]
     public async Task Transient_follow_up_retries_once_without_replaying_the_browser_tool()
     {
@@ -32,7 +87,7 @@ public sealed class GenerationRetryTests
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("check zigwheels"));
-        await runtime.WaitUntilIdleAsync();
+        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.Equal(3, model.Calls);
         Assert.Equal(["https://zigwheels.test/"], browser.Navigated);
@@ -67,7 +122,7 @@ public sealed class GenerationRetryTests
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("check two pages"));
-        await runtime.WaitUntilIdleAsync();
+        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.Equal(5, model.Calls);
         Assert.Equal(["https://zigwheels.test/a", "https://zigwheels.test/b"], browser.Navigated);
@@ -90,7 +145,7 @@ public sealed class GenerationRetryTests
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("close the browser"));
-        await runtime.WaitUntilIdleAsync();
+        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.Equal(1, browser.CloseCalls);
         Assert.Equal(
@@ -108,7 +163,7 @@ public sealed class GenerationRetryTests
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("hello"));
-        await runtime.WaitUntilIdleAsync();
+        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.Equal(2, model.Calls);
         var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
@@ -129,7 +184,7 @@ public sealed class GenerationRetryTests
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("hello"));
-        await runtime.WaitUntilIdleAsync();
+        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.Equal(1, model.Calls);
         Assert.Equal(
@@ -145,13 +200,15 @@ public sealed class GenerationRetryTests
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("hello"));
-        await runtime.WaitUntilIdleAsync();
+        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.Equal(1, model.Calls);
     }
 
-    [Fact]
-    public async Task Visible_text_prevents_a_retry()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Visible_text_prevents_a_retry(bool timeout)
     {
         var model = new ScriptedModel(
             [
@@ -159,19 +216,24 @@ public sealed class GenerationRetryTests
                     "Partial answer",
                     new ModelSpeechProjection(ModelSpeechMode.Same, null),
                     [])),
-                new ModelFailed(Unavailable(ProviderFailureReason.StreamIncomplete))
+                new ModelFailed(timeout ? TimeoutFailure(ProviderFailureReason.StreamIdle)
+                    : Unavailable(ProviderFailureReason.StreamIncomplete))
             ]);
         await using var runtime = Create(model, browser: null);
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("hello"));
-        await runtime.WaitUntilIdleAsync();
+        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.Equal(1, model.Calls);
     }
 
-    [Fact]
-    public async Task Incomplete_tool_call_with_an_admitted_call_is_not_retried()
+    [Theory]
+    [InlineData(ProviderErrorCode.Unavailable, ProviderFailureReason.IncompleteToolCall)]
+    [InlineData(ProviderErrorCode.Timeout, ProviderFailureReason.StreamIdle)]
+    [InlineData(ProviderErrorCode.Timeout, ProviderFailureReason.SetupTimeout)]
+    [InlineData(ProviderErrorCode.Unavailable, ProviderFailureReason.Http5xx)]
+    public async Task Failure_with_an_admitted_call_is_not_retried(ProviderErrorCode code, string reason)
     {
         var browser = new CountingBrowser();
         var model = new ScriptedModel(
@@ -180,13 +242,13 @@ public sealed class GenerationRetryTests
                     "nav-1",
                     ToolCatalog.BrowserNavigate,
                     """{"url":"https://zigwheels.test/"}""")),
-                new ModelFailed(Unavailable(ProviderFailureReason.IncompleteToolCall))
+                new ModelFailed(new ProviderFailure(code, "Provider failed.", FailureReason: reason))
             ]);
         await using var runtime = Create(model, browser, ToolCatalog.BrowserNavigate);
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("check zigwheels"));
-        await runtime.WaitUntilIdleAsync();
+        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.Equal(1, model.Calls);
         Assert.Empty(browser.Navigated);
@@ -202,7 +264,7 @@ public sealed class GenerationRetryTests
         Assert.True(await runtime.SubmitUserTextAsync("hello"));
         await model.RetryStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await runtime.CancelActiveResponseAsync();
-        await runtime.WaitUntilIdleAsync();
+        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.Equal(2, model.Calls);
         Assert.Equal(EntryStatus.Interrupted, Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);

@@ -129,15 +129,19 @@ public sealed class FailureReferenceTests
         Assert.Equal(code, reference.Code);
     }
 
-    [Fact]
-    public void Allowlisted_provider_detail_round_trips_and_rejects_raw_text()
+    [Theory]
+    [InlineData("toolCallTruncated")]
+    [InlineData("setupTimeout")]
+    [InlineData("streamIdle")]
+    [InlineData("totalTimeout")]
+    public void Allowlisted_provider_detail_round_trips_and_rejects_raw_text(string reason)
     {
         var reference = new FailureReference(
             DiagnosticId,
             "provider",
             "InvalidResponse",
             CorrelationId,
-            "toolCallTruncated",
+            reason,
             "toolCall");
         var restored = FailureReferenceJson.Deserialize(FailureReferenceJson.Serialize(reference));
         Assert.Equal(reference, restored);

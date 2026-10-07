@@ -765,7 +765,7 @@ describe("applyServerEvent", () => {
     expect(next.sessionError?.extensions).toEqual({ retryable: true });
   });
 
-  it("stamps allowlisted provider diagnostics from the live error and drops raw arguments", () => {
+  it.each(["toolCallTruncated", "setupTimeout", "streamIdle", "totalTimeout"])("stamps allowlisted provider diagnostics from the live error and drops raw arguments (%s)", (reason) => {
     const started = applyServerEvent(
       { ...emptySession(), attachmentId: "a1" },
       event({
@@ -786,20 +786,20 @@ describe("applyServerEvent", () => {
           code: "InvalidResponse",
           message: "The model's tool call was cut off before it finished.",
           diagnosticId: "diag-cut",
-          failureReason: "toolCallTruncated",
+          failureReason: reason,
           providerResponseChannel: "toolCall",
           arguments: "{\"path\":\"secret.cs\"}"
         }
       })
     );
-    expect(diagnosed.sessionError?.failureReason).toBe("toolCallTruncated");
+    expect(diagnosed.sessionError?.failureReason).toBe(reason);
     expect(diagnosed.sessionError?.providerResponseChannel).toBe("toolCall");
     expect(diagnosed.entries[0]?.failure).toEqual({
       diagnosticId: "diag-cut",
       correlationId: "c1",
       category: "provider",
       code: "InvalidResponse",
-      failureReason: "toolCallTruncated",
+      failureReason: reason,
       providerResponseChannel: "toolCall"
     });
     expect(JSON.stringify(diagnosed.entries[0]?.failure)).not.toContain("secret.cs");
@@ -1371,7 +1371,7 @@ describe("historyFromPayload", () => {
     expect(entries[1]?.failure).toBeNull();
   });
 
-  it("keeps allowlisted provider diagnostics and drops raw tool arguments", () => {
+  it.each(["toolCallTruncated", "setupTimeout", "streamIdle", "totalTimeout"])("keeps allowlisted provider diagnostics and drops raw tool arguments (%s)", (reason) => {
     const entries = historyFromPayload([
       {
         entryId: "a1",
@@ -1389,7 +1389,7 @@ describe("historyFromPayload", () => {
           correlationId: null,
           category: "provider",
           code: "InvalidResponse",
-          failureReason: "toolCallTruncated",
+          failureReason: reason,
           providerResponseChannel: "toolCall",
           arguments: "{\"path\":\"/workspace/working/secret.cs\"}"
         }
@@ -1400,7 +1400,7 @@ describe("historyFromPayload", () => {
       correlationId: null,
       category: "provider",
       code: "InvalidResponse",
-      failureReason: "toolCallTruncated",
+      failureReason: reason,
       providerResponseChannel: "toolCall"
     });
     expect(JSON.stringify(entries[0]?.failure)).not.toContain("secret.cs");

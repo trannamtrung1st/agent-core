@@ -49,6 +49,8 @@ SyntheticSpeechRecognizer, SyntheticSpeechSynthesizer and ScriptedLanguageModel 
 
 ## Language model and failures
 
+Language-model Timeout failures use bounded `FailureReason` values `setupTimeout` (before response headers), `streamIdle`, or `totalTimeout`. Unclassified Timeout remains terminal. Caller cancellation uses Cancelled. [Backend timeout policy](12-backend-implementation-spec.md#timeouts-and-retry-policy) owns the single-generation retry fences.
+
 ```csharp
 public enum ProviderErrorCode
 {

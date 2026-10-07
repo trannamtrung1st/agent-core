@@ -1,7 +1,7 @@
 namespace AgentCore.Domain.Diagnostics;
 
 /// <summary>
-/// Closed tokens for provider diagnostic detail. Values name a contract violation.
+/// Closed tokens for provider diagnostic detail. Values name a contract violation or provider failure phase.
 /// They are not model output, tool arguments, or prompts.
 /// </summary>
 public static class DiagnosticDetailAllowlist
@@ -28,6 +28,8 @@ public static class DiagnosticDetailAllowlist
         "toolCallTruncated",
         "transportFailure",
         "http5xx",
+        "setupTimeout",
+        "totalTimeout",
         "streamIdle",
         "streamMalformed",
         "providerStreamError",

@@ -6230,12 +6230,22 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (generationRetries >= 1
             || publishedVisible
             || cancellationToken.IsCancellationRequested
-            || failed.Failure.Code != ProviderErrorCode.Unavailable)
+            || pending.Count != 0)
         {
             return false;
         }
 
         var reason = failed.Failure.FailureReason;
+        if (failed.Failure.Code == ProviderErrorCode.Timeout)
+        {
+            return reason is ProviderFailureReason.SetupTimeout or ProviderFailureReason.StreamIdle;
+        }
+
+        if (failed.Failure.Code != ProviderErrorCode.Unavailable)
+        {
+            return false;
+        }
+
         if (reason is ProviderFailureReason.TransportFailure
             or ProviderFailureReason.Http5xx
             or ProviderFailureReason.StreamIdle
@@ -6246,7 +6256,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return true;
         }
 
-        return reason == ProviderFailureReason.IncompleteToolCall && pending.Count == 0;
+        return reason == ProviderFailureReason.IncompleteToolCall;
     }
 
     private const string ChallengedBrowserInstruction =

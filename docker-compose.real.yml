@@ -23,6 +23,9 @@ services:
       Providers__LanguageModels__primary-llm__ReasoningObjectWire: "true"
       Providers__LanguageModels__primary-llm__ExcludeVisibleReasoning: "true"
       Providers__LanguageModels__primary-llm__Vision: ${AGENTCORE_LLM_VISION:-false}
+      Providers__LanguageModels__primary-llm__Timeouts__SetupSeconds: "30"
+      Providers__LanguageModels__primary-llm__Timeouts__StreamIdleSeconds: "60"
+      Providers__LanguageModels__primary-llm__Timeouts__TotalSeconds: "120"
       Providers__LanguageModels__primary-llm__Tools: ${AGENTCORE_LLM_TOOLS:-true}
       Providers__ModelCatalog__DefaultKey: deepseek-v41-flash
       Providers__ModelCatalog__Models__0__Key: deepseek-v41-flash

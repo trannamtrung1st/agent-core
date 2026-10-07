@@ -117,6 +117,8 @@ Infrastructure/Application/API filters in [P7G report](reports/p7g-history-rollb
 
 Include interruption at each boundary: before first token, while TTS prepares, while PCM queued, after model complete but before playback complete, during terminal save. Also test empty transcripts, expired utterances, final marker with zero bytes, duplicate sample frames and response receipt offsets beyond emitted text.
 
+Provider timeout regressions distinguish setup, total-during-setup, simultaneous deadlines, caller cancellation, stream idle and stream total expiration. `GenerationRetryTests` exercises Session Runtime recovery, one-retry exhaustion, visible-output and admitted-call fences, and terminal total/unclassified timeouts. The adapter/runtime integration checks a stalled-header setup timeout followed by a successful answer without a client error, and repeated idle timeouts followed by one terminal failure; both issue exactly two POSTs. UI diagnostic tests render and copy allowlisted timeout reasons.
+
 ## Backend suites
 
 Domain.Tests: policy/value invariants and definition immutability. Infrastructure.Tests also validates JSON definition loading. Application.Tests: summary/context eligible text limits, controller tables, session ownership, IDs/time, prompt sections, initiative, trailing-user suffix batching, the synthetic 20-turn measured demo, redaction, mailbox/audio backpressure and deterministic conversation matrix. Infrastructure.Tests: synthetic contract parity, SQLite transactions/revisions/reopen, HTTP adapter parsing and error mapping, OpenAI transcription session payloads with optional vendor fields omitted by default. Api.Tests: WebApplicationFactory REST examples, validation/statuses, lifecycle, concurrency and wire mappings.

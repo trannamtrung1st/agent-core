@@ -193,6 +193,43 @@ public sealed class OpenAICompatibleLanguageModelTests
         Assert.Equal(1, handler.PostCount);
     }
 
+    [Theory]
+    [InlineData(1, 120, false, ProviderErrorCode.Timeout, ProviderFailureReason.SetupTimeout)]
+    [InlineData(10, 1, false, ProviderErrorCode.Timeout, ProviderFailureReason.TotalTimeout)]
+    [InlineData(1, 1, false, ProviderErrorCode.Timeout, ProviderFailureReason.TotalTimeout)]
+    [InlineData(10, 120, true, ProviderErrorCode.Cancelled, null)]
+    public async Task Header_deadline_distinguishes_setup_total_and_caller_cancellation(
+        int setup, int total, bool cancel, ProviderErrorCode code, string? reason)
+    {
+        var time = new FakeTimeProvider();
+        var handler = new WaitingHeadersHandler();
+        var model = Create(handler, time: time,
+            timeouts: new ProviderTimeoutOptions { SetupSeconds = setup, TotalSeconds = total });
+        using var cts = new CancellationTokenSource();
+        await using var enumerator = model.GenerateAsync(Request(), cts.Token).GetAsyncEnumerator();
+        var next = enumerator.MoveNextAsync().AsTask();
+        await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        if (cancel)
+        {
+            await cts.CancelAsync();
+        }
+        else
+        {
+            time.Advance(TimeSpan.FromSeconds(Math.Min(setup, total)));
+        }
+
+        Assert.True(await next.WaitAsync(TimeSpan.FromSeconds(10)));
+        var failure = Assert.IsType<ModelFailed>(enumerator.Current).Failure;
+        Assert.Equal(code, failure.Code);
+        Assert.Equal(reason, failure.FailureReason);
+        if (reason == ProviderFailureReason.SetupTimeout)
+        {
+            Assert.Equal("Provider did not return response headers within 1s.", failure.SafeMessage);
+        }
+        Assert.False(await enumerator.MoveNextAsync());
+        Assert.Equal(1, handler.PostCount);
+    }
+
     [Fact]
     public async Task Open_stream_idle_timeout_emits_one_timeout_without_escaping_exception()
     {
@@ -209,6 +246,7 @@ public sealed class OpenAICompatibleLanguageModelTests
         var failed = Assert.Single(events.OfType<ModelFailed>());
         Assert.Equal(ProviderErrorCode.Timeout, failed.Failure.Code);
         Assert.Equal("Language model stream idle timeout.", failed.Failure.SafeMessage);
+        Assert.Equal(ProviderFailureReason.StreamIdle, failed.Failure.FailureReason);
         Assert.Equal(1, handler.PostCount);
     }
 
@@ -228,13 +266,18 @@ public sealed class OpenAICompatibleLanguageModelTests
         var failed = Assert.Single(events.OfType<ModelFailed>());
         Assert.Equal(ProviderErrorCode.Timeout, failed.Failure.Code);
         Assert.Equal("Language model response timed out.", failed.Failure.SafeMessage);
+        Assert.Equal(ProviderFailureReason.TotalTimeout, failed.Failure.FailureReason);
     }
 
-    [Fact]
-    public async Task Session_runtime_open_stream_idle_timeout_emits_one_terminal_failure()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Session_runtime_provider_timeout_retries_once_then_recovers_or_terminalizes(bool recoverSetup)
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero));
-        var handler = new ScriptedHandler([], holdOpen: true);
+        var idleHandler = new ScriptedHandler([], holdOpen: true);
+        var setupHandler = new SetupTimeoutThenAnswerHandler();
+        HttpMessageHandler handler = recoverSetup ? setupHandler : idleHandler;
         var output = new CapturingSessionOutput();
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 32).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
@@ -262,6 +305,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             snapshot,
             Create(
                 handler,
+                time: recoverSetup ? time : null,
                 timeouts: new ProviderTimeoutOptions { SetupSeconds = 10, StreamIdleSeconds = 1, TotalSeconds = 120 }),
             new DefaultAgentBrain(new PromptContextBuilder()),
             store,
@@ -269,7 +313,12 @@ public sealed class OpenAICompatibleLanguageModelTests
             ids,
             time,
             NullLogger<SessionRuntime>.Instance);
-        await runtime.SubmitUserTextAsync("Hello");
+        Assert.True(await runtime.SubmitUserTextAsync("Hello"));
+        if (recoverSetup)
+        {
+            await setupHandler.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            time.Advance(TimeSpan.FromSeconds(10));
+        }
         using var idleWait = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await runtime.WaitUntilIdleAsync(idleWait.Token);
         Assert.DoesNotContain(
@@ -277,9 +326,21 @@ public sealed class OpenAICompatibleLanguageModelTests
             item => item.Payload is ErrorOutput error
                 && error.Code == nameof(ProviderErrorCode.Unknown)
                 && error.SafeMessage.Contains("Generation failed.", StringComparison.Ordinal));
-        Assert.Contains(
-            output.Items,
-            item => item.Payload is ResponseCompletedOutput completed && completed.Failed);
+        var terminal = Assert.Single(output.Items, item => item.Payload is ResponseCompletedOutput);
+        Assert.Equal(!recoverSetup, ((ResponseCompletedOutput)terminal.Payload).Failed);
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        if (recoverSetup)
+        {
+            Assert.Equal("Hi", assistant.Text);
+            Assert.Equal(EntryStatus.Completed, assistant.Status);
+            Assert.DoesNotContain(output.Items, item => item.Payload is ErrorOutput);
+        }
+        else
+        {
+            Assert.Equal(EntryStatus.Failed, assistant.Status);
+            Assert.Equal(ProviderFailureReason.StreamIdle, assistant.Failure!.FailureReason);
+        }
+        Assert.Equal(2, recoverSetup ? setupHandler.PostCount : idleHandler.PostCount);
     }
 
     [Fact]
@@ -1796,4 +1857,39 @@ internal sealed class ChunkedStream : Stream
     public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
     public override void SetLength(long value) => throw new NotSupportedException();
     public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+}
+
+internal sealed class WaitingHeadersHandler : HttpMessageHandler
+{
+    public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public int PostCount { get; private set; }
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        PostCount++;
+        Started.TrySetResult();
+        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        throw new InvalidOperationException("Header wait must be cancelled.");
+    }
+}
+
+internal sealed class SetupTimeoutThenAnswerHandler : ScriptedHandler
+{
+    public SetupTimeoutThenAnswerHandler() : base([Encoding.UTF8.GetBytes(
+        "data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"},\"finish_reason\":\"stop\"}]}\n\n" +
+        "data: [DONE]\n\n")]) { }
+
+    public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public new int PostCount { get; private set; }
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        PostCount++;
+        if (PostCount == 1)
+        {
+            Started.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        }
+        return await base.SendAsync(request, cancellationToken);
+    }
 }

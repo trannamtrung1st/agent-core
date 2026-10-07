@@ -25,6 +25,8 @@ public static class ProviderFailureReason
     public const string ToolCallTruncated = "toolCallTruncated";
     public const string TransportFailure = "transportFailure";
     public const string Http5xx = "http5xx";
+    public const string SetupTimeout = "setupTimeout";
+    public const string TotalTimeout = "totalTimeout";
     public const string StreamIdle = "streamIdle";
     public const string StreamMalformed = "streamMalformed";
     public const string ProviderStreamError = "providerStreamError";

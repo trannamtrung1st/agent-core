@@ -39,6 +39,8 @@ const failureReasonTokens = new Set([
   "toolCallTruncated",
   "transportFailure",
   "http5xx",
+  "setupTimeout",
+  "totalTimeout",
   "streamIdle",
   "streamMalformed",
   "providerStreamError",

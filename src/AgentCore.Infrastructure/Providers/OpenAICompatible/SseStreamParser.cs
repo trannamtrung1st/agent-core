@@ -72,6 +72,7 @@ internal sealed class SseStreamParser
     {
         using var readCts = CancellationTokenSource.CreateLinkedTokenSource(
             totalCancellationToken,
+            userCancellationToken,
             enumeratorCancellationToken);
         using var idleTimer = time.CreateTimer(
             static state => ((CancellationTokenSource)state!).Cancel(),

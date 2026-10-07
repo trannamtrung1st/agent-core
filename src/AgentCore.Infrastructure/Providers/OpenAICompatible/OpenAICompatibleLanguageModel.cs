@@ -111,7 +111,11 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         catch (OperationCanceledException)
         {
             RecordRequest(request, callNumber, callStarted, 0);
-            setupFailed = Fail(ProviderErrorCode.Timeout, "Language model setup timed out.");
+            setupFailed = totalCts.IsCancellationRequested
+                ? Fail(ProviderErrorCode.Timeout, "Language model response timed out.", ProviderFailureReason.TotalTimeout)
+                : Fail(ProviderErrorCode.Timeout,
+                    $"Provider did not return response headers within {Math.Max(1, _options.Timeouts.SetupSeconds)}s.",
+                    ProviderFailureReason.SetupTimeout);
         }
         catch (HttpRequestException)
         {
@@ -192,7 +196,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                         emittedText
                             ? "Language model stream ended unexpectedly."
                             : "Language model stream idle timeout.",
-                        emittedText ? ProviderFailureReason.StreamIdle : null);
+                        ProviderFailureReason.StreamIdle);
                 }
                 catch (SseStreamTotalTimeoutException)
                 {
@@ -203,7 +207,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
 
                     streamFailed = Fail(
                         ProviderErrorCode.Timeout,
-                        "Language model response timed out.");
+                        "Language model response timed out.", ProviderFailureReason.TotalTimeout);
                 }
                 catch (InvalidOperationException)
                 {
