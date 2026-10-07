@@ -2279,13 +2279,86 @@ body,
 .harness-policy-scopes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
 .harness-policy-scopes .ant-checkbox-wrapper { margin-inline: 0; min-width: 0; }
 .harness-procedure { white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-approval .ant-modal-container {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 2 * var(--ac-space-section));
+}
+.chat-approval .ant-modal-header,
+.chat-approval .ant-modal-footer { flex-shrink: 0; }
+.chat-approval .ant-modal-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.chat-approval-summary,
+.chat-approval-scope,
+.chat-approval-revisions { flex-shrink: 0; }
+.chat-approval-summary { overflow-wrap: anywhere; }
+.chat-approval-scope { margin-block-end: var(--ac-space-section); overflow-wrap: anywhere; }
+.chat-approval-revisions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ac-space-default) var(--ac-space-section);
+  list-style: none;
+  padding: 0;
+  margin-block: 0 var(--ac-space-section);
+}
+.chat-approval-revisions li { display: flex; align-items: center; gap: var(--ac-space-compact); }
+.chat-approval-revisions .ant-tag { margin-inline-end: 0; }
+.chat-approval-details {
+  min-height: min(40vh, calc(2 * var(--ac-space-section)));
+  max-height: 40vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.chat-approval-details:focus-visible {
+  outline: 2px solid var(--ac-color-primary);
+  outline-offset: 2px;
+}
+.chat-approval-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-section);
+}
+.chat-approval-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-compact);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.chat-approval-value { white-space: pre-wrap; }
+.chat-approval-change {
+  padding: var(--ac-space-default);
+  background: var(--ac-color-fill);
+}
+.chat-approval-proposal { white-space: pre-wrap; }
+.chat-approval-proposal > div:empty { min-height: var(--ac-space-default); }
+.chat-approval-proposal-item {
+  padding-inline-start: var(--ac-space-default);
+  text-indent: calc(-1 * var(--ac-space-default));
+}
+.chat-approval .ant-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--ac-space-compact);
+}
+.chat-approval .ant-modal-footer .ant-btn + .ant-btn { margin-inline-start: 0; }
 .harness-approval { border-inline-start: 2px solid var(--ant-color-primary); padding-inline-start: 12px; }
 
 .harness-management-content > .ant-typography { margin-block-end: 0; }
 .harness-evidence > .ant-typography { max-width: 72ch; }
 @media (max-width: 767px) {
   .harness-policy-scopes { grid-template-columns: minmax(0, 1fr); }
-  .harness-chat-approval .ant-modal-footer .ant-btn { min-height: 40px; }
+  .chat-approval .ant-modal-footer .ant-btn { min-height: 40px; }
 }
 
 /* Admin collections share search insets; Ant Design owns table cell spacing. */
