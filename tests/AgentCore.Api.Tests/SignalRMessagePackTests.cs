@@ -7,6 +7,7 @@ namespace AgentCore.Api.Tests;
 public class KestrelHostFixture : IAsyncLifetime
 {
     private Process? _process;
+    private readonly string _dataRoot = Path.Combine(Path.GetTempPath(), "kestrel-wire-fixture-" + Guid.NewGuid().ToString("N"));
 
     public string BaseAddress { get; private set; } = "";
 
@@ -24,9 +25,8 @@ public class KestrelHostFixture : IAsyncLifetime
         };
         start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
         start.Environment["AgentCore__Profile"] = "Synthetic";
-        var data = Path.Combine(Path.GetTempPath(), "kestrel-wire-fixture-" + Guid.NewGuid().ToString("N"));
         foreach (var (key, directory) in new[] { ("WorkspaceRoot", "workspaces"), ("AttachmentRoot", "attachments"), ("ArtifactRoot", "artifacts"), ("DefinitionResourceRoot", "definition-resources") })
-            start.Environment["Persistence__" + key] = Path.Combine(data, directory);
+            start.Environment["Persistence__" + key] = Path.Combine(_dataRoot, directory);
         start.Environment["Providers__Speech__Recognition__Adapter"] = "Synthetic";
         start.Environment["Providers__Speech__Synthesis__Adapter"] = "Synthetic";
         start.Environment["AgentCore__MaxActiveSessions"] = "64";
@@ -68,18 +68,31 @@ public class KestrelHostFixture : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        if (_process is null)
+        try
         {
-            return;
+            if (_process is not null && !_process.HasExited)
+            {
+                _process.Kill(entireProcessTree: true);
+                await _process.WaitForExitAsync().ConfigureAwait(false);
+            }
         }
-
-        if (!_process.HasExited)
+        finally
         {
-            _process.Kill(entireProcessTree: true);
-            await _process.WaitForExitAsync().ConfigureAwait(false);
+            _process?.Dispose();
+            try
+            {
+                if (Directory.Exists(_dataRoot))
+                    Directory.Delete(_dataRoot, recursive: true);
+            }
+            catch (IOException)
+            {
+                // Temporary fixture data cleanup is best effort.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Temporary fixture data cleanup is best effort.
+            }
         }
-
-        _process.Dispose();
     }
 
     public async Task RunJsAsync(string scenario, string? realtimeProtocol = null)
