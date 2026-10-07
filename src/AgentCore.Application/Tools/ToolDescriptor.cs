@@ -29,7 +29,6 @@ public sealed record ToolExecutionAdmission(
     TriggerKind TriggerKind,
     bool IntermediateMessagingAllowed = false,
     Guid? AgentInstanceId = null,
-    bool TrustedConnection = false,
     bool SupportsVision = false,
     string? CaptureScope = null,
     Guid? WorkItemId = null,

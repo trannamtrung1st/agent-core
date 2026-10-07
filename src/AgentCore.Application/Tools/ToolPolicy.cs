@@ -18,6 +18,9 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         }
 
+        if (descriptor.OfferRule == ToolOfferRule.CredentialAuthority)
+            return admission is { AgentInstanceId: not null, SupportsTools: true } ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
+
         if (definition.Environment?.Capabilities is not null && !RolePermissions.AllowsTool(definition, toolName)) return ToolPolicyDecision.Deny;
 
         if (descriptor.OfferRule == ToolOfferRule.IdentityMaintenanceAuthority)
@@ -45,11 +48,8 @@ public static class ToolPolicy
         if (toolName == ToolCatalog.CapabilitiesLoad)
             return definition.Environment?.Capabilities is not null && admission is { SupportsTools: true }
                 && (admission is { Detached: false, TriggerKind: TriggerKind.UserTurn }
-                    || admission.TrustedConnection && ToolResources.IsOccurrence(admission.TriggerKind))
+                    || admission.AgentInstanceId is not null && ToolResources.IsOccurrence(admission.TriggerKind))
                 ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
-
-
-
         if (!RolePermissions.AllowsTool(definition, toolName))
         {
             return ToolPolicyDecision.Deny;
@@ -140,6 +140,9 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (descriptor.OfferRule == ToolOfferRule.CredentialAuthority)
+            return context is { AgentInstanceId: not null, ModelSupportsTools: true, CredentialMetadataAvailable: true };
+
         if (definition.Environment?.Capabilities is not null && !RolePermissions.AllowsTool(definition, descriptor.Name)) return false;
 
         if (context is not null && !context.ModelSupportsTools)
@@ -162,6 +165,8 @@ public static class ToolPolicy
             return false;
         }
 
+
+
         if (descriptor.OfferRule == ToolOfferRule.IdentityMaintenanceAuthority)
             return context is { ModelSupportsTools: true } && !string.IsNullOrEmpty(context.ContinuityContext)
                 && (context is { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn }
@@ -182,7 +187,7 @@ public static class ToolPolicy
         if (descriptor.Name == ToolCatalog.CapabilitiesLoad)
             return definition.Environment?.Capabilities is not null && context is { ModelSupportsTools: true }
                 && (context is { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn }
-                    || context.TrustedConnection && ToolResources.IsOccurrence(context.Trigger.Kind));
+                    || context.AgentInstanceId is not null && ToolResources.IsOccurrence(context.Trigger.Kind));
 
         if (descriptor.Name == ToolCatalog.WorkspaceCwd && context?.AgentWorkspaceAvailable != true)
             return false;
@@ -235,32 +240,32 @@ public static class ToolPolicy
     private static bool BrowserAdmissionAllows(ToolExecutionAdmission? admission) =>
         admission is { Detached: false, TriggerKind: TriggerKind.UserTurn }
         || UnattendedBrowser(admission)
-        || LiveTrustedOccurrence(admission);
+        || LiveOccurrence(admission);
 
     private static bool BrowserOfferAllows(AgentContext? context) =>
         context is { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn }
         || UnattendedBrowser(context)
-        || LiveTrustedOccurrence(context);
+        || LiveOccurrence(context);
 
     private static bool UnattendedBrowser(ToolExecutionAdmission? admission) =>
-        admission is { Detached: true, TrustedConnection: true }
+        admission is { Detached: true }
         && ToolResources.IsOccurrence(admission.TriggerKind)
         && admission.AgentInstanceId is Guid agentInstanceId
         && agentInstanceId != Guid.Empty;
 
     private static bool UnattendedBrowser(AgentContext? context) =>
-        context is { DetachedExecution: true, TrustedConnection: true }
-        && ToolResources.IsOccurrence(context.Trigger.Kind);
+        context is { DetachedExecution: true }
+        && context.AgentInstanceId is Guid id && id != Guid.Empty && ToolResources.IsOccurrence(context.Trigger.Kind);
 
-    private static bool LiveTrustedOccurrence(ToolExecutionAdmission? admission) =>
-        admission is { Detached: false, TrustedConnection: true }
+    private static bool LiveOccurrence(ToolExecutionAdmission? admission) =>
+        admission is { Detached: false }
         && ToolResources.IsOccurrence(admission.TriggerKind)
         && admission.AgentInstanceId is Guid agentInstanceId
         && agentInstanceId != Guid.Empty;
 
-    private static bool LiveTrustedOccurrence(AgentContext? context) =>
-        context is { DetachedExecution: false, TrustedConnection: true }
-        && ToolResources.IsOccurrence(context.Trigger.Kind);
+    private static bool LiveOccurrence(AgentContext? context) =>
+        context is { DetachedExecution: false }
+        && context.AgentInstanceId is Guid id && id != Guid.Empty && ToolResources.IsOccurrence(context.Trigger.Kind);
 
     private static bool OccurrenceCompletion(ToolExecutionAdmission? admission) =>
         admission is { Detached: true } && ToolResources.IsOccurrence(admission.TriggerKind);

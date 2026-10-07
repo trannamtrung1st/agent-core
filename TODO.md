@@ -330,7 +330,7 @@ A prepared worker package must not share one customer’s identity, memory, auth
 
 Memory scopes, if portability requires them, stay explicit: identity, relationship, application, task, and session. Memory does not automatically cross applications.
 
-Workspace scopes stay separate lifecycles. The bounded managed-instance `/home` now keeps explicitly retained work; `SessionWorkspace` remains execution scratch. Definition resources, attachments, artifacts, and mutable workspace data stay distinct. Application/task/shared scopes require a separate concrete workflow and decision.
+Workspace scopes keep separate lifecycles. The implemented unified Agent Workspace mounts durable instance-owned `/home` and working-context-owned temporary `/working` through one API; Session contexts own scratch and detached work receives disposable WorkItem scratch. Every Session starts at `/home`. Explicit copy/retention follows existing revision/tree guards. Definition resources, attachments and artifacts stay distinct. Application/task/shared scopes wait for a separate requirement.
 
 Unattended work extends Trigger, Occurrence, and WorkItem. It is not a permanent `while(true)` model loop. The shape is a goal or task, a WorkItem, an authorized action, a checkpoint, then continue, wait for an event or approval, or complete. Waiting must not require a live model call or browser session. Delegation between identities, if it is ever required, carries identity, authority, provenance, and work ownership. It is not an agent swarm.
 
@@ -1394,7 +1394,7 @@ Examples: owner Chat may manage knowledge/Skills; employee Chat gets operational
 
 **P11B — PostgreSQL.** Move from SQLite when concurrent external users, multi-process services, or hosted reliability require it. Verify migrations, transactions, and revision concurrency. Keep SQLite for local and Synthetic development unless maintaining both becomes counterproductive. Verify restore, not only backup. Do not invent a new persistence architecture if the EF boundary is already sufficient.
 
-**P11C — Object storage and secrets.** Move attachments, artifacts, and immutable resources off local disk when deployment requires it. Keep mutable session workspace distinct from immutable blobs. Add retention where required. Add a secret manager when deployment requires it. Credentials stay outside model context and ordinary Admin projections.
+**P11C — Object storage and secrets.** Move immutable blobs off local disk when deployment requires it, retaining separate mutable working-context data. System Credentials already have reusable resources, explicit instance grants, safe contextual discovery and typed secure sinks. Future external vault/KMS/HSM replaces `ICredentialProtector`/resolver storage behind those semantics; do not invent a new credential or website connection model. Keep Event Source bearer hashes and host/provider configuration separate. Validate key/payload backup and restore before migration. P11 remains unopened.
 
 **P11D — Hosted operations.** TLS and ingress, a production logging and tracing backend, OpenTelemetry export where useful, alerting, backup and restore drills, rollback, quotas, and a public-hosting security review. Expand Admin history into enterprise audit only where required.
 
@@ -1455,7 +1455,7 @@ Orientation for what later work can build on. Detail and gate history are in `/d
 
 **Voice and realtime.** SignalR with MessagePack as the default transport, optional JSON diagnostic mode with the same contract, independently replaceable STT and TTS, voice interruption, and heard versus received tracking. Synthetic speech requires no provider credentials.
 
-**Workspace and resources.** Session-owned scratch, attachments and artifacts, current and historical images, versioned definition resources, and bounded managed-instance `/home` with explicit retain/checkout and guarded replacement.
+**Workspace and resources.** Unified durable `/home` plus working-context `/working`, guarded revision/tree operations, session attachments/artifacts, historical images and immutable Definition resources. The older explicit retain/checkout surface is superseded by direct unified workspace operations.
 
 **Triggers and background work.** Durable trigger registration and occurrences, and durable `WorkModelPin`-carrying WorkItems for work that must outlive the Session Runtime. Schedules and source-owned authenticated `order.placed` events use the same occurrence routing model. Event admission snapshots matching subscribers into a delivery ledger so fan-out can resume after restart without adding later subscribers. Scheduled and application-event background browser execution can reuse an Agent-Instance-owned persistent authenticated profile. Attention-worthy results have idempotent trusted-owner delivery; ordinary completion can remain quiet. One process schedules and executes this work.
 
@@ -1481,3 +1481,7 @@ Orientation for what later work can build on. Detail and gate history are in `/d
 **Closed/frozen on verified behavior `3c784a4d`**, 2026-10-06. [Hosted Synthetic/Compose `37464818667`, attempt 2](https://github.com/trannamtrung1st/agent-core/actions/runs/37464818667/attempts/2) passed all five jobs after the backend-only rerun. Includes post-authorization GUID canonicalization; the initial unrelated SQLite concurrency failure remains recorded in the report.
 
 Artifact delivery completes Chat presentation of the existing session-owned Artifact store: canonical metadata, an accessible downloadable card, lazy owner-authenticated exact-byte download, bounded metadata deduplication, local Retry and retained read-only history. Verification/closure evidence: [Artifact delivery report](docs/reports/artifact-delivery-ux.md). P9.8/P9.9/P9.10 freezes stay unchanged; P10/P11 remain unopened.
+
+## System Credentials authorized migration
+
+Replaces production Application Connection with reusable encrypted System Credentials, explicit AgentCredentialBindings and direct Browser Password sink. Historical P9.5/P9.6 sections above describe evidence at their freeze SHAs and no longer authorize connection-based browser gating. Future Application Binding is for a client application embedding/invoking an Agent Core identity, not generic website automation. Track completion and remaining acceptance gates in [verification](docs/reports/system-credentials-verification.md). No automatic bootstrap `.env` import, no new external vault dependency, and no P10/P11 launch.

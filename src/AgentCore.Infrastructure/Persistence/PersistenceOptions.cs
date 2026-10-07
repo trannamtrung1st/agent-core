@@ -2,6 +2,7 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class PersistenceOptions
 {
+    public string CredentialProtectionKeyRoot { get; set; } = "data/credential-protection-keys";
     public string Provider { get; set; } = "InMemory";
     public string ConnectionString { get; set; } = "Data Source=data/agent-core.db";
     public int CheckpointMs { get; set; } = 1000;

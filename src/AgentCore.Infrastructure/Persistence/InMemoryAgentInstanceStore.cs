@@ -10,6 +10,7 @@ namespace AgentCore.Infrastructure.Persistence;
 public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
 {
     private readonly object _gate = new();
+    internal object CredentialGate => _gate;
     private readonly Dictionary<Guid, AgentInstance> _instances = [];
 
     internal InMemoryAdminEventStore? EventStore { get; set; }

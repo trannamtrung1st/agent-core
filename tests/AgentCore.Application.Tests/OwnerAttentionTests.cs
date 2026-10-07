@@ -100,8 +100,7 @@ public sealed class OwnerAttentionTests
                 admission: new ToolExecutionAdmission(
                     true,
                     TriggerKind.ScheduledOccurrence,
-                    AgentInstanceId: OwnerId,
-                    TrustedConnection: false)));
+                    AgentInstanceId: OwnerId)));
         Assert.Equal(
             ToolPolicyDecision.Deny,
             ToolPolicy.EvaluateExecution(
@@ -111,19 +110,18 @@ public sealed class OwnerAttentionTests
                 admission: new ToolExecutionAdmission(
                     true,
                     TriggerKind.ScheduledOccurrence,
-                    AgentInstanceId: OwnerId,
-                    TrustedConnection: false)));
+                    AgentInstanceId: null)));
         var messaging = await new SessionToolExecutor().ExecuteAsync(
             definition,
             Guid.Empty,
             Call(ToolCatalog.AppMessageSend, """{"text":"hello"}"""),
             ToolLimits.MaxOutputBytes,
-            admission: new ToolExecutionAdmission(true, TriggerKind.ScheduledOccurrence, AgentInstanceId: OwnerId, TrustedConnection: true));
+            admission: new ToolExecutionAdmission(true, TriggerKind.ScheduledOccurrence, AgentInstanceId: OwnerId));
         Assert.Contains("forbidden", messaging.Text, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task Connected_occurrence_offers_work_complete_without_a_recipient()
+    public async Task Occurrence_offers_work_complete_without_a_recipient_and_browser_requires_owner()
     {
         var brain = new DefaultAgentBrain(new PromptContextBuilder(ToolConfigurationGates.AllowAll));
         var connected = Context(trusted: true);
@@ -135,7 +133,8 @@ public sealed class OwnerAttentionTests
             StringComparison.OrdinalIgnoreCase);
         Assert.Contains(speak.Request.Tools!, tool => tool.Name == ToolCatalog.BrowserNavigate);
         var unconnected = Assert.IsType<Speak>(await brain.DecideAsync(Context(trusted: false), Guid.NewGuid()));
-        Assert.Null(unconnected.Request.Tools);
+        Assert.Contains(unconnected.Request.Tools!, tool => tool.Name == ToolCatalog.WorkComplete);
+        Assert.DoesNotContain(unconnected.Request.Tools!, tool => ToolCatalog.IsBrowserTool(tool.Name));
     }
 
     [Fact]
@@ -146,8 +145,7 @@ public sealed class OwnerAttentionTests
             store,
             ToolRound(Call(
                 ToolCatalog.WorkComplete,
-                """{"summary":"A payment failed.","attentionRequired":true}""")),
-            trustedConnection: false);
+                """{"summary":"A payment failed.","attentionRequired":true}""")));
         var completed = Assert.IsType<DurableOccurrenceCompleted>(outcome);
         Assert.True(completed.AttentionRequired);
         Assert.Equal("A payment failed.", completed.Text);
@@ -155,8 +153,7 @@ public sealed class OwnerAttentionTests
 
     private static async Task<DurableOccurrenceOutcome> RunAsync(
         InMemoryWorkItemStore store,
-        IReadOnlyList<ModelGenerationEvent> round,
-        bool trustedConnection = true)
+        IReadOnlyList<ModelGenerationEvent> round)
     {
         await store.CreateAsync(WorkItem.Create(
             WorkId,
@@ -191,8 +188,7 @@ public sealed class OwnerAttentionTests
             new DeterministicIdGenerator(
                 Enumerable.Range(1, 8).Select(index => Guid.Parse($"019944af-00f3-7000-8000-{index:D12}")),
                 [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940f301")]),
-            CancellationToken.None,
-            trustedConnection);
+            CancellationToken.None);
     }
 
     private static AgentDefinition Definition() =>
@@ -229,7 +225,7 @@ public sealed class OwnerAttentionTests
             null,
             new AgentTrigger(Guid.NewGuid(), TriggerKind.ScheduledOccurrence, "review"),
             DetachedExecution: true,
-            TrustedConnection: trusted);
+            AgentInstanceId: trusted ? OwnerId : null);
 
     private static ModelToolCall Call(string name, string arguments) => new("call-" + name, name, arguments);
 

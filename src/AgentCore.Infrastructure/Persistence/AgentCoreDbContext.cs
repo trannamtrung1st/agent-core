@@ -217,7 +217,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         Set<AgentDefinitionPublicationResourceRecord>();
     public DbSet<AdminEventRecord> AdminEvents => Set<AdminEventRecord>();
 
-    public DbSet<ApplicationConnectionRecord> ApplicationConnections => Set<ApplicationConnectionRecord>();
+    public DbSet<CredentialRecord> Credentials => Set<CredentialRecord>();
+    public DbSet<AgentCredentialBindingRecord> AgentCredentialBindings => Set<AgentCredentialBindingRecord>();
 
     public DbSet<WorkAttentionAlertRecord> WorkAttentionAlerts => Set<WorkAttentionAlertRecord>();
 
@@ -621,20 +622,23 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.SummaryJson).IsRequired();
             entity.HasIndex(row => new { row.TargetType, row.TargetId, row.OccurredAtUtc });
         });
-        modelBuilder.Entity<ApplicationConnectionRecord>(entity =>
+        modelBuilder.Entity<CredentialRecord>(entity =>
         {
-            entity.ToTable("ApplicationConnections");
-            entity.HasKey(row => row.ConnectionId);
-            entity.Property(row => row.ConnectionId).HasMaxLength(36);
-            entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();
-            entity.Property(row => row.Kind).HasMaxLength(32).IsRequired();
-            entity.Property(row => row.DisplayName).HasMaxLength(80).IsRequired();
-            entity.Property(row => row.BaseUrl).HasMaxLength(200).IsRequired();
-            entity.Property(row => row.TrustedOriginsJson).HasMaxLength(500).IsRequired();
-            entity.Property(row => row.Status).HasMaxLength(32).IsRequired();
-            entity.Property(row => row.ProfileKey).HasMaxLength(36).IsRequired();
-            entity.Property(row => row.StatusDetail).HasMaxLength(80);
-            entity.HasIndex(row => row.AgentInstanceId).IsUnique();
+            entity.ToTable("Credentials"); entity.HasKey(c => c.CredentialId);
+            entity.Property(c => c.Revision).IsConcurrencyToken();
+            entity.Property(c => c.DisplayName).HasMaxLength(120).IsRequired();
+            entity.Property(c => c.MetadataJson).HasMaxLength(16384).IsRequired();
+            entity.Property(c => c.ProtectedPayload).IsRequired();
+        });
+        modelBuilder.Entity<AgentCredentialBindingRecord>(entity =>
+        {
+            entity.ToTable("AgentCredentialBindings"); entity.HasKey(b => b.BindingId);
+            entity.Property(b => b.Revision).IsConcurrencyToken();
+            entity.Property(b => b.Reference).HasMaxLength(64).IsRequired();
+            entity.HasIndex(b => new { b.AgentInstanceId, b.Reference }).IsUnique();
+            entity.HasIndex(b => new { b.AgentInstanceId, b.CredentialId }).IsUnique();
+            entity.HasOne<AgentInstanceRecord>().WithMany().HasForeignKey(b => b.AgentInstanceId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<CredentialRecord>().WithMany().HasForeignKey(b => b.CredentialId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 

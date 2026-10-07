@@ -241,6 +241,19 @@ status, cadence_body = request(
 cadence = json.loads(cadence_body)
 assert cadence["configuredIntervalSeconds"] == 900 and cadence["revision"] == 1, cadence
 
+# Reusable credentials and resource grants survive the same volume recreation.
+_, credential_body = request(f"http://127.0.0.1:{port}/api/v2/admin/credentials", method="POST",
+    data=json.dumps({"displayName": "Compose shared credential", "kind": "Password",
+        "metadata": {"username": "compose@example.test"}, "allowedOrigins": ["https://store.example.test"],
+        "protectedValue": "compose-private-value-7b3f"}).encode(), headers=owner_headers)
+credential = json.loads(credential_body)
+assert "compose-private-value-7b3f" not in credential_body.decode()
+_, binding_body = request(f"http://127.0.0.1:{port}/api/v2/admin/agent-instances/{instance['instanceId']}/credential-bindings",
+    method="POST", data=json.dumps({"credentialId": credential["credentialId"], "reference": "store-admin",
+        "expectedInstanceRevision": instance["revision"]}).encode(), headers=owner_headers)
+json.dump({"credentialId": credential["credentialId"], "instanceId": instance["instanceId"],
+    "bindingId": json.loads(binding_body)["bindingId"]}, open("/tmp/agent-core-credential-survival.json", "w"))
+
 admin_state = {
     "draftId": draft_id,
     "publicationVersion": pub_version,
@@ -272,6 +285,13 @@ import json, sqlite3, sys, time, uuid
 db, session_id = sys.argv[1], sys.argv[2]
 con = sqlite3.connect(db, timeout=30)
 con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+credential_state = json.load(open("/tmp/agent-core-credential-survival.json"))
+protected = con.execute("SELECT ProtectedPayload FROM Credentials WHERE CredentialId=?", (credential_state["credentialId"],)).fetchone()
+assert protected and "compose-private-value-7b3f" not in str(protected), "Credential payload must be protected"
+assert b"compose-private-value-7b3f" not in open(db, "rb").read(), "SQLite contained plaintext"
+assert not con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ApplicationConnections'").fetchone()
+credential_state["protectedPayload"] = protected[0]
+json.dump(credential_state, open("/tmp/agent-core-credential-survival.json", "w"))
 owner = con.execute(
     """SELECT s.AgentInstanceId, snap.ProfileId
        FROM Sessions s
@@ -327,6 +347,11 @@ docker cp "$seed_dir/agent-core.db" "$cid":/data/agent-core.db
 volume="$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/data" }}{{ .Name }}{{ end }}{{ end }}' "$cid")"
 docker run --rm --user root --entrypoint sh -v "$volume":/data agent-core:synthetic -c 'rm -f /data/agent-core.db-wal /data/agent-core.db-shm && chown 1654:1654 /data /data/agent-core.db && chmod 755 /data && chmod 644 /data/agent-core.db'
 rm -rf "$seed_dir"
+
+docker cp "$cid":/data/credential-protection-keys "$seed_dir-keys"
+find "$seed_dir-keys" -type f -name '*.xml' -exec shasum -a 256 {} \; | awk '{print $1}' | sort > /tmp/agent-core-credential-key-hashes.txt
+[[ -s /tmp/agent-core-credential-key-hashes.txt ]]
+rm -rf "$seed_dir-keys"
 
 "${compose[@]}" up -d --force-recreate --no-deps agent-core
 
@@ -492,7 +517,23 @@ except urllib.error.HTTPError as error: assert error.code == 404
 print("managed v2 binary home and nested scratch survived recreation; fresh scratch isolated", v2["instanceId"])
 print("agent workspace survived source deletion and container recreation", home["instanceId"])
 print("admin survived", instance_id, managed_session_id, pub_version, resource_path)
+credential = json.load(open("/tmp/agent-core-credential-survival.json"))
+status, safe_credential = get(f"http://127.0.0.1:{port}/api/v2/admin/credentials/{credential['credentialId']}")
+assert status == 200 and json.loads(safe_credential)["bindingCount"] == 1
+assert "compose-private-value-7b3f" not in safe_credential
+status, grants = get(f"http://127.0.0.1:{port}/api/v2/admin/agent-instances/{credential['instanceId']}/credential-bindings")
+assert status == 200 and any(item["bindingId"] == credential["bindingId"] and item["reference"] == "store-admin" for item in json.loads(grants)["items"])
+print("credential and binding survived with safe projection", credential["credentialId"])
+
 PY
+
+recreated_cid="$("${compose[@]}" ps -aq agent-core)"
+keys_after="$(mktemp -d)"
+docker cp "$recreated_cid":/data/credential-protection-keys "$keys_after/keys"
+find "$keys_after/keys" -type f -name '*.xml' -exec shasum -a 256 {} \; | awk '{print $1}' | sort > /tmp/agent-core-credential-key-hashes-after.txt
+cmp /tmp/agent-core-credential-key-hashes.txt /tmp/agent-core-credential-key-hashes-after.txt
+rm -rf "$keys_after"
+echo "credential protection key ring survived container recreation"
 
 spa="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:${AGENTCORE_COMPOSE_PORT}/)"
 api_missing="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:${AGENTCORE_COMPOSE_PORT}/api/v1/missing)"

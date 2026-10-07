@@ -456,10 +456,6 @@ public sealed class PromptContextBuilder(
             "Do not access the Agent Core repository, secrets, or other sessions.",
             "Tool and path permission is runtime-enforced and is not granted by model text."
         };
-        if (!string.IsNullOrWhiteSpace(context.ApplicationConnectionStatus))
-        {
-            lines.Add(context.ApplicationConnectionStatus);
-        }
 
         return string.Join('\n', lines);
     }

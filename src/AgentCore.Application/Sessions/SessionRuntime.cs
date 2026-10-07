@@ -4,7 +4,6 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using AgentCore.Application.Agents;
-using AgentCore.Application.Connections;
 using AgentCore.Application.Audio;
 using AgentCore.Application.Events;
 using AgentCore.Application.Execution;
@@ -16,7 +15,6 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Speech;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Triggers;
-using AgentCore.Domain.Connections;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Diagnostics;
@@ -60,7 +58,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly IArtifactReferenceAuthorizer _artifacts;
     private readonly SessionToolExecutor _tools;
     private readonly IBrowserSessionLease? _browserLease;
-    private readonly IApplicationConnectionStore? _applicationConnections;
     private bool _intermediateMessagingAllowed;
     private readonly ApplicationMessagePolicy _applicationMessagePolicy = ApplicationMessagePolicy.Default;
     private readonly InteractionPolicy _policy;
@@ -216,8 +213,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IStructuredMemoryService? structuredMemory = null,
         IConversationTurnExecutionStore? turnExecutions = null,
         IDiagnosticIdSource? diagnostics = null,
-        IBrowserSessionLease? browserLease = null,
-        IApplicationConnectionStore? applicationConnections = null)
+        IBrowserSessionLease? browserLease = null)
     {
         _diagnostics = diagnostics ?? FallbackDiagnosticIdSource.Instance;
         _snapshot = snapshot;
@@ -241,7 +237,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _artifacts = artifacts ?? new FixtureArtifactReferenceAuthorizer();
         _tools = tools ?? new SessionToolExecutor();
         _browserLease = browserLease;
-        _applicationConnections = applicationConnections;
         if (browserLease is IBrowserProfileBinding binding)
         {
             binding.BindSession(snapshot.SessionId, snapshot.AgentInstanceId);
@@ -2387,19 +2382,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             try
             {
                 var sessionAttachments = await BuildSessionAttachmentManifestAsync(evaluationToken).ConfigureAwait(false);
-                string? applicationConnectionStatus = null;
-                var trustedConnection = false;
-                if (_applicationConnections is not null && _snapshot.AgentInstanceId is Guid applicationInstanceId)
-                {
-                    var applicationConnection = await _applicationConnections
-                        .GetByAgentAsync(applicationInstanceId, evaluationToken)
-                        .ConfigureAwait(false);
-                    trustedConnection = applicationConnection?.Status == ApplicationConnectionStatus.Connected
-                        && trigger.Kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent;
-                    var formatted = ApplicationConnectionPrompt.Format(applicationConnection);
-                    applicationConnectionStatus = formatted.Length == 0 ? null : formatted;
-                }
-
                 var learned = await SessionMemoryPrompt.LoadAsync(
                     _structuredMemory,
                     _snapshot.SessionId,
@@ -2438,8 +2420,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ScheduleConversation: _scheduleConversationContext,
                     ScheduleDraft: _scheduleDraftContext,
                     ActiveSkillIds: ResolveActiveSkillIds(trigger, responseId),
-                    ApplicationConnectionStatus: applicationConnectionStatus,
-                    TrustedConnection: trustedConnection,
+                    AgentInstanceId: _snapshot.AgentInstanceId,
+                    CredentialMetadataAvailable: await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, evaluationToken),
                     Harness: trigger.Kind == TriggerKind.UserTurn ? await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, evaluationToken) : null,
                     AgentWorkspaceAvailable: await _tools.AgentWorkspaceAvailableAsync(SessionId, evaluationToken),
                     AllowAgentConsolidation: await _tools.AllowsAgentConsolidationAsync(_snapshot.AgentInstanceId, evaluationToken),
@@ -2658,7 +2640,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var budget = ToolExecutionBudget.Resolve(new ToolBudgetSignal(
             InteractiveBrowser: trigger.Kind == TriggerKind.UserTurn
                 && ToolCatalog.AuthorizesBrowser(budgetTools),
-            BoundApplicationBrowser: false));
+            PersistentBrowserLease: false));
         var toolDeadline = request.Tools is { Count: > 0 };
         using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using ITimer? overallTimer = toolDeadline ? ScheduleCancel(_time, overallCts, budget.Overall) : null;
@@ -3067,8 +3049,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     trigger.Kind,
                                     allowedIntermediate,
                                     _snapshot.AgentInstanceId,
-                                    TrustedConnection: await LiveTrustedConnectionAsync(trigger.Kind, overallCts.Token)
-                                        .ConfigureAwait(false),
                                     Harness: await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, overallCts.Token),
                                     SupportsTools: model.Capabilities.Tools), overallCts.Token);
                             if (policy == ToolPolicyDecision.Deny || string.IsNullOrWhiteSpace(call.Name))
@@ -3224,8 +3204,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                                 trigger.Kind,
                                                 allowedIntermediate,
                                                 _snapshot.AgentInstanceId,
-                                                TrustedConnection: await LiveTrustedConnectionAsync(trigger.Kind, toolCts.Token)
-                                                    .ConfigureAwait(false),
                                                 SupportsVision: model.Capabilities.Vision,
                                                 CaptureScope: request.ResponseId.ToString(),
                                                 HarnessSources: harnessSources.ToArray(),
@@ -5568,20 +5546,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 null);
         var resolved = _models.Resolve(selection, purpose);
         return TestDecorateLanguageModel?.Invoke(resolved) ?? resolved;
-    }
-
-    private async ValueTask<bool> LiveTrustedConnectionAsync(TriggerKind kind, CancellationToken cancellationToken)
-    {
-        if (kind is not (TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent)
-            || _applicationConnections is null
-)
-        {
-            return false;
-        }
-
-        var connection = await _applicationConnections.GetByAgentAsync(_snapshot.AgentInstanceId, cancellationToken)
-            .ConfigureAwait(false);
-        return connection?.Status == ApplicationConnectionStatus.Connected;
     }
 
     private ILanguageModel ResolveTurnModel(TriggerKind kind)

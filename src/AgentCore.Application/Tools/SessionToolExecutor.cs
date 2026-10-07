@@ -30,14 +30,14 @@ public sealed partial class SessionToolExecutor(
     IAgentDefinitionStore? agentDefinitions = null,
     IMemoryStore? profiles = null,
     IBrowserSession? browser = null,
-    IApplicationConnectionStore? applicationConnections = null,
     IAgentDefinitionResourceAdminStore? definitionResources = null,
     IWorkCaptureStore? workCaptures = null,
     Func<HarnessManagementService>? harnessAuthoring = null,
     AgentCore.Application.Experience.ExperienceService? experience = null,
     AgentCore.Application.Continuity.ContinuityService? continuity = null,
     AgentCore.Application.Continuity.IdentityMaintenanceService? identityMaintenance = null,
-    AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null)
+    AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null,
+    AgentCore.Application.Credentials.CredentialService? credentials = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -53,6 +53,9 @@ public sealed partial class SessionToolExecutor(
         triggerAuthorizer ?? new HeuristicTriggerCommandAuthorizer();
 
     public ITriggerCommandAuthorizer TriggerCommandAuthorizer => _triggerAuthorizer;
+
+    public async ValueTask<bool> CredentialMetadataAvailableAsync(Guid? id, CancellationToken ct) =>
+        id is Guid owner && credentials is not null && (await credentials.SafeMetadataAsync(owner, ct)).Count > 0;
 
     public ValueTask<string> ExperienceContextAsync(Guid? instanceId, CancellationToken ct) =>
         experience?.RecallAsync(instanceId, ct) ?? ValueTask.FromResult("");
@@ -144,7 +147,6 @@ public sealed partial class SessionToolExecutor(
             && ToolResources.IsSessionTool(call.Name)
             && !(HarnessChatTools.IsHarness(call.Name) && admission.TriggerKind == TriggerKind.ThoughtActivation)
             && !(ToolCatalog.IsBrowserTool(call.Name)
-                && admission is { TrustedConnection: true }
                 && ToolResources.IsOccurrence(admission.TriggerKind)
                 && admission.AgentInstanceId is Guid agentInstanceId
                 && agentInstanceId != Guid.Empty))
@@ -227,6 +229,12 @@ public sealed partial class SessionToolExecutor(
 
         try
         {
+            if (call.Name == ToolCatalog.CredentialsList)
+            {
+                if (args.EnumerateObject().Any()) return TextResult(Error("invalid", "Credential listing accepts no arguments."));
+                if (credentials is null || admission?.AgentInstanceId is not Guid owner) return TextResult(Error("forbidden", "Credential metadata is unavailable."));
+                return TextResult(JsonSerializer.Serialize(new { items = await credentials.SafeMetadataAsync(owner, cancellationToken) }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+            }
             if (ToolCatalog.IsIdentityMaintenance(call.Name))
             {
                 if (identityMaintenance is null || admission is null)

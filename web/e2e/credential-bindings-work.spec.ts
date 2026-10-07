@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 
-test("store connection and quiet background work stay labeled", async ({ page }) => {
+test("credential bindings and quiet background work stay labeled", async ({ page }) => {
   test.setTimeout(120_000);
   const consoleErrors: string[] = [];
   const serverErrors: string[] = [];
@@ -129,48 +129,16 @@ test("store connection and quiet background work stay labeled", async ({ page })
   await expect(page.getByLabel(/Application connection:/)).toHaveCount(0);
   await page.goto(`/admin/instances/${instanceId}`);
   await expect(page).toHaveURL(/\/admin\/instances\/[0-9a-f-]{36}$/i);
-  await page.getByRole("tab", { name: "Connections", exact: true }).click();
-  const section = page.getByRole("region", { name: "Application connection" });
-  await expect(section.getByRole("heading", { name: "Application connection" })).toBeVisible();
-  await expect(section.getByText("Connect the supported nopCommerce application to this agent. Authentication stays in this agent's browser profile.")).toBeVisible();
-  await expect(section.getByText("Application type")).toBeVisible();
-  await expect(section.getByText("nopCommerce", { exact: true }).first()).toBeVisible();
-  const existingRevoke = section.getByRole("button", { name: "Revoke connection" });
-  if (await existingRevoke.isVisible()) {
-    await existingRevoke.click();
-    await page.getByRole("dialog", { name: "Revoke this connection?" }).getByRole("button", { name: "Revoke" }).click();
-  }
-  await expect(section.getByText("Not connected")).toBeVisible();
-  await expect(section.getByLabel("Display name")).toHaveValue("");
-  await expect(section.getByLabel("Base URL")).toHaveValue("");
-
-  await section.getByLabel("Display name").fill("nopCommerce");
-  await section.getByLabel("Base URL").fill("not a url");
-  await section.getByRole("button", { name: "Connect" }).focus();
-  await expect(section.getByRole("button", { name: "Connect" })).toBeFocused();
-  await page.keyboard.press("Enter");
-  await expect(section.getByText("Base URL must be an absolute http or https origin without credentials.")).toBeVisible();
-  await expect(section.getByText(/cookie|token|profile path/i)).toHaveCount(0);
-
-  await section.getByLabel("Base URL").fill("http://127.0.0.1:5091");
-  await section.getByRole("button", { name: "Connect" }).click();
-  await expect(section.getByText("Connected", { exact: true })).toBeVisible({ timeout: 45_000 });
-  await section.getByRole("button", { name: "Revoke connection" }).click();
-  const confirm = page.getByRole("dialog", { name: "Revoke this connection?" });
-  await confirm.getByRole("button", { name: "Revoke" }).click();
-  await expect(section.getByText("Not connected", { exact: true })).toBeVisible();
-  await expect(section.getByText(/cookie|token|profile path/i)).toHaveCount(0);
-
-  await page.goto(`/c/${sessionId}`);
-  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
-  await expect(page.getByLabel(/Application connection:/)).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Manage application connection" })).toHaveCount(0);
-
-  await page.goto(`/admin/instances/${instanceId}`);
+  await page.getByRole("tab", { name: "Credentials", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Credential bindings" })).toBeVisible();
+  await expect(page.getByText("No credentials bound")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Browser state" })).toBeVisible();
+  await page.goto(`/admin/instances/${instanceId}/connections`);
+  await expect(page).toHaveURL(new RegExp(`/admin/instances/${instanceId}/credentials$`));
   await page.setViewportSize({ width: 390, height: 800 });
-  await page.getByRole("tab", { name: "Connections", exact: true }).click();
-  await expect(section.getByRole("heading", { name: "Application connection" })).toBeVisible();
-  await expect(section.getByRole("button", { name: "Connect" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Credential bindings" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Bind credential", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
 
   expect(serverErrors).toEqual([]);
   const unexpected = consoleErrors.filter(

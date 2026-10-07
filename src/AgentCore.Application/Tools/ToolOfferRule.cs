@@ -2,6 +2,7 @@ namespace AgentCore.Application.Tools;
 
 public enum ToolOfferRule
 {
+    CredentialAuthority,
     RoleAllowlist,
     SessionAttachmentsWhenRoleAllows,
     ConfigurationWhenRoleAllows,

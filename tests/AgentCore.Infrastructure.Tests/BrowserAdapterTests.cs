@@ -1092,7 +1092,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
     }
 
     [Fact]
-    public async Task Credential_and_verification_pages_report_intervention_and_a_public_page_does_not()
+    public async Task Existing_login_allows_secure_sink_and_registration_verification_require_intervention()
     {
         var session = fixture.Session;
         var id = Guid.NewGuid();
@@ -1102,7 +1102,8 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
 
         var login = await Navigate(session, id, "/login");
         Assert.Null(login.ErrorCode);
-        Assert.Equal(BrowserInterventionKind.AuthenticationRequired, login.Observation!.Intervention);
+        Assert.Equal(BrowserInterventionKind.None, login.Observation!.Intervention);
+        Assert.Equal(["fill_credential"], Field(login.Observation, "Password").Actions);
 
         var signup = await Navigate(session, id, "/signup");
         Assert.Null(signup.ErrorCode);
@@ -1126,13 +1127,14 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
     }
 
     [Fact]
-    public async Task Below_fold_login_still_reports_authentication_required()
+    public async Task Below_fold_login_exposes_only_the_secure_password_sink()
     {
         var session = fixture.Session;
         var id = Guid.NewGuid();
         var login = await Navigate(session, id, "/login-below-fold");
         Assert.Null(login.ErrorCode);
-        Assert.Equal(BrowserInterventionKind.AuthenticationRequired, login.Observation!.Intervention);
+        Assert.Equal(BrowserInterventionKind.None, login.Observation!.Intervention);
+        Assert.Equal(["fill_credential"], Field(login.Observation, "Password").Actions);
     }
 
     [Fact]
@@ -1475,9 +1477,9 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
             Assert.Equal("Grouped", Field(selected.Observation!, "Category").State?.SelectedText);
 
             var password = await session.ActAsync(new BrowserActRequest(id, "fill", Field(selected.Observation!, "Password").Ref, "p9-password-secret"));
-            Assert.Null(password.ErrorCode);
-            AssertSecretsAbsent(password.Observation!);
-            Assert.Null(Field(password.Observation!, "Password").State);
+            Assert.Equal("unsupported_operation", password.ErrorCode);
+            Assert.Null(Field(selected.Observation!, "Password").State);
+            Assert.Equal(["fill_credential"], Field(selected.Observation!, "Password").Actions);
         }
         finally
         {

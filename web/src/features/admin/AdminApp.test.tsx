@@ -98,7 +98,6 @@ vi.mock("../../services/adminApi", () => ({
     policy: { mode: "Disabled", scopes: [], sources: [], eligibleTools: [], frozen: false }, preparation: null,
     draftRevision: null, instructions: null, skills: [], knowledge: [], selectedTools: [], diff: null, resources: [] }),
   updateHarness: vi.fn(),
-  getApplicationConnection: vi.fn().mockResolvedValue(null),
   listEventSources: vi.fn().mockResolvedValue([]),
   listEventSubscriptions: vi.fn().mockResolvedValue([]),
   createEventSource: vi.fn(),

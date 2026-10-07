@@ -16,8 +16,7 @@ public static class ToolProjectionService
         return eligible.Where(t => t.Name == ToolCatalog.CapabilitiesLoad
             || always.Contains(t.Name, StringComparer.Ordinal) || skill.Contains(t.Name)
             || loaded.Contains(t.Name, StringComparer.Ordinal)
-            || !ToolRegistry.Get(t.Name).Discoverable
-            || context?.TrustedConnection == true && ToolCatalog.IsBrowserTool(t.Name))
+            || !ToolRegistry.Get(t.Name).Discoverable)
             .DistinctBy(t => t.Name).OrderBy(t => t.Name, StringComparer.Ordinal).ToArray();
     }
 }

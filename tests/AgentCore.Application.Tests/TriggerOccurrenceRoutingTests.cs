@@ -30,13 +30,11 @@ public sealed class TriggerOccurrenceRoutingTests
     private static readonly Guid ProfileId = Guid.Parse("019944af-00c1-7000-8000-0000000000b1");
     private static readonly DateTimeOffset Now = new(2026, 9, 23, 8, 0, 0, TimeSpan.Zero);
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Live_occurrence_loads_only_when_connected_and_each_response_starts_fresh(bool connected)
+    [Fact]
+    public async Task Live_occurrence_loads_without_connection_state_and_each_response_starts_fresh()
     {
         var model = new LiveCapabilityModel();
-        var harness = await StartAsync(model: model, capabilities: true, connected: connected);
+        var harness = await StartAsync(model: model, capabilities: true);
         await using var runtime = harness.Runtime;
         Assert.True(await runtime.SubmitPersistedUserTextAsync("Load an interface", Guid.NewGuid()));
         await runtime.WaitUntilIdleAsync();
@@ -50,20 +48,14 @@ public sealed class TriggerOccurrenceRoutingTests
             Assert.Equal(OccurrenceRoutingDisposition.AcceptedLive, (await harness.Store.GetOccurrenceAsync(harness.Owner, admitted.Occurrence!.OccurrenceId))!.Disposition);
         }
         Assert.Equal(6, model.Requests.Count);
-        var pairIndex = 0;
         foreach (var pair in model.Requests.Chunk(2))
         {
-            var allowed = pairIndex++ == 0 || connected;
-            Assert.Equal(allowed, pair[0].Tools!.Any(t => t.Name == ToolCatalog.CapabilitiesLoad));
+            Assert.Contains(pair[0].Tools!, t => t.Name == ToolCatalog.CapabilitiesLoad);
             Assert.DoesNotContain(pair[0].Tools!, t => t.Name == ToolCatalog.EmailSearch);
-            Assert.Equal(allowed, pair[1].Tools!.Any(t => t.Name == ToolCatalog.EmailSearch));
+            Assert.Contains(pair[1].Tools!, t => t.Name == ToolCatalog.EmailSearch);
             var result = Assert.Single(pair[1].Messages, m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.CapabilitiesLoad);
-            if (allowed)
-            {
-                Assert.Contains("email.search", result.Text);
-                Assert.DoesNotContain("error", result.Text);
-            }
-            else Assert.Contains("forbidden", result.Text);
+            Assert.Contains("email.search", result.Text);
+            Assert.DoesNotContain("error", result.Text);
         }
     }
 
@@ -938,16 +930,12 @@ public sealed class TriggerOccurrenceRoutingTests
         int version = 2,
         ILanguageModel? model = null,
         IModelCatalog? catalog = null,
-        ILanguageModelResolver? resolver = null, bool capabilities = false, bool connected = true)
+        ILanguageModelResolver? resolver = null, bool capabilities = false)
     {
         var definition = await LoadAsync(definitionId, version);
-        var connections = new InMemoryApplicationConnectionStore();
         if (capabilities)
         {
             definition = definition with { Environment = new(Capabilities: new("Selected", [ToolCatalog.CapabilitiesLoad, ToolCatalog.EmailSearch]), Projection: new([])) };
-            await connections.SaveAsync(new(Guid.NewGuid(), InstanceId, AgentCore.Domain.Connections.ApplicationConnectionKinds.NopCommerce,
-                "Fixture", "http://127.0.0.1:5088", ["http://127.0.0.1:5088"], connected ? AgentCore.Domain.Connections.ApplicationConnectionStatus.Connected : AgentCore.Domain.Connections.ApplicationConnectionStatus.NotConnected,
-                InstanceId, 1, Now, Now, null), 0);
         }
         var time = new FakeTimeProvider(Now);
         var store = new InMemoryTriggerStore();
@@ -986,8 +974,7 @@ public sealed class TriggerOccurrenceRoutingTests
             NullLogger<SessionRuntime>.Instance,
             modelResolver: resolver,
             catalog: catalog,
-            tools: capabilities ? new SessionToolExecutor(configurationGate: ToolConfigurationGates.AllowAll, applicationConnections: connections) : null,
-            applicationConnections: capabilities ? connections : null,
+            tools: capabilities ? new SessionToolExecutor(configurationGate: ToolConfigurationGates.AllowAll) : null,
             turnExecutions: capabilities ? new InMemoryConversationTurnExecutionStore() : null);
         await runtime.AttachAsync();
         return new Harness(runtime, store, guard.Guard, guard.Instances, time, new TriggerOwner(InstanceId, ProfileId), output);

@@ -50,7 +50,7 @@ for (const width of [1440, 390]) {
       ["Automation", "Thoughts", "automation/thoughts"],
       ["Automation", "Policies & models", "automation/controls"],
       ["Runs", undefined, "runs"],
-      ["Connections", undefined, "connections"],
+      ["Credentials", undefined, "credentials"],
       ["Effective configuration", undefined, "effective"]
     ] as const) {
       await page.getByRole("tab", { name: tab, exact: true }).click();

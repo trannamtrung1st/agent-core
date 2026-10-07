@@ -20,7 +20,7 @@ public sealed class ToolExecutionBudgetTests
     [Fact]
     public void Interactive_browser_execution_uses_the_larger_profile()
     {
-        var budget = ToolExecutionBudget.Resolve(new ToolBudgetSignal(InteractiveBrowser: true, BoundApplicationBrowser: false));
+        var budget = ToolExecutionBudget.Resolve(new ToolBudgetSignal(InteractiveBrowser: true, PersistentBrowserLease: false));
 
         Assert.Equal(ToolExecutionClass.InteractiveBrowser, budget.Class);
         Assert.Equal(48, budget.MaxSteps);
@@ -31,7 +31,7 @@ public sealed class ToolExecutionBudgetTests
     [Fact]
     public void Bound_application_browser_wins_over_the_interactive_profile()
     {
-        var budget = ToolExecutionBudget.Resolve(new ToolBudgetSignal(InteractiveBrowser: true, BoundApplicationBrowser: true));
+        var budget = ToolExecutionBudget.Resolve(new ToolBudgetSignal(InteractiveBrowser: true, PersistentBrowserLease: true));
 
         Assert.Equal(ToolExecutionClass.UnattendedBoundBrowser, budget.Class);
         Assert.Equal(32, budget.MaxSteps);

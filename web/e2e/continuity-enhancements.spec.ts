@@ -141,8 +141,12 @@ test('Admin authors scheduled work, runs through background execution, edits and
   await schedules.getByRole('button', { name: 'Cancel schedule', exact: true }).click();
   await page.getByRole('dialog', { name: 'Cancel this schedule?', exact: true }).getByRole('button', { name: 'Cancel schedule', exact: true }).click();
   await expect(schedules.getByText('Cancelled', { exact: true })).toBeVisible();
-  await page.getByRole('tab', { name: 'Thoughts', exact: true }).click();
-  await thoughts.getByRole('button', { name: /^View run: Review current/ }).click();
+  await expect(page.getByRole('dialog')).toBeHidden();
+  const mobileThoughtTab = page.getByRole('tab', { name: 'Thoughts', exact: true });
+  await mobileThoughtTab.click();
+  await expect(mobileThoughtTab).toHaveAttribute('aria-selected', 'true');
+  await thoughts.getByRole('button', { name: `View thought: ${updatedPrompt}`, exact: true }).click();
+  await thoughts.getByRole('button', { name: 'View run', exact: true }).click();
   await page.locator('.background-work-selected').getByRole('button', { name: 'View thought', exact: true }).click();
   await thoughts.getByRole('button', { name: 'Disable thought', exact: true }).click();
   await expect(thoughts.getByRole('button', { name: 'Run now', exact: true })).toBeDisabled();

@@ -43,6 +43,7 @@ public class AgentCoreApiFactory : WebApplicationFactory<Program>
         {
             var options = (PersistenceOptions)services.Single(d => d.ServiceType == typeof(PersistenceOptions)).ImplementationInstance!;
             options.WorkspaceRoot = Path.Combine(Path.GetTempPath(), "agent-core-api-isolated", Guid.NewGuid().ToString("N"), "workspaces");
+            options.CredentialProtectionKeyRoot = Path.Combine(Path.GetTempPath(), "agent-core-api-isolated", Guid.NewGuid().ToString("N"), "credential-keys");
             if (ExtraConfiguration.TryGetValue("Persistence:WorkspaceRoot", out var root) && root is not null)
                 options.WorkspaceRoot = root;
         });

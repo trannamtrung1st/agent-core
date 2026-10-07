@@ -312,11 +312,15 @@ Owners: [Protocol](14-api-and-realtime-protocol.md) (capability, leases vs Attac
 
 ## P9.5 connection and attention (closed)
 
-**Decision:** nopCommerce stays a direct Playwright profile plus one application connection row. It is the first concrete kind, not a Core domain term. There is no second scheduler, no browser panel, and no Chromium package in the Agent Core image. Attention is a result flag and one durable alert, not a new notification product. P9.5 is closed on `1012653`. Closure evidence is [p9.5-freeze-candidate.md](reports/p9.5-freeze-candidate.md). Hosted Synthetic [`37111979501`](https://github.com/trannamtrung1st/agent-core/actions/runs/37111979501) is green.
+**Historical decision, superseded:** nopCommerce proved persistent browser reuse in P9.5. The P9.5 nopCommerce Application Connection was a bounded proving slice and is retired by System Credentials. Historical P9.5/P9.6 freeze evidence remains unchanged; current behavior uses explicit credential grants, generic capabilities, and Agent-Instance-owned browser profiles. Attention remains one durable result flag/alert, and the default Compose image still does not package Chromium. See [P9.5 evidence](reports/p9.5-freeze-candidate.md).
 
-## Post-P9.5 application connection projection
+## System credential authority
 
-**Decision:** Admin projects the one application connection on an Agent Instance by its display name and status. Chat does not duplicate that row in the header. Admin shows a read-only Application type of nopCommerce, because connection establishment still opens that store's admin sign-in. The model context uses the display name and stored kind. nopCommerce remains the first concrete kind and is not Core vocabulary. This follow-up does not add a second connection, a provider registry, or a persistence migration, and it does not move `1012653`.
+**Decision:** replace the bounded nopCommerce connection domain with reusable System Credentials and explicit Agent Credential Bindings. Use predefined Password/ApiKey/Token/Certificate/PrivateKey/Generic security kinds, dynamic non-secret metadata and independent origin policy. Bindings are mutable instance resource grants; they do not change Definition authorization, contextual capability projection or capability fingerprints. The first secure sink is interactive Browser password fill; other kinds are stored but have no secure sink yet. Use the existing .NET Data Protection local provider behind `ICredentialProtector`, persisting its key ring with the database. No external vault dependency is needed locally. P11C reserves a replacement provider when deployment requires a vault/KMS/HSM. Generic browser state remains independent of grants. No nopCommerce Core service or browser authentication state machine is retained.
+
+Future Application Binding means a client application embedding/invoking an agent, with delegated context and permissions. Operating a website through generic Browser is not such a binding.
+
+The P9.5 nopCommerce Application Connection was a bounded proving slice and is retired by System Credentials. Historical P9.5/P9.6 freeze evidence remains unchanged; current behavior uses explicit credential grants, generic capabilities, and Agent-Instance-owned browser profiles.
 
 ## Post-P9.5 bounded browser settle
 

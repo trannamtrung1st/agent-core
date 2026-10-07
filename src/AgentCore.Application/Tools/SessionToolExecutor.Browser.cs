@@ -4,7 +4,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
-using AgentCore.Domain.Connections;
 using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Tools;
@@ -38,50 +37,16 @@ public sealed partial class SessionToolExecutor
     private readonly Dictionary<string, int> _downloadCounts = new(StringComparer.Ordinal);
     private readonly object _captureGate = new();
 
-    private async Task<string?> DenyBrowserUnlessConnectedAsync(
-        Guid sessionId,
-        ToolExecutionAdmission? admission,
-        CancellationToken cancellationToken)
+    private async Task<string?> BindBrowserAsync(Guid sessionId, ToolExecutionAdmission? admission, CancellationToken ct)
     {
-        var scheduled = admission is { Detached: true } && ToolResources.IsOccurrence(admission.TriggerKind);
-        if (applicationConnections is null
-            || admission?.AgentInstanceId is not Guid agentInstanceId
-            || agentInstanceId == Guid.Empty)
+        if (admission?.AgentInstanceId is Guid id && id != Guid.Empty)
         {
-            return scheduled
-                ? Error("forbidden", "This application connection cannot be used.")
-                : null;
+            if (_agentInstances is not null && await _agentInstances.FindAsync(id, ct) is not { Lifecycle: AgentInstanceLifecycle.Active })
+                return Error("forbidden", "An active Agent Instance is required.");
+            if (browser is IBrowserProfileBinding binding) binding.BindSession(sessionId, id);
         }
-
-        var connection = await applicationConnections
-            .GetByAgentAsync(agentInstanceId, cancellationToken)
-            .ConfigureAwait(false);
-        if (scheduled && connection is not { Status: ApplicationConnectionStatus.Connected })
-        {
-            if (browser is IBrowserProfileBinding unbound)
-            {
-                unbound.BindSession(sessionId, null);
-            }
-
-            return Error("forbidden", "This application connection cannot be used.");
-        }
-
-        if (connection is null || connection.Status == ApplicationConnectionStatus.Connected)
-        {
-            if (browser is IBrowserProfileBinding binding)
-            {
-                binding.BindSession(sessionId, agentInstanceId);
-            }
-
-            return null;
-        }
-
-        if (browser is IBrowserProfileBinding unbind)
-        {
-            unbind.BindSession(sessionId, null);
-        }
-
-        return Error("forbidden", "This application connection cannot be used.");
+        else if (admission?.Detached == true) return Error("forbidden", "An Agent Instance is required.");
+        return null;
     }
 
     private async Task<string> NavigateBrowserAsync(
@@ -91,7 +56,7 @@ public sealed partial class SessionToolExecutor
         CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
-        var denied = await DenyBrowserUnlessConnectedAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
+        var denied = await BindBrowserAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
         if (denied is not null)
         {
             return FinishBrowser(ToolCatalog.BrowserNavigate, started, denied);
@@ -123,24 +88,6 @@ public sealed partial class SessionToolExecutor
                     ToolCatalog.BrowserNavigate,
                     started,
                     Error(decision.Code ?? "target_denied", decision.Message ?? "Browser target is not allowed."));
-            }
-
-            if (applicationConnections is not null
-                && TrustedOccurrenceOrigin(admission, out var connectedAgent))
-            {
-                var connected = await applicationConnections.GetByAgentAsync(connectedAgent, cancellationToken)
-                    .ConfigureAwait(false);
-                var leased = BrowserTargetPolicy.EvaluateDestination(
-                    url,
-                    connected?.TrustedOrigins,
-                    BrowserPolicyMode.Restricted);
-                if (!leased.Allowed)
-                {
-                    return FinishBrowser(
-                        ToolCatalog.BrowserNavigate,
-                        started,
-                        Error(leased.Code ?? "target_denied", leased.Message ?? "Browser target is not allowed."));
-                }
             }
 
             if (!Uri.TryCreate(url, UriKind.Absolute, out destination))
@@ -184,7 +131,7 @@ public sealed partial class SessionToolExecutor
         CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
-        var denied = await DenyBrowserUnlessConnectedAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
+        var denied = await BindBrowserAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
         if (denied is not null)
         {
             return FinishBrowser(ToolCatalog.BrowserObserve, started, denied);
@@ -230,7 +177,7 @@ public sealed partial class SessionToolExecutor
         CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
-        var denied = await DenyBrowserUnlessConnectedAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
+        var denied = await BindBrowserAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
         if (denied is not null)
         {
             return FinishBrowser(ToolCatalog.BrowserAct, started, denied);
@@ -289,25 +236,23 @@ public sealed partial class SessionToolExecutor
                 current.AbsoluteUri,
                 browser.HostPolicy.EffectiveInteractionOrigins,
                 browser.HostPolicy.PolicyMode);
-            if (decision.Allowed
-                && applicationConnections is not null
-                && TrustedOccurrenceOrigin(admission, out var connectedAgent))
-            {
-                var connected = await applicationConnections.GetByAgentAsync(connectedAgent, cancellationToken)
-                    .ConfigureAwait(false);
-                decision = BrowserTargetPolicy.EvaluateAct(
-                    browser.HostPolicy.InteractionMode,
-                    current.AbsoluteUri,
-                    connected?.TrustedOrigins,
-                    BrowserPolicyMode.Restricted);
-            }
-
             if (!decision.Allowed)
             {
                 return FinishBrowser(
                     ToolCatalog.BrowserAct,
                     started,
                     Error(decision.Code ?? "forbidden", decision.Message ?? "Browser actions are not permitted."));
+            }
+
+            if (operation == "fill_credential")
+            {
+                if (admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn, AgentInstanceId: Guid owner }
+                    || credentials is null || browser is not IBrowserPasswordSink sink)
+                    return FinishBrowser(ToolCatalog.BrowserAct, started, Error("forbidden", "Protected credential use requires direct Chat."));
+                var alias = value!;
+                var filled = await sink.FillCredentialAsync(sessionId, reference,
+                    (origin, ct) => credentials.ResolvePasswordAsync(owner, alias, origin, ct), cancellationToken);
+                return FinishBrowser(ToolCatalog.BrowserAct, started, await PresentBrowserAsync(sessionId, admission, filled, cancellationToken));
             }
 
             BrowserUpload? upload = null;
@@ -498,7 +443,7 @@ public sealed partial class SessionToolExecutor
         CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
-        var denied = await DenyBrowserUnlessConnectedAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
+        var denied = await BindBrowserAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
         if (denied is not null)
         {
             return FinishBrowser(ToolCatalog.BrowserPages, started, denied);
@@ -558,7 +503,7 @@ public sealed partial class SessionToolExecutor
                 Error("model-capability-unsupported", "This model cannot receive a browser image.")));
         }
 
-        var denied = await DenyBrowserUnlessConnectedAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
+        var denied = await BindBrowserAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
         if (denied is not null)
         {
             return TextResult(FinishBrowser(ToolCatalog.BrowserCapture, started, denied));
@@ -678,6 +623,8 @@ public sealed partial class SessionToolExecutor
         BrowserOperationResult result,
         CancellationToken cancellationToken)
     {
+        if (admission?.Detached == true && result.Observation?.Elements.Any(e => e.Actions.Contains("fill_credential")) == true)
+            result = result with { Observation = result.Observation with { Intervention = BrowserInterventionKind.AuthenticationRequired } };
         var json = FromBrowserProvider(result);
         if (result.Downloads is not { Count: > 0 } downloads)
         {
@@ -1027,50 +974,15 @@ public sealed partial class SessionToolExecutor
             RuntimeTelemetry.ElapsedMs(started),
             $"{toolName}:{outcome}");
 
-    public async ValueTask<OccurrenceBrowserScope> OpenOccurrenceBrowserAsync(
-        Guid workItemId,
-        Guid agentInstanceId,
-        bool trustedConnection,
-        CancellationToken cancellationToken)
+    public async ValueTask<OccurrenceBrowserScope> OpenOccurrenceBrowserAsync(Guid workItemId, Guid agentInstanceId, CancellationToken ct)
     {
-        if (workItemId != Guid.Empty
-            && agentInstanceId != Guid.Empty
-            && browser is IBrowserProfileBinding binding)
-        {
+        if (workItemId != Guid.Empty && agentInstanceId != Guid.Empty && browser is IBrowserProfileBinding binding)
             binding.BindSession(workItemId, agentInstanceId);
-        }
-
         IAsyncDisposable? lease = null;
-        if (trustedConnection
-            && workItemId != Guid.Empty
-            && agentInstanceId != Guid.Empty
-            && browser is IBrowserContextUse use
-            && applicationConnections is not null)
-        {
-            var connection = await applicationConnections.GetByAgentAsync(agentInstanceId, cancellationToken)
-                .ConfigureAwait(false);
-            if (connection is { Status: ApplicationConnectionStatus.Connected })
-            {
-                lease = await use.EnterUnattendedAsync(agentInstanceId, connection.TrustedOrigins, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-        }
-
+        if (workItemId != Guid.Empty && agentInstanceId != Guid.Empty && browser is { IsAvailable: true }
+            && _configurationGate.IsConfigured(ToolCatalog.BrowserNavigate) && browser is IBrowserContextUse use)
+            lease = await use.EnterUnattendedAsync(agentInstanceId, [], ct);
         return new OccurrenceBrowserScope(browser, workItemId, lease);
-    }
-
-    private static bool TrustedOccurrenceOrigin(ToolExecutionAdmission? admission, out Guid agentInstanceId)
-    {
-        if (admission is { TrustedConnection: true, AgentInstanceId: Guid id }
-            && id != Guid.Empty
-            && ToolResources.IsOccurrence(admission.TriggerKind))
-        {
-            agentInstanceId = id;
-            return true;
-        }
-
-        agentInstanceId = Guid.Empty;
-        return false;
     }
 
     public void AdoptOccurrenceBrowser(Guid agentInstanceId)
@@ -1093,10 +1005,10 @@ public sealed class OccurrenceBrowserScope : IAsyncDisposable
         _browser = browser;
         _workItemId = workItemId;
         _lease = lease;
-        BoundApplicationBrowser = lease is not null;
+        PersistentBrowserLease = lease is not null;
     }
 
-    public bool BoundApplicationBrowser { get; }
+    public bool PersistentBrowserLease { get; }
 
     public async ValueTask DisposeAsync()
     {

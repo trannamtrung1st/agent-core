@@ -19,7 +19,7 @@ public sealed class TriggerScheduleSemanticsTests
     private static readonly DateTimeOffset Now = new(2026, 9, 24, 9, 30, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task Scheduled_occurrence_speak_request_has_no_tools()
+    public async Task Scheduled_occurrence_speak_request_projects_authorized_generic_tools()
     {
         var definition = await LoadAsync(9);
         var brain = new DefaultAgentBrain(new PromptContextBuilder());
@@ -37,7 +37,8 @@ public sealed class TriggerScheduleSemanticsTests
             UtcNow: Now);
         var decision = await brain.DecideAsync(context, Guid.NewGuid());
         var speak = Assert.IsType<Speak>(decision);
-        Assert.Null(speak.Request.Tools);
+        Assert.Contains(speak.Request.Tools!, tool => tool.Name == ToolCatalog.KnowledgeRetrieve);
+        Assert.DoesNotContain(speak.Request.Tools!, tool => ToolCatalog.IsBrowserTool(tool.Name));
         Assert.Contains("Scheduled reminder delivery mode", speak.Request.Messages[1].Text, StringComparison.Ordinal);
     }
 

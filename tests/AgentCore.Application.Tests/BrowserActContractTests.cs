@@ -15,12 +15,13 @@ public sealed class BrowserActContractTests
         Assert.Equal("object", root.GetProperty("type").GetString());
         Assert.False(root.TryGetProperty("required", out _));
         var branches = root.GetProperty("oneOf");
-        Assert.Equal(11, branches.GetArrayLength());
+        Assert.Equal(12, branches.GetArrayLength());
 
         AssertBranch(branches, "click", ["operation", "ref"]);
         AssertBranch(branches, "check", ["operation", "ref"]);
         AssertBranch(branches, "uncheck", ["operation", "ref"]);
         AssertBranch(branches, "fill", ["operation", "ref", "value"], valueMaxLength: 500);
+        AssertBranch(branches, "fill_credential", ["operation", "ref", "credentialRef"]);
         AssertBranch(branches, "select", ["operation", "ref", "value"], valueMaxLength: 200);
         AssertBranch(branches, "press", ["operation", "ref", "key"]);
         AssertBranch(branches, "upload", ["operation", "ref", "artifactId"]);
@@ -36,6 +37,8 @@ public sealed class BrowserActContractTests
         AssertAccepted("click", $$"""{"operation":"click","ref":"{{Ref}}"}""");
         AssertRejected($$"""{"operation":"fill","ref":"{{Ref}}"}""", "missing_value");
         AssertAccepted("fill", $$"""{"operation":"fill","ref":"{{Ref}}","value":"AC Keyboard"}""");
+        AssertAccepted("fill_credential", $$"""{"operation":"fill_credential","ref":"{{Ref}}","credentialRef":"store-admin"}""");
+        AssertRejected($$"""{"operation":"fill_credential","ref":"{{Ref}}","credentialRef":"store-admin","value":"raw-secret"}""", "unsupported_property", absent: "raw-secret");
         AssertRejected($$"""{"operation":"select","ref":"{{Ref}}"}""", "missing_value");
         AssertAccepted("select", $$"""{"operation":"select","ref":"{{Ref}}","value":"Published"}""");
         AssertRejected($$"""{"operation":"press","ref":"{{Ref}}"}""", "missing_key");

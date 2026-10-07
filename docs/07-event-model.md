@@ -143,3 +143,7 @@ Observed: catalog lifecycle; pending/bound attachment bind; off-mailbox extracti
 `ThoughtActivation` extends server-owned `TriggerKind`, durable `TriggerSourceKind` and `WorkSourceKind`; `Retrospection` is an independent derived WorkItem source. Browser/client/model event payloads cannot assign these origins. Session pause/end completion remains acknowledged before retrospective admission and no audio or model stream is inserted into the domain mailbox for retrospection.
 
 `ExperienceChanged` and `ThoughtRegistrationChanged` Admin events contain metadata only (instance/record identity, operation, revision, enabled state, interval, prompt hash and model key). They contain no Experience body, thinking prompt, conversation, tool payload, provider error body or reasoning. Thought approval and owner-attention events reuse existing durable work contracts.
+
+## Credential authority separation
+
+Credential lifecycle belongs to owner Admin operations and explicit per-instance grants. It does not create an External Event, subscription or Trigger authorization. Event Source bearer tokens remain hash-only source-owned ingress credentials. Browser password resolution and redaction happen inside the typed secure sink; protected values must never enter event envelopes, tool progress, durable checkpoints, history, Experience or Memory. Generic detached login failure uses the existing work completion/attention result.

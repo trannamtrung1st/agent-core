@@ -1,4 +1,3 @@
-using AgentCore.Application.Connections;
 using AgentCore.Application.Memory;
 using AgentCore.Application.Models;
 using AgentCore.Application.Ports;
@@ -19,7 +18,6 @@ public sealed class DurableWorkContextFactory(
     IModelCatalog catalog,
     ILanguageModelResolver models,
     TimeProvider time,
-    IApplicationConnectionStore? connections = null,
     SessionToolExecutor? tools = null)
 {
     public async ValueTask<AgentContext> CreateAsync(WorkItem item, CancellationToken cancellationToken = default)
@@ -69,18 +67,6 @@ public sealed class DurableWorkContextFactory(
             descriptor.ModelId,
             ModelSelectionSource.SystemDefault,
             item.Model.ReasoningEffort);
-        string? applicationConnectionStatus = null;
-        var trustedConnection = false;
-        if (connections is not null)
-        {
-            var applicationConnection = await connections
-                .GetByAgentAsync(item.Owner.AgentInstanceId, cancellationToken)
-                .ConfigureAwait(false);
-            trustedConnection = applicationConnection?.Status == Domain.Connections.ApplicationConnectionStatus.Connected;
-            var formatted = ApplicationConnectionPrompt.Format(applicationConnection);
-            applicationConnectionStatus = formatted.Length == 0 ? null : formatted;
-        }
-
         var learned = await SessionMemoryPrompt.LoadOwnerAsync(
             memories,
             instance.InstanceId,
@@ -105,8 +91,8 @@ public sealed class DurableWorkContextFactory(
             ModelSupportsTools: descriptor.Tools,
             ModelSupportsVision: descriptor.Vision,
             DetachedExecution: true,
-            ApplicationConnectionStatus: applicationConnectionStatus,
-            TrustedConnection: trustedConnection,
+            AgentInstanceId: instance.InstanceId,
+            CredentialMetadataAvailable: tools is not null && await tools.CredentialMetadataAvailableAsync(instance.InstanceId, cancellationToken),
             Harness: item.Provenance.SourceKind == WorkSourceKind.ThoughtActivation && tools is not null
                 ? await tools.HarnessContextAsync(instance.InstanceId, cancellationToken) : null,
             AllowAgentConsolidation: tools is not null && await tools.AllowsAgentConsolidationAsync(instance.InstanceId, cancellationToken),

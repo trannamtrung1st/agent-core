@@ -1,11 +1,9 @@
 using System.Text;
 using System.Text.Json;
-using AgentCore.Application.Connections;
 using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Triggers;
-using AgentCore.Domain.Connections;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Events;
@@ -95,7 +93,6 @@ public sealed class OrderPlacedAdmissionTests
         var text = string.Join('\n', secretary.Logs.Lines);
         Assert.DoesNotContain(issued.Token, text, StringComparison.Ordinal);
         Assert.DoesNotContain(WebhookTokens.Hash(issued.Token), text, StringComparison.Ordinal);
-        Assert.Null(await secretary.Connections.GetByAgentAsync(secretary.InstanceId));
         var stored = await secretary.Events.GetAsync(issued.SourceId);
         Assert.Equal(ExternalEventSourceStatus.Active, stored!.Status);
         Assert.NotEqual(issued.Token, stored.CredentialHash);
@@ -286,7 +283,6 @@ public sealed class OrderPlacedAdmissionTests
             UnattendedModelCatalogKey: unattendedModel));
         var profiles = new LocalUserProfileService(memory, TimeProvider.System);
         var profile = await profiles.GetLocalProfileAsync();
-        var connections = new InMemoryApplicationConnectionStore();
         triggers ??= new InMemoryTriggerStore();
         events ??= new InMemoryExternalEventStore();
         logs ??= new ListLogger();
@@ -311,7 +307,7 @@ public sealed class OrderPlacedAdmissionTests
             profiles,
             instances,
             logs);
-        return new Fixture(instanceId, instances, connections, triggers, events, ingress, sources, logs);
+        return new Fixture(instanceId, instances, triggers, events, ingress, sources, logs);
     }
 
     private static string FindAgents()
@@ -352,7 +348,6 @@ public sealed class OrderPlacedAdmissionTests
     private sealed record Fixture(
         Guid InstanceId,
         InMemoryAgentInstanceStore Instances,
-        InMemoryApplicationConnectionStore Connections,
         InMemoryTriggerStore Triggers,
         InMemoryExternalEventStore Events,
         ExternalEventIngress Ingress,

@@ -2,7 +2,6 @@ using System.Text.Json;
 using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
 using AgentCore.Application.Admin;
-using AgentCore.Application.Connections;
 using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -99,6 +98,7 @@ internal static class AdminEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/api/v2/admin").AddEndpointFilter<OwnerCapabilityFilter>();
+        group.MapCredentials();
         HarnessManagementEndpoints.Map(group);
         ContinuityEndpoints.Map(group);
 
@@ -391,120 +391,6 @@ internal static class AdminEndpoints
             }
         });
 
-        group.MapGet("/agent-instances/{instanceId:guid}/connection", async (
-            Guid instanceId,
-            ApplicationConnectionService connections,
-            CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                var connection = await connections.TryGetAsync(instanceId, cancellationToken).ConfigureAwait(false);
-                return connection is null
-                    ? Results.Text("null", "application/json")
-                    : Results.Json(AdminHttpMapping.ToApplicationConnection(connection));
-            }
-            catch (AgentCoreException ex)
-            {
-                return ProblemResults.From(ex);
-            }
-        });
-
-        group.MapPost("/agent-instances/{instanceId:guid}/connection/connect", async (
-            Guid instanceId,
-            AdminConnectApplicationRequest? request,
-            ApplicationConnectionService connections,
-            CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                if (request is null
-                    || string.IsNullOrWhiteSpace(request.DisplayName)
-                    || string.IsNullOrWhiteSpace(request.BaseUrl))
-                {
-                    throw AgentCoreErrors.Validation("displayName and baseUrl are required.");
-                }
-
-                var connection = await connections.ConnectAsync(
-                        instanceId,
-                        request.DisplayName,
-                        request.BaseUrl,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-                return Results.Json(AdminHttpMapping.ToApplicationConnection(connection));
-            }
-            catch (AgentCoreException ex)
-            {
-                return ProblemResults.From(ex);
-            }
-        });
-
-        group.MapPost("/agent-instances/{instanceId:guid}/connection/reauthenticate", async (
-            Guid instanceId,
-            ApplicationConnectionService connections,
-            CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                var connection = await connections.ReauthenticateAsync(instanceId, cancellationToken)
-                    .ConfigureAwait(false);
-                return Results.Json(AdminHttpMapping.ToApplicationConnection(connection));
-            }
-            catch (AgentCoreException ex)
-            {
-                return ProblemResults.From(ex);
-            }
-        });
-
-        group.MapPost("/agent-instances/{instanceId:guid}/connection/mark-connected", async (
-            Guid instanceId,
-            ApplicationConnectionService connections,
-            CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                var connection = await connections.MarkConnectedAsync(instanceId, cancellationToken)
-                    .ConfigureAwait(false);
-                return Results.Json(AdminHttpMapping.ToApplicationConnection(connection));
-            }
-            catch (AgentCoreException ex)
-            {
-                return ProblemResults.From(ex);
-            }
-        });
-
-        group.MapPost("/agent-instances/{instanceId:guid}/connection/open-browser", async (
-            Guid instanceId,
-            ApplicationConnectionService connections,
-            CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                var connection = await connections.ApplyObservationAsync(instanceId, cancellationToken)
-                    .ConfigureAwait(false);
-                return Results.Json(AdminHttpMapping.ToApplicationConnection(connection));
-            }
-            catch (AgentCoreException ex)
-            {
-                return ProblemResults.From(ex);
-            }
-        });
-
-        group.MapPost("/agent-instances/{instanceId:guid}/connection/revoke", async (
-            Guid instanceId,
-            ApplicationConnectionService connections,
-            CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                var connection = await connections.RevokeAsync(instanceId, cancellationToken).ConfigureAwait(false);
-                return Results.Json(AdminHttpMapping.ToApplicationConnection(connection));
-            }
-            catch (AgentCoreException ex)
-            {
-                return ProblemResults.From(ex);
-            }
-        });
-
         group.MapGet("/event-sources", async (
             ExternalEventSourceService sources,
             CancellationToken cancellationToken) =>
@@ -594,23 +480,6 @@ internal static class AdminEndpoints
                 var registration = await sources.SubscribeAsync(instanceId, sourceId, request.EventType, cancellationToken)
                     .ConfigureAwait(false);
                 return Results.Json(AdminHttpMapping.ToEventSubscription(registration));
-            }
-            catch (AgentCoreException ex)
-            {
-                return ProblemResults.From(ex);
-            }
-        });
-
-        group.MapPost("/agent-instances/{instanceId:guid}/connection/reset-profile", async (
-            Guid instanceId,
-            ApplicationConnectionService connections,
-            CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                var connection = await connections.ResetProfileAsync(instanceId, cancellationToken)
-                    .ConfigureAwait(false);
-                return Results.Json(AdminHttpMapping.ToApplicationConnection(connection));
             }
             catch (AgentCoreException ex)
             {

@@ -46,8 +46,15 @@ public sealed class SecretaryIdentityTests
         Assert.True(secretary.TriggerPolicy?.AllowUserScheduling);
         Assert.Equal(RoleEnvironments.Of(assistant).ToolList, RoleEnvironments.Of(secretary).ToolList);
         Assert.Equal(
-            ["store.product.manage", "store.order.review", "store.inventory.review", "store.promotion.manage", "store.daily.review"],
+            ["store.signin", "store.product.manage", "store.order.review", "store.inventory.review", "store.promotion.manage", "store.daily.review"],
             secretary.SkillList.Select(skill => skill.Id).ToArray());
+        var signin = secretary.SkillList.Single(skill => skill.Id == "store.signin");
+        Assert.Contains("credentials.list", signin.Procedure, StringComparison.Ordinal);
+        Assert.Contains("fill_credential", signin.Procedure, StringComparison.Ordinal);
+        Assert.Contains("store-admin", signin.Procedure, StringComparison.Ordinal);
+        Assert.Contains("http://127.0.0.1:5088/Admin", signin.Procedure, StringComparison.Ordinal);
+        Assert.Contains("Detached work cannot fill credentials", signin.Procedure, StringComparison.Ordinal);
+        Assert.DoesNotContain(ToolCatalog.CredentialsList, RoleEnvironments.Of(secretary).ToolList);
         var daily = secretary.SkillList.Single(skill => skill.Id == "store.daily.review");
         Assert.Contains("Visit each required review area at most once", daily.Procedure, StringComparison.Ordinal);
         Assert.Contains("Do not restart the whole review", daily.Procedure, StringComparison.Ordinal);

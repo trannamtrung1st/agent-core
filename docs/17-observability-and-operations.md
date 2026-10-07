@@ -313,3 +313,7 @@ COMPOSE_PROJECT_NAME=agent-core-unified-check AGENTCORE_COMPOSE_PORT=5087 ./scri
 ```
 
 The smoke recreates the application container and verifies owned Session/catalog, home exact bytes, current Session scratch, fresh Session scratch isolation, publication resources and safe Background Work records. It retains its isolated volume on normal shutdown. Every database/blob persistence root still has one authoritative writer.
+
+## Credential key-ring operations
+
+Keep `Persistence:CredentialProtectionKeyRoot` alongside the SQLite database in durable storage; Compose uses `/data/credential-protection-keys`. Back up and restore both together under restricted filesystem access. A missing/corrupt/unwritable key provider returns safe `credential_unavailable` and never falls back to plaintext. Do not log create/replace bodies, protector exceptions, protected values, browser cookies or key paths. Safe metadata is operator-authored non-secret data. Rotation replaces one resource for all grants. Disabling/unbinding prevents future secure resolution and does not log a website out; use the confirmed instance Browser profile reset when sign-out is intended. Instance deletion clears its grants/profile while shared Credentials remain. System Credentials do not include Event Source hashed bearer tokens or host/provider keys. Upgrade drops legacy connection rows without deleting profiles or importing `.env` material.

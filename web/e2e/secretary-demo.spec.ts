@@ -274,7 +274,10 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await expect(schedules.getByText('Not scheduled', { exact: true })).toHaveCount(2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 
-    await page.getByRole('tab', { name: 'Thoughts', exact: true }).click();
+    await expect(page.getByRole('dialog')).toBeHidden();
+    const thoughtTab = page.getByRole('tab', { name: 'Thoughts', exact: true });
+    await thoughtTab.click();
+    await expect(thoughtTab).toHaveAttribute('aria-selected', 'true');
     const initiative = page.getByRole('region', { name: 'Thoughts', exact: true });
     const prompt = 'Review current secretary responsibilities and relevant Memory and Experience. Do nothing when there is no meaningful action.';
     await initiative.getByLabel('Thinking prompt', { exact: true }).fill(prompt);

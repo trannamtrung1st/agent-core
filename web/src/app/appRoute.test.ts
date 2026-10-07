@@ -45,7 +45,7 @@ describe("appRoute", () => {
       });
     }
     const instanceId = "019944af-00d1-7000-8000-000000000001";
-    for (const tab of ["identity", "runs", "connections", "effective"] as const) {
+    for (const tab of ["identity", "runs", "credentials", "effective"] as const) {
       expect(parseAppRoute(adminInstancePath(instanceId, tab))).toEqual({
         area: "admin", view: "instance", instanceId, tab
       });
@@ -55,11 +55,17 @@ describe("appRoute", () => {
         area: "admin", view: "instance", instanceId, tab: "continuity", section
       });
     }
-    for (const section of ["schedules", "thoughts", "controls"] as const) {
+    for (const section of ["schedules", "thoughts", "controls", "events"] as const) {
       expect(parseAppRoute(adminInstancePath(instanceId, "automation", section))).toEqual({
         area: "admin", view: "instance", instanceId, tab: "automation", section
       });
     }
+  });
+
+  it("maps legacy instance connections to credentials", () => {
+    const instanceId = "019944af-00d1-7000-8000-000000000001";
+    expect(parseAppRoute(`/admin/instances/${instanceId}/connections`)).toEqual({ area: "admin", view: "instance", instanceId, tab: "credentials" });
+    expect(adminHomePath("credentials")).toBe("/admin/credentials");
   });
 
   it("ignores unknown tabs and sections and handles malformed escaped identifiers", () => {

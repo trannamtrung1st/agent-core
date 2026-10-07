@@ -12,6 +12,7 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
     public const string RecordResource = "AgentCore.Infrastructure.Browser.Fixture.record.html";
     public const string IsolateResource = "AgentCore.Infrastructure.Browser.Fixture.isolate.html";
     public const string ChallengeResource = "AgentCore.Infrastructure.Browser.Fixture.challenge.html";
+    public const string CredentialLoginResource = "AgentCore.Infrastructure.Browser.Fixture.credential-login.html";
     public const string LoginResource = "AgentCore.Infrastructure.Browser.Fixture.login.html";
     public const string SignupResource = "AgentCore.Infrastructure.Browser.Fixture.signup.html";
     public const string AccountResource = "AgentCore.Infrastructure.Browser.Fixture.account.html";
@@ -35,6 +36,7 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
         IsolateResource,
         ChallengeResource,
         LoginResource,
+        CredentialLoginResource,
         SignupResource,
         AccountResource,
         HiddenAuthResource,
@@ -244,6 +246,12 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
             if (string.Equals(path, "/challenge", StringComparison.Ordinal))
             {
                 await WriteResourceAsync(context, ChallengeResource, 200).ConfigureAwait(false);
+                return;
+            }
+
+            if (string.Equals(path, "/credential-login", StringComparison.Ordinal))
+            {
+                await WriteResourceAsync(context, CredentialLoginResource, 200).ConfigureAwait(false);
                 return;
             }
 

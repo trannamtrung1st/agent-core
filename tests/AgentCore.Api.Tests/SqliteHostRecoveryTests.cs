@@ -721,13 +721,14 @@ internal class DurableSqliteHostFactory(string dbPath, bool runScheduler = true,
             services.AddSingleton<IWorkItemStore>(provider => new SqliteWorkItemStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
 
-            foreach (var store in services.Where(item => item.ServiceType == typeof(IApplicationConnectionStore)).ToArray())
+            foreach (var store in services.Where(item => item.ServiceType == typeof(ICredentialStore) || item.ServiceType == typeof(IAgentCredentialBindingStore)).ToArray())
             {
                 services.Remove(store);
             }
 
-            services.AddSingleton<IApplicationConnectionStore>(provider => new SqliteApplicationConnectionStore(
-                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+            services.AddSingleton<SqliteCredentialStore>();
+            services.AddSingleton<ICredentialStore>(provider => provider.GetRequiredService<SqliteCredentialStore>());
+            services.AddSingleton<IAgentCredentialBindingStore>(provider => provider.GetRequiredService<SqliteCredentialStore>());
 
             foreach (var store in services.Where(item => item.ServiceType == typeof(IExternalEventStore)).ToArray())
             {

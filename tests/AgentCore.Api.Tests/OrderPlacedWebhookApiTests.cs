@@ -3,11 +3,9 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
-using AgentCore.Application.Connections;
 using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
 using AgentCore.Contracts.Http;
-using AgentCore.Domain.Connections;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Events;
 using AgentCore.Domain.Definitions;
@@ -76,7 +74,7 @@ public sealed class OrderPlacedWebhookApiTests
                 eventId = await EventIdAsync(accepted);
                 Assert.Equal(2, (await host.Services.GetRequiredService<ITriggerStore>()
                     .ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10)).Count);
-                Assert.Null(await host.Services.GetRequiredService<IApplicationConnectionStore>().GetByAgentAsync(instanceId));
+                Assert.Empty(await host.Services.GetRequiredService<IAgentCredentialBindingStore>().ListBindingsAsync(instanceId));
             }
 
             await using var reopened = new DurableSqliteHostFactory(db, runScheduler: false);
@@ -213,24 +211,6 @@ public sealed class OrderPlacedWebhookApiTests
             now,
             now));
         return instanceId;
-    }
-
-    private static async Task SaveConnectionAsync(DurableSqliteHostFactory host, Guid instanceId)
-    {
-        var now = DateTimeOffset.UtcNow;
-        await host.Services.GetRequiredService<IApplicationConnectionStore>().SaveAsync(new ApplicationConnection(
-            Guid.NewGuid(),
-            instanceId,
-            ApplicationConnectionKinds.NopCommerce,
-            "Store",
-            "http://127.0.0.1:5088",
-            ["http://127.0.0.1:5088"],
-            ApplicationConnectionStatus.Connected,
-            instanceId,
-            1,
-            now,
-            now,
-            null), 0);
     }
 
     private static async Task<(Guid SourceId, string Key, string Token)> CreateSourceAsync(HttpClient client, string name)

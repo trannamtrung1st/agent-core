@@ -1956,12 +1956,12 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
             new Dictionary<string, string>());
 
     [Fact]
-    public async Task Admin_application_connection_requires_owner_and_a_known_instance()
+    public async Task Retired_application_connection_surface_is_absent_for_owner_and_anonymous()
     {
         var anonymous = _factory.CreateClient();
         var missing = Guid.NewGuid();
         var unauthorized = await anonymous.GetAsync($"/api/v2/admin/agent-instances/{missing:D}/connection");
-        Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, unauthorized.StatusCode);
 
         var client = OwnerClient();
         var response = await client.GetAsync($"/api/v2/admin/agent-instances/{missing:D}/connection");
@@ -1972,8 +1972,9 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         create.EnsureSuccessStatusCode();
         var instance = await create.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
         var empty = await client.GetAsync($"/api/v2/admin/agent-instances/{instance!.InstanceId}/connection");
-        Assert.Equal(HttpStatusCode.OK, empty.StatusCode);
-        Assert.Equal("null", (await empty.Content.ReadAsStringAsync()).Trim());
+        Assert.Equal(HttpStatusCode.NotFound, empty.StatusCode);
+        foreach (var action in new[] { "connect", "reauthenticate", "mark-connected", "open-browser", "revoke", "reset-profile" })
+            Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsJsonAsync($"/api/v2/admin/agent-instances/{instance.InstanceId}/connection/{action}", new { })).StatusCode);
         var body = await response.Content.ReadAsStringAsync();
         Assert.DoesNotContain("browser-profiles", body, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("password", body, StringComparison.OrdinalIgnoreCase);

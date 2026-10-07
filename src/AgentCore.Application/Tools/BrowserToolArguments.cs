@@ -276,6 +276,7 @@ public static class BrowserToolArguments
 
         var allowed = operation switch
         {
+            "fill_credential" => new[] { "operation", "ref", "credentialRef" },
             "fill" or "select" => new[] { "operation", "ref", "value" },
             "press" => new[] { "operation", "ref", "key" },
             "upload" => new[] { "operation", "ref", "artifactId" },
@@ -337,7 +338,13 @@ public static class BrowserToolArguments
             return false;
         }
 
-        if (operation is "fill" or "select")
+        if (operation == "fill_credential")
+        {
+            if (!TryString(args, "credentialRef", out var alias) || alias.Length > 64)
+            { errorJson = Error("invalid", "credentialRef is required."); return false; }
+            value = alias;
+        }
+        else if (operation is "fill" or "select")
         {
             if (!TryString(args, "value", out var text))
             {

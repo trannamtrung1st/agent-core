@@ -1,8 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
-using AgentCore.Domain.Connections;
 
-namespace AgentCore.Application.Connections;
+namespace AgentCore.Application.Events;
 
 public static class WebhookTokens
 {

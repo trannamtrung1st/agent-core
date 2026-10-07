@@ -19,7 +19,8 @@ public sealed class InMemoryAdminLifecycleDeletion(
     InMemoryAgentDefinitionAdminStore definitions,
     InMemoryAdminEventStore events,
     InMemoryExperienceStore? experience = null,
-    IAgentInstanceWorkspaceStore? workspace = null) : IAdminLifecycleDeletion
+    IAgentInstanceWorkspaceStore? workspace = null,
+    IAgentCredentialBindingStore? credentialBindings = null, IBrowserSession? browser = null) : IAdminLifecycleDeletion
 {
     internal Func<CancellationToken, ValueTask>? BeforeCommit { get; set; }
 
@@ -34,6 +35,8 @@ public sealed class InMemoryAdminLifecycleDeletion(
                 receipt.TargetId, receipt.Revision, receipt.ActorKind.ToString());
             if (await instances.FindAsync(command.InstanceId, cancellationToken) is not null)
                 throw AgentCoreErrors.Conflict("Deleted instance id is already in use.");
+            if (credentialBindings is not null) await credentialBindings.DeleteBindingsAsync(command.InstanceId, cancellationToken);
+            if (browser is not null) await browser.ResetPersistentProfileAsync(command.InstanceId, cancellationToken);
             if (workspace is not null) await workspace.DeleteInstanceAsync(command.InstanceId, cancellationToken);
             return;
         }
@@ -70,14 +73,20 @@ public sealed class InMemoryAdminLifecycleDeletion(
         }
         experience?.Purge(command.InstanceId);
         triggers.PurgeDeletedThoughts(command.InstanceId);
+        if (credentialBindings is not null) await credentialBindings.DeleteBindingsAsync(command.InstanceId, cancellationToken);
+        if (browser is not null) await browser.ResetPersistentProfileAsync(command.InstanceId, cancellationToken);
         if (workspace is not null) await workspace.DeleteInstanceAsync(command.InstanceId, cancellationToken);
     }
 
     public ValueTask RecoverWorkspaceCleanupAsync(CancellationToken cancellationToken = default) =>
         WorkspaceDeletionRecovery.PurgeAsync(events.DeletedInstanceIds, async (owner, ct) =>
         {
-            if (workspace is not null && await instances.FindAsync(owner, ct) is null)
-                await workspace.DeleteInstanceAsync(owner, ct);
+            if (await instances.FindAsync(owner, ct) is null)
+            {
+                if (credentialBindings is not null) await credentialBindings.DeleteBindingsAsync(owner, ct);
+                if (browser is not null) await browser.ResetPersistentProfileAsync(owner, ct);
+                if (workspace is not null) await workspace.DeleteInstanceAsync(owner, ct);
+            }
         }, cancellationToken);
 
     public async ValueTask DeleteDefinitionAsync(
@@ -150,7 +159,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
 public sealed class SqliteAdminLifecycleDeletion(
     IDbContextFactory<AgentCoreDbContext> contexts,
     IIdGenerator ids,
-    IAgentInstanceWorkspaceStore? workspace = null) : IAdminLifecycleDeletion
+    IAgentInstanceWorkspaceStore? workspace = null, IBrowserSession? browser = null) : IAdminLifecycleDeletion
 {
     public async ValueTask DeleteInstanceAsync(
         AdminInstanceDeleteCommand command,
@@ -165,6 +174,7 @@ public sealed class SqliteAdminLifecycleDeletion(
                 receipt.TargetId, receipt.Revision, receipt.ActorKind);
             if (await db.AgentInstances.AnyAsync(i => i.InstanceId == receipt.TargetId, cancellationToken))
                 throw AgentCoreErrors.Conflict("Deleted instance id is already in use.");
+            if (browser is not null) await browser.ResetPersistentProfileAsync(command.InstanceId, cancellationToken);
             if (workspace is not null) await workspace.DeleteInstanceContentAsync(command.InstanceId, cancellationToken);
             return;
         }
@@ -214,12 +224,13 @@ public sealed class SqliteAdminLifecycleDeletion(
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         // The committed receipt is also the recovery marker if physical cleanup fails or the host exits.
+        if (browser is not null) await browser.ResetPersistentProfileAsync(command.InstanceId, cancellationToken);
         if (workspace is not null) await workspace.DeleteInstanceContentAsync(command.InstanceId, cancellationToken);
     }
 
     public async ValueTask RecoverWorkspaceCleanupAsync(CancellationToken cancellationToken = default)
     {
-        if (workspace is null) return;
+        if (workspace is null && browser is null) return;
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
         var owners = await db.AdminEvents.AsNoTracking()
             .Where(e => e.Operation == nameof(AdminEventOperationKind.InstanceDeleted) && e.TargetType == "agent.instance")
@@ -227,7 +238,10 @@ public sealed class SqliteAdminLifecycleDeletion(
         await WorkspaceDeletionRecovery.PurgeAsync(owners.Select(Guid.Parse), async (owner, ct) =>
         {
             if (!await db.AgentInstances.AnyAsync(i => i.InstanceId == owner.ToString("D"), ct))
-                await workspace.DeleteInstanceContentAsync(owner, ct);
+            {
+                if (browser is not null) await browser.ResetPersistentProfileAsync(owner, ct);
+                if (workspace is not null) await workspace.DeleteInstanceContentAsync(owner, ct);
+            }
         }, cancellationToken);
     }
 

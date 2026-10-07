@@ -937,62 +937,33 @@ export async function resetAdminLearnedMemoryScope(
   return payload.itemsRemoved;
 }
 
-export type ApplicationConnection = {
-  connectionId: string;
-  agentInstanceId: string;
-  kind: string;
-  displayName: string;
-  baseUrl: string;
-  status: string;
-  revision: number;
-  createdAtUtc: string;
-  updatedAtUtc: string;
-  statusDetail?: string | null;
+export type SystemCredential = {
+  credentialId: string; displayName: string; kind: string; status: string;
+  metadata: Record<string, string>; allowedOrigins: string[]; revision: number;
+  createdAtUtc: string; updatedAtUtc: string; bindingCount: number;
 };
-
-export async function getApplicationConnection(instanceId: string): Promise<ApplicationConnection | null> {
-  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/connection`);
-  if (response.status === 404) {
-    return null;
-  }
-  if (!response.ok) {
-    throw await adminProblemMessage(response, `Application connection failed (${response.status})`);
-  }
-  const body = (await response.json()) as ApplicationConnection | null;
-  return body?.connectionId ? body : null;
+export type CredentialBinding = { bindingId: string; credentialId: string; reference: string; revision: number; credential: SystemCredential };
+export type CredentialInput = { displayName: string; kind: string; metadata: Record<string, string>; allowedOrigins: string[]; protectedValue: string };
+async function credentialRequest<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+  const response = await ownerFetch(`/api/v2/admin/${path}`, { method,
+    headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
+  if (!response.ok) throw await adminProblemMessage(response, `Credential operation failed (${response.status})`);
+  return response.status === 204 ? undefined as T : await response.json() as T;
 }
-
-async function postApplicationConnection(instanceId: string, action: string, body?: unknown): Promise<ApplicationConnection> {
-  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/connection/${action}`, {
-    method: "POST",
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined
-  });
-  if (!response.ok) {
-    throw await adminProblemMessage(response, `Application connection ${action} failed (${response.status})`);
-  }
-  return (await response.json()) as ApplicationConnection;
-}
-
-export function connectApplication(instanceId: string, displayName: string, baseUrl: string) {
-  return postApplicationConnection(instanceId, "connect", { displayName, baseUrl });
-}
-
-export function reauthenticateApplication(instanceId: string) {
-  return postApplicationConnection(instanceId, "reauthenticate");
-}
-
-export function openApplicationBrowser(instanceId: string) {
-  return postApplicationConnection(instanceId, "open-browser");
-}
-
-export function revokeApplication(instanceId: string) {
-  return postApplicationConnection(instanceId, "revoke");
-}
-
-export function resetApplicationProfile(instanceId: string) {
-  return postApplicationConnection(instanceId, "reset-profile");
-}
+export const listCredentials = async () => (await credentialRequest<{ items: SystemCredential[] }>("credentials")).items;
+export const createCredential = (input: CredentialInput) => credentialRequest<SystemCredential>("credentials", "POST", input);
+export const updateCredential = (c: SystemCredential, input: Pick<SystemCredential, "displayName" | "status" | "metadata" | "allowedOrigins">) =>
+  credentialRequest<SystemCredential>(`credentials/${c.credentialId}`, "PATCH", { ...input, expectedRevision: c.revision });
+export const replaceCredentialValue = (c: SystemCredential, protectedValue: string) =>
+  credentialRequest<SystemCredential>(`credentials/${c.credentialId}/value`, "PUT", { expectedRevision: c.revision, protectedValue });
+export const deleteCredential = (c: SystemCredential) => credentialRequest<void>(`credentials/${c.credentialId}?expectedRevision=${c.revision}`, "DELETE");
+export const listCredentialBindings = async (id: string) => (await credentialRequest<{ items: CredentialBinding[] }>(`agent-instances/${id}/credential-bindings`)).items;
+export const bindCredential = (id: string, credentialId: string, reference: string, expectedInstanceRevision: number) =>
+  credentialRequest<CredentialBinding>(`agent-instances/${id}/credential-bindings`, "POST", { credentialId, reference, expectedInstanceRevision });
+export const unbindCredential = (id: string, b: CredentialBinding, instanceRevision: number) =>
+  credentialRequest<void>(`agent-instances/${id}/credential-bindings/${b.bindingId}?expectedRevision=${b.revision}&expectedInstanceRevision=${instanceRevision}`, "DELETE");
+export const resetBrowserProfile = (id: string, expectedInstanceRevision: number) =>
+  credentialRequest<void>(`agent-instances/${id}/browser-profile/reset`, "POST", { expectedInstanceRevision, confirm: true });
 
 export type AdminEventSource = {
   sourceId: string;

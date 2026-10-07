@@ -134,7 +134,7 @@ export function EventSourcesSection() {
       <div className="admin-definition-panel-heading">
         <Typography.Title level={4}>Event sources</Typography.Title>
         <Typography.Text type="secondary">
-          A source credential proves who sent an event. It does not grant an agent a browser or application connection.
+          A source credential proves who sent an event. It does not grant an agent Browser capabilities or system credential bindings.
         </Typography.Text>
       </div>
       <div className="admin-definition-panel-body">

@@ -3,7 +3,6 @@ using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Work;
-using AgentCore.Domain.Connections;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Work;
 using AgentCore.Infrastructure.Definitions;
@@ -24,7 +23,7 @@ public sealed class UnattendedBrowserTests
     public async Task Capability_load_reclaims_same_work_checkpoint_and_new_work_starts_empty()
     {
         var browser = new RecordingBrowser();
-        var connections = await ConnectedStoreAsync(OwnerId);
+        var agents = await ActiveAgentsAsync(OwnerId);
         var definition = Definition() with { Environment = new(Capabilities: new("Selected", [ToolCatalog.CapabilitiesLoad, ToolCatalog.EmailSearch, ToolCatalog.WorkComplete]), Projection: new([])) };
         var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
         var generation = Guid.NewGuid();
@@ -35,10 +34,10 @@ public sealed class UnattendedBrowserTests
         var firstModel = new RecordingScriptModel(false,
             () => ToolRound(Call(ToolCatalog.CapabilitiesLoad, "{\"query\":\"email.search\"}")),
             () => [new ModelFailed(new ProviderFailure(ProviderErrorCode.Unavailable, "Temporary failure"))]);
-        var first = await new DurableOccurrenceExecution(Executor(browser, connections), TimeProvider.System).RunAsync(claimed,
+        var first = await new DurableOccurrenceExecution(Executor(browser, agents), TimeProvider.System).RunAsync(claimed,
             new(Guid.NewGuid(), [new(ModelRole.User, "review")]), firstModel, definition, TriggerKind.ScheduledOccurrence,
             (item, body, ct) => store.CheckpointAsync(item.WorkItemId, item.Revision, generation, body, null, now, ct),
-            store, generation, now, Ids(), CancellationToken.None, trustedConnection: true);
+            store, generation, now, Ids(), CancellationToken.None);
         var retry = Assert.IsType<DurableOccurrenceRetry>(first);
         Assert.DoesNotContain(firstModel.Requests[0].Tools!, t => t.Name == ToolCatalog.EmailSearch);
         Assert.Contains(firstModel.Requests[1].Tools!, t => t.Name == ToolCatalog.EmailSearch);
@@ -51,16 +50,16 @@ public sealed class UnattendedBrowserTests
         await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(() => store.CheckpointAsync(WorkId, reclaimed.Revision, generation,
             reclaimed.Checkpoint!, null, now.AddMinutes(1)).AsTask());
         var resumedModel = new RecordingScriptModel(false, () => CompleteRound("Recovered exact interfaces"));
-        var continued = await new DurableOccurrenceExecution(Executor(browser, connections), TimeProvider.System).RunAsync(reclaimed,
+        var continued = await new DurableOccurrenceExecution(Executor(browser, agents), TimeProvider.System).RunAsync(reclaimed,
             new(Guid.NewGuid(), [new(ModelRole.User, "review")]), resumedModel, definition, TriggerKind.ScheduledOccurrence,
             (item, body, ct) => store.CheckpointAsync(item.WorkItemId, item.Revision, nextGeneration, body, null, now.AddMinutes(1), ct),
-            store, nextGeneration, now.AddMinutes(1), Ids(), CancellationToken.None, trustedConnection: true);
+            store, nextGeneration, now.AddMinutes(1), Ids(), CancellationToken.None);
         var completed = Assert.IsType<DurableOccurrenceCompleted>(continued);
         Assert.Equal("Recovered exact interfaces", completed.Text);
         Assert.Contains(Assert.Single(resumedModel.Requests).Tools!, t => t.Name == ToolCatalog.EmailSearch);
         Assert.Equal(1, DurableToolCallCheckpoint.ReadCapabilityState(completed.Running.Checkpoint).Calls);
         var fresh = new RecordingScriptModel(false, () => CompleteRound("Fresh work"));
-        await RunSecretaryModeAsync(browser, connections, definition, OwnerId, ProfileId, Guid.NewGuid(), Guid.NewGuid(), "fresh-capabilities", TriggerKind.ScheduledOccurrence, fresh);
+        await RunSecretaryModeAsync(browser, agents, definition, OwnerId, ProfileId, Guid.NewGuid(), Guid.NewGuid(), "fresh-capabilities", TriggerKind.ScheduledOccurrence, fresh);
         Assert.DoesNotContain(Assert.Single(fresh.Requests).Tools!, t => t.Name == ToolCatalog.EmailSearch);
     }
 
@@ -73,17 +72,16 @@ public sealed class UnattendedBrowserTests
         var sessionId = Guid.Parse("019944af-00f1-7000-8000-000000000003");
         var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x53, 0x45, 0x43, 0x52 };
         var browser = new RecordingBrowser { CapturePng = png };
-        var connections = await ConnectedStoreAsync(instanceId);
+        var agents = await ActiveAgentsAsync(instanceId);
         var executor = new SessionToolExecutor(
             artifacts: new InMemoryArtifactStore(TimeProvider.System),
             configurationGate: ToolConfigurationGates.AllowAll,
             browser: browser,
-            applicationConnections: connections);
+            agentInstances: agents);
         var interactive = new ToolExecutionAdmission(
             false,
             TriggerKind.UserTurn,
-            AgentInstanceId: instanceId,
-            TrustedConnection: true);
+            AgentInstanceId: instanceId);
 
         var navigated = await executor.ExecuteAsync(
             secretary,
@@ -137,7 +135,7 @@ public sealed class UnattendedBrowserTests
 
         var scheduled = await RunSecretaryModeAsync(
             browser,
-            connections,
+            agents,
             secretary,
             instanceId,
             profileId,
@@ -154,7 +152,7 @@ public sealed class UnattendedBrowserTests
 
         var reactive = await RunSecretaryModeAsync(
             browser,
-            connections,
+            agents,
             secretary,
             instanceId,
             profileId,
@@ -179,11 +177,12 @@ public sealed class UnattendedBrowserTests
     }
 
     [Fact]
-    public async Task Scheduled_connection_navigates_only_the_trusted_origin_and_its_own_profile()
+    public async Task Scheduled_browser_navigates_only_host_permitted_origins_and_its_own_profile()
     {
         var browser = new RecordingBrowser();
-        var connections = await ConnectedStoreAsync(OwnerId);
-        var executor = Executor(browser, connections);
+        var agents = await ActiveAgentsAsync(OwnerId);
+        var executor = Executor(browser, agents);
+        browser.PolicyMode = BrowserPolicyMode.Restricted;
         var allowed = await executor.ExecuteAsync(
             Definition(),
             WorkId,
@@ -206,26 +205,25 @@ public sealed class UnattendedBrowserTests
     }
 
     [Theory]
-    [InlineData(ApplicationConnectionStatus.NotConnected)]
-    [InlineData(ApplicationConnectionStatus.NeedsReauthentication)]
+    [InlineData(AgentInstanceLifecycle.Archived)]
     [InlineData(null)]
-    public async Task Revoked_missing_and_reauthentication_connections_do_not_navigate(ApplicationConnectionStatus? status)
+    public async Task Archived_or_missing_agent_cannot_navigate(AgentInstanceLifecycle? status)
     {
         var browser = new RecordingBrowser();
-        var connections = new InMemoryApplicationConnectionStore();
-        if (status is ApplicationConnectionStatus value)
+        var agents = new InMemoryAgentInstanceStore();
+        if (status is AgentInstanceLifecycle value)
         {
-            await SaveAsync(connections, value);
+            await AddAgentAsync(agents, OwnerId, value);
         }
 
-        var denied = await Executor(browser, connections).ExecuteAsync(
+        var denied = await Executor(browser, agents).ExecuteAsync(
             Definition(),
             WorkId,
             Call(ToolCatalog.BrowserNavigate, $$"""{"url":"{{Store}}/admin"}"""),
             ToolLimits.MaxOutputBytes,
             admission: Admission());
 
-        Assert.Contains("cannot be used", denied.Text, StringComparison.Ordinal);
+        Assert.Contains("active Agent Instance", denied.Text, StringComparison.Ordinal);
         Assert.Empty(browser.Navigated);
         Assert.DoesNotContain(OtherOwnerId, browser.BoundAgents);
     }
@@ -260,10 +258,10 @@ public sealed class UnattendedBrowserTests
             ToolPolicy.EvaluateExecution(messaging, ToolCatalog.AppMessageSend, ToolConfigurationGates.AllowAll, admission: Admission()));
         Assert.Equal(
             ToolPolicyDecision.Deny,
-            ToolPolicy.EvaluateExecution(Definition(), ToolCatalog.BrowserNavigate, ToolConfigurationGates.AllowAll, admission: Admission() with { TriggerKind = TriggerKind.ApplicationEvent, TrustedConnection = false }));
+            ToolPolicy.EvaluateExecution(Definition(), ToolCatalog.BrowserNavigate, ToolConfigurationGates.AllowAll, admission: Admission() with { TriggerKind = TriggerKind.ApplicationEvent, AgentInstanceId = null }));
         Assert.Equal(
             ToolPolicyDecision.Allow,
-            ToolPolicy.EvaluateExecution(Definition(), ToolCatalog.BrowserNavigate, ToolConfigurationGates.AllowAll, admission: Admission() with { TriggerKind = TriggerKind.ApplicationEvent, TrustedConnection = true }));
+            ToolPolicy.EvaluateExecution(Definition(), ToolCatalog.BrowserNavigate, ToolConfigurationGates.AllowAll, admission: Admission() with { TriggerKind = TriggerKind.ApplicationEvent, AgentInstanceId = OwnerId }));
         Assert.False(ToolPolicy.IsOffered(
             Definition(),
             Context(trusted: false),
@@ -280,10 +278,10 @@ public sealed class UnattendedBrowserTests
     public async Task Cancellation_and_provider_loss_do_not_act_later()
     {
         var browser = new RecordingBrowser();
-        var connections = await ConnectedStoreAsync(OwnerId);
+        var agents = await ActiveAgentsAsync(OwnerId);
         using var cancelled = new CancellationTokenSource();
         await cancelled.CancelAsync();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Executor(browser, connections).ExecuteAsync(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Executor(browser, agents).ExecuteAsync(
             Definition(),
             WorkId,
             Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}"""),
@@ -295,7 +293,7 @@ public sealed class UnattendedBrowserTests
         browser.ErrorCode = "provider_unavailable";
         var outcome = await RunAsync(
             browser,
-            connections,
+            agents,
             new ScriptModel(
                 () => ToolRound(Call(ToolCatalog.BrowserNavigate, $$"""{"url":"{{Store}}/admin"}""")),
                 () => ToolRound(Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""")),
@@ -309,10 +307,10 @@ public sealed class UnattendedBrowserTests
     public async Task Human_verification_stops_the_occurrence()
     {
         var browser = new RecordingBrowser { Intervention = true };
-        var connections = await ConnectedStoreAsync(OwnerId);
+        var agents = await ActiveAgentsAsync(OwnerId);
         var outcome = await RunAsync(
             browser,
-            connections,
+            agents,
             new ScriptModel(
                 () => ToolRound(Call(ToolCatalog.BrowserNavigate, $$"""{"url":"{{Store}}/admin"}""")),
                 () => TextRound("should not be claimed")));
@@ -325,14 +323,14 @@ public sealed class UnattendedBrowserTests
     public async Task Bound_browser_occurrence_runs_past_the_standard_step_budget()
     {
         var browser = new RecordingBrowser();
-        var connections = await ConnectedStoreAsync(OwnerId);
-        var completed = await RunAsync(browser, connections, new CountingNavigateModel(25));
+        var agents = await ActiveAgentsAsync(OwnerId);
+        var completed = await RunAsync(browser, agents, new CountingNavigateModel(25));
         Assert.IsType<DurableOccurrenceCompleted>(completed);
         Assert.Equal(25, browser.NavigateCalls);
 
         browser = new RecordingBrowser();
         var failed = Assert.IsType<DurableOccurrenceFailed>(
-            await RunAsync(browser, connections, new CountingNavigateModel(33)));
+            await RunAsync(browser, agents, new CountingNavigateModel(33)));
         Assert.Equal("tool-step-limit", failed.Code);
         Assert.Equal(ToolExecutionBudget.UnattendedBoundBrowser.MaxSteps, browser.NavigateCalls);
     }
@@ -342,7 +340,7 @@ public sealed class UnattendedBrowserTests
     {
         var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x53, 0x45, 0x43, 0x52, 0x45, 0x54 };
         var browser = new RecordingBrowser { CapturePng = png };
-        var connections = await ConnectedStoreAsync(OwnerId);
+        var agents = await ActiveAgentsAsync(OwnerId);
         var captures = new InMemoryWorkCaptureStore(TimeProvider.System);
         var model = new RecordingScriptModel(
             true,
@@ -364,7 +362,7 @@ public sealed class UnattendedBrowserTests
             new SessionToolExecutor(
                 browser: browser,
                 configurationGate: ToolConfigurationGates.AllowAll,
-                applicationConnections: connections,
+                agentInstances: agents,
                 workCaptures: captures),
             TimeProvider.System).RunAsync(
             claimed,
@@ -381,8 +379,7 @@ public sealed class UnattendedBrowserTests
             generation,
             now,
             Ids(),
-            CancellationToken.None,
-            trustedConnection: true);
+            CancellationToken.None);
 
         Assert.IsType<DurableOccurrenceCompleted>(outcome);
         var followUp = model.Requests[1];
@@ -430,7 +427,7 @@ public sealed class UnattendedBrowserTests
         var running = await store.CheckpointAsync(WorkId, claimed.Revision, generation, checkpoint, null, now);
         var model = new RecordingScriptModel(true, () => CompleteRound("saw the restored image"));
         var outcome = await new DurableOccurrenceExecution(
-            Executor(new RecordingBrowser(), await ConnectedStoreAsync(OwnerId)),
+            Executor(new RecordingBrowser(), await ActiveAgentsAsync(OwnerId)),
             TimeProvider.System,
             captures).RunAsync(
             running,
@@ -443,8 +440,7 @@ public sealed class UnattendedBrowserTests
             generation,
             now,
             Ids(),
-            CancellationToken.None,
-            trustedConnection: true);
+            CancellationToken.None);
 
         Assert.IsType<DurableOccurrenceCompleted>(outcome);
         var tool = Assert.Single(model.Requests[0].Messages, message => message.Role == ModelRole.Tool);
@@ -487,7 +483,7 @@ public sealed class UnattendedBrowserTests
             now);
         var model = new RecordingScriptModel(true, () => CompleteRound("the picture was missing"));
         var outcome = await new DurableOccurrenceExecution(
-            Executor(new RecordingBrowser(), await ConnectedStoreAsync(OwnerId)),
+            Executor(new RecordingBrowser(), await ActiveAgentsAsync(OwnerId)),
             TimeProvider.System,
             new InMemoryWorkCaptureStore(TimeProvider.System)).RunAsync(
             running,
@@ -500,8 +496,7 @@ public sealed class UnattendedBrowserTests
             generation,
             now,
             Ids(),
-            CancellationToken.None,
-            trustedConnection: true);
+            CancellationToken.None);
 
         Assert.IsType<DurableOccurrenceCompleted>(outcome);
         var tool = Assert.Single(model.Requests[0].Messages, message => message.Role == ModelRole.Tool);
@@ -513,10 +508,10 @@ public sealed class UnattendedBrowserTests
     public async Task Empty_model_continuation_after_a_browser_tool_retries_with_that_reason()
     {
         var browser = new RecordingBrowser();
-        var connections = await ConnectedStoreAsync(OwnerId);
+        var agents = await ActiveAgentsAsync(OwnerId);
         var outcome = await RunAsync(
             browser,
-            connections,
+            agents,
             new ScriptModel(
                 () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
                 () => [new ModelCompleted(ModelStopReason.Completed)]));
@@ -532,7 +527,7 @@ public sealed class UnattendedBrowserTests
     {
         var outcome = await RunAsync(
             new RecordingBrowser(),
-            await ConnectedStoreAsync(OwnerId),
+            await ActiveAgentsAsync(OwnerId),
             new ScriptModel(
                 () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
                 () => TextRound("I looked at the page.")));
@@ -545,7 +540,7 @@ public sealed class UnattendedBrowserTests
     {
         var outcome = await RunAsync(
             new RecordingBrowser(),
-            await ConnectedStoreAsync(OwnerId),
+            await ActiveAgentsAsync(OwnerId),
             new ScriptModel(
                 () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
                 () => ToolRound(Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""")),
@@ -564,7 +559,7 @@ public sealed class UnattendedBrowserTests
         var executor = new SessionToolExecutor(
             browser: browser,
             configurationGate: ToolConfigurationGates.AllowAll,
-            applicationConnections: await ConnectedStoreAsync(OwnerId),
+            agentInstances: await ActiveAgentsAsync(OwnerId),
             workCaptures: new InMemoryWorkCaptureStore(TimeProvider.System));
         var limited = Guid.Parse("019944af-00e7-7000-8000-000000000001");
         for (var attempt = 0; attempt < BrowserToolLimits.MaxCapturesPerScope; attempt++)
@@ -613,7 +608,6 @@ public sealed class UnattendedBrowserTests
                 true,
                 TriggerKind.ScheduledOccurrence,
                 AgentInstanceId: OwnerId,
-                TrustedConnection: true,
                 SupportsVision: true,
                 CaptureScope: scope.ToString("D"),
                 WorkItemId: scope));
@@ -624,12 +618,12 @@ public sealed class UnattendedBrowserTests
         var csv = "sku,name\nAC-1042,Keyboard\n"u8.ToArray();
         var pdf = "%PDF-1.4\n1 0 obj\n"u8.ToArray();
         var browser = new RecordingBrowser();
-        var connections = await ConnectedStoreAsync(OwnerId);
+        var agents = await ActiveAgentsAsync(OwnerId);
         var captures = new InMemoryWorkCaptureStore(TimeProvider.System);
         var executor = new SessionToolExecutor(
             browser: browser,
             configurationGate: ToolConfigurationGates.AllowAll,
-            applicationConnections: connections,
+            agentInstances: agents,
             workCaptures: captures);
         var admission = Admission() with { CaptureScope = WorkId.ToString("D"), WorkItemId = WorkId };
         browser.Downloads =
@@ -683,7 +677,7 @@ public sealed class UnattendedBrowserTests
     public async Task Uncertain_browser_act_is_not_replayed_until_observe()
     {
         var browser = new RecordingBrowser();
-        var connections = await ConnectedStoreAsync(OwnerId);
+        var agents = await ActiveAgentsAsync(OwnerId);
         var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
         var generation = Guid.Parse("019944af-00e1-7000-8000-000000000001");
         var act = Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""");
@@ -704,7 +698,7 @@ public sealed class UnattendedBrowserTests
             WorkId, saved.Revision, generation, WorkSideEffectDisposition.Prepared, act.Id, hash, now);
         var fenced = await store.MarkSideEffectAsync(
             WorkId, prepared.Revision, generation, WorkSideEffectDisposition.InFlight, act.Id, hash, now);
-        var outcome = await new DurableOccurrenceExecution(Executor(browser, connections), TimeProvider.System).RunAsync(
+        var outcome = await new DurableOccurrenceExecution(Executor(browser, agents), TimeProvider.System).RunAsync(
             fenced,
             new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "publish")]),
             new ScriptModel(
@@ -719,8 +713,7 @@ public sealed class UnattendedBrowserTests
             generation,
             now,
             Ids(),
-            CancellationToken.None,
-            trustedConnection: true);
+            CancellationToken.None);
 
         Assert.IsType<DurableOccurrenceCompleted>(outcome);
         Assert.Equal(1, browser.ActCalls);
@@ -733,7 +726,7 @@ public sealed class UnattendedBrowserTests
     public async Task Uncertain_browser_act_stays_unreplayed_until_the_page_is_observed()
     {
         var browser = new RecordingBrowser();
-        var connections = await ConnectedStoreAsync(OwnerId);
+        var agents = await ActiveAgentsAsync(OwnerId);
         var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
         var generation = Guid.Parse("019944af-00e4-7000-8000-000000000001");
         var act = Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""");
@@ -754,7 +747,7 @@ public sealed class UnattendedBrowserTests
             WorkId, saved.Revision, generation, WorkSideEffectDisposition.Prepared, act.Id, hash, now);
         var fenced = await store.MarkSideEffectAsync(
             WorkId, prepared.Revision, generation, WorkSideEffectDisposition.InFlight, act.Id, hash, now);
-        var outcome = await new DurableOccurrenceExecution(Executor(browser, connections), TimeProvider.System).RunAsync(
+        var outcome = await new DurableOccurrenceExecution(Executor(browser, agents), TimeProvider.System).RunAsync(
             fenced,
             new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "publish")]),
             new ScriptModel(() => TextRound("I stopped before looking.")),
@@ -765,8 +758,7 @@ public sealed class UnattendedBrowserTests
             generation,
             now,
             Ids(),
-            CancellationToken.None,
-            trustedConnection: true);
+            CancellationToken.None);
 
         var failed = Assert.IsType<DurableOccurrenceFailed>(outcome);
         Assert.Equal("observation-required", failed.Code);
@@ -779,7 +771,7 @@ public sealed class UnattendedBrowserTests
         Assert.Equal(WorkSideEffectDisposition.InFlight, resumed.SideEffect.Disposition);
         Assert.Contains("\"ObservationRequired\":true", resumed.Checkpoint!.PayloadJson, StringComparison.Ordinal);
         var resumeGeneration = resumed.Claim!.Generation;
-        var continued = await new DurableOccurrenceExecution(Executor(browser, connections), TimeProvider.System).RunAsync(
+        var continued = await new DurableOccurrenceExecution(Executor(browser, agents), TimeProvider.System).RunAsync(
             resumed,
             new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "publish")]),
             new ScriptModel(
@@ -800,8 +792,7 @@ public sealed class UnattendedBrowserTests
             resumeGeneration,
             now.AddMinutes(2),
             Ids(),
-            CancellationToken.None,
-            trustedConnection: true);
+            CancellationToken.None);
         Assert.IsType<DurableOccurrenceCompleted>(continued);
         Assert.Equal(1, browser.ActCalls);
         Assert.Equal(RepairRef, browser.LastActRef);
@@ -811,7 +802,7 @@ public sealed class UnattendedBrowserTests
     public async Task In_flight_browser_act_without_a_saved_flag_is_observed_after_claim_expiry()
     {
         var browser = new RecordingBrowser();
-        var connections = await ConnectedStoreAsync(OwnerId);
+        var agents = await ActiveAgentsAsync(OwnerId);
         var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
         var generation = Guid.Parse("019944af-00e5-7000-8000-000000000001");
         var act = Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""");
@@ -845,7 +836,7 @@ public sealed class UnattendedBrowserTests
         Assert.NotEqual(WorkItemStatus.WaitingToRetry, resumed.Status);
         Assert.Contains("\"ObservationRequired\":true", resumed.Checkpoint!.PayloadJson, StringComparison.Ordinal);
         var resumeGeneration = resumed.Claim!.Generation;
-        var continued = await new DurableOccurrenceExecution(Executor(browser, connections), TimeProvider.System).RunAsync(
+        var continued = await new DurableOccurrenceExecution(Executor(browser, agents), TimeProvider.System).RunAsync(
             resumed,
             new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "publish")]),
             new ScriptModel(
@@ -867,8 +858,7 @@ public sealed class UnattendedBrowserTests
             resumeGeneration,
             now.AddMinutes(2),
             Ids(),
-            CancellationToken.None,
-            trustedConnection: true);
+            CancellationToken.None);
         Assert.IsType<DurableOccurrenceCompleted>(continued);
         Assert.Equal(1, browser.ActCalls);
         Assert.Equal(RepairRef, browser.LastActRef);
@@ -878,24 +868,24 @@ public sealed class UnattendedBrowserTests
     public async Task Application_event_uses_the_instance_profile_and_bound_budget()
     {
         var browser = new RecordingBrowser();
-        var connections = await ConnectedStoreAsync(OwnerId);
+        var agents = await ActiveAgentsAsync(OwnerId);
         var completed = await RunAsync(
             browser,
-            connections,
+            agents,
             new CountingNavigateModel(25),
             TriggerKind.ApplicationEvent);
         Assert.IsType<DurableOccurrenceCompleted>(completed);
         Assert.Equal(25, browser.NavigateCalls);
         Assert.Equal([OwnerId], browser.UnattendedAgents);
-        Assert.Contains(Store, browser.UnattendedOrigins[0]);
+        Assert.Empty(browser.UnattendedOrigins[0]);
 
         browser = new RecordingBrowser();
         var standard = Assert.IsType<DurableOccurrenceFailed>(await RunAsync(
             browser,
-            connections,
+            agents,
             new CountingNavigateModel(25),
             TriggerKind.ApplicationEvent,
-            trusted: false));
+            browserConfigured: false));
         Assert.Equal("tool-step-limit", standard.Code);
         Assert.Equal(0, browser.NavigateCalls);
         Assert.Empty(browser.UnattendedAgents);
@@ -915,8 +905,7 @@ public sealed class UnattendedBrowserTests
         var live = new ToolExecutionAdmission(
             false,
             TriggerKind.ApplicationEvent,
-            AgentInstanceId: OwnerId,
-            TrustedConnection: true);
+            AgentInstanceId: OwnerId);
         Assert.Equal(
             ToolPolicyDecision.Allow,
             ToolPolicy.EvaluateExecution(Definition(), ToolCatalog.BrowserNavigate, ToolConfigurationGates.AllowAll, admission: live));
@@ -926,9 +915,9 @@ public sealed class UnattendedBrowserTests
                 Definition(),
                 ToolCatalog.BrowserNavigate,
                 ToolConfigurationGates.AllowAll,
-                admission: live with { TrustedConnection = false }));
+                admission: live with { AgentInstanceId = null }));
         var liveBrowser = new RecordingBrowser();
-        var navigated = await Executor(liveBrowser, connections).ExecuteAsync(
+        var navigated = await Executor(liveBrowser, agents).ExecuteAsync(
             Definition(),
             WorkId,
             Call(ToolCatalog.BrowserNavigate, $$"""{"url":"{{Store}}/admin"}"""),
@@ -943,7 +932,7 @@ public sealed class UnattendedBrowserTests
     public async Task Succeeded_browser_act_without_a_tool_result_is_not_replayed()
     {
         var browser = new RecordingBrowser();
-        var connections = await ConnectedStoreAsync(OwnerId);
+        var agents = await ActiveAgentsAsync(OwnerId);
         var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
         var generation = Guid.Parse("019944af-00e7-7000-8000-000000000001");
         var act = Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""");
@@ -982,7 +971,7 @@ public sealed class UnattendedBrowserTests
                 ToolCatalog.WorkComplete
             ])
         };
-        var outcome = await new DurableOccurrenceExecution(Executor(browser, connections), TimeProvider.System).RunAsync(
+        var outcome = await new DurableOccurrenceExecution(Executor(browser, agents), TimeProvider.System).RunAsync(
             succeeded,
             new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "publish")]),
             new ScriptModel(
@@ -1000,8 +989,7 @@ public sealed class UnattendedBrowserTests
             generation,
             now,
             Ids(),
-            CancellationToken.None,
-            trustedConnection: true);
+            CancellationToken.None);
 
         var completed = Assert.IsType<DurableOccurrenceCompleted>(outcome);
         Assert.Equal("Order checked.", completed.Text);
@@ -1016,7 +1004,7 @@ public sealed class UnattendedBrowserTests
 
     private static async Task<DurableOccurrenceCompleted> RunSecretaryModeAsync(
         RecordingBrowser browser,
-        InMemoryApplicationConnectionStore connections,
+        InMemoryAgentInstanceStore agents,
         AgentDefinition definition,
         Guid instanceId,
         Guid profileId,
@@ -1048,7 +1036,7 @@ public sealed class UnattendedBrowserTests
             3,
             now));
         var claimed = (await store.TryClaimAsync(workId, generation, now, now.AddMinutes(5)))!;
-        var outcome = await new DurableOccurrenceExecution(Executor(browser, connections), TimeProvider.System).RunAsync(
+        var outcome = await new DurableOccurrenceExecution(Executor(browser, agents), TimeProvider.System).RunAsync(
             claimed,
             new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "review the store")]),
             model,
@@ -1059,8 +1047,7 @@ public sealed class UnattendedBrowserTests
             generation,
             now,
             Ids(),
-            CancellationToken.None,
-            trustedConnection: true);
+            CancellationToken.None);
         return Assert.IsType<DurableOccurrenceCompleted>(outcome);
     }
 
@@ -1083,10 +1070,10 @@ public sealed class UnattendedBrowserTests
 
     private static async Task<DurableOccurrenceOutcome> RunAsync(
         RecordingBrowser browser,
-        InMemoryApplicationConnectionStore connections,
+        InMemoryAgentInstanceStore agents,
         ILanguageModel model,
         TriggerKind kind = TriggerKind.ScheduledOccurrence,
-        bool trusted = true)
+        bool browserConfigured = true)
     {
         var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
         var generation = Guid.Parse("019944af-00e2-7000-8000-000000000001");
@@ -1099,7 +1086,7 @@ public sealed class UnattendedBrowserTests
             3,
             now));
         var claimed = (await store.TryClaimAsync(WorkId, generation, now, now.AddMinutes(5)))!;
-        return await new DurableOccurrenceExecution(Executor(browser, connections), TimeProvider.System).RunAsync(
+        return await new DurableOccurrenceExecution(new SessionToolExecutor(browser: browser, agentInstances: agents, configurationGate: browserConfigured ? ToolConfigurationGates.AllowAll : ToolConfigurationGates.Unconfigured), TimeProvider.System).RunAsync(
             claimed,
             new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "publish")]),
             model,
@@ -1110,15 +1097,14 @@ public sealed class UnattendedBrowserTests
             generation,
             now,
             Ids(),
-            CancellationToken.None,
-            trustedConnection: trusted);
+            CancellationToken.None);
     }
 
-    private static SessionToolExecutor Executor(RecordingBrowser browser, InMemoryApplicationConnectionStore connections) =>
-        new(browser: browser, configurationGate: ToolConfigurationGates.AllowAll, applicationConnections: connections);
+    private static SessionToolExecutor Executor(RecordingBrowser browser, InMemoryAgentInstanceStore agents) =>
+        new(browser: browser, configurationGate: ToolConfigurationGates.AllowAll, agentInstances: agents);
 
     private static ToolExecutionAdmission Admission() =>
-        new(true, TriggerKind.ScheduledOccurrence, AgentInstanceId: OwnerId, TrustedConnection: true);
+        new(true, TriggerKind.ScheduledOccurrence, AgentInstanceId: OwnerId);
 
     private static ModelToolCall Call(string name, string arguments) => new("call-" + name, name, arguments);
 
@@ -1137,36 +1123,16 @@ public sealed class UnattendedBrowserTests
         new ModelCompleted(ModelStopReason.Completed)
     ];
 
-    private static async Task<InMemoryApplicationConnectionStore> ConnectedStoreAsync(Guid agent)
+    private static async Task<InMemoryAgentInstanceStore> ActiveAgentsAsync(Guid agent)
     {
-        var store = new InMemoryApplicationConnectionStore();
-        await SaveAsync(store, ApplicationConnectionStatus.Connected, agent);
-        return store;
+        var instances = new InMemoryAgentInstanceStore();
+        await AddAgentAsync(instances, agent, AgentInstanceLifecycle.Active);
+        return instances;
     }
-
-    private static async Task SaveAsync(
-        InMemoryApplicationConnectionStore store,
-        ApplicationConnectionStatus status,
-        Guid? agent = null)
-    {
-        var id = agent ?? OwnerId;
-        var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
-        await store.SaveAsync(
-            new ApplicationConnection(
-                Guid.NewGuid(),
-                id,
-                ApplicationConnectionKinds.NopCommerce,
-                "Store",
-                Store,
-                [Store],
-                status,
-                id,
-                1,
-                now,
-                now,
-                null),
-            0);
-    }
+    private static ValueTask AddAgentAsync(InMemoryAgentInstanceStore instances, Guid id, AgentInstanceLifecycle lifecycle) =>
+        instances.InsertAsync(new AgentInstance(id, "general-assistant", 11,
+            new("Test", "Secretary", "Fixture", "neutral"), lifecycle,
+            DateTimeOffset.Parse("2026-10-02T00:00:00Z"), DateTimeOffset.Parse("2026-10-02T00:00:00Z")));
 
     private static WorkProvenance Provenance(DateTimeOffset now, string dedupeKey = "source|browser") =>
         new(
@@ -1220,7 +1186,7 @@ public sealed class UnattendedBrowserTests
             null,
             new AgentTrigger(Guid.NewGuid(), kind, "review"),
             DetachedExecution: true,
-            TrustedConnection: trusted);
+            AgentInstanceId: trusted ? OwnerId : null);
 
     private static DeterministicIdGenerator Ids() =>
         new(
@@ -1327,12 +1293,13 @@ public sealed class UnattendedBrowserTests
 
         public bool IsAvailable => true;
 
-        public BrowserHostPolicy HostPolicy { get; } = new(
+        public BrowserPolicyMode PolicyMode { get; set; } = BrowserPolicyMode.OpenWeb;
+        public BrowserHostPolicy HostPolicy => new(
             true,
             true,
             BrowserInteractionMode.InteractiveDemo,
             [Store],
-            PolicyMode: BrowserPolicyMode.OpenWeb);
+            PolicyMode: PolicyMode);
 
         public void BindSession(Guid sessionId, Guid? agentInstanceId)
         {

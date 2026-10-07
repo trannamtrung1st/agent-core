@@ -14,7 +14,7 @@ vi.mock("./InstanceContinuitySection", () => ({
   }) => !open ? null : detailsOnly ? <div role="dialog" aria-label="Run details">Run history {selectedWorkItemId}<button onClick={() => onSource?.({ kind: "thought", registrationId: "original-thought" })}>Back to thought fixture</button><button onClick={() => onSource?.({ kind: "event", registrationId: "event-source" })}>Back to event fixture</button></div> : <div>Run history<button onClick={() => onRun?.("event-run")}>Inspect run fixture</button></div>
 }));
 vi.mock("./EventSubscriptionsSection", () => ({ EventSubscriptionsSection: ({ selection }: { selection?: { registrationId: string } }) => <div>Event controls {selection?.registrationId}</div> }));
-vi.mock("./ApplicationConnectionSection", () => ({ ApplicationConnectionSection: () => null }));
+vi.mock("./CredentialsSection", () => ({ CredentialsSection: () => null, InstanceCredentialsSection: () => <div>Credential bindings</div> }));
 vi.mock("./InstanceSchedulesSection", () => ({ InstanceSchedulesSection: () => <div>Schedule controls</div> }));
 vi.mock("./instanceMemoryAutomation", () => ({ InstanceMemoryAutomationPanel: ({ section }: { section: string }) => <div>{section === "memory" ? "Memory controls" : "Model controls"}</div> }));
 const config: AdminEffectiveConfiguration = {
@@ -78,7 +78,7 @@ describe("Managed instance information architecture", () => {
   it("groups retained context, automation and runs and retains exact selection in both directions", () => {
     render(<App><InstanceDetail instanceId={config.instanceId} instances={{ kind: "ready", data: [] }}
       effective={{ kind: "ready", data: config }} onBack={vi.fn()} onRetryEffective={vi.fn()} onInstanceChanged={vi.fn()} onInstanceDeleted={vi.fn()} /></App>);
-    for (const name of ["Identity & version", "Continuity", "Automation", "Runs", "Connections", "Effective configuration"]) expect(screen.getByRole("tab", { name })).toBeVisible();
+    for (const name of ["Identity & version", "Continuity", "Automation", "Runs", "Credentials", "Effective configuration"]) expect(screen.getByRole("tab", { name })).toBeVisible();
     expect(screen.queryByRole("tab", { name: "Behavior & continuity" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Continuity" }));
     expect(screen.getByText("Memory controls")).toBeVisible();
@@ -99,7 +99,7 @@ describe("Managed instance information architecture", () => {
     fireEvent.click(screen.getByRole("button", { name: "Inspect run fixture" }));
     expect(within(screen.getByRole("dialog", { name: "Run details" })).getByText(/Run history event-run/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Back to event fixture" }));
-    expect(screen.getByRole("tab", { name: "Connections" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Events" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText(/Event controls event-source/)).toBeVisible();
   });
   it("keeps inactive instances inside the existing active-instance API boundary", () => {

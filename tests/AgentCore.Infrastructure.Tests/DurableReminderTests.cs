@@ -101,7 +101,7 @@ public sealed class DurableReminderTests
             Assert.Equal(2, harness.Model.Calls);
             var request = harness.Model.Requests.Single(item =>
                 item.Messages.Any(message => message.Text.Contains("Scheduled reminder delivery mode.", StringComparison.Ordinal)));
-            Assert.DoesNotContain(request.Tools ?? [], tool => tool.Name == ToolCatalog.KnowledgeRetrieve);
+            Assert.Contains(request.Tools ?? [], tool => tool.Name == ToolCatalog.KnowledgeRetrieve);
             Assert.Equal(selection.ReasoningEffort, request.ReasoningEffort);
             var prompt = string.Join('\n', request.Messages.Select(message => message.Text));
             Assert.Contains("Riley", prompt, StringComparison.Ordinal);
@@ -138,8 +138,7 @@ public sealed class DurableReminderTests
             Assert.Contains("Observed occurrence data", eventPrompt, StringComparison.Ordinal);
             Assert.DoesNotContain("Scheduled reminder delivery mode.", eventPrompt, StringComparison.Ordinal);
             var eventTools = eventRequest.Tools!.Select(tool => tool.Name).ToArray();
-            Assert.Equal([ToolCatalog.WorkComplete], eventTools);
-            Assert.DoesNotContain(ToolCatalog.KnowledgeRetrieve, eventTools);
+            Assert.Equal([ToolCatalog.KnowledgeRetrieve, ToolCatalog.WebFetch, ToolCatalog.HttpRequest, ToolCatalog.TriggerList, ToolCatalog.WorkComplete], eventTools);
             Assert.DoesNotContain(ToolCatalog.WorkspaceRead, eventTools);
             Assert.DoesNotContain(ToolCatalog.TriggerScheduleOnce, eventTools);
             Assert.DoesNotContain(SourceSessionId.ToString(), eventPrompt, StringComparison.Ordinal);
@@ -171,7 +170,7 @@ public sealed class DurableReminderTests
             Assert.Equal(WorkItemStatus.Completed, completed!.Status);
             Assert.Equal("Oven is ready.", completed.Result!.Text);
             Assert.DoesNotContain("REASONING_CHANNEL_SENTINEL", completed.Result.Text, StringComparison.Ordinal);
-            Assert.DoesNotContain(
+            Assert.Contains(
                 harness.Model.Request!.Tools ?? [],
                 tool => tool.Name == ToolCatalog.KnowledgeRetrieve);
         }, () => new ReasoningThenTextModel());
@@ -218,7 +217,7 @@ public sealed class DurableReminderTests
             var completed = await reopened.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
             Assert.Equal(WorkItemStatus.Completed, completed!.Status);
             Assert.Equal("Oven is ready.", completed.Result!.Text);
-            Assert.Equal(DurableReminderExecutor.BeforeModelCheckpoint, completed.Checkpoint!.PayloadJson);
+            Assert.True(DurableToolCallCheckpoint.TryRead(completed.Checkpoint, out _));
         }, () => new GateModel());
     }
 
@@ -305,7 +304,7 @@ public sealed class DurableReminderTests
             var waiting = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
             Assert.Equal(WorkItemStatus.WaitingToRetry, waiting!.Status);
             Assert.Equal("model-unavailable", waiting.Failure!.Code);
-            Assert.Equal("The model did not complete the reminder.", waiting.Failure.Summary);
+            Assert.Equal("The model did not complete the occurrence.", waiting.Failure.Summary);
             Assert.Equal(Now.Add(DurableReminderExecutor.RetryDelay(1)), waiting.NextRetryAtUtc);
             Assert.Equal(0, await harness.Executor.ExecuteDueAsync(Now, 10));
 
@@ -316,7 +315,7 @@ public sealed class DurableReminderTests
             Assert.Equal(WorkItemStatus.Failed, failed!.Status);
             Assert.Equal("attempts-exhausted", failed.Failure!.Code);
             Assert.Equal(
-                "Retry budget is exhausted. Last attempt: The model did not complete the reminder.",
+                "Retry budget is exhausted. Last attempt: The model did not complete the occurrence.",
                 failed.Failure.Summary);
             Assert.NotEqual(Guid.Empty, failed.Failure.DiagnosticId);
             Assert.DoesNotContain("stack", failed.Failure.Summary, StringComparison.OrdinalIgnoreCase);

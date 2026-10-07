@@ -1,6 +1,7 @@
 using AgentCore.Application.Workspaces;
 using AgentCore.Application.Admin;
-using AgentCore.Application.Connections;
+using AgentCore.Application.Credentials;
+using AgentCore.Infrastructure.Credentials;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Identity;
@@ -158,7 +159,7 @@ public static class InfrastructureServiceCollectionExtensions
             services.AddSingleton<IAdminLifecycleDeletion>(provider => new SqliteAdminLifecycleDeletion(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                 provider.GetRequiredService<IIdGenerator>(),
-                provider.GetRequiredService<IAgentInstanceWorkspaceStore>()));
+                provider.GetRequiredService<IAgentInstanceWorkspaceStore>(), provider.GetService<IBrowserSession>()));
             services.TryAddSingleton<IAdminP7eHistoryMutator>(provider =>
                 new SqliteAdminP7eHistoryMutator(
                     provider.GetRequiredService<AdminMemoryService>(),
@@ -167,8 +168,9 @@ public static class InfrastructureServiceCollectionExtensions
                     provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                     provider.GetRequiredService<IIdGenerator>(),
                     provider.GetRequiredService<TimeProvider>()));
-            services.AddSingleton<IApplicationConnectionStore>(provider => new SqliteApplicationConnectionStore(
-                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+            services.AddSingleton<SqliteCredentialStore>();
+            services.AddSingleton<ICredentialStore>(p => p.GetRequiredService<SqliteCredentialStore>());
+            services.AddSingleton<IAgentCredentialBindingStore>(p => p.GetRequiredService<SqliteCredentialStore>());
             services.AddSingleton<IExternalEventStore>(provider => new SqliteExternalEventStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.TryAddSingleton<IOwnerCapabilityStore, SqliteOwnerCapabilityStore>();
@@ -205,7 +207,9 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<InMemoryConversationTurnExecutionStore>());
             services.TryAddSingleton<IDurableWorkHandoff>(provider =>
                 new InMemoryDurableWorkHandoff(provider.GetRequiredService<InMemoryDurableState>()));
-            services.TryAddSingleton<IApplicationConnectionStore, InMemoryApplicationConnectionStore>();
+            services.TryAddSingleton<InMemoryCredentialStore>();
+            services.TryAddSingleton<ICredentialStore>(p => p.GetRequiredService<InMemoryCredentialStore>());
+            services.TryAddSingleton<IAgentCredentialBindingStore>(p => p.GetRequiredService<InMemoryCredentialStore>());
             services.TryAddSingleton<IExternalEventStore, InMemoryExternalEventStore>();
             services.TryAddSingleton<IOwnerCapabilityStore, InMemoryOwnerCapabilityStore>();
             services.TryAddSingleton<IAttachmentStore>(provider =>
@@ -243,7 +247,7 @@ public static class InfrastructureServiceCollectionExtensions
                     provider.GetRequiredService<InMemoryAgentDefinitionAdminStore>(),
                     provider.GetRequiredService<InMemoryAdminEventStore>(),
                     (InMemoryExperienceStore)provider.GetRequiredService<IExperienceStore>(),
-                    provider.GetRequiredService<IAgentInstanceWorkspaceStore>());
+                    provider.GetRequiredService<IAgentInstanceWorkspaceStore>(), provider.GetRequiredService<IAgentCredentialBindingStore>(), provider.GetService<IBrowserSession>());
             });
             services.TryAddSingleton<IAdminP7eHistoryMutator>(provider =>
                 new InMemoryAdminP7eHistoryMutator(
@@ -253,7 +257,10 @@ public static class InfrastructureServiceCollectionExtensions
                     provider.GetRequiredService<AdminAutomationService>(),
                     provider.GetRequiredService<InMemoryDurableState>()));
         }
-        services.TryAddSingleton<ApplicationConnectionService>();
+        services.TryAddSingleton<ICredentialProtector>(p => new LocalCredentialProtector(persistence.CredentialProtectionKeyRoot));
+        services.TryAddSingleton<CredentialService>();
+        services.TryAddSingleton<ICredentialResolver>(p => p.GetRequiredService<CredentialService>());
+        services.TryAddSingleton<AgentBrowserProfileService>();
         services.TryAddSingleton<IAttachmentProcessor, AttachmentProcessor>();
         services.TryAddSingleton<DefinitionPublicationResourceReader>();
         services.TryAddSingleton<IAgentInstanceWorkspaceStore>(provider =>
@@ -414,14 +421,14 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<IAgentDefinitionStore>(),
             provider.GetRequiredService<IMemoryStore>(),
             provider.GetService<IBrowserSession>(),
-            provider.GetService<IApplicationConnectionStore>(),
             provider.GetService<IAgentDefinitionResourceAdminStore>(),
             provider.GetService<IWorkCaptureStore>(),
             () => provider.GetRequiredService<HarnessManagementService>(),
             provider.GetRequiredService<AgentCore.Application.Experience.ExperienceService>(),
             provider.GetRequiredService<AgentCore.Application.Continuity.ContinuityService>(),
             provider.GetRequiredService<AgentCore.Application.Continuity.IdentityMaintenanceService>(),
-            provider.GetRequiredService<AgentInstanceWorkspaceService>()));
+            provider.GetRequiredService<AgentInstanceWorkspaceService>(),
+            provider.GetRequiredService<CredentialService>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),
@@ -451,8 +458,7 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IStructuredMemoryService>(),
                 provider.GetRequiredService<IConversationTurnExecutionStore>(),
                 provider.GetRequiredService<IDiagnosticIdSource>(),
-                provider.GetService<IBrowserSessionLease>(),
-                provider.GetService<IApplicationConnectionStore>());
+                provider.GetService<IBrowserSessionLease>());
         });
         services.TryAddSingleton<ConversationExecutionCoordinator>();
         return services;

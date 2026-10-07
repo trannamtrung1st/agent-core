@@ -103,6 +103,13 @@ public sealed record BrowserActRequest(
     int Delta = 0,
     string? TargetRef = null);
 
+/// <summary>Resolves only after validating a live existing-password field and exact current origin, under the browser gate.</summary>
+public interface IBrowserPasswordSink
+{
+    ValueTask<BrowserOperationResult> FillCredentialAsync(Guid sessionId, string reference,
+        Func<string, CancellationToken, ValueTask<string>> resolve, CancellationToken ct = default);
+}
+
 public interface IBrowserSessionLease
 {
     ValueTask ReleaseAsync(Guid sessionId, CancellationToken cancellationToken = default);

@@ -89,6 +89,8 @@ export default defineConfig({
           ?? path.join(playwrightData, "workspaces"),
         Persistence__ArtifactRoot: process.env.Persistence__ArtifactRoot
           ?? path.join(playwrightData, "artifacts"),
+        Persistence__CredentialProtectionKeyRoot: process.env.Persistence__CredentialProtectionKeyRoot
+          ?? path.join(playwrightData, "credential-protection-keys"),
         // Keep the durability gate fast while still exercising grace expiry and headless continuation.
         AgentCore__DetachGracePeriodSeconds: "2",
         AgentCore__MaxActiveSessions: "32",

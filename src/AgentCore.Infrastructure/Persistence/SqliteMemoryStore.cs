@@ -1377,7 +1377,16 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 cancellationToken).ConfigureAwait(false);
         }
 
-        if (await TableExistsAsync(connection, "ApplicationConnections", cancellationToken).ConfigureAwait(false))
+        var credentialSchema = await TableExistsAsync(connection, "Credentials", cancellationToken).ConfigureAwait(false);
+        if (credentialSchema != await TableExistsAsync(connection, "AgentCredentialBindings", cancellationToken).ConfigureAwait(false))
+            throw new AgentCoreException("SessionPersistenceUnavailable", "Credential schema is incomplete.", 503);
+        if (credentialSchema)
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20261007045013_SystemCredentials', '10.0.12');
+                """, cancellationToken).ConfigureAwait(false);
+
+        if (credentialSchema || await TableExistsAsync(connection, "ApplicationConnections", cancellationToken).ConfigureAwait(false))
         {
             await db.Database.ExecuteSqlRawAsync(
                 """
@@ -1419,7 +1428,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 cancellationToken).ConfigureAwait(false);
         }
 
-        if (await ColumnExistsAsync(connection, "ApplicationConnections", "WebhookKey", cancellationToken)
+        if (credentialSchema || await ColumnExistsAsync(connection, "ApplicationConnections", "WebhookKey", cancellationToken)
             .ConfigureAwait(false))
         {
             await db.Database.ExecuteSqlRawAsync(

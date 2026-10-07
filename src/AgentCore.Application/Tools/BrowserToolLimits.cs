@@ -26,7 +26,7 @@ public static class BrowserToolLimits
 
     public static readonly string[] Operations =
     [
-        "click", "fill", "select", "press", "check", "uncheck", "upload",
+        "click", "fill_credential", "fill", "select", "press", "check", "uncheck", "upload",
         "doubleClick", "hover", "scroll", "drag"
     ];
 

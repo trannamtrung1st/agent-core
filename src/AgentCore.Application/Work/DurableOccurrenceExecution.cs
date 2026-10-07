@@ -36,17 +36,17 @@ public sealed class DurableOccurrenceExecution(
         DateTimeOffset asOfUtc,
         IIdGenerator ids,
         CancellationToken cancellationToken,
-        bool trustedConnection = false, AgentContext? projectionContextSnapshot = null)
+        AgentContext? projectionContextSnapshot = null)
     {
-        var occurrenceBrowser = ToolResources.IsOccurrence(triggerKind);
+        var occurrenceBrowser = ToolResources.IsOccurrence(triggerKind)
+            && RoleEnvironments.Of(definition).ToolList.Any(ToolCatalog.IsBrowserTool);
         var browserScope = occurrenceBrowser
             ? await tools.OpenOccurrenceBrowserAsync(
                 running.WorkItemId,
                 running.Owner.AgentInstanceId,
-                trustedConnection,
                 cancellationToken).ConfigureAwait(false)
             : null;
-        if (trustedConnection && occurrenceBrowser)
+        if (occurrenceBrowser)
         {
             tools.AdoptOccurrenceBrowser(running.Owner.AgentInstanceId);
         }
@@ -54,7 +54,7 @@ public sealed class DurableOccurrenceExecution(
         await using var heldBrowser = browserScope ?? (IAsyncDisposable)NoopScope.Instance;
         var budget = ToolExecutionBudget.Resolve(new ToolBudgetSignal(
             InteractiveBrowser: false,
-            BoundApplicationBrowser: browserScope?.BoundApplicationBrowser == true));
+            PersistentBrowserLease: browserScope?.PersistentBrowserLease == true));
         var resumed = DurableToolCallCheckpoint.TryReadState(
             running.Checkpoint,
             out var savedMessages,
@@ -65,7 +65,7 @@ public sealed class DurableOccurrenceExecution(
         var loadedCapabilities = restoredCapabilities.Ids.ToHashSet(StringComparer.Ordinal);
         var loadCalls = restoredCapabilities.Calls;
         var projectionContext = projectionContextSnapshot ?? new AgentContext(definition, [], "", null, AgentCore.Domain.Conversation.SessionMode.Text, null, false, null,
-            new AgentTrigger(running.WorkItemId, triggerKind, null), DetachedExecution: true, TrustedConnection: trustedConnection,
+            new AgentTrigger(running.WorkItemId, triggerKind, null), DetachedExecution: true, AgentInstanceId: running.Owner.AgentInstanceId,
             ModelSupportsTools: model.Capabilities.Tools, ModelSupportsVision: model.Capabilities.Vision,
             ActiveSkillIds: AgentCore.Application.Agents.DeterministicSkillSelector.SelectActiveIds(definition, string.Join(" ", request.Messages.Where(m => m.Role == ModelRole.User).Select(m => m.Text))),
             Harness: await tools.HarnessContextAsync(running.Owner.AgentInstanceId, cancellationToken),
@@ -91,7 +91,6 @@ public sealed class DurableOccurrenceExecution(
             Detached: true,
             triggerKind,
             AgentInstanceId: running.Owner.AgentInstanceId,
-            TrustedConnection: trustedConnection,
             SupportsVision: model.Capabilities.Vision,
             CaptureScope: running.WorkItemId.ToString("D"),
             WorkItemId: running.WorkItemId,
@@ -174,7 +173,7 @@ public sealed class DurableOccurrenceExecution(
             catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
             {
                 var leasedApplicationEvent = triggerKind == TriggerKind.ApplicationEvent
-                    && browserScope?.BoundApplicationBrowser == true;
+                    && browserScope?.PersistentBrowserLease == true;
                 if ((triggerKind == TriggerKind.ScheduledOccurrence || leasedApplicationEvent)
                     && steps == 0
                     && pending.Count == 0)

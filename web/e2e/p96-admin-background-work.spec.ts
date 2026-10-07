@@ -34,30 +34,6 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   const sourceId = "22222222-2222-4222-8222-222222222222";
   let sourceStatus = "Active";
   let sources: Array<Record<string, unknown>> = [];
-  await page.route(`**/agent-instances/${instanceId}/connection**`, async (route) => {
-    const method = route.request().method();
-    if (method === "GET") {
-      await route.fulfill({
-        json: {
-          connectionId: "22222222-2222-4222-8222-222222222222",
-          agentInstanceId: instanceId,
-          kind: "nopCommerce",
-          displayName: "Demo Store",
-          baseUrl: "http://127.0.0.1:5091",
-          trustedOrigins: ["http://127.0.0.1:5091"],
-          status: "Connected",
-          revision: 2,
-          createdAtUtc: "2026-10-04T00:00:00Z",
-          updatedAtUtc: "2026-10-04T00:00:00Z",
-          statusDetail: null
-        }
-      });
-      return;
-    }
-
-    await route.continue();
-  });
-
   await page.goto(`/admin/instances/${instanceId}`);
   await page.getByRole("tab", { name: "Continuity", exact: true }).click();
   const automation = page.locator(".admin-instance-tabs");
@@ -93,10 +69,6 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   await page.getByRole("tab", { name: "Automation", exact: true }).click();
   await page.getByRole("tab", { name: "Policies & models", exact: true }).click();
   await expect(automation.getByText("Effective source: Unattended default (Scripted Alpha)")).toBeVisible({ timeout: 15_000 });
-
-  await page.getByRole("tab", { name: "Connections", exact: true }).click();
-  const connection = page.getByRole("region", { name: "Application connection" });
-  await expect(connection.getByRole("button", { name: /webhook/i })).toHaveCount(0);
 
   await page.route("**/api/v2/admin/event-sources**", async (route) => {
     const url = route.request().url();

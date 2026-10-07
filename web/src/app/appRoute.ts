@@ -1,12 +1,12 @@
 export type AppArea = "chat" | "admin";
-export type AdminCollection = "definitions" | "instances" | "event-sources";
+export type AdminCollection = "definitions" | "instances" | "event-sources" | "credentials";
 
 export const ADMIN_DEFINITION_TABS = ["versions", "drafts"] as const;
 export type AdminDefinitionTab = (typeof ADMIN_DEFINITION_TABS)[number];
-export const ADMIN_INSTANCE_TABS = ["identity", "continuity", "automation", "runs", "workspace", "connections", "effective"] as const;
+export const ADMIN_INSTANCE_TABS = ["identity", "continuity", "automation", "runs", "workspace", "credentials", "effective"] as const;
 export type AdminInstanceTab = (typeof ADMIN_INSTANCE_TABS)[number];
 export const ADMIN_CONTINUITY_TABS = ["memory", "experience"] as const;
-export const ADMIN_AUTOMATION_TABS = ["schedules", "thoughts", "controls"] as const;
+export const ADMIN_AUTOMATION_TABS = ["schedules", "thoughts", "events", "controls"] as const;
 export type AdminInstanceSection = (typeof ADMIN_CONTINUITY_TABS)[number] | (typeof ADMIN_AUTOMATION_TABS)[number];
 
 export type AdminRoute =
@@ -24,7 +24,7 @@ export function parseAppRoute(pathname: string): AppRoute {
   if (pathname === ADMIN_HOME || pathname === `${ADMIN_HOME}/`) {
     return { area: "admin", view: "home" };
   }
-  const collectionMatch = /^\/admin\/(definitions|instances|event-sources)\/?$/i.exec(pathname);
+  const collectionMatch = /^\/admin\/(definitions|instances|event-sources|credentials)\/?$/i.exec(pathname);
   if (collectionMatch) {
     return { area: "admin", view: "home", collection: collectionMatch[1].toLowerCase() as AdminCollection };
   }
@@ -41,7 +41,8 @@ export function parseAppRoute(pathname: string): AppRoute {
 
   const instanceMatch = ADMIN_INSTANCE_PATTERN.exec(pathname);
   if (instanceMatch) {
-    const tab = instanceMatch[2]?.toLowerCase();
+    const legacyTab = instanceMatch[2]?.toLowerCase();
+    const tab = legacyTab === "connections" ? "credentials" : legacyTab;
     const section = instanceMatch[3]?.toLowerCase();
     return { area: "admin", view: "instance", instanceId: instanceMatch[1].toLowerCase(),
       ...(ADMIN_INSTANCE_TABS.includes(tab as AdminInstanceTab) ? { tab: tab as AdminInstanceTab } : {}),

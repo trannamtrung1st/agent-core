@@ -70,6 +70,47 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("AdminEvents", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentCredentialBindingRecord", b =>
+                {
+                    b.Property<string>("BindingId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AgentInstanceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CredentialId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("UpdatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("BindingId");
+
+                    b.HasIndex("CredentialId");
+
+                    b.HasIndex("AgentInstanceId", "CredentialId")
+                        .IsUnique();
+
+                    b.HasIndex("AgentInstanceId", "Reference")
+                        .IsUnique();
+
+                    b.ToTable("AgentCredentialBindings", (string)null);
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentDefinitionDraftEvaluationResultRecord", b =>
                 {
                     b.Property<string>("ResultId")
@@ -413,68 +454,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("AgentWorkspaceItems", (string)null);
                 });
 
-            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ApplicationConnectionRecord", b =>
-                {
-                    b.Property<string>("ConnectionId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("AgentInstanceId")
-                        .IsRequired()
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("BaseUrl")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("CreatedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("DisplayName")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Kind")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ProfileKey")
-                        .IsRequired()
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("Revision")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("StatusDetail")
-                        .HasMaxLength(80)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("TrustedOriginsJson")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("UpdatedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("ConnectionId");
-
-                    b.HasIndex("AgentInstanceId")
-                        .IsUnique();
-
-                    b.ToTable("ApplicationConnections", (string)null);
-                });
-
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ArtifactRecordRow", b =>
                 {
                     b.Property<string>("ArtifactId")
@@ -731,6 +710,55 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.HasIndex("Status", "ClaimLeaseExpiresAtUtc");
 
                     b.ToTable("ConversationTurnExecutions", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.CredentialRecord", b =>
+                {
+                    b.Property<string>("CredentialId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AllowedOriginsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MetadataJson")
+                        .IsRequired()
+                        .HasMaxLength(16384)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProtectedPayload")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ProtectionVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("UpdatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("CredentialId");
+
+                    b.ToTable("Credentials", (string)null);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EntryRecord", b =>
@@ -1911,6 +1939,21 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.HasIndex("AgentInstanceId", "ProfileId", "CreatedAtUtc");
 
                     b.ToTable("WorkItems", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentCredentialBindingRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.AgentInstanceRecord", null)
+                        .WithMany()
+                        .HasForeignKey("AgentInstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Persistence.CredentialRecord", null)
+                        .WithMany()
+                        .HasForeignKey("CredentialId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EntryRecord", b =>

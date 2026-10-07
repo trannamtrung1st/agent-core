@@ -69,3 +69,7 @@ Infrastructure-only physical layout for session workspaces (`data/workspaces/age
 - Infrastructure: `Persistence/*ExperienceStore`, EF records/migration, existing trigger/work transactions and Synthetic thought/retrospection fixtures. Provider DTOs remain local to adapters.
 - API/Contracts: owner-protected `ContinuityEndpoints` and `Http/ContinuityDtos`; ordinary work DTOs add optional source/registration/model/thought outcome metadata.
 - Web: instance `InstanceContinuitySection`, shared `ExecutionModelFields`, and the existing `BackgroundWorkDrawer`/confirmation/diagnostic components. No second component kit or timer service.
+
+## Credential modules
+
+`Domain/Credentials` defines resources, grants and bounded validation; `Application/Credentials` and `Application/Ports/Credentials.cs` own safe lifecycle and resolution. `Infrastructure/Credentials` owns local protection, while the existing persistence adapters store ciphertext/grants. Contracts HTTP and thin Admin endpoints expose safe DTOs. `web/src/features/admin/CredentialsSection.tsx` reuses Ant Design and Admin collections. The local key ring is runtime data (`Persistence:CredentialProtectionKeyRoot`), never a repository resource or browser profile. Historical connection migrations stay in persistence; production connection services and UI are retired.

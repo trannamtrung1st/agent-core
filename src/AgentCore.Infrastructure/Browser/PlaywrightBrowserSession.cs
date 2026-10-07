@@ -13,7 +13,7 @@ using Microsoft.Playwright;
 
 namespace AgentCore.Infrastructure.Browser;
 
-public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionLease, IBrowserProfileBinding, IBrowserContextUse, IBrowserRuntimeReadiness, IHostedService
+public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserPasswordSink, IBrowserSessionLease, IBrowserProfileBinding, IBrowserContextUse, IBrowserRuntimeReadiness, IHostedService
 {
     private const string DescribeElement = """
         el => {
@@ -86,6 +86,8 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             || sourceType === "hidden"
             || (source.getAttribute("autocomplete") || "").toLowerCase().includes("one-time-code")
             || sensitiveTerms.some(term => haystack.includes(term));
+          if (sourceType === "password") actions = ["fill_credential"];
+          else if (sensitive) return "null";
           const state = {};
           if (!sensitive && sourceType !== "file") {
             if (sourceTag === "select") {
@@ -254,7 +256,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
     private readonly ConcurrentDictionary<Guid, SessionBrowser> _persistent = new();
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _profileGates = new();
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _contextUse = new();
-    private readonly ConcurrentDictionary<Guid, string[]> _connectionLeases = new();
+    private readonly ConcurrentDictionary<Guid, string[]> _unattendedLeases = new();
     private readonly ConcurrentDictionary<Guid, TaskCompletionSource> _interactiveWaiters = new();
     private readonly AsyncLocal<Guid?> _unattendedOwner = new();
     private readonly ConcurrentBag<IPlaywright> _retiredDrivers = [];
@@ -763,6 +765,9 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                     return Result("stale_reference");
                 }
 
+                var passwordField = await live.Handle.EvaluateAsync<bool>("el => el.matches('input[type=password]')");
+                if (passwordField || live.Actions.Contains("fill_credential")) return Result("unsupported_operation", ["fill_credential"]);
+
                 if (live.Actions.Count > 0 && !ActionOffered(live.Actions, request.Operation))
                 {
                     LogBrowserFailure("act", "interaction", "actionNotOffered");
@@ -972,7 +977,31 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 return new BrowserCaptureResult("target_denied", null, 0);
             }
 
-            var redactions = await session.Page.EvaluateAsync<int>(MaskSensitiveScript)
+            var protectedMasks = await session.Page.EvaluateAsync<int>(
+                """
+                values => {
+                  let count = 0;
+                  const matches = text => values.some(value => value && text.includes(value));
+                  const mask = rect => {
+                    if (!rect.width || !rect.height) return;
+                    const overlay = document.createElement('div');
+                    overlay.setAttribute('data-agent-mask', '1');
+                    Object.assign(overlay.style, { position: 'fixed', left: rect.left + 'px', top: rect.top + 'px',
+                      width: rect.width + 'px', height: rect.height + 'px', background: '#111', zIndex: '2147483647' });
+                    document.documentElement.appendChild(overlay); count++;
+                  };
+                  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+                  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+                    if (!matches(node.textContent || '')) continue;
+                    const range = document.createRange(); range.selectNodeContents(node);
+                    for (const rect of range.getClientRects()) mask(rect);
+                  }
+                  for (const input of document.querySelectorAll('input, textarea, select'))
+                    if (matches(input.value || '')) mask(input.getBoundingClientRect());
+                  return count;
+                }
+                """, session.ProtectedValues).WaitAsync(cancellationToken);
+            var redactions = protectedMasks + await session.Page.EvaluateAsync<int>(MaskSensitiveScript)
                 .WaitAsync(cancellationToken)
                 .ConfigureAwait(false);
             var size = session.Page.ViewportSize;
@@ -1234,6 +1263,41 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
     public void BindSession(Guid sessionId, Guid? agentInstanceId) =>
         _sessionOwners[sessionId] = agentInstanceId;
 
+    public async ValueTask<BrowserOperationResult> FillCredentialAsync(Guid sessionId, string reference,
+        Func<string, CancellationToken, ValueTask<string>> resolve, CancellationToken ct = default)
+    {
+        await using var held = await EnterInteractiveAsync(sessionId, ct);
+        if (!_refs.TryGetValue(reference, out var live) || live.SessionId != sessionId
+            || !_sessions.TryGetValue(sessionId, out var session)) return Result("stale_reference");
+        await session.Gate.WaitAsync(ct);
+        try
+        {
+            if (live.Generation != session.Generation || !await IsAttachedAsync(live.Handle)) return Result("stale_reference");
+            if (!live.Actions.Contains("fill_credential") || !await live.Handle.EvaluateAsync<bool>("el => el.matches('input[type=password]')"))
+                return Result("unsupported_operation");
+            if (await ClassifyInterventionAsync(session.Page, ct) != BrowserInterventionKind.None) return Result("user_intervention_required");
+            var decision = BrowserTargetPolicy.EvaluateAct(_policy.InteractionMode, session.Page.Url, _policy.EffectiveInteractionOrigins, _policy.PolicyMode);
+            if (!decision.Allowed || !IsAllowed(session, session.Page.Url)) return Result("target_denied");
+            if (!Uri.TryCreate(session.Page.Url, UriKind.Absolute, out var uri)) return Result("target_denied");
+            var origin = uri.GetLeftPart(UriPartial.Authority);
+            var value = await resolve(origin, ct);
+            // Register before any effect; reflection after navigation still remains redacted.
+            session.ProtectedValues.Add(value);
+            session.ProtectedValues.Add(Uri.EscapeDataString(value));
+            session.ProtectedValues.Add(System.Net.WebUtility.HtmlEncode(value));
+            // A page may navigate independently during the resolver await. Recheck before dispatch.
+            if (session.Page.Url != uri.AbsoluteUri || live.Generation != session.Generation
+                || !await IsAttachedAsync(live.Handle)) return Result("stale_reference");
+            if (!await live.Handle.EvaluateAsync<bool>("el => el.matches('input[type=password]')")
+                || await ClassifyInterventionAsync(session.Page, ct) != BrowserInterventionKind.None)
+                return Result("user_intervention_required");
+            await live.Handle.FillAsync(value, new ElementHandleFillOptions { Timeout = TimeoutMs() }).WaitAsync(ct);
+            return await CaptureWithRetryAsync(session, sessionId, "act", BrowserCaptureSettle.None, null, ct);
+        }
+        catch (PlaywrightException) { return Result("provider_unavailable"); }
+        finally { session.Gate.Release(); }
+    }
+
     public async ValueTask<IAsyncDisposable> EnterUnattendedAsync(
         Guid agentInstanceId,
         IReadOnlyList<string> origins,
@@ -1246,13 +1310,13 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
         var gate = _contextUse.GetOrAdd(agentInstanceId, static _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        _connectionLeases[agentInstanceId] = origins.ToArray();
+        _unattendedLeases[agentInstanceId] = origins.ToArray();
         return new UnattendedLease(this, agentInstanceId, gate);
     }
 
     public void AdoptUnattendedFlow(Guid agentInstanceId)
     {
-        if (agentInstanceId != Guid.Empty && _connectionLeases.ContainsKey(agentInstanceId))
+        if (agentInstanceId != Guid.Empty && _unattendedLeases.ContainsKey(agentInstanceId))
         {
             _unattendedOwner.Value = agentInstanceId;
         }
@@ -1271,7 +1335,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         if (!_sessionOwners.TryGetValue(sessionId, out var owner)
             || owner is not Guid agentInstanceId
             || agentInstanceId == Guid.Empty
-            || !_connectionLeases.ContainsKey(agentInstanceId)
+            || !_unattendedLeases.ContainsKey(agentInstanceId)
             || _unattendedOwner.Value == agentInstanceId)
         {
             return NoopHold.Instance;
@@ -1291,22 +1355,22 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
     {
         if (_sessionOwners.TryGetValue(sessionId, out var owner)
             && owner is Guid agentInstanceId
-            && _connectionLeases.TryGetValue(agentInstanceId, out var origins))
+            && _unattendedLeases.TryGetValue(agentInstanceId, out var origins))
         {
-            return origins;
+            return origins.Length == 0 ? null : origins;
         }
 
-        if (_unattendedOwner.Value is Guid current && _connectionLeases.TryGetValue(current, out var leased))
+        if (_unattendedOwner.Value is Guid current && _unattendedLeases.TryGetValue(current, out var leased))
         {
-            return leased;
+            return leased.Length == 0 ? null : leased;
         }
 
         return null;
     }
 
     private string[]? LeaseOrigins(SessionBrowser session) =>
-        session.AgentInstanceId is Guid agentInstanceId && _connectionLeases.TryGetValue(agentInstanceId, out var origins)
-            ? origins
+        session.AgentInstanceId is Guid agentInstanceId && _unattendedLeases.TryGetValue(agentInstanceId, out var origins)
+            ? (origins.Length == 0 ? null : origins)
             : null;
 
     private async Task<SessionBrowser> EnsureSessionAsync(Guid sessionId, CancellationToken cancellationToken)
@@ -2115,13 +2179,13 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         var title = await session.Page.TitleAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
         var text = await session.Page.Locator("body").InnerTextAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
         var secrets = await CollectSecretsAsync(session, cancellationToken).ConfigureAwait(false);
-        title = Redact(title, secrets);
-        text = Redact(text, secrets);
+        title = Redact(title, secrets, session.ProtectedValues);
+        text = Redact(text, secrets, session.ProtectedValues);
         var truncated = text.Length > BrowserToolLimits.MaxVisibleTextLength;
         var elements = await CollectElementsAsync(session, sessionId, secrets, cancellationToken).ConfigureAwait(false);
         var intervention = await ClassifyInterventionAsync(session.Page, cancellationToken).ConfigureAwait(false);
         return new BrowserObservation(
-            session.Page.Url,
+            Redact(session.Page.Url, secrets, session.ProtectedValues),
             Clip(title, BrowserToolLimits.MaxTitleLength),
             Clip(text, BrowserToolLimits.MaxVisibleTextLength),
             truncated,
@@ -2194,8 +2258,10 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             'input[type="email"], input[autocomplete="username"], input[autocomplete="email"]');
           const registration = password.getAttribute("autocomplete") === "new-password"
             || !!firstVisibleWithin(form, 'input[autocomplete="new-password"]');
-          if (registration && email) return "registration";
-          return "authentication";
+          const passwordChange = /reset|change|new password|confirm password|create password/i.test(form.innerText || "")
+            || /reset|change-password|register|signup/i.test(location.pathname) || form.querySelectorAll('input[type="password"]').length > 1;
+          if (registration || passwordChange) return "registration";
+          return "none";
         }
         """;
 
@@ -2218,7 +2284,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         }
         catch (Exception ex) when (ex is PlaywrightException or TimeoutException)
         {
-            return BrowserInterventionKind.None;
+            return BrowserInterventionKind.AuthenticationRequired;
         }
     }
 
@@ -2293,10 +2359,10 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             _refs[token] = new LiveElement(sessionId, session.Generation, handle, actions);
             elements.Add(new BrowserElement(
                 token,
-                Clip(Redact(role, secrets), BrowserToolLimits.MaxRoleLength),
-                Clip(Redact(name, secrets), BrowserToolLimits.MaxAccessibleNameLength),
+                Clip(Redact(role, secrets, session.ProtectedValues), BrowserToolLimits.MaxRoleLength),
+                Clip(Redact(name, secrets, session.ProtectedValues), BrowserToolLimits.MaxAccessibleNameLength),
                 actions,
-                ReadControlState(described, name, secrets)));
+                ReadControlState(described, name, secrets, session.ProtectedValues)));
         }
 
         return elements;
@@ -2304,7 +2370,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
     private async Task<IReadOnlyList<string>> CollectSecretsAsync(SessionBrowser session, CancellationToken cancellationToken)
     {
-        var secrets = new List<string>();
+        var secrets = new List<string>(session.ProtectedValues);
         var cookies = await session.Context.CookiesAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
         foreach (var cookie in cookies)
         {
@@ -2737,7 +2803,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         secrets.Add(value);
     }
 
-    private static BrowserControlState? ReadControlState(string described, string name, IReadOnlyList<string> secrets)
+    private static BrowserControlState? ReadControlState(string described, string name, IReadOnlyList<string> secrets, IReadOnlyList<string> protectedValues)
     {
         if (SensitiveControl(name))
         {
@@ -2756,7 +2822,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         string? selected = null;
         if (state.TryGetProperty("value", out var valueProperty) && valueProperty.ValueKind == JsonValueKind.String)
         {
-            value = Clip(Redact(valueProperty.GetString(), secrets), BrowserToolLimits.MaxFillLength);
+            value = Clip(Redact(valueProperty.GetString(), secrets, protectedValues), BrowserToolLimits.MaxFillLength);
         }
 
         if (state.TryGetProperty("checked", out var checkedProperty)
@@ -2767,7 +2833,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
         if (state.TryGetProperty("selectedText", out var selectedProperty) && selectedProperty.ValueKind == JsonValueKind.String)
         {
-            selected = Clip(Redact(selectedProperty.GetString(), secrets), BrowserToolLimits.MaxFillLength);
+            selected = Clip(Redact(selectedProperty.GetString(), secrets, protectedValues), BrowserToolLimits.MaxFillLength);
         }
 
         if (value is null && checkedState is null && selected is null)
@@ -2805,9 +2871,11 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         return terms.Any(term => haystack.Contains(term, StringComparison.Ordinal));
     }
 
-    private static string Redact(string? text, IReadOnlyList<string> secrets)
+    private static string Redact(string? text, IReadOnlyList<string> secrets, IReadOnlyList<string>? protectedValues = null)
     {
         var current = text ?? string.Empty;
+        foreach (var value in protectedValues ?? [])
+            if (value.Length > 0) current = current.Replace(value, "[redacted]", StringComparison.Ordinal);
         foreach (var secret in secrets)
         {
             current = secret.Length >= 4
@@ -2931,7 +2999,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
     {
         var active = session.Page;
         return OpenPages(session)
-            .Select(item => new BrowserPageInfo(item.Id, SafePageUrl(item.Page), ReferenceEquals(item.Page, active)))
+            .Select(item => new BrowserPageInfo(item.Id, Redact(SafePageUrl(item.Page), [], session.ProtectedValues), ReferenceEquals(item.Page, active)))
             .ToArray();
     }
 
@@ -3137,7 +3205,11 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             results.Add(await ReadDownloadAsync(download, cancellationToken).ConfigureAwait(false));
         }
 
-        return results;
+        return results.Select(download =>
+            session.ProtectedValues.Any(value => value.Length > 0 &&
+                ((download.FileName?.Contains(value, StringComparison.Ordinal) ?? false)
+                 || download.Bytes is not null && download.Bytes.AsSpan().IndexOf(Encoding.UTF8.GetBytes(value)) >= 0))
+                ? new BrowserDownload("download_rejected", null, null, null) : download).ToArray();
     }
 
     private static async Task<BrowserDownload> ReadDownloadAsync(IDownload download, CancellationToken cancellationToken)
@@ -3292,6 +3364,8 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
     private sealed class SessionBrowser(IBrowserContext context, IPage page)
     {
+        public List<string> ProtectedValues { get; } = [];
+
         public IBrowserContext Context { get; } = context;
 
         public IPage Page { get; set; } = page;
@@ -3382,7 +3456,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
                 return ValueTask.CompletedTask;
             }
 
-            owner._connectionLeases.TryRemove(agentInstanceId, out _);
+            owner._unattendedLeases.TryRemove(agentInstanceId, out _);
             if (owner._unattendedOwner.Value == agentInstanceId)
             {
                 owner._unattendedOwner.Value = null;

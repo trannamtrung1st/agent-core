@@ -15,7 +15,7 @@ public enum ToolExecutionClass
     UnattendedBoundBrowser
 }
 
-public readonly record struct ToolBudgetSignal(bool InteractiveBrowser, bool BoundApplicationBrowser);
+public readonly record struct ToolBudgetSignal(bool InteractiveBrowser, bool PersistentBrowserLease);
 
 public readonly record struct ToolExecutionBudget(
     ToolExecutionClass Class,
@@ -43,7 +43,7 @@ public readonly record struct ToolExecutionBudget(
 
     public static ToolExecutionBudget Resolve(ToolBudgetSignal signal)
     {
-        if (signal.BoundApplicationBrowser)
+        if (signal.PersistentBrowserLease)
         {
             return UnattendedBoundBrowser;
         }

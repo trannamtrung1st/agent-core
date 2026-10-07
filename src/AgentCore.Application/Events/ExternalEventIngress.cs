@@ -1,4 +1,3 @@
-using AgentCore.Application.Connections;
 using AgentCore.Application.Models;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Triggers;

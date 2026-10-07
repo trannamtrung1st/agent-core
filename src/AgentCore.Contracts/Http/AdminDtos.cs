@@ -374,21 +374,6 @@ public sealed record AdminCancelAutomationRegistrationRequest(long ExpectedRevis
 
 public sealed record AdminEventListResponse(IReadOnlyList<AdminEventResponse> Items);
 
-public sealed record AdminConnectApplicationRequest(string DisplayName, string BaseUrl);
-
-public sealed record AdminApplicationConnectionResponse(
-    string ConnectionId,
-    string AgentInstanceId,
-    string Kind,
-    string DisplayName,
-    string BaseUrl,
-    IReadOnlyList<string> TrustedOrigins,
-    string Status,
-    long Revision,
-    string CreatedAtUtc,
-    string UpdatedAtUtc,
-    string? StatusDetail);
-
 public sealed record AdminEventSourceResponse(
     string SourceId,
     string DisplayName,

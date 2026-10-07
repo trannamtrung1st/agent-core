@@ -44,7 +44,7 @@ import {
 } from "./definitionCandidate";
 import { DefinitionCandidateEditor, type DefinitionEditorView } from "./definitionCandidateEditor";
 import { HarnessManagementSection, HarnessPolicyModeScopes } from "./HarnessManagementSection";
-import { ApplicationConnectionSection } from "./ApplicationConnectionSection";
+import { CredentialsSection, InstanceCredentialsSection } from "./CredentialsSection";
 import { EventSourcesSection } from "./EventSourcesSection";
 import { EventSubscriptionsSection } from "./EventSubscriptionsSection";
 import { DefinitionDraftPublishGatePanel } from "./definitionDraftPublishGatePanel";
@@ -288,6 +288,8 @@ export function groupDefinitionInventory(
 export function AdminApp({ route }: { route: AdminRoute }) {
   const [collection, setCollection] = useState<AdminCollection>(route.view === "home" ? route.collection ?? "definitions" : "definitions");
   useEffect(() => {
+    if (route.view === "instance" && /\/connections\/?$/.test(window.location.pathname))
+      navigateToAppPath(adminInstancePath(route.instanceId, "credentials"), true);
     if (route.view === "home") setCollection(route.collection ?? "definitions");
   }, [route]);
   const [definitions, setDefinitions] = useState<LoadState<AdminDefinitionInventoryItem[]>>({ kind: "loading" });
@@ -407,7 +409,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
                 <Typography.Paragraph type="secondary" className="admin-home-subtitle">
                   {collection === "definitions" ? "Inspect published definitions and drafts, then open a version or continue editing."
                     : collection === "instances" ? "Manage agent identities, continuity, automation, and their pinned definition versions."
-                    : "Manage event sources and their credentials, then subscribe instances from Connections."}
+                    : collection === "credentials" ? "Manage reusable protected credentials and their explicit agent bindings." : "Manage event sources, then subscribe instances from Automation → Events."}
                 </Typography.Paragraph>
               </div>
               <Flex gap={8} wrap="wrap">
@@ -480,7 +482,8 @@ export function AdminApp({ route }: { route: AdminRoute }) {
                     : []
                 }
               /> },
-              { key: "event-sources", label: "Event sources", children: <EventSourcesSection /> }
+              { key: "event-sources", label: "Event sources", children: <EventSourcesSection /> },
+              { key: "credentials", label: "Credentials", children: <CredentialsSection /> }
               ]}
             />
           </div>
@@ -2365,7 +2368,7 @@ export function InstanceDetail({
     restoreRunFocus.current = false;
     setRunDetailsOpen(false);
     if (source.kind === "event") {
-      setEventSelection({ registrationId: source.registrationId, request: Date.now() }); setActiveTab("connections"); return;
+      setEventSelection({ registrationId: source.registrationId, request: Date.now() }); setActiveTab("automation", "events"); return;
     }
     if (source.kind === "retrospection") {
       setExperienceSelection({ workItemId: source.workItemId, request: Date.now() }); setActiveTab("continuity", "experience"); return;
@@ -2454,6 +2457,7 @@ export function InstanceDetail({
                   <Tabs activeKey={automationTab} onChange={key => setActiveTab("automation", key as AdminInstanceSection)} aria-label="Automation sections" items={[
                     { key: "schedules", label: "Schedules", children: <InstanceSchedulesSection instanceId={instanceId} active={activeTab === "automation" && automationTab === "schedules"} onWork={viewRun} selection={activeTab === "automation" ? sourceSelection : undefined} /> },
                     { key: "thoughts", label: "Thoughts", children: <ThoughtSection instanceId={instanceId} active={activeTab === "automation" && automationTab === "thoughts"} onWork={viewRun} selection={activeTab === "automation" ? sourceSelection : undefined} /> },
+                    { key: "events", label: "Events", children: <EventSubscriptionsSection instanceId={instanceId} selection={activeTab === "automation" && automationTab === "events" ? eventSelection : undefined} /> },
                     { key: "controls", label: "Policies & models", children: <Flex vertical gap={16}>
                       <HarnessManagementSection instanceId={instanceId} eligibleTools={resolved.effectiveToolAllowlist} onUpdated={onInstanceChanged} />
                       <InstanceMemoryAutomationPanel config={resolved} section="automation" />
@@ -2468,14 +2472,9 @@ export function InstanceDetail({
                 resolved.instanceLifecycle === "Active" ? <InstanceRunsSection instanceId={instanceId} open={activeTab === "runs"} inline onRun={viewRun} onClose={() => setActiveTab("automation")} /> : <Alert type="info" showIcon title="Runs are available when this instance is active" description="Unarchive the instance from Identity & version to inspect execution history." />
               }]),
               {
-                key: "connections",
-                label: "Connections",
-                children: (
-                  <Flex vertical gap={16}>
-                    <ApplicationConnectionSection instanceId={instanceId} />
-                    <EventSubscriptionsSection instanceId={instanceId} selection={activeTab === "connections" ? eventSelection : undefined} />
-                  </Flex>
-                )
+                key: "credentials",
+                label: "Credentials",
+                children: <InstanceCredentialsSection instanceId={instanceId} revision={resolved.instanceRevision} archived={resolved.instanceLifecycle !== "Active"} />
               },
             {
               key: "effective",

@@ -27,7 +27,8 @@ public sealed partial class SessionRuntime
             false, null, trigger, SessionAttachments: await BuildSessionAttachmentManifestAsync(ct),
             ModelSupportsTools: model.Capabilities.Tools, ModelSupportsVision: model.Capabilities.Vision,
             ActiveSkillIds: skills, LoadedCapabilityIds: loaded, IntermediateMessagingAllowed: _intermediateMessagingAllowed,
-            TrustedConnection: await LiveTrustedConnectionAsync(trigger.Kind, ct),
+            AgentInstanceId: _snapshot.AgentInstanceId,
+            CredentialMetadataAvailable: await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, ct),
             Harness: await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, ct),
             AgentWorkspaceAvailable: await _tools.AgentWorkspaceAvailableAsync(SessionId, ct),
             AllowAgentConsolidation: await _tools.AllowsAgentConsolidationAsync(_snapshot.AgentInstanceId, ct),
@@ -56,8 +57,7 @@ public sealed partial class SessionRuntime
             {
                 using var occurrenceToken = CancellationTokenSource.CreateLinkedTokenSource(ct, input.RequestCancellation);
                 using var arguments = JsonDocument.Parse(input.ArgumentsJson);
-                var occurrenceContext = input.ProjectionContext with { Definition = _snapshot.Definition, LoadedCapabilityIds = live.Ids,
-                    TrustedConnection = await LiveTrustedConnectionAsync(occurrenceKind, occurrenceToken.Token) };
+                var occurrenceContext = input.ProjectionContext with { Definition = _snapshot.Definition, LoadedCapabilityIds = live.Ids, AgentInstanceId = _snapshot.AgentInstanceId };
                 if (!ToolPolicy.IsOffered(_snapshot.Definition, occurrenceContext, ToolCatalog.CapabilitiesLoad, _tools.ConfigurationGate)) return;
                 var load = CapabilityDiscoveryMatcher.Load(_snapshot.Definition, occurrenceContext, _tools.ConfigurationGate, arguments.RootElement, live.Calls);
                 occurrenceToken.Token.ThrowIfCancellationRequested();

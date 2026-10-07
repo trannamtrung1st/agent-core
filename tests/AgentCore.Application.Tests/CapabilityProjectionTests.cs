@@ -169,17 +169,18 @@ public sealed class CapabilityProjectionTests
         {
             var c = Context(d) with { DetachedExecution = true, Trigger = new(Guid.NewGuid(), kind, null) };
             Assert.False(ToolPolicy.IsOffered(d, c, ToolCatalog.CapabilitiesLoad, ToolConfigurationGates.AllowAll));
-            Assert.True(ToolPolicy.IsOffered(d, c with { TrustedConnection = true }, ToolCatalog.CapabilitiesLoad, ToolConfigurationGates.AllowAll));
+            Assert.True(ToolPolicy.IsOffered(d, c with { AgentInstanceId = Guid.NewGuid() }, ToolCatalog.CapabilitiesLoad, ToolConfigurationGates.AllowAll));
         }
     }
     [Fact]
-    public async Task Trusted_attachment_and_browser_context_project_only_exact_authority()
+    public async Task Attachment_and_browser_context_project_only_exact_authority()
     {
         var d = await Definition(ToolCatalog.CapabilitiesLoad, ToolCatalog.AttachmentsRead, ToolCatalog.BrowserObserve);
-        var c = Context(d) with { SessionAttachments = [new(Guid.NewGuid(), "invoice.txt", "text/plain", 1)], TrustedConnection = true };
+        var c = Context(d) with { SessionAttachments = [new(Guid.NewGuid(), "invoice.txt", "text/plain", 1)], AgentInstanceId = Guid.NewGuid() };
         var projected = ToolCatalog.For(d, c, ToolConfigurationGates.AllowAll).Select(t => t.Name).ToArray();
         Assert.Contains(ToolCatalog.AttachmentsRead, projected);
-        Assert.Contains(ToolCatalog.BrowserObserve, projected);
+        Assert.DoesNotContain(ToolCatalog.BrowserObserve, projected);
+        Assert.Contains(ToolCatalog.BrowserObserve, ToolCatalog.For(d, c with { LoadedCapabilityIds = [ToolCatalog.BrowserObserve] }, ToolConfigurationGates.AllowAll).Select(t => t.Name));
         Assert.DoesNotContain(ToolCatalog.BrowserNavigate, projected);
         Assert.DoesNotContain(ToolCatalog.AttachmentsRead, ToolCatalog.For(d, Context(d), ToolConfigurationGates.AllowAll).Select(t => t.Name));
     }
@@ -193,7 +194,7 @@ public sealed class CapabilityProjectionTests
         Assert.DoesNotContain(ToolCatalog.EmailSend, ToolCatalog.For(d, c, ToolConfigurationGates.Unconfigured).Select(t => t.Name));
         Assert.Equal(ToolPolicyDecision.Deny, ToolPolicy.EvaluateExecution(d, ToolCatalog.EmailSend, ToolConfigurationGates.Unconfigured));
         Assert.Equal(ToolPolicyDecision.RequireApproval, ToolPolicy.EvaluateExecution(d, ToolCatalog.EmailSend, ToolConfigurationGates.AllowAll));
-        var occurrence = c with { DetachedExecution = true, TrustedConnection = true, Trigger = new(Guid.NewGuid(), TriggerKind.ScheduledOccurrence, null) };
+        var occurrence = c with { DetachedExecution = true, AgentInstanceId = Guid.NewGuid(), Trigger = new(Guid.NewGuid(), TriggerKind.ScheduledOccurrence, null) };
         Assert.DoesNotContain(ToolCatalog.WorkspaceWrite, ToolCatalog.For(d, occurrence, ToolConfigurationGates.AllowAll).Select(t => t.Name));
         Assert.DoesNotContain(ToolCatalog.TriggerScheduleOnce, ToolCatalog.For(d, occurrence, ToolConfigurationGates.AllowAll).Select(t => t.Name));
     }

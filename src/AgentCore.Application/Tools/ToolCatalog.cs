@@ -6,6 +6,7 @@ namespace AgentCore.Application.Tools;
 
 public static class ToolCatalog
 {
+    public const string CredentialsList = "credentials.list";
     public const string KnowledgeRetrieve = "knowledge.retrieve";
     public const string AttachmentsRead = "attachments.read";
     public const string WorkspaceCwd = "workspace.cwd";
@@ -76,17 +77,8 @@ public static class ToolCatalog
             return [];
         }
 
-        if (context?.Trigger.Kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent)
-        {
-            if (context.TrustedConnection)
-            {
-                return OccurrenceTools(definition, context, configurationGate);
-            }
-
-            return context.Trigger.Kind == TriggerKind.ApplicationEvent
-                ? UnconnectedApplicationTools(definition, context, configurationGate)
-                : string.IsNullOrEmpty(context.ContinuityContext) ? [] : ContinuityOnly(definition, context, configurationGate);
-        }
+        if (context is not null && ToolResources.IsOccurrence(context.Trigger.Kind))
+            return OccurrenceTools(definition, context, configurationGate);
 
         var offered = new List<ModelToolDefinition>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -111,26 +103,7 @@ public static class ToolCatalog
             offered.Add(attachmentDescriptor.ModelDefinition);
         }
 
-        foreach (var descriptor in ToolRegistry.All)
-        {
-            if (descriptor.OfferRule is not (ToolOfferRule.CurrentExecutionCapability or ToolOfferRule.HarnessAuthority)
-                || !ToolPolicy.IsOffered(descriptor, definition, context, configurationGate)
-                || !seen.Add(descriptor.Name))
-            {
-                continue;
-            }
-
-            offered.Add(descriptor.ModelDefinition);
-        }
-
-        AddWorkComplete(offered, seen, definition, context, configurationGate);
-        return offered;
-    }
-
-    private static List<ModelToolDefinition> ContinuityOnly(AgentDefinition definition, AgentContext context, IToolConfigurationGate gate)
-    {
-        var offered = new List<ModelToolDefinition>();
-        AddWorkComplete(offered, new(StringComparer.Ordinal), definition, context, gate);
+        AddContextTools(offered, seen, definition, context, configurationGate);
         return offered;
     }
 
@@ -153,42 +126,22 @@ public static class ToolCatalog
             offered.Add(descriptor.ModelDefinition);
         }
 
-        AddWorkComplete(offered, seen, definition, context, configurationGate);
+        AddContextTools(offered, seen, definition, context, configurationGate);
         return offered;
     }
 
-    private static List<ModelToolDefinition> UnconnectedApplicationTools(
-        AgentDefinition definition,
-        AgentContext context,
-        IToolConfigurationGate configurationGate)
-    {
-        var offered = new List<ModelToolDefinition>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var name in RoleEnvironments.Of(definition).ToolList)
-        {
-            if (!string.Equals(name, DemoSensitiveAction, StringComparison.Ordinal)
-                || !ToolRegistry.TryGet(name, out var descriptor)
-                || !ToolPolicy.IsOffered(descriptor, definition, context, configurationGate)
-                || !seen.Add(name))
-            {
-                continue;
-            }
-
-            offered.Add(descriptor.ModelDefinition);
-        }
-
-        AddWorkComplete(offered, seen, definition, context, configurationGate);
-        return offered;
-    }
-
-    private static void AddWorkComplete(
+    private static void AddContextTools(
         List<ModelToolDefinition> offered,
         HashSet<string> seen,
         AgentDefinition definition,
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
-        foreach (var name in new[] { ContinuitySearch, ContinuityGet, MemoryConsolidate, MemoryForget, ExperienceConsolidate })
+        foreach (var authority in ToolRegistry.All)
+            if (authority.OfferRule is ToolOfferRule.CurrentExecutionCapability or ToolOfferRule.HarnessAuthority
+                && ToolPolicy.IsOffered(authority, definition, context, configurationGate) && seen.Add(authority.Name))
+                offered.Add(authority.ModelDefinition);
+        foreach (var name in new[] { CredentialsList, CapabilitiesLoad, ContinuitySearch, ContinuityGet, MemoryConsolidate, MemoryForget, ExperienceConsolidate })
             if (ToolRegistry.TryGet(name, out var continuityDescriptor)
                 && ToolPolicy.IsOffered(continuityDescriptor, definition, context, configurationGate) && seen.Add(name))
                 offered.Add(continuityDescriptor.ModelDefinition);
