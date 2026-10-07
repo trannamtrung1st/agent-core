@@ -40,7 +40,7 @@ public sealed class DockerSandboxExecutorTests
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
         var runId = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
         var executor = new DockerSandboxExecutor(workspace, dockerPath: DockerSandboxProbe.Path ?? "docker");
         var result = await executor.RunAsync(new SandboxRequest(session, runId, Examiner(), "echo", ["sandbox-ok"]));
         Assert.True(result.Succeeded);
@@ -68,7 +68,7 @@ public sealed class DockerSandboxExecutorTests
         Assert.Single(entries);
         Assert.Equal("/workspace/working", entries[0].GetProperty("Destination").GetString());
         Assert.Equal(
-            workspace.PhysicalWorkingDirectory(session),
+            await workspace.PhysicalWorkingDirectoryAsync(session),
             entries[0].GetProperty("Source").GetString());
     }
 
@@ -80,7 +80,7 @@ public sealed class DockerSandboxExecutorTests
         await File.WriteAllTextAsync(hostSecret, "HOST_SECRET");
         var sessionA = Guid.CreateVersion7();
         var sessionB = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
         await workspace.EnsureAsync(sessionA, Examiner());
         await workspace.WriteAsync(sessionA, "/workspace/working/secret.txt", "SESSION_A"u8.ToArray());
         await workspace.EnsureAsync(sessionB, Examiner());
@@ -108,7 +108,7 @@ public sealed class DockerSandboxExecutorTests
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
         var runId = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
         var executor = new DockerSandboxExecutor(workspace, dockerPath: DockerSandboxProbe.Path ?? "docker");
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(400));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
@@ -122,7 +122,7 @@ public sealed class DockerSandboxExecutorTests
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
         var other = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var executor = new DockerSandboxExecutor(workspace, artifacts, dockerPath: DockerSandboxProbe.Path ?? "docker");
         await workspace.EnsureAsync(session, Examiner());
@@ -161,7 +161,7 @@ public sealed class DockerSandboxExecutorTests
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
         var runId = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
         var executor = new DockerSandboxExecutor(workspace, dockerPath: DockerSandboxProbe.Path ?? "docker");
         await workspace.EnsureAsync(session, Examiner());
         var result = await executor.RunAsync(
@@ -175,7 +175,7 @@ public sealed class DockerSandboxExecutorTests
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
         var executor = new DockerSandboxExecutor(workspace, dockerPath: DockerSandboxProbe.Path ?? "docker");
         await workspace.EnsureAsync(session, Examiner());
         await workspace.WriteAsync(session, "/workspace/working/large.txt", Encoding.UTF8.GetBytes(new string('a', 200_000)));

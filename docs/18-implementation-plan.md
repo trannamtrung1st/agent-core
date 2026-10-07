@@ -1,5 +1,7 @@
 # Implementation Plan
 
+Physical Infrastructure paths use one `Persistence:WorkspaceRoot`: `agent-<instanceN>/home/blobs/<opaqueBlobIdN>` for immutable home bytes and `agent-<instanceN>/sessions/session-<sessionN>/working/` for scratch. The model sees `/home` and `/working`, never these host paths. Artifacts, attachments and definition resources retain separate roots. The sibling `.provisioned` marker prevents repeat template seeding; no scratch artifacts/state or intermediate workspace directory is created.
+
 ## Bounded capability authorization and projection enhancement
 
 This user-authorized follow-on composes with the completed Agent Workspace refinement. It does not reopen frozen milestones or start P10/P11. Its gates are: exact Selected/All authorization and removed count ceiling; separate always/context/Skill/loaded projection; fenced deterministic discovery with same-execution recovery; Admin catalog/access/projection authoring; safe projection telemetry; canonical docs and broad key-free regressions. The existing registry, Skill pipeline, Session mailbox and durable work checkpoints remain the implementation seams. Acceptance requires observed runtime and Admin journeys, not schema compilation alone. See the [capability enhancement verification report](reports/capability-authorization-projection-verification.md) for current gate evidence.

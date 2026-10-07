@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="AgentCore.Tests.Shared" />
+    <Compile Include="../Shared/WorkspaceTestSessions.cs" Link="WorkspaceTestSessions.cs" />
   </ItemGroup>
 
   <ItemGroup>

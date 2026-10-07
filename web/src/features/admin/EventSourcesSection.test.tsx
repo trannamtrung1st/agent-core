@@ -118,7 +118,7 @@ describe("EventSourcesSection", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create event source" }));
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Copy event source credential" }));
-    expect(await within(dialog).findByText("Copy failed. Select the value and copy it manually.")).toBeVisible();
+    await waitFor(() => expect(within(dialog).getByText("Copy failed. Select the value and copy it manually.")).toBeVisible());
     expect(within(dialog).getByLabelText("Event source credential")).toHaveValue("one-time-token");
     fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
     await waitFor(() => expect(screen.queryByLabelText("Event source credential")).not.toBeInTheDocument());

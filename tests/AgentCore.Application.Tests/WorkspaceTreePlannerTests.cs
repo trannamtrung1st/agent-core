@@ -97,11 +97,11 @@ public sealed class WorkspaceTreePlannerTests
     }
 
     [Fact]
-    public void Scratch_supports_all_existing_mutable_trees_but_protects_structural_roots()
+    public void Scratch_supports_only_working_and_protects_structural_roots()
     {
         var result = WorkspaceTreePlanner.Plan([new("/workspace/working/a", false, 1)],
-            [new("move", Source: "/workspace/working/a", Destination: "/workspace/artifacts/nested/a")], "/workspace", 100, 100);
-        Assert.Equal("/workspace/artifacts/nested", Assert.Single(result).ParentsToCreate.Single());
+            [new("move", Source: "/workspace/working/a", Destination: "/workspace/working/nested/a")], "/workspace", 100, 100);
+        Assert.Equal("/workspace/working/nested", Assert.Single(result).ParentsToCreate.Single());
         foreach (var root in new[] { "/workspace", "/workspace/working", "/workspace/artifacts", "/workspace/state" })
             Assert.Throws<AgentCoreException>(() => WorkspaceTreePlanner.Plan([], [new("delete", Path: root, Recursive: true)], "/workspace", 100, 100));
     }

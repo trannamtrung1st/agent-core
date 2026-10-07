@@ -668,7 +668,8 @@ internal class DurableSqliteHostFactory(string dbPath, bool runScheduler = true,
             var persistence = new PersistenceOptions
             {
                 Provider = "Sqlite",
-                ConnectionString = $"Data Source={dbPath}"
+                ConnectionString = $"Data Source={dbPath}",
+                WorkspaceRoot = Path.Combine(Path.GetDirectoryName(dbPath)!, "workspaces")
             };
             foreach (var option in services.Where(item => item.ServiceType == typeof(PersistenceOptions)).ToArray())
             {
@@ -811,7 +812,8 @@ internal sealed class GatedUserTurnSqliteFactory(string dbPath) : WebApplication
             var persistence = new PersistenceOptions
             {
                 Provider = "Sqlite",
-                ConnectionString = $"Data Source={dbPath}"
+                ConnectionString = $"Data Source={dbPath}",
+                WorkspaceRoot = Path.Combine(Path.GetDirectoryName(dbPath)!, "workspaces")
             };
             foreach (var option in services.Where(item => item.ServiceType == typeof(PersistenceOptions)).ToArray())
             {
@@ -938,7 +940,8 @@ internal sealed class GatedEndSqliteFactory : WebApplicationFactory<Program>
             var persistence = new PersistenceOptions
             {
                 Provider = "Sqlite",
-                ConnectionString = $"Data Source={_db}"
+                ConnectionString = $"Data Source={_db}",
+                WorkspaceRoot = Path.Combine(Path.GetDirectoryName(_db)!, "workspaces")
             };
             foreach (var option in services.Where(item => item.ServiceType == typeof(PersistenceOptions)).ToArray())
             {
@@ -1087,7 +1090,8 @@ internal sealed class PauseAfterEndSqliteFactory : WebApplicationFactory<Program
             var persistence = new PersistenceOptions
             {
                 Provider = "Sqlite",
-                ConnectionString = $"Data Source={_db}"
+                ConnectionString = $"Data Source={_db}",
+                WorkspaceRoot = Path.Combine(Path.GetDirectoryName(_db)!, "workspaces")
             };
             foreach (var option in services.Where(item => item.ServiceType == typeof(PersistenceOptions)).ToArray())
             {
@@ -1237,7 +1241,8 @@ internal sealed class FailingEndSqliteFactory : WebApplicationFactory<Program>
             var persistence = new PersistenceOptions
             {
                 Provider = "Sqlite",
-                ConnectionString = $"Data Source={_db}"
+                ConnectionString = $"Data Source={_db}",
+                WorkspaceRoot = Path.Combine(Path.GetDirectoryName(_db)!, "workspaces")
             };
             foreach (var option in services.Where(item => item.ServiceType == typeof(PersistenceOptions)).ToArray())
             {
@@ -1367,7 +1372,8 @@ internal sealed class FailingUserTurnSqliteFactory : WebApplicationFactory<Progr
             var persistence = new PersistenceOptions
             {
                 Provider = "Sqlite",
-                ConnectionString = $"Data Source={_db}"
+                ConnectionString = $"Data Source={_db}",
+                WorkspaceRoot = Path.Combine(Path.GetDirectoryName(_db)!, "workspaces")
             };
             foreach (var option in services.Where(item => item.ServiceType == typeof(PersistenceOptions)).ToArray())
             {
@@ -1517,6 +1523,8 @@ internal sealed class SqliteKestrelProcess : IAsyncDisposable
         start.Environment["AgentCore__AgentDirectory"] = Path.Combine(root, "agents");
         start.Environment["Persistence__Provider"] = "Sqlite";
         start.Environment["Persistence__ConnectionString"] = $"Data Source={DbPath}";
+        foreach (var (key, directory) in new[] { ("WorkspaceRoot", "workspaces"), ("AttachmentRoot", "attachments"), ("ArtifactRoot", "artifacts"), ("DefinitionResourceRoot", "definition-resources") })
+            start.Environment["Persistence__" + key] = Path.Combine(Path.GetDirectoryName(DbPath)!, directory);
         start.Environment["Hosting__BindUrl"] = BaseAddress;
         var logs = new System.Text.StringBuilder();
         _process = System.Diagnostics.Process.Start(start) ?? throw new InvalidOperationException("Failed to start API.");

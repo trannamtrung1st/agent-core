@@ -12,6 +12,7 @@ public sealed partial class FileSessionWorkspace
 
     private async ValueTask<T> WithFilesystemAsync<T>(Guid sessionId, Func<CancellationToken, ValueTask<T>> action, CancellationToken ct)
     {
+        await ResolveOwnerAsync(sessionId, ct);
         var gate = Gate(sessionId); await gate.WaitAsync(ct);
         try
         {
@@ -32,6 +33,7 @@ public sealed partial class FileSessionWorkspace
     {
         operations = WorkspaceStructuralPaths.Normalize(sessionId, operations);
         ThrowIfDeleted(sessionId);
+        await ResolveOwnerAsync(sessionId, cancellationToken);
         var gate = Gate(sessionId); await gate.WaitAsync(cancellationToken);
         try
         {
@@ -107,7 +109,7 @@ public sealed partial class FileSessionWorkspace
     private IReadOnlyList<WorkspaceTreeEntry> SnapshotPhysicalTree(Guid sessionId, CancellationToken ct)
     {
         var entries = new List<WorkspaceTreeEntry>();
-        var physical = SessionWorkspaceDir(sessionId);
+        var physical = Path.Combine(SessionRoot(sessionId), "working");
         DenyAllLinks(physical, SessionRoot(sessionId));
         if (Directory.Exists(physical)) Walk(physical, 0);
         return entries;

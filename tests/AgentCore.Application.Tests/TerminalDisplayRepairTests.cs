@@ -28,7 +28,7 @@ public sealed class TerminalDisplayRepairTests
         var root = Path.Combine(Path.GetTempPath(), $"agent-core-block-repair-{Guid.NewGuid():N}");
         try
         {
-            var workspace = new FileSessionWorkspace(Path.Combine(root, "ws"), Path.Combine(root, "templates"));
+            var workspace = new FileSessionWorkspace(Path.Combine(root, "ws"), Path.Combine(root, "templates"), sessions: new WorkspaceTestSessions());
             var artifacts = new InMemoryArtifactStore(TimeProvider.System);
             var document = string.Concat(Enumerable.Repeat("# Scrum playbook\nObserve the current evidence before making changes.\n", 1_500));
             var inner = new DocumentModel(document, structured);

@@ -25,7 +25,7 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
             new SystemIdGenerator(TimeProvider.System));
         admin.ResourceStore = resources;
         var reader = new DefinitionPublicationResourceReader(resources);
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader, sessions: new WorkspaceTestSessions());
 
         var candidate = SampleCandidate("resource-agent");
         var draft = await admin.CreateDraftAsync(
@@ -83,7 +83,7 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
             new SystemIdGenerator(TimeProvider.System));
         admin.ResourceStore = resources;
         var reader = new DefinitionPublicationResourceReader(resources);
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader, sessions: new WorkspaceTestSessions());
 
         const string templateId = "seed-pack";
         var draft = await admin.CreateDraftAsync(
@@ -155,7 +155,7 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
             new SystemIdGenerator(TimeProvider.System));
         admin.ResourceStore = resources;
         var reader = new DefinitionPublicationResourceReader(resources);
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader, sessions: new WorkspaceTestSessions());
 
         const string templateId = "seed-pack";
         var draft = await admin.CreateDraftAsync(
@@ -224,7 +224,7 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
             new SystemIdGenerator(TimeProvider.System));
         admin.ResourceStore = resources;
         var reader = new DefinitionPublicationResourceReader(resources);
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader, sessions: new WorkspaceTestSessions());
 
         var draft = await admin.CreateDraftAsync(
             new AgentDefinitionDraftCreate(
@@ -276,7 +276,7 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
             new SystemIdGenerator(TimeProvider.System));
         admin.ResourceStore = resources;
         var reader = new DefinitionPublicationResourceReader(resources);
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader, sessions: new WorkspaceTestSessions());
 
         var draft = await admin.CreateDraftAsync(
             new AgentDefinitionDraftCreate("resource-agent", SampleCandidate("resource-agent"), DefinitionDraftSourceKind.New, null, now),

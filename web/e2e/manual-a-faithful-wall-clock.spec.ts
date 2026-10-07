@@ -145,7 +145,6 @@ test("MANUAL_A faithful wall-clock detached reminder", async ({ page }) => {
   await page.goto("/");
   await page.waitForFunction(() => window.localStorage.getItem("agent-core.owner-capability"));
   await page.getByRole("button", { name: "Start a new chat" }).click();
-  await expect(page.getByRole("combobox", { name: "Identity" })).toBeEnabled({ timeout: 15_000 });
   await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.generalAssistant);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
 

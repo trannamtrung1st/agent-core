@@ -87,8 +87,6 @@ export default defineConfig({
           ?? path.join(playwrightData, "attachments"),
         Persistence__WorkspaceRoot: process.env.Persistence__WorkspaceRoot
           ?? path.join(playwrightData, "workspaces"),
-        Persistence__AgentWorkspaceRoot: process.env.Persistence__AgentWorkspaceRoot
-          ?? path.join(playwrightData, "agent-workspaces"),
         Persistence__ArtifactRoot: process.env.Persistence__ArtifactRoot
           ?? path.join(playwrightData, "artifacts"),
         // Keep the durability gate fast while still exercising grace expiry and headless continuation.

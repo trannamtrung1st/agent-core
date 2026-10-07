@@ -20,7 +20,7 @@ public static class WorkspaceTreePlanner
             throw AgentCoreErrors.Validation("A batch requires 1–16 structural operations.");
         if (root is not ("/home" or "/workspace")) throw AgentCoreErrors.Forbidden("Workspace scope is unavailable.");
         var tree = new Dictionary<string, WorkspaceTreeEntry>(StringComparer.OrdinalIgnoreCase);
-        var protectedRoots = root == "/home" ? new[] { root } : new[] { root, root + "/working", root + "/artifacts", root + "/state" };
+        var protectedRoots = root == "/home" ? new[] { root } : new[] { root, root + "/working" };
         foreach (var p in protectedRoots) tree[p] = new(p, true, 0);
         foreach (var e in entries)
         {

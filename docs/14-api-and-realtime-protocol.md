@@ -1,5 +1,7 @@
 # HTTP API and Realtime Protocol
 
+Physical Infrastructure paths use one `Persistence:WorkspaceRoot`: `agent-<instanceN>/home/blobs/<opaqueBlobIdN>` for immutable home bytes and `agent-<instanceN>/sessions/session-<sessionN>/working/` for scratch. The model sees `/home` and `/working`, never these host paths. Artifacts, attachments and definition resources retain separate roots. The sibling `.provisioned` marker prevents repeat template seeding; no scratch artifacts/state or intermediate workspace directory is created.
+
 ## Capability authoring and loading contracts
 
 `GET /api/v2/admin/tools` returns exact selectable `toolNames`, `maxToolAllowlistEntries:null`, and a `capabilities` catalog of name/category/summary/tags/discoverable/defaultProjectionClass/configured. The full `capabilities` catalog includes context-only names for exact capability authorization snapshots and identifies them separately. `toolNames` excludes context-owned grants. No secret configuration values are returned.

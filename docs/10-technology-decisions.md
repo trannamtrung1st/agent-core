@@ -1,5 +1,7 @@
 # Technology Decisions
 
+Physical Infrastructure paths use one `Persistence:WorkspaceRoot`: `agent-<instanceN>/home/blobs/<opaqueBlobIdN>` for immutable home bytes and `agent-<instanceN>/sessions/session-<sessionN>/working/` for scratch. The model sees `/home` and `/working`, never these host paths. Artifacts, attachments and definition resources retain separate roots. The sibling `.provisioned` marker prevents repeat template seeding; no scratch artifacts/state or intermediate workspace directory is created.
+
 ## Decision: scalable capability authorization and contextual projection
 
 The accepted capability enhancement removes the arbitrary 32-grant validation limit without replacing it. Selected and All publication modes persist exact names and an authorization fingerprint. All is current-catalog authoring intent, never wildcard runtime permission. The new projection policy chooses an authorized always set; remaining loadability derives from registry discoverability and current eligibility. Optional missing configuration may coexist with new-mode authority; runtime still denies execution. Legacy publication configuration rules remain compatible.

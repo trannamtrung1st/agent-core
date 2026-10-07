@@ -16,7 +16,7 @@ public sealed class WorkspaceArtifactToolTests
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
         var definition = WorkspaceTools();
         await workspace.EnsureAsync(session, definition);
         var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
@@ -52,7 +52,7 @@ public sealed class WorkspaceArtifactToolTests
     {
         var workspace = new FileSessionWorkspace(
             Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
-            Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
+            Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")), sessions: new WorkspaceTestSessions());
         var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
         var definition = WorkspaceTools();
         var session = Guid.CreateVersion7();
@@ -69,7 +69,7 @@ public sealed class WorkspaceArtifactToolTests
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
         var definition = WorkspaceTools();
         await workspace.EnsureAsync(session, definition);
         await workspace.WriteAsync(session, "/workspace/working/note.md", "hello"u8.ToArray());
@@ -95,7 +95,7 @@ public sealed class WorkspaceArtifactToolTests
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
         var definition = WorkspaceTools();
         await workspace.EnsureAsync(session, definition);
         const string path = "/workspace/working/report.md";
@@ -133,7 +133,7 @@ public sealed class WorkspaceArtifactToolTests
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var definition = WorkspaceTools();
         await workspace.EnsureAsync(session, definition);
@@ -172,7 +172,7 @@ public sealed class WorkspaceArtifactToolTests
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
         var definition = WorkspaceTools();
         await workspace.EnsureAsync(session, definition);
         await workspace.WriteAsync(session, "/workspace/working/notes.md", "sample workspace content"u8.ToArray());
@@ -203,7 +203,7 @@ public sealed class WorkspaceArtifactToolTests
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
         var definition = WorkspaceTools();
         await workspace.EnsureAsync(session, definition);
         var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));

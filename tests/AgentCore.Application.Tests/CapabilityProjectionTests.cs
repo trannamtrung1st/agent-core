@@ -25,7 +25,7 @@ public sealed class CapabilityProjectionTests
         var snapshot = new SessionSnapshot(1, Guid.NewGuid(), 1, d, SessionMode.Text, null, SessionStatus.Created, [], "", 0, null, null, now, now, ModelSelection: new SessionModelSelection("synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.SystemDefault, null), AgentInstanceId: Guid.NewGuid());
         var memory = new AgentCore.Infrastructure.Persistence.InMemoryMemoryStore();
         var turns = new AgentCore.Infrastructure.Persistence.InMemoryConversationTurnExecutionStore();
-        var workspace = new AgentCore.Infrastructure.Workspaces.FileSessionWorkspace(root, root);
+        var workspace = new AgentCore.Infrastructure.Workspaces.FileSessionWorkspace(root, root, sessions: new WorkspaceTestSessions());
         await workspace.EnsureAsync(snapshot.SessionId, d);
         await memory.SaveAsync(snapshot, 0);
         var model = new LoadQueryModel(query);

@@ -14,7 +14,7 @@ public sealed class ArtifactMaterializeTests
     public async Task Materialize_copies_workspace_file_preserves_hash_and_survives_deactivate()
     {
         var root = Path.Combine(Path.GetTempPath(), "agent-core-art", Guid.NewGuid().ToString("N"));
-        var workspace = new FileSessionWorkspace(Path.Combine(root, "ws"), Path.Combine(root, "tpl"));
+        var workspace = new FileSessionWorkspace(Path.Combine(root, "ws"), Path.Combine(root, "tpl"), sessions: new WorkspaceTestSessions());
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var manager = CreateManager(new InMemoryMemoryStore(), attachments, workspace, artifacts);

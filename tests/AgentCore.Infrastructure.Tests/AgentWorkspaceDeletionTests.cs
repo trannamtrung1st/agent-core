@@ -126,7 +126,7 @@ public sealed class AgentWorkspaceDeletionTests
         internal AgentWorkspaceItem Item = null!;
         internal AgentInstance Instance = null!;
         internal AdminInstanceDeleteCommand Command = null!;
-        internal string OwnerDirectory => Path.Combine(Root, "home", Owner.ToString("N"));
+        internal string OwnerDirectory => AgentWorkspacePhysicalPaths.AgentRoot(Path.Combine(Root, "home"), Owner);
 
         internal static async Task<Fixture> CreateAsync(bool sqlite)
         {

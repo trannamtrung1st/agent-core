@@ -256,17 +256,24 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<ApplicationConnectionService>();
         services.TryAddSingleton<IAttachmentProcessor, AttachmentProcessor>();
         services.TryAddSingleton<DefinitionPublicationResourceReader>();
-        services.TryAddSingleton<IAgentInstanceWorkspaceStore>(provider => new FileAgentInstanceWorkspaceStore(
-            persistence.AgentWorkspaceRoot, provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<IIdGenerator>(),
-            string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase) ? provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>() : null));
+        services.TryAddSingleton<IAgentInstanceWorkspaceStore>(provider =>
+        {
+            var options = provider.GetRequiredService<PersistenceOptions>();
+            return new FileAgentInstanceWorkspaceStore(options.WorkspaceRoot,
+                provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<IIdGenerator>(),
+                string.Equals(options.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase)
+                    ? provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>() : null);
+        });
         services.TryAddSingleton<AdminLifecycleCoordinator>();
         services.TryAddSingleton<AgentInstanceWorkspaceService>();
-        services.TryAddSingleton<ISessionWorkspace>(provider => new FileSessionWorkspace(
-            persistence.WorkspaceRoot,
-            persistence.TemplateRoot,
-            provider.GetService<IAttachmentStore>(),
-            publicationResources: provider.GetService<DefinitionPublicationResourceReader>(),
-            sessions: provider.GetRequiredService<IMemoryStore>()));
+        services.TryAddSingleton<ISessionWorkspace>(provider =>
+        {
+            var options = provider.GetRequiredService<PersistenceOptions>();
+            return new FileSessionWorkspace(options.WorkspaceRoot, options.TemplateRoot,
+                provider.GetService<IAttachmentStore>(),
+                publicationResources: provider.GetService<DefinitionPublicationResourceReader>(),
+                sessions: provider.GetRequiredService<IMemoryStore>());
+        });
         if (string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
         {
             services.TryAddSingleton<IArtifactStore>(provider => new SqliteArtifactStore(

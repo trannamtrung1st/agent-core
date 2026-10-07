@@ -25,7 +25,7 @@ public sealed class SupportComplianceWorkflowTests
         var store = new InMemoryMemoryStore();
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, attachments);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, attachments, sessions: store);
         var manager = CreateManager(store, attachments, workspace, artifacts);
         var catalog = new Dictionary<string, Guid>();
 
@@ -94,7 +94,7 @@ public sealed class SupportComplianceWorkflowTests
         foreach (var sessionId in catalog.Values)
         {
             var snapshot = await manager.GetAsync(sessionId);
-            var physical = Path.Combine(dir.WorkspaceRoot, sessionId.ToString("N"));
+            var physical = AgentWorkspacePhysicalPaths.SessionRoot(dir.WorkspaceRoot, snapshot.AgentInstanceId, sessionId);
             await manager.DurablyDeleteAsync(sessionId);
             await manager.DurablyDeleteAsync(sessionId);
             Assert.False(Directory.Exists(physical));
@@ -113,12 +113,12 @@ public sealed class SupportComplianceWorkflowTests
         var store = new InMemoryMemoryStore();
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-        var inner = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var inner = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: store);
         var workspace = new OnceFailingWorkspace(inner);
         var manager = CreateManager(store, attachments, workspace, artifacts);
         var created = await manager.CreateOwnedAsync("customer-support", 1, SessionMode.Text);
         await manager.WriteWorkspaceAsync(created.SessionId, "/working/note.txt", "keep"u8.ToArray());
-        var physical = Path.Combine(dir.WorkspaceRoot, created.SessionId.ToString("N"));
+        var physical = AgentWorkspacePhysicalPaths.SessionRoot(dir.WorkspaceRoot, created.AgentInstanceId, created.SessionId);
         Assert.True(Directory.Exists(physical));
         await Assert.ThrowsAsync<IOException>(() => manager.DurablyDeleteAsync(created.SessionId));
         Assert.True(Directory.Exists(physical));

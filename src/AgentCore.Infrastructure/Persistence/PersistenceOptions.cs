@@ -9,7 +9,6 @@ public sealed class PersistenceOptions
     public string AttachmentRoot { get; set; } = "data/attachments";
     public string WorkspaceRoot { get; set; } = "data/workspaces";
     public string TemplateRoot { get; set; } = "agents/templates";
-    public string AgentWorkspaceRoot { get; set; } = "data/agent-workspaces";
     public string ArtifactRoot { get; set; } = "data/artifacts";
     public string DefinitionResourceRoot { get; set; } = "data/definition-resources";
 }

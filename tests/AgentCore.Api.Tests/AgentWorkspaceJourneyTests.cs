@@ -208,7 +208,7 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
                 var client = OwnerOf(first); owner = await CreateInstance(client, 16); session = await CreateSession(client, owner);
                 (await client.PutAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/binary.dat", new ByteArrayContent(bytes))).EnsureSuccessStatusCode();
                 (await client.PutAsync($"/api/v2/sessions/{session}/workspace/content?path=/working/binary.dat", new ByteArrayContent(bytes))).EnsureSuccessStatusCode();
-                Assert.True(Directory.Exists(Path.Combine(root, "scratch", "agent-" + owner.ToString("N"), "sessions", "session-" + session.ToString("N"), "workspace", "working")));
+                Assert.True(Directory.Exists(AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(root, "workspaces"), owner, session)));
             }
             using (var second = new SqliteFactory(root))
             {
@@ -217,14 +217,14 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
                 Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/sessions/{session}/workspace/content?path=/working/binary.dat"));
                 Assert.Equal(HttpStatusCode.Conflict, (await client.PutAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/binary.dat", new ByteArrayContent([42]))).StatusCode);
                 (await client.DeleteAsync($"/api/v2/sessions/{session}")).EnsureSuccessStatusCode();
-                Assert.False(Directory.Exists(Path.Combine(root, "scratch", "agent-" + owner.ToString("N"), "sessions", "session-" + session.ToString("N"))));
+                Assert.False(Directory.Exists(AgentWorkspacePhysicalPaths.SessionRoot(Path.Combine(root, "workspaces"), owner, session)));
                 var fresh = await CreateSession(client, owner);
                 Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/sessions/{fresh}/workspace/content?path=/home/binary.dat"));
                 Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/sessions/{fresh}/workspace/content?path=/working/binary.dat")).StatusCode);
                 (await client.DeleteAsync($"/api/v2/sessions/{fresh}")).EnsureSuccessStatusCode();
                 (await client.PatchAsJsonAsync($"/api/v2/admin/agent-instances/{owner}/lifecycle", new AdminUpdateAgentInstanceLifecycleRequest(1, "Archived"))).EnsureSuccessStatusCode();
                 (await client.SendAsync(new HttpRequestMessage(HttpMethod.Delete, $"/api/v2/admin/agent-instances/{owner}") { Content = JsonContent.Create(new AdminInstanceDeleteRequest(2)) })).EnsureSuccessStatusCode();
-                Assert.False(Directory.Exists(Path.Combine(root, "home", owner.ToString("N"))));
+                Assert.False(Directory.Exists(AgentWorkspacePhysicalPaths.AgentRoot(Path.Combine(root, "workspaces"), owner)));
             }
         }
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
@@ -254,13 +254,13 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
                 var logicalOnly = new SqliteAdminLifecycleDeletion(services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                     services.GetRequiredService<IIdGenerator>());
                 await logicalOnly.DeleteInstanceAsync(new(owner, 2, Guid.NewGuid(), DateTimeOffset.UtcNow));
-                Assert.True(Directory.Exists(Path.Combine(root, "home", owner.ToString("N"))));
+                Assert.True(Directory.Exists(AgentWorkspacePhysicalPaths.AgentRoot(Path.Combine(root, "workspaces"), owner)));
             }
             var cleanupComplete = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             using var restarted = new SqliteFactory(root, cleanupComplete);
             var restartedClient = OwnerOf(restarted);
             await cleanupComplete.Task.WaitAsync(TimeSpan.FromSeconds(20));
-            Assert.False(Directory.Exists(Path.Combine(root, "home", owner.ToString("N"))));
+            Assert.False(Directory.Exists(AgentWorkspacePhysicalPaths.AgentRoot(Path.Combine(root, "workspaces"), owner)));
             Assert.Equal(HttpStatusCode.NotFound,
                 (await restartedClient.GetAsync($"/api/v2/agent-instances/{owner}/workspace")).StatusCode);
         }
@@ -286,16 +286,16 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
             builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
             {
             ["Persistence:Provider"] = "Sqlite", ["Persistence:ConnectionString"] = $"Data Source={root}/store.db",
-            ["Persistence:WorkspaceRoot"] = Path.Combine(root, "scratch"), ["Persistence:ArtifactRoot"] = Path.Combine(root, "artifacts"),
-            ["Persistence:AgentWorkspaceRoot"] = Path.Combine(root, "home"), ["Persistence:AttachmentRoot"] = Path.Combine(root, "attachments"),
+            ["Persistence:WorkspaceRoot"] = Path.Combine(root, "workspaces"), ["Persistence:ArtifactRoot"] = Path.Combine(root, "artifacts"),
+            ["Persistence:AttachmentRoot"] = Path.Combine(root, "attachments"),
             ["Persistence:DefinitionResourceRoot"] = Path.Combine(root, "definition-resources")
             }));
             builder.ConfigureTestServices(services =>
             {
                 services.RemoveAll<ISessionWorkspace>();
-                services.AddSingleton<ISessionWorkspace>(sp => new FileSessionWorkspace(Path.Combine(root, "scratch"), Path.Combine(root, "templates"), sessions: sp.GetRequiredService<IMemoryStore>()));
+                services.AddSingleton<ISessionWorkspace>(sp => new FileSessionWorkspace(Path.Combine(root, "workspaces"), Path.Combine(root, "templates"), sessions: sp.GetRequiredService<IMemoryStore>()));
                 services.RemoveAll<IAgentInstanceWorkspaceStore>();
-                services.AddSingleton<IAgentInstanceWorkspaceStore>(sp => new FileAgentInstanceWorkspaceStore(Path.Combine(root, "home"),
+                services.AddSingleton<IAgentInstanceWorkspaceStore>(sp => new FileAgentInstanceWorkspaceStore(Path.Combine(root, "workspaces"),
                     sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<IIdGenerator>(), sp.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
                 services.RemoveAll<IAdminLifecycleDeletion>();
                 services.AddSingleton<IAdminLifecycleDeletion>(sp =>

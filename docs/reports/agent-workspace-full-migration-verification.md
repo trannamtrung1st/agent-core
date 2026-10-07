@@ -1,41 +1,54 @@
 # Unified Agent Instance workspace migration verification
 
-Date: 2026-10-07. Baseline: `7316757d7327d4bb5c689add220e7451aaba4a8e`.
+Date: 2026-10-07. Physical cleanup baseline: `250b509eaa2a89f86f0570bc18f63c6938d974d5`. Deletion recovery baseline: `7316757d7327d4bb5c689add220e7451aaba4a8e`.
 
-The authorized breaking migration removes identity aliases and workspace execution modes. Every new Session requires an active real Agent Instance, whose exact active Definition/persona is pinned. Every instance owns durable `/home`; every Session owns isolated `/working`, with transient mailbox cwd starting/resetting at `/home`. Empty Chat directs the owner to Admin. Definition-only Session creation and v1 POST creation are removed; unrelated v1 history/read/end routes remain.
+Every Session belongs to a real Agent Instance. The instance owns durable `/home`; the Session owns isolated `/working`. Mailbox cwd starts/resets at `/home`. Definition-only Session creation, compatibility owners, v1 POST creation, checkout/retain execution modes and historical production catalog versions are removed. Unrelated v1 history/read/end routes remain. The supported catalog is Examiner v1, Approval Demo v1, General Assistant v16, Customer Support v3, Compliance v2 and Secretary v3.
 
-The active catalog contains examiner v1, approval-demo v1, General Assistant v16, Customer Support v3, Compliance v2 and Secretary v3. Unsupported historical built-ins remain in Git history. Explicit test-only policy fixtures replace historical production dependencies. Shipped procedures choose scratch or durable paths deliberately.
+## Physical storage
 
-Canonical registry descriptors govern normal offers and capability discovery. `workspace.copy` transfers exact files/trees across writable roots. Move/rename handles complete trees within one root. Retain/checkout contracts, their aliases, the workspace mode discriminator, descriptor adaptation and narrow move branch are removed. `WriteFileAsync` is the durable CAS primitive. Opaque immutable blobs, metadata, stable IDs, revision/hash and whole-tree guards, quotas, portability checks and trusted source-Session provenance remain intact.
+One `Persistence:WorkspaceRoot` owns both workspace adapters. Infrastructure derives all paths through `AgentWorkspacePhysicalPaths`:
 
-`harness.inspect` separates active version/authorized capabilities, future authoring eligibility and current Session pin. Its instruction excerpt is bounded at 1024 UTF-8 bytes with an explicit truncation flag so authority/version fields survive the normal durable tool-result budget. Full owner inspection remains in Admin. The regression publishes N+1, verifies current Session N remains unchanged, and verifies a fresh Session uses N+1.
+```text
+data/
+  agent-core.db
+  workspaces/
+    agent-<instanceN>/
+      home/blobs/<opaqueBlobIdN>
+      sessions/session-<sessionN>/
+        working/
+        .provisioned
+  artifacts/
+  attachments/
+  definition-resources/
+```
 
-## Data and deletion boundaries
+Home logical names stay in SQLite metadata, with stable ItemId, revision/hash/tree CAS and immutable opaque blobs. They never become physical names. Scratch resolves trusted Session metadata before direct writes, structure, transfers and sandbox path queries, even before provisioning. Missing Sessions fail NotFound; invalid owner state cannot fall back to a raw GUID directory. `.provisioned` prevents template reseeding over user edits. The private `/workspace/working` adapter prefix and sandbox container mount remain internal; there is no physical `workspace/` intermediate directory, scratch artifacts/state folder or separately configured home root. Artifact bytes belong to IArtifactStore.
 
-Migration `20261007014134_UnifiedAgentWorkspace` removes the Compatibility column and makes persisted Session ownership required. It rejects old compatibility owners and null/empty owners with **Legacy data reset required**, preserving the old data and migration history on failure. It never converts, backfills, reassigns or silently resets. [Operations](../17-observability-and-operations.md#unified-workspace-reset-and-isolated-verification) gives the explicit native backup/reset and destructive Compose volume reset commands.
+Startup rejects obsolete raw-GUID workspace trees, intermediate Session workspace directories and the default obsolete split home tree with a reset-required error. It does not move or delete bytes. Configuration, image, Compose, browser fixtures and normative docs use the single root. Native reset commands are in [Operations](../17-observability-and-operations.md#unified-workspace-reset-and-isolated-verification); the developer's data is preserved during verification.
 
-The baseline deletion correction is preserved: logical deletion, home metadata removal and the durable `InstanceDeleted` receipt commit before physical purge. Failed logical deletion preserves exact bytes; post-commit purge failures remain receipt-backed and recover at startup/every five minutes. Recovery never purges an existing owner. Retained execution references still block hard deletion. This migration does not introduce cascading deletion or change that lifecycle policy.
+Agent deletion commits logical removal, home metadata removal and the InstanceDeleted receipt before physical purge. With all referenced Sessions already deleted, purge removes the complete agent tree. Failed commit preserves exact bytes; failed purge is retried at startup, periodically or by exact command retry. Recovery never purges an existing owner. The existing failure-injection matrix remains in place.
 
-## Executed runtime journeys
+## Executed focused evidence
 
-Playwright MCP used only the task's disposable Synthetic API on 5086 and Vite on 5176. It verified no-instance Admin guidance and disabled Send, explicitly created General Assistant v16 through Admin, returned to Chat, and sent `synthetic-agent-workspace-v2:project`. The ordinary model/tool loop reported cwd `/home`, created four exact text files and an empty directory under `/working/c#/CsvTool`, copied the tree to `/home/c#`, and renamed it to `/home/csharp` using the current whole-tree token. The move reported four files affected and home listing reported `writable:true`. The completed Chat response had no tool error; browser console had no errors and instance/session requests succeeded.
+- Infrastructure workspace/sandbox suite: 59 passed, including owner layout, opaque blobs, direct operations before provisioning, missing-owner rejection, Session/agent isolation, no dead folders, non-destructive legacy rejection, bounded transfer/quota, symlink denial and deletion failure/recovery. Docker verifies a single Session working mount and denies host/other-Session access.
+- SQLite API workspace journeys: 6 passed. Host reconstruction preserves exact home and scratch bytes; fresh Session scratch is isolated; Session deletion preserves home; owner hard deletion and committed-receipt cleanup remove the complete agent tree.
+- Application lifecycle/planner/support focused suite: 22 passed. Archive/reopen/deactivate preserve scratch; durable delete and partial-cleanup retry remove the trusted Session tree.
+- Synthetic browser workspace/project/Admin journeys: 4 passed on isolated ports and disposable SQLite. The four-file project checks exact UTF-8/CRLF bytes, empty-directory provenance, copy/rename, relative guarded edit, Artifact download, fresh Session cwd/scratch, stale CAS conflict and archived write denial.
+- Isolated Compose SQLite persistence/recreation: passed. Home, current scratch, fresh scratch isolation, publication resources and Background Work survive container recreation; source Session deletion preserves home. Containers/network are removed and the disposable volume retained.
+- Frontend production build: passed. Source and documentation removal audits pass; obsolete root configuration and checkout-specific write helpers are absent. Legacy names remain only in explicit rejection tests/detection and historical evidence.
 
-The repeatable `unified-workspace-project.spec.ts` passed on fresh disposable SQLite and isolated ports 5096/5186. It additionally compared all four UTF-8/CRLF files byte-for-byte, checked empty-directory Session provenance and absence of the old name, opened a fresh Session with isolated scratch/cwd `/home`, patched a relative home file with CAS, and downloaded the exact new Artifact. Deleting the source Session preserved home; stale CAS returned 409; archive made nodes non-writable and rejected writes. Retained conversation executions correctly blocked owner deletion with 409. A separate unreferenced owner exercised home write, Session deletion, archive, successful owner deletion and inaccessible workspace. Infrastructure/API failure-injection tests establish physical deletion/recovery semantics.
+## Full candidate gates
 
-Four existing workspace/structural Playwright journeys also passed. The isolated Compose project `agent-core-unified-check` on 5087 passed `compose-sqlite-volume.sh`, including exact binary home bytes, nested scratch survival, fresh scratch isolation, source Session deletion survival, container recreation, publication resources and Background Work. The script removed its containers/network and retained its disposable volume. User Real services and data were not reset or stopped.
+The [Synthetic workflow](https://github.com/trannamtrung1st/agent-core/actions/workflows/synthetic.yml) records the exact candidate SHA and authoritative results. Acceptance requires all five jobs to pass on that SHA, not merely the focused evidence above:
 
-## Gates
-
-| Gate | Current result |
+| Job | Required coverage |
 | --- | --- |
-| `dotnet test AgentCore.sln --no-restore` | PASS: Domain 145; Application 1304; Infrastructure 784; API 384; OrderEvents plugin 4. Twelve explicit opt-in tests skipped; no provider calls |
-| Capability discovery focused suite | PASS: 25, including canonical cross-root copy and rename projection |
-| Frontend production build | PASS |
-| Full frontend units, serialized | Running; an earlier competing two-worker run had timeouts. Sequential affected files passed 72/73; the remaining modal lookup was scoped and passed its focused rerun. No assertion or timeout was relaxed |
-| Workspace model/tool acceptance | PASS: new four-file project journey and four existing workspace journeys |
-| Complete Synthetic/fake-device browser suite | Running; stale identity-label and scratch-path fixture expectations found and corrected |
-| Compose SQLite recreation/persistence | PASS |
-| Hosted final-candidate Synthetic CI | Pending candidate push; required before acceptance |
-| Active-source removal and documentation checks | PASS: removed symbols absent from runtime/frontend/catalog; historical migrations/reports intentionally retained. Normative ownership/path/reset/inspection chapters synchronized; local link targets checked |
+| Synthetic backend | Full Domain, Infrastructure, Application and API suites; SQLite, wire and browser integration |
+| Synthetic frontend | Full frontend unit suite and production build |
+| Synthetic Playwright core | All Synthetic, Browser STT and Browser/Browser journeys, including unified workspace project |
+| Synthetic Playwright acceptance | Faithful wall-clock reminder, Admin lifecycle/authoring, harness management, continuity/maintenance and Secretary journeys |
+| Synthetic Compose | SQLite volume persistence and recreation |
 
-Full migration acceptance remains pending the running frontend/browser and hosted gates. P10/P11, persistent cwd, home sandbox mounts, cross-store batches, distributed writers and atomic cross-root move remain outside scope. Earlier milestone freeze SHAs are unchanged.
+Browser fixtures explicitly provision real Agent Instances. Stale identity labels and the faithful fixture's pre-provision enabled check were corrected. Schedule disable/reload now waits for the successful revisioned PUT and visible enabled-state transition; the clipboard failure test waits for visible UI after its asynchronous rejection. Assertions and timeouts are preserved. Native test factories and process hosts isolate workspace data rather than reading the developer's legacy tree.
+
+P10/P11, persistent cwd, direct home sandbox mounts, cross-store batches, distributed writers and atomic cross-root move remain outside scope. Earlier milestone freeze SHAs are unchanged.

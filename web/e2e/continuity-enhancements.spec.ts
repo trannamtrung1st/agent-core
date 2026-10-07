@@ -125,7 +125,11 @@ test('Admin authors scheduled work, runs through background execution, edits and
   await schedules.getByRole('button', { name: 'Edit schedule', exact: true }).click();
   await schedules.getByLabel('Schedule task', { exact: true }).fill('Review store orders with a deliberately longer task description that wraps at a narrow viewport');
   await schedules.getByRole('button', { name: 'Save schedule', exact: true }).click();
-  await schedules.getByRole('button', { name: 'Disable schedule', exact: true }).click();
+  await Promise.all([
+    page.waitForResponse(response => response.request().method() === 'PUT' && /\/schedules\/[^/]+$/.test(new URL(response.url()).pathname) && response.ok()),
+    schedules.getByRole('button', { name: 'Disable schedule', exact: true }).click(),
+  ]);
+  await expect(schedules.getByRole('button', { name: 'Enable schedule', exact: true })).toBeVisible();
   await expect(run).toBeDisabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   await page.reload();

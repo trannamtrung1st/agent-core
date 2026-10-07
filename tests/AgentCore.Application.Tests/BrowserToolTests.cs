@@ -865,7 +865,7 @@ public sealed class BrowserToolTests
         try
         {
         var session = Guid.NewGuid();
-        var workspace = new FileSessionWorkspace(workspaceRoot, templateRoot);
+        var workspace = new FileSessionWorkspace(workspaceRoot, templateRoot, sessions: new WorkspaceTestSessions());
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var definition = BrowserDefinition() with
         {

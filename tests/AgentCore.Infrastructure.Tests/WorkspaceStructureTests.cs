@@ -110,11 +110,11 @@ public sealed class WorkspaceStructureTests
         await f.Write("tree/file", "safe"u8.ToArray());
         var outside = Path.Combine(f.Root,"outside"); Directory.CreateDirectory(outside);
         await File.WriteAllTextAsync(Path.Combine(outside,"sentinel"),"untouched");
-        Directory.CreateSymbolicLink(Path.Combine(f.Root,"scratch",f.Id.ToString("N"),"workspace","working","tree","link"),outside);
+        Directory.CreateSymbolicLink(Path.Combine(await f.Scratch!.PhysicalWorkingDirectoryAsync(f.Id),"tree","link"),outside);
         foreach (var op in new WorkspaceStructuralOperation[] {new("copy",Source:f.P("tree"),Destination:f.P("copy")),new("move",Source:f.P("tree"),Destination:f.P("moved")),new("delete",Path:f.P("tree"),Recursive:true),new("mkdir",Path:f.P("tree/link/pwn"))})
             await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Run(op));
         Assert.Equal("untouched",await File.ReadAllTextAsync(Path.Combine(outside,"sentinel")));
-        Directory.Delete(Path.Combine(f.Root,"scratch",f.Id.ToString("N"),"workspace","working","tree","link"));
+        Directory.Delete(Path.Combine(await f.Scratch!.PhysicalWorkingDirectoryAsync(f.Id),"tree","link"));
         await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Run(new WorkspaceStructuralOperation("move",Source:f.P("tree"),Destination:f.P(Guid.NewGuid().ToString("N")+"/stolen"))));
         var other = Guid.NewGuid(); await f.Scratch!.EnsureAsync(other,Definition);
         await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Scratch.StructureAsync(other,[new("delete",Path:f.P("tree"),Recursive:true)]));
@@ -125,7 +125,7 @@ public sealed class WorkspaceStructureTests
     public async Task Home_linked_child_blob_blocks_recursive_mutation_before_any_change(int profile)
     {
         using var f = await Fixture.Create(profile); await f.Write("tree/file", "safe"u8.ToArray());
-        var blob = Assert.Single(Directory.GetFiles(Path.Combine(f.Root,"blobs",f.Id.ToString("N"))));
+        var blob = Assert.Single(Directory.GetFiles(AgentWorkspacePhysicalPaths.HomeBlobRoot(Path.Combine(f.Root,"blobs"),f.Id)));
         var outside = Path.Combine(f.Root,"sentinel"); await File.WriteAllTextAsync(outside,"untouched");
         File.Delete(blob); File.CreateSymbolicLink(blob,outside);
         var before = await f.Paths();
@@ -161,9 +161,10 @@ public sealed class WorkspaceStructureTests
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         f.Scratch!.BeforeFilesystemRead = async ct => { entered.TrySetResult(); await release.Task.WaitAsync(ct); };
         var read = f.Read("read"); await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var sessionRoot = Path.GetDirectoryName(await f.Scratch.PhysicalWorkingDirectoryAsync(f.Id))!;
         await f.Scratch.DeleteSessionAsync(f.Id).AsTask().WaitAsync(TimeSpan.FromSeconds(10));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await read);
-        Assert.False(Directory.Exists(Path.Combine(f.Root,"scratch",f.Id.ToString("N"))));
+        Assert.False(Directory.Exists(sessionRoot));
     }
 
     private static readonly AgentDefinition Definition = new(1,"examiner",1,new AgentIdentity("Alex","Examiner","Practice.","Calm"),["Practice"],"Instructions",new BehaviorPolicy("acknowledgeThenContinue",true,true),new ConversationPolicy("concise",true,"en",256),new InitiativePolicy(true,8000,30000,1,["longSilence"]),new VoiceConfiguration(true,"default",1),new ProviderPreferences("primary-llm","primary-stt","primary-tts"),new Dictionary<string,string>());
@@ -176,7 +177,7 @@ public sealed class WorkspaceStructureTests
         public static async Task<Fixture> Create(int profile,long quota=1000)
         {
             var f = new Fixture { quota=quota }; Directory.CreateDirectory(f.Root);
-            if(profile==0) { f.Scratch=new(Path.Combine(f.Root,"scratch"),Path.Combine(f.Root,"templates"),maxWritableBytes:quota); await f.Scratch.EnsureAsync(f.Id,Definition); }
+            if(profile==0) { f.Scratch=new(Path.Combine(f.Root,"scratch"),Path.Combine(f.Root,"templates"),maxWritableBytes:quota, sessions: new WorkspaceTestSessions()); await f.Scratch.EnsureAsync(f.Id,Definition); }
             else { if(profile==2) {f.factory=new(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={f.Root}/store.db").Options); await new SqliteMemoryStore(f.factory,TimeProvider.System).EnsureCreatedAsync();} f.Reopen(); }
             return f;
         }

@@ -81,7 +81,7 @@ test("p7d managed instance persona form json chat archive and history", async ({
   const firstChatUrl = page.url();
   await page.getByRole("button", { name: "Open Admin" }).click();
   await page.goto(`/admin/instances/${instance.instanceId}`);
-  await expect(page.locator(".admin-instance-heading").getByText("Managed", { exact: true })).toBeVisible();
+  await expect(page.locator(".admin-instance-heading").getByText("Agent Instance", { exact: true })).toBeVisible();
 
   await page.getByLabel("Persona name").fill(personaName);
   await savePersonaAndAwaitPatch(page, instance.instanceId);

@@ -13,11 +13,12 @@ namespace AgentCore.Infrastructure.Workspaces;
 
 // Logical names never enter blob paths. SQLite and the key-free InMemory profile share these exact semantics.
 public sealed partial class FileAgentInstanceWorkspaceStore(
-    string blobRoot, TimeProvider time, IIdGenerator ids,
+    string workspaceRoot, TimeProvider time, IIdGenerator ids,
     IDbContextFactory<AgentCoreDbContext>? contexts = null,
     long maxFileBytes = AgentWorkspaceLimits.MaxFileBytes,
     long maxInstanceBytes = AgentWorkspaceLimits.MaxInstanceBytes) : IAgentInstanceWorkspaceStore
 {
+    private readonly string _root = AgentWorkspacePhysicalPaths.ValidateRoot(workspaceRoot);
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _gates = new();
     private readonly ConcurrentDictionary<Guid, byte> _recovered = new();
     private readonly ConcurrentDictionary<Guid, List<AgentWorkspaceRow>> _memory = new();
@@ -62,7 +63,7 @@ public sealed partial class FileAgentInstanceWorkspaceStore(
             var key = path.ToUpperInvariant();
             var old = rows.SingleOrDefault(r => r.PathKey == key);
             var previous = old is null ? null : FromRow(old);
-            if (previous?.Directory == true) throw AgentCoreErrors.Conflict("A directory occupies the retained file path.");
+            if (previous?.Directory == true) throw AgentCoreErrors.Conflict("A directory occupies the home file path.");
             if (previous is not null && (previous.LogicalPath != path
                 || expectedRevision is null && expectedSha256 is null
                 || expectedRevision.HasValue && expectedRevision != previous.Revision
@@ -146,30 +147,20 @@ public sealed partial class FileAgentInstanceWorkspaceStore(
         WithAsync(instanceId, ct =>
         {
             ct.ThrowIfCancellationRequested();
-            var directory = OwnerDirectory(instanceId);
-            if (Directory.Exists(directory))
-            {
-                foreach (var entry in Directory.EnumerateFileSystemEntries(directory)) DenyLinks(entry);
-                Directory.Delete(directory, recursive: true);
-            }
+            PurgeAgentDirectory(instanceId);
             return ValueTask.FromResult(0);
         }, cancellationToken).AsVoid();
 
     public ValueTask DeleteInstanceAsync(Guid instanceId, CancellationToken cancellationToken = default) =>
         WithAsync(instanceId, async ct =>
         {
-            var directory = OwnerDirectory(instanceId);
             if (contexts is not null)
             {
                 await using var db = await contexts.CreateDbContextAsync(ct);
                 await db.AgentWorkspaceItems.Where(r => r.AgentInstanceId == instanceId.ToString("D")).ExecuteDeleteAsync(ct);
             }
             _memory.TryRemove(instanceId, out _);
-            if (Directory.Exists(directory))
-            {
-                foreach (var entry in Directory.EnumerateFileSystemEntries(directory)) DenyLinks(entry);
-                Directory.Delete(directory, recursive: true);
-            }
+            PurgeAgentDirectory(instanceId);
             return 0;
         }, cancellationToken).AsVoid();
 
@@ -236,8 +227,8 @@ public sealed partial class FileAgentInstanceWorkspaceStore(
 
     private string OwnerDirectory(Guid owner)
     {
-        AttachmentBlobKeys.EnsureSafeRoot(blobRoot);
-        var directory = Path.Combine(Path.GetFullPath(blobRoot), owner.ToString("N"));
+        AttachmentBlobKeys.EnsureSafeRoot(_root);
+        var directory = AgentWorkspacePhysicalPaths.HomeBlobRoot(_root, owner);
         DenyLinks(directory);
         return directory;
     }
@@ -257,8 +248,27 @@ public sealed partial class FileAgentInstanceWorkspaceStore(
             if (File.Exists(current) || Directory.Exists(current))
                 if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
                     throw AgentCoreErrors.Forbidden("Linked home storage paths are denied.");
-            if (current == Path.GetFullPath(blobRoot)) break;
+            if (current == _root) break;
         }
+    }
+
+    private void PurgeAgentDirectory(Guid owner)
+    {
+        var directory = AgentWorkspacePhysicalPaths.AgentRoot(_root, owner);
+        DenyLinks(directory);
+        if (!Directory.Exists(directory)) return;
+        var pending = new Stack<string>(); pending.Push(directory);
+        var count = 0;
+        while (pending.TryPop(out var next))
+        {
+            foreach (var entry in Directory.EnumerateFileSystemEntries(next))
+            {
+                DenyLinks(entry);
+                if (++count > WorkspaceStructureLimits.MaxEntries) throw AgentCoreErrors.Persistence("Workspace cleanup traversal exceeded its bound.");
+                if (Directory.Exists(entry)) pending.Push(entry);
+            }
+        }
+        Directory.Delete(directory, recursive: true);
     }
 
     private static void DeleteFile(string path)

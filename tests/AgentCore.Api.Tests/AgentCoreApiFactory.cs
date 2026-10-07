@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.AspNetCore.TestHost;
+using AgentCore.Infrastructure.Persistence;
 
 namespace AgentCore.Api.Tests;
 
@@ -27,7 +29,6 @@ public class AgentCoreApiFactory : WebApplicationFactory<Program>
                 ["Providers:Speech:Synthesis:Adapter"] = "Synthetic",
                 ["Persistence:WorkspaceRoot"] = Path.Combine(Path.GetTempPath(), "agent-core-ws", Guid.NewGuid().ToString("N")),
                 ["Persistence:TemplateRoot"] = Path.Combine(repo, "agents", "templates"),
-                ["Persistence:AgentWorkspaceRoot"] = Path.Combine(Path.GetTempPath(), "agent-core-home", Guid.NewGuid().ToString("N")),
                 ["Persistence:ArtifactRoot"] = Path.Combine(Path.GetTempPath(), "agent-core-art", Guid.NewGuid().ToString("N"))
             };
             foreach (var pair in ExtraConfiguration)
@@ -36,6 +37,14 @@ public class AgentCoreApiFactory : WebApplicationFactory<Program>
             }
 
             config.AddInMemoryCollection(values);
+        });
+        // Minimal-host test configuration is applied after early application option binding.
+        builder.ConfigureTestServices(services =>
+        {
+            var options = (PersistenceOptions)services.Single(d => d.ServiceType == typeof(PersistenceOptions)).ImplementationInstance!;
+            options.WorkspaceRoot = Path.Combine(Path.GetTempPath(), "agent-core-api-isolated", Guid.NewGuid().ToString("N"), "workspaces");
+            if (ExtraConfiguration.TryGetValue("Persistence:WorkspaceRoot", out var root) && root is not null)
+                options.WorkspaceRoot = root;
         });
         TestHttpDefaults.UseLoopbackCaller(builder);
     }

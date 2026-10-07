@@ -33,7 +33,7 @@ public sealed class DockerSandboxExecutor(
 
         RolePermissions.EnsureLogicalPathAllowed("/workspace/working", request.SessionId);
         await files.EnsureAsync(request.SessionId, request.Definition, cancellationToken).ConfigureAwait(false);
-        var working = files.PhysicalWorkingDirectory(request.SessionId);
+        var working = await files.PhysicalWorkingDirectoryAsync(request.SessionId, cancellationToken);
         Directory.CreateDirectory(working);
 
         var name = $"acsbx-{request.RunId:N}";

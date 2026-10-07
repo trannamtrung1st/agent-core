@@ -1,4 +1,5 @@
 using System.Net;
+using AgentCore.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -14,6 +15,10 @@ internal static class TestHttpDefaults
         builder.ConfigureServices(services =>
         {
             services.AddSingleton<IStartupFilter, LoopbackCallerStartupFilter>();
+            // Test hosts must never resolve workspace bytes from the developer data tree.
+            var persistence = services.FirstOrDefault(d => d.ServiceType == typeof(PersistenceOptions))?.ImplementationInstance as PersistenceOptions;
+            if (persistence?.WorkspaceRoot == "data/workspaces")
+                persistence.WorkspaceRoot = Path.Combine(Path.GetTempPath(), "agent-core-http-fixture-" + Guid.NewGuid().ToString("N"), "workspaces");
         });
     }
 

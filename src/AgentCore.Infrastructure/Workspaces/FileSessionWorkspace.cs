@@ -15,7 +15,7 @@ namespace AgentCore.Infrastructure.Workspaces;
 
 public sealed partial class FileSessionWorkspace : ISessionWorkspace
 {
-    private static readonly string[] WritableTrees = ["/workspace/working", "/workspace/artifacts", "/workspace/state"];
+    private static readonly string[] WritableTrees = ["/workspace/working"];
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -26,7 +26,7 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
     private readonly IAttachmentStore? _attachments;
     private readonly DefinitionPublicationResourceReader? _publicationResources;
     private readonly long _maxWritableBytes;
-    private readonly IMemoryStore? _sessions;
+    private readonly IMemoryStore _sessions;
     private readonly ConcurrentDictionary<Guid, Guid> _owners = new();
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _locks = new();
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _writers = new();
@@ -41,11 +41,10 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
         DefinitionPublicationResourceReader? publicationResources = null,
         IMemoryStore? sessions = null)
     {
-        AttachmentBlobKeys.EnsureSafeRoot(workspaceRoot);
         AttachmentBlobKeys.EnsureSafeRoot(templateRoot);
-        _root = Path.GetFullPath(workspaceRoot);
+        _root = AgentWorkspacePhysicalPaths.ValidateRoot(workspaceRoot);
         _templateRoot = Path.GetFullPath(templateRoot);
-        _sessions = sessions;
+        _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions), "A trusted Session store is required for workspace ownership.");
         _attachments = attachments;
         _publicationResources = publicationResources;
         _maxWritableBytes = maxWritableBytes;
@@ -65,9 +64,8 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
         {
             ThrowIfDeleted(sessionId);
             var physical = SessionRoot(sessionId);
-            Directory.CreateDirectory(Path.Combine(physical, "workspace", "working"));
-            Directory.CreateDirectory(Path.Combine(physical, "workspace", "artifacts"));
-            Directory.CreateDirectory(Path.Combine(physical, "workspace", "state"));
+            DenyEscapingLinks(physical, _root);
+            Directory.CreateDirectory(Path.Combine(physical, "working"));
             var marker = Path.Combine(physical, ".provisioned");
             if (File.Exists(marker))
             {
@@ -164,19 +162,16 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
     }
 
     public ValueTask WriteAsync(Guid sessionId, string logicalPath, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default) =>
-        WriteCoreAsync(sessionId, logicalPath, bytes, false, cancellationToken);
-
-    public ValueTask WriteNewAsync(Guid sessionId, string logicalPath, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default) =>
-        WriteCoreAsync(sessionId, logicalPath, bytes, true, cancellationToken);
+        WriteCoreAsync(sessionId, logicalPath, bytes, cancellationToken);
 
     private async ValueTask WriteCoreAsync(
         Guid sessionId,
         string logicalPath,
         ReadOnlyMemory<byte> bytes,
-        bool exclusive,
         CancellationToken cancellationToken = default)
     {
         ThrowIfDeleted(sessionId);
+        await ResolveOwnerAsync(sessionId, cancellationToken);
         var path = Normalize(logicalPath);
         RolePermissions.EnsureLogicalPathAllowed(path, sessionId);
         if (!IsWritableFile(path))
@@ -202,8 +197,7 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
             DenyEscapingLinks(parent, SessionRoot(sessionId));
             Directory.CreateDirectory(parent);
             DenyEscapingLinks(physical, SessionRoot(sessionId));
-            if (exclusive && File.Exists(physical)) throw AgentCoreErrors.Conflict("Checkout destination already exists.");
-            var used = Measure(SessionWorkspaceDir(sessionId));
+            var used = Measure(Path.Combine(SessionRoot(sessionId), "working"));
             var existing = File.Exists(physical) ? new FileInfo(physical).Length : 0;
             if (used - existing + bytes.Length > _maxWritableBytes)
             {
@@ -213,7 +207,7 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
 
             await using var stream = new FileStream(
                 physical,
-                exclusive ? FileMode.CreateNew : FileMode.Create,
+                FileMode.Create,
                 FileAccess.Write,
                 FileShare.None,
                 4096,
@@ -305,7 +299,7 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
             }
 
             var newBytes = Encoding.UTF8.GetBytes(updated);
-            var used = Measure(SessionWorkspaceDir(sessionId));
+            var used = Measure(Path.Combine(SessionRoot(sessionId), "working"));
             var existing = originalBytes.Length;
             if (used - existing + newBytes.Length > _maxWritableBytes)
             {
@@ -623,9 +617,7 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
         {
             return
             [
-                new WorkspaceNode("/workspace/working", true, 0, false),
-                new WorkspaceNode("/workspace/artifacts", true, 0, false),
-                new WorkspaceNode("/workspace/state", true, 0, false)
+                new WorkspaceNode("/workspace/working", true, 0, false)
             ];
         }
 
@@ -714,7 +706,7 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
         }
 
         var templatePrefix = templateId + "/";
-        var working = Path.Combine(physical, "workspace", "working");
+        var working = Path.Combine(physical, "working");
         foreach (var item in items)
         {
             if (item.Kind != AgentDefinitionResourceKind.Template)
@@ -772,7 +764,7 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
             return;
         }
 
-        var working = Path.Combine(physical, "workspace", "working");
+        var working = Path.Combine(physical, "working");
         foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
         {
             DenyEscapingLinks(file, source);
@@ -872,23 +864,31 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
 
     private async ValueTask ResolveOwnerAsync(Guid sessionId, CancellationToken ct)
     {
-        if (_sessions is null || _owners.ContainsKey(sessionId)) return;
+        if (_owners.ContainsKey(sessionId)) return;
         var snapshot = await _sessions.LoadMetadataAsync(sessionId, ct);
         if (snapshot is null) throw AgentCoreErrors.NotFound("Session workspace owner was not found.");
         _owners.TryAdd(sessionId, snapshot.AgentInstanceId);
     }
 
-    private string SessionRoot(Guid sessionId) => _owners.TryGetValue(sessionId, out var owner)
-        ? Path.Combine(_root, "agent-" + owner.ToString("N"), "sessions", "session-" + sessionId.ToString("N"))
-        : Path.Combine(_root, sessionId.ToString("N"));
-
-    public string PhysicalWorkingDirectory(Guid sessionId)
+    private string SessionRoot(Guid sessionId)
     {
-        ThrowIfDeleted(sessionId);
-        return Path.Combine(SessionRoot(sessionId), "workspace", "working");
+        if (!_owners.TryGetValue(sessionId, out var owner))
+            throw AgentCoreErrors.Persistence("Session workspace ownership has not been resolved.");
+        var root = AgentWorkspacePhysicalPaths.SessionRoot(_root, owner, sessionId);
+        DenyEscapingLinks(root, _root);
+        return root;
     }
 
-    private string SessionWorkspaceDir(Guid sessionId) => Path.Combine(SessionRoot(sessionId), "workspace");
+    public async ValueTask<string> PhysicalWorkingDirectoryAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDeleted(sessionId);
+        await ResolveOwnerAsync(sessionId, cancellationToken);
+        var working = Path.Combine(SessionRoot(sessionId), "working");
+        DenyEscapingLinks(working, _root);
+        return working;
+    }
+
+    private string SessionWorkspaceDir(Guid sessionId) => SessionRoot(sessionId);
 
     private SemaphoreSlim Gate(Guid sessionId) => _locks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
 

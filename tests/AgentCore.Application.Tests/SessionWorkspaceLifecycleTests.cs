@@ -16,20 +16,21 @@ public sealed class SessionWorkspaceLifecycleTests
         var root = Path.Combine(Path.GetTempPath(), "agent-core-ws-life", Guid.NewGuid().ToString("N"));
         var templates = Path.Combine(root, "templates");
         Directory.CreateDirectory(templates);
-        var workspace = new FileSessionWorkspace(root, templates);
-        var manager = CreateManager(new InMemoryMemoryStore(), workspace);
+        var store = new InMemoryMemoryStore();
+        var workspace = new FileSessionWorkspace(root, templates, sessions: store);
+        var manager = CreateManager(store, workspace);
         var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
-        var physical = Path.Combine(root, created.SessionId.ToString("N"));
+        var physical = AgentWorkspacePhysicalPaths.SessionRoot(root, created.AgentInstanceId, created.SessionId);
         Assert.False(Directory.Exists(physical));
 
         await manager.WriteWorkspaceAsync(created.SessionId, "/working/note.txt", "keep"u8.ToArray());
-        Assert.True(File.Exists(Path.Combine(physical, "workspace", "working", "note.txt")));
+        Assert.True(File.Exists(Path.Combine(physical, "working", "note.txt")));
 
         await manager.DeactivateAsync(created.SessionId);
-        Assert.True(File.Exists(Path.Combine(physical, "workspace", "working", "note.txt")));
+        Assert.True(File.Exists(Path.Combine(physical, "working", "note.txt")));
 
         await manager.ArchiveAsync(created.SessionId);
-        Assert.True(File.Exists(Path.Combine(physical, "workspace", "working", "note.txt")));
+        Assert.True(File.Exists(Path.Combine(physical, "working", "note.txt")));
         var archivedWrite = await Assert.ThrowsAsync<AgentCoreException>(
             () => manager.WriteWorkspaceAsync(created.SessionId, "/working/note.txt", "x"u8.ToArray()));
         Assert.Equal("SessionArchived", archivedWrite.Code);

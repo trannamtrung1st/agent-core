@@ -18,7 +18,7 @@ public sealed class FileSessionWorkspaceTests
         var session = Guid.CreateVersion7();
         var other = Guid.CreateVersion7();
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, attachments, maxWritableBytes: 64);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, attachments, maxWritableBytes: 64, sessions: new WorkspaceTestSessions());
         var definition = Examiner();
 
         await workspace.EnsureAsync(session, definition);
@@ -40,7 +40,7 @@ public sealed class FileSessionWorkspaceTests
 
         var outside = Path.Combine(dir.Root, "outside.txt");
         await File.WriteAllTextAsync(outside, "repo");
-        var link = Path.Combine(dir.WorkspaceRoot, session.ToString("N"), "workspace", "working", "escape.txt");
+        var link = Path.Combine(await workspace.PhysicalWorkingDirectoryAsync(session), "escape.txt");
         File.CreateSymbolicLink(link, outside);
         var escaped = await Assert.ThrowsAsync<AgentCoreException>(() =>
             workspace.ReadAsync(session, definition, "/workspace/working/escape.txt").AsTask());
@@ -48,14 +48,14 @@ public sealed class FileSessionWorkspaceTests
 
         var outsideDir = Path.Combine(dir.Root, "outside-dir");
         Directory.CreateDirectory(outsideDir);
-        var linkedDir = Path.Combine(dir.WorkspaceRoot, session.ToString("N"), "workspace", "working", "out");
+        var linkedDir = Path.Combine(await workspace.PhysicalWorkingDirectoryAsync(session), "out");
         File.CreateSymbolicLink(linkedDir, outsideDir);
         var writeThrough = await Assert.ThrowsAsync<AgentCoreException>(() =>
             workspace.WriteAsync(session, "/workspace/working/out/pwn.txt", "x"u8.ToArray()).AsTask());
         Assert.Equal("Forbidden", writeThrough.Code);
         Assert.False(File.Exists(Path.Combine(outsideDir, "pwn.txt")));
 
-        var deepLink = Path.Combine(dir.WorkspaceRoot, session.ToString("N"), "workspace", "working", "a");
+        var deepLink = Path.Combine(await workspace.PhysicalWorkingDirectoryAsync(session), "a");
         File.CreateSymbolicLink(deepLink, outsideDir);
         Directory.CreateDirectory(Path.Combine(deepLink, "b", "c", "d", "e", "f", "g", "h", "i"));
         var deepWrite = await Assert.ThrowsAsync<AgentCoreException>(() =>
@@ -81,7 +81,7 @@ public sealed class FileSessionWorkspaceTests
         await File.WriteAllTextAsync(Path.Combine(dir.TemplateRoot, "notes", "harness", "pack.txt"), "pack");
 
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
         var definition = Examiner() with
         {
             Environment = new RoleEnvironment(Workspace: new WorkspaceTemplatePolicy("notes"))
@@ -105,7 +105,7 @@ public sealed class FileSessionWorkspaceTests
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
         var definition = Examiner();
         await workspace.EnsureAsync(session, definition);
         const string path = "/workspace/working/binary.txt";
@@ -138,7 +138,7 @@ public sealed class FileSessionWorkspaceTests
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
         var definition = Examiner();
         await workspace.EnsureAsync(session, definition);
         const string path = "/workspace/working/race.txt";
@@ -171,7 +171,7 @@ public sealed class FileSessionWorkspaceTests
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, maxWritableBytes: 50);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, maxWritableBytes: 50, sessions: new WorkspaceTestSessions());
         var definition = Examiner();
         await workspace.EnsureAsync(session, definition);
         const string path = "/workspace/working/quota.txt";
@@ -191,7 +191,7 @@ public sealed class FileSessionWorkspaceTests
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, maxWritableBytes: 50);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, maxWritableBytes: 50, sessions: new WorkspaceTestSessions());
         var definition = Examiner();
         await workspace.EnsureAsync(session, definition);
         var first = workspace.WriteAsync(session, "/workspace/working/one.txt", new byte[40]);

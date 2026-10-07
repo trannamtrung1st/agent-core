@@ -31,6 +31,7 @@ public sealed class RealComposeHostFixture : IAsyncLifetime
         start.Environment["AgentCore__Profile"] = "Real";
         start.Environment["AgentCore__AgentDirectory"] = Path.Combine(root, "agents");
         start.Environment["Persistence__Provider"] = "InMemory";
+        start.Environment["Persistence__WorkspaceRoot"] = Path.Combine(Path.GetTempPath(), "real-profile-fixture-" + Guid.NewGuid().ToString("N"), "workspaces");
         start.Environment["Providers__LanguageModels__primary-llm__Adapter"] = "OpenAICompatible";
         start.Environment["Providers__LanguageModels__primary-llm__BaseUrl"] = "https://openrouter.ai/api/v1/";
         start.Environment["Providers__LanguageModels__primary-llm__DefaultModel"] = "deepseek/deepseek-v4.1-flash";
