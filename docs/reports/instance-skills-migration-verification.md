@@ -42,7 +42,7 @@ Compose recreated an isolated Synthetic container and verified exact local Skill
 
 | Check | Result |
 | --- | --- |
-| Final `dotnet test AgentCore.sln --no-restore --nologo` | Passed final Customize candidate: Domain 150, Application 1304, Infrastructure 821, API 361, OrderEvents plugin 4; 2640 passed, 13 opt-in skips, zero failed |
+| Final `dotnet test AgentCore.sln --no-restore --nologo` | Passed final approval-ACK candidate: Domain 150, Application 1306, Infrastructure 821, API 361, OrderEvents plugin 4; 2642 passed, 13 opt-in skips, zero failed |
 | `pnpm --dir web run test --run --maxWorkers=1` | Passed: 94 files, 712 tests, zero failed, 610.60 seconds; unchanged test timeouts |
 | `pnpm --dir web run build` | Passed; existing large bundle warning (about 2 MB minified) |
 | Affected Skills/Harness/messaging CLI journeys | Earlier affected run: 10 passed; subsequent instance upgrade/rollback journey: 3 passed |
@@ -84,3 +84,11 @@ The corrected cross-version path passed the full Application suite (1304 passed,
 The user review identified Customize's result-contract mismatch. Both ordinary `skills.customize` and owner HTTP Customize now return `{instanceSkill, definitionSkill:{key,enabled:false,revision}}`. The shared service builds both resulting states from the mutation snapshot and returns only after its atomic store commit; no second mutable read is used to construct the confirmation. Frontend response typing and Compose survival verification use the same new contract. Tests assert the source's advanced revision and disabled state for Admin HTTP, Agent tool execution and both stores. Earlier candidate runs remain intermediate evidence; only the final Customize-result candidate can close this migration.
 
 Final Customize local checks: backend 2640 passed / 13 opt-in skips / zero failed; Skills browser journeys 3 passed in 43.8 seconds on isolated SQLite/ports 5118/5198; frontend build passed. The focused Skills unit run initially timed out in its existing conflict/delete case while broad jobs overlapped (5 passed, 1 timeout); with all other jobs complete, all six passed in 22.56 seconds using the unchanged 30-second timeout and assertions. No unit/runtime assertion was relaxed. Final hosted verification repeats the complete frontend/browser/Compose gates against the published candidate.
+
+## Bounded approval ACK hardening before freeze
+
+[Hosted run 37628386953](https://github.com/trannamtrung1st/agent-core/actions/runs/37628386953) tested `761abfd5c2a9797a9dd6c8470b24a29cde0303eb`: backend, frontend, Compose and Playwright core passed. Acceptance failed only the existing P9.7 exact-Chat-approval journey when Reject did not hide the already-decided dialog within its unchanged 20-second assertion. Five other P9.7 cases and the standalone Reject journey passed. This run is not a green closure gate.
+
+The live approval handler coupled its Accepted ACK to awaited durable execution resume. The bounded correction acknowledges the validated/decided input immediately after signalling its waiter, then awaits resume in the same mailbox. No detached continuation, new runtime owner, changed authorization or longer Playwright timeout is introduced. A release-gated real-runtime regression reproduces the previous ACK wait for both Approve and Reject; it verifies ACK completion while resume remains blocked, then normal terminal persistence after release. Final exact-SHA verification is required after this correction.
+
+Local approval hardening gates passed: full backend 2642 passed / 13 opt-in skips / zero failed; all six P9.7 acceptance cases passed in 54.4 seconds on isolated SQLite and ports 5118/5198, including the exact previously failing Reject sequence. Both Approve/Reject ACK regressions pass with resume deliberately unreleased; terminal execution storage is checked after release. Existing stale/unknown/duplicate/detach/expiry/cancellation coverage also passed. The Playwright modal assertions remain 20 seconds. The new published behavior SHA and all five final hosted job results will be recorded at closure.

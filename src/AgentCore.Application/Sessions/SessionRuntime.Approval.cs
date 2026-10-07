@@ -102,8 +102,9 @@ public sealed partial class SessionRuntime
                 input.Decision == ToolApprovalDecision.Approve
                     ? ApprovalWaitResult.Approved
                     : ApprovalWaitResult.Rejected);
-            await ResumeBoundExecutionAfterApprovalAsync(CancellationToken.None).ConfigureAwait(false);
+            // ACK the accepted decision; durable continuation remains owned by this mailbox.
             input.Completed?.TrySetResult(ResponseApprovalResult.Accepted);
+            await ResumeBoundExecutionAfterApprovalAsync(CancellationToken.None).ConfigureAwait(false);
             return;
         }
         catch
