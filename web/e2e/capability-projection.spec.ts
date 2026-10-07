@@ -47,7 +47,9 @@ test("Admin pins All with always projection and Chat loads only the needed inter
   expect(saved.candidate.environment.capabilities.mode).toBe("All");
   expect(saved.candidate.environment.capabilities.resolvedCapabilities.length).toBeGreaterThan(32);
   expect(saved.candidate.environment.projection.alwaysCapabilities).toEqual(["workspace.list", "knowledge.retrieve"]);
-  await completeDefinitionDraftPublishGate(page, editor, "capabilities.load", { skipToolAllowlist: true });
+  expect(saved.candidate.environment.capabilities.resolvedCapabilities).not.toContain("capabilities.load");
+  expect(saved.candidate.environment.capabilities.resolvedCapabilities).not.toContain("credentials.list");
+  await completeDefinitionDraftPublishGate(page, editor, "knowledge.retrieve", { skipToolAllowlist: true });
   await publishDraftFromInstructions(page, editor);
   const ownerResponse = await page.request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: id, version: 1 } });
   expect(ownerResponse.ok(), await ownerResponse.text()).toBe(true);

@@ -1631,25 +1631,25 @@ describe("AdminApp", () => {
     });
 
     await act(async () => {
-      render(<AdminApp route={{ area: "admin", view: "home" }} />);
+      render(<AdminApp route={{ area: "admin", view: "home", collection: "instances" }} />);
     });
-    fireEvent.click(screen.getByRole("tab", { name: "Instances" }));
     fireEvent.click(screen.getByRole("button", { name: "New instance" }));
-    expect(screen.getByText("v5 · Durable · Published")).toBeInTheDocument();
-    expect(screen.queryByText(/is deprecated/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText("Harness management (optional)"));
-    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Authoring mode" }));
+    const dialog = within(screen.getByRole("dialog", { name: "New instance" }));
+    expect(dialog.getByText("v5 · Durable · Published")).toBeInTheDocument();
+    expect(dialog.queryByText(/is deprecated/)).not.toBeInTheDocument();
+    fireEvent.click(dialog.getByText("Harness management (optional)"));
+    fireEvent.mouseDown(dialog.getByRole("combobox", { name: "Authoring mode" }));
     fireEvent.click(await screen.findByText("Managed", { selector: ".ant-select-item-option-content" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Knowledge & resources" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Skills" }));
-    expect(screen.getByRole("button", { name: "Create instance" })).toBeDisabled();
-    const areas = screen.getByRole("group", { name: "Areas the agent may manage" });
+    fireEvent.click(dialog.getByRole("checkbox", { name: "Knowledge & resources" }));
+    fireEvent.click(dialog.getByRole("checkbox", { name: "Skills" }));
+    expect(dialog.getByRole("button", { name: "Create instance" })).toBeDisabled();
+    const areas = dialog.getByRole("group", { name: "Areas the agent may manage" });
     expect(areas).toHaveAccessibleDescription("Select at least one area.");
     expect(areas).toHaveAttribute("aria-invalid", "true");
-    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Authoring mode" }));
+    fireEvent.mouseDown(dialog.getByRole("combobox", { name: "Authoring mode" }));
     fireEvent.click(await screen.findByText("Manual (off)", { selector: ".ant-select-item-option-content" }));
-    expect(screen.getByRole("button", { name: "Create instance" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "Create instance" }));
+    expect(dialog.getByRole("button", { name: "Create instance" })).toBeEnabled();
+    fireEvent.click(dialog.getByRole("button", { name: "Create instance" }));
 
     await waitFor(() => {
       expect(createAdminAgentInstance).toHaveBeenCalledWith("examiner", 5, null);
@@ -1686,21 +1686,21 @@ describe("AdminApp", () => {
     });
 
     await act(async () => {
-      render(<AdminApp route={{ area: "admin", view: "home" }} />);
+      render(<AdminApp route={{ area: "admin", view: "home", collection: "instances" }} />);
     });
-    fireEvent.click(screen.getByRole("tab", { name: "Instances" }));
     fireEvent.click(screen.getByRole("button", { name: "New instance" }));
-    fireEvent.mouseDown(screen.getByLabelText("Published version"));
+    const dialog = within(screen.getByRole("dialog", { name: "New instance" }));
+    fireEvent.mouseDown(dialog.getByLabelText("Published version"));
     fireEvent.click(await screen.findByText("v6 · Durable · Deprecated"));
     expect(
-      screen.getByText("v6 is deprecated. New instances normally use the latest active publication.")
+      dialog.getByText("v6 is deprecated. New instances normally use the latest active publication.")
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("radio", { name: "Custom persona" }));
-    fireEvent.change(screen.getByLabelText("Persona name"), { target: { value: "Casey" } });
-    fireEvent.change(screen.getByLabelText("Persona role"), { target: { value: "Guide" } });
-    fireEvent.change(screen.getByLabelText("Persona description"), { target: { value: "A field guide." } });
-    fireEvent.change(screen.getByLabelText("Persona tone"), { target: { value: "Direct" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create instance" }));
+    fireEvent.click(dialog.getByRole("radio", { name: "Custom persona" }));
+    fireEvent.change(dialog.getByLabelText("Persona name"), { target: { value: "Casey" } });
+    fireEvent.change(dialog.getByLabelText("Persona role"), { target: { value: "Guide" } });
+    fireEvent.change(dialog.getByLabelText("Persona description"), { target: { value: "A field guide." } });
+    fireEvent.change(dialog.getByLabelText("Persona tone"), { target: { value: "Direct" } });
+    fireEvent.click(dialog.getByRole("button", { name: "Create instance" }));
 
     await waitFor(() => {
       expect(createAdminAgentInstance).toHaveBeenCalledWith("examiner", 6, {

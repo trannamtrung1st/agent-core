@@ -153,6 +153,6 @@ describe("AgentPicker", () => {
     );
 
     expect(screen.getByRole("combobox", { name: "Identity" })).toBeDisabled();
-    expect(screen.getByText("Create an Agent Instance in Admin to start a conversation.")).toBeInTheDocument();
+    expect(screen.getByText("Create an instance in Admin to chat.")).toBeInTheDocument();
   });
 });

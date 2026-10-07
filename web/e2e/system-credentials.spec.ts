@@ -28,6 +28,10 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
   await create.getByRole("button", {name:"Add metadata"}).click();
   await create.getByLabel("Metadata key 2").fill("__proto__");
   await create.getByLabel("Metadata value 2").fill("safe metadata value");
+  const longMetadata = "Safe support context ".repeat(40);
+  await create.getByRole("button", {name:"Add metadata"}).click();
+  await create.getByLabel("Metadata key 3").fill("support-context");
+  await create.getByLabel("Metadata value 3").fill(longMetadata);
   await create.getByLabel("Allowed origins").fill("https://store.example.test");
   await create.getByLabel("Protected value", {exact:true}).fill("ui-known-private-9847");
   await expect(create.locator(".ant-input-password-icon")).toHaveCount(0);
@@ -35,6 +39,17 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
   await expect(create).toBeHidden();
   await page.getByRole("textbox", {name:"Search credentials",exact:true}).fill(name);
   const row = page.getByRole("row").filter({hasText:name}); await expect(row).toContainText("operator@example.test");
+  await expect(row).toContainText("1 more metadata field");
+  await row.getByRole("button", {name:"Expand row",exact:true}).click();
+  await expect(page.getByRole("region", {name:`Details for ${name}`})).toContainText(longMetadata.trim());
+  for (const width of [1440,768,390]) {
+    await page.setViewportSize({width,height:900});
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  }
+  await page.setViewportSize({width:1440,height:900});
+  await page.getByRole("textbox", {name:"Search credentials",exact:true}).fill("unmatched-credential-search");
+  await expect(page.getByText("No matches. Clear search or filters to see all results.")).toBeVisible();
+  await page.getByRole("textbox", {name:"Search credentials",exact:true}).fill(name);
   const c = (await owner(page,"credentials")).items.find((x: {displayName:string}) => x.displayName === name);
   expect(JSON.stringify(c)).not.toContain("ui-known-private-9847");
   expect(Object.hasOwn(c.metadata, "__proto__")).toBe(true);
@@ -59,8 +74,15 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
     await bind.getByRole("combobox", {name:"System credential"}).fill(name);
     await page.getByTitle(`${name} · Password · Active`, {exact:true}).click();
     await bind.getByLabel("Reference", {exact:true}).fill("invalid alias");
-    await bind.getByRole("button", {name:"OK",exact:true}).click(); await expect(bind.getByText("Use 1–64 letters, digits or hyphens.")).toBeVisible();
-    await bind.getByLabel("Reference", {exact:true}).fill(alias); await bind.getByRole("button", {name:"OK",exact:true}).click();
+    await bind.getByRole("button", {name:"Bind credential",exact:true}).click(); await expect(bind.getByText("Use 1–64 letters, digits or hyphens.")).toBeVisible();
+    await bind.getByLabel("Reference", {exact:true}).fill(alias);
+    if (alias === "primary") {
+      await page.route(`**/agent-instances/${instance.instanceId}/credential-bindings`, route => route.fulfill({status:409,json:{title:"Binding conflict",detail:"Try again with the current instance.",diagnosticId:"binding-write-diagnostic"}}), {times:1});
+      await bind.getByRole("button", {name:"Bind credential",exact:true}).click();
+      await expect(bind.getByRole("alert")).toContainText("Try again with the current instance.");
+      await expect(bind.getByLabel("Reference", {exact:true})).toHaveValue(alias);
+    }
+    await bind.getByRole("button", {name:"Bind credential",exact:true}).click();
     await expect(bind).toBeHidden(); await expect(page.getByRole("cell", {name:alias,exact:true})).toBeVisible();
   }
   await page.goto("/admin/credentials");
@@ -76,6 +98,10 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
   await edit.getByRole("button", {name:/Save credential/}).click(); await expect(edit).toBeHidden(); await expect(row).toContainText("Disabled");
   await page.goto(`/admin/instances/${a.instanceId}/connections`); await expect(page).toHaveURL(new RegExp(`/instances/${a.instanceId}/credentials$`));
   await expect(page.getByText("Password · Disabled")).toBeVisible();
+  await page.getByRole("button",{name:"Reset browser profile",exact:true}).click();
+  await page.getByRole("dialog",{name:"Reset browser profile?"}).getByRole("button",{name:"Cancel",exact:true}).click();
+  await expect(page.getByRole("dialog",{name:"Reset browser profile?"})).toBeHidden();
+  await expect(page.getByRole("cell",{name:"primary",exact:true})).toBeVisible();
   await page.getByRole("button",{name:"Reset browser profile",exact:true}).click();
   await page.getByRole("dialog",{name:"Reset browser profile?"}).getByRole("button",{name:"Reset browser profile",exact:true}).click();
   await expect(page.getByRole("cell",{name:"primary",exact:true})).toBeVisible();

@@ -11,7 +11,7 @@ const credential: api.SystemCredential = { credentialId: "credential", displayNa
   metadata: { username: "operator@example.test", application: "store" }, allowedOrigins: ["https://store.example.test"],
   revision: 2, bindingCount: 1, createdAtUtc: "2026-10-07T00:00:00Z", updatedAtUtc: "2026-10-07T00:00:00Z" };
 function view(child = <CredentialsSection />) { return render(<ConfigProvider><App>{child}</App></ConfigProvider>); }
-beforeEach(() => { vi.clearAllMocks(); vi.mocked(api.listCredentials).mockResolvedValue([credential]); });
+beforeEach(() => { vi.clearAllMocks(); vi.mocked(api.listCredentialBindings).mockResolvedValue([]); vi.mocked(api.listCredentials).mockResolvedValue([credential]); });
 afterEach(cleanup);
 
 describe("System credentials", () => {
@@ -66,6 +66,7 @@ describe("System credentials", () => {
   it("shows a collection load failure and retries to an empty inventory", async () => {
     vi.mocked(api.listCredentials).mockRejectedValueOnce(new Error("Network unavailable")).mockResolvedValue([]);
     view(); expect(await screen.findByRole("alert")).toHaveTextContent("Network unavailable");
+    expect(screen.queryByText("No credentials yet")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByText("No credentials yet")).toBeInTheDocument();
     expect(api.listCredentials).toHaveBeenCalledTimes(2);
@@ -77,4 +78,44 @@ describe("System credentials", () => {
     for (const name of ["Bind credential", "Unbind", "Reset browser profile"]) expect(screen.getByRole("button", { name })).toBeDisabled();
     expect(screen.getByText("username: operator@example.test")).toBeInTheDocument();
   });
+  it("searches visible origin, metadata key and status fields and distinguishes no matches", async () => {
+    view(); await screen.findByRole("button", { name: "Edit" });
+    const search = screen.getByRole("textbox", { name: "Search credentials" });
+    for (const value of ["store.example.test", "USERNAME", " Active "]) {
+      fireEvent.change(search, { target: { value } });
+      expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    }
+    fireEvent.change(search, { target: { value: "missing-credential" } });
+    expect(screen.getByText("No matches. Clear search or filters to see all results.")).toBeInTheDocument();
+    expect(screen.queryByText("No credentials yet")).toBeNull();
+    fireEvent.change(search, { target: { value: "" } });
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+  });
+  it("retains complete safe metadata in expandable details without growing the collection row", async () => {
+    const longValue = "safe-detail-".repeat(100);
+    vi.mocked(api.listCredentials).mockResolvedValue([{ ...credential, metadata: { ...credential.metadata, third: longValue } }]);
+    view(); await screen.findByRole("button", { name: "Edit" });
+    expect(screen.getByText("1 more metadata field")).toBeInTheDocument();
+    expect(screen.queryByText(`third: ${longValue}`)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Expand row" }));
+    expect(within(screen.getByRole("region", { name: "Details for Shared store" })).getByText(`third: ${longValue}`)).toBeInTheDocument();
+  });
+  it("keeps failed binding feedback and alias inside the dialog and permits a retry", async () => {
+    vi.mocked(api.bindCredential).mockRejectedValueOnce(new Error("Binding revision conflict")).mockResolvedValue({ bindingId: "grant", credentialId: "credential", reference: "store-admin", revision: 1, credential });
+    view(<InstanceCredentialsSection instanceId="owner" revision={2} archived={false} />);
+    const opener = await screen.findByRole("button", { name: "Bind credential" });
+    await waitFor(() => expect(opener).toBeEnabled()); fireEvent.click(opener);
+    const dialog = within(screen.getByRole("dialog", { name: "Bind credential" }));
+    fireEvent.mouseDown(dialog.getByRole("combobox", { name: "System credential" }));
+    fireEvent.click(await screen.findByText("Shared store · Password · Active"));
+    fireEvent.change(dialog.getByLabelText("Reference", { exact: true }), { target: { value: "store-admin" } });
+    fireEvent.click(dialog.getByRole("button", { name: "Bind credential" }));
+    expect(await dialog.findByRole("alert")).toHaveTextContent("Binding revision conflict");
+    expect(dialog.getByLabelText("Reference", { exact: true })).toHaveValue("store-admin");
+    await waitFor(() => expect(dialog.getByRole("button", { name: "Bind credential" })).toBeEnabled());
+    fireEvent.click(dialog.getByRole("button", { name: "Bind credential" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(api.bindCredential).toHaveBeenCalledTimes(2);
+  });
+
 });

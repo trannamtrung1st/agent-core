@@ -64,7 +64,7 @@ export function AgentPicker({
         style={{ width: "100%" }}
       />
       {!managedInstancesLoading && !managedInstancesError && !hasOptions ? (
-        <Typography.Text type="secondary">Create an Agent Instance in Admin to start a conversation.</Typography.Text>
+        <Typography.Text type="secondary">Create an instance in Admin to chat.</Typography.Text>
       ) : null}
       <SpeechLocalePicker value={speechLocale} onChange={onSpeechLocaleChange} />
     </Flex>
