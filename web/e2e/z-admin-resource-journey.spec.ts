@@ -1,3 +1,4 @@
+import { startSyntheticChat } from "./admin-managed-helpers";
 import { expect, test } from "@playwright/test";
 import {
   completeDefinitionDraftPublishGate,
@@ -7,14 +8,6 @@ import { definitionDraftsSection, forkBuiltInV1Draft } from "./admin-draft-edito
 
 const antdNoise = (line: string) =>
   line.includes("[antd: List]") || line.includes("[antd: Alert]");
-
-async function startSyntheticChat(page: import("@playwright/test").Page) {
-  await page.goto("/");
-  await page.getByLabel("Message").fill("Hello");
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
-  await page.waitForFunction(() => window.localStorage.getItem("agent-core.owner-capability"));
-}
 
 async function readWorkspaceText(page: import("@playwright/test").Page, sessionId: string, logicalPath: string) {
   return page.evaluate(

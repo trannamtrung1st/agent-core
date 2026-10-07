@@ -1,3 +1,4 @@
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, type Page } from "@playwright/test";
 import {
   completeDefinitionDraftPublishGate,
@@ -156,6 +157,7 @@ export async function publishExaminerP7gFirstPublication(page: Page) {
 
 export async function startSyntheticChat(page: Page) {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await page.getByLabel("Message").fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });

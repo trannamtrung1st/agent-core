@@ -1,3 +1,4 @@
+import { startSyntheticChat } from "./admin-managed-helpers";
 import { execFileSync } from "node:child_process";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
@@ -8,14 +9,6 @@ import { definitionDraftsSection, draftEditorSection } from "./admin-draft-edito
 
 const antdNoise = (line: string) =>
   line.includes("[antd: List]") || line.includes("[antd: Alert]") || line.includes("[antd: message]");
-
-async function startSyntheticChat(page: Page) {
-  await page.goto("/");
-  await page.getByLabel("Message").fill("Hello");
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
-  await page.waitForFunction(() => window.localStorage.getItem("agent-core.owner-capability"));
-}
 
 async function saveDraft(page: Page, editor: Locator) {
   await editor.getByRole("button", { name: "Save draft" }).click();

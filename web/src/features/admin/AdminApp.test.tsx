@@ -1644,7 +1644,9 @@ describe("AdminApp", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Knowledge & resources" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Skills" }));
     expect(screen.getByRole("button", { name: "Create instance" })).toBeDisabled();
-    await waitFor(() => expect(screen.getByText("Select at least one area.")).toBeVisible());
+    const areas = screen.getByRole("group", { name: "Areas the agent may manage" });
+    expect(areas).toHaveAccessibleDescription("Select at least one area.");
+    expect(areas).toHaveAttribute("aria-invalid", "true");
     fireEvent.mouseDown(screen.getByRole("combobox", { name: "Authoring mode" }));
     fireEvent.click(await screen.findByText("Manual (off)", { selector: ".ant-select-item-option-content" }));
     expect(screen.getByRole("button", { name: "Create instance" })).toBeEnabled();
