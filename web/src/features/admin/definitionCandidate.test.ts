@@ -157,14 +157,22 @@ describe("definitionCandidate", () => {
         name: "Demo",
         description: "",
         procedure: "PROC",
-        activationKeywords: "silly joke,",
+        projection: "OnDemand", defaultEnabled: true,
         requiredCapabilities: "workspace.read,",
         resourcePaths: ""
       }
     ]);
     const skill = readSkills(edited)[0];
-    expect(skill.activationKeywords).toBe("silly joke,");
+    expect(skill.projection).toBe("OnDemand");
     expect(skill.requiredCapabilities).toBe("workspace.read,");
+  });
+
+  it("does not infer missing or invalid projection and default enabled values", () => {
+    const malformed = { ...sample, skills: [{ id: 'review', name: 'Review', description: 'Review', procedure: 'Review', projection: 0 }] };
+    const skill = readSkills(malformed)[0];
+    expect(skill.projection).toBeUndefined(); expect(skill.defaultEnabled).toBeUndefined();
+    const changed = writeSkills(malformed, [{ ...skill, description: 'Edited' }]);
+    expect(JSON.stringify(changed)).not.toContain('OnDemand'); expect(JSON.stringify(changed)).not.toContain('defaultEnabled');
   });
 
   it("round-trips skills and omits an empty list", () => {
@@ -174,7 +182,7 @@ describe("definitionCandidate", () => {
         name: "Refund",
         description: "Handle a refund",
         procedure: "REFUND_PROCEDURE",
-        activationKeywords: "refund, return",
+        projection: "OnDemand", defaultEnabled: true,
         requiredCapabilities: "workspace.read, chat.respond",
         resourcePaths: "notes/refund.md"
       }
@@ -187,7 +195,7 @@ describe("definitionCandidate", () => {
           name: "Refund",
           description: "Handle a refund",
           procedure: "REFUND_PROCEDURE",
-          activationKeywords: "refund, return",
+          projection: "OnDemand", defaultEnabled: true,
           requiredCapabilities: "workspace.read, chat.respond",
           resourcePaths: "notes/refund.md"
         }
@@ -198,7 +206,7 @@ describe("definitionCandidate", () => {
       id: "refund.handle",
       name: "Refund",
       procedure: "REFUND_PROCEDURE",
-      activationKeywords: "refund, return",
+      projection: "OnDemand", defaultEnabled: true,
       requiredCapabilities: "workspace.read, chat.respond",
       resourcePaths: "notes/refund.md",
       marker: "keep"
@@ -209,7 +217,7 @@ describe("definitionCandidate", () => {
         name: "Refund",
         description: "Handle a refund",
         procedure: "REFUND_PROCEDURE",
-        activationKeywords: ["refund", "return"],
+        projection: "OnDemand", defaultEnabled: true,
         requiredCapabilities: ["workspace.read", "chat.respond"],
         resourcePaths: ["notes/refund.md"],
         marker: "keep"

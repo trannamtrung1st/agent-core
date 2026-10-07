@@ -19,12 +19,6 @@ internal static class HarnessLegacyFixture
                 Content: "Review permitted order policy and stop before production changes.", Source: "knowledge:support-order-policy"));
             review = await service.ReviewAsync(id); draft = review.Draft!;
         }
-        if (review.State.Policy.Allows(HarnessManagementScope.Skills) && !draft.Candidate.SkillList.Any(s => s.Id == "operations.review"))
-        {
-            await service.RequestOperationAsync(id, prepId, new("skill.upsert", draft.Revision,
-                Skill: new("operations.review", "Operations review", "Review safely", "Review evidence and stop before production changes.", [], ["chat.respond"], [])));
-            review = await service.ReviewAsync(id); draft = review.Draft!;
-        }
         if (review.State.Policy.Allows(HarnessManagementScope.ToolSelection) && review.State.Preparation!.Approvals.Count == 0)
         {
             await service.RequestOperationAsync(id, prepId, new("tool.select", draft.Revision, Id: "web.fetch", Enabled: true));

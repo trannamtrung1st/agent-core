@@ -12,7 +12,7 @@ public sealed record HarnessPolicyResponse(string Mode, IReadOnlyList<string> Sc
 public sealed record HarnessSkillResponse(string Id, string Name, string Description, string Procedure,
     IReadOnlyList<string> RequiredCapabilities, IReadOnlyList<string> ResourcePaths);
 public sealed record HarnessOperationResponse(string Kind, long DraftRevision, string? Id, string? Content,
-    string? Source, HarnessSkillResponse? Skill, bool? Enabled, bool? AllowUnreadUnsupportedTypes);
+    string? Source, bool? Enabled, bool? AllowUnreadUnsupportedTypes);
 public sealed record HarnessApprovalResponse(string ApprovalId, string ActionHash, HarnessOperationResponse Operation, string Status);
 public sealed record HarnessEvidenceResponse(string Actor, long DraftRevision, string Check, string Status,
     string Expected, string Observed, string? Limitation);

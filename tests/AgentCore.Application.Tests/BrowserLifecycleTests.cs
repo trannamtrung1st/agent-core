@@ -155,7 +155,7 @@ public sealed class BrowserLifecycleTests
             Guid.Parse("019944af-00c4-7000-8000-000000000003"),
             Guid.Parse("019944af-00c4-7000-8000-000000000004"));
         var call = new ModelToolCall("nav-1", ToolCatalog.BrowserNavigate, """{"url":"http://127.0.0.1:5091/"}""");
-        var payload = DurableToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [call])]);
+        var payload = DurableToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [call])], skillState: new([], [], 0));
         var store = new InMemoryWorkItemStore();
         var created = await store.CreateAsync(WorkItem.Create(
             workId,

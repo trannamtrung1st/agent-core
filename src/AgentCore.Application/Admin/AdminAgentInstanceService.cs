@@ -104,7 +104,7 @@ public sealed class AdminAgentInstanceService(
             definition.Version,
             personaSource: personaSource,
             personaFingerprint: AdminPersonaHistoryFingerprint.Compute(storedPersona));
-        var created = await instances.InsertManagedWithHistoryAsync(instance, append, cancellationToken)
+        var created = await instances.InsertManagedWithHistoryAsync(instance, append, cancellationToken, definition.SkillList)
             .ConfigureAwait(false);
         OperationalDiagnostics.RecordAdmin(
             "instanceCreate",
@@ -174,7 +174,7 @@ public sealed class AdminAgentInstanceService(
             instance.ActiveVersion,
             definition.Version, actorKind);
         var updated = await instances.UpdateActiveVersionWithHistoryAsync(
-                new AgentInstanceRevisionUpdate(instance.InstanceId, expectedRevision, ActiveVersion: definition.Version, HarnessManagement: harnessManagement),
+                new AgentInstanceRevisionUpdate(instance.InstanceId, expectedRevision, ActiveVersion: definition.Version, HarnessManagement: harnessManagement, DefinitionSkills: definition.SkillList),
                 now,
                 append,
                 cancellationToken)

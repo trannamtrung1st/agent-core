@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Agents;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Definitions;
@@ -61,15 +62,25 @@ public sealed class DurableOccurrenceExecution(
             out var restoredObservation,
             out var restoredBlockedHash);
         var messages = resumed ? savedMessages!.ToList() : request.Messages.ToList();
+        var skillState = resumed ? DurableToolCallCheckpoint.ReadSkillState(running.Checkpoint)
+            : new DurableToolCallCheckpoint.ExecutionSkillState(await tools.ResolveSkillCatalogAsync(running.Owner.AgentInstanceId, definition, cancellationToken), [], 0);
+        if (!resumed) skillState = skillState with { ActiveKeys = skillState.Catalog.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray() };
+        if (!resumed)
+        {
+            var catalogText = PromptContextBuilder.BuildSkillCatalogSystem(skillState.Catalog);
+            if (catalogText.Length > 0) messages.Insert(0, new(ModelRole.System, catalogText));
+            messages = PromptContextBuilder.WithActiveSkillSystem(messages, skillState.Catalog, skillState.ActiveKeys).ToList();
+        }
         var restoredCapabilities = resumed ? DurableToolCallCheckpoint.ReadCapabilityState(running.Checkpoint) : (Ids: (IReadOnlyList<string>)[], Calls: 0);
         var loadedCapabilities = restoredCapabilities.Ids.ToHashSet(StringComparer.Ordinal);
         var loadCalls = restoredCapabilities.Calls;
         var projectionContext = projectionContextSnapshot ?? new AgentContext(definition, [], "", null, AgentCore.Domain.Conversation.SessionMode.Text, null, false, null,
             new AgentTrigger(running.WorkItemId, triggerKind, null), DetachedExecution: true, AgentInstanceId: running.Owner.AgentInstanceId,
             ModelSupportsTools: model.Capabilities.Tools, ModelSupportsVision: model.Capabilities.Vision,
-            ActiveSkillIds: AgentCore.Application.Agents.DeterministicSkillSelector.SelectActiveIds(definition, string.Join(" ", request.Messages.Where(m => m.Role == ModelRole.User).Select(m => m.Text))),
+            ActiveSkillKeys: skillState.ActiveKeys, PinnedSkillCatalog: skillState.Catalog,
             Harness: await tools.HarnessContextAsync(running.Owner.AgentInstanceId, cancellationToken),
             ContinuityContext: await tools.ContinuityContextAsync(running.Owner.AgentInstanceId, null, running.WorkItemId, definition, cancellationToken));
+        projectionContext = projectionContext with { ActiveSkillKeys = skillState.ActiveKeys, PinnedSkillCatalog = skillState.Catalog };
         var steps = resumed ? running.Checkpoint!.StepCount : 0;
         var outputBytes = resumed ? running.Checkpoint!.OutputBytes : 0;
         var remaining = resumed
@@ -99,8 +110,9 @@ public sealed class DurableOccurrenceExecution(
         var observationRequired = restoredObservation;
         string? blockedActionHash = restoredBlockedHash;
         var browserUnavailable = false;
-        if (!DurableToolCallCheckpoint.TryWrite(messages, observationRequired, blockedActionHash, out _, CheckpointCapabilityIds(), loadCalls))
+        if (!DurableToolCallCheckpoint.TryWrite(messages, observationRequired, blockedActionHash, out _, CheckpointCapabilityIds(), loadCalls, skillState))
             return CheckpointCapacityFailure();
+        if (!resumed && !await SaveCheckpointAsync().ConfigureAwait(false)) return CheckpointCapacityFailure();
         if (resumed)
         {
             var normalizedSteps = DurableToolCallCheckpoint.NormalizeResumedStepCount(steps, messages);
@@ -226,7 +238,7 @@ public sealed class DurableOccurrenceExecution(
             if (terminalBatch) pending[0] = pending[0] with { Id = DurableToolCallCheckpoint.CompletionCallId };
             var batch = messages.Append(new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: pending)).ToArray();
             if (!terminalBatch && !DurableToolCallCheckpoint.TryWriteWithReserve(batch, observationRequired,
-                blockedActionHash, DurableToolCallCheckpoint.CompletionReserve(triggerKind), out _, CheckpointCapabilityIds(), loadCalls))
+                blockedActionHash, DurableToolCallCheckpoint.CompletionReserve(triggerKind), out _, CheckpointCapabilityIds(), loadCalls, skillState))
                 return CheckpointCapacityFailure();
             messages.Add(batch[^1]);
             steps += pending.Count;
@@ -320,6 +332,15 @@ public sealed class DurableOccurrenceExecution(
                     ToolResources.IsSessionTool(call.Name) && !ToolCatalog.IsBrowserTool(call.Name) && !HarnessChatTools.IsHarness(call.Name)
                     ? """{"error":"forbidden","message":"Session context is required."}"""
                     : """{"error":"forbidden","message":"Tool is not permitted in this execution origin."}"""), false);
+            if (call.Name == ToolCatalog.SkillsLoad)
+            {
+                if (!SkillLoadAdmission.TryParseIds(args, out var requested, out var error)) return await AppendResultAsync(call, ToolExecutionResult.FromText(error), false);
+                var plan = SkillLoadAdmission.Plan(skillState.Catalog, skillState.ActiveKeys, skillState.LoadCount, requested);
+                skillState = skillState with { ActiveKeys = skillState.ActiveKeys.Concat(plan.IdsToAppend).ToArray(), LoadCount = skillState.LoadCount + (plan.IncrementInvocation ? 1 : 0) };
+                projectionContext = projectionContext with { ActiveSkillKeys = skillState.ActiveKeys };
+                messages = PromptContextBuilder.WithActiveSkillSystem(messages, skillState.Catalog, skillState.ActiveKeys).ToList();
+                return await AppendResultAsync(call, ToolExecutionResult.FromText(plan.ToToolResultJson()), false);
+            }
             if (call.Name == ToolCatalog.CapabilitiesLoad)
             {
                 try
@@ -398,7 +419,7 @@ public sealed class DurableOccurrenceExecution(
             }
 
             var resultBudget = Math.Min(RemainingOutput(outputBytes),
-                DurableToolCallCheckpoint.ToolResultBudget(messages, call, observationRequired, blockedActionHash, triggerKind, CheckpointCapabilityIds(), loadCalls));
+                DurableToolCallCheckpoint.ToolResultBudget(messages, call, observationRequired, blockedActionHash, triggerKind, CheckpointCapabilityIds(), loadCalls, skillState));
             if (resultBudget < 128)
                 return await AppendResultAsync(call, ToolExecutionResult.FromText(DurableToolCallCheckpoint.FinishRequired), false);
 
@@ -628,9 +649,9 @@ public sealed class DurableOccurrenceExecution(
             var reserve = DurableToolCallCheckpoint.CompletionReserve(triggerKind)
                 + (IsFinishRequired(execution.Text) ? 0 : DurableToolCallCheckpoint.FinishRequiredReserve());
             if (!DurableToolCallCheckpoint.TryWriteWithReserve(messages.Append(resultMessage).ToArray(),
-                observationRequired, blockedActionHash, reserve, out _, CheckpointCapabilityIds(), loadCalls))
+                observationRequired, blockedActionHash, reserve, out _, CheckpointCapabilityIds(), loadCalls, skillState))
             {
-                var budget = DurableToolCallCheckpoint.ToolResultBudget(messages, call, observationRequired, blockedActionHash, triggerKind, CheckpointCapabilityIds(), loadCalls);
+                var budget = DurableToolCallCheckpoint.ToolResultBudget(messages, call, observationRequired, blockedActionHash, triggerKind, CheckpointCapabilityIds(), loadCalls, skillState);
                 if (budget < 128) return CheckpointCapacityFailure();
                 var bounded = ToolJsonResults.FitJsonWithContentField(budget, execution.Text, (prefix, _) =>
                     JsonSerializer.Serialize(new { truncated = true, reason = "checkpoint_capacity", resultPrefix = prefix }));
@@ -685,7 +706,7 @@ public sealed class DurableOccurrenceExecution(
         async ValueTask<bool> SaveCheckpointAsync()
         {
             if (!DurableToolCallCheckpoint.TryWrite(messages, observationRequired, blockedActionHash, out var payload,
-                definition.Environment?.Capabilities is null ? null : CheckpointCapabilityIds(), loadCalls))
+                definition.Environment?.Capabilities is null ? null : CheckpointCapabilityIds(), loadCalls, skillState))
                 return false;
             running = await checkpoint(running, new WorkCheckpoint(payload, steps, outputBytes,
                 (int)Math.Max(remaining.TotalMilliseconds, 0)), cancellationToken).ConfigureAwait(false);

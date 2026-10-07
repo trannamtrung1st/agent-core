@@ -1,3 +1,4 @@
+import { InstanceSkillsSection } from "./InstanceSkillsSection";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { updateHarness } from "../../services/adminApi";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -605,7 +606,7 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
   const [version, setVersion] = useState<number | null>(null);
   const [personaMode, setPersonaMode] = useState<"default" | "custom">("default");
   const [harnessMode, setHarnessMode] = useState<import("../../services/adminApi").HarnessMode>("Disabled");
-  const [harnessAreas, setHarnessAreas] = useState<import("../../services/adminApi").HarnessScope[]>(["KnowledgeResources", "Skills"]);
+  const [harnessAreas, setHarnessAreas] = useState<import("../../services/adminApi").HarnessScope[]>(["KnowledgeResources"]);
   const [persona, setPersona] = useState<AdminCreateInstancePersona>({
     name: "",
     role: "",
@@ -631,7 +632,7 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
     }
     setPersonaMode("default");
     setHarnessMode("Disabled");
-    setHarnessAreas(["KnowledgeResources", "Skills"]);
+    setHarnessAreas(["KnowledgeResources"]);
     setPersona({ name: "", role: "", description: "", tone: "" });
     setOpen(true);
   };
@@ -2446,6 +2447,9 @@ export function InstanceDetail({
                 ]} />
               }]),
               ...([{
+                key: "skills", label: "Skills", children: <InstanceSkillsSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} active={activeTab === "skills"} onUpdated={onInstanceChanged} />
+              },
+              {
                 key: "continuity", label: "Continuity",
                 children: <Flex vertical gap={token.padding}>{resolved.instanceLifecycle === "Active" ? <IdentityMaintenanceSection instanceId={instanceId} /> : null}<Tabs activeKey={continuityTab} onChange={key => setActiveTab("continuity", key as AdminInstanceSection)} aria-label="Continuity sections" items={[
                   { key: "memory", label: "Memory", children: <InstanceMemoryAutomationPanel config={resolved} section="memory" /> },

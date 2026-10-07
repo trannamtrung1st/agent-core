@@ -51,7 +51,7 @@ public sealed record AgentContext(
     ScheduleConversationContext? ScheduleConversation = null,
     ScheduleDraftContext? ScheduleDraft = null,
     bool DetachedExecution = false,
-    IReadOnlyList<string>? ActiveSkillIds = null,
+    IReadOnlyList<string>? ActiveSkillKeys = null,
     bool IntermediateMessagingAllowed = false,
     Guid? AgentInstanceId = null,
     bool CredentialMetadataAvailable = false,
@@ -61,7 +61,7 @@ public sealed record AgentContext(
     string? ContinuityContext = null,
     bool AllowAgentConsolidation = false,
     bool AgentWorkspaceAvailable = false,
-    IReadOnlyList<string>? LoadedCapabilityIds = null)
+    IReadOnlyList<string>? LoadedCapabilityIds = null, IReadOnlyList<EffectiveSkill>? PinnedSkillCatalog = null)
 {
     public AgentIdentity EffectiveIdentity => Persona ?? Definition.Identity;
 }

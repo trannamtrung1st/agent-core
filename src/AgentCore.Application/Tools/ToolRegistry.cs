@@ -286,7 +286,7 @@ public static class ToolRegistry
                 ToolReplaySafety.NonReplayable),
             [ToolCatalog.SkillsLoad] = Descriptor(
                 ToolCatalog.SkillsLoad,
-                "Load procedures for Skill ids from the pinned definition version. Required capabilities stay requirements and do not grant tools, credentials, or approval.",
+                "Load OnDemand procedures by canonical keys (definition:<id> or instance:<Guid>) from this execution’s pinned effective Skill catalog. Required capabilities stay requirements and do not grant tools, credentials, or approval.",
                 """{"type":"object","additionalProperties":false,"properties":{"ids":{"type":"array","minItems":1,"maxItems":4,"items":{"type":"string"}}},"required":["ids"]}""",
                 ToolEffect.ReadOnly,
                 ToolOfferRule.CurrentExecutionCapability,
@@ -299,7 +299,7 @@ public static class ToolRegistry
                 ToolEffect.Write)
         };
 
-    private static readonly IReadOnlyDictionary<string, ToolDescriptor> Contextual = HarnessChatTools.Descriptors().ToDictionary(d => d.Name, StringComparer.Ordinal);
+    private static readonly IReadOnlyDictionary<string, ToolDescriptor> Contextual = HarnessChatTools.Descriptors().Concat(InstanceSkillTools.Descriptors()).ToDictionary(d => d.Name, StringComparer.Ordinal);
     public static IEnumerable<ToolDescriptor> All => Registered.Values.Concat(Contextual.Values);
 
     public static IEnumerable<ToolDescriptor> DefinitionAuthorizable => All.Where(d => d.DefinitionAuthorizable);

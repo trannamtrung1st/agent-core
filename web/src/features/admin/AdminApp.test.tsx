@@ -1641,7 +1641,6 @@ describe("AdminApp", () => {
     fireEvent.mouseDown(dialog.getByRole("combobox", { name: "Authoring mode" }));
     fireEvent.click(await screen.findByText("Managed", { selector: ".ant-select-item-option-content" }));
     fireEvent.click(dialog.getByRole("checkbox", { name: "Knowledge & resources" }));
-    fireEvent.click(dialog.getByRole("checkbox", { name: "Skills" }));
     expect(dialog.getByRole("button", { name: "Create instance" })).toBeDisabled();
     const areas = dialog.getByRole("group", { name: "Areas the agent may manage" });
     expect(areas).toHaveAccessibleDescription("Select at least one area.");

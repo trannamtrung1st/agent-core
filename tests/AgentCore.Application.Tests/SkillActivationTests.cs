@@ -1,455 +1,123 @@
 using AgentCore.Application.Agents;
-using AgentCore.Application.Events;
+using AgentCore.Application.Admin;
+using AgentCore.Application.Identity;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
-using AgentCore.Application.Testing;
 using AgentCore.Application.Tools;
-using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
-using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
-using AgentCore.Infrastructure.Providers.Synthetic;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
-
 namespace AgentCore.Application.Tests;
 
 public sealed class SkillActivationTests
 {
+    private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-10-07T00:00:00Z");
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Failed_version_reconciliation_leaves_owner_and_skill_rows_unchanged(bool sqlite)
+    {
+        await using var db = sqlite ? await SqliteTestHarness.CreateMigratedAsync() : null;
+        var ids = new SystemIdGenerator(TimeProvider.System); var clock = new FakeTimeProvider(Now);
+        IAgentInstanceStore store = sqlite ? new SqliteAgentInstanceStore(db!.Factory, ids) : new InMemoryAgentInstanceStore();
+        var original = Definition(1, new SkillSpec("review", "Review", "Review", "SMALL", SkillProjection.Always, true, [], []));
+        var upgraded = Definition(2,
+            new SkillSpec("review", "Review", "Review", new string('a', 4000), SkillProjection.Always, true, [], []),
+            new SkillSpec("added", "Added", "Added", new string('b', 4000), SkillProjection.Always, true, [], []));
+        var defs = new Definitions(original, upgraded); var instances = new AgentInstanceService(store, defs, ids, clock);
+        var owner = await instances.CreateAsync(original.Id, 1);
+        var service = new AgentInstanceSkillService(store, defs, ids, clock);
+        await service.WriteAsync(owner.InstanceId, "create", input: new("Local", "Local", "LOCAL", SkillProjection.Always, true, []), actor: SkillAuthor.Agent);
+        owner = (await store.FindAsync(owner.InstanceId))!;
+        var before = await store.ReadSkillsAsync(owner.InstanceId);
+        await Assert.ThrowsAsync<AgentCoreException>(() => instances.UpgradeAsync(owner.InstanceId, 2, owner.Revision).AsTask());
+        Assert.Equal(owner, await store.FindAsync(owner.InstanceId));
+        var after = await store.ReadSkillsAsync(owner.InstanceId);
+        Assert.Equal(before.DefinitionStates, after.DefinitionStates); Assert.Equal(before.InstanceSkills, after.InstanceSkills);
+        Assert.DoesNotContain(after.DefinitionStates, s => s.DefinitionSkillId == "added");
+    }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Durable_ownership_customization_revision_and_upgrade_are_consistent(bool sqlite)
+    {
+        await using var db = sqlite ? await SqliteTestHarness.CreateMigratedAsync() : null;
+        var ids = new SystemIdGenerator(TimeProvider.System); var clock = new FakeTimeProvider(Now);
+        IAgentInstanceStore store = sqlite ? new SqliteAgentInstanceStore(db!.Factory, ids) : new InMemoryAgentInstanceStore();
+        var original = Definition(1, new SkillSpec("review", "Review", "Review orders", "ORIGINAL", SkillProjection.OnDemand, true, [], []));
+        var upgraded = Definition(2, new SkillSpec("review", "Review", "New review", "UPSTREAM", SkillProjection.Always, false, [], []), new SkillSpec("added", "Added", "New default", "ADDED", SkillProjection.OnDemand, false, [], []));
+        var removed = Definition(3);
+        var defs = new Definitions(original, upgraded, removed);
+        var instances = new AgentInstanceService(store, defs, ids, clock);
+        var owner = await instances.CreateAsync(original.Id, 1);
+        var service = new AgentInstanceSkillService(store, defs, ids, clock);
+        var initial = Assert.Single(await service.ListAsync(owner.InstanceId));
+        Assert.True(initial.Enabled); Assert.Equal("definition:review", initial.Key);
+        var copied = await service.WriteAsync(owner.InstanceId, "customize", initial.Key, initial.Revision, actor: SkillAuthor.Agent);
+        Assert.Equal(SkillOrigin.Instance, copied.Origin); Assert.Equal("review", copied.SourceDefinitionSkillId);
+        Assert.False((await service.InspectAsync(owner.InstanceId, initial.Key)).Enabled);
+        Assert.Equal("ORIGINAL", copied.Procedure);
+        var updated = await service.WriteAsync(owner.InstanceId, "update", copied.Key, copied.Revision,
+            new("Review", "Local review", "LOCAL", SkillProjection.Always, true, []), actor: SkillAuthor.Agent);
+        Assert.Equal(copied.Revision + 1, updated.Revision);
+        await Assert.ThrowsAsync<AgentCoreException>(() => service.WriteAsync(owner.InstanceId, "delete", copied.Key, copied.Revision, actor: SkillAuthor.Agent).AsTask());
+        await Assert.ThrowsAsync<AgentCoreException>(() => service.WriteAsync(owner.InstanceId, "delete", initial.Key, 2, actor: SkillAuthor.Agent).AsTask());
+        owner = (await store.FindAsync(owner.InstanceId))!;
+        await instances.UpgradeAsync(owner.InstanceId, 2, owner.Revision);
+        var afterUpgrade = await service.ListAsync(owner.InstanceId);
+        Assert.False(afterUpgrade.Single(s => s.Key == initial.Key).Enabled);
+        Assert.Equal("UPSTREAM", afterUpgrade.Single(s => s.Key == initial.Key).Procedure);
+        Assert.False(afterUpgrade.Single(s => s.Key == "definition:added").Enabled);
+        Assert.Equal("LOCAL", afterUpgrade.Single(s => s.Key == copied.Key).Procedure);
+        owner = (await store.FindAsync(owner.InstanceId))!;
+        await instances.UpgradeAsync(owner.InstanceId, 3, owner.Revision);
+        Assert.Single(await service.ListAsync(owner.InstanceId));
+        Assert.Equal(2, (await store.ReadSkillsAsync(owner.InstanceId)).DefinitionStates.Count);
+        owner = (await store.FindAsync(owner.InstanceId))!;
+        await instances.UpgradeAsync(owner.InstanceId, 1, owner.Revision);
+        Assert.False((await service.InspectAsync(owner.InstanceId, initial.Key)).Enabled);
+        var readStore = sqlite ? new SqliteAgentInstanceStore(db!.Factory, ids) : store;
+        Assert.Equal("LOCAL", Assert.Single((await readStore.ReadSkillsAsync(owner.InstanceId)).InstanceSkills).Procedure);
+        await service.WriteAsync(owner.InstanceId, "delete", copied.Key, updated.Revision, actor: SkillAuthor.Agent);
+        Assert.Empty((await store.ReadSkillsAsync(owner.InstanceId)).InstanceSkills);
+    }
     [Fact]
-    public void Selector_matches_keywords_in_definition_order_and_stops_at_three()
+    public async Task Current_execution_keeps_old_content_and_next_execution_sees_durable_changes_without_shadowing()
     {
-        var definition = Definition(
-            Skill("refund.handle", "REFUND_PROCEDURE", ["refund"]),
-            Skill("order.lookup", "ORDER_PROCEDURE", ["order"]),
-            Skill("billing.note", "BILLING_PROCEDURE", ["billing"]),
-            Skill("shipping.note", "SHIPPING_PROCEDURE", ["shipping"]));
-
-        Assert.Equal(
-            ["refund.handle"],
-            DeterministicSkillSelector.SelectActiveIds(definition, "Please REFUND this"));
-        Assert.Equal(
-            ["order.lookup"],
-            DeterministicSkillSelector.SelectActiveIds(definition, "Check the order"));
-        Assert.Equal(
-            ["refund.handle", "order.lookup", "billing.note"],
-            DeterministicSkillSelector.SelectActiveIds(definition, "refund order billing shipping"));
-        Assert.Empty(DeterministicSkillSelector.SelectActiveIds(definition, "hello"));
-        Assert.Empty(DeterministicSkillSelector.SelectActiveIds(definition, "   "));
+        var store = new InMemoryAgentInstanceStore(); var ids = new SystemIdGenerator(TimeProvider.System); var clock = new FakeTimeProvider(Now);
+        var d = Definition(1, new SkillSpec("review", "Review", "Definition review", "DEFINITION", SkillProjection.Always, true, [], []));
+        var defs = new Definitions(d); var owner = await new AgentInstanceService(store, defs, ids, clock).CreateAsync(d.Id);
+        var service = new AgentInstanceSkillService(store, defs, ids, clock);
+        var local = await service.WriteAsync(owner.InstanceId, "create", input: new("Review", "Local", "OLD", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent);
+        var resolver = new EffectiveSkillCatalogResolver(store); var pin = await resolver.ResolveAsync(owner.InstanceId, d);
+        Assert.Equal(2, pin.Count); Assert.Equal(2, pin.Select(s => s.Key).Distinct().Count());
+        await service.WriteAsync(owner.InstanceId, "update", local.Key, local.Revision, new("Review", "Local", "NEW", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent);
+        var later = await service.WriteAsync(owner.InstanceId, "create", input: new("Later", "Later", "LATER", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent);
+        var loaded = SkillLoadAdmission.Plan(pin, ["definition:review"], 0, [local.Key, later.Key]);
+        Assert.Equal([local.Key], loaded.Admitted); Assert.Equal("unknown", Assert.Single(loaded.Rejected).Reason);
+        Assert.Contains("OLD", PromptContextBuilder.BuildActiveSkillSystem(pin, loaded.Admitted));
+        Assert.DoesNotContain("NEW", PromptContextBuilder.BuildActiveSkillSystem(pin, loaded.Admitted));
+        Assert.Contains("NEW", PromptContextBuilder.BuildActiveSkillSystem(await resolver.ResolveAsync(owner.InstanceId, d), [local.Key]));
     }
-
     [Fact]
-    public void Selector_matches_whole_words_and_an_optional_plural()
+    public async Task Resources_missing_authority_and_archived_lifecycle_fail_without_mutation()
     {
-        var definition = Definition(
-            Skill("store.product.manage", "PRODUCT", ["product", "sku", "publish product"]),
-            Skill("store.order.review", "ORDER", ["pending order", "order review"]));
-
-        Assert.Equal(["store.product.manage"], DeterministicSkillSelector.SelectActiveIds(definition, "publish this product"));
-        Assert.Equal(["store.product.manage"], DeterministicSkillSelector.SelectActiveIds(definition, "SKU AC-KBD-001"));
-        Assert.Empty(DeterministicSkillSelector.SelectActiveIds(definition, "improve my productivity"));
-        Assert.Equal(["store.order.review"], DeterministicSkillSelector.SelectActiveIds(definition, "review pending orders"));
+        var store = new InMemoryAgentInstanceStore(); var ids = new SystemIdGenerator(TimeProvider.System); var clock = new FakeTimeProvider(Now);
+        var d = Definition(1, new SkillSpec("bound", "Bound", "Bound resource", "Read reference", SkillProjection.OnDemand, true, [], ["knowledge/reference"]));
+        var defs = new Definitions(d); var instances = new AgentInstanceService(store, defs, ids, clock); var owner = await instances.CreateAsync(d.Id);
+        var service = new AgentInstanceSkillService(store, defs, ids, clock);
+        await Assert.ThrowsAsync<AgentCoreException>(() => service.WriteAsync(owner.InstanceId, "customize", "definition:bound", 1, actor: SkillAuthor.Agent).AsTask());
+        Assert.True(Assert.Single((await store.ReadSkillsAsync(owner.InstanceId)).DefinitionStates).Enabled);
+        Assert.Empty((await store.ReadSkillsAsync(owner.InstanceId)).InstanceSkills);
+        await Assert.ThrowsAsync<AgentCoreException>(() => service.WriteAsync(owner.InstanceId, "create", input: new("Bad", "Bad", "No grant", SkillProjection.Always, true, ["shell"]), actor: SkillAuthor.Agent).AsTask());
+        await instances.SetLifecycleAsync(owner.InstanceId, AgentInstanceLifecycle.Archived, owner.Revision);
+        await Assert.ThrowsAsync<AgentCoreException>(() => service.WriteAsync(owner.InstanceId, "create", input: new("Local", "Local", "Local", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent).AsTask());
     }
-
-    [Fact]
-    public void Prompt_includes_only_pinned_procedures()
+    internal static AgentDefinition Definition(int version, params SkillSpec[] skills) => SampleDefinitions.Examiner with { Version = version, Skills = skills, Environment = RoleEnvironment.Empty };
+    internal sealed class Definitions(params AgentDefinition[] versions) : IAgentDefinitionStore
     {
-        var definition = Definition(
-            Skill("refund.handle", "REFUND_PROCEDURE", ["refund"]),
-            Skill("order.lookup", "ORDER_PROCEDURE", ["order"]));
-        var request = new PromptContextBuilder().Build(
-            Context(definition, ["refund.handle"]),
-            Guid.NewGuid());
-        var text = string.Join('\n', request.Messages.Select(message => message.Text));
-        Assert.Contains("REFUND_PROCEDURE", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("ORDER_PROCEDURE", text, StringComparison.Ordinal);
-        Assert.Equal(
-            [ToolCatalog.WorkspaceRead, ToolCatalog.SkillsLoad],
-            new PromptContextBuilder().OfferTools(definition, Context(definition, ["refund.handle"])).Select(tool => tool.Name).ToArray());
-    }
-
-    [Fact]
-    public void Pinned_ids_stay_in_the_prompt_when_keywords_would_select_another_skill()
-    {
-        var definition = Definition(
-            Skill("refund.handle", "REFUND_PROCEDURE", ["other"]),
-            Skill("order.lookup", "ORDER_PROCEDURE", ["order"]));
-        Assert.Equal(["order.lookup"], DeterministicSkillSelector.SelectActiveIds(definition, "check the order"));
-        var request = new PromptContextBuilder().Build(
-            Context(definition, ["refund.handle"]),
-            Guid.NewGuid());
-        var text = string.Join('\n', request.Messages.Select(message => message.Text));
-        Assert.Contains("REFUND_PROCEDURE", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("ORDER_PROCEDURE", text, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Required_capabilities_do_not_grant_tools_or_approval()
-    {
-        var definition = Definition(
-            Skill("refund.handle", "REFUND_PROCEDURE", ["refund"], [ToolCatalog.WebSearch, ToolCatalog.DemoSensitiveAction]));
-        Assert.Equal(
-            ToolPolicyDecision.Deny,
-            ToolPolicy.EvaluateExecution(definition, ToolCatalog.WebSearch, ToolConfigurationGates.Unconfigured));
-        definition = definition with
-        {
-            Environment = RoleEnvironment.Empty with
-            {
-                ToolAllowlist = [ToolCatalog.WebSearch, ToolCatalog.DemoSensitiveAction]
-            }
-        };
-        Assert.Equal(
-            ToolPolicyDecision.Deny,
-            ToolPolicy.EvaluateExecution(definition, ToolCatalog.WebSearch, ToolConfigurationGates.Unconfigured));
-        Assert.Equal(
-            ToolPolicyDecision.RequireApproval,
-            ToolPolicy.EvaluateExecution(definition, ToolCatalog.DemoSensitiveAction, ToolConfigurationGates.AllowAll));
-        Assert.DoesNotContain(
-            new PromptContextBuilder().OfferTools(definition, Context(definition, ["refund.handle"])),
-            tool => tool.Name == ToolCatalog.WebSearch);
-    }
-
-    [Fact]
-    public async Task Synthetic_turn_pins_one_skill_and_stores_one_chat_response()
-    {
-        var model = new RecordingLanguageModel();
-        var turns = new InMemoryConversationTurnExecutionStore();
-        await using var runtime = Create(model, turns, Definition(
-            Skill("refund.handle", "REFUND_PROCEDURE", ["refund"], [ToolCatalog.WorkspaceRead, SkillCapabilities.ChatRespond]),
-            Skill("order.lookup", "ORDER_PROCEDURE", ["order"], [ToolCatalog.WebSearch])));
-        await runtime.AttachAsync();
-        await runtime.SubmitUserTextAsync("Please refund this");
-        await runtime.WaitUntilIdleAsync();
-
-        var first = Assert.Single(model.Requests);
-        var firstText = string.Join('\n', first.Messages.Select(message => message.Text));
-        Assert.Contains("REFUND_PROCEDURE", firstText, StringComparison.Ordinal);
-        Assert.DoesNotContain("ORDER_PROCEDURE", firstText, StringComparison.Ordinal);
-        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal(EntryStatus.Completed, assistant.Status);
-        Assert.Equal("Shown", assistant.Text);
-
-        var user = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.User);
-        var pinned = await turns.GetBySourceEventAsync(runtime.SessionId, user.SourceEventId ?? user.EntryId);
-        Assert.Equal(["refund.handle"], pinned!.PinnedActiveSkillIds);
-
-        await runtime.SubmitUserTextAsync("Check the order");
-        await runtime.WaitUntilIdleAsync();
-        Assert.Equal(2, model.Requests.Count);
-        var secondText = string.Join('\n', model.Requests[1].Messages.Select(message => message.Text));
-        Assert.Contains("ORDER_PROCEDURE", secondText, StringComparison.Ordinal);
-        Assert.DoesNotContain("REFUND_PROCEDURE", secondText, StringComparison.Ordinal);
-        var secondUser = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.User);
-        var secondPin = await turns.GetBySourceEventAsync(runtime.SessionId, secondUser.SourceEventId ?? secondUser.EntryId);
-        Assert.Equal(["order.lookup"], secondPin!.PinnedActiveSkillIds);
-        Assert.Equal(2, runtime.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.Assistant && entry.Status == EntryStatus.Completed));
-    }
-
-    [Fact]
-    public async Task Queued_batch_pins_the_later_user_text_on_the_shared_response()
-    {
-        var model = new GatedRecordingLanguageModel();
-        var turns = new InMemoryConversationTurnExecutionStore();
-        await using var runtime = Create(model, turns, Definition(
-            Skill("greeting.note", "GREETING_PROCEDURE", ["status"]),
-            Skill("refund.handle", "REFUND_PROCEDURE", ["refund"])));
-        await runtime.AttachAsync();
-        await runtime.SubmitUserTextAsync("hello");
-        await model.FirstRequestStarted.Task;
-
-        Assert.True(await runtime.SubmitPersistedUserTextAsync(
-            "status please",
-            Guid.Parse("019944af-0000-7000-8000-0000000000b1"),
-            CancellationToken.None,
-            null,
-            UserTextBehavior.Queue));
-        Assert.True(await runtime.SubmitPersistedUserTextAsync(
-            "please refund this",
-            Guid.Parse("019944af-0000-7000-8000-0000000000b2"),
-            CancellationToken.None,
-            null,
-            UserTextBehavior.Queue));
-        model.Release.TrySetResult();
-        await runtime.WaitUntilIdleAsync();
-
-        var batch = model.Requests.Single(request =>
-            request.Messages.Any(message => message.Text.Contains("please refund this", StringComparison.Ordinal)));
-        var batchText = string.Join('\n', batch.Messages.Select(message => message.Text));
-        Assert.Contains("REFUND_PROCEDURE", batchText, StringComparison.Ordinal);
-        Assert.DoesNotContain("GREETING_PROCEDURE", batchText, StringComparison.Ordinal);
-
-        var earlier = await turns.GetBySourceEventAsync(
-            runtime.SessionId,
-            Guid.Parse("019944af-0000-7000-8000-0000000000b1"));
-        var later = await turns.GetBySourceEventAsync(
-            runtime.SessionId,
-            Guid.Parse("019944af-0000-7000-8000-0000000000b2"));
-        Assert.Equal(later!.ResponseId, earlier!.ResponseId);
-        Assert.Equal(["refund.handle"], earlier.PinnedActiveSkillIds);
-        var reloaded = await turns.GetAsync(earlier.ExecutionId);
-        Assert.Equal(["refund.handle"], reloaded!.PinnedActiveSkillIds);
-    }
-
-    [Fact]
-    public async Task Deferred_batch_pins_the_later_user_text_before_the_model_request()
-    {
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var deferred = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var model = new RecordingScriptedModel(new ScriptedLanguageModel(
-            compactionFixture: CompactionFixture.Late,
-            compactionRelease: release,
-            compactionStarted: started));
-        var turns = new InMemoryConversationTurnExecutionStore();
-        var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-30T12:00:00Z"));
-        var ids = new DeterministicIdGenerator(
-            Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
-            [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
-        var now = time.GetUtcNow();
-        var definition = Definition(
-            Skill("greeting.note", "GREETING_PROCEDURE", ["status"]),
-            Skill("refund.handle", "REFUND_PROCEDURE", ["refund"]));
-        var snapshot = new SessionSnapshot(
-            1,
-            ids.NewSessionId(),
-            1,
-            definition,
-            SessionMode.Text,
-            null,
-            SessionStatus.Created,
-            DeferredHistory(now),
-            string.Empty,
-            0,
-            null,
-            null,
-            now,
-            now,
-            ModelSelection: new SessionModelSelection(
-                "synthetic-offline/scripted",
-                "primary-llm",
-                "scripted",
-                ModelSelectionSource.SystemDefault,
-                null), AgentInstanceId: Guid.NewGuid());
-        var memory = new InMemoryMemoryStore();
-        await memory.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
-            snapshot,
-            model,
-            new DefaultAgentBrain(new PromptContextBuilder()),
-            memory,
-            new CapturingSessionOutput(),
-            ids,
-            time,
-            NullLogger<SessionRuntime>.Instance,
-            new FakeInterruptionClassifier(),
-            turnExecutions: turns);
-        runtime.TestDeferredUserTurnEstablished = deferred;
-
-        await runtime.AttachAsync();
-        Assert.True(await runtime.SubmitPersistedUserTextAsync(
-            "continue",
-            Guid.Parse("019944af-0008-7000-8000-0000000000d1")));
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.True(await runtime.SubmitPersistedUserTextAsync(
-            "status please",
-            Guid.Parse("019944af-0008-7000-8000-0000000000d2")));
-        await deferred.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var requestsBeforeReplacement = model.ConversationRequests.Count;
-        Assert.True(await runtime.SubmitPersistedUserTextAsync(
-            "please refund this",
-            Guid.Parse("019944af-0008-7000-8000-0000000000d3")));
-        Assert.Equal(requestsBeforeReplacement, model.ConversationRequests.Count);
-        release.TrySetResult();
-        await runtime.WaitUntilIdleAsync();
-
-        var batch = Assert.Single(
-            model.ConversationRequests,
-            request => request.Messages.Any(message =>
-                message.Text.Contains("please refund this", StringComparison.Ordinal)));
-        var batchText = string.Join('\n', batch.Messages.Select(message => message.Text));
-        Assert.Contains("REFUND_PROCEDURE", batchText, StringComparison.Ordinal);
-        Assert.DoesNotContain("GREETING_PROCEDURE", batchText, StringComparison.Ordinal);
-        var earlier = await turns.GetBySourceEventAsync(
-            runtime.SessionId,
-            Guid.Parse("019944af-0008-7000-8000-0000000000d2"));
-        Assert.Equal(["refund.handle"], earlier!.PinnedActiveSkillIds);
-        var reloaded = await turns.GetAsync(earlier.ExecutionId);
-        Assert.Equal(["refund.handle"], reloaded!.PinnedActiveSkillIds);
-    }
-
-    private static IReadOnlyList<ConversationEntry> DeferredHistory(DateTimeOffset now)
-    {
-        var entries = new List<ConversationEntry>(40);
-        for (var sequence = 1; sequence <= 40; sequence++)
-        {
-            var role = sequence % 2 == 0 ? ConversationRole.Assistant : ConversationRole.User;
-            var text = $"turn-{sequence}";
-            entries.Add(new ConversationEntry(
-                Guid.Parse($"019944af-0006-7000-8000-{sequence:D12}"),
-                sequence,
-                null,
-                role,
-                text,
-                null,
-                EntryStatus.Completed,
-                SessionMode.Text,
-                text.Length,
-                text.Length,
-                now.AddSeconds(sequence)));
-        }
-
-        return entries;
-    }
-
-    private static AgentContext Context(AgentDefinition definition, IReadOnlyList<string> activeIds) =>
-        new(
-            definition,
-            [],
-            string.Empty,
-            null,
-            SessionMode.Text,
-            null,
-            false,
-            null,
-            new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, "hello"),
-            ActiveSkillIds: activeIds);
-
-    private static AgentDefinition Definition(params SkillSpec[] skills) =>
-        SampleDefinitions.Examiner with
-        {
-            Voice = new VoiceConfiguration(false, "default", 1),
-            ProviderPreferences = new ProviderPreferences("primary-llm", null, null),
-            Environment = RoleEnvironment.Empty with { ToolAllowlist = [ToolCatalog.WorkspaceRead] },
-            Skills = skills
-        };
-
-    private static SkillSpec Skill(
-        string id,
-        string procedure,
-        IReadOnlyList<string> keywords,
-        IReadOnlyList<string>? capabilities = null) =>
-        new(id, id, "", procedure, keywords, capabilities ?? [], []);
-
-    private static SessionRuntime Create(
-        ILanguageModel model,
-        InMemoryConversationTurnExecutionStore turns,
-        AgentDefinition definition)
-    {
-        var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-30T12:00:00Z"));
-        var ids = new DeterministicIdGenerator(
-            Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
-            [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
-        var now = time.GetUtcNow();
-        var snapshot = new SessionSnapshot(
-            1,
-            ids.NewSessionId(),
-            1,
-            definition,
-            SessionMode.Text,
-            null,
-            SessionStatus.Created,
-            [],
-            string.Empty,
-            0,
-            null,
-            null,
-            now,
-            now,
-            ModelSelection: new SessionModelSelection(
-                "synthetic-offline/scripted",
-                "primary-llm",
-                "scripted",
-                ModelSelectionSource.SystemDefault,
-                null), AgentInstanceId: Guid.NewGuid());
-        var memory = new InMemoryMemoryStore();
-        memory.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
-        return new SessionRuntime(
-            snapshot,
-            model,
-            new DefaultAgentBrain(new PromptContextBuilder()),
-            memory,
-            new CapturingSessionOutput(),
-            ids,
-            time,
-            NullLogger<SessionRuntime>.Instance,
-            new FakeInterruptionClassifier(),
-            turnExecutions: turns);
-    }
-
-    private sealed class RecordingLanguageModel : ILanguageModel
-    {
-        public List<ModelRequest> Requests { get; } = [];
-
-        public ModelCapabilities Capabilities { get; } = new(true, true);
-
-        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
-            ModelRequest request,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            Requests.Add(request);
-            await Task.Yield();
-            yield return new ModelDisplayDelta("Shown");
-            yield return new ModelSemanticResponseReady(
-                new ModelSemanticResponse("Shown", new ModelSpeechProjection(ModelSpeechMode.Same, null), []));
-            yield return new ModelCompleted(ModelStopReason.Completed);
-        }
-    }
-
-    private sealed class GatedRecordingLanguageModel : ILanguageModel
-    {
-        private int _calls;
-
-        public List<ModelRequest> Requests { get; } = [];
-
-        public TaskCompletionSource FirstRequestStarted { get; } =
-            new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public TaskCompletionSource Release { get; } =
-            new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public ModelCapabilities Capabilities { get; } = new(true, true);
-
-        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
-            ModelRequest request,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            var call = Interlocked.Increment(ref _calls);
-            Requests.Add(request);
-            if (call == 1)
-            {
-                FirstRequestStarted.TrySetResult();
-                await Release.Task.ConfigureAwait(false);
-            }
-
-            await Task.Yield();
-            yield return new ModelDisplayDelta("Shown");
-            yield return new ModelSemanticResponseReady(
-                new ModelSemanticResponse("Shown", new ModelSpeechProjection(ModelSpeechMode.Same, null), []));
-            yield return new ModelCompleted(ModelStopReason.Completed);
-        }
-    }
-
-    private sealed class RecordingScriptedModel(ScriptedLanguageModel inner) : ILanguageModel
-    {
-        public List<ModelRequest> ConversationRequests { get; } = [];
-
-        public ModelCapabilities Capabilities => inner.Capabilities;
-
-        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
-            ModelRequest request,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            if (!request.Messages.Any(message =>
-                    message.Text.Contains(ConversationCompactor.Marker, StringComparison.Ordinal)))
-            {
-                ConversationRequests.Add(request);
-            }
-
-            await foreach (var item in inner.GenerateAsync(request, cancellationToken).ConfigureAwait(false))
-            {
-                yield return item;
-            }
-        }
+        public ValueTask<AgentDefinition?> GetAsync(string id, int? version = null, CancellationToken cancellationToken = default) => ValueTask.FromResult(versions.Where(d => d.Id == id && (version is null || d.Version == version)).OrderByDescending(d => d.Version).FirstOrDefault());
+        public ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<AgentDefinition>>(versions);
     }
 }

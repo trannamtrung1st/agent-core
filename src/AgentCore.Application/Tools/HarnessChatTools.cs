@@ -17,8 +17,6 @@ public static class HarnessChatTools
         {
             ["harness.knowledge.upsert"] = ("knowledge.upsert", HarnessManagementScope.KnowledgeResources),
             ["harness.knowledge.remove"] = ("knowledge.remove", HarnessManagementScope.KnowledgeResources),
-            ["harness.skill.upsert"] = ("skill.upsert", HarnessManagementScope.Skills),
-            ["harness.skill.remove"] = ("skill.remove", HarnessManagementScope.Skills),
             ["harness.instructions.update"] = ("instructions.update", HarnessManagementScope.Instructions),
             ["harness.tool.select"] = ("tool.select", HarnessManagementScope.ToolSelection),
             ["harness.tool.configure"] = ("tool.configure", HarnessManagementScope.ToolSelection)
@@ -41,19 +39,8 @@ public static class HarnessChatTools
         }
     }
 
-    public static readonly string SkillPayloadHelp = "Send a nested skill object. Creation needs name, description and procedure. To update, supply an existing id plus only the fields to change, or use its unique name if id is omitted; omitted name, description, procedure and optional metadata stay unchanged. Core assigns an id on create and reuses the id of a unique existing Skill with the same name; use the exact id from harness.inspect for a metadata-only update. After creating Knowledge, inspect again for the new active version, then explicitly bind its identity with skill.knowledgeIds. Report a binding only after that Skill save succeeds. "
-        + "A supplied skill.id must match " + SkillIds.Pattern + ". "
-        + "name is 1..80 characters, description 1..240, procedure 1..4000; use procedural text without fenced code or script blocks. "
-        + "activationKeywords is an optional array of up to 8 unique, trimmed, nonblank strings of at most 64 characters. "
-        + "requiredCapabilities is an optional array of up to 8 unique capability ids, limited to chat.respond or already selected tools; requirements do not grant tools. "
-        + "knowledgeIds is an optional array of up to 4 identities from harness.inspect knowledge; Core resolves them to definition resources. "
-        + "resourcePaths is a legacy optional array of up to 4 unique existing definition resource paths (max 240 characters, relative forward-slash paths without dot segments); do not combine it with knowledgeIds. Workspace files are not definition resources. "
-        + "Omitted optional metadata stays unchanged when updating an existing Skill and defaults to empty on creation. The resulting definition may have at most 16 Skills and 12000 total procedure characters.";
-
     private static string OperationHelp(string kind) => kind switch
     {
-        "skill.upsert" => SkillPayloadHelp + " Owner-provided procedures may be authored directly. Read external source material through authorized ordinary tools first. activationKeywords, requiredCapabilities and knowledgeIds may be omitted.",
-        "skill.remove" => "id is the exact Skill id from harness.inspect.",
         "knowledge.upsert" => "id is a simple alphanumeric name (hyphens/underscores allowed). content is the retained text. source must name material actually read in this turn (for example workspace:playbook.md), or conversation:user for current owner-provided material.",
         "knowledge.remove" => "id is the exact knowledge identity from harness.inspect.",
         "instructions.update" => "content replaces the complete operating instructions; preserve other intended instructions from harness.inspect.",
@@ -70,10 +57,6 @@ public static class HarnessChatTools
             if (pattern is not null) field["pattern"] = pattern;
             return field;
         }
-        static JsonObject List(int max, JsonObject item) => new()
-        {
-            ["type"] = "array", ["maxItems"] = max, ["uniqueItems"] = true, ["items"] = item
-        };
         const string identifier = "^[a-z][a-z0-9._]{0,63}$";
         var fields = new JsonObject
         {
@@ -83,31 +66,10 @@ public static class HarnessChatTools
             ["observed"] = Text(2000, "What was actually read or checked; do not claim unperformed checks."),
             ["limitation"] = Text(2000, "Optional honest verification limits.")
         };
-        var required = kind == "skill.upsert"
-            ? new JsonArray("expectedVersion", "policyRevision")
-            : new JsonArray("expectedVersion", "policyRevision", "expected", "observed");
+        var required = new JsonArray("expectedVersion", "policyRevision", "expected", "observed");
         void Add(string key, JsonObject field) { fields[key] = field; required.Add(key); }
         switch (kind)
         {
-            case "skill.upsert":
-                Add("skill", new JsonObject
-                {
-                    ["type"] = "object", ["additionalProperties"] = false,
-                    ["required"] = new JsonArray(),
-                    ["properties"] = new JsonObject
-                    {
-                        ["id"] = Text(64, "Existing Skill id when updating; omit when creating.", SkillIds.Pattern),
-                        ["name"] = Text(80, "Required on creation or update without id; omit with an existing id to preserve its name."),
-                        ["description"] = Text(240, "Required on creation; omit on update to preserve the existing description."),
-                        ["procedure"] = Text(4000, "Required on creation; omit on update to preserve the existing procedure. No fenced code or script blocks."),
-                        ["activationKeywords"] = List(8, Text(64, "Optional unique trimmed activation phrase.")),
-                        ["requiredCapabilities"] = List(8, Text(64, "chat.respond or a tool in activeDefinitionAuthorizedCapabilities from harness.inspect; [] is allowed.", identifier)),
-                        ["knowledgeIds"] = List(4, Text(80, "Optional identity from harness.inspect knowledge; Core resolves its resource.")),
-                        ["resourcePaths"] = List(4, Text(240, "Optional existing definition-relative resource path, never a workspace path."))
-                    }
-                });
-                break;
-            case "skill.remove": Add("id", Text(64, "Existing Skill id.", SkillIds.Pattern)); break;
             case "knowledge.upsert":
             case "knowledge.remove":
                 Add("id", Text(80, "Knowledge identity.", "^[a-zA-Z0-9_-]+$"));

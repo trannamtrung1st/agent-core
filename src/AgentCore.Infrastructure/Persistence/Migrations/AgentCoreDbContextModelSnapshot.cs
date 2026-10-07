@@ -360,6 +360,33 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("AgentDefinitionPublicationResources", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentDefinitionSkillStateRecord", b =>
+                {
+                    b.Property<string>("AgentInstanceId")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DefinitionSkillId")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("UpdatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("AgentInstanceId", "DefinitionSkillId");
+
+                    b.HasIndex("AgentInstanceId");
+
+                    b.ToTable("AgentDefinitionSkillStates", (string)null);
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentInstanceRecord", b =>
                 {
                     b.Property<string>("InstanceId")
@@ -412,6 +439,74 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.HasIndex("DefinitionId");
 
                     b.ToTable("AgentInstances", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentInstanceSkillRecord", b =>
+                {
+                    b.Property<string>("SkillId")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AgentInstanceId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Procedure")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Projection")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RequiredCapabilitiesJson")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SourceDefinitionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("SourceDefinitionVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SourceDefinitionSkillId")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("UpdatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("SkillId");
+
+                    b.HasIndex("AgentInstanceId", "UpdatedAtUtc");
+
+                    b.ToTable("AgentInstanceSkills", (string)null);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentWorkspaceRow", b =>
@@ -679,6 +774,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<long>("AcceptedAtUtc")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("ActiveSkillKeysJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("AgentInstanceId")
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
@@ -736,11 +835,11 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("PinnedActiveSkillIdsJson")
-                        .HasMaxLength(512)
+                    b.Property<string>("PinnedPersonaJson")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("PinnedPersonaJson")
+                    b.Property<string>("PinnedSkillCatalogJson")
+                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ProfileId")
@@ -1939,6 +2038,24 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("CredentialId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentDefinitionSkillStateRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.AgentInstanceRecord", null)
+                        .WithMany()
+                        .HasForeignKey("AgentInstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentInstanceSkillRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.AgentInstanceRecord", null)
+                        .WithMany()
+                        .HasForeignKey("AgentInstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 

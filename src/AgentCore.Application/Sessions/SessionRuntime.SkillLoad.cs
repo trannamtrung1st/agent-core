@@ -99,21 +99,14 @@ public sealed partial class SessionRuntime
             return SkillLoadMailboxResult.Failed(errorJson, "denied");
         }
 
-        var definition = _snapshot.Definition;
-        if (!string.Equals(definition.Id, current.DefinitionId, StringComparison.Ordinal)
-            || definition.Version != current.DefinitionVersion)
-        {
-            definition = definition with { Skills = [] };
-        }
-
         var plan = SkillLoadAdmission.Plan(
-            definition,
-            current.PinnedActiveSkillIds,
+            current.PinnedSkillCatalog,
+            current.ActiveSkillKeys,
             current.SkillLoadCount,
             requestedIds);
         if (!plan.IncrementInvocation)
         {
-            return new SkillLoadMailboxResult(plan.ToToolResultJson(), current.PinnedActiveSkillIds, plan.Outcome);
+            return new SkillLoadMailboxResult(plan.ToToolResultJson(), current.ActiveSkillKeys, plan.Outcome);
         }
 
         var updated = await _turnExecutions.AdmitActiveSkillsAsync(
@@ -129,7 +122,7 @@ public sealed partial class SessionRuntime
             _boundConversationExecution = updated;
         }
 
-        return new SkillLoadMailboxResult(plan.ToToolResultJson(), updated.PinnedActiveSkillIds, plan.Outcome);
+        return new SkillLoadMailboxResult(plan.ToToolResultJson(), updated.ActiveSkillKeys, plan.Outcome);
     }
 
     private SkillLoadMailboxResult? SkillLoadFence(SkillLoadRequested input)

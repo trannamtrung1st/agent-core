@@ -52,16 +52,14 @@ public sealed class SkillPublicationTests
                 "refund.handle",
                 "Refund handling",
                 "Order refunds.",
-                "Confirm the order before any refund.",
-                ["refund"],
+                "Confirm the order before any refund.", SkillProjection.OnDemand, true,
                 [SkillCapabilities.ChatRespond, ToolCatalog.WorkspaceRead],
                 ["notes/refund.md"]),
             new SkillSpec(
                 "order.lookup",
                 "Order lookup",
-                "",
-                "Read the order summary.",
-                ["order"],
+                "Procedural guidance.",
+                "Read the order summary.", SkillProjection.OnDemand, true,
                 [ToolCatalog.WorkspaceRead],
                 [])
         };
@@ -104,7 +102,7 @@ public sealed class SkillPublicationTests
 
     private static string[] Shapes(IReadOnlyList<SkillSpec> skills) =>
         skills.Select(skill =>
-                $"{skill.Id}|{skill.Name}|{skill.Description}|{skill.Procedure}|{string.Join(",", skill.ActivationKeywords)}|{string.Join(",", skill.RequiredCapabilities)}|{string.Join(",", skill.ResourcePaths)}")
+                $"{skill.Id}|{skill.Name}|{skill.Description}|{skill.Procedure}|{skill.Projection.ToString() + "," + skill.DefaultEnabled}|{string.Join(",", skill.RequiredCapabilities)}|{string.Join(",", skill.ResourcePaths)}")
             .ToArray();
 
     private static async Task BindAsync(

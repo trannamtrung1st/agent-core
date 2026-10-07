@@ -263,7 +263,7 @@ describe("definition candidate editor", () => {
           name: "Order lookup",
           description: "Look up an order",
           procedure: "ORDER_PROCEDURE",
-          activationKeywords: ["order"],
+          projection: "OnDemand", defaultEnabled: true,
           requiredCapabilities: ["web.search"],
           resourcePaths: []
         }
@@ -281,9 +281,9 @@ describe("definition candidate editor", () => {
     setText("Skill 2 id", "refund.handle");
     setText("Skill 2 name", "Refund");
     setText("Skill 2 procedure", "REFUND_PROCEDURE");
-    setText("Skill 2 activation keywords", "refund,");
-    expect(screen.getByLabelText("Skill 2 activation keywords")).toHaveValue("refund,");
-    setText("Skill 2 activation keywords", "refund, return");
+    setText("Skill 2 description", "refund,");
+    expect(screen.getByLabelText("Skill 2 description")).toHaveValue("refund,");
+    setText("Skill 2 description", "refund, return");
     setText("Skill 2 required capabilities", "workspace.read, chat.respond");
     setText("Skill 2 resource paths", "notes/refund.md");
 
@@ -311,7 +311,7 @@ describe("definition candidate editor", () => {
   it("edits every supported candidate area through the form and saves that candidate", async () => {
     mockDraft({ ...storedCandidate, skills: [{
       id: "refund.handle", name: "Refund", description: "Handle a refund",
-      procedure: "REFUND_PROCEDURE", activationKeywords: ["refund", "return"],
+      procedure: "REFUND_PROCEDURE", projection: "OnDemand", defaultEnabled: true,
       requiredCapabilities: ["workspace.read", "chat.respond"], resourcePaths: ["notes/refund.md"]
     }] });
     await openDraft();
@@ -521,7 +521,7 @@ describe("definition candidate editor", () => {
     expect(vi.mocked(updateAdminDefinitionDraft).mock.calls.at(-1)?.[2]).toEqual({
       ...parsed,
       skills: [{ id: "refund.handle", name: "Refund", description: "Handle a refund",
-        procedure: "REFUND_PROCEDURE_EDITED", activationKeywords: ["refund", "return"],
+        procedure: "REFUND_PROCEDURE_EDITED", projection: "OnDemand", defaultEnabled: true,
         requiredCapabilities: ["workspace.read", "chat.respond"], resourcePaths: ["notes/refund.md"] }]
     });
     expect(publishAdminDefinitionDraft).not.toHaveBeenCalled();

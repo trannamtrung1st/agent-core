@@ -189,7 +189,7 @@ public sealed partial class SessionRuntime
             stableResponseId,
             _snapshot,
             userEntry,
-            acceptedAt);
+            acceptedAt, await _tools.ResolveSkillCatalogAsync(_snapshot.AgentInstanceId, _snapshot.Definition, cancellationToken));
         var created = await _turnExecutions.CreateAsync(proposed, cancellationToken).ConfigureAwait(false);
         return created.Item;
     }

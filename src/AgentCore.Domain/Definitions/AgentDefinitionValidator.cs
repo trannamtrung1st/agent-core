@@ -153,11 +153,6 @@ public static class AgentDefinitionValidator
             return;
         }
 
-        if (skills.Count > 16)
-        {
-            throw new ArgumentException("skills must contain at most 16 entries.");
-        }
-
         if (skills.Any(skill => skill is null))
         {
             throw new ArgumentException("skill is missing required fields.");
@@ -176,41 +171,15 @@ public static class AgentDefinitionValidator
                 throw new ArgumentException("skill id is invalid.");
             }
 
-            if (skill.Name is null || skill.Name.Length is < 1 or > 80)
-            {
-                throw new ArgumentException("skill name is invalid.");
-            }
-
-            if (skill.Description is null || skill.Description.Length > 240)
-            {
-                throw new ArgumentException("skill description is invalid.");
-            }
-
-            if (skill.Procedure is null || skill.Procedure.Length is < 1 or > 4000)
-            {
-                throw new ArgumentException("skill procedure is invalid.");
-            }
-
-            procedureCharacters += skill.Procedure.Length;
-            ValidateActivation(skill.ActivationKeywords);
+            SkillPolicy.Validate(skill.Name, skill.Description, skill.Procedure, skill.Projection, skill.RequiredCapabilities);
+            procedureCharacters += skill.Projection == SkillProjection.Always && skill.DefaultEnabled ? skill.Procedure.Length : 0;
             ValidateCapabilities(skill.RequiredCapabilities);
             ValidateResourcePaths(skill.ResourcePaths);
         }
 
-        if (procedureCharacters > 12000)
+        if (procedureCharacters > SkillPolicy.MaxActiveProcedureCharacters)
         {
-            throw new ArgumentException("skill procedure text exceeds 12000 characters.");
-        }
-    }
-
-    private static void ValidateActivation(IReadOnlyList<string>? keywords)
-    {
-        if (keywords is null
-            || keywords.Count > 8
-            || keywords.Any(keyword => string.IsNullOrWhiteSpace(keyword) || keyword.Length > 64 || keyword != keyword.Trim())
-            || keywords.Distinct(StringComparer.Ordinal).Count() != keywords.Count)
-        {
-            throw new ArgumentException("skill activation shape is invalid.");
+            throw new ArgumentException("Always Skill procedure text exceeds 8000 characters.");
         }
     }
 

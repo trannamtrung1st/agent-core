@@ -63,8 +63,7 @@ public sealed class AdminDefinitionCandidateValidatorTests
                 "refund.handle",
                 "OPENROUTER_API_KEY",
                 "OPENROUTER_API_KEY",
-                "OPENROUTER_API_KEY",
-                ["OPENROUTER_API_KEY"],
+                "OPENROUTER_API_KEY", SkillProjection.OnDemand, true,
                 [SkillCapabilities.ChatRespond],
                 []));
 
@@ -74,7 +73,7 @@ public sealed class AdminDefinitionCandidateValidatorTests
         Assert.Contains(findings, finding => finding.Field == "skills[0].procedure" && finding.Code == "secret_reference");
         Assert.Contains(
             findings,
-            finding => finding.Field == "skills[0].activationKeywords[0]" && finding.Code == "secret_reference");
+            finding => finding.Field == "skills[0].procedure" && finding.Code == "secret_reference");
     }
 
     [Fact]
@@ -85,9 +84,8 @@ public sealed class AdminDefinitionCandidateValidatorTests
             new SkillSpec(
                 "refund.handle",
                 "Refunds",
-                "",
-                "Confirm the order.",
-                ["refund"],
+                "Procedural guidance.",
+                "Confirm the order.", SkillProjection.OnDemand, true,
                 [SkillCapabilities.ChatRespond, "orders.read", ToolCatalog.KnowledgeRetrieve],
                 []),
             allowlist);

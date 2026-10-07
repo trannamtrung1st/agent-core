@@ -398,6 +398,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IBrowserSession>(sp => sp.GetRequiredService<PlaywrightBrowserSession>());
         services.TryAddSingleton<IBrowserSessionLease>(sp => sp.GetRequiredService<PlaywrightBrowserSession>());
         services.AddHostedService(sp => sp.GetRequiredService<PlaywrightBrowserSession>());
+        services.TryAddSingleton<AgentInstanceSkillService>();
         services.TryAddSingleton<SessionToolExecutor>(provider => new SessionToolExecutor(
             provider.GetService<RoleKnowledgeService>(),
             provider.GetService<IAttachmentStore>(),
@@ -424,7 +425,8 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<AgentCore.Application.Continuity.IdentityMaintenanceService>(),
             provider.GetRequiredService<AgentInstanceWorkspaceService>(),
             provider.GetRequiredService<CredentialService>(),
-            provider.GetRequiredService<AdminAutomationAuthoringService>()));
+            provider.GetRequiredService<AdminAutomationAuthoringService>(),
+            provider.GetRequiredService<AgentInstanceSkillService>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),

@@ -13,6 +13,15 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class SkillDefinitionRoundTripTests
 {
+    [Theory]
+    [InlineData("", "\"defaultEnabled\":true,")]
+    [InlineData("\"projection\":\"OnDemand\",", "")]
+    [InlineData("\"projection\":0,", "\"defaultEnabled\":true,")]
+    public void Skill_json_requires_explicit_string_projection_and_default_enabled(string projection, string enabled)
+    {
+        var json = "{" + projection + enabled + "\"id\":\"review\",\"name\":\"Review\",\"description\":\"Review\",\"procedure\":\"Review\",\"requiredCapabilities\":[],\"resourcePaths\":[]}";
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<SkillSpec>(json, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+    }
     [Fact]
     public async Task Built_in_files_without_skills_still_load()
     {
@@ -54,7 +63,7 @@ public sealed class SkillDefinitionRoundTripTests
             {
                 Skills =
                 [
-                    new SkillSpec("refund.handle", "Refunds", "", "Confirm the order.", ["refund"], ["chat.respond"], [])
+                    new SkillSpec("refund.handle", "Refunds", "Refund procedure", "Confirm the order.", SkillProjection.OnDemand, true, ["chat.respond"], [])
                 ]
             };
             var withoutSkills = Definition() with { Id = "plain-agent" };
@@ -80,7 +89,7 @@ public sealed class SkillDefinitionRoundTripTests
         {
             var skills = new[]
             {
-                new SkillSpec("refund.handle", "Refunds", "Orders.", "Confirm the order.", ["refund"], ["chat.respond"], ["notes/refund.md"])
+                new SkillSpec("refund.handle", "Refunds", "Orders.", "Confirm the order.", SkillProjection.OnDemand, true, ["chat.respond"], ["notes/refund.md"])
             };
             var now = DateTimeOffset.Parse("2026-09-30T12:00:00Z");
             var draft = await admin.CreateDraftAsync(
@@ -158,7 +167,7 @@ public sealed class SkillDefinitionRoundTripTests
 
     private static string[] Shapes(IReadOnlyList<SkillSpec> skills) =>
         skills.Select(skill =>
-                $"{skill.Id}|{skill.Name}|{skill.Description}|{skill.Procedure}|{string.Join(",", skill.ActivationKeywords)}|{string.Join(",", skill.RequiredCapabilities)}|{string.Join(",", skill.ResourcePaths)}")
+                $"{skill.Id}|{skill.Name}|{skill.Description}|{skill.Procedure}|{skill.Projection.ToString() + "," + skill.DefaultEnabled}|{string.Join(",", skill.RequiredCapabilities)}|{string.Join(",", skill.ResourcePaths)}")
             .ToArray();
 
     private static string Json(AgentDefinition definition) =>
@@ -201,7 +210,7 @@ public sealed class SkillDefinitionRoundTripTests
             1,
             Definition() with
             {
-                Skills = [new SkillSpec("refund.handle", "Refunds", "", "Confirm the order.", ["refund"], ["chat.respond"], [])]
+                Skills = [new SkillSpec("refund.handle", "Refunds", "Refund procedure", "Confirm the order.", SkillProjection.OnDemand, true, ["chat.respond"], [])]
             },
             SessionMode.Text,
             null,

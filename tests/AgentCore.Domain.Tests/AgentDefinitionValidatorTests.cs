@@ -123,9 +123,8 @@ public sealed class AgentDefinitionValidatorTests
                 new SkillSpec(
                     "refund.handle",
                     "Refund handling",
-                    "",
-                    "Confirm the order before any refund.",
-                    ["refund"],
+                    "Confirm orders",
+                    "Confirm the order before any refund.", SkillProjection.OnDemand, true,
                     [SkillCapabilities.ChatRespond, "orders.read"],
                     [])
             ])).ToPublished(3);
@@ -138,7 +137,7 @@ public sealed class AgentDefinitionValidatorTests
     [InlineData("duplicate")]
     [InlineData("missing")]
     [InlineData("budget")]
-    [InlineData("activation")]
+    [InlineData("projection")]
     [InlineData("resource")]
     public void Rejects_invalid_skills(string kind)
     {
@@ -146,8 +145,8 @@ public sealed class AgentDefinitionValidatorTests
         {
             "duplicate" => new[] { Skill("same"), Skill("same") },
             "missing" => new[] { Skill("refund.handle") with { Procedure = "" } },
-            "budget" => Enumerable.Range(0, 17).Select(index => Skill($"skill.n{index:D2}")).ToArray(),
-            "activation" => new[] { Skill("refund.handle") with { ActivationKeywords = ["", "refund"] } },
+            "budget" => Enumerable.Range(0, 3).Select(index => Skill($"skill.n{index:D2}") with { Projection = SkillProjection.Always, Procedure = new string('a', 3000) }).ToArray(),
+            "projection" => new[] { Skill("refund.handle") with { Projection = (SkillProjection)99 } },
             _ => new[] { Skill("refund.handle") with { ResourcePaths = ["../secret.md"] } }
         };
         var error = Assert.Throws<ArgumentException>(() => AgentDefinitionValidator.Validate(Valid(skills)));
@@ -158,10 +157,10 @@ public sealed class AgentDefinitionValidatorTests
     public void Rejects_aggregate_procedure_text_over_the_budget()
     {
         var skills = Enumerable.Range(0, 4)
-            .Select(index => Skill($"skill.n{index}") with { Procedure = new string('a', 3001) })
+            .Select(index => Skill($"skill.n{index}") with { Projection = SkillProjection.Always, Procedure = new string('a', 3001) })
             .ToArray();
         var error = Assert.Throws<ArgumentException>(() => AgentDefinitionValidator.Validate(Valid(skills)));
-        Assert.Contains("12000", error.Message, StringComparison.Ordinal);
+        Assert.Contains("8000", error.Message, StringComparison.Ordinal);
     }
 
     private static AgentDefinition Valid(IReadOnlyList<SkillSpec>? skills) =>
@@ -181,5 +180,5 @@ public sealed class AgentDefinitionValidatorTests
             Skills: skills);
 
     private static SkillSpec Skill(string id) =>
-        new(id, "Name", "", "Do the task.", ["task"], [], []);
+        new(id, "Name", "Description", "Do the task.", SkillProjection.OnDemand, true, [], []);
 }

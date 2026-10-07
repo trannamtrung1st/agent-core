@@ -22,11 +22,11 @@ public sealed partial class SessionRuntime
         : _liveOccurrenceCapabilities is { } live && live.ResponseId == responseId && live.Epoch == _epoch ? live.Calls : 0;
 
     private async Task<AgentContext> CapabilityProjectionContextAsync(AgentTrigger trigger, ILanguageModel model,
-        IReadOnlyList<string> skills, IReadOnlyList<string> loaded, CancellationToken ct) =>
+        IReadOnlyList<AgentCore.Domain.Definitions.EffectiveSkill> catalog, IReadOnlyList<string> skills, IReadOnlyList<string> loaded, CancellationToken ct) =>
         new(_snapshot.Definition, _snapshot.Entries, _snapshot.Summary, _profile, _snapshot.Mode, _snapshot.PendingTopic,
             false, null, trigger, SessionAttachments: await BuildSessionAttachmentManifestAsync(ct),
             ModelSupportsTools: model.Capabilities.Tools, ModelSupportsVision: model.Capabilities.Vision,
-            ActiveSkillIds: skills, LoadedCapabilityIds: loaded, IntermediateMessagingAllowed: _intermediateMessagingAllowed,
+            PinnedSkillCatalog: catalog, ActiveSkillKeys: skills, LoadedCapabilityIds: loaded, IntermediateMessagingAllowed: _intermediateMessagingAllowed,
             AgentInstanceId: _snapshot.AgentInstanceId,
             CredentialMetadataAvailable: await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, ct),
             Harness: await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, ct),
@@ -76,7 +76,7 @@ public sealed partial class SessionRuntime
                 || current.CancellationRequested || current.Status != ConversationTurnExecutionStatus.Running) return;
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, input.RequestCancellation);
             using var json = JsonDocument.Parse(input.ArgumentsJson);
-            var context = input.ProjectionContext with { Definition = _snapshot.Definition, LoadedCapabilityIds = current.LoadedCapabilityIds, ActiveSkillIds = current.PinnedActiveSkillIds };
+            var context = input.ProjectionContext with { Definition = _snapshot.Definition, LoadedCapabilityIds = current.LoadedCapabilityIds, ActiveSkillKeys = current.ActiveSkillKeys, PinnedSkillCatalog = current.PinnedSkillCatalog };
             if (!ToolPolicy.IsOffered(_snapshot.Definition, context, ToolCatalog.CapabilitiesLoad, _tools.ConfigurationGate)) return;
             var plan = CapabilityDiscoveryMatcher.Load(_snapshot.Definition, context, _tools.ConfigurationGate, json.RootElement, current.CapabilityLoadCount);
             matches = plan.Loaded.Count;

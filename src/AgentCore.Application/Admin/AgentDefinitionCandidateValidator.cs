@@ -323,20 +323,7 @@ internal static class AgentDefinitionCandidateValidator
                     yield return finding;
                 }
 
-                if (skill.ActivationKeywords is null)
-                {
-                    continue;
-                }
 
-                for (var keywordIndex = 0; keywordIndex < skill.ActivationKeywords.Count; keywordIndex++)
-                {
-                    foreach (var finding in CollectSecretFieldFindings(
-                                 $"skills[{index}].activationKeywords[{keywordIndex}]",
-                                 skill.ActivationKeywords[keywordIndex]))
-                    {
-                        yield return finding;
-                    }
-                }
             }
         }
 

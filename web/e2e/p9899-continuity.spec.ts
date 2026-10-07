@@ -12,7 +12,7 @@ async function send(page: Page, text: string) {
   await page.getByRole('button', { name: 'Send', exact: true }).click();
 }
 
-test('Experience informs an approved Automation; next activation stays quiet; owner controls work at narrow width', async ({ page }, testInfo) => {
+test('Experience informs an authorized Instance Skill Automation; next activation stays quiet; owner controls work at narrow width', async ({ page }, testInfo) => {
   test.setTimeout(150_000);
   const errors: string[] = [];
   const reviewerName = `Continuity reviewer ${Date.now()}`;
@@ -33,10 +33,6 @@ test('Experience informs an approved Automation; next activation stays quiet; ow
   await dialog.getByLabel('Persona role').fill('Store review');
   await dialog.getByLabel('Persona description').fill('Review observable outcomes.');
   await dialog.getByLabel('Persona tone').fill('Clear');
-  await dialog.getByText('Harness management (optional)', { exact: true }).click();
-  await select(page, 'Authoring mode', 'Assisted');
-  await dialog.getByLabel('Knowledge & resources', { exact: true }).uncheck();
-  await dialog.getByLabel('Skills', { exact: true }).check();
   await dialog.getByRole('button', { name: 'Create instance', exact: true }).click();
   await expect(page.getByRole('heading', { name: reviewerName, exact: true })).toBeVisible();
   const id = new URL(page.url()).pathname.split('/')[3];
@@ -120,17 +116,20 @@ test('Experience informs an approved Automation; next activation stays quiet; ow
   await page.unroute(statusPattern);
   await initiative.getByRole('button', { name: 'Refresh automations', exact: true }).click();
 
-  await expect(initiative.getByText('Needs approval', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  await expect(initiative.getByText(/Completed · Action completed/).first()).toBeVisible({ timeout: 30_000 });
   expect(runRequests).toBe(1);
   await page.unroute(runPattern);
   await initiative.getByRole('button', { name: 'View last run', exact: true }).click();
   const work = page.getByRole('dialog', { name: 'Run details', exact: true });
   await expect(work.getByText('Review recent experience', { exact: true })).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath('automation-approval-desktop.png'), fullPage: true });
-  await work.getByRole('button', { name: 'Approve Automation · Manual', exact: true }).click();
-  await page.getByRole('dialog', { name: 'Approve this action?', exact: true }).getByRole('button', { name: 'Approve action', exact: true }).click();
   await expect(work.getByText(/Model:.*Action completed/)).toBeVisible({ timeout: 30_000 });
+  await expect(work.getByRole('button', { name: 'Approve Automation · Manual', exact: true })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('automation-instance-skill-desktop.png'), fullPage: true });
   await page.locator('.background-work-selected').getByRole('button', { name: 'View automation', exact: true }).click();
+  await page.getByRole('tab', { name: 'Skills', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Instance Skills', exact: true })).toContainText('Experience review');
+  await page.getByRole('tab', { name: 'Automation', exact: true }).click();
+  await page.getByRole('tab', { name: 'Automations', exact: true }).click();
   await initiative.getByRole('button', { name: 'Refresh automations', exact: true }).click();
   await expect(initiative.getByText(/Completed · Action completed/).first()).toBeVisible();
   await initiative.getByRole('button', { name: 'Run automation now', exact: true }).click();

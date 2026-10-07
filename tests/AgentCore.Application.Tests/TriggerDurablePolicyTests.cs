@@ -381,7 +381,7 @@ public sealed class TriggerDurablePolicyTests
         public ValueTask<AgentInstance?> FindAsync(Guid instanceId, CancellationToken cancellationToken = default) =>
             inner.FindAsync(instanceId, cancellationToken);
 
-        public async ValueTask InsertAsync(AgentInstance instance, CancellationToken cancellationToken = default)
+        public async ValueTask InsertAsync(AgentInstance instance, CancellationToken cancellationToken = default, IReadOnlyList<SkillSpec>? initialSkills = null)
         {
             await inner.InsertAsync(racedWinner, cancellationToken).ConfigureAwait(false);
             throw new AgentCoreException("Conflict", "Agent instance already exists.", 409);
@@ -403,7 +403,7 @@ public sealed class TriggerDurablePolicyTests
         public ValueTask<AgentInstance> InsertManagedWithHistoryAsync(
             AgentInstance instance,
             AdminEventAppend historyAppend,
-            CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default, IReadOnlyList<AgentCore.Domain.Definitions.SkillSpec>? initialSkills = null) =>
             inner.InsertManagedWithHistoryAsync(instance, historyAppend, cancellationToken);
 
         public ValueTask<AgentInstance> UpdateActiveVersionWithHistoryAsync(

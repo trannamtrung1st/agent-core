@@ -531,6 +531,8 @@ Use another narrow transition only when implementation evidence supports it. Rem
 
 ## P8C — Skills
 
+Historical P8 ownership plan, superseded by the [Instance Skills cutover](docs/04-backend-interfaces.md#agent-instance-skill-management-ports). Definition reuse now coexists with durable independent Instance Skills and instance-owned enabled choices.
+
 Skills are the missing first-class concept. They are procedural know-how for a kind of work. They are not tools, credentials, permissions, knowledge resources, application bindings, or learned memory.
 
 ```text
@@ -744,61 +746,7 @@ Observed admission:
 
 ## P8.5B — Dynamic Skill activation
 
-The P8 deterministic keyword selector is useful scaffolding and may remain as a cheap preload optimization. It is not the long-term authority for Skill activation.
-
-Current limitations:
-
-- keyword and synonym sensitivity, with possible false matches;
-- compound tasks;
-- keyword preload still stops at three; one execution pin can reach four after `skills.load`;
-- the relevant Skill may become apparent only after tool or browser observations;
-- current activation is focused on user turns.
-
-The observed load path is:
-
-```text
-compact available Skill catalog
-      ↓
-agent
-      ↓
-skills.load(["skill.id"])
-      ↓
-Agent Core validates / admits
-      ↓
-pin active Skill IDs
-      ↓
-expose trusted full procedures
-      ↓
-agent continues
-```
-
-The tool name is `skills.load`. Before activation, a tool-capable model sees a compact catalog that omits procedure bodies. A model without tools does not receive that catalog or the instruction to call `skills.load`. Full procedure text is injected only for ids Core has pinned.
-
-Core admission ensures:
-
-- the requested Skill exists on the pinned Definition version and is available in the current context;
-- the activation/context budget permits it;
-- the accepted execution still owns the work;
-- active Skill IDs remain inspectable and stable for retry and recovery.
-
-```text
-Skill requires capability
-≠
-Skill grants capability
-```
-
-Loading a Skill never adds a tool to an allowlist, grants credentials or application access, satisfies approval, widens owner/session/application scope, or overrides runtime or security policy.
-
-The architecture must permit later loading during the same bounded execution when observations reveal the need. Do not add a mandatory second LLM Skill-router call before every turn.
-
-```text
-obvious deterministic match → optional preload
-ambiguous or later-discovered need → agent requests Skill
-```
-
-Keyword preload still pins at most three Skills. A later `skills.load` on the same execution can raise the pin to four. Aggregate procedure text is capped at 8000 characters, one load accepts at most four ids, and one execution accepts at most two load invocations. Recovery reads the stored pin when a load has already happened and does not run keyword selection again.
-
-Do not add embeddings, vector search, a Skill marketplace, independently versioned shared Skills, or a dedicated Skill-router model in P8.5.
+The Instance Skills migration supersedes this historical activation plan. Enabled Always procedures initialize executions; enabled OnDemand procedures require explicit loading by canonical keys from the frozen effective catalog. There is no keyword preload, definition-only lookup or global active-count ceiling. Four keys per load call, two calls per execution and an 8000-character procedure budget remain safety bounds. See [current contracts](docs/04-backend-interfaces.md#definition-skills).
 
 ## Why P8.5 precedes P9
 
@@ -1296,8 +1244,8 @@ P9.6 closes when Browser Capability v1 provides the bounded semantic, visual, or
 
 - Normal trusted-local single-owner Chat receives instance-policy/scoped authoring only with tools support and attached UserTurn context. User text expresses intent, never authority. Stale offers require live execution recheck.
 - Existing normal tools authorize source access; successful content-bearing execution receipts or current owner material permit retention with provenance. No mandatory secondary source catalog or backdoor source client.
-- Fixed semantic knowledge/Skill/instruction/tool operations call existing Authoring owners. Skills cannot grant authority. Eligibility derives from configured, already-authorized tools; policy/scope/owner/credentials cannot be self-authored. This leaves a known limitation: Chat cannot propose a newly configured tool outside that authorized set. Instruction replacement stays outside the default empty scopes and always needs exact owner approval when enabled.
-- Managed knowledge/Skills may verify/publish/adopt internally. Assisted mutations, all instructions and every tool selection/configuration need exact Chat approval. Later concrete sensitive actions need their own approval.
+- Fixed semantic knowledge/instruction/tool operations call existing Authoring owners. Ordinary authorized Skill tools use independent instance ownership. Skills cannot grant authority. Eligibility derives from configured, already-authorized tools; policy/scope/owner/credentials cannot be self-authored. This leaves a known limitation: Chat cannot propose a newly configured tool outside that authorized set. Instruction replacement stays outside the default empty scopes and always needs exact owner approval when enabled.
+- Managed knowledge may verify/publish/adopt internally. Assisted mutations, all instructions and every tool selection/configuration need exact Chat approval. Later concrete sensitive actions need their own approval.
 - Internal candidates preserve CAS, revision-bound evidence, actual Core readback/activation, immutable publication, atomic adoption, safe diagnostics, durable history and SQLite recovery. Agent assessment remains partial; destructive/production/subjective outcomes require external evidence.
 - Future Sessions use adopted versions. Current Session pins never silently change. Admin is policy/inspection/freeze with advanced legacy candidate discard; no required Prepare/Continue/Verify/Publish workflow or second LLM runtime.
 - Completion passed all 20 correction criteria, journeys A–F, affected full regressions, MCP runtime verification, responsive Impeccable/design synchronization, docs consistency and hosted Synthetic green on the final behavior SHA. No continuous autonomous loop, arbitrary executable plugin generation or new persistence/runtime owner.
@@ -1491,3 +1439,8 @@ Replaces production Application Connection with reusable encrypted System Creden
 ## Unified Automation cutover
 
 The original unified Automation cutover passed all five hosted Synthetic/Compose jobs on **`60dda1df`** (2026-10-07; [historical evidence](https://github.com/trannamtrung1st/agent-core/actions/runs/37600240526)). Final closure is pending hosted verification of the subsequent UI corrections, Chat scheduling guidance and internal Automation terminology cleanup on their latest behavior SHA. One Automation resource with Schedule/Event triggers, generic durable runs and semantic Experience tools supersedes historical behavioral Thoughts, separate Schedule/event-subscription resources, special retrospective execution and configurable semantic review cadence. Final evidence is recorded in [unified Automation verification](docs/reports/unified-automation-model-verification.md). Historical reports/SHAs remain records of their original versions. P10/P11 remain unopened.
+
+
+## Agent Instance Skills migration (2026-10-07)
+
+Full architectural cutover is locally verified; hosted exact-SHA acceptance remains pending: stable-id Definition enabled state, independent owner-local procedures, explicit projection/defaults, immutable execution catalogs, ordinary authorized management tools, Admin UI and atomic persistence. Keyword activation and Harness Skill authoring are retired. Historical milestones keep their original evidence; current verification and remaining gates are tracked in [migration report](docs/reports/instance-skills-migration-verification.md).

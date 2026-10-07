@@ -1853,12 +1853,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _traceHasDisplayText = false;
         BeginWork();
         var responseToken = _responseCts.Token;
-        var activeSkillIds = ResolveActiveSkillIds(input.Trigger, input.ResponseId);
+        _responseSkillCatalog = input.SkillCatalog ?? [];
+        var pinnedCatalog = SkillCatalogFor(input.ResponseId);
+        var activeSkillKeys = ResolveActiveSkillKeys(input.Trigger, input.ResponseId);
         _ = Task.Run(async () =>
         {
             try
             {
-                await PumpModelAsync(model, request, input.Context, input.Trigger, activeSkillIds, responseToken)
+                await PumpModelAsync(model, request, input.Context, input.Trigger, pinnedCatalog, activeSkillKeys, responseToken)
                     .ConfigureAwait(false);
             }
             finally
@@ -2060,8 +2062,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         RetainProposalOnlyForConfirmingTurn(suffix.Select(entry => entry.Text).ToArray());
         var last = suffix[^1];
         var executions = await EnsureConversationExecutionsForUserBatchAsync(suffix, cancellationToken)
-            .ConfigureAwait(false);
-        executions = await PinPromptExecutionForTriggerAsync(executions, last.Text, cancellationToken)
             .ConfigureAwait(false);
         if (!await BindConversationExecutionsForStartAsync(executions, cancellationToken).ConfigureAwait(false))
         {
@@ -2273,71 +2273,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             .ConfigureAwait(false);
     }
 
-    private async Task<IReadOnlyList<ConversationTurnExecution>> PinPromptExecutionForTriggerAsync(
-        IReadOnlyList<ConversationTurnExecution> executions,
-        string triggerText,
-        CancellationToken cancellationToken)
-    {
-        if (_turnExecutions is null || executions.Count == 0)
-        {
-            return executions;
-        }
-
-        var promptExecution = executions[0];
-        var queued = promptExecution.Status == ConversationTurnExecutionStatus.Queued && promptExecution.Claim is null;
-        var replacingDeferredTrigger = _deferredUserTurn is { } deferred
-            && deferred.ResponseId == promptExecution.ResponseId
-            && promptExecution.Status == ConversationTurnExecutionStatus.Running
-            && promptExecution.Claim is not null
-            && promptExecution.AssistantEntryId is null;
-        if (!queued && !replacingDeferredTrigger)
-        {
-            return executions;
-        }
-
-        if (promptExecution.AssistantEntryId is not null || promptExecution.SkillLoadCount > 0)
-        {
-            return executions;
-        }
-
-        var skillIds = DeterministicSkillSelector.SelectActiveIds(_snapshot.Definition, triggerText);
-        if (skillIds.SequenceEqual(promptExecution.PinnedActiveSkillIds))
-        {
-            return executions;
-        }
-
-        var updated = await _turnExecutions.PinActiveSkillsAsync(
-                promptExecution.ExecutionId,
-                promptExecution.Revision,
-                skillIds,
-                _time.GetUtcNow(),
-                cancellationToken)
-            .ConfigureAwait(false);
-        var pinned = executions.ToArray();
-        pinned[0] = updated;
-        return pinned;
-    }
-
-    private IReadOnlyList<string> ResolveActiveSkillIds(AgentTrigger trigger, Guid responseId)
-    {
-        // Intentional P8 limit: only a user turn selects Skills. Other triggers stay inactive.
-        if (trigger.Kind != TriggerKind.UserTurn)
-        {
-            return [];
-        }
-
-        if (_boundConversationExecution is { } execution && execution.ResponseId == responseId)
-        {
-            return execution.PinnedActiveSkillIds;
-        }
-
-        if (_turnExecutions is not null)
-        {
-            return [];
-        }
-
-        return DeterministicSkillSelector.SelectActiveIds(_snapshot.Definition, trigger.Text);
-    }
+    private IReadOnlyList<EffectiveSkill> SkillCatalogFor(Guid responseId) =>
+        _boundConversationExecution is { } e && e.ResponseId == responseId ? e.PinnedSkillCatalog : _responseSkillCatalog;
+    private IReadOnlyList<EffectiveSkill> _responseSkillCatalog = [];
+    private IReadOnlyList<string> ResolveActiveSkillKeys(AgentTrigger trigger, Guid responseId) =>
+        _boundConversationExecution is { } e && e.ResponseId == responseId ? e.ActiveSkillKeys
+        : _responseSkillCatalog.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray();
 
     private void LaunchBrain(
         EventContext cause,
@@ -2390,6 +2331,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     _snapshot.Entries,
                     evaluationToken,
                     _snapshot.AgentInstanceId).ConfigureAwait(false);
+                var skillCatalog = _boundConversationExecution is { } execution && execution.ResponseId == responseId
+                    ? execution.PinnedSkillCatalog : await _tools.ResolveSkillCatalogAsync(_snapshot.AgentInstanceId, _snapshot.Definition, evaluationToken);
                 var context = new AgentContext(
                     _snapshot.Definition,
                     _snapshot.Entries,
@@ -2419,7 +2362,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     Persona: _snapshot.PinnedPersona,
                     ScheduleConversation: _scheduleConversationContext,
                     ScheduleDraft: _scheduleDraftContext,
-                    ActiveSkillIds: ResolveActiveSkillIds(trigger, responseId),
+                    ActiveSkillKeys: skillCatalog.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray(),
+                    PinnedSkillCatalog: skillCatalog,
                     AgentInstanceId: _snapshot.AgentInstanceId,
                     CredentialMetadataAvailable: await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, evaluationToken),
                     Harness: trigger.Kind == TriggerKind.UserTurn ? await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, evaluationToken) : null,
@@ -2513,7 +2457,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     return;
                 }
 
-                if (!TryMailbox(new BrainReturned(inbound, turn, responseId, trigger, decision, processed)))
+                if (!TryMailbox(new BrainReturned(inbound, turn, responseId, trigger, decision, processed, skillCatalog)))
                 {
                     EndWork();
                     return;
@@ -2607,14 +2551,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         ModelRequest request,
         EventContext cause,
         AgentTrigger trigger,
-        IReadOnlyList<string> activeSkillIds,
+        IReadOnlyList<EffectiveSkill> pinnedCatalog,
+        IReadOnlyList<string> activeSkillKeys,
         CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
         using var activity = RuntimeTelemetry.Activity.StartActivity("model");
         var messages = request.Messages.ToList();
         var authorizedTools = request.Tools;
-        var pinnedSkills = activeSkillIds.ToArray();
+        var pinnedSkills = activeSkillKeys.ToArray();
         var loadedCapabilities = LoadedCapabilitiesFor(request.ResponseId);
         var workspaceCwd = await RequestWorkspaceCwdAsync(cause, request.ResponseId, null, cancellationToken).ConfigureAwait(false);
         if (workspaceCwd is null) return;
@@ -2636,7 +2581,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var budgetTools = _snapshot.Definition.Environment?.Capabilities is null
             ? WithOfferedTools(request, authorizedTools, trigger, model).Tools
             : ToolCatalog.Eligible(_snapshot.Definition,
-                await CapabilityProjectionContextAsync(trigger, model, pinnedSkills, loadedCapabilities, cancellationToken), _tools.ConfigurationGate);
+                await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, cancellationToken), _tools.ConfigurationGate);
         var budget = ToolExecutionBudget.Resolve(new ToolBudgetSignal(
             InteractiveBrowser: trigger.Kind == TriggerKind.UserTurn
                 && ToolCatalog.AuthorizesBrowser(budgetTools),
@@ -2668,11 +2613,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                 retryingGeneration = false;
                 BrowserObservationCompaction.Compact(messages);
-                messages = PromptContextBuilder.WithActiveSkillSystem(messages, _snapshot.Definition, pinnedSkills).ToList();
+                messages = PromptContextBuilder.WithActiveSkillSystem(messages, pinnedCatalog, pinnedSkills).ToList();
                 AgentContext? projectionContext = null;
                 if (_snapshot.Definition.Environment?.Capabilities is not null)
                 {
-                    projectionContext = await CapabilityProjectionContextAsync(trigger, model, pinnedSkills, loadedCapabilities, generateToken);
+                    projectionContext = await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, generateToken);
                     authorizedTools = _tools.ProjectTools(_snapshot.Definition, projectionContext);
                 }
                 var pageBlocked = browserPageOrigin is not null && blockedBrowserOrigins.Contains(browserPageOrigin);
@@ -3082,7 +3027,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                         overallCts.Token)
                                     .ConfigureAwait(false);
                                 executionResult = ToolExecutionResult.FromText(loaded.ToolResultJson);
-                                if (loaded.ActiveSkillIds is { } admittedIds)
+                                if (loaded.ActiveSkillKeys is { } admittedIds)
                                 {
                                     pinnedSkills = admittedIds.ToArray();
                                 }

@@ -194,7 +194,8 @@ public sealed class DurableReminderTests
             var running = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
             Assert.NotNull(running);
             Assert.Equal(WorkItemStatus.Running, running.Status);
-            Assert.Equal(DurableReminderExecutor.BeforeModelCheckpoint, running.Checkpoint!.PayloadJson);
+            Assert.NotNull(DurableToolCallCheckpoint.ReadSkillState(running.Checkpoint));
+            Assert.Equal(harness.Definition.SkillList.Count, DurableToolCallCheckpoint.ReadSkillState(running.Checkpoint).Catalog.Count);
             var staleGeneration = running.Claim!.Generation;
             var staleRevision = running.Revision;
             shutdown.Cancel();
@@ -206,7 +207,7 @@ public sealed class DurableReminderTests
             var recovered = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
             Assert.Equal(WorkItemStatus.WaitingToRetry, recovered!.Status);
             Assert.Null(recovered.Claim);
-            Assert.Equal(DurableReminderExecutor.BeforeModelCheckpoint, recovered.Checkpoint!.PayloadJson);
+            Assert.Equal(running.Checkpoint!.PayloadJson, recovered.Checkpoint!.PayloadJson);
             var stale = await Assert.ThrowsAsync<AgentCoreException>(() => harness.Work.CompleteAsync(
                 created.WorkItemId,
                 staleRevision,
@@ -1328,7 +1329,7 @@ public sealed class DurableReminderTests
                 claimed.Revision,
                 generation,
                 new WorkCheckpoint(
-                    DurableToolCallCheckpoint.Write(messages),
+                    DurableToolCallCheckpoint.Write(messages, skillState: new([], [], 0)),
                     2,
                     32,
                     (int)ToolLimits.Overall.TotalMilliseconds),
@@ -1402,7 +1403,7 @@ public sealed class DurableReminderTests
                 claimed.Revision,
                 generation,
                 new WorkCheckpoint(
-                    DurableToolCallCheckpoint.Write(messages),
+                    DurableToolCallCheckpoint.Write(messages, skillState: new([], [], 0)),
                     1,
                     32,
                     (int)ToolLimits.Overall.TotalMilliseconds),
@@ -1883,7 +1884,7 @@ public sealed class DurableReminderTests
             definition.Identity,
             AgentInstanceLifecycle.Active,
             Now,
-            Now));
+            Now), initialSkills: definition.SkillList);
         var definitions = new SingleDefinitionStore(definition);
         var memories = new OwnerMemoryDouble(Now);
         var recording = new RecordingModel(modelFactory?.Invoke() ?? new ScriptedLanguageModel(["Oven is ready."]));
@@ -1908,7 +1909,7 @@ public sealed class DurableReminderTests
             new SessionToolExecutor(
                 RoleKnowledgeService.FromApprovedCatalog(knowledge, time),
                 emailProvider: new SyntheticEmailProvider(),
-                httpRequestClient: http),
+                httpRequestClient: http, agentInstances: instances),
             logger);
         return new Harness(
             triggers,
@@ -2565,13 +2566,13 @@ public sealed class DurableReminderTests
         public ValueTask<AgentInstance?> FindCompatibilityAsync(string definitionId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public ValueTask InsertAsync(AgentInstance instance, CancellationToken cancellationToken = default) =>
+        public ValueTask InsertAsync(AgentInstance instance, CancellationToken cancellationToken = default, IReadOnlyList<SkillSpec>? initialSkills = null) =>
             throw new NotSupportedException();
 
         public ValueTask<AgentInstance> InsertManagedWithHistoryAsync(
             AgentInstance instance,
             AdminEventAppend historyAppend,
-            CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default, IReadOnlyList<AgentCore.Domain.Definitions.SkillSpec>? initialSkills = null) =>
             throw new NotSupportedException();
 
         public ValueTask<AgentInstance> UpdateActiveVersionWithHistoryAsync(

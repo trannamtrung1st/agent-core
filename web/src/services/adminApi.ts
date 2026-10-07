@@ -1017,11 +1017,11 @@ export async function setAdminUnattendedModel(
 }
 
 export type HarnessMode = "Disabled" | "Assisted" | "Managed";
-export type HarnessScope = "KnowledgeResources" | "Skills" | "Instructions" | "ToolSelection";
+export type HarnessScope = "KnowledgeResources" | "Instructions" | "ToolSelection";
 export type HarnessPolicy = { mode: HarnessMode; scopes: HarnessScope[]; sources: string[]; eligibleTools: string[]; frozen: boolean };
 export type HarnessSkill = { id: string; name: string; description: string; procedure: string; requiredCapabilities: string[]; resourcePaths: string[] };
 export type HarnessOperation = { kind: string; draftRevision: number; id: string | null; content: string | null; source: string | null;
-  skill: HarnessSkill | null; enabled: boolean | null; allowUnreadUnsupportedTypes: boolean | null };
+  enabled: boolean | null; allowUnreadUnsupportedTypes: boolean | null };
 export type HarnessApproval = { approvalId: string; actionHash: string; operation: HarnessOperation; status: string };
 export type HarnessEvidence = { actor: string; draftRevision: number; check: string; status: string; expected: string; observed: string; limitation: string | null };
 export type HarnessReview = {

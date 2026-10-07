@@ -8,7 +8,7 @@ vi.mock("../../services/adminApi", () => ({ getHarnessReview: vi.fn(), updateHar
 const base: HarnessReview = { instanceId: "instance", instanceRevision: 1, activeVersion: 7, policyRevision: 1,
   policy: { mode: "Disabled", scopes: [], sources: [], eligibleTools: [], frozen: false }, preparation: null,
   draftRevision: null, instructions: null, skills: [], knowledge: [], selectedTools: [], diff: null, resources: [] };
-const candidate: HarnessReview = { ...base, policy: { ...base.policy, mode: "Managed", scopes: ["Skills"] }, draftRevision: 3,
+const candidate: HarnessReview = { ...base, policy: { ...base.policy, mode: "Managed", scopes: ["KnowledgeResources"] }, draftRevision: 3,
   preparation: { preparationId: "preparation", draftId: "draft", baseVersion: 7, purpose: "Review operations", status: "Ready",
     publishedVersion: null, publishedDraftRevision: null, diagnosticId: null, approvals: [], evidence: [
       { actor: "Agent", draftRevision: 2, check: "Old report", status: "Verified", expected: "Old", observed: "Old", limitation: null },
@@ -72,17 +72,17 @@ describe("Harness governance", () => {
   });
   it("requires an area for an enabled policy and recovers when one is selected", async () => {
     vi.mocked(getHarnessReview).mockResolvedValue({ ...base, policy: { ...base.policy, mode: "Managed" } });
-    vi.mocked(updateHarness).mockResolvedValue({ ...base, policy: { ...base.policy, mode: "Managed", scopes: ["Skills"] } });
+    vi.mocked(updateHarness).mockResolvedValue({ ...base, policy: { ...base.policy, mode: "Managed", scopes: ["KnowledgeResources"] } });
     mount();
     expect(await screen.findByRole("group", { name: "Areas the agent may manage" })).toHaveAccessibleDescription("Select at least one area.");
     const save = screen.getByRole("button", { name: "Save authoring policy" });
     expect(save).toBeDisabled();
-    expect(screen.getByRole("combobox", { name: "Authoring mode" })).toHaveAccessibleDescription("Allowed knowledge and Skills may auto-save. Instructions and tools need approval.");
-    fireEvent.click(screen.getByRole("checkbox", { name: "Skills" }));
+    expect(screen.getByRole("combobox", { name: "Authoring mode" })).toHaveAccessibleDescription("Allowed knowledge may auto-save. Instructions and tools need approval.");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Knowledge & resources" }));
     expect(save).toBeEnabled();
     fireEvent.click(save);
     await waitFor(() => expect(updateHarness).toHaveBeenCalledWith("instance", "policy", {
-      expectedRevision: 1, mode: "Managed", scopes: ["Skills"], sources: [], eligibleTools: [], frozen: false
+      expectedRevision: 1, mode: "Managed", scopes: ["KnowledgeResources"], sources: [], eligibleTools: [], frozen: false
     }));
   });
 });

@@ -71,21 +71,11 @@ public sealed class SecretaryIdentityTests
         var inventory = secretary.SkillList.Single(skill => skill.Id == "store.inventory.review");
         Assert.Contains("confirmed low-stock subset", inventory.Procedure, StringComparison.Ordinal);
         Assert.Contains("Do not invent a threshold", inventory.Procedure, StringComparison.Ordinal);
-        Assert.Contains(
-            "store.daily.review",
-            DeterministicSkillSelector.SelectActiveIds(secretary, "check current state of our nopCommerce store"));
-        Assert.Contains(
-            "store.daily.review",
-            DeterministicSkillSelector.SelectActiveIds(secretary, "daily store review"));
-        Assert.DoesNotContain(
-            "store.daily.review",
-            DeterministicSkillSelector.SelectActiveIds(secretary, "publish a product to our nopCommerce store"));
-        Assert.Contains(
-            "store.product.manage",
-            DeterministicSkillSelector.SelectActiveIds(secretary, "publish a product to our nopCommerce store"));
-        Assert.DoesNotContain(
-            "store.daily.review",
-            DeterministicSkillSelector.SelectActiveIds(secretary, "improve my productivity"));
+
+
+
+
+
         Assert.All(secretary.SkillList, skill => Assert.NotEmpty(skill.RequiredCapabilities));
         Assert.DoesNotContain("demo.sensitive_action", RoleEnvironments.Of(secretary).ToolList);
     }
@@ -126,9 +116,7 @@ public sealed class SecretaryIdentityTests
         Assert.Contains("observe the current edit page before deciding whether another create is necessary", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("inspect and repair the existing product, not create a duplicate", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("Create only when the initial check showed that no intended product exists", product.Procedure, StringComparison.Ordinal);
-        Assert.Equal(
-            ["product", "sku", "catalog", "product price", "product image", "publish product", "store product"],
-            product.ActivationKeywords);
+        Assert.Equal(SkillProjection.OnDemand, product.Projection);
         Assert.Contains(ToolCatalog.ArtifactsCreateFromWorkspace, product.RequiredCapabilities);
         Assert.Contains("dashboard", product.Procedure, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("A Save or Publish click is not completion", product.Procedure, StringComparison.Ordinal);
@@ -144,10 +132,10 @@ public sealed class SecretaryIdentityTests
             Skills = [product],
             Environment = RoleEnvironment.Empty with { ToolAllowlist = [ToolCatalog.WorkspaceRead] }
         };
-        using var args = JsonDocument.Parse("""{"ids":["store.product.manage"]}""");
+        using var args = JsonDocument.Parse("""{"ids":["definition:store.product.manage"]}""");
         Assert.True(SkillLoadAdmission.TryParseIds(args.RootElement, out var requested, out _));
-        var plan = SkillLoadAdmission.Plan(bare, [], 0, requested);
-        Assert.Equal(["store.product.manage"], plan.Admitted);
+        var plan = SkillLoadAdmission.Plan(Catalog(bare), [], 0, requested);
+        Assert.Equal(["definition:store.product.manage"], plan.Admitted);
         var offered = new PromptContextBuilder()
             .OfferTools(bare, Context(bare, plan.Admitted))
             .Select(tool => tool.Name)
@@ -166,14 +154,14 @@ public sealed class SecretaryIdentityTests
     }
 
     [Fact]
-    public async Task Journey_style_product_request_pins_store_product_manage_and_other_turns_do_not()
+    public async Task OnDemand_skills_are_pinned_without_keyword_activation_across_turns()
     {
         var secretary = await LoadSecretaryAsync();
-        Assert.Contains("store.product.manage", DeterministicSkillSelector.SelectActiveIds(secretary, "publish this product"));
-        Assert.Contains("store.product.manage", DeterministicSkillSelector.SelectActiveIds(secretary, "SKU AC-KBD-001"));
-        Assert.DoesNotContain("store.product.manage", DeterministicSkillSelector.SelectActiveIds(secretary, "improve my productivity"));
-        var pending = DeterministicSkillSelector.SelectActiveIds(secretary, "review pending orders");
-        Assert.DoesNotContain("store.product.manage", pending);
+        var agents = new InMemoryAgentInstanceStore();
+        await agents.InsertAsync(new AgentInstance(InstanceId, secretary.Id, secretary.Version, secretary.Identity,
+            AgentInstanceLifecycle.Active, Now, Now), initialSkills: secretary.SkillList);
+        var pending = secretary.SkillList.Select(s => s.Id).ToArray();
+        Assert.Contains("store.product.manage", pending);
         Assert.Contains("store.order.review", pending);
         var turns = new InMemoryConversationTurnExecutionStore();
         var model = new CompletingLanguageModel();
@@ -213,6 +201,7 @@ public sealed class SecretaryIdentityTests
             sessionIds,
             new FakeTimeProvider(Now),
             NullLogger<SessionRuntime>.Instance,
+            tools: new SessionToolExecutor(agentInstances: agents),
             turnExecutions: turns);
         await runtime.AttachAsync();
 
@@ -221,9 +210,10 @@ public sealed class SecretaryIdentityTests
         await runtime.WaitUntilIdleAsync();
         var user = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.User);
         var pinned = await turns.GetBySourceEventAsync(runtime.SessionId, user.SourceEventId ?? user.EntryId);
-        Assert.Contains("store.product.manage", pinned!.PinnedActiveSkillIds);
+        Assert.Empty(pinned!.ActiveSkillKeys);
+        Assert.Contains(pinned.PinnedSkillCatalog, s => s.Key == "definition:store.product.manage");
         Assert.Contains(
-            "Do not return to /Admin/Product/Create after a product was successfully created",
+            "key: definition:store.product.manage",
             string.Join('\n', model.Requests[0].Messages.Select(message => message.Text)),
             StringComparison.Ordinal);
 
@@ -231,14 +221,15 @@ public sealed class SecretaryIdentityTests
         await runtime.WaitUntilIdleAsync();
         var reminder = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.User && entry.Text.Contains("Remind me", StringComparison.Ordinal));
         var reminderPin = await turns.GetBySourceEventAsync(runtime.SessionId, reminder.SourceEventId ?? reminder.EntryId);
-        Assert.DoesNotContain("store.product.manage", reminderPin!.PinnedActiveSkillIds);
+        Assert.DoesNotContain("store.product.manage", reminderPin!.ActiveSkillKeys);
 
         Assert.True(await runtime.SubmitUserTextAsync("Review pending orders."));
         await runtime.WaitUntilIdleAsync();
         var orders = runtime.Snapshot.Entries.Last(entry => entry.Text == "Review pending orders.");
         var orderPin = await turns.GetBySourceEventAsync(runtime.SessionId, orders.SourceEventId ?? orders.EntryId);
-        Assert.DoesNotContain("store.product.manage", orderPin!.PinnedActiveSkillIds);
-        Assert.Contains("store.order.review", orderPin.PinnedActiveSkillIds);
+        Assert.DoesNotContain("store.product.manage", orderPin!.ActiveSkillKeys);
+        Assert.Empty(orderPin.ActiveSkillKeys);
+        Assert.Contains(orderPin.PinnedSkillCatalog, s => s.Key == "definition:store.order.review");
     }
 
     [Fact]
@@ -325,8 +316,11 @@ public sealed class SecretaryIdentityTests
         var triggerIds = new DeterministicIdGenerator(
             Enumerable.Range(1, 8).Select(index => Guid.Parse($"019944af-00c3-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf21")]);
+        var agents = new InMemoryAgentInstanceStore();
+        await agents.InsertAsync(new AgentInstance(InstanceId, secretary.Id, secretary.Version, secretary.Identity,
+            AgentInstanceLifecycle.Active, Now, Now), initialSkills: secretary.SkillList);
         var tools = new SessionToolExecutor(
-            knowledge,
+            knowledge, agentInstances: agents,
             artifacts: artifacts,
             triggerRegistrations: new AutomationService(triggers, triggerIds, time));
         var sessionIds = new DeterministicIdGenerator(
@@ -421,7 +415,7 @@ public sealed class SecretaryIdentityTests
             false,
             null,
             new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, "store product"),
-            ActiveSkillIds: activeIds);
+            ActiveSkillKeys: activeIds);
 
     private static async Task<AgentDefinition> LoadSecretaryAsync()
     {
@@ -451,4 +445,7 @@ public sealed class SecretaryIdentityTests
 
         throw new DirectoryNotFoundException("agents/");
     }
+    private static IReadOnlyList<EffectiveSkill> Catalog(AgentDefinition d) => d.SkillList.Select(s => new EffectiveSkill("definition:" + s.Id,
+        SkillOrigin.Definition, s.Id, s.Name, s.Description, s.Procedure, s.Projection, s.RequiredCapabilities, s.ResourcePaths)).ToArray();
+
 }

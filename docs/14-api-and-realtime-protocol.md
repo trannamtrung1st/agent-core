@@ -372,14 +372,14 @@ All governance/advanced owner routes retain the local trusted-owner filter under
 | Method / suffix | Request | Effect |
 | --- | --- | --- |
 | GET root | none | Policy, recent internal candidate/diff/evidence inspection. |
-| PUT `/policy` | expectedRevision, mode, scopes, sources, eligibleTools, frozen | Grant/revoke/freeze. Normal UI sends empty source/eligible arrays; server derives authorized configured eligibility. |
+| PUT `/policy` | expectedRevision, mode, scopes, sources, eligibleTools, frozen | Grant/revoke/freeze. Normal UI sends empty source/eligible arrays; server derives authorized configured eligibility. Advanced arrays are bounded to 24 sources and 64 eligible tool names. |
 | POST `/prepare` | expectedRevision, purpose | Advanced owner candidate fork; no model loop. |
 | POST `/verify` | preparationId | Advanced current candidate Core checks. |
 | POST `/cancel` | expectedRevision | Discard unfinished candidate/pending approvals; Published returns 409. |
 | POST `/approvals/{approvalId}` | expectedRevision, actionHash, approve | Legacy advanced exact candidate decision. |
 | POST `/publish-adopt` | expectedRevision, draftRevision | Advanced owner lifecycle publication/adoption. |
 
-`POST /continue` was removed and returns 404. Normal tools are `harness.inspect`, `harness.knowledge.upsert/remove`, `harness.skill.upsert/remove`, `harness.instructions.update`, `harness.tool.select/configure`. Mutations carry expectedVersion/policyRevision and a semantic payload. Non-Skill mutations require expected/observed assessment. Skill creation requires `skill.name`, `skill.description`, and `skill.procedure`; an update requires an existing `skill.id` or unique `skill.name` and only changed fields, preserving omitted name, description, procedure and metadata when the ID is supplied. `skill.id` is optional: an omitted ID updates a unique existing Skill with the same normalized name or creates a Core-generated ID. Ambiguous matching names require an explicit ID. Optional activationKeywords, requiredCapabilities and knowledgeIds default to empty on creation; knowledgeIds refer to identities returned by inspect. Legacy resourcePaths is accepted separately. Skill IDs permit lowercase letters, digits, dots, underscores and hyphens after the initial letter. Exact runtime approval binds tool plus canonical arguments; authorization is rechecked after the wait. A changed save returns `saved=true`, `changed=true`, activeVersion, appliesTo=future conversations, currentSessionUnchanged, verification, limitation and skillId for Skill upsert. An identical Skill/knowledge/instruction/tool-state write returns `saved=true`, `changed=false` with unchanged activeVersion. Blocking verification returns `saved=false`, `error=verification_failed`, up to eight bounded findings with check/field/code/message, `activeVersionUnchanged=true` and `retryable=true`. Other errors use safe error/message and diagnosticId when available.
+`POST /continue` was removed and returns 404. Harness tools are `harness.inspect`, `harness.knowledge.upsert/remove`, `harness.instructions.update` and `harness.tool.select/configure`. Mutations carry expectedVersion/policyRevision and a semantic payload. Exact runtime approval binds tool and canonical arguments; authority is rechecked after waiting. Changed writes return saved/changed, activeVersion, future-conversation scope and verification/limitations. Identical state writes return changed=false. Blocking verification returns saved=false, verification_failed and bounded findings. Safe errors carry diagnostic references when available. Skills have no Harness alias or scope.
 
 Typed owner review uses string modes/statuses and evidence actor, draft revision, check, status, expected/observed/limitation. Verified, PartiallyVerified, CannotVerify, RequiresExternalEvidence and Failed remain distinct. Published evidence retains tested publishedDraftRevision. Invalid requests use 400; stale revisions/grants use 409; unexpected failures use server diagnostics. No private credential or host-path projection enters model context.
 
@@ -478,3 +478,22 @@ Scratch delete/batch approval binds exact paths and recursive intent, but not th
 ## Credential tool boundary
 
 `credentials.list` accepts optional `{cursor,limit}` (default limit 20, range 1–100) and returns `{items:[{reference,displayName,kind,metadata}],hasMore,nextCursor}` for the current active owner's active grants. Items use ordinal alias order; cursor is the last returned alias, and nextCursor is null on the final page. Each call evaluates current grants, so concurrent mutations can change later pages. Complete records fit the execution's remaining UTF-8 output budget; the page shrinks when necessary. If even one record cannot fit, return a budget-fitted `output_limit` error rather than truncated metadata or an empty non-progressing page. It has no selector for another owner and no value endpoint. `browser.act` adds an exclusive operation branch `{operation:"fill_credential",ref:"el_…",credentialRef:"store-admin"}` with no extra properties, raw value, selector or owner field. Secure fill is direct UserTurn only. Other kinds/sinks and detached injection are denied. Tool results/errors, checkpoints, history and captures must exclude protected material. Old `/connection` endpoints are removed, not compatibility aliases.
+
+
+## Agent Instance Skill HTTP and tool contract
+
+All HTTP routes below are under `/api/v2/admin/agent-instances/{instanceId}/skills` and require the existing trusted-local owner capability. Keys are URL-encoded canonical `definition:<id>` or `instance:<Guid>` strings.
+
+| Method/path | Operation |
+| --- | --- |
+| GET collection | Definition/local metadata; no full procedure bodies |
+| GET `/{key}` | Complete read-only/editable inspection |
+| POST collection | Create local Skill, Core-generated identity |
+| PATCH `/{key}` | Update local content with `expectedRevision` |
+| PUT `/{key}/enabled` | `{expectedRevision, enabled}` for either origin |
+| DELETE `/{key}?expectedRevision=N` | Delete local Skill only |
+| POST `/{key}/customize` | `{expectedRevision}`; atomic independent copy plus source disable |
+
+Create/update content is `{name, description, procedure, projection, enabled, requiredCapabilities}` with projection exactly `Always`/`OnDemand`; update additionally requires the current revision. Responses use camelCase and string origin/projection. Views include key, origin, description, revision, current Definition version or local source provenance, and `missingCapabilities`. Invalid/wrong-origin/resource-bound customization is 400; missing owner/key is 404; stale revision is 409; missing owner capability is 401. Archived owners are read-only. Admin mutations append safe operation/key history atomically; model writes retain Agent provenance without false Admin events.
+
+Ordinary `skills.list/inspect/create/update/set_enabled/delete/customize` use the same service and CAS rules, strict additionalProperties=false tool schemas and trusted owner context. Writes are non-replayable; requirements never grant authority. `skills.load` retains `{ids:[canonicalKey,...]}` and loads only pinned OnDemand entries. Existing tool-result error envelopes and output limits apply; no new SignalR envelope is introduced.

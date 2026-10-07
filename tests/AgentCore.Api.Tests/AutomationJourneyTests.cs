@@ -44,7 +44,7 @@ public sealed class AutomationJourneyTests
     }
 
     [Fact(Timeout = 90000)]
-    public async Task Experience_to_automation_to_approved_skill_survives_restart_then_finishes_quietly_without_more_work()
+    public async Task Experience_to_automation_to_instance_skill_survives_restart_then_finishes_quietly_without_more_work()
     {
         var db = Path.Combine(Path.GetTempPath(), $"automation-{Guid.NewGuid():N}.db");
         Guid instanceId, automationId, workId; int originalVersion;
@@ -61,7 +61,7 @@ public sealed class AutomationJourneyTests
             await service.RequestSessionAsync(instanceId, repeated.SessionId);
             Assert.Equal(2, await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100));
             instance = await s.GetRequiredService<HarnessManagementService>().ConfigureAsync(instanceId, instance.Revision,
-                new(HarnessManagementMode.Assisted, [HarnessManagementScope.Skills, HarnessManagementScope.ToolSelection], [], [ToolCatalog.WebFetch]));
+                new(HarnessManagementMode.Assisted, [ HarnessManagementScope.ToolSelection], [], [ToolCatalog.WebFetch]));
             var client = TestOwnerCapability.CreateOwnerClient(host);
             var path = $"/api/v2/admin/agent-instances/{instanceId}/automations";
             Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path, Draft(0, 10))).StatusCode);
@@ -95,13 +95,14 @@ public sealed class AutomationJourneyTests
             Assert.Contains("synthetic-automation-improve", item.Provenance.EvidenceJson);
             Assert.Equal(1, await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100));
             item = (await work.GetAsync(owner, workId))!;
-            Assert.Equal(WorkItemStatus.WaitingForApproval, item.Status);
-            Assert.Equal("harness.skill.upsert", item.Approval!.ToolName);
+            Assert.Equal(WorkItemStatus.Completed, item.Status);
+            Assert.Null(item.Approval);
+            Assert.Single((await s.GetRequiredService<IAgentInstanceStore>().ReadSkillsAsync(instanceId)).InstanceSkills, skill => skill.Name == "Experience review");
             Assert.Equal(originalVersion, (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(instanceId))!.ActiveVersion);
             var edited = await client.PutAsJsonAsync(path + "/" + automationId, Draft(r.Revision) with { Instructions = "synthetic-automation-attention future prompt" }); edited.EnsureSuccessStatusCode();
             var historical = (await client.GetFromJsonAsync<WorkItemResponse>(detailPath))!;
             Assert.Equal("synthetic-automation-improve", historical.Instructions);
-            var scheduler = await s.GetRequiredService<TriggerScheduler>().RunOnceAsync(DateTimeOffset.UtcNow.AddHours(10));
+            var scheduler = await s.GetRequiredService<TriggerScheduler>().RunOnceAsync(DateTimeOffset.UtcNow);
             Assert.Equal(0, scheduler.Admitted);
             Assert.Single(await work.ListAsync(owner, 100), w => w.Provenance.AutomationId == automationId);
             Assert.Contains("synthetic-automation-improve", (await work.GetAsync(owner, workId))!.Provenance.EvidenceJson);
@@ -122,20 +123,14 @@ public sealed class AutomationJourneyTests
             var s = host.Services; var client = TestOwnerCapability.CreateOwnerClient(host);
             var work = s.GetRequiredService<IWorkItemStore>(); var owner = new WorkOwner(instanceId, AgentCore.Domain.Conversation.LocalUserProfile.Id);
             var item = (await work.GetAsync(owner, workId))!;
-            Assert.Equal(WorkItemStatus.WaitingForApproval, item.Status);
-            var a = item.Approval!;
-            var url = $"/api/v2/admin/agent-instances/{instanceId}/work-items/{workId}/approvals/{a.ApprovalId}/approve";
-            Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(url, new DecideWorkApprovalRequest(item.Revision, a.Revision, "forged-hash"))).StatusCode);
-            (await client.PostAsJsonAsync(url, new DecideWorkApprovalRequest(item.Revision, a.Revision, a.ActionHash))).EnsureSuccessStatusCode();
-            Assert.Equal(1, await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100));
-            item = (await work.GetAsync(owner, workId))!;
             Assert.Equal(WorkItemStatus.Completed, item.Status);
             Assert.Equal("ActionCompleted", WorkCompletionRequest.Outcome(item.Result!.Text));
             Assert.False(item.Result.AttentionRequired);
             var instance = (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(instanceId))!;
-            Assert.True(instance.ActiveVersion > originalVersion);
+            Assert.Equal(originalVersion, instance.ActiveVersion);
             var future = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync(instance.DefinitionId, instance.ActiveVersion))!;
-            Assert.Single(future.SkillList, skill => skill.Name == "Experience review");
+            Assert.DoesNotContain(future.SkillList, skill => skill.Name == "Experience review");
+            Assert.Single((await s.GetRequiredService<IAgentInstanceStore>().ReadSkillsAsync(instanceId)).InstanceSkills, skill => skill.Name == "Experience review" && skill.CreatedBy == SkillAuthor.Agent);
             Assert.Empty(await Alerts(work, owner));
             var r = (await s.GetRequiredService<ITriggerStore>().GetAsync(new(instanceId, owner.ProfileId), automationId))!;
             r = await s.GetRequiredService<AdminAutomationAuthoringService>().SaveAsync(instanceId, automationId, r.Revision, true, 3600, "synthetic-automation-improve", null, null);

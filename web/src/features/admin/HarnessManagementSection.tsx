@@ -8,7 +8,7 @@ import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 
 export const harnessScopes: { label: string; value: HarnessScope }[] = [
-  { label: "Knowledge & resources", value: "KnowledgeResources" }, { label: "Skills", value: "Skills" },
+  { label: "Knowledge & resources", value: "KnowledgeResources" },
   { label: "Operating instructions", value: "Instructions" }, { label: "Tool proposals", value: "ToolSelection" }
 ];
 const evidenceLabels: Record<string, string> = { PartiallyVerified: "Partially verified", CannotVerify: "Cannot verify", RequiresExternalEvidence: "Requires external evidence" };
@@ -116,7 +116,7 @@ export function HarnessPolicyModeScopes({ mode, scopes, busy, onMode, onScopes }
     ? "Harness changes stay manual."
     : mode === "Assisted"
       ? "Changes need your approval in Chat."
-      : "Allowed knowledge and Skills may auto-save. Instructions and tools need approval.";
+      : "Allowed knowledge may auto-save. Instructions and tools need approval.";
   return <Flex vertical gap={token.padding} className="harness-policy-fields">
     <Form.Item label="Authoring mode" htmlFor={fieldId} extra={<Typography.Text id={helpId} type="secondary" style={{ color: token.colorTextSecondary }}>{help}</Typography.Text>}>
       <Select id={fieldId} aria-label="Authoring mode" aria-describedby={helpId} value={mode} disabled={busy} onChange={onMode} options={[

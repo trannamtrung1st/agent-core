@@ -134,6 +134,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             foreach (var item in workspaceEvents) yield return item;
             yield break;
         }
+        if (InstanceSkillScript.Generate(request) is { } instanceSkillEvents)
+        {
+            foreach (var item in instanceSkillEvents) yield return item;
+            yield break;
+        }
         if (HarnessChatScript.Generate(request) is { } chatEvents)
         {
             foreach (var item in chatEvents) yield return item;
@@ -1158,7 +1163,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                 new ModelToolCallEvent(new ModelToolCall(
                     "p85-load",
                     ToolCatalog.SkillsLoad,
-                    JsonSerializer.Serialize(new { ids = new[] { MessagingSkillJourneyTargetSkill } }))),
+                    JsonSerializer.Serialize(new { ids = new[] { "definition:" + MessagingSkillJourneyTargetSkill } }))),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ];
             return true;
@@ -1490,7 +1495,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                 events = ToolTurn(
                     "product-skill",
                     ToolCatalog.SkillsLoad,
-                    JsonSerializer.Serialize(new { ids = new[] { ProductPublishSkillId } }));
+                    JsonSerializer.Serialize(new { ids = new[] { "definition:" + ProductPublishSkillId } }));
                 return true;
             case 1:
                 events = ToolTurn(
@@ -1559,7 +1564,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                 events = ToolTurn(
                     "p9-skill",
                     ToolCatalog.SkillsLoad,
-                    JsonSerializer.Serialize(new { ids = new[] { BrowserRecordSkillId } }));
+                    JsonSerializer.Serialize(new { ids = new[] { "definition:" + BrowserRecordSkillId } }));
                 return true;
             case 3 when Offers(request, ToolCatalog.AppMessageSend):
                 events = ToolTurn(

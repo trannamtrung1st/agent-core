@@ -42,7 +42,6 @@ public static class ToolApprovalPreview
         {
             var details = new Dictionary<string, string>(StringComparer.Ordinal);
             details["Change"] = operation.Kind is "knowledge.upsert" or "instructions.update" ? ReadString(args, "content") ?? ""
-                : operation.Kind == "skill.upsert" && args.TryGetProperty("skill", out var skill) ? FormatSkill(skill)
                 : $"{operation.Kind}: {ReadString(args, "id") ?? "operating instructions"}; enabled={ReadValue(args, "enabled")}; unsupported readability={ReadValue(args, "allowUnreadUnsupportedTypes")}";
             AgentCore.Application.Admin.DefinitionResourcePolicies.RejectSecretsInTextualContent("text/plain", System.Text.Encoding.UTF8.GetBytes(details["Change"]));
             if (details["Change"].Length > 32000) throw new ArgumentException("Harness approval exceeds its content bound.");
@@ -77,8 +76,7 @@ public static class ToolApprovalPreview
     }
 
     private static string ReadValue(JsonElement args, string name) => args.TryGetProperty(name, out var value) ? value.ToString() : "unchanged";
-    private static string FormatSkill(JsonElement skill) => string.Join("\n", new[] { "id", "name", "description", "procedure", "activationKeywords", "requiredCapabilities", "resourcePaths" }
-        .Where(key => skill.TryGetProperty(key, out _)).Select(key => $"{key}: {skill.GetProperty(key)}"));
+
 
     public static string BoundSummary(string value) => Bound(value);
 

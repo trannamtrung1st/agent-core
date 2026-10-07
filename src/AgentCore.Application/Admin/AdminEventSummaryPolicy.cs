@@ -200,6 +200,17 @@ public static class AdminEventSummaryPolicy
                 throw AgentCoreErrors.Validation("Admin event summary metadata must be a JSON object.");
             }
 
+            if (append.Operation == AdminEventOperationKind.InstanceSkillsChanged)
+            {
+                var allowed = new HashSet<string>(StringComparer.Ordinal) { "instanceId", "operation", "skillKey" };
+                foreach (var property in document.RootElement.EnumerateObject())
+                    if (!allowed.Contains(property.Name)) throw AgentCoreErrors.Validation("Unsupported Skill history metadata.");
+                RequireString(document.RootElement, "instanceId");
+                RequireString(document.RootElement, "operation");
+                var key = document.RootElement.GetProperty("skillKey").GetString();
+                if (!SkillKeys.IsValid(key)) throw AgentCoreErrors.Validation("Invalid Skill history key.");
+                return;
+            }
             if (append.Operation is AdminEventOperationKind.ExperienceChanged or AdminEventOperationKind.AutomationChanged)
             {
                 var allowed = new HashSet<string>(StringComparer.Ordinal) { "instanceId", "recordId", "operation", "revision", "enabled", "instructionsHash", "modelKey" };

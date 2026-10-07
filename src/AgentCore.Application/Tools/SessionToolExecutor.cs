@@ -38,7 +38,7 @@ public sealed partial class SessionToolExecutor(
     AgentCore.Application.Continuity.IdentityMaintenanceService? identityMaintenance = null,
     AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null,
     AgentCore.Application.Credentials.CredentialService? credentials = null,
-    AdminAutomationAuthoringService? automationAuthoring = null)
+    AdminAutomationAuthoringService? automationAuthoring = null, AgentInstanceSkillService? instanceSkills = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -74,6 +74,11 @@ public sealed partial class SessionToolExecutor(
             || instance.HarnessManagement is not { } state || state.Policy.Frozen || state.Policy.Mode == HarnessManagementMode.Disabled) return null;
         return new(state.Policy, state.PolicyRevision, instance.ActiveVersion);
     }
+
+    public ValueTask<IReadOnlyList<EffectiveSkill>> ResolveSkillCatalogAsync(Guid? owner, AgentDefinition definition, CancellationToken ct) =>
+        owner is Guid id && _agentInstances is not null ? new EffectiveSkillCatalogResolver(_agentInstances).ResolveAsync(id, definition, ct)
+        : definition.SkillList.Count == 0 ? ValueTask.FromResult<IReadOnlyList<EffectiveSkill>>([])
+        : throw AgentCoreErrors.Persistence("Skill resolution requires a trusted Agent Instance store.");
 
     public ToolPolicyDecision EvaluateExecutionPolicy(
         AgentDefinition definition,
@@ -225,6 +230,8 @@ public sealed partial class SessionToolExecutor(
             if (ToolCatalog.IsIdentityMaintenance(call.Name)) RecordMaintenanceRejection(call.Name);
             return TextResult(Error("invalid", "Tool arguments were malformed."));
         }
+
+        if (InstanceSkillTools.IsManagement(call.Name)) return await ExecuteSkillManagementAsync(definition, call, args, admission, remainingOutputBytes, cancellationToken);
 
         if (LooksLikeSessionMutation(args) || LooksLikeHostPath(args))
         {

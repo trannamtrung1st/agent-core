@@ -10,7 +10,7 @@ public static class ToolProjectionService
         var eligible = ToolCatalog.Eligible(definition, context, gate);
         if (definition.Environment?.Capabilities is null) return eligible;
         var always = definition.Environment.Projection?.AlwaysCapabilities ?? [];
-        var skill = definition.SkillList.Where(s => context?.ActiveSkillIds?.Contains(s.Id, StringComparer.Ordinal) == true)
+        var skill = (context?.PinnedSkillCatalog ?? []).Where(s => context?.ActiveSkillKeys?.Contains(s.Key, StringComparer.Ordinal) == true)
             .SelectMany(s => s.RequiredCapabilities ?? []).ToHashSet(StringComparer.Ordinal);
         var loaded = context?.LoadedCapabilityIds ?? [];
         return eligible.Where(t => t.Name == ToolCatalog.CapabilitiesLoad

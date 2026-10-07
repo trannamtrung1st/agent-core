@@ -138,7 +138,7 @@ public sealed class ApplicationMessageTests
                 false,
                 null,
                 new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, "thanks"),
-                ActiveSkillIds: []),
+                ActiveSkillKeys: []),
             Guid.NewGuid());
         var prompt = string.Join('\n', request.Messages.Select(item => item.Text));
         Assert.Contains("hello", prompt, StringComparison.Ordinal);

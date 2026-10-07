@@ -169,6 +169,7 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
         releaseModel.TrySetResult();
         await secondDelta.Task.WaitAsync(TimeSpan.FromSeconds(15));
         await completed.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        await host.WaitUntilMailboxDrainedAsync(Guid.Parse(session.SessionId)).WaitAsync(TimeSpan.FromSeconds(15));
         Assert.Null(host.ActiveResponseId(Guid.Parse(session.SessionId)));
     }
 

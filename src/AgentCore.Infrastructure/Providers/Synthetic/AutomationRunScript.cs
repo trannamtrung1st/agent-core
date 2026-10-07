@@ -50,35 +50,15 @@ internal static class AutomationRunScript
         }
         if (prompt.Contains("synthetic-automation-improve", StringComparison.Ordinal))
         {
-            if (!Offers(HarnessChatTools.Inspect) || !Offers("harness.skill.upsert"))
-                return Complete("NoAction", "Harness management is unavailable; no change was made.", false);
-            if (!request.Messages.Any(m => (m.Text.StartsWith("Historical Experience", StringComparison.Ordinal) || m.Text.StartsWith("Historical Continuity", StringComparison.Ordinal) && m.Text.Contains("\"kind\":\"Experience\"", StringComparison.Ordinal))))
-                return Complete("NoAction", "No prior experience needs investigation.", false);
-            var saved = results.LastOrDefault(m => m.Name == "harness.skill.upsert");
-            if (saved is not null)
-            {
-                using var response = JsonDocument.Parse(saved.Text);
-                var changed = response.RootElement.TryGetProperty("saved", out var flag) && flag.ValueKind == JsonValueKind.True;
-                return Complete(changed ? "ActionCompleted" : "NoAction", changed
-                    ? "Refined the review Skill after exact approval and Core verification. External outcomes remain unverified."
-                    : "The proposed change was not applied.", false);
-            }
-            var inspected = results.LastOrDefault(m => m.Name == HarnessChatTools.Inspect);
-            if (inspected is null) return Call(HarnessChatTools.Inspect, new { });
+            if (!Offers("skills.create") || !Offers("skills.list")) return Complete("NoAction", "Skill management is unavailable; no change was made.", false);
+            if (results.LastOrDefault(m => m.Name == "skills.create") is { } saved)
+                return Complete(saved.Text.Contains("\"error\"", StringComparison.Ordinal) ? "NoAction" : "ActionCompleted", "Created an independent Instance review Skill.", false);
+            if (results.LastOrDefault(m => m.Name == "skills.list") is not { } inspected) return Call("skills.list", new { });
             using var inspection = JsonDocument.Parse(inspected.Text);
-            var root = inspection.RootElement;
-            if (!root.TryGetProperty("activeDefinitionVersion", out var activeVersion))
-                return Complete("NoAction", "Harness inspection is incomplete; no change was made.", false);
-            if (root.TryGetProperty("skills", out var skills) && skills.EnumerateArray().Any(s =>
-                (s.TryGetProperty("name", out var name) || s.TryGetProperty("Name", out name)) && name.GetString() == "Experience review"))
-                return Complete("NoAction", "The review Skill already incorporates the experience; nothing new needs action.", false);
-            return Call("harness.skill.upsert", new
-            {
-                expectedVersion = activeVersion.GetInt32(),
-                policyRevision = root.GetProperty("policyRevision").GetInt64(),
-                skill = new { name = "Experience review", description = "Verify observed state before reviewing store outcomes.",
-                    procedure = "Observe current page state before choosing a browser action. Check the outcome and report only confirmed results." }
-            });
+            if (inspection.RootElement.ValueKind == JsonValueKind.Array && inspection.RootElement.EnumerateArray().Any(s => s.GetProperty("name").GetString() == "Experience review"))
+                return Complete("NoAction", "The review Skill already exists.", false);
+            return Call("skills.create", new { name = "Experience review", description = "Verify observed outcomes.",
+                procedure = "Observe current state, check outcomes, and report confirmed results.", projection = "OnDemand", enabled = true, requiredCapabilities = Array.Empty<string>() });
         }
         if (prompt.Contains("synthetic-automation-attention", StringComparison.Ordinal))
             return Complete("AttentionRequested", "An unresolved checkpoint needs the owner's attention.", true);

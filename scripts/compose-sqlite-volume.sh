@@ -195,6 +195,21 @@ assert resource_bytes.decode("utf-8") in workspace_text, workspace_text
 status, v2_owner_body = request(f"http://127.0.0.1:{port}/api/v2/admin/agent-instances", method="POST",
     data=json.dumps({"definitionId": "general-assistant", "version": 16}).encode(), headers=owner_headers)
 v2_owner = json.loads(v2_owner_body)["instanceId"]
+skills_url = f"http://127.0.0.1:{port}/api/v2/admin/agent-instances/{v2_owner}/skills"
+_, skill_body = request(skills_url, headers=owner_headers)
+source = next(row for row in json.loads(skill_body) if row["origin"] == "Definition")
+_, copied_body = request(skills_url + "/" + urllib.parse.quote(source["key"], safe="") + "/customize", method="POST",
+    data=json.dumps({"expectedRevision": source["revision"]}).encode(), headers=owner_headers)
+copied_skill = json.loads(copied_body)
+assert copied_skill["origin"] == "Instance" and copied_skill["sourceDefinitionSkillId"] == "browser.record.lookup"
+_, accounting_body = request(skills_url, method="POST", headers=owner_headers,
+    data=json.dumps({"name": "Accounting", "description": "Check totals", "procedure": "COMPOSE_ACCOUNTING_PROCEDURE",
+        "projection": "OnDemand", "enabled": True, "requiredCapabilities": ["workspace.read"]}).encode())
+accounting = json.loads(accounting_body)
+_, skill_body = request(skills_url, headers=owner_headers)
+skill_rows = json.loads(skill_body)
+assert not next(row for row in skill_rows if row["key"] == source["key"])["enabled"]
+json.dump({"instanceId": v2_owner, "rows": skill_rows, "accounting": accounting, "copy": copied_skill}, open("/tmp/agent-core-skills-survival.json", "w"))
 status, v2_session_body = request(f"http://127.0.0.1:{port}/api/v2/sessions", method="POST",
     data=json.dumps({"agentInstanceId": v2_owner, "mode": "text"}).encode(), headers=owner_headers)
 v2_session = json.loads(v2_session_body)["sessionId"]
@@ -496,6 +511,14 @@ assert any(item["sha256Hex"] == home["item"]["sha256Hex"] and not item["director
 assert any(item["logicalPath"] == "/home/reports" and item["directory"] for item in json.loads(listed_home)["items"])
 assert len(json.loads(listed_home)["treeSha256"]) == 64
 v2 = json.load(open("/tmp/agent-core-v2-survival.json"))
+skills_seed = json.load(open("/tmp/agent-core-skills-survival.json"))
+skills_url = f"http://127.0.0.1:{port}/api/v2/admin/agent-instances/{skills_seed['instanceId']}/skills"
+status, skills_json = get(skills_url)
+assert status == 200 and json.loads(skills_json) == skills_seed["rows"]
+for saved in (skills_seed["accounting"], skills_seed["copy"]):
+    status, reopened_skill = get(skills_url + "/" + urllib.parse.quote(saved["key"], safe=""))
+    assert status == 200 and json.loads(reopened_skill) == saved
+print("instance Skills, Definition disabled state and copy provenance survived recreation", skills_seed["instanceId"])
 v2_bytes = bytes([0, 255, 128, 13, 10])
 for path in ("/home/binary.dat", "/working/binary.dat"):
     req = urllib.request.Request(f"http://127.0.0.1:{port}/api/v2/sessions/{v2['sessionId']}/workspace/content?path={path}", headers={"X-AgentCore-Owner-Capability": token})

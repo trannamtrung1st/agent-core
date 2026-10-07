@@ -26,10 +26,8 @@ public sealed class MessagingSkillJourneyTests
         var definition = Definition(
             Skill(
                 ScriptedLanguageModel.MessagingSkillJourneyTargetSkill,
-                ScriptedLanguageModel.MessagingSkillJourneyProcedure,
-                ["invoice"]),
-            Skill("order.lookup", "ORDER_PROCEDURE", ["order"]));
-        Assert.Empty(DeterministicSkillSelector.SelectActiveIds(definition, userText));
+                ScriptedLanguageModel.MessagingSkillJourneyProcedure),
+            Skill("order.lookup", "ORDER_PROCEDURE"));
 
         var recording = new RecordingModel(new ScriptedLanguageModel());
         var output = new CapturingSessionOutput();
@@ -49,7 +47,7 @@ public sealed class MessagingSkillJourneyTests
         Assert.DoesNotContain(ScriptedLanguageModel.MessagingSkillJourneyProcedure, afterMessage, StringComparison.Ordinal);
         Assert.Contains(ScriptedLanguageModel.MessagingSkillJourneyProcedure, afterLoad, StringComparison.Ordinal);
         Assert.DoesNotContain("ORDER_PROCEDURE", afterLoad, StringComparison.Ordinal);
-        Assert.Contains("id: order.lookup", first, StringComparison.Ordinal);
+        Assert.Contains("key: definition:order.lookup", first, StringComparison.Ordinal);
 
         var application = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.ApplicationMessage);
         Assert.Equal(ScriptedLanguageModel.MessagingSkillJourneyMessage, application.Text);
@@ -69,7 +67,7 @@ public sealed class MessagingSkillJourneyTests
 
         var user = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.User);
         var pinned = await turns.GetBySourceEventAsync(runtime.SessionId, user.SourceEventId ?? user.EntryId);
-        Assert.Equal([ScriptedLanguageModel.MessagingSkillJourneyTargetSkill], pinned!.PinnedActiveSkillIds);
+        Assert.Equal(["definition:" + ScriptedLanguageModel.MessagingSkillJourneyTargetSkill], pinned!.ActiveSkillKeys);
         Assert.Equal(1, pinned.SkillLoadCount);
 
         var saved = await memory.LoadAsync(runtime.SessionId);
@@ -92,8 +90,8 @@ public sealed class MessagingSkillJourneyTests
             reopened.Snapshot.Entries,
             entry => entry.Role == ConversationRole.Assistant && entry.Status == EntryStatus.Completed);
         Assert.Equal(
-            [ScriptedLanguageModel.MessagingSkillJourneyTargetSkill],
-            (await turns.GetBySourceEventAsync(runtime.SessionId, user.SourceEventId ?? user.EntryId))!.PinnedActiveSkillIds);
+            ["definition:" + ScriptedLanguageModel.MessagingSkillJourneyTargetSkill],
+            (await turns.GetBySourceEventAsync(runtime.SessionId, user.SourceEventId ?? user.EntryId))!.ActiveSkillKeys);
     }
 
     private static string Text(ModelRequest request) =>
@@ -108,8 +106,8 @@ public sealed class MessagingSkillJourneyTests
             Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.WorkspaceList, ToolCatalog.WorkspaceRead])
         };
 
-    private static SkillSpec Skill(string id, string procedure, IReadOnlyList<string> keywords) =>
-        new(id, id, "", procedure, keywords, [], []);
+    private static SkillSpec Skill(string id, string procedure) =>
+        new(id, id, "Procedure", procedure, SkillProjection.OnDemand, true, [], []);
 
     private static SessionRuntime Create(
         ILanguageModel model,
@@ -150,6 +148,9 @@ public sealed class MessagingSkillJourneyTests
             memory.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         }
 
+        var instances = new InMemoryAgentInstanceStore();
+        instances.InsertAsync(new(snapshot.AgentInstanceId, definition.Id, definition.Version, definition.Identity,
+            AgentInstanceLifecycle.Active, now, now), initialSkills: definition.SkillList).AsTask().GetAwaiter().GetResult();
         return new SessionRuntime(
             snapshot,
             model,
@@ -160,7 +161,7 @@ public sealed class MessagingSkillJourneyTests
             time,
             NullLogger<SessionRuntime>.Instance,
             new FakeInterruptionClassifier(),
-            turnExecutions: turns);
+            turnExecutions: turns, tools: new SessionToolExecutor(agentInstances: instances));
     }
 
     private sealed class RecordingModel(ILanguageModel inner) : ILanguageModel

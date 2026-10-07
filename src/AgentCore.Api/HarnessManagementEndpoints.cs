@@ -71,7 +71,7 @@ internal static class HarnessManagementEndpoints
         new(value.Id, value.Name, value.Description, value.Procedure, value.RequiredCapabilities, value.ResourcePaths);
     private static HarnessOperationResponse Operation(HarnessAuthoringOperation value) =>
         new(value.Kind, value.DraftRevision, value.Id, value.Content, value.Source,
-            value.Skill is null ? null : Skill(value.Skill), value.Enabled, value.AllowUnreadUnsupportedTypes);
+            value.Enabled, value.AllowUnreadUnsupportedTypes);
     private static HarnessReviewResponse ToResponse(HarnessReview review)
     {
         var state = review.State;

@@ -1,7 +1,7 @@
 namespace AgentCore.Domain.Definitions;
 
 public enum HarnessManagementMode { Disabled, Assisted, Managed }
-public enum HarnessManagementScope { KnowledgeResources, Skills, Instructions, ToolSelection }
+public enum HarnessManagementScope { KnowledgeResources, Instructions, ToolSelection }
 public enum HarnessPreparationStatus { Preparing, AwaitingApproval, Ready, Failed, Cancelled, Published }
 public enum HarnessEvidenceStatus { Verified, PartiallyVerified, CannotVerify, RequiresExternalEvidence, Failed }
 
@@ -23,7 +23,6 @@ public sealed record HarnessAuthoringOperation(
     string? Id = null,
     string? Content = null,
     string? Source = null,
-    SkillSpec? Skill = null,
     bool? Enabled = null,
     bool? AllowUnreadUnsupportedTypes = null);
 

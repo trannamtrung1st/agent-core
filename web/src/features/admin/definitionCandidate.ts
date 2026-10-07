@@ -15,7 +15,8 @@ export type SkillDraft = {
   name: string;
   description: string;
   procedure: string;
-  activationKeywords: string;
+  projection: "Always" | "OnDemand" | undefined;
+  defaultEnabled: boolean | undefined;
   requiredCapabilities: string;
   resourcePaths: string;
 };
@@ -33,7 +34,8 @@ export function readSkills(candidate: DefinitionCandidate): SkillDraft[] {
       name: readSkillString(row.name),
       description: readSkillString(row.description),
       procedure: readSkillString(row.procedure),
-      activationKeywords: readSkillListField(row.activationKeywords),
+      projection: row.projection === "Always" || row.projection === "OnDemand" ? row.projection : undefined,
+      defaultEnabled: typeof row.defaultEnabled === "boolean" ? row.defaultEnabled : undefined,
       requiredCapabilities: readSkillListField(row.requiredCapabilities),
       resourcePaths: readSkillListField(row.resourcePaths)
     };
@@ -60,7 +62,8 @@ export function writeSkills(candidate: DefinitionCandidate, skills: SkillDraft[]
         name: skill.name,
         description: skill.description,
         procedure: skill.procedure,
-        activationKeywords: skill.activationKeywords,
+        projection: skill.projection,
+        defaultEnabled: skill.defaultEnabled,
         requiredCapabilities: skill.requiredCapabilities,
         resourcePaths: skill.resourcePaths
       };
@@ -108,7 +111,6 @@ function normalizeSkillLists(candidate: DefinitionCandidate): DefinitionCandidat
       const row = item as Record<string, unknown>;
       return {
         ...row,
-        activationKeywords: normalizeSkillListValue(row.activationKeywords),
         requiredCapabilities: normalizeSkillListValue(row.requiredCapabilities),
         resourcePaths: normalizeSkillListValue(row.resourcePaths)
       };

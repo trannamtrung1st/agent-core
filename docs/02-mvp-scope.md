@@ -146,7 +146,7 @@ The baseline is a modular monolith with SQLite and a React SPA. [Technology Deci
 
 ## P9.7 — Conversational harness learning
 
-Normal trusted-local owner Chat is the primary interface for durable role knowledge and reusable Skills. Instance-owned Manual (Disabled), Assisted and Managed policy grants separate knowledge, Skill, instruction and tool-proposal scopes. User text expresses intent, never authority. Managed knowledge/Skills may auto-apply after Core verification; Assisted changes, operating instructions and every tool selection/configuration change need exact Chat approval. Admin governs policy, inspection and freeze. Internal candidates preserve immutable publication and future-Session adoption; existing Session pins stay unchanged. P10/P11 remain requirement-triggered. See [current evidence](reports/p9.7-chat-first-freeze-candidate.md).
+Normal trusted-local owner Chat is the primary interface for durable role knowledge. Ordinary authorized tools manage independent Instance Skills under the current Skill ownership contract. Instance-owned Manual (Disabled), Assisted and Managed policy grants separate knowledge, instruction and tool-proposal scopes. User text expresses intent, never authority. Managed knowledge may auto-apply after Core verification; Assisted changes, operating instructions and every tool selection/configuration change need exact Chat approval. Admin governs policy, inspection and freeze. Internal candidates preserve immutable publication and future-Session adoption; existing Session pins stay unchanged. P10/P11 remain requirement-triggered. See [current evidence](reports/p9.7-chat-first-freeze-candidate.md).
 
 ## Unified Automation and continuity scope
 

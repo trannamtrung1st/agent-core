@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class SqliteAgentInstanceStore(
+public sealed partial class SqliteAgentInstanceStore(
     IDbContextFactory<AgentCoreDbContext> contexts,
     IIdGenerator ids) : IAgentInstanceStore
 {
@@ -53,10 +53,11 @@ public sealed class SqliteAgentInstanceStore(
     }
 
 
-    public async ValueTask InsertAsync(AgentInstance instance, CancellationToken cancellationToken = default)
+    public async ValueTask InsertAsync(AgentInstance instance, CancellationToken cancellationToken = default, IReadOnlyList<SkillSpec>? initialSkills = null)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         db.AgentInstances.Add(Map(instance));
+        await InitializeSkillsAsync(db, instance.InstanceId, initialSkills, instance.UpdatedAt, cancellationToken);
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -70,7 +71,7 @@ public sealed class SqliteAgentInstanceStore(
     public async ValueTask<AgentInstance> InsertManagedWithHistoryAsync(
         AgentInstance instance,
         AdminEventAppend historyAppend,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, IReadOnlyList<SkillSpec>? initialSkills = null)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var existingEvent = await AdminEventPersistence.TryGetByOperationIdAsync(
@@ -89,6 +90,7 @@ public sealed class SqliteAgentInstanceStore(
         }
 
         db.AgentInstances.Add(Map(instance));
+        await InitializeSkillsAsync(db, instance.InstanceId, initialSkills, instance.UpdatedAt, cancellationToken);
         AdminEventPersistence.StageAppend(db, historyAppend, ids.NewId());
         try
         {
@@ -181,6 +183,7 @@ public sealed class SqliteAgentInstanceStore(
         row.UpdatedAtUtc = updatedAt.ToUnixTimeMilliseconds();
         row.Revision++;
         AdminEventPersistence.StageAppend(db, historyAppend, ids.NewId());
+        await InitializeSkillsAsync(db, update.InstanceId, update.DefinitionSkills, updatedAt, cancellationToken);
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -535,6 +538,7 @@ public sealed class SqliteAgentInstanceStore(
             row.HarnessManagementJson = JsonSerializer.Serialize(update.HarnessManagement, Json);
         if (update.History is not null)
             AdminEventPersistence.StageAppend(db, update.History, ids.NewId());
+        await InitializeSkillsAsync(db, update.InstanceId, update.DefinitionSkills, updatedAt, cancellationToken);
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

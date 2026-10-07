@@ -27,7 +27,6 @@ public sealed class BrowserRecordJourneyTests
     {
         var userText = "Please look up record AC-1042.";
         var definition = Definition();
-        Assert.Empty(DeterministicSkillSelector.SelectActiveIds(definition, userText));
 
         var browser = new FixtureBrowser();
         var recording = new RecordingModel(new ScriptedLanguageModel());
@@ -230,8 +229,7 @@ public sealed class BrowserRecordJourneyTests
                     ScriptedLanguageModel.BrowserRecordSkillId,
                     "Record lookup",
                     "Look up one fixture record and answer in Chat.",
-                    Procedure,
-                    ["fixture-record-lookup"],
+                    Procedure, SkillProjection.OnDemand, true,
                     [ToolCatalog.BrowserNavigate],
                     [])
             ]);
@@ -271,6 +269,9 @@ public sealed class BrowserRecordJourneyTests
                 null), AgentInstanceId: Guid.NewGuid());
         var store = new InMemoryMemoryStore();
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
+        var instances = new InMemoryAgentInstanceStore();
+        instances.InsertAsync(new(snapshot.AgentInstanceId, definition.Id, definition.Version, definition.Identity,
+            AgentInstanceLifecycle.Active, now, now), initialSkills: definition.SkillList).AsTask().GetAwaiter().GetResult();
         return new SessionRuntime(
             snapshot,
             model,
@@ -280,7 +281,7 @@ public sealed class BrowserRecordJourneyTests
             ids,
             time,
             NullLogger<SessionRuntime>.Instance,
-            tools: new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll),
+            tools: new SessionToolExecutor(agentInstances: instances, browser: browser, configurationGate: ToolConfigurationGates.AllowAll),
             turnExecutions: turns);
     }
 

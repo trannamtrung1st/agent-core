@@ -7,7 +7,7 @@ using AgentCore.Infrastructure.Definitions;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
+public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
 {
     private readonly object _gate = new();
     internal object CredentialGate => _gate;
@@ -93,7 +93,7 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
         }
     }
 
-    public ValueTask InsertAsync(AgentInstance instance, CancellationToken cancellationToken = default)
+    public ValueTask InsertAsync(AgentInstance instance, CancellationToken cancellationToken = default, IReadOnlyList<SkillSpec>? initialSkills = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
@@ -103,7 +103,9 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                 throw new AgentCoreException("Conflict", "Agent instance already exists.", 409);
             }
 
+            ValidateSkillTransition(instance.InstanceId, initialSkills);
             _instances[instance.InstanceId] = instance;
+            InitializeSkills(instance.InstanceId, initialSkills, instance.UpdatedAt);
             return ValueTask.CompletedTask;
         }
     }
@@ -111,7 +113,7 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
     public ValueTask<AgentInstance> InsertManagedWithHistoryAsync(
         AgentInstance instance,
         AdminEventAppend historyAppend,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, IReadOnlyList<SkillSpec>? initialSkills = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (EventStore is null)
@@ -142,6 +144,7 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                     throw new AgentCoreException("Conflict", "Agent instance already exists.", 409);
                 }
 
+                ValidateSkillTransition(instance.InstanceId, initialSkills);
                 _instances[instance.InstanceId] = instance;
                 try
                 {
@@ -153,6 +156,7 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                     throw;
                 }
 
+                InitializeSkills(instance.InstanceId, initialSkills, instance.UpdatedAt);
                 return ValueTask.FromResult(instance);
             }
         }
@@ -227,6 +231,7 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                     throw AgentCoreErrors.Validation("Active version is required.");
                 }
 
+                ValidateSkillTransition(update.InstanceId, update.DefinitionSkills);
                 var previous = instance;
                 var next = instance with
                 {
@@ -246,6 +251,7 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                     throw;
                 }
 
+                InitializeSkills(update.InstanceId, update.DefinitionSkills, updatedAt);
                 return ValueTask.FromResult(next);
             }
         }
@@ -309,6 +315,7 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                     throw new AgentCoreException("Conflict", "Agent instance persona revision is stale.", 409);
                 }
 
+                ValidateSkillTransition(update.InstanceId, update.DefinitionSkills);
                 var previous = instance;
                 var next = instance with
                 {
@@ -328,6 +335,7 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                     throw;
                 }
 
+                InitializeSkills(update.InstanceId, update.DefinitionSkills, updatedAt);
                 return ValueTask.FromResult(next);
             }
         }
@@ -401,6 +409,7 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                     throw AgentCoreErrors.Validation("Lifecycle is required.");
                 }
 
+                ValidateSkillTransition(update.InstanceId, update.DefinitionSkills);
                 var previous = instance;
                 var next = instance with
                 {
@@ -419,6 +428,7 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                     throw;
                 }
 
+                InitializeSkills(update.InstanceId, update.DefinitionSkills, updatedAt);
                 return ValueTask.FromResult(next);
             }
         }
@@ -554,6 +564,7 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                 personaRevision++;
             }
 
+            ValidateSkillTransition(update.InstanceId, update.DefinitionSkills);
             var next = instance with
             {
                 ActiveVersion = update.ActiveVersion ?? instance.ActiveVersion,
@@ -575,6 +586,7 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                 if (EventStore is null) throw AgentCoreErrors.Persistence("Admin history is unavailable.");
                 EventStore.AppendWithinLock(update.History);
             }
+            InitializeSkills(update.InstanceId, update.DefinitionSkills, updatedAt);
             _instances[update.InstanceId] = next;
             return ValueTask.FromResult(next);
         }

@@ -192,8 +192,7 @@ public sealed class ProductPublishWorkflowTests
                     ScriptedLanguageModel.ProductPublishSkillId,
                     "Manage a store product",
                     "Create or update a product, then confirm the public storefront.",
-                    "Search SKU AC-KBD-001, upload ac-keyboard.png, and check the storefront. A Save or Publish click is not completion.",
-                    ["store product"],
+                    "Search SKU AC-KBD-001, upload ac-keyboard.png, and check the storefront. A Save or Publish click is not completion.", SkillProjection.OnDemand, true,
                     [ToolCatalog.BrowserNavigate],
                     [])
             ]);
@@ -210,6 +209,7 @@ public sealed class ProductPublishWorkflowTests
             Enumerable.Range(1, 400).Select(index => Guid.Parse($"019944af-00d2-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940d201")]);
         var now = time.GetUtcNow();
+        var instanceId = Guid.NewGuid();
         var snapshot = new SessionSnapshot(
             1,
             ids.NewSessionId(),
@@ -230,9 +230,12 @@ public sealed class ProductPublishWorkflowTests
                 "primary-llm",
                 "scripted",
                 ModelSelectionSource.SystemDefault,
-                null), AgentInstanceId: Guid.NewGuid());
+                null), AgentInstanceId: instanceId);
         var store = new InMemoryMemoryStore();
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
+        var agents = new InMemoryAgentInstanceStore();
+        agents.InsertAsync(new AgentInstance(instanceId, definition.Id, definition.Version, definition.Identity,
+            AgentInstanceLifecycle.Active, now, now), initialSkills: definition.SkillList).AsTask().GetAwaiter().GetResult();
         return new SessionRuntime(
             snapshot,
             model,
@@ -242,7 +245,7 @@ public sealed class ProductPublishWorkflowTests
             ids,
             time,
             NullLogger<SessionRuntime>.Instance,
-            tools: new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll),
+            tools: new SessionToolExecutor(browser: browser, agentInstances: agents, configurationGate: ToolConfigurationGates.AllowAll),
             turnExecutions: turns);
     }
 

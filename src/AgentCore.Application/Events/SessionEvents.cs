@@ -88,7 +88,7 @@ public sealed record BrainReturned(
     Guid ResponseId,
     AgentTrigger Trigger,
     AgentDecision Decision,
-    TaskCompletionSource Processed) : SessionInput(Context);
+    TaskCompletionSource Processed, IReadOnlyList<AgentCore.Domain.Definitions.EffectiveSkill>? SkillCatalog = null) : SessionInput(Context);
 
 public sealed record BrainFailed(
     EventContext Context,

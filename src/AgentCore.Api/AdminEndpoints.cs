@@ -100,6 +100,7 @@ internal static class AdminEndpoints
         var group = app.MapGroup("/api/v2/admin").AddEndpointFilter<OwnerCapabilityFilter>();
         group.MapCredentials();
         HarnessManagementEndpoints.Map(group);
+        AgentInstanceSkillEndpoints.Map(group);
         ContinuityEndpoints.Map(group);
 
         group.MapGet("/definitions", async (

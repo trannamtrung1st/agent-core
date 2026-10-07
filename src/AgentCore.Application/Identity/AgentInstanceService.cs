@@ -29,7 +29,7 @@ public sealed class AgentInstanceService(
             AgentInstanceLifecycle.Active,
             now,
             now);
-        await instances.InsertAsync(created, cancellationToken).ConfigureAwait(false);
+        await instances.InsertAsync(created, cancellationToken, definition.SkillList).ConfigureAwait(false);
         return created;
     }
 
@@ -54,7 +54,7 @@ public sealed class AgentInstanceService(
 
         var updatedAt = time.GetUtcNow();
         var updated = await instances.UpdateWithExpectedRevisionAsync(
-                new AgentInstanceRevisionUpdate(instance.InstanceId, expectedRevision, ActiveVersion: definition.Version),
+                new AgentInstanceRevisionUpdate(instance.InstanceId, expectedRevision, ActiveVersion: definition.Version, DefinitionSkills: definition.SkillList),
                 updatedAt,
                 cancellationToken)
             .ConfigureAwait(false);

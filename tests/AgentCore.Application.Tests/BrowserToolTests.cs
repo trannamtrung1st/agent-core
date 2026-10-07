@@ -440,9 +440,8 @@ public sealed class BrowserToolTests
                 new SkillSpec(
                     "browser.record.lookup",
                     "Record lookup",
-                    "",
-                    "Search the fixture and answer in chat.",
-                    ["fixture-record-lookup"],
+                    "Procedural guidance.",
+                    "Search the fixture and answer in chat.", SkillProjection.OnDemand, true,
                     [ToolCatalog.BrowserNavigate],
                     [])
             ]
@@ -458,8 +457,8 @@ public sealed class BrowserToolTests
                 && finding.Message.Contains(ToolCatalog.BrowserNavigate, StringComparison.Ordinal));
 
         var definition = candidate.ToPublished(1);
-        var plan = SkillLoadAdmission.Plan(definition, [], 0, ["browser.record.lookup"]);
-        Assert.Contains("browser.record.lookup", plan.Admitted);
+        var plan = SkillLoadAdmission.Plan(Catalog(definition), [], 0, ["definition:browser.record.lookup"]);
+        Assert.Contains("definition:browser.record.lookup", plan.Admitted);
         Assert.DoesNotContain(ToolCatalog.BrowserNavigate, RoleEnvironments.Of(definition).ToolList);
 
         var fake = new FakeBrowser();
@@ -632,7 +631,7 @@ public sealed class BrowserToolTests
         Assert.DoesNotContain("Trusted browser start:", browserDescription, StringComparison.Ordinal);
 
         var fake = new FakeBrowser();
-        var userTurn = Context(v11, TriggerKind.UserTurn, detached: false);
+        var userTurn = Context(v11, TriggerKind.UserTurn, detached: false) with { AgentInstanceId = Guid.NewGuid(), PinnedSkillCatalog = Catalog(v11) };
         var offered = new PromptContextBuilder(ToolConfigurationGates.AllowAll, fake)
             .OfferTools(v11, userTurn);
         var navigate = Assert.Single(offered, tool => tool.Name == ToolCatalog.BrowserNavigate);
@@ -710,7 +709,7 @@ public sealed class BrowserToolTests
         var v11 = (await store.GetAsync("general-assistant", 11))!;
         var v12 = (await store.GetAsync("general-assistant", 12))!;
         var fake = new FakeBrowser();
-        var userTurn = Context(v11, TriggerKind.UserTurn, detached: false);
+        var userTurn = Context(v11, TriggerKind.UserTurn, detached: false) with { PinnedSkillCatalog = Catalog(v11) };
         var offeredV11 = new PromptContextBuilder(ToolConfigurationGates.AllowAll, fake)
             .OfferTools(v11, userTurn);
         var offeredV12 = new PromptContextBuilder(ToolConfigurationGates.AllowAll, fake)
@@ -1253,4 +1252,7 @@ public sealed class BrowserToolTests
         public ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             ValueTask.CompletedTask;
     }
+    private static IReadOnlyList<EffectiveSkill> Catalog(AgentDefinition d) => d.SkillList.Select(s => new EffectiveSkill("definition:" + s.Id,
+        SkillOrigin.Definition, s.Id, s.Name, s.Description, s.Procedure, s.Projection, s.RequiredCapabilities, s.ResourcePaths)).ToArray();
+
 }

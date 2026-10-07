@@ -142,9 +142,9 @@ public sealed class CapabilityProjectionTests
         var c = Context(d);
         Assert.Equal([ToolCatalog.CapabilitiesLoad], ToolCatalog.For(d, c, ToolConfigurationGates.AllowAll).Select(t => t.Name));
         d = d with { Environment = d.Environment! with { Projection = new([ToolCatalog.WorkspaceRead]) },
-            Skills = [new("write", "Write", "Write a file", "Use tools", [], [ToolCatalog.WorkspaceWrite], [])] };
-        c = c with { Definition = d, ActiveSkillIds = ["write"], LoadedCapabilityIds = [ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceWrite] };
-        Assert.Equal(4, ToolCatalog.For(d, c, ToolConfigurationGates.AllowAll).Count);
+            Skills = [new("write", "Write", "Write a file", "Use tools", SkillProjection.OnDemand, true, [ToolCatalog.WorkspaceWrite], [])] };
+        c = c with { Definition = d, AgentInstanceId = Guid.NewGuid(), PinnedSkillCatalog = [new("definition:write", SkillOrigin.Definition, "write", "Write", "Write a file", "Use tools", SkillProjection.OnDemand, [ToolCatalog.WorkspaceWrite], [])], ActiveSkillKeys = ["definition:write"], LoadedCapabilityIds = [ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceWrite] };
+        Assert.Equal(6, ToolCatalog.For(d, c, ToolConfigurationGates.AllowAll).Count);
         Assert.Contains(ToolCatalog.SkillsLoad, ToolCatalog.For(d, c, ToolConfigurationGates.AllowAll).Select(t => t.Name));
         Assert.Empty(ToolCatalog.For(d, c with { ModelSupportsTools = false }, ToolConfigurationGates.AllowAll));
         Assert.DoesNotContain(ToolCatalog.WorkspaceWrite, ToolCatalog.For(d, Context(d), ToolConfigurationGates.AllowAll).Select(t => t.Name));

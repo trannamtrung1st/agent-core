@@ -37,16 +37,6 @@ public sealed class HarnessManagementService(
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static string Bound(string value, int max) => value.Length <= max ? value : value[..max];
-    private static string ComparableSkillName(string name) =>
-        string.Join(' ', name.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).ToUpperInvariant();
-
-    private static bool SameSkill(SkillSpec left, SkillSpec right) =>
-        left.Id == right.Id && left.Name == right.Name && left.Description == right.Description
-        && left.Procedure == right.Procedure
-        && left.ActivationKeywords.SequenceEqual(right.ActivationKeywords, StringComparer.Ordinal)
-        && left.RequiredCapabilities.SequenceEqual(right.RequiredCapabilities, StringComparer.Ordinal)
-        && left.ResourcePaths.SequenceEqual(right.ResourcePaths, StringComparer.Ordinal);
-
     public async ValueTask<HarnessReview> ReviewAsync(Guid instanceId, CancellationToken ct = default)
     {
         var instance = await RequireInstanceAsync(instanceId, ct);
@@ -73,7 +63,7 @@ public sealed class HarnessManagementService(
             var instance = await RequireInstanceAsync(instanceId, token);
             RequireRevision(instance, expectedRevision);
             if (!Enum.IsDefined(policy.Mode) || policy.Scopes.Any(scope => !Enum.IsDefined(scope))
-                || policy.Scopes.Count > 4 || policy.Sources.Count > 24 || policy.EligibleTools.Count > 40)
+                || policy.Scopes.Count > 4 || policy.Sources.Count > 24 || policy.EligibleTools.Count > 64)
                 throw AgentCoreErrors.Validation("Harness policy is invalid or exceeds its bounds.");
             foreach (var source in policy.Sources)
             {
@@ -260,25 +250,6 @@ public sealed class HarnessManagementService(
                 "knowledgeReadback", check.Status.ToString(), true, token);
         }, ct);
 
-    public ValueTask<AgentInstance> TestSkillActivationAsync(Guid instanceId, Guid preparationId, string skillId, CancellationToken ct) =>
-        gates.WithInstanceAsync(instanceId, async token =>
-        {
-            var instance = await RequireInstanceAsync(instanceId, token);
-            var review = await ReviewAsync(instanceId, token);
-            var (state, prep, draft) = await RequireContextAsync(instance, preparationId, review.Draft?.Revision ?? 0, token);
-            ValidateText(skillId, 80, "skill identity");
-            var plan = SkillLoadAdmission.Plan(draft.Candidate.ToPublished(1), [], 0, [skillId]);
-            var injected = PromptContextBuilder.BuildActiveSkillSystem(draft.Candidate.ToPublished(1), plan.Admitted);
-            var skill = draft.Candidate.SkillList.SingleOrDefault(s => s.Id == skillId);
-            var passed = skill is not null && plan.Admitted.Contains(skillId) && injected.Contains(skill.Procedure, StringComparison.Ordinal);
-            var check = new HarnessVerificationEvidence("Core", draft.Revision, "Candidate Skill activation", passed ? HarnessEvidenceStatus.Verified : HarnessEvidenceStatus.Failed,
-                "The candidate procedure passes existing Skill activation admission and enters the active Skill prompt.",
-                passed ? $"Skill {skillId} was admitted and its exact procedure injected." : "Skill activation or procedure injection failed.",
-                "Activation verifies the runtime prerequisite; procedure quality and production outcomes need separate evidence.");
-            return await SaveAsync(instance, state with { Preparation = prep with { Evidence = [.. prep.Evidence.TakeLast(63), check], Status = StatusAfterEvidence(prep, check) } },
-                "skillTest", check.Status.ToString(), true, token);
-        }, ct);
-
     public ValueTask<AgentInstance> VerifyAsync(Guid instanceId, Guid preparationId, CancellationToken ct = default, bool agent = false) =>
         gates.WithInstanceAsync(instanceId, async token =>
         {
@@ -291,13 +262,13 @@ public sealed class HarnessManagementService(
             var review = await ReviewAsync(instance.InstanceId, ct);
             var (state, prep, draft) = await RequireContextAsync(instance, preparationId, review.Draft?.Revision ?? 0, ct);
             var checks = await validation.ValidateDraftAsync(draft.DraftId, ct);
-            var evidence = prep.Evidence.Where(e => e.Actor != "Core" || e.DraftRevision != draft.Revision || e.Check is "Candidate knowledge readback" or "Candidate Skill activation").ToList();
+            var evidence = prep.Evidence.Where(e => e.Actor != "Core" || e.DraftRevision != draft.Revision || e.Check is "Candidate knowledge readback").ToList();
             evidence.Add(new("Core", draft.Revision, "Structure and resource policy", checks.HasBlockingFindings ? HarnessEvidenceStatus.Failed : HarnessEvidenceStatus.Verified,
                 "Candidate passes existing Definition and resource validation.", checks.HasBlockingFindings
                     ? string.Join("; ", checks.Findings.Select(f => f.Message)) : "Validation passed."));
             evidence.Add(new("Core", draft.Revision, "Authoring authority", HarnessEvidenceStatus.Verified,
                 "Policy, instance, preparation and candidate revision match.", agent
-                    ? "Current grant and active base version match; Managed Chat may promote Skills and knowledge after verification."
+                    ? "Current grant and active base version match; Managed Chat may promote knowledge after verification."
                     : "Current grant and active base version match; Admin controls this preparation."));
             evidence.Add(new("Core", draft.Revision, "Tool approvals", prep.Approvals.Any(a => a.Status is "Pending" or "Consumed")
                 ? HarnessEvidenceStatus.RequiresExternalEvidence : HarnessEvidenceStatus.Verified,
@@ -308,11 +279,9 @@ public sealed class HarnessManagementService(
                 evidence.Add(new("Core", draft.Revision, scenario.Title, result.Passed ? HarnessEvidenceStatus.Verified : HarnessEvidenceStatus.Failed,
                     scenario.Prompt, result.Passed ? "Synthetic representative scenario passed." : string.Join("; ", result.Findings)));
             }
-            var hasChatSkillActivation = agent && evidence.Any(e => e.Actor == "Core" && e.DraftRevision == draft.Revision
-                && e.Check == "Candidate Skill activation" && e.Status == HarnessEvidenceStatus.Verified);
             var status = checks.HasBlockingFindings || evidence.Any(e => e.DraftRevision == draft.Revision && e.Status == HarnessEvidenceStatus.Failed)
                 ? HarnessPreparationStatus.Failed : prep.Approvals.Any(a => a.Status is "Pending" or "Consumed")
-                    ? HarnessPreparationStatus.AwaitingApproval : hasChatSkillActivation || evidence.Any(e => e.Actor == "Agent" && e.DraftRevision == draft.Revision)
+                    ? HarnessPreparationStatus.AwaitingApproval : evidence.Any(e => e.Actor == "Agent" && e.DraftRevision == draft.Revision)
                         ? HarnessPreparationStatus.Ready : HarnessPreparationStatus.Preparing;
             return await SaveAsync(instance, state with { Preparation = prep with { Evidence = evidence.TakeLast(64).ToArray(), Status = status } },
                 "verify", status.ToString(), agent, ct);
@@ -335,7 +304,7 @@ public sealed class HarnessManagementService(
                 || prep.Approvals.Any(a => a.Status is "Pending" or "Consumed")
                 || !(prep.Evidence.Any(e => e.Actor == "Agent" && e.DraftRevision == draftRevision)
                     || agent && prep.Evidence.Any(e => e.Actor == "Core" && e.DraftRevision == draftRevision
-                        && e.Check == "Candidate Skill activation" && e.Status == HarnessEvidenceStatus.Verified))
+                        && e.Check == "Candidate knowledge readback" && e.Status == HarnessEvidenceStatus.Verified))
                 || !prep.Evidence.Any(e => e.Actor == "Core" && e.DraftRevision == draftRevision && e.Check == "Structure and resource policy" && e.Status == HarnessEvidenceStatus.Verified))
                 throw AgentCoreErrors.Validation("Review current verification and resolve approvals before promotion.");
             await RequireContextAsync(instance, prep.PreparationId, draftRevision, ct);
@@ -377,18 +346,8 @@ public sealed class HarnessManagementService(
             knowledge = RoleEnvironments.Of(active).KnowledgeList,
             skills = active.SkillList, activeDefinitionAuthorizedCapabilities = RoleEnvironments.Of(active).ToolList,
             activation = "authoringEligibleTools is for changing future Definitions only. It is not the current Session tool set. The current Session remains pinned to currentSessionPinnedDefinitionVersion.",
-            authoringGuide = "Inspect, read relevant external source material using ordinary tools, then call the offered operation. Skill creation needs name, description and procedure; Core supplies the id. For an existing Skill, provide its name or id and only changed fields; with an id, omitted name, procedure and description stay unchanged. After saving Knowledge, inspect the new active version and explicitly save the Skill binding before reporting it. On validation failure, correct the named field using the tool schema; do not blindly retry. Reinspect on version/policy conflict. Report saved only after a successful tool result.",
-            skillPayloadHelp = state.Policy.Allows(HarnessManagementScope.Skills) ? HarnessChatTools.SkillPayloadHelp : null,
-            skillUpsertExample = state.Policy.Allows(HarnessManagementScope.Skills) ? new
-            {
-                expectedVersion = instance.ActiveVersion, policyRevision = state.PolicyRevision,
-                skill = new
-                {
-                    name = "Operations review", description = "Review an operational change before acting.",
-                    procedure = "Confirm the target and current state. Explain the proposed change and rollback. Ask before destructive actions. Verify the result and report limitations.",
-                    activationKeywords = new[] { "operational change" }
-                },
-            } : null
+            authoringGuide = "Inspect, read relevant external source material using authorized ordinary tools, then call the offered operation. Correct named validation errors. Reinspect on conflicts. Report saved only after a successful tool result."
+
         };
     }
 
@@ -416,81 +375,17 @@ public sealed class HarnessManagementService(
             catch (JsonException)
             {
                 throw AgentCoreErrors.Validation("Payload field types do not match the tool schema. "
-                    + (toolName == "harness.skill.upsert" ? HarnessChatTools.SkillPayloadHelp : "Use the required fields and types shown by this tool."));
+                    + "Use the required fields and types shown by this tool.");
             }
             operation = operation with { Kind = HarnessChatTools.Operations[toolName].Kind };
-            if (operation.Kind == "skill.upsert" && operation.Skill is null)
-                throw AgentCoreErrors.Validation("A declarative Skill is required. " + HarnessChatTools.SkillPayloadHelp);
             var active = await RequireDefinitionAsync(instance, token);
-            if (operation.Kind == "skill.upsert")
-            {
-                var skill = operation.Skill!;
-                var skillArgs = args.GetProperty("skill");
-                foreach (var field in new[] { "activationKeywords", "requiredCapabilities", "resourcePaths" })
-                    if (skillArgs.TryGetProperty(field, out var supplied) && supplied.ValueKind == JsonValueKind.Null)
-                        throw AgentCoreErrors.Validation($"{field} must be an array when supplied. " + HarnessChatTools.SkillPayloadHelp);
-                var paths = skill.ResourcePaths ?? [];
-                if (skillArgs.TryGetProperty("knowledgeIds", out var knowledgeIds))
-                {
-                    if (skillArgs.TryGetProperty("resourcePaths", out _) || knowledgeIds.ValueKind != JsonValueKind.Array
-                        || knowledgeIds.GetArrayLength() > 4)
-                        throw AgentCoreErrors.Validation("Use knowledgeIds as an array of at most four identities, without resourcePaths.");
-                    var references = new List<string>();
-                    foreach (var identity in knowledgeIds.EnumerateArray())
-                    {
-                        if (identity.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(identity.GetString()))
-                            throw AgentCoreErrors.Validation("knowledgeIds must contain identities from harness.inspect knowledge.");
-                        var source = RoleEnvironments.Of(active).KnowledgeList.SingleOrDefault(k => k.Identity == identity.GetString())
-                            ?? throw AgentCoreErrors.Validation("A knowledgeIds entry is not in the active harness; inspect knowledge first.");
-                        references.Add(KnowledgeSourcePaths.ResolveBackingPath(source));
-                    }
-                    if (references.Distinct(StringComparer.Ordinal).Count() != references.Count)
-                        throw AgentCoreErrors.Validation("knowledgeIds must be unique.");
-                    paths = references;
-                }
-                var id = skill.Id;
-                if (string.IsNullOrWhiteSpace(id))
-                {
-                    ValidateText(skill.Name, 80, "Skill name");
-                    var name = ComparableSkillName(skill.Name);
-                    var matches = active.SkillList.Where(existing => ComparableSkillName(existing.Name) == name).ToArray();
-                    if (matches.Length > 1)
-                        throw AgentCoreErrors.Conflict("More than one existing Skill has this name; inspect Skills and supply the intended id.");
-                    id = matches.Length == 1 ? matches[0].Id
-                        : SkillIds.FromName(skill.Name, active.SkillList.Select(existing => existing.Id));
-                }
-                var previous = active.SkillList.SingleOrDefault(existing => existing.Id == id);
-                var nameToSave = skillArgs.TryGetProperty("name", out _)
-                    ? skill.Name : previous?.Name;
-                ValidateText(nameToSave, 80, "Skill name");
-                var description = skillArgs.TryGetProperty("description", out _)
-                    ? skill.Description : previous?.Description;
-                var procedure = skillArgs.TryGetProperty("procedure", out _)
-                    ? skill.Procedure : previous?.Procedure;
-                ValidateText(description, 240, "Skill description");
-                ValidateText(procedure, 4000, "Skill procedure");
-                if (previous is not null && !skillArgs.TryGetProperty("knowledgeIds", out _)
-                    && !skillArgs.TryGetProperty("resourcePaths", out _))
-                    paths = previous.ResourcePaths;
-                operation = operation with { Skill = skill with
-                {
-                    Id = id,
-                    Name = nameToSave!,
-                    Description = description!,
-                    Procedure = procedure!,
-                    ActivationKeywords = skillArgs.TryGetProperty("activationKeywords", out _)
-                        ? skill.ActivationKeywords ?? [] : previous?.ActivationKeywords ?? [],
-                    RequiredCapabilities = skillArgs.TryGetProperty("requiredCapabilities", out _)
-                        ? skill.RequiredCapabilities ?? [] : previous?.RequiredCapabilities ?? [],
-                    ResourcePaths = paths
-                } };
-            }
+
             string Read(string name) => args.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
                 ? value.GetString()! : throw AgentCoreErrors.Validation($"{name} is required.");
             var hasExpected = args.TryGetProperty("expected", out _);
             var hasObserved = args.TryGetProperty("observed", out _);
             if (operation.Kind == "skill.upsert" && hasExpected != hasObserved)
-                throw AgentCoreErrors.Validation("Supply both expected and observed for an Agent assessment, or omit both and use Core Skill verification.");
+                throw AgentCoreErrors.Validation("Supply both expected and observed for an Agent assessment, or omit both and use Core knowledge verification.");
             var expected = hasExpected ? Read("expected") : null;
             var observed = hasObserved ? Read("observed") : null;
             if (operation.Kind != "skill.upsert" && (expected is null || observed is null))
@@ -509,11 +404,6 @@ public sealed class HarnessManagementService(
                 throw AgentCoreErrors.Validation("The proposed tool is not currently configured.");
             // Pure policy/shape checks run before the durable fork. Invalid model payloads leave no failed draft.
             ValidateOperation(state.Policy, AgentDefinitionCandidate.FromDefinition(active), operation, sourceRead);
-            if (operation.Kind == "skill.upsert"
-                && active.SkillList.FirstOrDefault(existing => existing.Id == operation.Skill!.Id) is { } existingSkill
-                && SameSkill(existingSkill, operation.Skill!))
-                return new { saved = true, changed = false, skillId = existingSkill.Id, activeVersion = instance.ActiveVersion,
-                    appliesTo = "future conversations", currentSessionUnchanged = true };
             if (operation.Kind == "knowledge.upsert"
                 && RoleEnvironments.Of(active).KnowledgeList.FirstOrDefault(existing => existing.Identity == operation.Id) is { } existingKnowledge
                 && existingKnowledge.Title == operation.Id && existingKnowledge.Citation == operation.Source
@@ -553,14 +443,7 @@ public sealed class HarnessManagementService(
                     evidence.Add(new("Core", draft.Revision, "Candidate knowledge readback", matched ? HarnessEvidenceStatus.Verified : HarnessEvidenceStatus.Failed,
                         "Retained content matches the candidate binding and provenance.", matched ? $"Readback matched; provenance: {operation.Source}." : "Readback failed."));
                 }
-                if (operation.Kind == "skill.upsert")
-                {
-                    var candidate = draft.Candidate.ToPublished(1);
-                    var plan = SkillLoadAdmission.Plan(candidate, [], 0, [operation.Skill!.Id]);
-                    var matched = plan.Admitted.Contains(operation.Skill.Id) && PromptContextBuilder.BuildActiveSkillSystem(candidate, plan.Admitted).Contains(operation.Skill.Procedure, StringComparison.Ordinal);
-                    evidence.Add(new("Core", draft.Revision, "Candidate Skill activation", matched ? HarnessEvidenceStatus.Verified : HarnessEvidenceStatus.Failed,
-                        "Existing Skill admission injects the exact procedure.", matched ? "Activation and procedure injection matched." : "Activation failed.", "Production outcomes remain external evidence."));
-                }
+
                 prep = prep with { Evidence = evidence, Approvals = approval is null ? []
                     : [new(approval.ApprovalId, approval.ActionHash, operation, "Approved")] };
                 instance = await SaveAsync(instance, state with { Preparation = prep }, operation.Kind, "ChatCandidateCommitted", true, token);
@@ -585,11 +468,6 @@ public sealed class HarnessManagementService(
                         activeVersionUnchanged = true, retryable = true };
                 }
                 instance = await PromoteCoreAsync(instance, draft.Revision, token, agent: true);
-                if (operation.Kind == "skill.upsert")
-                    return new { saved = true, changed = true, skillId = operation.Skill!.Id, activeVersion = instance.ActiveVersion, appliesTo = "future conversations",
-                        currentSessionUnchanged = true, verification = expected is null
-                            ? "Core validation and Skill activation passed; no external outcome was tested."
-                            : "Core validation and Skill activation passed; Agent assessment is partial.", limitation };
                 return new { saved = true, changed = true, activeVersion = instance.ActiveVersion, appliesTo = "future conversations",
                     currentSessionUnchanged = true, verification = "Core validation/readback passed; Agent assessment is partial.", limitation };
             }
@@ -694,14 +572,6 @@ public sealed class HarnessManagementService(
                 await lifecycle.UpdateDraftAsync(draft.DraftId, afterRemove.Revision, afterRemove.Candidate with { Environment = environment with
                     { KnowledgeSources = environment.KnowledgeList.Where(k => k.Identity != operation.Id).ToArray() } }, ct, history: DraftEvent(instance, afterRemove, operation.Kind, "CandidateCommitted"));
                 break;
-            case "skill.upsert":
-                candidate = candidate with { Skills = [.. candidate.SkillList.Where(s => s.Id != operation.Skill!.Id), operation.Skill!] };
-                await lifecycle.UpdateDraftAsync(draft.DraftId, draft.Revision, candidate, ct, history: DraftEvent(instance, draft, operation.Kind, "CandidateCommitted"));
-                break;
-            case "skill.remove":
-                await lifecycle.UpdateDraftAsync(draft.DraftId, draft.Revision, candidate with
-                    { Skills = candidate.SkillList.Where(s => s.Id != operation.Id).ToArray() }, ct, history: DraftEvent(instance, draft, operation.Kind, "CandidateCommitted"));
-                break;
             case "instructions.update":
                 await lifecycle.UpdateDraftAsync(draft.DraftId, draft.Revision, candidate with { SystemInstructions = operation.Content! }, ct, history: DraftEvent(instance, draft, operation.Kind, "CandidateCommitted"));
                 break;
@@ -732,7 +602,6 @@ public sealed class HarnessManagementService(
         var scope = op.Kind switch
         {
             "knowledge.upsert" or "knowledge.remove" => HarnessManagementScope.KnowledgeResources,
-            "skill.upsert" or "skill.remove" => HarnessManagementScope.Skills,
             "instructions.update" => HarnessManagementScope.Instructions,
             "tool.select" or "tool.configure" => HarnessManagementScope.ToolSelection,
             _ => throw AgentCoreErrors.Validation("Unknown semantic authoring operation.")
@@ -753,26 +622,7 @@ public sealed class HarnessManagementService(
             if (op.Source is null || (!sourceRead && !policy.Sources.Contains(op.Source, StringComparer.Ordinal)))
                 throw AgentCoreErrors.Validation("Knowledge provenance must name an owner-permitted source.");
         }
-        if (op.Kind == "skill.upsert")
-        {
-            if (op.Skill is null) throw AgentCoreErrors.Validation("A declarative Skill is required. " + HarnessChatTools.SkillPayloadHelp);
-            try
-            {
-                ValidateText(op.Skill.Id, 64, "Skill identity");
-                ValidateText(op.Skill.Name, 80, "Skill name");
-                ValidateText(op.Skill.Description, 240, "Skill description");
-                ValidateText(op.Skill.Procedure, 4000, "procedure");
-            }
-            catch (AgentCoreException exception) { throw AgentCoreErrors.Validation(exception.Message + " " + HarnessChatTools.SkillPayloadHelp); }
-            try { AgentDefinitionValidator.Validate((candidate with { Skills = [.. candidate.SkillList.Where(s => s.Id != op.Skill.Id), op.Skill] }).ToPublished(1)); }
-            catch (ArgumentException exception) { throw AgentCoreErrors.Validation(exception.Message + " " + HarnessChatTools.SkillPayloadHelp); }
-            if (op.Skill.Procedure.Contains("```", StringComparison.Ordinal)
-                || op.Skill.Procedure.Contains("<script", StringComparison.OrdinalIgnoreCase))
-                throw AgentCoreErrors.Validation("Self-authored Skills must be procedural; executable blocks are unsupported.");
-            var selected = candidate.Environment?.ToolList ?? [];
-            if (op.Skill.RequiredCapabilities.Any(c => c != SkillCapabilities.ChatRespond && !selected.Contains(c, StringComparer.Ordinal)))
-                throw AgentCoreErrors.Validation("Skill requirements cannot grant capabilities.");
-        }
+
         if (op.Kind == "instructions.update") ValidateText(op.Content, 32000, "instructions");
         if (op.Kind.StartsWith("tool.", StringComparison.Ordinal))
         {

@@ -12,7 +12,7 @@ public static class ConversationTurnExecutionFactory
         Guid responseId,
         SessionSnapshot snapshot,
         ConversationEntry userEntry,
-        DateTimeOffset acceptedAtUtc)
+        DateTimeOffset acceptedAtUtc, IReadOnlyList<EffectiveSkill> catalog)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(userEntry);
@@ -38,6 +38,6 @@ public static class ConversationTurnExecutionFactory
             snapshot.PinnedPersona,
             pin,
             acceptedAtUtc,
-            DeterministicSkillSelector.SelectActiveIds(definition, userEntry.Text));
+            catalog.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray(), pinnedSkillCatalog: catalog);
     }
 }

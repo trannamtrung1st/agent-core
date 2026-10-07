@@ -226,8 +226,30 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<IdentityMaintenanceSettingsRecord> IdentityMaintenanceSettings => Set<IdentityMaintenanceSettingsRecord>();
     public DbSet<ExperienceSettingsRecord> ExperienceSettings => Set<ExperienceSettingsRecord>();
 
+    public DbSet<AgentDefinitionSkillStateRecord> AgentDefinitionSkillStates => Set<AgentDefinitionSkillStateRecord>();
+    public DbSet<AgentInstanceSkillRecord> AgentInstanceSkills => Set<AgentInstanceSkillRecord>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<AgentDefinitionSkillStateRecord>(e => {
+            e.ToTable("AgentDefinitionSkillStates"); e.HasKey(s => new { s.AgentInstanceId, s.DefinitionSkillId });
+            e.Property(s => s.AgentInstanceId).HasMaxLength(36); e.Property(s => s.DefinitionSkillId).HasMaxLength(64);
+            e.Property(s => s.Revision).IsConcurrencyToken(); e.HasIndex(s => s.AgentInstanceId);
+            e.HasOne<AgentInstanceRecord>().WithMany().HasForeignKey(s => s.AgentInstanceId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<AgentInstanceSkillRecord>(e => {
+            e.ToTable("AgentInstanceSkills"); e.HasKey(s => s.SkillId);
+            e.Property(s => s.SkillId).HasMaxLength(36); e.Property(s => s.AgentInstanceId).HasMaxLength(36);
+            e.Property(s => s.Name).IsRequired().HasMaxLength(80);
+            e.Property(s => s.Description).IsRequired().HasMaxLength(240);
+            e.Property(s => s.Procedure).IsRequired().HasMaxLength(4000);
+            e.Property(s => s.RequiredCapabilitiesJson).IsRequired().HasMaxLength(1024);
+            e.Property(s => s.SourceDefinitionId).HasMaxLength(64);
+            e.Property(s => s.SourceDefinitionSkillId).HasMaxLength(64);
+            e.Property(s => s.Revision).IsConcurrencyToken();
+            e.HasIndex(s => new { s.AgentInstanceId, s.UpdatedAtUtc });
+            e.HasOne<AgentInstanceRecord>().WithMany().HasForeignKey(s => s.AgentInstanceId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<IdentityMaintenanceSettingsRecord>().HasKey(r => r.AgentInstanceId);
         modelBuilder.Entity<ExperienceSettingsRecord>().HasKey(r => r.AgentInstanceId);
         var experience = modelBuilder.Entity<ExperienceRecord>();
@@ -474,7 +496,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.ModelReasoningEffort).HasMaxLength(WorkLimits.MaxReasoningEffortCharacters);
             entity.Property(row => row.ClaimGeneration).HasMaxLength(36);
             entity.Property(row => row.AssistantEntryId).HasMaxLength(36);
-            entity.Property(row => row.PinnedActiveSkillIdsJson).HasMaxLength(512);
+            entity.Property(row => row.ActiveSkillKeysJson).IsRequired();
+            entity.Property(row => row.PinnedSkillCatalogJson).IsRequired();
             entity.Property(row => row.SkillLoadCount).HasDefaultValue(0);
             entity.HasIndex(row => new { row.SessionId, row.SourceEventId }).IsUnique();
             entity.HasIndex(row => new { row.Status, row.ClaimLeaseExpiresAtUtc });

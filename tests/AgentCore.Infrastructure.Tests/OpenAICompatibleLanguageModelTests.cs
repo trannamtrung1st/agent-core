@@ -479,7 +479,7 @@ public sealed class OpenAICompatibleLanguageModelTests
     [InlineData("knowledge.retrieve")]
     [InlineData("harness.inspect")]
     [InlineData("harness.knowledge.upsert")]
-    [InlineData("harness.skill.upsert")]
+    [InlineData("skills.create")]
     [InlineData("harness.tool.select")]
     public async Task Maps_tool_call_fragments_when_tools_are_offered(string name)
     {
@@ -506,18 +506,6 @@ public sealed class OpenAICompatibleLanguageModelTests
         Assert.Contains("\"tools\"", handler.LastBody, StringComparison.Ordinal);
         Assert.Contains(OpenAiCompatibleToolNames.ToWireName(name), handler.LastBody, StringComparison.Ordinal);
         Assert.DoesNotContain(name, handler.LastBody, StringComparison.Ordinal);
-        if (name == "harness.skill.upsert")
-        {
-            using var request = JsonDocument.Parse(handler.LastBody!);
-            var schema = request.RootElement.GetProperty("tools")[0].GetProperty("function").GetProperty("parameters");
-            Assert.Contains(schema.GetProperty("required").EnumerateArray(), field => field.GetString() == "skill");
-            var skill = schema.GetProperty("properties").GetProperty("skill").GetProperty("properties");
-            Assert.Equal(SkillIds.Pattern, skill.GetProperty("id").GetProperty("pattern").GetString());
-            Assert.DoesNotContain(schema.GetProperty("required").EnumerateArray(), field => field.GetString() == "expected");
-            Assert.False(schema.GetProperty("properties").GetProperty("skill").TryGetProperty("required", out _));
-            Assert.Equal(8, skill.GetProperty("activationKeywords").GetProperty("maxItems").GetInt32());
-            Assert.True(skill.GetProperty("activationKeywords").GetProperty("uniqueItems").GetBoolean());
-        }
         var call = Assert.IsType<ModelToolCallEvent>(events[0]).Call;
         Assert.Equal("call_1", call.Id);
         Assert.Equal(name, call.Name);

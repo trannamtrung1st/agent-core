@@ -16,7 +16,7 @@ async function saveDraft(page: Page, editor: Locator) {
   await expect(page.getByText("Draft saved.")).toBeHidden({ timeout: 10_000 });
 }
 
-test("P8 publishes two skills, activates the matching one, and keeps one chat response", async ({ page }) => {
+test("Definition authoring publishes Always and OnDemand Skills, initializes only Always, and keeps one chat response", async ({ page }) => {
   test.setTimeout(300_000);
   await page.setViewportSize({ width: 1280, height: 900 });
   const consoleErrors: string[] = [];
@@ -50,7 +50,9 @@ test("P8 publishes two skills, activates the matching one, and keeps one chat re
   await editor.getByLabel("Skill 1 id").fill("refund.handle");
   await editor.getByLabel("Skill 1 name").fill("Refund");
   await editor.getByLabel("Skill 1 procedure").fill("REFUND_PROCEDURE");
-  await editor.getByLabel("Skill 1 activation keywords").fill("refund");
+  await editor.getByLabel("Skill 1 description").fill("Procedural guidance.");
+  await editor.getByLabel("Skill 1 projection").click();
+  await page.locator(".ant-select-item-option").filter({ hasText: "Always" }).click();
   await editor.getByLabel("Skill 1 required capabilities").fill("chat.respond");
   await expect(editor.getByText("Skill id is required before publish.")).toHaveCount(0);
   await expect(editor.getByText("Unsaved changes — save before using Test & Publish.")).toBeVisible();
@@ -66,7 +68,7 @@ test("P8 publishes two skills, activates the matching one, and keeps one chat re
   await editor.getByLabel("Skill 2 id").fill("order.lookup");
   await editor.getByLabel("Skill 2 name").fill("Order lookup");
   await editor.getByLabel("Skill 2 procedure").fill("ORDER_PROCEDURE");
-  await editor.getByLabel("Skill 2 activation keywords").fill("order");
+  await editor.getByLabel("Skill 2 description").fill("Procedural guidance.");
 
   await editor.locator(".admin-draft-view-switch").getByText("Advanced JSON", { exact: true }).click();
   const json = editor.getByRole("textbox", { name: "Advanced JSON" });
@@ -141,7 +143,7 @@ test("P8 publishes two skills, activates the matching one, and keeps one chat re
 
   const database = process.env.PLAYWRIGHT_SQLITE_PATH;
   expect(database).toBeTruthy();
-  const pins = execFileSync("sqlite3", [database!, "SELECT PinnedActiveSkillIdsJson FROM ConversationTurnExecutions;"], {
+  const pins = execFileSync("sqlite3", [database!, "SELECT ActiveSkillKeysJson FROM ConversationTurnExecutions;"], {
     encoding: "utf8"
   });
   expect(pins).toContain("refund.handle");

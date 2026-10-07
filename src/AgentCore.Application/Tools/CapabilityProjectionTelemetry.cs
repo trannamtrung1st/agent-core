@@ -11,7 +11,7 @@ public static class CapabilityProjectionTelemetry
     {
         var projected = tools ?? [];
         var names = projected.Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
-        var skills = definition.SkillList.Where(s => context?.ActiveSkillIds?.Contains(s.Id) == true).SelectMany(s => s.RequiredCapabilities ?? []).ToHashSet();
+        var skills = (context?.PinnedSkillCatalog ?? []).Where(s => context?.ActiveSkillKeys?.Contains(s.Key) == true).SelectMany(s => s.RequiredCapabilities ?? []).ToHashSet();
         var always = definition.Environment?.Projection?.AlwaysCapabilities ?? [];
         var loaded = context?.LoadedCapabilityIds ?? [];
         void Measure(string kind, long count) => RuntimeTelemetry.RecordCapabilityProjection(kind, count, definition.ProviderPreferences.LanguageModel, model);

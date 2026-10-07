@@ -397,6 +397,10 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             if (await ColumnExistsAsync(connection, "Automations", "TriggerRevision", cancellationToken).ConfigureAwait(false)
                 && await ColumnExistsAsync(connection, "TriggerOccurrences", "TriggerRevision", cancellationToken).ConfigureAwait(false))
                 await db.Database.ExecuteSqlRawAsync("INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ('20261007101836_AutomationTriggerRevision', '10.0.12');", cancellationToken).ConfigureAwait(false);
+            if (await TableExistsAsync(connection, "AgentInstanceSkills", cancellationToken).ConfigureAwait(false)
+                && await TableExistsAsync(connection, "AgentDefinitionSkillStates", cancellationToken).ConfigureAwait(false)
+                && await ColumnExistsAsync(connection, "ConversationTurnExecutions", "PinnedSkillCatalogJson", cancellationToken).ConfigureAwait(false))
+                await db.Database.ExecuteSqlRawAsync("INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ('20261007114116_InstanceSkillsCutover', '10.0.12');", cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -1340,7 +1344,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 cancellationToken).ConfigureAwait(false);
         }
 
-        if (await ColumnExistsAsync(connection, "ConversationTurnExecutions", "PinnedActiveSkillIdsJson", cancellationToken)
+        if (await ColumnExistsAsync(connection, "ConversationTurnExecutions", "ActiveSkillKeysJson", cancellationToken)
             .ConfigureAwait(false))
         {
             await db.Database.ExecuteSqlRawAsync(

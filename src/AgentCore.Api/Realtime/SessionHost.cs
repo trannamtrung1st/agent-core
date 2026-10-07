@@ -90,6 +90,9 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
     public Guid? ActiveResponseId(Guid sessionId) =>
         _live.TryGetValue(sessionId, out var live) ? live.Runtime.ActiveResponseId : null;
 
+    internal Task WaitUntilMailboxDrainedAsync(Guid sessionId, CancellationToken ct = default) =>
+        _live.TryGetValue(sessionId, out var live) ? live.Runtime.WaitUntilMailboxDrainedAsync(ct) : Task.CompletedTask;
+
     private static bool NeedsDurableConversationConvergence(
         SessionSnapshot current,
         SessionSnapshot durable)

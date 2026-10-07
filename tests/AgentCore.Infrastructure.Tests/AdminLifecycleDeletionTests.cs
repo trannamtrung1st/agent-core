@@ -278,16 +278,24 @@ public abstract class AdminLifecycleDeletionTests
                 "field-guide",
                 1,
                 new AgentIdentity("Guide", "role", "desc", "tone"),
-                AgentInstanceLifecycle.Archived,
+                AgentInstanceLifecycle.Active,
                 now,
                 now,
-                Revision: 2));
+                Revision: 2), initialSkills: [new SkillSpec("review", "Review", "Review", "Review", SkillProjection.OnDemand, true, [], [])]);
+
+            await fixture.Instances.MutateSkillsAsync(new(instanceId, 2, InstanceSkill: new(fixture.Ids.NewId(), instanceId,
+                "Local", "Local guidance", "Local procedure", SkillProjection.OnDemand, true, [], 1, now, now, SkillAuthor.Agent)));
+            await fixture.Instances.UpdateWithExpectedRevisionAsync(new(instanceId, 3, Lifecycle: AgentInstanceLifecycle.Archived), now);
+            var ownedSkills = await fixture.Instances.ReadSkillsAsync(instanceId);
+            Assert.Single(ownedSkills.DefinitionStates); Assert.Single(ownedSkills.InstanceSkills);
 
             await fixture.Deletion.DeleteInstanceAsync(
-                new AdminInstanceDeleteCommand(instanceId, 2, fixture.Ids.NewId(), now),
+                new AdminInstanceDeleteCommand(instanceId, 4, fixture.Ids.NewId(), now),
                 CancellationToken.None);
 
             Assert.Null(await fixture.Instances.FindAsync(instanceId, CancellationToken.None));
+            var deletedSkills = await fixture.Instances.ReadSkillsAsync(instanceId);
+            Assert.Empty(deletedSkills.DefinitionStates); Assert.Empty(deletedSkills.InstanceSkills);
             var history = await fixture.Events.ListAsync(new AdminEventListQuery(), CancellationToken.None);
             Assert.Contains(history, item => item.Operation == AdminEventOperationKind.InstanceDeleted);
         });

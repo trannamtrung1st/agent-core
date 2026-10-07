@@ -237,7 +237,7 @@ public sealed class ContinuityBoundaryTests
     [Theory(Timeout = 60000)]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task Approval_rejection_or_frozen_policy_prevents_mutation_and_origin_payload_cannot_bootstrap_authority(bool freeze)
+    public async Task Harness_policy_does_not_control_ordinary_skill_authority_and_origin_payload_cannot_bootstrap_authority(bool freeze)
     {
         var db = Path.Combine(Path.GetTempPath(), $"automation-frozen-{Guid.NewGuid():N}.db");
         await using var host = new ExperienceHost(db);
@@ -249,7 +249,7 @@ public sealed class ContinuityBoundaryTests
         await s.GetRequiredService<ExperienceService>().RequestSessionAsync(id, source.SessionId);
         await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
         var harness = s.GetRequiredService<HarnessManagementService>();
-        instance = await harness.ConfigureAsync(id, instance.Revision, new(HarnessManagementMode.Assisted, [HarnessManagementScope.Skills], [], []));
+        instance = await harness.ConfigureAsync(id, instance.Revision, new(HarnessManagementMode.Assisted, [HarnessManagementScope.KnowledgeResources], [], []));
         var response = await client.PostAsJsonAsync($"/api/v2/admin/agent-instances/{id}/automations", new {
             expectedRevision = 0, enabled = true, name = "Review", instructions = "synthetic-automation-improve", trigger = new { kind = "schedule", schedule = new { kind = "fixedInterval", interval = 3600, anchorAtUtc = DateTimeOffset.UtcNow.AddHours(1).ToString("o") } }, origin = "UserTurn", ownerId = Guid.NewGuid() });
         response.EnsureSuccessStatusCode();
@@ -257,18 +257,13 @@ public sealed class ContinuityBoundaryTests
         var automations = s.GetRequiredService<AdminAutomationAuthoringService>();
         await automations.RunNowAsync(id, Guid.Parse(reg.AutomationId), reg.Revision);
         await AutomationJourneyTests.Intake(s);
+        if (freeze) await harness.ConfigureAsync(id, instance.Revision, instance.HarnessManagement!.Policy with { Frozen = true });
         var executor = s.GetRequiredService<DurableReminderExecutor>(); await executor.ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
         var store = s.GetRequiredService<IWorkItemStore>(); var owner = new WorkOwner(id, LocalUserProfile.Id);
         var item = (await store.ListAsync(owner, 100)).Single(w => w.Provenance.AutomationId == Guid.Parse(reg.AutomationId));
-        Assert.Equal(WorkItemStatus.WaitingForApproval, item.Status);
-        var approval = item.Approval!;
-        await store.DecideApprovalAsync(owner, item.WorkItemId, approval.ApprovalId, item.Revision, approval.Revision, approval.ActionHash, freeze ? WorkApprovalDecision.Approved : WorkApprovalDecision.Rejected, DateTimeOffset.UtcNow);
-        instance = (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(id))!;
-        if (freeze) await harness.ConfigureAsync(id, instance.Revision, instance.HarnessManagement!.Policy with { Frozen = true });
-        await executor.ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
-        item = (await store.GetAsync(owner, item.WorkItemId))!;
         Assert.Equal(WorkItemStatus.Completed, item.Status);
-        Assert.Equal("NoAction", WorkCompletionRequest.Outcome(item.Result!.Text));
+        Assert.Equal("ActionCompleted", WorkCompletionRequest.Outcome(item.Result!.Text));
+        Assert.Single((await s.GetRequiredService<IAgentInstanceStore>().ReadSkillsAsync(id)).InstanceSkills);
         Assert.Equal(16, (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(id))!.ActiveVersion);
         var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
         var tools = s.GetRequiredService<SessionToolExecutor>();

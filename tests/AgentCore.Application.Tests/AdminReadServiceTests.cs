@@ -153,7 +153,7 @@ public sealed class AdminReadServiceTests
         public ValueTask<AgentInstance?> FindCompatibilityAsync(string definitionId, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult<AgentInstance?>(null);
 
-        public ValueTask InsertAsync(AgentInstance inserted, CancellationToken cancellationToken = default) =>
+        public ValueTask InsertAsync(AgentInstance inserted, CancellationToken cancellationToken = default, IReadOnlyList<AgentCore.Domain.Definitions.SkillSpec>? initialSkills = null) =>
             ValueTask.CompletedTask;
 
         public ValueTask UpdateActiveVersionAsync(
@@ -172,7 +172,7 @@ public sealed class AdminReadServiceTests
         public ValueTask<AgentInstance> InsertManagedWithHistoryAsync(
             AgentInstance inserted,
             AdminEventAppend historyAppend,
-            CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default, IReadOnlyList<AgentCore.Domain.Definitions.SkillSpec>? initialSkills = null) =>
             ValueTask.FromResult(instance);
 
         public ValueTask<AgentInstance> UpdateActiveVersionWithHistoryAsync(

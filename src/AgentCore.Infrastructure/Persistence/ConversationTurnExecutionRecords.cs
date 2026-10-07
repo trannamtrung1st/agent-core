@@ -50,7 +50,8 @@ public sealed class ConversationTurnExecutionRecord
 
     public long UpdatedAtUtc { get; set; }
 
-    public string? PinnedActiveSkillIdsJson { get; set; }
+    public string ActiveSkillKeysJson { get; set; } = "[]";
+    public string PinnedSkillCatalogJson { get; set; } = "[]";
 
     public string? LoadedCapabilityIdsJson { get; set; }
     public int CapabilityLoadCount { get; set; }

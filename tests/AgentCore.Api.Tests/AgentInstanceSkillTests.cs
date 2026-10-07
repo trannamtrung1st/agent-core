@@ -1,0 +1,66 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using AgentCore.Application.Admin;
+using AgentCore.Application.Agents;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
+using AgentCore.Contracts.Http;
+using AgentCore.Domain.Definitions;
+using Microsoft.Extensions.DependencyInjection;
+namespace AgentCore.Api.Tests;
+
+public sealed class AgentInstanceSkillTests
+{
+    [Fact]
+    public async Task Owner_skill_journey_shares_tool_policy_and_rejects_stale_wrong_origin_and_foreign_scope()
+    {
+        await using var host = new AgentCoreApiFactory();
+        using var client = host.CreateClient(); client.DefaultRequestHeaders.Add(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(host.Services));
+        var instances = host.Services.GetRequiredService<AdminAgentInstanceService>();
+        var owner = await instances.CreateManagedAsync("general-assistant", 16);
+        var other = await instances.CreateManagedAsync("general-assistant", 16);
+        var path = $"/api/v2/admin/agent-instances/{owner.InstanceId}/skills";
+        var initial = await client.GetFromJsonAsync<JsonElement>(path);
+        Assert.Single(initial.EnumerateArray());
+        var sourceKey = initial[0].GetProperty("key").GetString()!;
+        var sourceUrl = path + "/" + Uri.EscapeDataString(sourceKey);
+        (await client.PutAsJsonAsync(sourceUrl + "/enabled", new { enabled = false, expectedRevision = 1 })).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PutAsJsonAsync(sourceUrl + "/enabled", new { enabled = true, expectedRevision = 1 })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.DeleteAsync(sourceUrl + "?expectedRevision=2")).StatusCode);
+        var custom = await client.PostAsJsonAsync(sourceUrl + "/customize", new { expectedRevision = 2 }); custom.EnsureSuccessStatusCode();
+        var copy = await custom.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Instance", copy.GetProperty("origin").GetString());
+        Assert.Equal("browser.record.lookup", copy.GetProperty("sourceDefinitionSkillId").GetString());
+        var copyUrl = path + "/" + Uri.EscapeDataString(copy.GetProperty("key").GetString()!);
+        var created = await client.PostAsJsonAsync(path, new { name = "Accounting", description = "Accounting procedure", procedure = "OLD_ACCOUNTING", projection = "OnDemand", enabled = true, requiredCapabilities = new[] { "workspace.read" } });
+        created.EnsureSuccessStatusCode(); var local = await created.Content.ReadFromJsonAsync<JsonElement>();
+        var localKey = local.GetProperty("key").GetString()!;
+        var localUrl = path + "/" + Uri.EscapeDataString(localKey);
+        var resolver = new EffectiveSkillCatalogResolver(host.Services.GetRequiredService<IAgentInstanceStore>());
+        var definition = (await host.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync(owner.DefinitionId, 16))!;
+        var pin = await resolver.ResolveAsync(owner.InstanceId, definition);
+        var input = new { name = "Accounting", description = "Accounting procedure", procedure = "NEW_ACCOUNTING", projection = "OnDemand", enabled = true, requiredCapabilities = new[] { "workspace.read" }, expectedRevision = 1 };
+        (await client.PatchAsJsonAsync(localUrl, input)).EnsureSuccessStatusCode();
+        Assert.Equal("OLD_ACCOUNTING", pin.Single(s => s.Key == localKey).Procedure);
+        Assert.Equal("NEW_ACCOUNTING", (await resolver.ResolveAsync(owner.InstanceId, definition)).Single(s => s.Key == localKey).Procedure);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/admin/agent-instances/{other.InstanceId}/skills/{Uri.EscapeDataString(localKey)}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await client.DeleteAsync(localUrl + "?expectedRevision=1")).StatusCode);
+        var executor = host.Services.GetRequiredService<SessionToolExecutor>();
+        var call = new ModelToolCall("self-create", "skills.create", JsonSerializer.Serialize(new { name = "Review", description = "Review evidence", procedure = "Review evidence", projection = "Always", enabled = true, requiredCapabilities = Array.Empty<string>() }));
+        var result = await executor.ExecuteAsync(definition, Guid.NewGuid(), call, 8192, admission: new(false, TriggerKind.UserTurn, AgentInstanceId: owner.InstanceId));
+        Assert.DoesNotContain("\"error\"", result.Text);
+        var skills = host.Services.GetRequiredService<AgentInstanceSkillService>();
+        Assert.Contains(await skills.ListAsync(owner.InstanceId), s => s.Name == "Review");
+        Assert.DoesNotContain(await skills.ListAsync(other.InstanceId), s => s.Name == "Review");
+        var denied = await executor.ExecuteAsync(definition with { Environment = RoleEnvironment.Empty }, Guid.NewGuid(), call, 8192, admission: new(false, TriggerKind.UserTurn, AgentInstanceId: other.InstanceId));
+        Assert.Contains("forbidden", denied.Text);
+        var foreign = call with { ArgumentsJson = call.ArgumentsJson[..^1] + ",\"agentInstanceId\":\"" + other.InstanceId + "\"}" };
+        Assert.Contains("Unknown Skill argument", (await executor.ExecuteAsync(definition, Guid.NewGuid(), foreign, 8192, admission: new(false, TriggerKind.UserTurn, AgentInstanceId: owner.InstanceId))).Text);
+        (await client.DeleteAsync(copyUrl + "?expectedRevision=1")).EnsureSuccessStatusCode();
+        (await client.DeleteAsync(localUrl + "?expectedRevision=2")).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(localUrl)).StatusCode);
+        using var anonymous = host.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(path)).StatusCode);
+    }
+}

@@ -20,6 +20,53 @@ public sealed class UnattendedBrowserTests
     private const string RepairRef = "el_abcdefghijklmnopqrstuv";
 
     [Fact]
+    public async Task Work_recovery_keeps_loaded_instance_content_and_new_work_resolves_current_catalog()
+    {
+        var browser = new RecordingBrowser(); var agents = await ActiveAgentsAsync(OwnerId); var definition = Definition();
+        var now = DateTimeOffset.Parse("2026-10-07T00:00:00Z"); var localId = Guid.NewGuid(); var alwaysId = Guid.NewGuid();
+        var localKey = "instance:" + localId.ToString("D"); var alwaysKey = "instance:" + alwaysId.ToString("D");
+        await agents.MutateSkillsAsync(new(OwnerId, 1, InstanceSkill: new(localId, OwnerId, "Accounting", "Check totals", "OLD_PROCEDURE",
+            SkillProjection.OnDemand, true, [], 1, now, now, SkillAuthor.Agent)));
+        await agents.MutateSkillsAsync(new(OwnerId, 2, InstanceSkill: new(alwaysId, OwnerId, "Startup", "Startup guidance", "ALWAYS_PROCEDURE",
+            SkillProjection.Always, true, [], 1, now, now, SkillAuthor.Agent)));
+        var work = new InMemoryWorkItemStore(); var generation = Guid.NewGuid();
+        await work.CreateAsync(WorkItem.Create(WorkId, new(OwnerId, ProfileId), Provenance(now), new("synthetic-default", "synthetic", "synthetic-small", null), 3, now));
+        var claimed = (await work.TryClaimAsync(WorkId, generation, now, now.AddMinutes(1)))!;
+        var first = new RecordingScriptModel(false,
+            () => ToolRound(Call(ToolCatalog.SkillsLoad, JsonSerializer.Serialize(new { ids = new[] { localKey } }))),
+            () => [new ModelFailed(new ProviderFailure(ProviderErrorCode.Unavailable, "Temporary failure"))]);
+        var retry = Assert.IsType<DurableOccurrenceRetry>(await new DurableOccurrenceExecution(Executor(browser, agents), TimeProvider.System).RunAsync(claimed,
+            new(Guid.NewGuid(), [new(ModelRole.User, "review")]), first, definition, TriggerKind.ScheduledOccurrence,
+            (item, body, ct) => work.CheckpointAsync(item.WorkItemId, item.Revision, generation, body, null, now, ct),
+            work, generation, now, Ids(), CancellationToken.None));
+        Assert.Contains(first.Requests[0].Messages, m => m.Text.Contains("ALWAYS_PROCEDURE", StringComparison.Ordinal));
+        Assert.DoesNotContain(first.Requests[0].Messages, m => m.Text.Contains("OLD_PROCEDURE", StringComparison.Ordinal));
+        Assert.Contains(first.Requests[1].Messages, m => m.Text.Contains("OLD_PROCEDURE", StringComparison.Ordinal));
+        var pinned = DurableToolCallCheckpoint.ReadSkillState(retry.Running.Checkpoint);
+        Assert.Equal(1, pinned.LoadCount); Assert.Equal(new[] { alwaysKey, localKey }.Order(), pinned.ActiveKeys.Order());
+        await agents.MutateSkillsAsync(new(OwnerId, 3, InstanceSkill: new(localId, OwnerId, "Accounting", "Check totals", "NEW_PROCEDURE",
+            SkillProjection.OnDemand, true, [], 2, now, now, SkillAuthor.Agent), ExpectedSkillRevision: 1));
+        await agents.MutateSkillsAsync(new(OwnerId, 4, InstanceSkill: new(Guid.NewGuid(), OwnerId, "Later", "Created after admission", "LATER_PROCEDURE",
+            SkillProjection.OnDemand, true, [], 1, now, now, SkillAuthor.Agent)));
+        await work.RecoverExpiredClaimsAsync(now.AddMinutes(1)); generation = Guid.NewGuid();
+        var reclaimed = (await work.TryClaimAsync(WorkId, generation, now.AddMinutes(1), now.AddMinutes(5)))!;
+        var resumed = new RecordingScriptModel(false, () => CompleteRound("Recovered snapshot"));
+        Assert.IsType<DurableOccurrenceCompleted>(await new DurableOccurrenceExecution(Executor(browser, agents), TimeProvider.System).RunAsync(reclaimed,
+            new(Guid.NewGuid(), [new(ModelRole.User, "review")]), resumed, definition, TriggerKind.ScheduledOccurrence,
+            (item, body, ct) => work.CheckpointAsync(item.WorkItemId, item.Revision, generation, body, null, now.AddMinutes(1), ct),
+            work, generation, now.AddMinutes(1), Ids(), CancellationToken.None));
+        var recoveredText = string.Join("\n", Assert.Single(resumed.Requests).Messages.Select(m => m.Text));
+        Assert.Contains("OLD_PROCEDURE", recoveredText); Assert.DoesNotContain("NEW_PROCEDURE", recoveredText); Assert.DoesNotContain("Created after admission", recoveredText);
+        var fresh = new RecordingScriptModel(false,
+            () => ToolRound(Call(ToolCatalog.SkillsLoad, JsonSerializer.Serialize(new { ids = new[] { localKey } }))),
+            () => CompleteRound("Fresh snapshot"));
+        await RunSecretaryModeAsync(browser, agents, definition, OwnerId, ProfileId, Guid.NewGuid(), Guid.NewGuid(), "fresh-skills", TriggerKind.ScheduledOccurrence, fresh);
+        Assert.Contains(fresh.Requests[0].Messages, m => m.Text.Contains("Created after admission", StringComparison.Ordinal));
+        Assert.Contains(fresh.Requests[1].Messages, m => m.Text.Contains("NEW_PROCEDURE", StringComparison.Ordinal));
+        Assert.DoesNotContain(fresh.Requests[1].Messages, m => m.Text.Contains("OLD_PROCEDURE", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Capability_load_reclaims_same_work_checkpoint_and_new_work_starts_empty()
     {
         var browser = new RecordingBrowser();
@@ -72,7 +119,9 @@ public sealed class UnattendedBrowserTests
         var sessionId = Guid.Parse("019944af-00f1-7000-8000-000000000003");
         var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x53, 0x45, 0x43, 0x52 };
         var browser = new RecordingBrowser { CapturePng = png };
-        var agents = await ActiveAgentsAsync(instanceId);
+        var agents = new InMemoryAgentInstanceStore();
+        await agents.InsertAsync(new AgentInstance(instanceId, secretary.Id, secretary.Version, secretary.Identity,
+            AgentInstanceLifecycle.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow), initialSkills: secretary.SkillList);
         var executor = new SessionToolExecutor(
             artifacts: new InMemoryArtifactStore(TimeProvider.System),
             configurationGate: ToolConfigurationGates.AllowAll,
@@ -240,8 +289,7 @@ public sealed class UnattendedBrowserTests
                     "store.product.manage",
                     "Manage a store product",
                     "Procedure only.",
-                    "Use the browser.",
-                    ["store product"],
+                    "Use the browser.", SkillProjection.OnDemand, true,
                     [ToolCatalog.BrowserNavigate],
                     [])
             ]
@@ -411,7 +459,7 @@ public sealed class UnattendedBrowserTests
                 $$"""{"contentType":"image/png","byteSize":{{png.Length}},"artifactId":"{{artifactId}}"}""",
                 ToolCallId: call.Id,
                 Name: ToolCatalog.BrowserCapture)
-        ]);
+        ], skillState: new([], [], 0));
         var now = DateTimeOffset.Parse("2026-10-03T00:00:00Z");
         var generation = Guid.Parse("019944af-00e6-7000-8000-000000000002");
         var store = new InMemoryWorkItemStore();
@@ -462,7 +510,7 @@ public sealed class UnattendedBrowserTests
                 $$"""{"artifactId":"{{missing}}"}""",
                 ToolCallId: call.Id,
                 Name: ToolCatalog.BrowserCapture)
-        ]);
+        ], skillState: new([], [], 0));
         var now = DateTimeOffset.Parse("2026-10-03T00:00:00Z");
         var generation = Guid.Parse("019944af-00e6-7000-8000-000000000003");
         var store = new InMemoryWorkItemStore();
@@ -681,7 +729,7 @@ public sealed class UnattendedBrowserTests
         var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
         var generation = Guid.Parse("019944af-00e1-7000-8000-000000000001");
         var act = Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""");
-        var payload = DurableToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [act])]);
+        var payload = DurableToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [act])], skillState: new([], [], 0));
         var store = new InMemoryWorkItemStore();
         await store.CreateAsync(WorkItem.Create(
             WorkId,
@@ -730,7 +778,7 @@ public sealed class UnattendedBrowserTests
         var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
         var generation = Guid.Parse("019944af-00e4-7000-8000-000000000001");
         var act = Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""");
-        var payload = DurableToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [act])]);
+        var payload = DurableToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [act])], skillState: new([], [], 0));
         var store = new InMemoryWorkItemStore();
         await store.CreateAsync(WorkItem.Create(
             WorkId,
@@ -806,7 +854,7 @@ public sealed class UnattendedBrowserTests
         var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
         var generation = Guid.Parse("019944af-00e5-7000-8000-000000000001");
         var act = Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""");
-        var payload = DurableToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [act])]);
+        var payload = DurableToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [act])], skillState: new([], [], 0));
         Assert.DoesNotContain("\"ObservationRequired\":true", payload, StringComparison.Ordinal);
         var store = new InMemoryWorkItemStore();
         await store.CreateAsync(WorkItem.Create(
@@ -936,7 +984,7 @@ public sealed class UnattendedBrowserTests
         var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
         var generation = Guid.Parse("019944af-00e7-7000-8000-000000000001");
         var act = Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""");
-        var payload = DurableToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [act])]);
+        var payload = DurableToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [act])], skillState: new([], [], 0));
         var store = new InMemoryWorkItemStore();
         await store.CreateAsync(WorkItem.Create(
             WorkId,

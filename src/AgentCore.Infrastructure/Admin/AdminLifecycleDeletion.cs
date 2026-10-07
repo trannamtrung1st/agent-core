@@ -71,6 +71,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
             instances.Restore(removed);
             throw;
         }
+        instances.PurgeSkills(command.InstanceId);
         experience?.Purge(command.InstanceId);
         triggers.PurgeDeletedAutomations(command.InstanceId);
         if (credentialBindings is not null) await credentialBindings.DeleteBindingsAsync(command.InstanceId, cancellationToken);

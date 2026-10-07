@@ -45,9 +45,8 @@ internal static class ConversationTurnExecutionStoreMapping
         row.CancellationRequestedAtUtc = Unix(item.CancellationRequestedAtUtc);
         row.AcceptedAtUtc = item.AcceptedAtUtc.ToUnixTimeMilliseconds();
         row.UpdatedAtUtc = item.UpdatedAtUtc.ToUnixTimeMilliseconds();
-        row.PinnedActiveSkillIdsJson = item.PinnedActiveSkillIds.Count == 0
-            ? null
-            : JsonSerializer.Serialize(item.PinnedActiveSkillIds, Json);
+        row.ActiveSkillKeysJson = JsonSerializer.Serialize(item.ActiveSkillKeys, Json);
+        row.PinnedSkillCatalogJson = JsonSerializer.Serialize(item.PinnedSkillCatalog, Json);
         row.SkillLoadCount = item.SkillLoadCount;
         row.LoadedCapabilityIdsJson = JsonSerializer.Serialize(item.LoadedCapabilityIds, Json);
         row.CapabilityLoadCount = item.CapabilityLoadCount;
@@ -73,9 +72,9 @@ internal static class ConversationTurnExecutionStoreMapping
         }
 
         IReadOnlyList<string> pinnedSkills = [];
-        if (!string.IsNullOrWhiteSpace(row.PinnedActiveSkillIdsJson))
+        if (!string.IsNullOrWhiteSpace(row.ActiveSkillKeysJson))
         {
-            pinnedSkills = JsonSerializer.Deserialize<string[]>(row.PinnedActiveSkillIdsJson, Json) ?? [];
+            pinnedSkills = JsonSerializer.Deserialize<string[]>(row.ActiveSkillKeysJson, Json) ?? [];
         }
 
         return ConversationTurnExecution.Restore(
@@ -101,7 +100,7 @@ internal static class ConversationTurnExecutionStoreMapping
             DateTimeOffset.FromUnixTimeMilliseconds(row.AcceptedAtUtc),
             DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc),
             pinnedSkills,
-            row.SkillLoadCount, JsonSerializer.Deserialize<string[]>(row.LoadedCapabilityIdsJson ?? "[]", Json), row.CapabilityLoadCount);
+            row.SkillLoadCount, JsonSerializer.Deserialize<string[]>(row.LoadedCapabilityIdsJson ?? "[]", Json), row.CapabilityLoadCount, JsonSerializer.Deserialize<EffectiveSkill[]>(row.PinnedSkillCatalogJson, Json) ?? throw AgentCoreErrors.Persistence("Pinned Skill catalog is missing."));
     }
 
     public static Exception Map(Exception exception) =>

@@ -19,7 +19,7 @@ async function create(page: Page, name: string, mode = 'Managed', scope = 'Knowl
   await d.getByText('Harness management (optional)',{exact:true}).click();
   await select(page,'Authoring mode',mode);
   if(mode !== 'Manual (off)') {
-    for(const label of ['Knowledge & resources','Skills']) await d.getByLabel(label,{exact:true}).uncheck();
+    for(const label of ['Knowledge & resources']) await d.getByLabel(label,{exact:true}).uncheck();
     await d.getByLabel(scope,{exact:true}).check();
   }
   await d.getByRole('button',{name:'Create instance',exact:true}).click();
@@ -57,15 +57,6 @@ test('Managed Chat reads authorized public material, saves knowledge and retriev
   expect(currentResponse.ok()).toBe(true);const current=await currentResponse.json();expect(current.agentVersion).toBe(16);
   await fresh(page,'Managed learning');await send(page,'What is the learned order policy?');
   await expect(page.getByText('The saved policy says to check payment, shipping and fraud notes.',{exact:true})).toBeVisible();
-});
-
-test('Managed Chat learns a Skill and normal skills.load activates it in a new Session',async({page})=>{
-  const id=await create(page,'Skill learning','Managed','Skills');
-  await send(page,'Learn this order-review procedure for future conversations: Check payment, then shipping, then fraud notes.');
-  await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible({timeout:30000});
-  expect((await review(page,id)).skills.some((s:{id:string})=>s.id==='order-review')).toBe(true);
-  await fresh(page,'Skill learning');await send(page,'Use the learned order-review procedure.');
-  await expect(page.getByText('Using the learned procedure: check payment, then shipping, then fraud notes. Stop before production actions.',{exact:true})).toBeVisible();
 });
 
 test('Assisted Chat rejects once then approves a fresh exact knowledge change',async({page})=>{

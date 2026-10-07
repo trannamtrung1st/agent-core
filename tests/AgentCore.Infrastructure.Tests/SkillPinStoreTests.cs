@@ -1,5 +1,6 @@
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Work;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -10,7 +11,7 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed class SkillPinStoreTests
 {
     [Fact]
-    public async Task Sqlite_reopen_keeps_the_pinned_skill_ids()
+    public async Task Sqlite_reopen_keeps_the_complete_catalog_and_active_keys()
     {
         var path = Path.Combine(Path.GetTempPath(), $"agent-core-skill-pin-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
@@ -22,26 +23,27 @@ public sealed class SkillPinStoreTests
         {
             await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
             var store = new SqliteConversationTurnExecutionStore(factory);
-            var created = await store.CreateAsync(Execution(sessionId, sourceEventId, now, ["refund.handle", "order.lookup"]));
+            var created = await store.CreateAsync(Execution(sessionId, sourceEventId, now, ["definition:refund.handle", "definition:order.lookup"]));
             Assert.Equal(ConversationTurnExecutionCreateKind.Created, created.Kind);
 
             var reopened = new SqliteConversationTurnExecutionStore(factory);
             var loaded = await reopened.GetBySourceEventAsync(sessionId, sourceEventId);
-            Assert.Equal(["refund.handle", "order.lookup"], loaded!.PinnedActiveSkillIds);
+            Assert.Equal(["definition:refund.handle", "definition:order.lookup"], loaded!.ActiveSkillKeys);
+            Assert.Equal("PINNED_LOCAL_PROCEDURE", loaded.PinnedSkillCatalog.Single(s => s.Origin == SkillOrigin.Instance).Procedure);
 
             var claimed = await reopened.TryClaimAsync(
                 loaded.ExecutionId,
                 Guid.Parse("019944af-00d1-7000-8000-0000000000b9"),
                 now.AddMinutes(1),
                 now.AddMinutes(6));
-            Assert.Equal(["refund.handle", "order.lookup"], claimed!.PinnedActiveSkillIds);
+            Assert.Equal(["definition:refund.handle", "definition:order.lookup"], claimed!.ActiveSkillKeys);
             var admitted = await reopened.AdmitActiveSkillsAsync(
                 claimed.ExecutionId,
                 claimed.Revision,
                 Guid.Parse("019944af-00d1-7000-8000-0000000000b9"),
-                ["billing.note"],
+                ["definition:billing.note"],
                 now.AddMinutes(2));
-            Assert.Equal(["refund.handle", "order.lookup", "billing.note"], admitted.PinnedActiveSkillIds);
+            Assert.Equal(["definition:refund.handle", "definition:order.lookup", "definition:billing.note"], admitted.ActiveSkillKeys);
             Assert.Equal(1, admitted.SkillLoadCount);
             var reloadedCount = await reopened.GetAsync(admitted.ExecutionId);
             Assert.Equal(1, reloadedCount!.SkillLoadCount);
@@ -71,7 +73,7 @@ public sealed class SkillPinStoreTests
                 now,
                 []));
             var reloadedEmpty = await reopened.GetAsync(empty.Item.ExecutionId);
-            Assert.Empty(reloadedEmpty!.PinnedActiveSkillIds);
+            Assert.Empty(reloadedEmpty!.ActiveSkillKeys);
             Assert.Empty(reloadedEmpty.LoadedCapabilityIds);
             Assert.Equal(0, reloadedEmpty.CapabilityLoadCount);
         }
@@ -143,7 +145,11 @@ public sealed class SkillPinStoreTests
             null,
             new WorkModelPin("scripted-alpha", "primary-llm", "scripted-alpha", null),
             now,
-            skillIds);
+            skillIds, pinnedSkillCatalog: new[] { "definition:refund.handle", "definition:order.lookup", "definition:billing.note" }
+                .Select(key => new EffectiveSkill(key, SkillOrigin.Definition, key[11..], key, "Guidance", "Pinned procedure",
+                    SkillProjection.OnDemand, [], [])).Append(new EffectiveSkill("instance:019944af-00d1-7000-8000-0000000000c1",
+                    SkillOrigin.Instance, "019944af-00d1-7000-8000-0000000000c1", "Local", "Local procedure", "PINNED_LOCAL_PROCEDURE",
+                    SkillProjection.OnDemand, ["workspace.read"], [])).ToArray());
 
     private sealed class SqliteContextFactory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>
     {

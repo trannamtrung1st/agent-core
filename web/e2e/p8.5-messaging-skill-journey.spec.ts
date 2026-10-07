@@ -51,12 +51,12 @@ test("P8.5 sends one intermediate message, loads the missed skill, and keeps one
   await editor.getByLabel("Skill 1 id").fill("billing.review");
   await editor.getByLabel("Skill 1 name").fill("Billing review");
   await editor.getByLabel("Skill 1 procedure").fill("BILLING_PROCEDURE");
-  await editor.getByLabel("Skill 1 activation keywords").fill("invoice");
+  await editor.getByLabel("Skill 1 description").fill("Procedural guidance.");
   await editor.getByRole("button", { name: "Add skill" }).click();
   await editor.getByLabel("Skill 2 id").fill("order.lookup");
   await editor.getByLabel("Skill 2 name").fill("Order lookup");
   await editor.getByLabel("Skill 2 procedure").fill("ORDER_PROCEDURE");
-  await editor.getByLabel("Skill 2 activation keywords").fill("order");
+  await editor.getByLabel("Skill 2 description").fill("Procedural guidance.");
   await saveDraft(page, editor);
   await ensureToolAllowlisted(page, editor, "workspace.list");
   await completeDefinitionDraftPublishGate(page, editor);
@@ -120,7 +120,7 @@ test("P8.5 sends one intermediate message, loads the missed skill, and keeps one
 
   const database = process.env.PLAYWRIGHT_SQLITE_PATH;
   expect(database).toBeTruthy();
-  const pins = execFileSync("sqlite3", [database!, "SELECT PinnedActiveSkillIdsJson FROM ConversationTurnExecutions;"], {
+  const pins = execFileSync("sqlite3", [database!, "SELECT ActiveSkillKeysJson FROM ConversationTurnExecutions;"], {
     encoding: "utf8"
   });
   expect(pins).toContain("billing.review");

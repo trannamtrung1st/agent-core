@@ -18,6 +18,9 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         }
 
+        if (InstanceSkillTools.IsManagement(toolName) && admission is not { AgentInstanceId: not null, SupportsTools: true })
+            return ToolPolicyDecision.Deny;
+
         if (descriptor.OfferRule == ToolOfferRule.CredentialAuthority)
             return admission is { AgentInstanceId: not null, SupportsTools: true } ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
 
@@ -69,16 +72,12 @@ public static class ToolPolicy
 
         if (descriptor.OfferRule == ToolOfferRule.CurrentExecutionCapability)
         {
+            if (toolName == ToolCatalog.SkillsLoad) return admission is { SupportsTools: true, AgentInstanceId: not null } &&
+                (admission.TriggerKind == TriggerKind.UserTurn || ToolResources.IsOccurrence(admission.TriggerKind)) ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
             if (admission is null
                 || admission.Detached
                 || admission.TriggerKind != TriggerKind.UserTurn
                 || ToolResources.IsOccurrence(admission.TriggerKind))
-            {
-                return ToolPolicyDecision.Deny;
-            }
-
-            if (string.Equals(toolName, ToolCatalog.SkillsLoad, StringComparison.Ordinal)
-                && definition.SkillList.Count == 0)
             {
                 return ToolPolicyDecision.Deny;
             }
@@ -140,6 +139,9 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (InstanceSkillTools.IsManagement(descriptor.Name) && context is not { AgentInstanceId: not null, ModelSupportsTools: true })
+            return false;
+
         if (descriptor.OfferRule == ToolOfferRule.CredentialAuthority)
             return context is { AgentInstanceId: not null, ModelSupportsTools: true, CredentialMetadataAvailable: true };
 
@@ -208,6 +210,8 @@ public static class ToolPolicy
             return false;
         }
 
+        if (descriptor.Name == ToolCatalog.SkillsLoad) return context is { AgentInstanceId: not null, ModelSupportsTools: true } && (context.PinnedSkillCatalog?.Count ?? 0) > 0
+            && (context.Trigger.Kind == TriggerKind.UserTurn || ToolResources.IsOccurrence(context.Trigger.Kind));
         return descriptor.OfferRule switch
         {
             ToolOfferRule.RoleAllowlist => RoleEnvironments.Of(definition).ToolList.Contains(
@@ -222,7 +226,7 @@ public static class ToolPolicy
                 && context.Trigger.Kind == TriggerKind.UserTurn
                 && !context.DetachedExecution
                 && !ToolResources.IsOccurrence(context.Trigger.Kind)
-                && (descriptor.Name != ToolCatalog.SkillsLoad || definition.SkillList.Count > 0)
+                && (descriptor.Name != ToolCatalog.SkillsLoad || (context.PinnedSkillCatalog?.Count ?? 0) > 0)
                 && (descriptor.Name != ToolCatalog.AppMessageSend || context.IntermediateMessagingAllowed),
             ToolOfferRule.OccurrenceCapability => OccurrenceCompletion(context),
             _ => false

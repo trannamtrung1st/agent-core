@@ -784,7 +784,8 @@ function emptySkill(): SkillDraft {
     name: "",
     description: "",
     procedure: "",
-    activationKeywords: "",
+    projection: "OnDemand",
+    defaultEnabled: true,
     requiredCapabilities: "",
     resourcePaths: ""
   };
@@ -855,14 +856,11 @@ function SkillCard({
           onChange={(event) => onChange({ ...skill, procedure: event.target.value })}
         />
       </label>
-      <TextField
-        readOnly={readOnly}
-        label={`Skill ${number} activation keywords`}
-        hint="Comma-separated. Keywords select this skill; they do not grant authority."
-        value={skill.activationKeywords}
-        disabled={disabled}
-        onChange={(activationKeywords) => onChange({ ...skill, activationKeywords })}
-      />
+      <label>Skill {number} projection
+        <Select aria-label={`Skill ${number} projection`} value={skill.projection} disabled={disabled || readOnly} options={[{value: "Always", label: "Always"}, {value: "OnDemand", label: "On demand"}]} onChange={projection => onChange({ ...skill, projection })} />
+      </label>
+      <label>Skill {number} default enabled <Switch aria-label={`Skill ${number} default enabled`} checked={skill.defaultEnabled} disabled={disabled || readOnly} onChange={defaultEnabled => onChange({ ...skill, defaultEnabled })} /></label>
+      {skill.projection === undefined || skill.defaultEnabled === undefined ? <Typography.Text type="danger">Choose an explicit projection and default enabled state before publishing.</Typography.Text> : null}
       <TextField
         readOnly={readOnly}
         label={`Skill ${number} required capabilities`}

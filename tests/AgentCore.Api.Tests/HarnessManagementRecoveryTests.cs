@@ -28,7 +28,7 @@ public sealed class HarnessManagementRecoveryTests
                 var service = services.GetRequiredService<HarnessManagementService>();
                 var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
                 id = instance.InstanceId;
-                instance = await service.ConfigureAsync(id, instance.Revision, new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources], [], []));
+                instance = await service.ConfigureAsync(id, instance.Revision, new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources], ["knowledge:support-order-policy"], []));
                 var contexts = services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>();
                 await using (var db = await contexts.CreateDbContextAsync())
                     await db.Database.ExecuteSqlRawAsync("""
@@ -74,7 +74,7 @@ public sealed class HarnessManagementRecoveryTests
             var instance = await factory.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
             var service = factory.Services.GetRequiredService<HarnessManagementService>();
             instance = await service.ConfigureAsync(instance.InstanceId, instance.Revision,
-                new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []));
+                new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources], ["knowledge:support-order-policy"], []));
             instance = await service.StartAsync(instance.InstanceId, instance.Revision, "Prepare a safe review procedure.");
             var prepId = instance.HarnessManagement!.Preparation!.PreparationId;
             var review = await HarnessLegacyFixture.RunAsync(factory.Services, instance.InstanceId, prepId);
@@ -124,7 +124,7 @@ public sealed class HarnessManagementRecoveryTests
                 id = instance.InstanceId;
                 var service = first.Services.GetRequiredService<HarnessManagementService>();
                 instance = await service.ConfigureAsync(id, instance.Revision,
-                    new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources, HarnessManagementScope.Skills, HarnessManagementScope.ToolSelection],
+                    new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources, HarnessManagementScope.ToolSelection],
                         ["knowledge:support-order-policy"], ["web.fetch"]));
                 instance = await service.StartAsync(id, instance.Revision, "Prepare operations review.");
                 preparationId = instance.HarnessManagement!.Preparation!.PreparationId;
@@ -141,7 +141,7 @@ public sealed class HarnessManagementRecoveryTests
                 var review = await service.ReviewAsync(id);
                 Assert.Equal(draftId, review.Draft!.DraftId);
                 Assert.Equal("Pending", Assert.Single(review.State.Preparation!.Approvals).Status);
-                Assert.Contains(review.Draft.Candidate.SkillList, s => s.Id == "operations.review");
+                Assert.Contains(review.Draft.Candidate.Environment!.KnowledgeList, s => s.Identity == "preparation-reference");
                 var instance = await service.DecideApprovalAsync(id, revision, approvalId, actionHash, true);
                 review = await HarnessLegacyFixture.RunAsync(reopened.Services, id, preparationId);
                 Assert.Equal(HarnessPreparationStatus.Ready, review.State.Preparation!.Status);
@@ -151,7 +151,7 @@ public sealed class HarnessManagementRecoveryTests
                 instance = await service.ConfigureAsync(id, instance.Revision, instance.HarnessManagement!.Policy with { Mode = HarnessManagementMode.Disabled, Frozen = true });
                 Assert.Equal(HarnessPreparationStatus.Published, instance.HarnessManagement!.Preparation!.Status);
                 await Assert.ThrowsAsync<AgentCoreException>(async () => await service.RequestOperationAsync(id, preparationId,
-                    new("skill.remove", review.Draft.Revision, Id: "operations.review")));
+                    new("knowledge.remove", review.Draft.Revision, Id: "operations.review")));
                 instance = await service.ConfigureAsync(id, instance.Revision, instance.HarnessManagement.Policy with { Mode = HarnessManagementMode.Managed, Frozen = false });
                 instance = await service.StartAsync(id, instance.Revision, "Improve the next candidate.");
                 Assert.NotEqual(draftId, instance.HarnessManagement!.Preparation!.DraftId);

@@ -9,7 +9,6 @@ public static class SkillActivationLimits
     public const int MaxIdsPerLoad = 4;
     public const int MaxLoadInvocations = 2;
     public const int MaxAggregateProcedureCharacters = 8000;
-    public const int MaxCatalogKeywordCharacters = 120;
 }
 
 public sealed record SkillLoadRejection(string Id, string Reason);
@@ -36,7 +35,7 @@ public sealed record SkillLoadPlan(
 
 public sealed record SkillLoadMailboxResult(
     string ToolResultJson,
-    IReadOnlyList<string>? ActiveSkillIds,
+    IReadOnlyList<string>? ActiveSkillKeys,
     string Outcome)
 {
     public static SkillLoadMailboxResult Failed(string toolResultJson, string outcome) =>
@@ -97,12 +96,12 @@ public static class SkillLoadAdmission
     }
 
     public static SkillLoadPlan Plan(
-        AgentDefinition definition,
+        IReadOnlyList<EffectiveSkill> catalog,
         IReadOnlyList<string> pinnedIds,
         int skillLoadCount,
         IReadOnlyList<string> requestedIds)
     {
-        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(pinnedIds);
         ArgumentNullException.ThrowIfNull(requestedIds);
         if (skillLoadCount >= SkillActivationLimits.MaxLoadInvocations)
@@ -121,18 +120,18 @@ public static class SkillLoadAdmission
         var rejected = new List<SkillLoadRejection>();
         var append = new List<string>();
         var working = new List<string>(pinnedIds);
-        var characters = AggregateProcedureCharacters(definition, working);
+        var characters = AggregateProcedureCharacters(catalog, working);
         var budgetClosed = false;
         foreach (var raw in requestedIds)
         {
             var id = raw.Trim();
-            if (!ConversationTurnExecution.IsPinnedSkillId(id))
+            if (!ConversationTurnExecution.IsSkillKey(id))
             {
                 rejected.Add(new SkillLoadRejection(id, "invalid"));
                 continue;
             }
 
-            var skill = definition.SkillList.FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.Ordinal));
+            var skill = catalog.FirstOrDefault(item => string.Equals(item.Key, id, StringComparison.Ordinal));
             if (skill is null)
             {
                 rejected.Add(new SkillLoadRejection(id, "unknown"));
@@ -145,8 +144,9 @@ public static class SkillLoadAdmission
                 continue;
             }
 
+            if (skill.Projection != SkillProjection.OnDemand) { rejected.Add(new(id, "not_on_demand")); continue; }
+
             if (budgetClosed
-                || working.Count >= ConversationTurnExecution.MaxPinnedActiveSkills
                 || characters + skill.Procedure.Length > SkillActivationLimits.MaxAggregateProcedureCharacters)
             {
                 budgetClosed = true;
@@ -172,12 +172,12 @@ public static class SkillLoadAdmission
     public static string Error(string code, string message) =>
         JsonSerializer.Serialize(new { error = code, message });
 
-    private static int AggregateProcedureCharacters(AgentDefinition definition, IReadOnlyList<string> ids)
+    private static int AggregateProcedureCharacters(IReadOnlyList<EffectiveSkill> catalog, IReadOnlyList<string> ids)
     {
         var total = 0;
         foreach (var id in ids)
         {
-            var skill = definition.SkillList.FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.Ordinal));
+            var skill = catalog.FirstOrDefault(item => string.Equals(item.Key, id, StringComparison.Ordinal));
             if (skill is not null)
             {
                 total += skill.Procedure.Length;
