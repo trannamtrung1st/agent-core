@@ -1434,6 +1434,7 @@ These items are recorded decisions. P9.5–P9.9 take only the narrow exceptions 
 Always keep this section.
 
 - [ ] Admin assistant agent remains a future idea.
+- [ ] PNG, more file generation/processing.
 - [x] P9.7 owns bounded, configurable agent-assisted/self-managed harness authoring; do not track a second generic “self-improvement” runtime here.
 - [x] P9.8 — Session Retrospection / Agent Experience (bounded experience with provenance; optional existing memory admission).
 - [ ] team work, agent communication, workflow, orchestration, etc .... like grok bot
