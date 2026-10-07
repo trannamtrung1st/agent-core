@@ -11,7 +11,7 @@ public interface IAgentInstanceWorkspaceStore
 {
     ValueTask<WorkspaceTransfer> ExportAsync(Guid instanceId, string path, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("Workspace tree export is unavailable.");
-    ValueTask ImportAsync(Guid instanceId, string destination, WorkspaceTransfer transfer,
+    ValueTask ImportAsync(Guid instanceId, string destination, WorkspaceTransfer transfer, Guid? sourceSessionId = null,
         long? expectedRevision = null, string? expectedSha256 = null, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("Workspace tree import is unavailable.");
 

@@ -28,9 +28,14 @@ public sealed class InMemoryAdminLifecycleDeletion(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (await events.TryGetByOperationIdAsync(command.OperationId, cancellationToken).ConfigureAwait(false) is not null)
+        if (await events.TryGetByOperationIdAsync(command.OperationId, cancellationToken).ConfigureAwait(false) is { } receipt)
         {
-            throw AgentCoreErrors.Conflict("Operation id is already used for a different admin event.");
+            WorkspaceDeletionRecovery.RequireMatchingReceipt(command, receipt.Operation.ToString(), receipt.TargetType,
+                receipt.TargetId, receipt.Revision, receipt.ActorKind.ToString());
+            if (await instances.FindAsync(command.InstanceId, cancellationToken) is not null)
+                throw AgentCoreErrors.Conflict("Deleted instance id is already in use.");
+            if (workspace is not null) await workspace.DeleteInstanceAsync(command.InstanceId, cancellationToken);
+            return;
         }
 
         var instance = await instances.FindAsync(command.InstanceId, cancellationToken).ConfigureAwait(false)
@@ -47,7 +52,6 @@ public sealed class InMemoryAdminLifecycleDeletion(
             await BeforeCommit(cancellationToken).ConfigureAwait(false);
         }
 
-        if (workspace is not null) await workspace.DeleteInstanceAsync(command.InstanceId, cancellationToken);
         var removed = instances.RemoveForDeletion(command.InstanceId, command.ExpectedRevision);
         try
         {
@@ -66,7 +70,15 @@ public sealed class InMemoryAdminLifecycleDeletion(
         }
         experience?.Purge(command.InstanceId);
         triggers.PurgeDeletedThoughts(command.InstanceId);
+        if (workspace is not null) await workspace.DeleteInstanceAsync(command.InstanceId, cancellationToken);
     }
+
+    public ValueTask RecoverWorkspaceCleanupAsync(CancellationToken cancellationToken = default) =>
+        WorkspaceDeletionRecovery.PurgeAsync(events.DeletedInstanceIds, async (owner, ct) =>
+        {
+            if (workspace is not null && await instances.FindAsync(owner, ct) is null)
+                await workspace.DeleteInstanceAsync(owner, ct);
+        }, cancellationToken);
 
     public async ValueTask DeleteDefinitionAsync(
         AdminDefinitionDeleteCommand command,
@@ -151,6 +163,17 @@ public sealed class SqliteAdminLifecycleDeletion(
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var receipt = await db.AdminEvents.AsNoTracking().SingleOrDefaultAsync(
+            e => e.OperationId == command.OperationId.ToString("D"), cancellationToken);
+        if (receipt is not null)
+        {
+            WorkspaceDeletionRecovery.RequireMatchingReceipt(command, receipt.Operation, receipt.TargetType,
+                receipt.TargetId, receipt.Revision, receipt.ActorKind);
+            if (await db.AgentInstances.AnyAsync(i => i.InstanceId == receipt.TargetId, cancellationToken))
+                throw AgentCoreErrors.Conflict("Deleted instance id is already in use.");
+            if (workspace is not null) await workspace.DeleteInstanceContentAsync(command.InstanceId, cancellationToken);
+            return;
+        }
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         var key = command.InstanceId.ToString("D");
         var row = await db.AgentInstances
@@ -179,7 +202,6 @@ public sealed class SqliteAdminLifecycleDeletion(
             throw AgentCoreErrors.Conflict(AdminDeletionMessages.InstanceBlocked(counts));
         }
 
-        if (workspace is not null) await workspace.DeleteInstanceContentAsync(command.InstanceId, cancellationToken);
         await db.AgentWorkspaceItems.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
         await db.Experiences.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
         await db.IdentityMaintenanceSettings.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
@@ -203,6 +225,22 @@ public sealed class SqliteAdminLifecycleDeletion(
             ids.NewId());
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        // The committed receipt is also the recovery marker if physical cleanup fails or the host exits.
+        if (workspace is not null) await workspace.DeleteInstanceContentAsync(command.InstanceId, cancellationToken);
+    }
+
+    public async ValueTask RecoverWorkspaceCleanupAsync(CancellationToken cancellationToken = default)
+    {
+        if (workspace is null) return;
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var owners = await db.AdminEvents.AsNoTracking()
+            .Where(e => e.Operation == nameof(AdminEventOperationKind.InstanceDeleted) && e.TargetType == "agent.instance")
+            .Select(e => e.TargetId).Distinct().ToListAsync(cancellationToken);
+        await WorkspaceDeletionRecovery.PurgeAsync(owners.Select(Guid.Parse), async (owner, ct) =>
+        {
+            if (!await db.AgentInstances.AnyAsync(i => i.InstanceId == owner.ToString("D"), ct))
+                await workspace.DeleteInstanceContentAsync(owner, ct);
+        }, cancellationToken);
     }
 
     public async ValueTask DeleteDefinitionAsync(
@@ -369,5 +407,32 @@ public sealed class SqliteAdminLifecycleDeletion(
         }
 
         return true;
+    }
+}
+
+internal static class WorkspaceDeletionRecovery
+{
+    internal static void RequireMatchingReceipt(AdminInstanceDeleteCommand command, string operation,
+        string targetType, string targetId, long? revision, string actorKind)
+    {
+        if (operation != nameof(AdminEventOperationKind.InstanceDeleted) || targetType != "agent.instance"
+            || targetId != command.InstanceId.ToString("D") || revision != command.ExpectedRevision
+            || actorKind != command.ActorKind.ToString())
+            throw AgentCoreErrors.Conflict("Operation id is already used for a different admin event.");
+    }
+
+    internal static async ValueTask PurgeAsync(IEnumerable<Guid> owners,
+        Func<Guid, CancellationToken, ValueTask> purge, CancellationToken cancellationToken)
+    {
+        var failed = 0;
+        foreach (var owner in owners)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try { await purge(owner, cancellationToken); }
+            catch (IOException) { failed++; }
+            catch (UnauthorizedAccessException) { failed++; }
+            catch (AgentCoreException) { failed++; }
+        }
+        if (failed != 0) throw new IOException($"Workspace cleanup remains pending for {failed} deleted instances.");
     }
 }

@@ -151,7 +151,7 @@ public sealed class AgentWorkspaceStoreTests
             Assert.Equal(bytes, (await scratch.ReadAsync(session, definition, "/workspace/working/copied/data.bin")).Bytes);
             Assert.Contains(await scratch.ListAsync(session, definition, "/workspace/working/copied"), n => n.Directory && n.LogicalPath.EndsWith("/empty", StringComparison.Ordinal));
             var transfer = await scratch.ExportAsync(session, "/workspace/working/copied");
-            await home.ImportAsync(owner, "/home/roundtrip", transfer);
+            await home.ImportAsync(owner, "/home/roundtrip", transfer, session);
             Assert.Equal(bytes, (await home.ReadAsync(owner, null, "/home/roundtrip/data.bin")).Bytes);
             await Assert.ThrowsAsync<AgentCoreException>(async () => await scratch.ImportAsync(session, "/workspace/working/over-quota", transfer));
             Assert.False(Directory.Exists(Path.Combine(scratch.PhysicalWorkingDirectory(session), "over-quota")));
@@ -162,10 +162,14 @@ public sealed class AgentWorkspaceStoreTests
             var existing = (await home.ReadAsync(owner, null, "/home/project/data.bin")).Item;
             var replacement = new WorkspaceTransfer([new("", false, "application/octet-stream", new byte[] { 42, 0 })]);
             await Assert.ThrowsAsync<AgentCoreException>(async () => await home.ImportAsync(owner, existing.LogicalPath, replacement));
-            await home.ImportAsync(owner, existing.LogicalPath, replacement, existing.Revision, existing.Sha256Hex);
-            await Assert.ThrowsAsync<AgentCoreException>(async () => await home.ImportAsync(owner, existing.LogicalPath, replacement, existing.Revision, existing.Sha256Hex));
+            await home.ImportAsync(owner, existing.LogicalPath, replacement, session, existing.Revision, existing.Sha256Hex);
+            await Assert.ThrowsAsync<AgentCoreException>(async () => await home.ImportAsync(owner, existing.LogicalPath, replacement, session, existing.Revision, existing.Sha256Hex));
             if (sqlite) home = NewStore(root, factory);
-            Assert.Equal(new byte[] { 42, 0 }, (await home.ReadAsync(owner, null, existing.LogicalPath)).Bytes);
+            var overwritten = await home.ReadAsync(owner, null, existing.LogicalPath);
+            Assert.Equal(new byte[] { 42, 0 }, overwritten.Bytes);
+            Assert.Equal(session, overwritten.Item.SourceSessionId);
+            Assert.All((await home.ListAsync(owner, "/home/roundtrip", null, 256)).Items,
+                item => Assert.Equal(session, item.SourceSessionId));
             Assert.Contains((await home.ListAsync(owner, "/home", null, 256)).Items, n => n.LogicalPath == "/home/roundtrip/empty" && n.Directory);
         }
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }

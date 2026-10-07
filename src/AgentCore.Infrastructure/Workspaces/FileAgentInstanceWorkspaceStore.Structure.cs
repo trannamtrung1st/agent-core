@@ -109,7 +109,7 @@ public sealed partial class FileAgentInstanceWorkspaceStore
         }
     }
 
-    private List<AgentWorkspaceRow> ParentRows(Guid owner, string path, IReadOnlyList<AgentWorkspaceRow> existing)
+    private List<AgentWorkspaceRow> ParentRows(Guid owner, string path, IReadOnlyList<AgentWorkspaceRow> existing, Guid? sourceSessionId = null)
     {
         var result = new List<AgentWorkspaceRow>();
         var indexed = existing.ToDictionary(row => row.PathKey, StringComparer.Ordinal);
@@ -122,12 +122,12 @@ public sealed partial class FileAgentInstanceWorkspaceStore
                 if (!item.Directory || item.LogicalPath != parent) throw AgentCoreErrors.Conflict("Home parent conflicts with an existing file or case-only path.");
                 continue;
             }
-            result.Add(DirectoryRow(owner, parent));
+            result.Add(DirectoryRow(owner, parent, sourceSessionId));
         }
         result.Reverse(); return result;
     }
-    private AgentWorkspaceRow DirectoryRow(Guid owner, string path) => Row(new AgentWorkspaceItem(ids.NewId(), owner, path,
-        "inode/directory", 0, Hash([]), 1, time.GetUtcNow(), time.GetUtcNow(), null, Directory: true), "");
+    private AgentWorkspaceRow DirectoryRow(Guid owner, string path, Guid? sourceSessionId = null) => Row(new AgentWorkspaceItem(ids.NewId(), owner, path,
+        "inode/directory", 0, Hash([]), 1, time.GetUtcNow(), time.GetUtcNow(), sourceSessionId, Directory: true), "");
     private static AgentWorkspaceRow Row(AgentWorkspaceItem item, string blob) => new()
     {
         ItemId = item.ItemId.ToString("D"), AgentInstanceId = item.AgentInstanceId.ToString("D"), PathKey = item.LogicalPath.ToUpperInvariant(),

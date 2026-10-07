@@ -278,3 +278,9 @@ Configure `ContinuityMaintenance:PollIntervalSeconds` (60), `MinimumIntervalSeco
 Admin per-instance Automatic continuity review overrides the default within the allowed range. Null inherits it. `LastMaintenanceAtUtc` means eligible checkpoint evaluation claimed, including a quiet scan, rather than successful model completion. It is saved before source inspection and survives restart; failed admission/generation recovers through the existing Experience outbox and WorkItem path. Cadence edits retain the timestamp. A narrowed operator range exposes incompatible saved values and explicitly uses the default until corrected. Experience enablement, consolidation permission and Thought activation remain independent. Stable pause/end and background-work boundaries remain immediate and do not use this interval.
 
 An enabled active instance without a previous evaluation timestamp is due on the next host poll. Subsequent evaluations use its persisted claim timestamp plus the effective interval; process restart does not reset that timestamp.
+
+## Agent Workspace deletion cleanup
+
+Run only one authoritative writable Agent Core host per database and `Persistence:AgentWorkspaceRoot`; writable replicas sharing these roots are unsupported. Back up/restore both together as described in [workspace persistence](15-persistence-and-configuration.md#agent-instance-home-persistence).
+
+`WorkspaceCleanupHostedService` retries committed instance-deletion receipts at startup and every five minutes. Failed cleanup logs a bounded warning and retries later without restoring the deleted owner. Physical leftovers remain inaccessible; do not remove the Admin receipts needed for recovery. An exact repeated internal deletion command can also finish cleanup; the HTTP delete endpoint generates its own operation id. Logical-commit failure leaves the archived instance and its workspace intact.

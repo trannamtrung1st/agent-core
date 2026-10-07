@@ -147,7 +147,7 @@ public sealed class AgentInstanceWorkspaceService(
             await RequireAsync(owner, true, ct); await SessionAsync(sessionId, true, ct);
             await scratch.EnsureAsync(sessionId, snapshot.Definition, ct);
             var transfer = sourceHome ? await store.ExportAsync(owner, source, ct) : await scratch.ExportAsync(sessionId, source, ct);
-            if (destinationHome) await store.ImportAsync(owner, destination, transfer, expectedRevision, expectedSha256, ct);
+            if (destinationHome) await store.ImportAsync(owner, destination, transfer, sessionId, expectedRevision, expectedSha256, ct);
             else await scratch.ImportAsync(sessionId, destination, transfer, expectedRevision, expectedSha256, ct);
         }, cancellationToken);
     }

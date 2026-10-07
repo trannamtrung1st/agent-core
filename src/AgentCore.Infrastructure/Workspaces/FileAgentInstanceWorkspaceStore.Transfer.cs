@@ -33,14 +33,14 @@ public sealed partial class FileAgentInstanceWorkspaceStore
             return new WorkspaceTransfer(entries);
         }, cancellationToken);
 
-    public async ValueTask ImportAsync(Guid instanceId, string destination, WorkspaceTransfer transfer,
+    public async ValueTask ImportAsync(Guid instanceId, string destination, WorkspaceTransfer transfer, Guid? sourceSessionId = null,
         long? expectedRevision = null, string? expectedSha256 = null, CancellationToken cancellationToken = default)
     {
         destination = AgentHomePath.Normalize(destination);
         if (transfer.Entries.Count == 1 && !transfer.Entries[0].Directory)
         {
             var entry = transfer.Entries[0];
-            await RetainAsync(instanceId, destination, entry.ContentType, entry.Bytes, null, expectedRevision, expectedSha256, cancellationToken);
+            await RetainAsync(instanceId, destination, entry.ContentType, entry.Bytes, sourceSessionId, expectedRevision, expectedSha256, cancellationToken);
             return;
         }
         await WithAsync(instanceId, async ct =>
@@ -54,19 +54,19 @@ public sealed partial class FileAgentInstanceWorkspaceStore
             var blobs = new List<string>();
             try
             {
-                foreach (var parent in plan[0].ParentsToCreate) added.Add(DirectoryRow(instanceId, parent));
+                foreach (var parent in plan[0].ParentsToCreate) added.Add(DirectoryRow(instanceId, parent, sourceSessionId));
                 foreach (var entry in transfer.Entries)
                 {
                     ct.ThrowIfCancellationRequested();
                     var path = destination + (entry.RelativePath.Length == 0 ? "" : "/" + entry.RelativePath);
                     AgentHomePath.Normalize(path);
-                    if (entry.Directory) { added.Add(DirectoryRow(instanceId, path)); continue; }
+                    if (entry.Directory) { added.Add(DirectoryRow(instanceId, path, sourceSessionId)); continue; }
                     var blob = ids.NewId().ToString("N");
                     var physical = BlobPath(instanceId, blob); blobs.Add(physical);
                     Directory.CreateDirectory(Path.GetDirectoryName(physical)!); physical = BlobPath(instanceId, blob);
                     await WriteImmutableBlobAsync(physical, entry.Bytes, ct);
                     added.Add(Row(new AgentWorkspaceItem(ids.NewId(), instanceId, path, entry.ContentType, entry.Bytes.LongLength,
-                        Hash(entry.Bytes), 1, time.GetUtcNow(), time.GetUtcNow(), null), blob));
+                        Hash(entry.Bytes), 1, time.GetUtcNow(), time.GetUtcNow(), sourceSessionId), blob));
                 }
                 await CommitRowsAsync(instanceId, [], added, ct);
                 return 0;

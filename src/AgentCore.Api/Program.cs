@@ -83,6 +83,7 @@ builder.Services.AddSingleton<SessionHost>();
 builder.Services.AddSingleton<IProfileLiveUpdateNotifier, LazyProfileLiveUpdateNotifier>();
 builder.Services.AddHostedService<SessionShutdownHostedService>();
 builder.Services.AddHostedService<AttachmentTtlHostedService>();
+builder.Services.AddHostedService<WorkspaceCleanupHostedService>();
 builder.Services.AddHostedService<TriggerSchedulerHostedService>();
 builder.Services.AddHostedService<ContinuityMaintenanceHostedService>();
 builder.Services.AddHostedService<DurableWorkIntakeHostedService>();

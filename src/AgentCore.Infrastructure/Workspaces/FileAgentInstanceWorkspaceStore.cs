@@ -84,7 +84,7 @@ public sealed partial class FileAgentInstanceWorkspaceStore(
                     if (a[n] != b[n]) throw AgentCoreErrors.Conflict("Case-only home directory collisions are denied.");
                 }
             }
-            var parents = ParentRows(instanceId, path, rows);
+            var parents = ParentRows(instanceId, path, rows, sourceSessionId);
             if (bytes.Length > maxFileBytes || rows.Sum(r => r.ByteSize) - (previous?.ByteSize ?? 0) + bytes.Length > maxInstanceBytes
                 || previous is null && rows.Count(r => !FromRow(r).Directory) >= AgentWorkspaceLimits.MaxItems
                 || rows.Count + parents.Count + (previous is null ? 1 : 0) > WorkspaceStructureLimits.MaxEntries)
@@ -165,7 +165,11 @@ public sealed partial class FileAgentInstanceWorkspaceStore(
                 await db.AgentWorkspaceItems.Where(r => r.AgentInstanceId == instanceId.ToString("D")).ExecuteDeleteAsync(ct);
             }
             _memory.TryRemove(instanceId, out _);
-            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+            if (Directory.Exists(directory))
+            {
+                foreach (var entry in Directory.EnumerateFileSystemEntries(directory)) DenyLinks(entry);
+                Directory.Delete(directory, recursive: true);
+            }
             return 0;
         }, cancellationToken).AsVoid();
 

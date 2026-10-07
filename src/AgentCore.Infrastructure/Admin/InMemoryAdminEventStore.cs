@@ -73,6 +73,10 @@ public class InMemoryAdminEventStore(IIdGenerator ids) : IAdminEventStore
         return ValueTask.FromResult<IReadOnlyList<AdminEvent>>(ordered);
     }
 
+    internal IEnumerable<Guid> DeletedInstanceIds => _events
+        .Where(e => e.Operation == AdminEventOperationKind.InstanceDeleted && e.TargetType == "agent.instance")
+        .Select(e => Guid.Parse(e.TargetId)).Distinct();
+
     internal virtual void AppendWithinLock(AdminEventAppend append)
     {
         _ = AppendAsync(append).AsTask().GetAwaiter().GetResult();

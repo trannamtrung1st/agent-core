@@ -254,6 +254,14 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
         var bytes = new byte[] { 0, 255, 128, 13, 10 };
         (await client.PutAsync($"/api/v2/sessions/{session}/workspace/content?path=/working/copy/raw.bin", new ByteArrayContent(bytes))).EnsureSuccessStatusCode();
         await Tool(ToolCatalog.WorkspaceCopy, new { source = "/working/copy", destination = "/home/binary-tree" });
+        var homeStore = _factory.Services.GetRequiredService<IAgentInstanceWorkspaceStore>();
+        Assert.All((await homeStore.ListAsync(owner, "/home/binary-tree", null, 256)).Items,
+            item => Assert.Equal(session, item.SourceSessionId));
+        await Tool(ToolCatalog.WorkspaceCopy, new { source = "/working/copy/raw.bin", destination = "/home/single.bin" });
+        var copiedFile = (await homeStore.ReadAsync(owner, null, "/home/single.bin")).Item;
+        Assert.Equal(session, copiedFile.SourceSessionId);
+        await Tool(ToolCatalog.WorkspaceCopy, new { source = "/working/copy/raw.bin", destination = "/home/single.bin", expectedRevision = copiedFile.Revision });
+        Assert.Equal(session, (await homeStore.ReadAsync(owner, null, "/home/single.bin")).Item.SourceSessionId);
         Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/binary-tree/raw.bin"));
         Assert.Equal("Conflict", (await Tool(ToolCatalog.WorkspaceCopy, new { source = "/home/project", destination = "/working/copy" })).GetProperty("error").GetString());
         Assert.Equal("Forbidden", (await Tool(ToolCatalog.WorkspaceMove, new { source = "/working/copy", destination = "/home/transferred" })).GetProperty("error").GetString());
@@ -363,7 +371,51 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
     {
         var client = factory.CreateClient(); client.DefaultRequestHeaders.TryAddWithoutValidation(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(factory.Services)); return client;
     }
-    private sealed class SqliteFactory(string root) : DurableSqliteHostFactory(Path.Combine(root, "store.db"))
+    [Fact]
+    public async Task Sqlite_host_startup_purges_bytes_left_after_committed_logical_deletion()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "workspace-cleanup-restart", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        Guid owner;
+        try
+        {
+            using (var first = new SqliteFactory(root))
+            {
+                var client = OwnerOf(first); owner = await CreateInstance(client, 15);
+                var services = first.Services;
+                await services.GetRequiredService<IAgentInstanceWorkspaceStore>().RetainAsync(owner,
+                    "/home/leftover.bin", "application/octet-stream", new byte[] { 0, 255, 128 }, null, null, null);
+                (await client.PatchAsJsonAsync($"/api/v2/admin/agent-instances/{owner}/lifecycle",
+                    new AdminUpdateAgentInstanceLifecycleRequest(1, "Archived"))).EnsureSuccessStatusCode();
+                // Simulate exit in the commit-to-purge gap: commit deletion with no physical adapter.
+                var logicalOnly = new SqliteAdminLifecycleDeletion(services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                    services.GetRequiredService<IIdGenerator>());
+                await logicalOnly.DeleteInstanceAsync(new(owner, 2, Guid.NewGuid(), DateTimeOffset.UtcNow));
+                Assert.True(Directory.Exists(Path.Combine(root, "home", owner.ToString("N"))));
+            }
+            var cleanupComplete = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var restarted = new SqliteFactory(root, cleanupComplete);
+            var restartedClient = OwnerOf(restarted);
+            await cleanupComplete.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            Assert.False(Directory.Exists(Path.Combine(root, "home", owner.ToString("N"))));
+            Assert.Equal(HttpStatusCode.NotFound,
+                (await restartedClient.GetAsync($"/api/v2/agent-instances/{owner}/workspace")).StatusCode);
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
+    }
+
+    private sealed class ObservedDeletion(IAdminLifecycleDeletion inner, TaskCompletionSource completed) : IAdminLifecycleDeletion
+    {
+        public ValueTask DeleteInstanceAsync(AgentCore.Application.Admin.AdminInstanceDeleteCommand command, CancellationToken ct = default) => inner.DeleteInstanceAsync(command, ct);
+        public ValueTask DeleteDefinitionAsync(AgentCore.Application.Admin.AdminDefinitionDeleteCommand command, CancellationToken ct = default) => inner.DeleteDefinitionAsync(command, ct);
+        public async ValueTask RecoverWorkspaceCleanupAsync(CancellationToken ct = default)
+        {
+            await inner.RecoverWorkspaceCleanupAsync(ct);
+            completed.TrySetResult();
+        }
+    }
+
+    private sealed class SqliteFactory(string root, TaskCompletionSource? cleanupComplete = null) : DurableSqliteHostFactory(Path.Combine(root, "store.db"))
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -383,8 +435,12 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
                 services.AddSingleton<IAgentInstanceWorkspaceStore>(sp => new FileAgentInstanceWorkspaceStore(Path.Combine(root, "home"),
                     sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<IIdGenerator>(), sp.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
                 services.RemoveAll<IAdminLifecycleDeletion>();
-                services.AddSingleton<IAdminLifecycleDeletion>(sp => new SqliteAdminLifecycleDeletion(sp.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
-                    sp.GetRequiredService<IIdGenerator>(), sp.GetRequiredService<IAgentInstanceWorkspaceStore>()));
+                services.AddSingleton<IAdminLifecycleDeletion>(sp =>
+                {
+                    var deletion = new SqliteAdminLifecycleDeletion(sp.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                        sp.GetRequiredService<IIdGenerator>(), sp.GetRequiredService<IAgentInstanceWorkspaceStore>());
+                    return cleanupComplete is null ? deletion : new ObservedDeletion(deletion, cleanupComplete);
+                });
             });
         }
     }
