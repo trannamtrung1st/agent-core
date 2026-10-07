@@ -72,6 +72,7 @@ internal static class BrowserPageSettle
 
     public static async Task<bool> WaitAsync(IPage page, int timeoutMs, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var started = Environment.TickCount64;
         var deadline = started + Math.Max(0, timeoutMs);
         long? seen = null;
@@ -82,8 +83,13 @@ internal static class BrowserPageSettle
             cancellationToken.ThrowIfCancellationRequested();
             var now = Environment.TickCount64;
             var elapsed = now - started;
-            var (generation, inflight) = await ReadAsync(page, cancellationToken).ConfigureAwait(false);
+            var (generation, inflight) = await ReadAsync(page, deadline, cancellationToken).ConfigureAwait(false);
             var observedAt = Environment.TickCount64;
+            cancellationToken.ThrowIfCancellationRequested();
+            if (observedAt >= deadline)
+            {
+                return false;
+            }
             var unstable = inflight > 0 || seen is null || generation != seen.Value;
             seen = generation;
             if (unstable || elapsed < MinimumOpportunityMs)
@@ -111,11 +117,21 @@ internal static class BrowserPageSettle
         return false;
     }
 
-    private static async Task<(long Generation, int Inflight)> ReadAsync(IPage page, CancellationToken cancellationToken)
+    private static async Task<(long Generation, int Inflight)> ReadAsync(
+        IPage page, long deadline, CancellationToken cancellationToken)
     {
         try
         {
-            var values = await page.EvaluateAsync<long[]>(ReadScript).WaitAsync(cancellationToken).ConfigureAwait(false);
+            var remaining = deadline - Environment.TickCount64;
+            if (remaining <= 0)
+            {
+                return (-1, 1);
+            }
+
+            // EvaluateAsync has no cancellation argument. Bound our wait for its
+            // read-only result; a late result cannot extend this settle window.
+            var values = await page.EvaluateAsync<long[]>(ReadScript)
+                .WaitAsync(TimeSpan.FromMilliseconds(remaining), cancellationToken).ConfigureAwait(false);
             if (values is not { Length: >= 2 })
             {
                 return (-1, 1);
@@ -130,6 +146,7 @@ internal static class BrowserPageSettle
         }
         catch (Exception ex) when (ex is PlaywrightException or TimeoutException)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             return (-1, 1);
         }
     }
