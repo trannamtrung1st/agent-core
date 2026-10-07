@@ -5,6 +5,8 @@ async function createInstance(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: "New instance", exact: true }).click();
   await page.getByRole("combobox", { name: "Definition", exact: true }).click();
   await page.locator(".ant-select-item-option").filter({ hasText: "General Assistant · general-assistant" }).click();
+  await page.getByRole("combobox", { name: "Definition", exact: true }).press("Escape");
+  await expect(page.getByRole("combobox", { name: "Definition", exact: true })).toHaveAttribute("aria-expanded", "false");
   await page.getByRole("button", { name: "Create instance", exact: true }).click();
   await expect(page.getByLabel("Persona name", { exact: true })).toBeVisible();
   return page.url();
