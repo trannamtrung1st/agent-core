@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { InfoCircleOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Checkbox, Collapse, Flex, Form, Select, Spin, Tag, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
@@ -63,14 +63,16 @@ export function HarnessManagementSection({ instanceId, onUpdated }: {
         <Flex wrap gap={token.paddingXS}><Typography.Text strong>Active version {review.activeVersion}</Typography.Text>
           <Tag>{review.policy.frozen ? "Frozen" : review.policy.mode === "Disabled" ? "Manual" : review.policy.mode}</Tag></Flex>
         <Form layout="vertical" className="admin-config-form">
-          <HarnessPolicyModeScopes mode={mode} scopes={scopes} busy={busy} onMode={setMode} onScopes={setScopes} />
-          <Typography.Paragraph type="secondary">Existing conversations keep their current version.</Typography.Paragraph>
-          <Flex wrap gap={token.paddingXS}>
-            <Button type="primary" disabled={busy || (!changed && !review.policy.frozen) || (mode !== "Disabled" && scopes.length === 0)} onClick={() => void run("policy", {
-              expectedRevision: review.instanceRevision, mode, scopes: mode === "Disabled" ? [] : scopes, sources: [], eligibleTools: [], frozen: false
-            })}>Save authoring policy</Button>
-            {enabled ? <Button disabled={busy} onClick={() => confirmAction(modal, { title: "Freeze self-management?", content: "Disable harness changes in Chat. The agent keeps using its active version.",
-              okText: "Freeze self-management", onOk: () => run("policy", { expectedRevision: review.instanceRevision, ...review.policy, mode: "Disabled", frozen: true }) })}>Freeze self-management</Button> : null}
+          <Flex vertical gap={token.padding}>
+            <HarnessPolicyModeScopes mode={mode} scopes={scopes} busy={busy} onMode={setMode} onScopes={setScopes} />
+            <Typography.Text type="secondary">Existing conversations keep their current version.</Typography.Text>
+            <Flex wrap gap={token.paddingXS}>
+              <Button type="primary" disabled={busy || (!changed && !review.policy.frozen) || (mode !== "Disabled" && scopes.length === 0)} onClick={() => void run("policy", {
+                expectedRevision: review.instanceRevision, mode, scopes: mode === "Disabled" ? [] : scopes, sources: [], eligibleTools: [], frozen: false
+              })}>Save authoring policy</Button>
+              {enabled ? <Button disabled={busy} onClick={() => confirmAction(modal, { title: "Freeze self-management?", content: "Disable harness changes in Chat. The agent keeps using its active version.",
+                okText: "Freeze self-management", onOk: () => run("policy", { expectedRevision: review.instanceRevision, ...review.policy, mode: "Disabled", frozen: true }) })}>Freeze self-management</Button> : null}
+            </Flex>
           </Flex>
         </Form>
         {review.policy.frozen ? <Alert type="info" showIcon title="Self-management is frozen" description="Chat continues normally. Save an enabled policy to allow new durable improvements." />
@@ -106,13 +108,25 @@ export function HarnessManagementSection({ instanceId, onUpdated }: {
 export function HarnessPolicyModeScopes({ mode, scopes, busy, onMode, onScopes }: {
   mode: HarnessMode; scopes: HarnessScope[]; busy: boolean; onMode: (mode: HarnessMode) => void; onScopes: (scopes: HarnessScope[]) => void
 }) {
-  return <>
-    <Form.Item label="Authoring mode" help="Assisted asks before saving. Managed may auto-save allowed knowledge and Skills; other changes need approval.">
-      <Select aria-label="Authoring mode" value={mode} disabled={busy} onChange={onMode} options={[
+  const { token } = theme.useToken();
+  const fieldId = useId();
+  const helpId = `${fieldId}-help`;
+  const scopesInvalid = mode !== "Disabled" && scopes.length === 0;
+  const help = mode === "Disabled"
+    ? "Harness changes stay manual."
+    : mode === "Assisted"
+      ? "Changes need your approval in Chat."
+      : "Allowed knowledge and Skills may auto-save. Instructions and tools need approval.";
+  return <Flex vertical gap={token.padding} className="harness-policy-fields">
+    <Form.Item label="Authoring mode" htmlFor={fieldId} extra={<Typography.Text id={helpId} type="secondary" style={{ color: token.colorTextSecondary }}>{help}</Typography.Text>}>
+      <Select id={fieldId} aria-label="Authoring mode" aria-describedby={helpId} value={mode} disabled={busy} onChange={onMode} options={[
         { value: "Disabled", label: "Manual (off)" }, { value: "Assisted", label: "Assisted" }, { value: "Managed", label: "Managed" }
       ]} />
     </Form.Item>
-    {mode !== "Disabled" ? <Form.Item label="Areas the agent may manage"><Checkbox.Group aria-label="Authoring scopes" options={harnessScopes} value={scopes} disabled={busy}
+    {mode !== "Disabled" ? <Form.Item label="Areas the agent may manage" validateStatus={scopesInvalid ? "error" : undefined}
+      help={scopesInvalid ? <span id={`${fieldId}-scopes-help`}>Select at least one area.</span> : undefined}>
+      <Checkbox.Group className="harness-policy-scopes" style={{ gap: token.paddingXS }} aria-label="Areas the agent may manage"
+        aria-invalid={scopesInvalid || undefined} aria-describedby={scopesInvalid ? `${fieldId}-scopes-help` : undefined} options={harnessScopes} value={scopes} disabled={busy}
       onChange={values => onScopes(values as HarnessScope[])} /></Form.Item> : null}
-  </>;
+  </Flex>;
 }

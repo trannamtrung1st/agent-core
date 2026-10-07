@@ -70,4 +70,19 @@ describe("Harness governance", () => {
     expect(await screen.findByText("Load failed")).toBeVisible();fireEvent.click(screen.getByRole("button", {name:"Reload"}));
     expect(await screen.findByText("Manual")).toBeVisible();
   });
+  it("requires an area for an enabled policy and recovers when one is selected", async () => {
+    vi.mocked(getHarnessReview).mockResolvedValue({ ...base, policy: { ...base.policy, mode: "Managed" } });
+    vi.mocked(updateHarness).mockResolvedValue({ ...base, policy: { ...base.policy, mode: "Managed", scopes: ["Skills"] } });
+    mount();
+    expect(await screen.findByRole("group", { name: "Areas the agent may manage" })).toHaveAccessibleDescription("Select at least one area.");
+    const save = screen.getByRole("button", { name: "Save authoring policy" });
+    expect(save).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Authoring mode" })).toHaveAccessibleDescription("Allowed knowledge and Skills may auto-save. Instructions and tools need approval.");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Skills" }));
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+    await waitFor(() => expect(updateHarness).toHaveBeenCalledWith("instance", "policy", {
+      expectedRevision: 1, mode: "Managed", scopes: ["Skills"], sources: [], eligibleTools: [], frozen: false
+    }));
+  });
 });

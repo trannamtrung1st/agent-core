@@ -617,7 +617,8 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
   const instanceVersions = instanceVersionRows(selectedGroup?.versions ?? []);
   const selectedVersion = instanceVersions.find((row) => row.version === version) ?? null;
   const customPersonaReady = personaFieldsReady(persona);
-  const canCreate = Boolean(selectedGroup && selectedVersion) && (personaMode === "default" || customPersonaReady);
+  const canCreate = Boolean(selectedGroup && selectedVersion) && (personaMode === "default" || customPersonaReady)
+    && (harnessMode === "Disabled" || harnessAreas.length > 0);
 
   const openModal = () => {
     const first = groups[0];
@@ -636,7 +637,7 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
   };
 
   const createInstance = async () => {
-    if (!selectedGroup || selectedVersion === null || version === null) {
+    if (!canCreate || !selectedGroup || selectedVersion === null || version === null) {
       return;
     }
     setBusy(true);

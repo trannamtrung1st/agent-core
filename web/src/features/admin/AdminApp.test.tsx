@@ -1638,6 +1638,16 @@ describe("AdminApp", () => {
     fireEvent.click(screen.getByRole("button", { name: "New instance" }));
     expect(screen.getByText("v5 · Durable · Published")).toBeInTheDocument();
     expect(screen.queryByText(/is deprecated/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Harness management (optional)"));
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Authoring mode" }));
+    fireEvent.click(await screen.findByText("Managed", { selector: ".ant-select-item-option-content" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Knowledge & resources" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Skills" }));
+    expect(screen.getByRole("button", { name: "Create instance" })).toBeDisabled();
+    await waitFor(() => expect(screen.getByText("Select at least one area.")).toBeVisible());
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Authoring mode" }));
+    fireEvent.click(await screen.findByText("Manual (off)", { selector: ".ant-select-item-option-content" }));
+    expect(screen.getByRole("button", { name: "Create instance" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Create instance" }));
 
     await waitFor(() => {
