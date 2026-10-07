@@ -69,7 +69,7 @@ public sealed class TriggerDurablePolicyTests
         var denied = await TriggerScheduleCommands.ExecuteAsync(
             v9,
             registrations,
-            ToolCatalog.TriggerScheduleOnce,
+            ToolCatalog.AutomationCreate,
             args.RootElement,
             context,
             CancellationToken.None,
@@ -215,7 +215,7 @@ public sealed class TriggerDurablePolicyTests
         var denied = await TriggerScheduleCommands.ExecuteAsync(
             v9,
             registrations,
-            ToolCatalog.TriggerScheduleOnce,
+            ToolCatalog.AutomationCreate,
             args.RootElement,
             context,
             CancellationToken.None,
@@ -274,7 +274,7 @@ public sealed class TriggerDurablePolicyTests
         var denied = await TriggerScheduleCommands.ExecuteAsync(
             v9,
             registrations,
-            ToolCatalog.TriggerScheduleOnce,
+            ToolCatalog.AutomationCreate,
             args.RootElement,
             context,
             CancellationToken.None,

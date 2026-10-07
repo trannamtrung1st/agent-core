@@ -348,14 +348,14 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     }
 
     public ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(TriggerOwner owner, Guid automationId,
-        long expectedScheduleRevision, DateTimeOffset expectedNextOccurrenceAtUtc, DateTimeOffset asOfUtc,
+        long expectedTriggerRevision, DateTimeOffset expectedNextOccurrenceAtUtc, DateTimeOffset asOfUtc,
         CancellationToken cancellationToken = default) => TryAdmitScheduledCore(owner, automationId,
-            expectedScheduleRevision, expectedNextOccurrenceAtUtc, asOfUtc, cancellationToken);
+            expectedTriggerRevision, expectedNextOccurrenceAtUtc, asOfUtc, cancellationToken);
 
     private ValueTask<ScheduledAdmitResult> TryAdmitScheduledCore(
         TriggerOwner owner,
         Guid automationId,
-        long expectedScheduleRevision,
+        long expectedTriggerRevision,
         DateTimeOffset expectedNextOccurrenceAtUtc,
         DateTimeOffset asOfUtc,
         CancellationToken cancellationToken = default, ExecutionModelPin? pin = null)
@@ -365,7 +365,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         lock (_state.Gate)
         {
             var current = Find(owner, automationId);
-            if (!IsCurrent(current, expectedScheduleRevision, expectedNext))
+            if (!IsCurrent(current, expectedTriggerRevision, expectedNext))
             {
                 return ValueTask.FromResult(new ScheduledAdmitResult(ScheduledAdmitOutcome.Stale, current, null, 0));
             }
@@ -755,11 +755,11 @@ public sealed class InMemoryTriggerStore : ITriggerStore
 
     private static bool IsCurrent(
         Automation? current,
-        long expectedScheduleRevision,
+        long expectedTriggerRevision,
         DateTimeOffset expectedNext) =>
         current is not null
         && current.Status == AutomationStatus.Active
-        && current.ScheduleRevision == expectedScheduleRevision
+        && current.TriggerRevision == expectedTriggerRevision
         && current.NextOccurrenceAtUtc == expectedNext;
 
     private Automation? Find(TriggerOwner owner, Guid automationId) =>

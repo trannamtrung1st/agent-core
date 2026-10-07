@@ -112,7 +112,7 @@ public sealed class AutomationJourneyTests
             var user = automation with { Detached = false, TriggerKind = TriggerKind.UserTurn };
             Assert.Equal(ToolPolicyDecision.Deny, toolExecutor.EvaluateExecutionPolicy(definition, "harness.tool.select", admission: automation));
             Assert.Equal(ToolPolicyDecision.RequireApproval, toolExecutor.EvaluateExecutionPolicy(definition, "harness.tool.select", admission: user));
-            Assert.Equal(ToolPolicyDecision.Deny, toolExecutor.EvaluateExecutionPolicy(definition, ToolCatalog.TriggerCancel, admission: automation));
+            Assert.Equal(ToolPolicyDecision.Deny, toolExecutor.EvaluateExecutionPolicy(definition, ToolCatalog.AutomationDelete, admission: automation));
             Assert.Equal(ToolPolicyDecision.Deny, toolExecutor.EvaluateExecutionPolicy(definition, ToolCatalog.AppMessageSend, admission: automation));
             Assert.DoesNotContain("harness.tool.select", item.Checkpoint!.PayloadJson);
             Assert.Empty(await Alerts(work, owner));

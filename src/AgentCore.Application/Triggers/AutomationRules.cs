@@ -57,7 +57,7 @@ public static class AutomationRules
         now = TriggerScheduleCalculator.Truncate(now);
         var key = $"manual:{automation.AutomationId:D}:{automation.Revision}:{now.ToUnixTimeMilliseconds()}";
         return new(TriggerScheduleAdmission.OccurrenceId(key), key, automation.AutomationId, automation.Owner,
-            TriggerSourceKind.ManualInvocation, null, now, now, Evidence(automation), null, automation.ScheduleRevision,
+            TriggerSourceKind.ManualInvocation, null, now, now, Evidence(automation), null, automation.TriggerRevision,
             OccurrenceRoutingDisposition.Pending, null, 0, null, null, null, modelPin: pin);
     }
 }

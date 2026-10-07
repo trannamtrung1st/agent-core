@@ -86,7 +86,7 @@ public sealed class AutomationService(
             AsUtc(draft.ExpiresAtUtc, "Expiry"),
             occurrenceCount: 0,
             revision: 1,
-            scheduleRevision: 1,
+            triggerRevision: 1,
             new TriggerProvenance(
                 draft.AuthorizationOrigin,
                 draft.SourceSessionId,
@@ -159,7 +159,7 @@ public sealed class AutomationService(
             now,
             evidence,
             draft.SourceEventId,
-            draft.ScheduleRevision,
+            draft.TriggerRevision,
             OccurrenceRoutingDisposition.Pending,
             dispositionReason: null,
             routingRevision: 0,

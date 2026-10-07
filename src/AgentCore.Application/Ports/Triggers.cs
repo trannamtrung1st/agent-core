@@ -104,7 +104,7 @@ public sealed record TriggerOccurrenceDraft(
     DateTimeOffset ObservedAtUtc,
     string EvidenceJson,
     Guid? SourceEventId,
-    long? ScheduleRevision);
+    long? TriggerRevision);
 
 public interface ITriggerStore
 {
@@ -194,7 +194,7 @@ public interface ITriggerStore
     ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(
         TriggerOwner owner,
         Guid automationId,
-        long expectedScheduleRevision,
+        long expectedTriggerRevision,
         DateTimeOffset expectedNextOccurrenceAtUtc,
         DateTimeOffset asOfUtc,
         CancellationToken cancellationToken = default);

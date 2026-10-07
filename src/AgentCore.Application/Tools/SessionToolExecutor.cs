@@ -455,8 +455,8 @@ public sealed partial class SessionToolExecutor(
                     await CreateEmailDraftAsync(args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.EmailSend => TextResult(
                     await SendEmailDraftAsync(args, approvalGrant, cancellationToken).ConfigureAwait(false)),
-                ToolCatalog.TriggerScheduleOnce or ToolCatalog.TriggerList
-                    or ToolCatalog.TriggerUpdate or ToolCatalog.TriggerCancel => await TriggerScheduleCommands.ExecuteAsync(
+                ToolCatalog.AutomationCreate or ToolCatalog.AutomationList
+                    or ToolCatalog.AutomationUpdate or ToolCatalog.AutomationDelete => await TriggerScheduleCommands.ExecuteAsync(
                         definition,
                         triggerRegistrations,
                         call.Name,

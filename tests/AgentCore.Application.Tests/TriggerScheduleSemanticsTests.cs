@@ -66,7 +66,7 @@ public sealed class TriggerScheduleSemanticsTests
         var result = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
-            ToolCatalog.TriggerScheduleOnce,
+            ToolCatalog.AutomationCreate,
             args.RootElement,
             context,
             CancellationToken.None,
@@ -105,7 +105,7 @@ public sealed class TriggerScheduleSemanticsTests
         var result = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
-            ToolCatalog.TriggerScheduleOnce,
+            ToolCatalog.AutomationCreate,
             args.RootElement,
             context,
             CancellationToken.None,
@@ -142,7 +142,7 @@ public sealed class TriggerScheduleSemanticsTests
         var createdJson = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
-            ToolCatalog.TriggerScheduleOnce,
+            ToolCatalog.AutomationCreate,
             createArgs.RootElement,
             createContext,
             CancellationToken.None,
@@ -166,7 +166,7 @@ public sealed class TriggerScheduleSemanticsTests
         var updatedJson = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
-            ToolCatalog.TriggerUpdate,
+            ToolCatalog.AutomationUpdate,
             updateArgs.RootElement,
             updateContext,
             CancellationToken.None,
@@ -188,7 +188,7 @@ public sealed class TriggerScheduleSemanticsTests
         var cappedJson = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
-            ToolCatalog.TriggerUpdate,
+            ToolCatalog.AutomationUpdate,
             capArgs.RootElement,
             capContext,
             CancellationToken.None,
@@ -210,7 +210,7 @@ public sealed class TriggerScheduleSemanticsTests
         var cancelledJson = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
-            ToolCatalog.TriggerCancel,
+            ToolCatalog.AutomationDelete,
             cancelArgs.RootElement,
             cancelContext,
             CancellationToken.None,
@@ -232,7 +232,7 @@ public sealed class TriggerScheduleSemanticsTests
         var result = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
-            ToolCatalog.TriggerScheduleOnce,
+            ToolCatalog.AutomationCreate,
             args.RootElement,
             context,
             CancellationToken.None,
@@ -254,7 +254,7 @@ public sealed class TriggerScheduleSemanticsTests
         var rejected = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
-            ToolCatalog.TriggerScheduleOnce,
+            ToolCatalog.AutomationCreate,
             rejectedArgs.RootElement,
             rejectedContext,
             CancellationToken.None,
@@ -291,7 +291,7 @@ public sealed class TriggerScheduleSemanticsTests
         var inherited = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
-            ToolCatalog.TriggerScheduleOnce,
+            ToolCatalog.AutomationCreate,
             intervalOnlyArgs.RootElement,
             staleDraftContext,
             CancellationToken.None,
@@ -312,7 +312,7 @@ public sealed class TriggerScheduleSemanticsTests
         var withoutDraft = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
-            ToolCatalog.TriggerScheduleOnce,
+            ToolCatalog.AutomationCreate,
             intervalOnlyArgs.RootElement,
             clearedContext,
             CancellationToken.None,
@@ -324,7 +324,7 @@ public sealed class TriggerScheduleSemanticsTests
         var created = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
-            ToolCatalog.TriggerScheduleOnce,
+            ToolCatalog.AutomationCreate,
             explicitIntentArgs.RootElement,
             clearedContext,
             CancellationToken.None,
@@ -346,7 +346,7 @@ public sealed class TriggerScheduleSemanticsTests
         var rejected = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
-            ToolCatalog.TriggerScheduleOnce,
+            ToolCatalog.AutomationCreate,
             rejectedArgs.RootElement,
             rejectedContext,
             CancellationToken.None,
@@ -372,7 +372,7 @@ public sealed class TriggerScheduleSemanticsTests
         var result = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
-            ToolCatalog.TriggerScheduleOnce,
+            ToolCatalog.AutomationCreate,
             createArgs.RootElement,
             createContext,
             CancellationToken.None,

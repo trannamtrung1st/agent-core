@@ -11,9 +11,9 @@ public static class ToolResources
         ToolRegistry.TryGet(toolName, out var descriptor) && descriptor.Scope == ToolResourceScope.Session;
 
     public static bool IsTriggerWrite(string toolName) =>
-        toolName is ToolCatalog.TriggerScheduleOnce
-            or ToolCatalog.TriggerUpdate
-            or ToolCatalog.TriggerCancel or ToolCatalog.AutomationRun or ToolCatalog.AutomationDisable;
+        toolName is ToolCatalog.AutomationCreate
+            or ToolCatalog.AutomationUpdate
+            or ToolCatalog.AutomationDelete or ToolCatalog.AutomationRun or ToolCatalog.AutomationDisable;
 }
 
 public enum ToolResourceScope

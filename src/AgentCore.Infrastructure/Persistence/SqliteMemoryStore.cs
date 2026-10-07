@@ -394,6 +394,9 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
 
             if (await ColumnExistsAsync(connection, "Automations", "TriggerKind", cancellationToken).ConfigureAwait(false))
                 await db.Database.ExecuteSqlRawAsync("INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ('20261007072939_UnifiedAutomation', '10.0.12');", cancellationToken).ConfigureAwait(false);
+            if (await ColumnExistsAsync(connection, "Automations", "TriggerRevision", cancellationToken).ConfigureAwait(false)
+                && await ColumnExistsAsync(connection, "TriggerOccurrences", "TriggerRevision", cancellationToken).ConfigureAwait(false))
+                await db.Database.ExecuteSqlRawAsync("INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ('20261007101836_AutomationTriggerRevision', '10.0.12');", cancellationToken).ConfigureAwait(false);
             return;
         }
 

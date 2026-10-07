@@ -32,13 +32,13 @@ public static class ToolCatalog
     public const string EmailCreateDraft = "email.create_draft";
     public const string EmailSend = "email.send";
     public const string DemoSensitiveAction = "demo.sensitive_action";
-    public const string TriggerScheduleOnce = "automation.create";
-    public const string TriggerList = "automation.list";
+    public const string AutomationCreate = "automation.create";
+    public const string AutomationList = "automation.list";
     public const string AutomationInspect = "automation.inspect";
     public const string AutomationRun = "automation.run";
     public const string AutomationDisable = "automation.disable";
-    public const string TriggerUpdate = "automation.update";
-    public const string TriggerCancel = "automation.delete";
+    public const string AutomationUpdate = "automation.update";
+    public const string AutomationDelete = "automation.delete";
     public const string CapabilitiesLoad = "capabilities.load";
     public const string SkillsLoad = "skills.load";
     public const string AppMessageSend = "app.message.send";

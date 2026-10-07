@@ -152,7 +152,7 @@ public sealed class TriggerScheduleTimeResolutionTests
         var result = await tools.ExecuteAsync(
             definition,
             context.SessionId,
-            new ModelToolCall("create", ToolCatalog.TriggerScheduleOnce, argumentsJson),
+            new ModelToolCall("create", ToolCatalog.AutomationCreate, argumentsJson),
             ToolLimits.MaxOutputBytes,
             triggerCommand: context);
         Assert.Contains("\"status\":\"Active\"", result.Text, StringComparison.Ordinal);

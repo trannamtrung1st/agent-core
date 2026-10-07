@@ -212,7 +212,7 @@ public sealed class TriggerScheduleContinuationTests
         var result = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
-            ToolCatalog.TriggerUpdate,
+            ToolCatalog.AutomationUpdate,
             args.RootElement,
             context,
             CancellationToken.None,

@@ -14,7 +14,7 @@ public sealed class AutomationRecord
     public long? ExpiresAtUtc { get; set; }
     public int OccurrenceCount { get; set; }
     public long Revision { get; set; }
-    public long ScheduleRevision { get; set; }
+    public long TriggerRevision { get; set; }
     public int AuthorizationOrigin { get; set; }
     public string? SourceSessionId { get; set; }
     public string? SourceEventId { get; set; }
@@ -41,7 +41,7 @@ public sealed class TriggerOccurrenceRecord
     public long AdmittedAtUtc { get; set; }
     public string EvidenceJson { get; set; } = "";
     public string? SourceEventId { get; set; }
-    public long? ScheduleRevision { get; set; }
+    public long? TriggerRevision { get; set; }
     public int Disposition { get; set; }
     public string? DispositionReason { get; set; }
     public long RoutingRevision { get; set; }

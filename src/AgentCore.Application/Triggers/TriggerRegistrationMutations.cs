@@ -54,7 +54,7 @@ public static class AutomationMutations
                 nextOccurrenceAtUtc,
                 expiresAtUtc,
                 current.Revision + 1,
-                scheduleChanged ? current.ScheduleRevision + 1 : current.ScheduleRevision,
+                scheduleChanged ? current.TriggerRevision + 1 : current.TriggerRevision,
                 updatedAt);
         }
         catch (ArgumentException exception)

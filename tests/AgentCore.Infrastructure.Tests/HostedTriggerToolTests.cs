@@ -59,7 +59,7 @@ public sealed class HostedTriggerToolTests
         var result = await tools.ExecuteAsync(
             definition,
             sessionId,
-            new ModelToolCall("create", ToolCatalog.TriggerScheduleOnce, """{"instructions":"Call John","relativeDayOffset":1,"localTime":"09:00"}"""),
+            new ModelToolCall("create", ToolCatalog.AutomationCreate, """{"instructions":"Call John","relativeDayOffset":1,"localTime":"09:00"}"""),
             ToolLimits.MaxOutputBytes,
             triggerCommand: context);
 
@@ -90,7 +90,7 @@ public sealed class HostedTriggerToolTests
         async Task<ToolExecutionResult> Execute(string tool, object args, TriggerCommandContext? context = null, ToolExecutionAdmission? admission = null) =>
             await tools.ExecuteAsync(definition, sessionId, new ModelToolCall(Guid.NewGuid().ToString(), tool, JsonSerializer.Serialize(args)),
                 ToolLimits.MaxOutputBytes, triggerCommand: context, admission: admission);
-        var created = await Execute(ToolCatalog.TriggerScheduleOnce, new { name = "Review orders", instructions = "Review the order reference.", eventSourceId = sourceId, eventType = "order.placed" }, command);
+        var created = await Execute(ToolCatalog.AutomationCreate, new { name = "Review orders", instructions = "Review the order reference.", eventSourceId = sourceId, eventType = "order.placed" }, command);
         Assert.Contains("\"status\":\"Active\"", created.Text);
         using var document = JsonDocument.Parse(created.Text);
         Assert.Equal("Active", document.RootElement.GetProperty("status").GetString());
@@ -104,21 +104,21 @@ public sealed class HostedTriggerToolTests
         var foreign = await Execute(ToolCatalog.AutomationInspect, new { automationId = id }, admission: detached with { AgentInstanceId = Guid.NewGuid() });
         Assert.Contains("NotFound", foreign.Text);
         var update = command with { CurrentUserText = "Update this automation instructions.", AllowedActions = TriggerCommandAction.Update };
-        var edited = await Execute(ToolCatalog.TriggerUpdate, new { automationId = id, expectedRevision = 1, instructions = "Review configured order details." }, update);
+        var edited = await Execute(ToolCatalog.AutomationUpdate, new { automationId = id, expectedRevision = 1, instructions = "Review configured order details." }, update);
         Assert.Contains("Review configured order details.", edited.Text);
         var owner = new TriggerOwner(instanceId, LocalUserProfile.Id);
         var stored = (await provider.GetRequiredService<IAutomationService>().GetAsync(owner, id))!;
         Assert.Equal(2, stored.Revision); Assert.Equal(sessionId, stored.Provenance.SourceSessionId);
-        var denied = await Execute(ToolCatalog.TriggerUpdate, new { automationId = id, expectedRevision = 2, instructions = "Injected behavior" }, update with { Classification = TriggerAuthorizationClassification.Occurrence });
+        var denied = await Execute(ToolCatalog.AutomationUpdate, new { automationId = id, expectedRevision = 2, instructions = "Injected behavior" }, update with { Classification = TriggerAuthorizationClassification.Occurrence });
         Assert.Contains("forbidden", denied.Text);
-        var negated = await Execute(ToolCatalog.TriggerCancel, new { automationId = id, expectedRevision = 2 }, command with { CurrentUserText = "Do not delete this automation.", AllowedActions = TriggerCommandAction.Cancel });
+        var negated = await Execute(ToolCatalog.AutomationDelete, new { automationId = id, expectedRevision = 2 }, command with { CurrentUserText = "Do not delete this automation.", AllowedActions = TriggerCommandAction.Cancel });
         Assert.Contains("authorization_denied", negated.Text);
         var live = detached with { Detached = false, TriggerKind = TriggerKind.UserTurn, OwnerTurnText = "Run this automation now." };
         var run = await Execute(ToolCatalog.AutomationRun, new { automationId = id, expectedRevision = 2 }, command, live);
         Assert.Contains("occurrenceId", run.Text);
         var disabled = await Execute(ToolCatalog.AutomationDisable, new { automationId = id, expectedRevision = 2 }, command, live with { OwnerTurnText = "Disable this automation." });
         Assert.Contains("Disabled", disabled.Text);
-        var deleted = await Execute(ToolCatalog.TriggerCancel, new { automationId = id, expectedRevision = 3 }, command with { CurrentUserText = "Delete this automation.", AllowedActions = TriggerCommandAction.Cancel });
+        var deleted = await Execute(ToolCatalog.AutomationDelete, new { automationId = id, expectedRevision = 3 }, command with { CurrentUserText = "Delete this automation.", AllowedActions = TriggerCommandAction.Cancel });
         Assert.Contains("Cancelled", deleted.Text);
     }
 

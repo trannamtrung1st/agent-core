@@ -408,6 +408,7 @@ public sealed class MemoryStoreContractTests
         await using var verify = await reopened.Factory.CreateDbContextAsync();
         var applied = await verify.Database.GetAppliedMigrationsAsync();
         Assert.Contains("20260926175411_P7ConversationTurnExecution", applied);
+        Assert.Contains("20261007101836_AutomationTriggerRevision", applied);
     }
 
     [Fact]

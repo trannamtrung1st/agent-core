@@ -78,7 +78,7 @@ public sealed class ContinuityEnhancementJourneyTests
             var automationContext = await s.GetRequiredService<DurableWorkContextFactory>().CreateAsync(work, default);
             Assert.Contains("Experience", automationContext.ContinuityContext);
             Assert.Contains(ToolCatalog.For(definition, automationContext, ToolConfigurationGates.Unconfigured), t => t.Name == ToolCatalog.ContinuitySearch);
-            Assert.Equal(ToolPolicyDecision.Deny, s.GetRequiredService<SessionToolExecutor>().EvaluateExecutionPolicy(definition, ToolCatalog.TriggerCancel,
+            Assert.Equal(ToolPolicyDecision.Deny, s.GetRequiredService<SessionToolExecutor>().EvaluateExecutionPolicy(definition, ToolCatalog.AutomationDelete,
                 admission: new(true, TriggerKind.ManualInvocation, AgentInstanceId: instanceId)));
             await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
             Assert.Equal("NoAction", WorkCompletionRequest.Outcome((await s.GetRequiredService<IWorkItemStore>().GetAsync(work.Owner, work.WorkItemId))!.Result!.Text));

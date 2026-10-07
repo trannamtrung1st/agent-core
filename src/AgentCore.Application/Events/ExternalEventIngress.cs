@@ -201,7 +201,7 @@ public sealed class ExternalEventIngress(
             now,
             AutomationRules.Evidence(registration, new { sourceEventId, eventId, sourceId, payload = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(evidence) }),
             eventId,
-            registration.ScheduleRevision,
+            registration.TriggerRevision,
             OccurrenceRoutingDisposition.Pending,
             null,
             0,

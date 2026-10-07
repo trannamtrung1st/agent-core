@@ -56,7 +56,7 @@ public sealed class AdminAutomationAuthoringService(ITriggerStore store, Experie
         var proposed = new Automation(current?.AutomationId ?? ids.NewId(), owner,
             enabled ? AutomationStatus.Active : AutomationStatus.Disabled, instructions, trigger,
             changed ? next : current!.NextOccurrenceAtUtc, current?.ExpiresAtUtc, current?.OccurrenceCount ?? 0, expectedRevision + 1,
-            (current?.ScheduleRevision ?? 0) + 1,
+            (current?.TriggerRevision ?? 0) + 1,
             current?.Provenance.WithUpdated(now) ?? provenance ?? new(TriggerAuthorizationOrigin.AdminOwner, null, null, now, now), null, modelKey, effort,
             current?.RequiresVision ?? false, name);
         if (enabled && !ExecutionModelPolicy.Resolve(catalog, definition, instance, proposed).Accepted)

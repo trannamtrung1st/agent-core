@@ -75,7 +75,7 @@ public sealed class OrderPlacedAdmissionTests
             new[] { secretary.InstanceId, monitor.InstanceId }.Order(),
             pending.Select(item => item.Owner.AgentInstanceId).Order());
         Assert.All(pending, item => Assert.NotNull(item.ModelPin));
-        Assert.All(pending, item => Assert.Equal(1, item.ScheduleRevision));
+        Assert.All(pending, item => Assert.Equal(1, item.TriggerRevision));
         Assert.All(
             pending,
             item => Assert.Equal(

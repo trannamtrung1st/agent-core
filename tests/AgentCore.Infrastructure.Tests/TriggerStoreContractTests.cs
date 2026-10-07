@@ -94,7 +94,7 @@ public sealed class TriggerStoreContractTests
             var other = new TriggerOwner(InstanceB, ProfileB);
             var created = await service.CreateAsync(Draft(owner, "Call John", OneShot()));
             Assert.Equal(1, created.Revision);
-            Assert.Equal(1, created.ScheduleRevision);
+            Assert.Equal(1, created.TriggerRevision);
             Assert.Equal(AutomationStatus.Active, created.Status);
             Assert.Equal(TriggerAuthorizationOrigin.CurrentUserTurn, created.Provenance.AuthorizationOrigin);
             Assert.Equal(SourceSessionId, created.Provenance.SourceSessionId);
@@ -125,7 +125,7 @@ public sealed class TriggerStoreContractTests
                 1,
                 AutomationChange.InstructionsOnly("Call later"));
             Assert.Equal(2, renamed.Revision);
-            Assert.Equal(1, renamed.ScheduleRevision);
+            Assert.Equal(1, renamed.TriggerRevision);
             Assert.Equal("Call later", renamed.Instructions);
 
             var stale = await Assert.ThrowsAsync<AgentCoreException>(() => service.UpdateAsync(
@@ -144,7 +144,7 @@ public sealed class TriggerStoreContractTests
                 2,
                 AutomationChange.ScheduleOnly(weekly, Now.AddDays(5), null));
             Assert.Equal(3, rescheduled.Revision);
-            Assert.Equal(2, rescheduled.ScheduleRevision);
+            Assert.Equal(2, rescheduled.TriggerRevision);
             Assert.True(weekly.SemanticEquals(rescheduled.Schedule));
             Assert.Equal(Now.AddDays(5), rescheduled.NextOccurrenceAtUtc);
 
@@ -166,7 +166,7 @@ public sealed class TriggerStoreContractTests
             var cancelled = await service.CancelAsync(owner, created.AutomationId, 3);
             Assert.Equal(AutomationStatus.Cancelled, cancelled.Status);
             Assert.Equal(4, cancelled.Revision);
-            Assert.Equal(2, cancelled.ScheduleRevision);
+            Assert.Equal(2, cancelled.TriggerRevision);
             var repeated = await service.CancelAsync(owner, created.AutomationId, 3);
             Assert.Equal(cancelled.Revision, repeated.Revision);
             Assert.Equal(0, await service.CountActiveAsync(owner));
@@ -327,7 +327,7 @@ public sealed class TriggerStoreContractTests
                 Now,
                 "{}",
                 null,
-                created.ScheduleRevision));
+                created.TriggerRevision));
 
             var reopened = Service(new SqliteTriggerStore(factory), time);
             var loaded = await reopened.GetAsync(owner, created.AutomationId);

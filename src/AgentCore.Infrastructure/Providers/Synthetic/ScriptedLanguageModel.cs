@@ -572,9 +572,9 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         out ModelGenerationEvent? toolEvent)
     {
         toolEvent = null;
-        if (!Offers(request, ToolCatalog.TriggerScheduleOnce)
-            && !Offers(request, ToolCatalog.TriggerList)
-            && !Offers(request, ToolCatalog.TriggerScheduleOnce))
+        if (!Offers(request, ToolCatalog.AutomationCreate)
+            && !Offers(request, ToolCatalog.AutomationList)
+            && !Offers(request, ToolCatalog.AutomationCreate))
         {
             return false;
         }
@@ -595,19 +595,19 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
             if (toolRounds == 1 && lastUser.Contains("list my schedules", StringComparison.OrdinalIgnoreCase))
             {
-                toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerList, "{}");
+                toolEvent = ScheduleCall(toolRounds, ToolCatalog.AutomationList, "{}");
                 return true;
             }
 
             if (toolRounds == 2 && lastUser.Contains("move that schedule", StringComparison.OrdinalIgnoreCase))
             {
-                toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerUpdate, ScheduleMutationArgs(lastTool, "11:00", includeTime: true));
+                toolEvent = ScheduleCall(toolRounds, ToolCatalog.AutomationUpdate, ScheduleMutationArgs(lastTool, "11:00", includeTime: true));
                 return true;
             }
 
             if (toolRounds == 3 && lastUser.Contains("cancel that schedule", StringComparison.OrdinalIgnoreCase))
             {
-                toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerCancel, ScheduleMutationArgs(lastTool, "11:00", includeTime: false));
+                toolEvent = ScheduleCall(toolRounds, ToolCatalog.AutomationDelete, ScheduleMutationArgs(lastTool, "11:00", includeTime: false));
                 return true;
             }
 
@@ -618,21 +618,21 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         {
             toolEvent = ScheduleCall(
                 toolRounds,
-                ToolCatalog.TriggerScheduleOnce,
+                ToolCatalog.AutomationCreate,
                 """{"instructions":"Weekly call","kind":"weekly","interval":1,"weekdays":["monday"],"localTime":"09:00"}""");
             return true;
         }
 
         if (lastUser.Contains(ScheduleForceMarker, StringComparison.OrdinalIgnoreCase))
         {
-            toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerScheduleOnce, """{"instructions":"Sneaky","relativeDayOffset":1,"localTime":"09:00"}""");
+            toolEvent = ScheduleCall(toolRounds, ToolCatalog.AutomationCreate, """{"instructions":"Sneaky","relativeDayOffset":1,"localTime":"09:00"}""");
             return true;
         }
 
         if (lastUser.Contains("remind me", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("set a reminder", StringComparison.OrdinalIgnoreCase))
         {
-            toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerScheduleOnce, """{"instructions":"Call John","relativeDayOffset":1,"localTime":"09:00"}""");
+            toolEvent = ScheduleCall(toolRounds, ToolCatalog.AutomationCreate, """{"instructions":"Call John","relativeDayOffset":1,"localTime":"09:00"}""");
             return true;
         }
 
@@ -641,7 +641,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         {
             toolEvent = ScheduleCall(
                 toolRounds,
-                ToolCatalog.TriggerScheduleOnce,
+                ToolCatalog.AutomationCreate,
                 """{"instructions":"check the oven","relativeDelaySeconds":60}""");
             return true;
         }
@@ -651,7 +651,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         {
             toolEvent = ScheduleCall(
                 toolRounds,
-                ToolCatalog.TriggerScheduleOnce,
+                ToolCatalog.AutomationCreate,
                 """{"instructions":"Say hello to me","kind":"fixed_interval","intervalSeconds":30}""");
             return true;
         }
@@ -660,7 +660,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         {
             toolEvent = ScheduleCall(
                 toolRounds,
-                ToolCatalog.TriggerScheduleOnce,
+                ToolCatalog.AutomationCreate,
                 """{"kind":"fixed_interval","intervalSeconds":60}""");
             return true;
         }
@@ -670,7 +670,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         {
             toolEvent = ScheduleCall(
                 toolRounds,
-                ToolCatalog.TriggerScheduleOnce,
+                ToolCatalog.AutomationCreate,
                 """{"instructions":"Hello","relativeDelaySeconds":60}""");
             return true;
         }
@@ -680,7 +680,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         {
             toolEvent = ScheduleCall(
                 toolRounds,
-                ToolCatalog.TriggerScheduleOnce,
+                ToolCatalog.AutomationCreate,
                 """{"instructions":"Hello","localDate":"2026-09-24","localTime":"00:19","timeZone":"viet nam time"}""");
             return true;
         }
@@ -691,7 +691,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         {
             toolEvent = ScheduleCall(
                 toolRounds,
-                ToolCatalog.TriggerScheduleOnce,
+                ToolCatalog.AutomationCreate,
                 """{"instructions":"Hello","localDate":"2026-09-24","localTime":"08:49","timeZone":"viet nam time"}""");
             return true;
         }
@@ -701,14 +701,14 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         {
             toolEvent = ScheduleCall(
                 toolRounds,
-                ToolCatalog.TriggerScheduleOnce,
+                ToolCatalog.AutomationCreate,
                 """{"instructions":"Hello","localDate":"2026-09-24","localTime":"08:52","timeZone":"viet nam time"}""");
             return true;
         }
 
         if (ScheduleAuthorizer.IsScheduleConfirmation(lastUser, null))
         {
-            toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerScheduleOnce, """{"instructions":"Different","relativeDayOffset":2,"localTime":"15:00"}""");
+            toolEvent = ScheduleCall(toolRounds, ToolCatalog.AutomationCreate, """{"instructions":"Different","relativeDayOffset":2,"localTime":"15:00"}""");
             return true;
         }
 
@@ -716,7 +716,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             || lastUser.Contains("what reminders", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("show my reminders", StringComparison.OrdinalIgnoreCase))
         {
-            toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerList, "{}");
+            toolEvent = ScheduleCall(toolRounds, ToolCatalog.AutomationList, "{}");
             return true;
         }
 
@@ -731,7 +731,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
             toolEvent = ScheduleCall(
                 toolRounds,
-                ToolCatalog.TriggerUpdate,
+                ToolCatalog.AutomationUpdate,
                 ScheduleRememberedArgs(moveScratch, includeTime: true, ClockFromMove(lastUser)));
             return true;
         }
@@ -746,7 +746,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
             toolEvent = ScheduleCall(
                 toolRounds,
-                ToolCatalog.TriggerCancel,
+                ToolCatalog.AutomationDelete,
                 ScheduleRememberedArgs(cancelScratch, includeTime: false, "10:00"));
             return true;
         }
@@ -998,7 +998,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             || lastUser.Contains(HistoricalImageRereadMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(SensitiveApprovalMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(EmailHarnessMarker, StringComparison.OrdinalIgnoreCase)
-            || (request.Tools?.Any(t => t.Name == ToolCatalog.TriggerList || t.Name == ToolCatalog.TriggerScheduleOnce) == true && IsScheduleTurn(request, lastUser))
+            || (request.Tools?.Any(t => t.Name == ToolCatalog.AutomationList || t.Name == ToolCatalog.AutomationCreate) == true && IsScheduleTurn(request, lastUser))
             || request.Messages.Any(message => message.Role == ModelRole.Tool)
             || request.Messages.Any(message =>
                 message.Role == ModelRole.System

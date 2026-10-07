@@ -255,8 +255,8 @@ public static class ToolRegistry
                 """{"type":"object","properties":{"label":{"type":"string"}},"required":["label"]}""",
                 ToolEffect.SensitiveWrite,
                 scope: ToolResourceScope.External),
-            [ToolCatalog.TriggerScheduleOnce] = Descriptor(
-                ToolCatalog.TriggerScheduleOnce,
+            [ToolCatalog.AutomationCreate] = Descriptor(
+                ToolCatalog.AutomationCreate,
                 "Create an owned Automation from the current user request. Provide name and instructions. For one-shot timing provide exactly one of relativeDelaySeconds, relativeDayOffset + localTime, localDate + localTime or atUtc. For recurring timing provide kind fixed_interval/daily/weekly and its timing fields. Trigger payloads never approve future tools; every Run uses current capabilities and exact approvals. Core resolves trusted relative time and validates policy.",
                 """{"type":"object","additionalProperties":false,"properties":{"modelKey":{"type":["string","null"]},"reasoningEffort":{"type":["string","null"]},"eventSourceId":{"type":"string","format":"uuid"},"eventType":{"type":"string","enum":["order.placed"]},"name":{"type":"string","maxLength":120},"instructions":{"type":"string","maxLength":2000},"kind":{"type":"string","enum":["one_shot","fixed_interval","daily","weekly"]},"relativeDelaySeconds":{"type":"integer"},"relativeDayOffset":{"type":"integer"},"localDate":{"type":"string"},"localTime":{"type":"string"},"atUtc":{"type":"string"},"timeZone":{"type":"string"},"intervalSeconds":{"type":"integer"},"interval":{"type":"integer"},"weekdays":{"type":"array","items":{"type":"string"}},"startDate":{"type":"string"},"endDate":{"type":"string"},"endAtUtc":{"type":"string"},"maxOccurrences":{"type":"integer"}},"required":["instructions"]}""",
                 ToolEffect.Write),
@@ -266,13 +266,13 @@ public static class ToolRegistry
                 """{"type":"object","additionalProperties":false,"properties":{"automationId":{"type":"string","format":"uuid"},"expectedRevision":{"type":"integer","minimum":1}},"required":["automationId","expectedRevision"]}""", ToolEffect.Write),
             [ToolCatalog.AutomationDisable] = Descriptor(ToolCatalog.AutomationDisable, "Disable future triggers for one owned Automation on the current user's explicit request. Preserve its definition and run history.",
                 """{"type":"object","additionalProperties":false,"properties":{"automationId":{"type":"string","format":"uuid"},"expectedRevision":{"type":"integer","minimum":1}},"required":["automationId","expectedRevision"]}""", ToolEffect.Write),
-            [ToolCatalog.TriggerList] = Descriptor(
-                ToolCatalog.TriggerList,
+            [ToolCatalog.AutomationList] = Descriptor(
+                ToolCatalog.AutomationList,
                 "List Automations owned by the current user and agent instance. Requires authorization from the current user turn. Results never include another owner's Automations.",
                 """{"type":"object","properties":{"status":{"type":"string"}}}""",
                 ToolEffect.ReadOnly),
-            [ToolCatalog.TriggerUpdate] = Descriptor(
-                ToolCatalog.TriggerUpdate,
+            [ToolCatalog.AutomationUpdate] = Descriptor(
+                ToolCatalog.AutomationUpdate,
                 "Update an Automation owned by the current user. Requires authorization from the current user turn and expectedRevision. Scheduling does not approve any future tool. Do not send a property named revision.",
                 """{"type":"object","properties":{"automationId":{"type":"string"},"expectedRevision":{"type":"integer"},"name":{"type":"string","maxLength":120},"eventSourceId":{"type":"string","format":"uuid"},"eventType":{"type":"string","enum":["order.placed"]},"modelKey":{"type":["string","null"]},"reasoningEffort":{"type":["string","null"]},"instructions":{"type":"string"},"kind":{"type":"string"},"intervalSeconds":{"type":"integer"},"interval":{"type":"integer"},"localTime":{"type":"string"},"timeZone":{"type":"string"},"weekdays":{"type":"array","items":{"type":"string"}},"relativeDelaySeconds":{"type":"integer"},"relativeDayOffset":{"type":"integer"},"localDate":{"type":"string"},"atUtc":{"type":"string"},"startDate":{"type":"string"},"endDate":{"type":"string"},"endAtUtc":{"type":"string"},"maxOccurrences":{"type":"integer"}},"required":["automationId","expectedRevision"]}""",
                 ToolEffect.Write),
@@ -292,8 +292,8 @@ public static class ToolRegistry
                 ToolOfferRule.CurrentExecutionCapability,
                 ToolResourceScope.Session,
                 ToolReplaySafety.NonReplayable),
-            [ToolCatalog.TriggerCancel] = Descriptor(
-                ToolCatalog.TriggerCancel,
+            [ToolCatalog.AutomationDelete] = Descriptor(
+                ToolCatalog.AutomationDelete,
                 "Delete an Automation owned by the current user. Requires authorization from the current user turn and expectedRevision. Do not send a property named revision.",
                 """{"type":"object","properties":{"automationId":{"type":"string"},"expectedRevision":{"type":"integer"}},"required":["automationId","expectedRevision"]}""",
                 ToolEffect.Write)

@@ -102,7 +102,7 @@ public sealed class TriggerSchedulerTests
             Assert.Equal(1, exact.Admitted);
             var advanced = await store.GetAsync(owner, daily.AutomationId);
             Assert.Equal(2, advanced!.Revision);
-            Assert.Equal(1, advanced.ScheduleRevision);
+            Assert.Equal(1, advanced.TriggerRevision);
             Assert.Equal(1, advanced.OccurrenceCount);
             Assert.Equal(Due.AddDays(1), advanced.NextOccurrenceAtUtc);
             Assert.Equal(AutomationStatus.Active, advanced.Status);
@@ -130,7 +130,7 @@ public sealed class TriggerSchedulerTests
             var completed = await store.GetAsync(owner, shot.AutomationId);
             Assert.Equal(AutomationStatus.Completed, completed!.Status);
             Assert.Null(completed.NextOccurrenceAtUtc);
-            Assert.Equal(1, completed.ScheduleRevision);
+            Assert.Equal(1, completed.TriggerRevision);
             var second = await scheduler.RunOnceAsync(Due.AddDays(3));
             Assert.Equal(0, second.Admitted);
             Assert.Equal(1, (await store.GetAsync(owner, shot.AutomationId))!.OccurrenceCount);
@@ -167,7 +167,7 @@ public sealed class TriggerSchedulerTests
             Assert.Equal(1, progressed.Admitted);
             var nextWeek = await store.GetAsync(owner, weekly.AutomationId);
             Assert.Equal(monday.AddDays(7), nextWeek!.NextOccurrenceAtUtc);
-            Assert.Equal(1, nextWeek.ScheduleRevision);
+            Assert.Equal(1, nextWeek.TriggerRevision);
         });
     }
 
@@ -235,12 +235,12 @@ public sealed class TriggerSchedulerTests
             var staleCancel = await store.TryAdmitScheduledAsync(
                 owner,
                 cancelled.AutomationId,
-                cancelled.ScheduleRevision,
+                cancelled.TriggerRevision,
                 Due.AddDays(20),
                 Due.AddDays(20));
             Assert.Equal(ScheduledAdmitOutcome.Stale, staleCancel.Outcome);
             Assert.Null(await store.GetOccurrenceAsync(owner, TriggerScheduleAdmission.OccurrenceId(
-                TriggerScheduleAdmission.DedupeKey(cancelled.AutomationId, cancelled.ScheduleRevision, Due.AddDays(20)))));
+                TriggerScheduleAdmission.DedupeKey(cancelled.AutomationId, cancelled.TriggerRevision, Due.AddDays(20)))));
 
             var moving = await CreateAsync(store, owner, new DailySchedule(1, new TimeOnly(9, 0), "UTC"), Due.AddDays(30), "Move me");
             var later = Due.AddDays(40);
@@ -252,7 +252,7 @@ public sealed class TriggerSchedulerTests
             var stale = await store.TryAdmitScheduledAsync(
                 owner,
                 moving.AutomationId,
-                moving.ScheduleRevision,
+                moving.TriggerRevision,
                 Due.AddDays(30),
                 Due.AddDays(30));
             Assert.Equal(ScheduledAdmitOutcome.Stale, stale.Outcome);
@@ -472,7 +472,7 @@ public sealed class TriggerSchedulerTests
 
     private static Guid OccurrenceFor(TriggerSchedulerPass pass, Automation registration)
     {
-        var key = TriggerScheduleAdmission.DedupeKey(registration.AutomationId, registration.ScheduleRevision, registration.NextOccurrenceAtUtc!.Value);
+        var key = TriggerScheduleAdmission.DedupeKey(registration.AutomationId, registration.TriggerRevision, registration.NextOccurrenceAtUtc!.Value);
         var id = TriggerScheduleAdmission.OccurrenceId(key);
         Assert.Contains(id, pass.OccurrenceIds);
         return id;
@@ -611,14 +611,14 @@ public sealed class TriggerSchedulerTests
         public ValueTask<IReadOnlyList<Automation>> ListDueAsync(DateTimeOffset asOfUtc, int limit, CancellationToken cancellationToken = default) =>
             inner.ListDueAsync(asOfUtc, limit, cancellationToken);
 
-        public ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(TriggerOwner owner, Guid automationId, long expectedScheduleRevision, DateTimeOffset expectedNextOccurrenceAtUtc, DateTimeOffset asOfUtc, CancellationToken cancellationToken = default)
+        public ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(TriggerOwner owner, Guid automationId, long expectedTriggerRevision, DateTimeOffset expectedNextOccurrenceAtUtc, DateTimeOffset asOfUtc, CancellationToken cancellationToken = default)
         {
             if (Interlocked.Decrement(ref _failures) >= 0)
             {
                 throw new IOException("transient");
             }
 
-            return inner.TryAdmitScheduledAsync(owner, automationId, expectedScheduleRevision, expectedNextOccurrenceAtUtc, asOfUtc, cancellationToken);
+            return inner.TryAdmitScheduledAsync(owner, automationId, expectedTriggerRevision, expectedNextOccurrenceAtUtc, asOfUtc, cancellationToken);
         }
 
         public ValueTask<Automation?> SuspendPolicyAsync(TriggerOwner owner, Guid automationId, long expectedRevision, string reason, DateTimeOffset suspendedAt, CancellationToken cancellationToken = default) =>

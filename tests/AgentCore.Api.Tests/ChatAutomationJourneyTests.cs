@@ -153,10 +153,10 @@ public sealed class ChatAutomationJourneyTests
             var user = request.Messages.LastOrDefault(m => m.Role == ModelRole.User);
             if (user?.Text == UserRequest)
             {
-                if (!request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.TriggerScheduleOnce))
+                if (!request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.AutomationCreate))
                 {
                     ChatRequests.Enqueue(request);
-                    yield return new ModelToolCallEvent(new("create-recurring-action", ToolCatalog.TriggerScheduleOnce,
+                    yield return new ModelToolCallEvent(new("create-recurring-action", ToolCatalog.AutomationCreate,
                         """{"kind":"fixed_interval","intervalSeconds":3600,"instructions":"Review recent experience and consolidate it when useful."}"""));
                     yield return new ModelCompleted(ModelStopReason.ToolCalls);
                 }

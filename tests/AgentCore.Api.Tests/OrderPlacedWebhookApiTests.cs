@@ -154,7 +154,7 @@ public sealed class OrderPlacedWebhookApiTests
                     now,
                     evidence,
                     null,
-                    first.ScheduleRevision,
+                    first.TriggerRevision,
                     OccurrenceRoutingDisposition.Pending,
                     null,
                     0,

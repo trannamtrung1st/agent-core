@@ -144,7 +144,7 @@ public sealed class TriggerScheduler
                 var result = await _store.TryAdmitScheduledAsync(
                     registration.Owner,
                     registration.AutomationId,
-                    registration.ScheduleRevision,
+                    registration.TriggerRevision,
                     dueAt,
                     asOf,
                     cancellationToken).ConfigureAwait(false);

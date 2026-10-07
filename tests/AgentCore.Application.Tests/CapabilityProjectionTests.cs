@@ -196,15 +196,15 @@ public sealed class CapabilityProjectionTests
     [Fact]
     public async Task Always_and_loaded_interfaces_still_obey_configuration_context_and_approval()
     {
-        var d = await Definition(ToolCatalog.CapabilitiesLoad, ToolCatalog.EmailSend, ToolCatalog.WorkspaceWrite, ToolCatalog.TriggerScheduleOnce);
-        d = d with { Environment = d.Environment! with { Projection = new([ToolCatalog.EmailSend, ToolCatalog.WorkspaceWrite, ToolCatalog.TriggerScheduleOnce]) } };
+        var d = await Definition(ToolCatalog.CapabilitiesLoad, ToolCatalog.EmailSend, ToolCatalog.WorkspaceWrite, ToolCatalog.AutomationCreate);
+        d = d with { Environment = d.Environment! with { Projection = new([ToolCatalog.EmailSend, ToolCatalog.WorkspaceWrite, ToolCatalog.AutomationCreate]) } };
         var c = Context(d) with { LoadedCapabilityIds = d.Environment.ToolList };
         Assert.DoesNotContain(ToolCatalog.EmailSend, ToolCatalog.For(d, c, ToolConfigurationGates.Unconfigured).Select(t => t.Name));
         Assert.Equal(ToolPolicyDecision.Deny, ToolPolicy.EvaluateExecution(d, ToolCatalog.EmailSend, ToolConfigurationGates.Unconfigured));
         Assert.Equal(ToolPolicyDecision.RequireApproval, ToolPolicy.EvaluateExecution(d, ToolCatalog.EmailSend, ToolConfigurationGates.AllowAll));
         var occurrence = c with { DetachedExecution = true, AgentInstanceId = Guid.NewGuid(), Trigger = new(Guid.NewGuid(), TriggerKind.ScheduledOccurrence, null) };
         Assert.DoesNotContain(ToolCatalog.WorkspaceWrite, ToolCatalog.For(d, occurrence, ToolConfigurationGates.AllowAll).Select(t => t.Name));
-        Assert.DoesNotContain(ToolCatalog.TriggerScheduleOnce, ToolCatalog.For(d, occurrence, ToolConfigurationGates.AllowAll).Select(t => t.Name));
+        Assert.DoesNotContain(ToolCatalog.AutomationCreate, ToolCatalog.For(d, occurrence, ToolConfigurationGates.AllowAll).Select(t => t.Name));
     }
 
     [Fact]

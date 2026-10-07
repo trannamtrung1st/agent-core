@@ -108,10 +108,10 @@ public static class TriggerAuthorization
 
     public static TriggerCommandAction ActionForTool(string toolName) => toolName switch
     {
-        ToolCatalog.TriggerList => TriggerCommandAction.List,
-        ToolCatalog.TriggerUpdate => TriggerCommandAction.Update,
-        ToolCatalog.TriggerCancel => TriggerCommandAction.Cancel,
-        ToolCatalog.TriggerScheduleOnce => TriggerCommandAction.Create,
+        ToolCatalog.AutomationList => TriggerCommandAction.List,
+        ToolCatalog.AutomationUpdate => TriggerCommandAction.Update,
+        ToolCatalog.AutomationDelete => TriggerCommandAction.Cancel,
+        ToolCatalog.AutomationCreate => TriggerCommandAction.Create,
         _ => TriggerCommandAction.None
     };
 
@@ -235,7 +235,7 @@ public static class TriggerScheduleCommands
             ? await registrations.GetAsync(owner, RequireId(effectiveArguments), cancellationToken) : null;
         var eventTrigger = effectiveArguments.TryGetProperty("eventSourceId", out _) || existing?.Trigger is EventTrigger && !HasScheduleFields(effectiveArguments);
         var sourceKind = eventTrigger ? TriggerSourceKind.ApplicationEvent : TriggerSourceKind.Schedule;
-        if (effectiveName == ToolCatalog.TriggerScheduleOnce && effectiveArguments.TryGetProperty("eventType", out _) && !effectiveArguments.TryGetProperty("eventSourceId", out _))
+        if (effectiveName == ToolCatalog.AutomationCreate && effectiveArguments.TryGetProperty("eventType", out _) && !effectiveArguments.TryGetProperty("eventSourceId", out _))
             return Result("validation", "An Event Source is required for an Event trigger.", clearProposal: false);
         if (effectiveArguments.TryGetProperty("eventSourceId", out _) && HasScheduleFields(effectiveArguments))
             return Result("validation", "Choose exactly one Schedule or Event trigger.", clearProposal: false);
@@ -277,7 +277,7 @@ public static class TriggerScheduleCommands
         {
             var json = effectiveName switch
             {
-                ToolCatalog.TriggerScheduleOnce when effectiveArguments.TryGetProperty("eventSourceId", out _) => automationAuthoring is null
+                ToolCatalog.AutomationCreate when effectiveArguments.TryGetProperty("eventSourceId", out _) => automationAuthoring is null
                     ? Error("unavailable", "Automation authoring is unavailable.")
                     : RegistrationJson(await automationAuthoring.SaveAsync(owner.AgentInstanceId, null, 0, true,
                         TryString(effectiveArguments, "name", out var eventName) ? eventName : RequireInstructions(effectiveArguments)[..Math.Min(80, RequireInstructions(effectiveArguments).Length)],
@@ -286,16 +286,16 @@ public static class TriggerScheduleCommands
                         TryString(effectiveArguments, "modelKey", out var eventModel) ? eventModel : null,
                         TryString(effectiveArguments, "reasoningEffort", out var eventEffort) ? eventEffort : null, cancellationToken,
                         new(TriggerAuthorizationOrigin.CurrentUserTurn, context.SessionId, context.SourceEventId, context.UtcNow, context.UtcNow))),
-                ToolCatalog.TriggerScheduleOnce when automationAuthoring is not null => await CreateScheduleAutomationAsync(
+                ToolCatalog.AutomationCreate when automationAuthoring is not null => await CreateScheduleAutomationAsync(
                     policyDefinition, automationAuthoring, owner, context, effectiveArguments, cancellationToken),
-                ToolCatalog.TriggerScheduleOnce => effectiveArguments.TryGetProperty("kind", out var recurrence) && recurrence.GetString() is "daily" or "weekly" or "fixed_interval"
+                ToolCatalog.AutomationCreate => effectiveArguments.TryGetProperty("kind", out var recurrence) && recurrence.GetString() is "daily" or "weekly" or "fixed_interval"
                     ? await CreateRecurringAsync(policyDefinition, registrations, owner, context, effectiveArguments, cancellationToken).ConfigureAwait(false)
                     : await CreateOnceAsync(policyDefinition, registrations, owner, context, effectiveArguments, cancellationToken).ConfigureAwait(false),
-                ToolCatalog.TriggerList => await ListAsync(
+                ToolCatalog.AutomationList => await ListAsync(
                     policyDefinition, registrations, owner, effectiveArguments, cancellationToken).ConfigureAwait(false),
-                ToolCatalog.TriggerUpdate => await UpdateAsync(
+                ToolCatalog.AutomationUpdate => await UpdateAsync(
                     policyDefinition, registrations, owner, context, effectiveArguments, cancellationToken, automationAuthoring).ConfigureAwait(false),
-                ToolCatalog.TriggerCancel => await CancelAsync(
+                ToolCatalog.AutomationDelete => await CancelAsync(
                     policyDefinition, registrations, owner, context, effectiveArguments, cancellationToken, automationAuthoring).ConfigureAwait(false),
                 _ => Error("forbidden", "Tool is not permitted for this role.")
             };
@@ -1100,7 +1100,7 @@ public static class TriggerScheduleCommands
     {
         automationId = registration.AutomationId,
         revision = registration.Revision,
-        scheduleRevision = registration.ScheduleRevision,
+        triggerRevision = registration.TriggerRevision,
         status = registration.Status.ToString(),
         name = registration.Name,
         instructions = registration.Instructions,
@@ -1142,9 +1142,9 @@ public static class TriggerScheduleCommands
 
     private static string Operation(string toolName) => toolName switch
     {
-        ToolCatalog.TriggerUpdate => "update",
-        ToolCatalog.TriggerCancel => "cancel",
-        ToolCatalog.TriggerList => "list",
+        ToolCatalog.AutomationUpdate => "update",
+        ToolCatalog.AutomationDelete => "cancel",
+        ToolCatalog.AutomationList => "list",
         _ => "create"
     };
 

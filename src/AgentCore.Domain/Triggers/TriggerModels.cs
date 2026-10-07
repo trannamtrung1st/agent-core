@@ -531,7 +531,7 @@ public sealed class Automation
         DateTimeOffset? expiresAtUtc,
         int occurrenceCount,
         long revision,
-        long scheduleRevision,
+        long triggerRevision,
         TriggerProvenance provenance,
         string? suspensionReason,
         string? modelOverrideCatalogKey = null,
@@ -556,7 +556,7 @@ public sealed class Automation
             throw new ArgumentException("Occurrence count cannot be negative.", nameof(occurrenceCount));
         }
 
-        if (revision < 1 || scheduleRevision < 1)
+        if (revision < 1 || triggerRevision < 1)
         {
             throw new ArgumentException("Registration revisions start at 1.");
         }
@@ -575,7 +575,7 @@ public sealed class Automation
         ExpiresAtUtc = expiresAtUtc;
         OccurrenceCount = occurrenceCount;
         Revision = revision;
-        ScheduleRevision = scheduleRevision;
+        TriggerRevision = triggerRevision;
         Provenance = provenance ?? throw new ArgumentException("Provenance is required.", nameof(provenance));
         SuspensionReason = TriggerText.OptionalReason(suspensionReason);
         ModelOverrideCatalogKey = OptionalModelToken(modelOverrideCatalogKey, WorkLimits.MaxModelFieldCharacters, "Model override");
@@ -611,7 +611,7 @@ public sealed class Automation
 
     public long Revision { get; }
 
-    public long ScheduleRevision { get; }
+    public long TriggerRevision { get; }
 
     public TriggerProvenance Provenance { get; }
 
@@ -633,7 +633,7 @@ public sealed class Automation
         DateTimeOffset? nextOccurrenceAtUtc,
         DateTimeOffset? expiresAtUtc,
         long revision,
-        long scheduleRevision,
+        long triggerRevision,
         DateTimeOffset updatedAt) =>
         new(
             AutomationId,
@@ -645,7 +645,7 @@ public sealed class Automation
             expiresAtUtc,
             OccurrenceCount,
             revision,
-            scheduleRevision,
+            triggerRevision,
             Provenance.WithUpdated(updatedAt),
             SuspensionReason,
             ModelOverrideCatalogKey,
@@ -670,7 +670,7 @@ public sealed class Automation
             ExpiresAtUtc,
             occurrenceCount,
             revision,
-            ScheduleRevision,
+            TriggerRevision,
             Provenance.WithUpdated(updatedAt),
             suspensionReason,
             ModelOverrideCatalogKey,
@@ -689,7 +689,7 @@ public sealed class Automation
             ExpiresAtUtc,
             OccurrenceCount,
             revision,
-            ScheduleRevision,
+            TriggerRevision,
             Provenance.WithUpdated(cancelledAt),
             SuspensionReason,
             ModelOverrideCatalogKey,
@@ -712,7 +712,7 @@ public sealed class Automation
             ExpiresAtUtc,
             OccurrenceCount,
             revision,
-            ScheduleRevision,
+            TriggerRevision,
             Provenance.WithUpdated(updatedAt),
             SuspensionReason,
             catalogKey,
@@ -752,7 +752,7 @@ public sealed class TriggerOccurrence
         DateTimeOffset admittedAtUtc,
         string evidenceJson,
         Guid? sourceEventId,
-        long? scheduleRevision,
+        long? triggerRevision,
         OccurrenceRoutingDisposition disposition,
         string? dispositionReason,
         long routingRevision,
@@ -777,9 +777,9 @@ public sealed class TriggerOccurrence
             throw new ArgumentException("Routing disposition is not valid.", nameof(disposition));
         }
 
-        if (scheduleRevision is < 1)
+        if (triggerRevision is < 1)
         {
-            throw new ArgumentException("Schedule revision must be positive.", nameof(scheduleRevision));
+            throw new ArgumentException("Trigger revision must be positive.", nameof(triggerRevision));
         }
 
         if (routingRevision < 0)
@@ -823,7 +823,7 @@ public sealed class TriggerOccurrence
         AdmittedAtUtc = admittedAtUtc;
         EvidenceJson = TriggerText.RequireEvidence(evidenceJson);
         SourceEventId = sourceEventId;
-        ScheduleRevision = scheduleRevision;
+        TriggerRevision = triggerRevision;
         Disposition = disposition;
         DispositionReason = TriggerText.OptionalReason(dispositionReason);
         RoutingRevision = routingRevision;
@@ -854,7 +854,7 @@ public sealed class TriggerOccurrence
 
     public Guid? SourceEventId { get; }
 
-    public long? ScheduleRevision { get; }
+    public long? TriggerRevision { get; }
 
     public OccurrenceRoutingDisposition Disposition { get; }
 
@@ -885,7 +885,7 @@ public sealed class TriggerOccurrence
                 AdmittedAtUtc,
                 EvidenceJson,
                 SourceEventId,
-                ScheduleRevision,
+                TriggerRevision,
                 Disposition,
                 DispositionReason,
                 RoutingRevision,
@@ -919,7 +919,7 @@ public sealed class TriggerOccurrence
             AdmittedAtUtc,
             EvidenceJson,
             SourceEventId,
-            ScheduleRevision,
+            TriggerRevision,
             OccurrenceRoutingDisposition.AcceptedDurable,
             null,
             routingRevision,
@@ -948,7 +948,7 @@ public sealed class TriggerOccurrence
             AdmittedAtUtc,
             EvidenceJson,
             SourceEventId,
-            ScheduleRevision,
+            TriggerRevision,
             disposition,
             dispositionReason,
             routingRevision,

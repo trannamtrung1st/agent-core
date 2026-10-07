@@ -351,7 +351,7 @@ public static class TriggerScheduleAdmission
 
         asOf = TriggerScheduleCalculator.Truncate(asOf);
         scheduled = TriggerScheduleCalculator.Truncate(scheduled);
-        var dedupeKey = DedupeKey(registration.AutomationId, registration.ScheduleRevision, scheduled);
+        var dedupeKey = DedupeKey(registration.AutomationId, registration.TriggerRevision, scheduled);
         return new TriggerOccurrence(
             OccurrenceId(dedupeKey),
             dedupeKey,
@@ -363,7 +363,7 @@ public static class TriggerScheduleAdmission
             asOf,
             Evidence(registration, admission, scheduled),
             null,
-            registration.ScheduleRevision,
+            registration.TriggerRevision,
             OccurrenceRoutingDisposition.Pending,
             null,
             0,
@@ -388,8 +388,8 @@ public static class TriggerScheduleAdmission
             suspensionReason ?? registration.SuspensionReason);
     }
 
-    public static string DedupeKey(Guid automationId, long scheduleRevision, DateTimeOffset scheduledAtUtc) =>
-        $"schedule:{automationId:D}:{scheduleRevision}:{TriggerScheduleCalculator.Truncate(scheduledAtUtc).ToUnixTimeMilliseconds()}";
+    public static string DedupeKey(Guid automationId, long triggerRevision, DateTimeOffset scheduledAtUtc) =>
+        $"schedule:{automationId:D}:{triggerRevision}:{TriggerScheduleCalculator.Truncate(scheduledAtUtc).ToUnixTimeMilliseconds()}";
 
     public static Guid OccurrenceId(string dedupeKey)
     {

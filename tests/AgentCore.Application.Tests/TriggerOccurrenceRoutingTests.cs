@@ -1133,8 +1133,8 @@ public sealed class TriggerOccurrenceRoutingTests
         public ValueTask<IReadOnlyList<Automation>> ListDueAsync(DateTimeOffset asOfUtc, int limit, CancellationToken cancellationToken = default) =>
             inner.ListDueAsync(asOfUtc, limit, cancellationToken);
 
-        public ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(TriggerOwner owner, Guid automationId, long expectedScheduleRevision, DateTimeOffset expectedNextOccurrenceAtUtc, DateTimeOffset asOfUtc, CancellationToken cancellationToken = default) =>
-            inner.TryAdmitScheduledAsync(owner, automationId, expectedScheduleRevision, expectedNextOccurrenceAtUtc, asOfUtc, cancellationToken);
+        public ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(TriggerOwner owner, Guid automationId, long expectedTriggerRevision, DateTimeOffset expectedNextOccurrenceAtUtc, DateTimeOffset asOfUtc, CancellationToken cancellationToken = default) =>
+            inner.TryAdmitScheduledAsync(owner, automationId, expectedTriggerRevision, expectedNextOccurrenceAtUtc, asOfUtc, cancellationToken);
 
         public ValueTask<Automation?> SuspendPolicyAsync(TriggerOwner owner, Guid automationId, long expectedRevision, string reason, DateTimeOffset suspendedAt, CancellationToken cancellationToken = default) =>
             inner.SuspendPolicyAsync(owner, automationId, expectedRevision, reason, suspendedAt, cancellationToken);
@@ -1283,8 +1283,8 @@ public sealed class TriggerOccurrenceRoutingTests
         public ValueTask<IReadOnlyList<Automation>> ListDueAsync(DateTimeOffset asOfUtc, int limit, CancellationToken cancellationToken = default) =>
             inner.ListDueAsync(asOfUtc, limit, cancellationToken);
 
-        public ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(TriggerOwner owner, Guid automationId, long expectedScheduleRevision, DateTimeOffset expectedNextOccurrenceAtUtc, DateTimeOffset asOfUtc, CancellationToken cancellationToken = default) =>
-            inner.TryAdmitScheduledAsync(owner, automationId, expectedScheduleRevision, expectedNextOccurrenceAtUtc, asOfUtc, cancellationToken);
+        public ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(TriggerOwner owner, Guid automationId, long expectedTriggerRevision, DateTimeOffset expectedNextOccurrenceAtUtc, DateTimeOffset asOfUtc, CancellationToken cancellationToken = default) =>
+            inner.TryAdmitScheduledAsync(owner, automationId, expectedTriggerRevision, expectedNextOccurrenceAtUtc, asOfUtc, cancellationToken);
 
         public ValueTask<Automation?> SuspendPolicyAsync(TriggerOwner owner, Guid automationId, long expectedRevision, string reason, DateTimeOffset suspendedAt, CancellationToken cancellationToken = default) =>
             inner.SuspendPolicyAsync(owner, automationId, expectedRevision, reason, suspendedAt, cancellationToken);

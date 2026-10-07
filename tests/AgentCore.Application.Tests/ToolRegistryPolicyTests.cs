@@ -76,7 +76,7 @@ public sealed class ToolRegistryPolicyTests
                 ToolCatalog.KnowledgeRetrieve,
                 ToolCatalog.WorkspaceRead,
                 ToolCatalog.SandboxRun,
-                ToolCatalog.TriggerScheduleOnce,
+                ToolCatalog.AutomationCreate,
                 ToolCatalog.WebFetch
             ]);
         var context = new AgentContext(
@@ -95,7 +95,7 @@ public sealed class ToolRegistryPolicyTests
         Assert.Equal([ToolCatalog.KnowledgeRetrieve, ToolCatalog.WebFetch, ToolCatalog.WorkComplete], offered);
         Assert.DoesNotContain(ToolCatalog.WorkspaceRead, offered);
         Assert.DoesNotContain(ToolCatalog.SandboxRun, offered);
-        Assert.DoesNotContain(ToolCatalog.TriggerScheduleOnce, offered);
+        Assert.DoesNotContain(ToolCatalog.AutomationCreate, offered);
 
         var admission = new ToolExecutionAdmission(Detached: true, TriggerKind.ApplicationEvent);
         var executor = new SessionToolExecutor();
@@ -110,7 +110,7 @@ public sealed class ToolRegistryPolicyTests
             ToolPolicyDecision.Deny,
             ToolPolicy.EvaluateExecution(
                 definition,
-                ToolCatalog.TriggerScheduleOnce,
+                ToolCatalog.AutomationCreate,
                 ToolConfigurationGates.AllowAll,
                 admission: admission));
         Assert.Equal(

@@ -143,7 +143,7 @@ public sealed class DurableReminderTests
             Assert.Contains(AgentCore.Application.Experience.ExperienceService.RecordTool, eventTools);
             Assert.Contains(ToolCatalog.WorkComplete, eventTools);
             Assert.DoesNotContain(ToolCatalog.WorkspaceRead, eventTools);
-            Assert.DoesNotContain(ToolCatalog.TriggerScheduleOnce, eventTools);
+            Assert.DoesNotContain(ToolCatalog.AutomationCreate, eventTools);
             Assert.DoesNotContain(SourceSessionId.ToString(), eventPrompt, StringComparison.Ordinal);
         });
     }

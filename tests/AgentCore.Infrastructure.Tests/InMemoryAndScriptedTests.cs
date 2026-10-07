@@ -98,11 +98,11 @@ public sealed class InMemoryAndScriptedTests
         var cancelA = await AwaitScheduleToolCallAsync(
             model,
             CancelRequest(tools, registrationA, "Intent Alpha"),
-            ToolCatalog.TriggerCancel);
+            ToolCatalog.AutomationDelete);
         var cancelB = await AwaitScheduleToolCallAsync(
             model,
             CancelRequest(tools, registrationB, "Intent Beta"),
-            ToolCatalog.TriggerCancel);
+            ToolCatalog.AutomationDelete);
 
         Assert.Contains(registrationA.ToString("D"), cancelA.ArgumentsJson, StringComparison.Ordinal);
         Assert.DoesNotContain(registrationB.ToString("D"), cancelA.ArgumentsJson, StringComparison.Ordinal);
@@ -141,9 +141,9 @@ public sealed class InMemoryAndScriptedTests
 
     private static ModelToolDefinition[] ScheduleToolDefinitions() =>
     [
-        new(ToolCatalog.TriggerScheduleOnce, "Schedule once", """{"type":"object"}"""),
-        new(ToolCatalog.TriggerUpdate, "Update schedule", """{"type":"object"}"""),
-        new(ToolCatalog.TriggerCancel, "Cancel schedule", """{"type":"object"}""")
+        new(ToolCatalog.AutomationCreate, "Schedule once", """{"type":"object"}"""),
+        new(ToolCatalog.AutomationUpdate, "Update schedule", """{"type":"object"}"""),
+        new(ToolCatalog.AutomationDelete, "Cancel schedule", """{"type":"object"}""")
     ];
 
     private static async Task SeedScheduleScratchAsync(
@@ -157,7 +157,7 @@ public sealed class InMemoryAndScriptedTests
         var create = await AwaitScheduleToolCallAsync(
             model,
             new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, userText)], Tools: tools),
-            ToolCatalog.TriggerScheduleOnce);
+            ToolCatalog.AutomationCreate);
         var toolResult =
             $$"""{"automationId":"{{automationId:D}}","revision":1,"instructions":"{{intent}}","timeZone":"UTC","status":"Active","scheduleKind":"OneShot"}""";
         var messages = new List<ModelMessage>

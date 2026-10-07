@@ -244,7 +244,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
                     .SetProperty(row => row.NextOccurrenceAtUtc, ToUnix(updated.NextOccurrenceAtUtc))
                     .SetProperty(row => row.ExpiresAtUtc, ToUnix(updated.ExpiresAtUtc))
                     .SetProperty(row => row.Revision, updated.Revision)
-                    .SetProperty(row => row.ScheduleRevision, updated.ScheduleRevision)
+                    .SetProperty(row => row.TriggerRevision, updated.TriggerRevision)
                     .SetProperty(row => row.UpdatedAtUtc, updated.Provenance.UpdatedAt.ToUnixTimeMilliseconds()),
                 cancellationToken)
             .ConfigureAwait(false);
@@ -422,14 +422,14 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
     }
 
     public ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(TriggerOwner owner, Guid automationId,
-        long expectedScheduleRevision, DateTimeOffset expectedNextOccurrenceAtUtc, DateTimeOffset asOfUtc,
+        long expectedTriggerRevision, DateTimeOffset expectedNextOccurrenceAtUtc, DateTimeOffset asOfUtc,
         CancellationToken cancellationToken = default) => TryAdmitScheduledCoreAsync(owner, automationId,
-            expectedScheduleRevision, expectedNextOccurrenceAtUtc, asOfUtc, cancellationToken);
+            expectedTriggerRevision, expectedNextOccurrenceAtUtc, asOfUtc, cancellationToken);
 
     private async ValueTask<ScheduledAdmitResult> TryAdmitScheduledCoreAsync(
         TriggerOwner owner,
         Guid automationId,
-        long expectedScheduleRevision,
+        long expectedTriggerRevision,
         DateTimeOffset expectedNextOccurrenceAtUtc,
         DateTimeOffset asOfUtc,
         CancellationToken cancellationToken = default, ExecutionModelPin? pin = null, long? expectedRevision = null)
@@ -442,7 +442,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         if (row is null
             || row.Status != (int)AutomationStatus.Active
             || (expectedRevision is not null && row.Revision != expectedRevision)
-            || row.ScheduleRevision != expectedScheduleRevision
+            || row.TriggerRevision != expectedTriggerRevision
             || row.NextOccurrenceAtUtc != expectedNext.ToUnixTimeMilliseconds())
         {
             var current = row is null ? null : TriggerStoreMapping.ToRegistration(row);
@@ -515,7 +515,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
                 db,
                 owner,
                 automationId,
-                expectedScheduleRevision,
+                expectedTriggerRevision,
                 expectedNext,
                 occurrence.DedupeKey,
                 decision,
@@ -648,7 +648,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         AgentCoreDbContext db,
         TriggerOwner owner,
         Guid automationId,
-        long expectedScheduleRevision,
+        long expectedTriggerRevision,
         DateTimeOffset expectedNext,
         string dedupeKey,
         ScheduleAdmission decision,
@@ -665,7 +665,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         var mapped = TriggerStoreMapping.ToOccurrence(existing);
 
         if (registrationRow.Status == (int)AutomationStatus.Active
-            && registrationRow.ScheduleRevision == expectedScheduleRevision
+            && registrationRow.TriggerRevision == expectedTriggerRevision
             && registrationRow.NextOccurrenceAtUtc == expectedNext.ToUnixTimeMilliseconds())
         {
             var current = TriggerStoreMapping.ToRegistration(registrationRow);
@@ -1017,7 +1017,7 @@ internal static class TriggerStoreMapping
         ExpiresAtUtc = registration.ExpiresAtUtc?.ToUnixTimeMilliseconds(),
         OccurrenceCount = registration.OccurrenceCount,
         Revision = registration.Revision,
-        ScheduleRevision = registration.ScheduleRevision,
+        TriggerRevision = registration.TriggerRevision,
         AuthorizationOrigin = (int)registration.Provenance.AuthorizationOrigin,
         SourceSessionId = registration.Provenance.SourceSessionId?.ToString("D"),
         SourceEventId = registration.Provenance.SourceEventId?.ToString("D"),
@@ -1041,7 +1041,7 @@ internal static class TriggerStoreMapping
         FromUnix(row.ExpiresAtUtc),
         row.OccurrenceCount,
         row.Revision,
-        row.ScheduleRevision,
+        row.TriggerRevision,
         new TriggerProvenance(
             (TriggerAuthorizationOrigin)row.AuthorizationOrigin,
             ParseOptional(row.SourceSessionId),
@@ -1067,7 +1067,7 @@ internal static class TriggerStoreMapping
         AdmittedAtUtc = occurrence.AdmittedAtUtc.ToUnixTimeMilliseconds(),
         EvidenceJson = occurrence.EvidenceJson,
         SourceEventId = occurrence.SourceEventId?.ToString("D"),
-        ScheduleRevision = occurrence.ScheduleRevision,
+        TriggerRevision = occurrence.TriggerRevision,
         Disposition = (int)occurrence.Disposition,
         DispositionReason = occurrence.DispositionReason,
         RoutingRevision = occurrence.RoutingRevision,
@@ -1104,7 +1104,7 @@ internal static class TriggerStoreMapping
         DateTimeOffset.FromUnixTimeMilliseconds(row.AdmittedAtUtc),
         row.EvidenceJson,
         ParseOptional(row.SourceEventId),
-        row.ScheduleRevision,
+        row.TriggerRevision,
         (OccurrenceRoutingDisposition)row.Disposition,
         row.DispositionReason,
         row.RoutingRevision,

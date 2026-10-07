@@ -75,7 +75,7 @@ schedule_json = json.dumps({"kind": "oneShot", "atUtc": now + 86_400_000, "timeZ
 con.execute(
     """INSERT INTO Automations (
         AutomationId, AgentInstanceId, ProfileId, Status, Name, Instructions, TriggerKind, ScheduleJson,
-        ScheduleRevision, NextOccurrenceAtUtc, OccurrenceCount, Revision, AuthorizationOrigin,
+        TriggerRevision, NextOccurrenceAtUtc, OccurrenceCount, Revision, AuthorizationOrigin,
         SourceSessionId, CreatedAtUtc, UpdatedAtUtc, RequiresVision
     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
     (
