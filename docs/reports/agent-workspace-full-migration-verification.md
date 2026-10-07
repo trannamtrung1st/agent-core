@@ -1,6 +1,6 @@
 # Unified Agent Instance workspace migration verification
 
-Date: 2026-10-07. Physical cleanup baseline: `250b509eaa2a89f86f0570bc18f63c6938d974d5`. Deletion recovery baseline: `7316757d7327d4bb5c689add220e7451aaba4a8e`.
+Date: 2026-10-07. Unified ownership/contracts baseline: `250b509eaa2a89f86f0570bc18f63c6938d974d5`. Physical workspace cleanup baseline: `7fc49d397e3fc2f20a6d9ba2c9f1cc682b77ab2f`. Deletion recovery baseline: `7316757d7327d4bb5c689add220e7451aaba4a8e`.
 
 Every Session belongs to a real Agent Instance. The instance owns durable `/home`; the Session owns isolated `/working`. Mailbox cwd starts/resets at `/home`. Definition-only Session creation, compatibility owners, v1 POST creation, checkout/retain execution modes and historical production catalog versions are removed. Unrelated v1 history/read/end routes remain. The supported catalog is Examiner v1, Approval Demo v1, General Assistant v16, Customer Support v3, Compliance v2 and Secretary v3.
 
@@ -36,6 +36,10 @@ Agent deletion commits logical removal, home metadata removal and the InstanceDe
 - Synthetic browser workspace/project/Admin journeys: 4 passed on isolated ports and disposable SQLite. The four-file project checks exact UTF-8/CRLF bytes, empty-directory provenance, copy/rename, relative guarded edit, Artifact download, fresh Session cwd/scratch, stale CAS conflict and archived write denial.
 - Isolated Compose SQLite persistence/recreation: passed. Home, current scratch, fresh scratch isolation, publication resources and Background Work survive container recreation; source Session deletion preserves home. Containers/network are removed and the disposable volume retained.
 - Frontend production build: passed. Source and documentation removal audits pass; obsolete root configuration and checkout-specific write helpers are absent. Legacy names remain only in explicit rejection tests/detection and historical evidence.
+
+## Native reset confirmation
+
+The native API was stopped; old `src/AgentCore.Api/data` was preserved at ignored `local/backups/api-data.before-final-workspace-cleanup-20261007-102240`. A credential-free Synthetic host on isolated port 5101 recreated the default native data root. Explicit instance `01a11463-6a3a-747f-a360-ec68d56a5079` and Session `198b40c1-b06d-4031-89d8-1f4cbeb1d8f5` wrote/read matching home and scratch bytes. Physical inspection confirmed one opaque home blob and exactly `.provisioned` plus `working/` beneath the Session; no raw GUID root, obsolete home root or dead scratch folders exist. Repository `data/` was untouched. This is local operator evidence, not a migration run by application startup.
 
 ## Full candidate gates
 

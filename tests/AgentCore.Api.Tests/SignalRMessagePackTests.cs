@@ -24,6 +24,9 @@ public class KestrelHostFixture : IAsyncLifetime
         };
         start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
         start.Environment["AgentCore__Profile"] = "Synthetic";
+        var data = Path.Combine(Path.GetTempPath(), "kestrel-wire-fixture-" + Guid.NewGuid().ToString("N"));
+        foreach (var (key, directory) in new[] { ("WorkspaceRoot", "workspaces"), ("AttachmentRoot", "attachments"), ("ArtifactRoot", "artifacts"), ("DefinitionResourceRoot", "definition-resources") })
+            start.Environment["Persistence__" + key] = Path.Combine(data, directory);
         start.Environment["Providers__Speech__Recognition__Adapter"] = "Synthetic";
         start.Environment["Providers__Speech__Synthesis__Adapter"] = "Synthetic";
         start.Environment["AgentCore__MaxActiveSessions"] = "64";
