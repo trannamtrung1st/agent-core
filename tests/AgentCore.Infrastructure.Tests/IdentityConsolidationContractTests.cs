@@ -107,7 +107,7 @@ public sealed class IdentityConsolidationContractTests
             var workId = Guid.NewGuid();
             var result = Result(sources);
             result = result with { Provenance = result.Provenance with {
-                MaintenanceOrigin = "Thought", MaintenanceAgentInstanceId = Instance, MaintenanceWorkItemId = workId } };
+                MaintenanceOrigin = "Automation", MaintenanceAgentInstanceId = Instance, MaintenanceWorkItemId = workId } };
             await memories.ConsolidateAsync(sources, result);
             var replay = result with { Provenance = result.Provenance with { MaintenanceAgentInstanceId = Guid.NewGuid(), MaintenanceWorkItemId = Guid.NewGuid() } };
             var canonical = await memories.ConsolidateAsync(sources, replay);

@@ -1,8 +1,8 @@
 # Unified Automation model verification
 
-Status: complete and closed on behavior commit `60dda1dff150e1f13134ec53881e9a31548b9d73` (2026-10-07). All five hosted Synthetic/Compose jobs are green on that exact SHA. P10/P11 remain unopened. Historical reports and freeze SHAs are unchanged.
+Status: final follow-up closure pending hosted CI on its final behavior SHA. The original cutover passed all five hosted Synthetic/Compose jobs on `60dda1dff150e1f13134ec53881e9a31548b9d73` (2026-10-07); those results do not establish closure of later functional changes. P10/P11 remain unopened. Historical reports and freeze SHAs are unchanged.
 
-Starting baseline: `fcd2090e65a4bbcdc08b4fdaf1f5cce8ef9d187c`. Final verified behavior commit: `60dda1dff150e1f13134ec53881e9a31548b9d73`. Implementation was committed directly to `main` and pushed after explicit owner approval. This report is updated separately as documentation-only closure evidence.
+Starting baseline: `fcd2090e65a4bbcdc08b4fdaf1f5cce8ef9d187c`. Original verified cutover behavior commit: `60dda1dff150e1f13134ec53881e9a31548b9d73`. Implementation was committed directly to `main` and pushed after explicit owner approval. This report is updated separately as documentation-only closure evidence.
 
 ## Implemented contract
 
@@ -86,3 +86,14 @@ Playwright MCP against an isolated native Synthetic/SQLite host exercised a real
 Changed-document hygiene passed for five Markdown files and 66 local links/anchors, with balanced fences and no complete JSON examples in these changed files. `git diff --check` and design-sidecar JSON/unchanged token-component checks passed.
 
 Hosted verification for this follow-up is pending the committed candidate. The original five-job green workflow does not prove this later behavior change.
+
+
+## Chat scheduling semantics and terminology follow-up — 2026-10-07
+
+Reviewed from `fa7bbe4c20ec7bc7c6eeceb31ece1dd928c0b317`. The conversational scheduling prompt incorrectly described every recurring Automation as reminder-only, contradicting the generic durable Run. It now preserves explicitly requested recurring work, distinguishes reminder requests, and states that creation does not authorize future actions: current eligible capabilities, policy and exact-action approvals govern each Run. Immediate execution does not establish a recurring Automation.
+
+`ChatAutomationJourneyTests` submits the requested hourly Experience-review action through SignalR Chat and the real `automation.create` authorization/authoring path. SQLite retains the action Instructions and current-user provenance. A logical hour later the scheduler, occurrence router and durable intake execute the generic Run. The authorized case inspects and consolidates three Experience records with retained lineage and finishes quietly via `work.complete`; the permission-revoked case offers no consolidation tool, changes no Experience and completes quietly with NoAction. Model decisions use a deterministic test adapter; no provider credentials, live inference or external business effects are claimed.
+
+Renamed the remaining current-behavior Thought test files, classes, methods, clocks, variables and fixture provenance to Automation/WorkCompletionRequest. Preserved the destructive-migration historical comment and reasoning-channel “secret-thought” sentinel strings, which do not describe a behavioral resource. Simplified a redundant review-test path while retaining both interval/calendar cases.
+
+Local focused regression: both Chat-authored hourly-action cases pass (authorized and permission revoked). The full Domain suite passes 150 tests and Application passes 1307 with one explicit live-provider skip, including the scheduling-prompt regression. The full local Infrastructure/API suites are still running at candidate publication. Changed-document hygiene passes for seven Markdown files, 240 local links/anchors and eight complete JSON examples; `git diff --check` passes. Full local counts and final hosted exact-SHA evidence will be recorded after completion. Final closure remains pending; the original green workflow and intermediate `fa7bbe4c` workflow are historical evidence only.

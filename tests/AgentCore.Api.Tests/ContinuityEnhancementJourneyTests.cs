@@ -21,7 +21,7 @@ namespace AgentCore.Api.Tests;
 public sealed class ContinuityEnhancementJourneyTests
 {
     [Fact(Timeout = 90000)]
-    public async Task Unified_search_inspection_new_session_thought_scope_and_visibility_survive_restart()
+    public async Task Unified_search_inspection_new_session_automation_scope_and_visibility_survive_restart()
     {
         var db = Path.Combine(Path.GetTempPath(), $"continuity-search-{Guid.NewGuid():N}.db");
         Guid instanceId, sessionId, experienceId, memoryId;
@@ -71,13 +71,13 @@ public sealed class ContinuityEnhancementJourneyTests
             Assert.True(context.Length <= ContinuityService.MaxCharacters);
             Assert.DoesNotContain("The first approach failed.", context); // Only a bounded source hint, no replay.
             var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
-            var thoughts = s.GetRequiredService<AdminAutomationAuthoringService>();
-            var r = await thoughts.SaveAsync(instanceId, null, 0, true, 3600, "Review observable state and do nothing when appropriate", null, null);
-            await thoughts.RunNowAsync(instanceId, r.AutomationId, r.Revision); await ThoughtJourneyTests.Intake(s);
+            var automations = s.GetRequiredService<AdminAutomationAuthoringService>();
+            var r = await automations.SaveAsync(instanceId, null, 0, true, 3600, "Review observable state and do nothing when appropriate", null, null);
+            await automations.RunNowAsync(instanceId, r.AutomationId, r.Revision); await AutomationJourneyTests.Intake(s);
             var work = (await s.GetRequiredService<IWorkItemStore>().ListAsync(new(instanceId, LocalUserProfile.Id), 100)).Single(w => w.Provenance.AutomationId == r.AutomationId);
-            var thoughtContext = await s.GetRequiredService<DurableWorkContextFactory>().CreateAsync(work, default);
-            Assert.Contains("Experience", thoughtContext.ContinuityContext);
-            Assert.Contains(ToolCatalog.For(definition, thoughtContext, ToolConfigurationGates.Unconfigured), t => t.Name == ToolCatalog.ContinuitySearch);
+            var automationContext = await s.GetRequiredService<DurableWorkContextFactory>().CreateAsync(work, default);
+            Assert.Contains("Experience", automationContext.ContinuityContext);
+            Assert.Contains(ToolCatalog.For(definition, automationContext, ToolConfigurationGates.Unconfigured), t => t.Name == ToolCatalog.ContinuitySearch);
             Assert.Equal(ToolPolicyDecision.Deny, s.GetRequiredService<SessionToolExecutor>().EvaluateExecutionPolicy(definition, ToolCatalog.TriggerCancel,
                 admission: new(true, TriggerKind.ManualInvocation, AgentInstanceId: instanceId)));
             await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
@@ -162,7 +162,7 @@ public sealed class ContinuityEnhancementJourneyTests
             Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(path + "/" + automationId + "/run", new ContinuityRevisionRequest(r.Revision))).StatusCode);
             var edit = await client.PutAsJsonAsync(path + "/" + automationId, draft with { ExpectedRevision = r.Revision, Instructions = "Future task", ModelKey = "scripted-beta" }); edit.EnsureSuccessStatusCode();
             r = (await edit.Content.ReadFromJsonAsync<AutomationResponse>())!;
-            await ThoughtJourneyTests.Intake(s);
+            await AutomationJourneyTests.Intake(s);
             var item = Assert.Single(await s.GetRequiredService<IWorkItemStore>().ListAsync(new(instanceId, LocalUserProfile.Id), 100)); workId = item.WorkItemId;
             Assert.Equal(WorkSourceKind.ManualInvocation, item.Provenance.SourceKind); Assert.Equal("scripted-alpha", item.Model.CatalogKey);
             Assert.Contains("Review pending store orders", item.Provenance.EvidenceJson); Assert.DoesNotContain("Future task", item.Provenance.EvidenceJson);

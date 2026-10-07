@@ -21,7 +21,7 @@ public sealed class WorkItemApiTests
 
     [Theory]
     [InlineData(WorkSourceKind.Schedule, "Recorded task", "Recorded task")]
-    [InlineData(WorkSourceKind.ManualInvocation, "Recorded thought", "Recorded thought")]
+    [InlineData(WorkSourceKind.ManualInvocation, "Recorded automation", "Recorded automation")]
     [InlineData(WorkSourceKind.ApplicationEvent, "Review the configured order", "Review the configured order")]
     [InlineData(WorkSourceKind.Schedule, "overlong", null)]
     [InlineData(WorkSourceKind.ManualInvocation, "malformed", null)]

@@ -70,14 +70,14 @@ public sealed class LiveIdentityMaintenanceTests(ITestOutputHelper output)
                 await memory.PromoteToIdentityUserAsync(new(session.SessionId), record.MemoryId, new(owner, LocalUserProfile.Id), true, admission);
             }
         }
-        async Task<WorkItem> Thought(Guid owner, string prompt)
+        async Task<WorkItem> Automation(Guid owner, string prompt)
         {
-            var thoughts = s.GetRequiredService<AdminAutomationAuthoringService>();
-            var r = await thoughts.SaveAsync(owner, null, 0, true, 3600, prompt + " Finish via work.complete with a summary under 300 characters, valid outcome and attentionRequired=false.", null, null);
-            await thoughts.RunNowAsync(owner, r.AutomationId, r.Revision); await ThoughtJourneyTests.Intake(s);
+            var automations = s.GetRequiredService<AdminAutomationAuthoringService>();
+            var r = await automations.SaveAsync(owner, null, 0, true, 3600, prompt + " Finish via work.complete with a summary under 300 characters, valid outcome and attentionRequired=false.", null, null);
+            await automations.RunNowAsync(owner, r.AutomationId, r.Revision); await AutomationJourneyTests.Intake(s);
             await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
             var result = (await s.GetRequiredService<IWorkItemStore>().ListAsync(new(owner, LocalUserProfile.Id), 100)).Single(w => w.Provenance.AutomationId == r.AutomationId);
-            output.WriteLine($"Thought status={result.Status}; outcome={result.Result?.Text}; failure={result.Failure?.Summary}");
+            output.WriteLine($"Automation status={result.Status}; outcome={result.Result?.Text}; failure={result.Failure?.Summary}");
             Assert.Equal(WorkItemStatus.Completed, result.Status);
             return result;
         }
@@ -92,7 +92,7 @@ public sealed class LiveIdentityMaintenanceTests(ITestOutputHelper output)
         await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
         var sources = (await s.GetRequiredService<IExperienceStore>().ListAsync(id, 100)).Where(e => e.Content is not null).ToArray();
         Assert.Equal(3, sources.Length);
-        await Thought(id, "Inspect recent Experience about the internal React dashboard. If the three observations genuinely repeat, consolidate them with experience.consolidate. Preserve the dashboard qualifier, failed initial approaches, correction to observe the current page, and unresolved work. Never promote Experience to Memory. Complete with ActionCompleted only after the tool confirms the mutation.");
+        await Automation(id, "Inspect recent Experience about the internal React dashboard. If the three observations genuinely repeat, consolidate them with experience.consolidate. Preserve the dashboard qualifier, failed initial approaches, correction to observe the current page, and unresolved work. Never promote Experience to Memory. Complete with ActionCompleted only after the tool confirms the mutation.");
         var experiences = await s.GetRequiredService<IExperienceStore>().ListAsync(id, 100);
         var generalized = Assert.Single(experiences, e => e.DerivedFromExperienceIds is { Count: 3 });
         output.WriteLine("Generalized Experience: " + System.Text.Json.JsonSerializer.Serialize(generalized.Content));
@@ -102,7 +102,7 @@ public sealed class LiveIdentityMaintenanceTests(ITestOutputHelper output)
         await SeedMemories(id, [("Frontend language", "For the internal React dashboard, prefer TypeScript in frontend examples."),
             ("Frontend samples", "Use TypeScript for frontend code samples in the internal React dashboard."),
             ("Frontend examples", "Frontend examples for the internal React dashboard should use TypeScript.")]);
-        await Thought(id, "Inspect the three learned frontend preferences. Consolidate only genuinely redundant inferred IdentityUser Preference records into one canonical memory with memory.consolidate. Keep the internal React dashboard qualifier. Inspect each exact source using continuity.get. Pass only sourceMemoryIds, kind, subject, content; minItems and maxItems are schema constraints and must not be arguments. Preserve source lineage and report ActionCompleted only after confirmed mutation.");
+        await Automation(id, "Inspect the three learned frontend preferences. Consolidate only genuinely redundant inferred IdentityUser Preference records into one canonical memory with memory.consolidate. Keep the internal React dashboard qualifier. Inspect each exact source using continuity.get. Pass only sourceMemoryIds, kind, subject, content; minItems and maxItems are schema constraints and must not be arguments. Preserve source lineage and report ActionCompleted only after confirmed mutation.");
         var canonical = Assert.Single(await memories.ListActiveIdentityUserAsync(id, LocalUserProfile.Id));
         Assert.Equal(3, canonical.Provenance.DerivedFromMemoryIds!.Count);
         Assert.Contains("dashboard", canonical.Content, StringComparison.OrdinalIgnoreCase);
@@ -110,7 +110,7 @@ public sealed class LiveIdentityMaintenanceTests(ITestOutputHelper output)
         var other = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         await s.GetRequiredService<IExperienceStore>().ConfigureMaintenanceAsync(other.InstanceId, 0, true);
         await SeedMemories(other.InstanceId, [("Frontend language A", "Prefer TypeScript for all frontend examples."), ("Frontend language B", "Prefer Python for all frontend examples.")]);
-        var noOp = await Thought(other.InstanceId, "Inspect learned frontend preferences for contradictions. With insufficient evidence to choose one, do not consolidate or forget either. Complete with NoAction and explain that current user clarification is needed.");
+        var noOp = await Automation(other.InstanceId, "Inspect learned frontend preferences for contradictions. With insufficient evidence to choose one, do not consolidate or forget either. Complete with NoAction and explain that current user clarification is needed.");
         Assert.Equal("NoAction", WorkCompletionRequest.Outcome(noOp.Result!.Text));
         Assert.Equal(2, await memories.CountActiveIdentityUserAsync(other.InstanceId, LocalUserProfile.Id));
 

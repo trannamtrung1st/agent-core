@@ -24,16 +24,16 @@ public sealed class ContinuityReviewJourneyTests
     [Theory(Timeout = 90000)]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Last_run_remains_linked_after_more_than_one_hundred_unrelated_runs(bool thought)
+    public async Task Last_run_remains_linked_after_more_than_one_hundred_unrelated_runs(bool fixedInterval)
     {
         await using var host = new ExperienceHost(Database());
         var services = host.Services;
         var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         var client = TestOwnerCapability.CreateOwnerClient(host);
         var root = $"/api/v2/admin/agent-instances/{instance.InstanceId}";
-        var path = root + (thought ? "/automations" : "/automations");
+        var path = root + "/automations";
         string automationId;
-        if (thought)
+        if (fixedInterval)
         {
             var created = await client.PostAsJsonAsync(path, new IntervalAutomationDraft(0, true, 3600, "Review; do nothing if no action is useful.", null, null));
             created.EnsureSuccessStatusCode();
@@ -47,7 +47,7 @@ public sealed class ContinuityReviewJourneyTests
         }
         var run = await client.PostAsJsonAsync(path + "/" + automationId + "/run", new ContinuityRevisionRequest(1));
         run.EnsureSuccessStatusCode();
-        await ThoughtJourneyTests.Intake(services);
+        await AutomationJourneyTests.Intake(services);
         var store = services.GetRequiredService<IWorkItemStore>();
         var owner = new WorkOwner(instance.InstanceId, LocalUserProfile.Id);
         var original = Assert.Single(await store.ListAsync(owner, 100));

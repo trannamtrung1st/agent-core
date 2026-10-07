@@ -105,6 +105,14 @@ public sealed class TriggerScheduleTimeResolutionTests
         Assert.Contains("currentUtc=2026-09-23T17:17:00.0000000+00:00", text, StringComparison.Ordinal);
         Assert.Contains("relativeDelaySeconds", text, StringComparison.Ordinal);
         Assert.Contains("confirmation_required", text, StringComparison.Ordinal);
+        Assert.Contains("runs its configured Instructions", text, StringComparison.Ordinal);
+        Assert.Contains("does not pre-authorize its future actions", text, StringComparison.Ordinal);
+        Assert.Contains("currently authorized and eligible", text, StringComparison.Ordinal);
+        Assert.Contains("exact-action approvals still apply", text, StringComparison.Ordinal);
+        Assert.Contains("reminder-style Instructions when the user asks for a reminder", text, StringComparison.Ordinal);
+        Assert.Contains("action-oriented Instructions that preserve the requested work", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("deliver reminder text", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("not perform the action each time", text, StringComparison.Ordinal);
     }
 
     [Fact]

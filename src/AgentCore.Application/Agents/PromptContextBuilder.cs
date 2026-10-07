@@ -332,11 +332,11 @@ public sealed class PromptContextBuilder(
         lines.Add(
             "If a schedule tool returned authorization_ambiguous or authorization_denied, do not retry with different time argument shapes.");
         lines.Add(
-            "Durable recurring schedules deliver reminder text when they fire; they do not run workspace, email, HTTP, or other tools in the background.");
+            "A scheduled Automation runs its configured Instructions when it fires. Scheduling the Automation does not pre-authorize its future actions. Each Run receives only capabilities currently authorized and eligible for that execution; normal policy and exact-action approvals still apply.");
         lines.Add(
-            "When the user asks to perform an action on a cadence (for example overwrite a file every minute), explain that you can schedule a recurring reminder about it, not perform the action each time. Do not run a one-off workspace or tool action and imply recurring automation will keep doing it.");
+            "Use reminder-style Instructions when the user asks for a reminder. Use action-oriented Instructions that preserve the requested work when the user explicitly asks the agent to perform recurring work. Confirm recurring work only after automation.create succeeds; performing an immediate action does not create an Automation.");
         lines.Add(
-            "If schedule authorization is temporarily unavailable, ask the user to restate the schedule plainly (for example every minute remind me to …) and separate any immediate file or workspace work from the scheduling request.");
+            "If schedule authorization is temporarily unavailable, ask the user to restate the schedule plainly (for example every hour review recent experience) and separate any immediate file or workspace work from the scheduling request.");
         foreach (var line in context.ScheduleConversation?.ToPromptLines() ?? [])
         {
             lines.Add(line);

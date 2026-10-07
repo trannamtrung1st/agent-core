@@ -19,7 +19,7 @@ namespace AgentCore.Api.Tests;
 public sealed class ContinuityBudgetTests
 {
     [Fact(Timeout = 60000)]
-    public async Task Thought_skips_identical_cross_scope_decisions_without_a_maintenance_attempt()
+    public async Task Automation_skips_identical_cross_scope_decisions_without_a_maintenance_attempt()
     {
         var model = new CrossScopeModel();
         await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"continuity-scope-{Guid.NewGuid():N}.db"), model,
@@ -39,10 +39,10 @@ public sealed class ContinuityBudgetTests
                 "Scrum decision", "Use fictional Scrum checklists for Aurora.", "scrum decision", new("user", [], null, now), now, now,
                 scope, scope == MemoryScope.User ? null : id, LocalUserProfile.Id));
         await s.GetRequiredService<IExperienceStore>().ConfigureMaintenanceAsync(id, 0, true);
-        var thoughts = s.GetRequiredService<AdminAutomationAuthoringService>();
-        var r = await thoughts.SaveAsync(id, null, 0, true, 3600, "try to consolidate your memory and experience", null, null);
-        await thoughts.RunNowAsync(id, r.AutomationId, r.Revision);
-        await ThoughtJourneyTests.Intake(s);
+        var automations = s.GetRequiredService<AdminAutomationAuthoringService>();
+        var r = await automations.SaveAsync(id, null, 0, true, 3600, "try to consolidate your memory and experience", null, null);
+        await automations.RunNowAsync(id, r.AutomationId, r.Revision);
+        await AutomationJourneyTests.Intake(s);
         await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
         var work = Assert.Single(await s.GetRequiredService<IWorkItemStore>().ListAsync(new(id, LocalUserProfile.Id), 100));
         Assert.Equal(WorkItemStatus.Completed, work.Status);

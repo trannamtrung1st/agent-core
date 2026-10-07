@@ -412,7 +412,7 @@ public abstract class AdminLifecycleDeletionTests
     [InlineData(OccurrenceRoutingDisposition.Rejected, true)]
     [InlineData(OccurrenceRoutingDisposition.Pending, false)]
     [InlineData(OccurrenceRoutingDisposition.AwaitingDurableWork, false)]
-    public async Task Cancelled_thought_allows_deletion_only_without_pending_or_durable_work(OccurrenceRoutingDisposition disposition, bool deletable)
+    public async Task Cancelled_automation_allows_deletion_only_without_pending_or_durable_work(OccurrenceRoutingDisposition disposition, bool deletable)
     {
         await ForEachProfileAsync(async fixture =>
         {
@@ -424,11 +424,11 @@ public abstract class AdminLifecycleDeletionTests
                 AutomationStatus.Cancelled, "Review experience",
                 new OneShotSchedule(now.AddDays(1), "UTC", DateOnly.FromDateTime(now.UtcDateTime), new TimeOnly(9, 0)),
                 null, null, 0, 1, 1, new(TriggerAuthorizationOrigin.AdminOwner, null, null, now, now), null));
-            var occurrence = new TriggerOccurrence(Guid.NewGuid(), $"thought:{Guid.NewGuid()}", automationId, owner,
+            var occurrence = new TriggerOccurrence(Guid.NewGuid(), $"automation:{Guid.NewGuid()}", automationId, owner,
                 TriggerSourceKind.ManualInvocation, now, now, now, "{}", null, 1, OccurrenceRoutingDisposition.Pending, null, 0, null, null, null);
             await fixture.Triggers.AdmitOccurrenceAsync(occurrence);
             if (disposition == OccurrenceRoutingDisposition.Rejected)
-                Assert.NotNull(await fixture.Triggers.TryRejectPendingAsync(occurrence.OccurrenceId, "Thought deleted", now));
+                Assert.NotNull(await fixture.Triggers.TryRejectPendingAsync(occurrence.OccurrenceId, "Automation deleted", now));
             if (disposition == OccurrenceRoutingDisposition.AwaitingDurableWork)
             {
                 var claim = Guid.NewGuid();

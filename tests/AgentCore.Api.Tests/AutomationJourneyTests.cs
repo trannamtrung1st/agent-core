@@ -15,7 +15,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace AgentCore.Api.Tests;
 
-public sealed class ThoughtJourneyTests
+public sealed class AutomationJourneyTests
 {
     [Theory]
     [InlineData(14, false)]
@@ -24,9 +24,9 @@ public sealed class ThoughtJourneyTests
     [InlineData(3600, true)]
     [InlineData(604800, true)]
     [InlineData(604801, false)]
-    public async Task Thought_intervals_enforce_seconds_bounds(int seconds, bool accepted)
+    public async Task Automation_intervals_enforce_seconds_bounds(int seconds, bool accepted)
     {
-        var db = Path.Combine(Path.GetTempPath(), $"thought-interval-{Guid.NewGuid():N}.db");
+        var db = Path.Combine(Path.GetTempPath(), $"automation-interval-{Guid.NewGuid():N}.db");
         await using var host = new ExperienceHost(db);
         var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         var client = TestOwnerCapability.CreateOwnerClient(host);
@@ -44,9 +44,9 @@ public sealed class ThoughtJourneyTests
     }
 
     [Fact(Timeout = 90000)]
-    public async Task Experience_to_thought_to_approved_skill_survives_restart_then_finishes_quietly_without_more_work()
+    public async Task Experience_to_automation_to_approved_skill_survives_restart_then_finishes_quietly_without_more_work()
     {
-        var db = Path.Combine(Path.GetTempPath(), $"thought-{Guid.NewGuid():N}.db");
+        var db = Path.Combine(Path.GetTempPath(), $"automation-{Guid.NewGuid():N}.db");
         Guid instanceId, automationId, workId; int originalVersion;
         await using (var host = new ExperienceHost(db))
         {
@@ -108,12 +108,12 @@ public sealed class ThoughtJourneyTests
             var toolExecutor = s.GetRequiredService<SessionToolExecutor>();
             var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", originalVersion))!;
             var harness = await toolExecutor.HarnessContextAsync(instanceId, default);
-            var thought = new ToolExecutionAdmission(true, TriggerKind.ManualInvocation, AgentInstanceId: instanceId, Harness: harness);
-            var user = thought with { Detached = false, TriggerKind = TriggerKind.UserTurn };
-            Assert.Equal(ToolPolicyDecision.Deny, toolExecutor.EvaluateExecutionPolicy(definition, "harness.tool.select", admission: thought));
+            var automation = new ToolExecutionAdmission(true, TriggerKind.ManualInvocation, AgentInstanceId: instanceId, Harness: harness);
+            var user = automation with { Detached = false, TriggerKind = TriggerKind.UserTurn };
+            Assert.Equal(ToolPolicyDecision.Deny, toolExecutor.EvaluateExecutionPolicy(definition, "harness.tool.select", admission: automation));
             Assert.Equal(ToolPolicyDecision.RequireApproval, toolExecutor.EvaluateExecutionPolicy(definition, "harness.tool.select", admission: user));
-            Assert.Equal(ToolPolicyDecision.Deny, toolExecutor.EvaluateExecutionPolicy(definition, ToolCatalog.TriggerCancel, admission: thought));
-            Assert.Equal(ToolPolicyDecision.Deny, toolExecutor.EvaluateExecutionPolicy(definition, ToolCatalog.AppMessageSend, admission: thought));
+            Assert.Equal(ToolPolicyDecision.Deny, toolExecutor.EvaluateExecutionPolicy(definition, ToolCatalog.TriggerCancel, admission: automation));
+            Assert.Equal(ToolPolicyDecision.Deny, toolExecutor.EvaluateExecutionPolicy(definition, ToolCatalog.AppMessageSend, admission: automation));
             Assert.DoesNotContain("harness.tool.select", item.Checkpoint!.PayloadJson);
             Assert.Empty(await Alerts(work, owner));
         }
@@ -160,18 +160,18 @@ public sealed class ThoughtJourneyTests
         }
     }
     [Fact(Timeout = 60000)]
-    public async Task Overdue_periodic_thought_coalesces_once_and_frozen_admission_resumes_after_restart()
+    public async Task Overdue_periodic_automation_coalesces_once_and_frozen_admission_resumes_after_restart()
     {
-        var db = Path.Combine(Path.GetTempPath(), $"thought-periodic-{Guid.NewGuid():N}.db");
-        var clock = new ThoughtClock(DateTimeOffset.UtcNow.AddHours(2));
+        var db = Path.Combine(Path.GetTempPath(), $"automation-periodic-{Guid.NewGuid():N}.db");
+        var clock = new AutomationClock(DateTimeOffset.UtcNow.AddHours(2));
         Guid instanceId, workId;
         await using (var host = new ExperienceHost(db, clock: clock))
         {
             var services = host.Services;
             var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
             instanceId = instance.InstanceId;
-            var thoughts = services.GetRequiredService<AdminAutomationAuthoringService>();
-            var registration = await thoughts.SaveAsync(instanceId, null, 0, true, 3600, "Review; do nothing if no useful action is available.", null, null);
+            var automations = services.GetRequiredService<AdminAutomationAuthoringService>();
+            var registration = await automations.SaveAsync(instanceId, null, 0, true, 3600, "Review; do nothing if no useful action is available.", null, null);
             clock.Advance(TimeSpan.FromHours(10));
             var scheduler = services.GetRequiredService<TriggerScheduler>();
             Assert.Equal(1, (await scheduler.RunOnceAsync(clock.GetUtcNow())).Admitted);
@@ -179,7 +179,7 @@ public sealed class ThoughtJourneyTests
             registration = (await services.GetRequiredService<ITriggerStore>().GetAsync(registration.Owner, registration.AutomationId))!;
             Assert.True(registration.NextOccurrenceAtUtc > clock.GetUtcNow());
             // An edit after atomic admission changes only future activations and their models.
-            await thoughts.SaveAsync(instanceId, registration.AutomationId, registration.Revision, true, 3600,
+            await automations.SaveAsync(instanceId, registration.AutomationId, registration.Revision, true, 3600,
                 "synthetic-automation-attention future activation", "scripted-beta", null);
             await Intake(services);
             var work = Assert.Single(await services.GetRequiredService<IWorkItemStore>().ListAsync(new(instanceId, registration.Owner.ProfileId), 100));
@@ -203,7 +203,7 @@ public sealed class ThoughtJourneyTests
         Assert.Empty(await s.GetRequiredService<IExperienceStore>().ListAsync(instanceId, 100));
         Assert.Empty(await Alerts(s.GetRequiredService<IWorkItemStore>(), owner));
     }
-    private sealed class ThoughtClock(DateTimeOffset initial) : TimeProvider
+    private sealed class AutomationClock(DateTimeOffset initial) : TimeProvider
     {
         private DateTimeOffset now = initial;
         public override DateTimeOffset GetUtcNow() => now;

@@ -60,10 +60,10 @@ public sealed class DurableCheckpointCapacityTests
             ? WorkSourceKind.ManualInvocation : WorkSourceKind.Schedule);
         var fetch = new Fetcher(string.Concat(Enumerable.Repeat("資料\n\"\\\u0001", 20_000)));
         var tools = new SessionToolExecutor(publicWebFetcher: fetch);
-        await Assert.ThrowsAsync<SimulatedCrash>(() => fixture.RunAsync(tools, new ReadModel(1, thought: triggerKind == TriggerKind.ManualInvocation), crashAfterResult: true, triggerKind: triggerKind));
+        await Assert.ThrowsAsync<SimulatedCrash>(() => fixture.RunAsync(tools, new ReadModel(1, automation: triggerKind == TriggerKind.ManualInvocation), crashAfterResult: true, triggerKind: triggerKind));
         Assert.Equal(1, fetch.Calls);
         await fixture.RecoverAsync();
-        var outcome = await fixture.RunAsync(tools, new ReadModel(1, thought: triggerKind == TriggerKind.ManualInvocation), triggerKind: triggerKind);
+        var outcome = await fixture.RunAsync(tools, new ReadModel(1, automation: triggerKind == TriggerKind.ManualInvocation), triggerKind: triggerKind);
         var completed = Assert.IsType<DurableOccurrenceCompleted>(outcome);
         Assert.False(completed.AttentionRequired);
         Assert.Equal(1, fetch.Calls);
@@ -156,7 +156,7 @@ public sealed class DurableCheckpointCapacityTests
         await using var fixture = await Fixture.CreateAsync(WorkSourceKind.ManualInvocation);
         var fetch = new Fetcher("must not execute");
         var failed = Assert.IsType<DurableOccurrenceFailed>(await fixture.RunAsync(new(publicWebFetcher: fetch),
-            new ReadModel(99, thought: true), request: new(Guid.NewGuid(), NearCapacity(TriggerKind.ManualInvocation)), triggerKind: TriggerKind.ManualInvocation));
+            new ReadModel(99, automation: true), request: new(Guid.NewGuid(), NearCapacity(TriggerKind.ManualInvocation)), triggerKind: TriggerKind.ManualInvocation));
         Assert.Equal("checkpoint-capacity", failed.Code); Assert.Equal(0, fetch.Calls);
         Assert.Contains(fixture.Checkpoints, c => c.PayloadJson.Contains("finish_required"));
     }
@@ -247,7 +247,7 @@ public sealed class DurableCheckpointCapacityTests
         }
     }
 
-    private sealed class ReadModel(int reads, bool oversizedArguments = false, bool write = false, bool thought = false) : ILanguageModel
+    private sealed class ReadModel(int reads, bool oversizedArguments = false, bool write = false, bool automation = false) : ILanguageModel
     {
         public List<ModelRequest> Requests { get; } = [];
         public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: true);
@@ -257,7 +257,7 @@ public sealed class DurableCheckpointCapacityTests
             Requests.Add(request);
             var count = request.Messages.Count(m => m.Role == ModelRole.Tool);
             var call = count >= reads
-                ? new ModelToolCall("finish", ToolCatalog.WorkComplete, thought
+                ? new ModelToolCall("finish", ToolCatalog.WorkComplete, automation
                     ? """{"summary":"Read the document.","attentionRequired":false,"outcome":"NoAction"}"""
                     : """{"summary":"Read the document.","attentionRequired":false,"outcome":"ActionCompleted"}""")
                 : write ? new ModelToolCall("write", ToolCatalog.HttpRequest, """{"method":"POST","url":"https://example.test/note","body":"note"}""")
