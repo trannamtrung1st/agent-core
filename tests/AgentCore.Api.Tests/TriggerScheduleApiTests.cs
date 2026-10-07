@@ -84,7 +84,9 @@ public sealed class TriggerScheduleApiTests : IClassFixture<AgentCoreApiFactory>
             new CancelTriggerRequest(created.Revision + 5));
         Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
 
-        var sameOwner = await CreateAsync(client, "examiner", 1);
+        var sameOwnerResponse = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(Guid.Parse(examiner.AgentInstanceId!), "text"));
+        sameOwnerResponse.EnsureSuccessStatusCode();
+        var sameOwner = (await sameOwnerResponse.Content.ReadFromJsonAsync<SessionViewResponse>())!;
         var visible = await client.GetFromJsonAsync<TriggerScheduleListResponse>($"/api/v2/sessions/{sameOwner.SessionId}/triggers");
         Assert.Contains(visible!.Items, row => row.RegistrationId == created.RegistrationId.ToString());
 
@@ -150,12 +152,12 @@ public sealed class TriggerScheduleApiTests : IClassFixture<AgentCoreApiFactory>
     private static async Task<TriggerOwner> OwnerAsync(IServiceProvider services, string sessionId)
     {
         var snapshot = await services.GetRequiredService<SessionManager>().GetAsync(Guid.Parse(sessionId));
-        return new TriggerOwner(snapshot.AgentInstanceId!.Value, snapshot.ProfileId!.Value);
+        return new TriggerOwner(snapshot.AgentInstanceId, snapshot.ProfileId!.Value);
     }
 
     private static async Task<SessionViewResponse> CreateAsync(HttpClient client, string agentId, int? version)
     {
-        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(agentId, version, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, agentId, version), "text"));
         created.EnsureSuccessStatusCode();
         return (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
     }

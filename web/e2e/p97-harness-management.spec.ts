@@ -7,14 +7,11 @@ async function select(page: Page, label: string, text: string) {
 }
 async function create(page: Page, name: string, mode = 'Managed', scope = 'Knowledge & resources') {
   await page.goto('/');
-  await page.getByLabel('Message',{exact:true}).fill('Hello');
-  await page.getByRole('button',{name:'Send',exact:true}).click();
-  await expect(page.getByText('Hello from synthetic.',{exact:true}).last()).toBeVisible();
   await page.getByRole('button',{name:'Open Admin'}).click();
   await page.getByRole('tab', { name: 'Instances', exact: true }).click();
   await page.getByRole('button',{name:'New instance',exact:true}).click();
   await select(page,'Definition','General Assistant · general-assistant');
-  await select(page,'Published version','v7 · Built-in · Published');
+  await select(page,'Published version','v16 · Built-in · Published');
   const d=page.getByRole('dialog',{name:'New instance',exact:true});
   await d.getByText('Custom persona',{exact:true}).click();
   await d.getByLabel('Persona name').fill(name);await d.getByLabel('Persona role').fill('Operations');
@@ -52,12 +49,12 @@ test('Managed Chat reads authorized public material, saves knowledge and retriev
   const id=await create(page,'Managed learning');
   await send(page,learn);
   await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible({timeout:30000});
-  const saved=await review(page,id);expect(saved.activeVersion).toBeGreaterThan(7);
+  const saved=await review(page,id);expect(saved.activeVersion).toBeGreaterThan(16);
   expect(saved.policy.sources).toEqual([]);expect(saved.knowledge.some((k:{identity:string})=>k.identity==='learned-orders')).toBe(true);
   const sessionId=page.url().split('/').at(-1)!;
   const owner=await page.evaluate(()=>localStorage.getItem('agent-core.owner-capability'));
   const currentResponse=await page.request.get(`/api/v2/sessions/${sessionId}`,{headers:{'X-AgentCore-Owner-Capability':owner!}});
-  expect(currentResponse.ok()).toBe(true);const current=await currentResponse.json();expect(current.agentVersion).toBe(7);
+  expect(currentResponse.ok()).toBe(true);const current=await currentResponse.json();expect(current.agentVersion).toBe(16);
   await fresh(page,'Managed learning');await send(page,'What is the learned order policy?');
   await expect(page.getByText('The saved policy says to check payment, shipping and fraud notes.',{exact:true})).toBeVisible();
 });
@@ -76,9 +73,9 @@ test('Assisted Chat rejects once then approves a fresh exact knowledge change',a
   await send(page,learn);const approval=page.getByRole('dialog',{name:'Save this harness change?'});
   await expect(approval).toContainText('Check payment, shipping and fraud notes');
   await approval.getByRole('button',{name:'Reject',exact:true}).click();
-  await expect(page.getByText(/Nothing was saved/).last()).toBeVisible();expect((await review(page,id)).activeVersion).toBe(7);
+  await expect(page.getByText(/Nothing was saved/).last()).toBeVisible();expect((await review(page,id)).activeVersion).toBe(16);
   await send(page,learn);await expect(approval).toBeVisible();await approval.getByRole('button',{name:'Approve',exact:true}).click();
-  await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible();expect((await review(page,id)).activeVersion).toBeGreaterThan(7);
+  await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible();expect((await review(page,id)).activeVersion).toBeGreaterThan(16);
 });
 
 test('Managed tool and instruction proposals require exact Chat approval',async({page})=>{
@@ -86,7 +83,7 @@ test('Managed tool and instruction proposals require exact Chat approval',async(
   const id=await create(page,'Tool learning','Managed','Tool proposals');
   await send(page,'Propose disabling http.request for future conversations.');
   const approval=page.getByRole('dialog',{name:'Save this harness change?'});await expect(approval).toContainText('http.request');
-  expect((await review(page,id)).activeVersion).toBe(7);await approval.getByRole('button',{name:'Approve',exact:true}).click();
+  expect((await review(page,id)).activeVersion).toBe(16);await approval.getByRole('button',{name:'Approve',exact:true}).click();
   await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible();expect((await review(page,id)).selectedTools).not.toContain('http.request');
   await send(page,'Try a sensitive HTTP action now.');
   const sensitive=page.getByRole('dialog',{name:'Approve sensitive action'});await expect(sensitive).toBeVisible();
@@ -105,7 +102,7 @@ test('Freeze blocks durable Chat learning while normal Chat still works',async({
   await page.getByRole('dialog').getByRole('button',{name:'Freeze self-management',exact:true}).click();
   await expect(page.getByText('Frozen',{exact:true})).toBeVisible();await page.locator('.admin-header').getByRole('button',{name:/Chat$/}).first().click();await select(page,'Identity','Frozen learning');
   await send(page,learn);await expect(page.getByText(/cannot save a durable harness change/).last()).toBeVisible();
-  expect((await review(page,id)).activeVersion).toBe(7);await send(page,'Hello');await expect(page.getByText('Hello from synthetic.',{exact:true}).last()).toBeVisible();
+  expect((await review(page,id)).activeVersion).toBe(16);await send(page,'Hello');await expect(page.getByText('Hello from synthetic.',{exact:true}).last()).toBeVisible();
 });
 
 
@@ -113,8 +110,8 @@ test('Managed instruction changes still require approval in Chat',async({page})=
   const id=await create(page,'Instruction learning','Managed','Operating instructions');
   await send(page,'Save these operating instructions for future conversations: Use concise summaries.');
   const approval=page.getByRole('dialog',{name:'Save this harness change?'});await expect(approval).toContainText('Use concise order-review summaries');
-  expect((await review(page,id)).activeVersion).toBe(7);await approval.getByRole('button',{name:'Reject',exact:true}).click();
-  await expect(page.getByText(/Nothing was saved/).last()).toBeVisible();expect((await review(page,id)).activeVersion).toBe(7);
+  expect((await review(page,id)).activeVersion).toBe(16);await approval.getByRole('button',{name:'Reject',exact:true}).click();
+  await expect(page.getByText(/Nothing was saved/).last()).toBeVisible();expect((await review(page,id)).activeVersion).toBe(16);
 });
 
 test('A stale Chat approval cannot adopt and a fresh operation recovers', async ({ page }) => {
@@ -139,7 +136,7 @@ test('A stale Chat approval cannot adopt and a fresh operation recovers', async 
   await expect(approval).toBeHidden({ timeout: 20_000 });
   await expect(page.getByText(/Nothing was saved/).last()).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('connection')).toHaveText('Ready', { timeout: 20_000 });
-  expect((await review(page, id)).activeVersion).toBe(7);
+  expect((await review(page, id)).activeVersion).toBe(16);
 
   await send(page, learn);
   await expect(approval).toBeVisible({ timeout: 30_000 });
@@ -147,5 +144,5 @@ test('A stale Chat approval cannot adopt and a fresh operation recovers', async 
   await approval.getByRole('button', { name: 'Approve', exact: true }).click();
   await expect(approval).toBeHidden({ timeout: 20_000 });
   await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible({ timeout: 30_000 });
-  expect((await review(page, id)).activeVersion).toBeGreaterThan(7);
+  expect((await review(page, id)).activeVersion).toBeGreaterThan(16);
 });

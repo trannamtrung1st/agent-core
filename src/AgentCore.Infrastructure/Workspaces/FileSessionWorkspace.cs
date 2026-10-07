@@ -328,16 +328,6 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
         }
     }
 
-    public async ValueTask MoveAsync(
-        Guid sessionId,
-        string sourceLogicalPath,
-        string destinationLogicalPath,
-        CancellationToken cancellationToken = default)
-    {
-        var result = await StructureCoreAsync(sessionId, [new("move", Source: sourceLogicalPath, Destination: destinationLogicalPath)], fileMoveOnly: true, cancellationToken);
-        if (!result.Completed) throw AgentCoreErrors.Conflict(result.Message!);
-    }
-
     public async ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         await ResolveOwnerAsync(sessionId, cancellationToken);
@@ -884,11 +874,8 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
     {
         if (_sessions is null || _owners.ContainsKey(sessionId)) return;
         var snapshot = await _sessions.LoadMetadataAsync(sessionId, ct);
-        if (snapshot?.AgentInstanceId is Guid owner && WorkspaceSemantics.IsV2(snapshot.Definition))
-        {
-            // Existing physical data remains at its historical location; never migrate or strand it implicitly.
-            if (!Directory.Exists(Path.Combine(_root, sessionId.ToString("N")))) _owners.TryAdd(sessionId, owner);
-        }
+        if (snapshot is null) throw AgentCoreErrors.NotFound("Session workspace owner was not found.");
+        _owners.TryAdd(sessionId, snapshot.AgentInstanceId);
     }
 
     private string SessionRoot(Guid sessionId) => _owners.TryGetValue(sessionId, out var owner)

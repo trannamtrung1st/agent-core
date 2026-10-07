@@ -21,13 +21,7 @@ public sealed class HostSessionContractTests : IClassFixture<AgentCoreApiFactory
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
         var created = await client.PostAsJsonAsync(
             "/api/v2/host/sessions",
-            new HostCreateSessionRequest(
-                "examiner",
-                1,
-                "text",
-                Purpose: new HostSessionPurposeRequest("goal", "Finish the spoken sample", null),
-                CompletionPolicy: new HostSessionCompletionPolicyRequest("advisory", false, true),
-                MaxDurationSeconds: 3600));
+            new HostCreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text", Purpose: new HostSessionPurposeRequest("goal", "Finish the spoken sample", null), CompletionPolicy: new HostSessionCompletionPolicyRequest("advisory", false, true), MaxDurationSeconds: 3600));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         using var hostDoc = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
         Assert.Equal("goal", hostDoc.RootElement.GetProperty("purpose").GetProperty("kind").GetString());
@@ -66,12 +60,7 @@ public sealed class HostSessionContractTests : IClassFixture<AgentCoreApiFactory
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
         var created = await client.PostAsJsonAsync(
             "/api/v2/host/sessions",
-            new HostCreateSessionRequest(
-                "examiner",
-                1,
-                "text",
-                Purpose: new HostSessionPurposeRequest("goal", "Exam"),
-                CompletionPolicy: new HostSessionCompletionPolicyRequest("advisory", false, true)));
+            new HostCreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text", Purpose: new HostSessionPurposeRequest("goal", "Exam"), CompletionPolicy: new HostSessionCompletionPolicyRequest("advisory", false, true)));
         created.EnsureSuccessStatusCode();
         var host = await created.Content.ReadFromJsonAsync<HostSessionViewResponse>();
 
@@ -109,34 +98,20 @@ public sealed class HostSessionContractTests : IClassFixture<AgentCoreApiFactory
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
         var both = await client.PostAsJsonAsync(
             "/api/v2/host/sessions",
-            new HostCreateSessionRequest(
-                "examiner",
-                1,
-                "text",
-                Purpose: new HostSessionPurposeRequest(
+            new HostCreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text", Purpose: new HostSessionPurposeRequest(
                     "goal",
                     "Exam",
-                    "2026-09-19T12:00:00.000Z"),
-                MaxDurationSeconds: 60));
+                    "2026-09-19T12:00:00.000Z"), MaxDurationSeconds: 60));
         Assert.Equal(HttpStatusCode.BadRequest, both.StatusCode);
 
         var tooLong = await client.PostAsJsonAsync(
             "/api/v2/host/sessions",
-            new HostCreateSessionRequest(
-                "examiner",
-                1,
-                "text",
-                Purpose: new HostSessionPurposeRequest("goal"),
-                MaxDurationSeconds: (long)TimeSpan.FromDays(31).TotalSeconds));
+            new HostCreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text", Purpose: new HostSessionPurposeRequest("goal"), MaxDurationSeconds: (long)TimeSpan.FromDays(31).TotalSeconds));
         Assert.Equal(HttpStatusCode.BadRequest, tooLong.StatusCode);
 
         var noTimezone = await client.PostAsJsonAsync(
             "/api/v2/host/sessions",
-            new HostCreateSessionRequest(
-                "examiner",
-                1,
-                "text",
-                Purpose: new HostSessionPurposeRequest("goal", "Exam", "2026-09-19T12:00:00")));
+            new HostCreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text", Purpose: new HostSessionPurposeRequest("goal", "Exam", "2026-09-19T12:00:00")));
         Assert.Equal(HttpStatusCode.BadRequest, noTimezone.StatusCode);
     }
 
@@ -153,13 +128,7 @@ public sealed class HostSessionContractTests : IClassFixture<AgentCoreApiFactory
                 var client = TestOwnerCapability.CreateOwnerClient(first);
                 var created = await client.PostAsJsonAsync(
                     "/api/v2/host/sessions",
-                    new HostCreateSessionRequest(
-                        "examiner",
-                        1,
-                        "text",
-                        Purpose: new HostSessionPurposeRequest("goal", "Onboarding task"),
-                        CompletionPolicy: new HostSessionCompletionPolicyRequest("advisory", false, true),
-                        MaxDurationSeconds: 120));
+                    new HostCreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text", Purpose: new HostSessionPurposeRequest("goal", "Onboarding task"), CompletionPolicy: new HostSessionCompletionPolicyRequest("advisory", false, true), MaxDurationSeconds: 120));
                 created.EnsureSuccessStatusCode();
                 using var createdDoc = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
                 sessionId = createdDoc.RootElement.GetProperty("sessionId").GetString()!;

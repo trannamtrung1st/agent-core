@@ -17,7 +17,7 @@ internal static class CapabilityProjectionScript
         var name = results.Length == 0 ? ToolCatalog.CapabilitiesLoad : results.Length == 1 ? ToolCatalog.WorkspaceWrite : null;
         if (name is null) return [new ModelTextDelta("Capability projection results: " + string.Join("\n", results.Select(r => r.Text))), new ModelCompleted(ModelStopReason.Completed)];
         if (!names.Contains(name)) return [new ModelTextDelta("Capability projection missing schema: " + name), new ModelCompleted(ModelStopReason.Completed)];
-        object args = name == ToolCatalog.CapabilitiesLoad ? new { query = "workspace.write", limit = 1 } : new { path = "loaded-capability.txt", content = "Loaded exact capability café\r\n" };
+        object args = name == ToolCatalog.CapabilitiesLoad ? new { query = "workspace.write", limit = 1 } : new { path = "/working/loaded-capability.txt", content = "Loaded exact capability café\r\n" };
         return [new ModelToolCallEvent(new("capability-proof-" + results.Length, name, JsonSerializer.Serialize(args))), new ModelCompleted(ModelStopReason.ToolCalls)];
     }
 }

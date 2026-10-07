@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { LEGACY_IDENTITY_LABELS, selectLegacyIdentity } from "./support/legacy-identity";
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { waitForResponseSettled } from "./support/response-settled";
 
 const prompt = "Please look up record AC-1042.";
@@ -25,7 +25,7 @@ test("P9 looks up record AC-1042 with one application message and one answer", a
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
-  await selectLegacyIdentity(page, LEGACY_IDENTITY_LABELS.generalAssistant);
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.generalAssistant);
   await chooseScriptedAlpha(page);
 
   await page.evaluate(() => {

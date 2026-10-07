@@ -280,8 +280,7 @@ public abstract class AdminManagedInstanceHistoryTests
             new AgentIdentity("Alex", "Examiner", "Practice.", "Calm"),
             AgentInstanceLifecycle.Active,
             now,
-            now,
-            Compatibility: false);
+            now);
 
     protected static AgentDefinition SampleExaminerDefinition() =>
         new(

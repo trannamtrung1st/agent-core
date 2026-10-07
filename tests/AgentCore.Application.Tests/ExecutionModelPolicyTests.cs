@@ -177,7 +177,6 @@ public sealed class ExecutionModelPolicyTests
             AgentInstanceLifecycle.Active,
             Now,
             Now,
-            false,
             UnattendedModelCatalogKey: catalogKey,
             UnattendedReasoningEffort: effort);
 
@@ -204,7 +203,7 @@ public sealed class ExecutionModelPolicyTests
 
     private static async Task<AgentDefinition> LoadAsync(string id, int version)
     {
-        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var store = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         return (await store.GetAsync(id, version).ConfigureAwait(false))!;
     }
 

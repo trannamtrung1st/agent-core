@@ -26,10 +26,10 @@ public sealed class SessionCapacityTests : IClassFixture<CapacityOneApiFactory>
     {
         var host = _factory.Services.GetRequiredService<SessionHost>();
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
-        var firstCreated = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var firstCreated = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         firstCreated.EnsureSuccessStatusCode();
         var first = (await firstCreated.Content.ReadFromJsonAsync<SessionViewResponse>())!;
-        var secondCreated = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var secondCreated = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         secondCreated.EnsureSuccessStatusCode();
         var second = (await secondCreated.Content.ReadFromJsonAsync<SessionViewResponse>())!;
 

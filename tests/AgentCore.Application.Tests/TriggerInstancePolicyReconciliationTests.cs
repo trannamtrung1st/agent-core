@@ -72,7 +72,6 @@ public sealed class TriggerInstancePolicyReconciliationTests
         var service = new AgentInstanceService(
             instances,
             definitions,
-            memory,
             Ids(8),
             clock,
             reconciliation);
@@ -125,7 +124,7 @@ public sealed class TriggerInstancePolicyReconciliationTests
 
         var guard = new TriggerAdmissionGuard(instances, definitions, memory);
         var reconciliation = new TriggerInstancePolicyReconciliationService(store, guard);
-        var service = new AgentInstanceService(instances, definitions, memory, Ids(8), clock, reconciliation);
+        var service = new AgentInstanceService(instances, definitions, Ids(8), clock, reconciliation);
         var managed = await service.CreateAsync("examiner", 1);
         var owner = new TriggerOwner(managed.InstanceId, ProfileId);
         var due = Now.AddMinutes(1);

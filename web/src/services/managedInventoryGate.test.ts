@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { legacyChatIdentityKey } from "../features/chat/chatIdentity";
+import { managedChatIdentityKey } from "../features/chat/chatIdentity";
 import { emptySession, useSessionStore } from "../state/sessionStore";
 import { composerSendEnabled, startConversation } from "./realtime";
 
@@ -7,12 +7,11 @@ vi.mock("./api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./api")>();
   return {
     ...actual,
-    createSession: vi.fn(),
     createSessionForInstance: vi.fn()
   };
 });
 
-import { createSession } from "./api";
+import { createSessionForInstance } from "./api";
 
 const agents = [
   {
@@ -40,7 +39,7 @@ describe("managed inventory gate", () => {
     vi.clearAllMocks();
   });
 
-  it("does not allow send or legacy session create while managed inventory is loading", async () => {
+  it("does not allow send or session create while managed inventory is loading", async () => {
     useSessionStore.setState({
       ...emptySession(),
       agents,
@@ -56,17 +55,17 @@ describe("managed inventory gate", () => {
 
     const started = await startConversation();
     expect(started).toBe(false);
-    expect(createSession).not.toHaveBeenCalled();
+    expect(createSessionForInstance).not.toHaveBeenCalled();
   });
 
-  it("enables send only after inventory resolves to a legacy identity", () => {
+  it("enables send only after inventory resolves to an active instance", () => {
     useSessionStore.setState({
       ...emptySession(),
       agents,
-      chatAgentInstances: [],
+      chatAgentInstances: [{ instanceId: "019944af-00d1-7000-8000-000000000099", definitionId: "customer-support", activeVersion: 3, name: "Sam", role: "Support", voiceAvailable: false, language: "en" }],
       chatAgentInstancesError: null,
       chatAgentInstancesLoading: false,
-      newChatIdentityKey: legacyChatIdentityKey("customer-support"),
+      newChatIdentityKey: managedChatIdentityKey("019944af-00d1-7000-8000-000000000099"),
       selectedAgentId: "customer-support",
       draft: "Hello"
     });

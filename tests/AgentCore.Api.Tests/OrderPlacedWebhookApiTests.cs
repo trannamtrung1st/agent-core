@@ -42,13 +42,13 @@ public sealed class OrderPlacedWebhookApiTests
                 Assert.DoesNotContain(WebhookTokens.Hash(token), listed, StringComparison.Ordinal);
                 Assert.Contains(sourceKey, listed, StringComparison.Ordinal);
 
-                instanceId = await InsertInstanceAsync(host, "secretary", 2);
-                secondId = await InsertInstanceAsync(host, "secretary", 2);
+                instanceId = await InsertInstanceAsync(host, "secretary", 3);
+                secondId = await InsertInstanceAsync(host, "secretary", 3);
                 await SubscribeAsync(owner, instanceId, sourceId);
                 await SubscribeAsync(owner, secondId, sourceId);
-                var v1 = await InsertInstanceAsync(host, "secretary", 1);
+                var ineligible = await InsertInstanceAsync(host, "examiner", 1);
                 var blockedSubscribe = await owner.PostAsJsonAsync(
-                    $"/api/v2/admin/agent-instances/{v1}/event-subscriptions",
+                    $"/api/v2/admin/agent-instances/{ineligible}/event-subscriptions",
                     new AdminCreateEventSubscriptionRequest(sourceId.ToString("D"), "order.placed"));
                 Assert.Equal(HttpStatusCode.BadRequest, blockedSubscribe.StatusCode);
 
@@ -124,8 +124,8 @@ public sealed class OrderPlacedWebhookApiTests
             {
                 var owner = OwnerClient(host);
                 (sourceId, _, _) = await CreateSourceAsync(owner, "Demo Store");
-                firstId = await InsertInstanceAsync(host, "secretary", 2);
-                secondId = await InsertInstanceAsync(host, "secretary", 2);
+                firstId = await InsertInstanceAsync(host, "secretary", 3);
+                secondId = await InsertInstanceAsync(host, "secretary", 3);
                 await SubscribeAsync(owner, firstId, sourceId);
                 await SubscribeAsync(owner, secondId, sourceId);
 
@@ -172,7 +172,7 @@ public sealed class OrderPlacedWebhookApiTests
 
             await using var reopened = new DurableSqliteHostFactory(db, runScheduler: false);
             var client = OwnerClient(reopened);
-            var lateId = await InsertInstanceAsync(reopened, "secretary", 2);
+            var lateId = await InsertInstanceAsync(reopened, "secretary", 3);
             await SubscribeAsync(client, lateId, sourceId);
             var created = await reopened.Services.GetRequiredService<ExternalEventIngress>().ResumePendingAsync();
             Assert.Equal(1, created);
@@ -211,8 +211,7 @@ public sealed class OrderPlacedWebhookApiTests
             definition.Identity,
             AgentInstanceLifecycle.Active,
             now,
-            now,
-            false));
+            now));
         return instanceId;
     }
 

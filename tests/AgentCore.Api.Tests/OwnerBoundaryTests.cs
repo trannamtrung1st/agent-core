@@ -103,7 +103,7 @@ public sealed class OwnerBoundaryTests : IClassFixture<AgentCoreApiFactory>
     public async Task V1_session_endpoints_require_owner_capability()
     {
         var client = _factory.CreateClient();
-        var create = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var create = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         Assert.Equal(HttpStatusCode.Unauthorized, create.StatusCode);
 
         var sessionId = Guid.NewGuid();

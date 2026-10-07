@@ -647,7 +647,7 @@ public sealed class TriggerScheduleRuntimeTests
 
     private static async Task<AgentDefinition> LoadAsync(int version)
     {
-        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var store = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         return (await store.GetAsync("general-assistant", version))!;
     }
 

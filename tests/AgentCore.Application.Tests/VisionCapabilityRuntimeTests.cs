@@ -126,7 +126,7 @@ public sealed class VisionCapabilityRuntimeTests
                 "primary-llm",
                 "scripted-alpha",
                 ModelSelectionSource.SystemDefault,
-                "medium"));
+                "medium"), AgentInstanceId: Guid.NewGuid());
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         return new SessionRuntime(
             snapshot,

@@ -40,7 +40,6 @@ public sealed class AgentInstanceTests
         var fresh = await service.CreateAsync("examiner", 1);
         Assert.NotEqual(alice.InstanceId, bob.InstanceId);
         Assert.NotEqual(alice.InstanceId, fresh.InstanceId);
-        Assert.NotEqual(alice.InstanceId, AgentInstance.CompatibilityFor("examiner"));
         Assert.Equal(alice.Persona, fresh.Persona);
         Assert.Equal(1, alice.ActiveVersion);
 
@@ -79,20 +78,7 @@ public sealed class AgentInstanceTests
         Assert.Equal(alice.Persona, later.PinnedPersona);
         Assert.NotEqual(first.SessionId, later.SessionId);
 
-        var compatibilitySession = await manager.CreateAsync("examiner", 1, SessionMode.Text);
-        var compatibility = await service.RequireAsync(compatibilitySession.AgentInstanceId!.Value);
-        Assert.True(compatibility.Compatibility);
-        Assert.Equal(AgentInstance.CompatibilityFor("examiner"), compatibility.InstanceId);
-        Assert.Equal(1, compatibility.ActiveVersion);
-        var newer = await manager.CreateAsync("examiner", 2, SessionMode.Text);
-        Assert.Equal(2, newer.Definition.Version);
-        Assert.Equal("v2 tone", newer.PinnedPersona!.Tone);
-        var upgradedCompatibility = await service.RequireAsync(compatibility.InstanceId);
-        Assert.Equal(2, upgradedCompatibility.ActiveVersion);
-        Assert.Equal(compatibility.Persona, upgradedCompatibility.Persona);
-        var fromInstance = await manager.CreateForInstanceAsync(compatibility.InstanceId, SessionMode.Text);
-        Assert.Equal(2, fromInstance.Definition.Version);
-        Assert.Equal(compatibility.Persona, fromInstance.PinnedPersona);
+
     }
 
     [Fact]
@@ -128,66 +114,17 @@ public sealed class AgentInstanceTests
     }
 
     [Fact]
-    public async Task Concurrent_compatibility_forward_align_succeeds()
+    public async Task Missing_and_empty_instance_owners_cannot_create_sessions()
     {
-        await ForEachStore(async (sessions, instances, clock) =>
-        {
-            var definitions = new VersionedDefinitions(V1(), V2());
-            var service = Service(instances, definitions, sessions, clock, 4);
-            var now = clock.GetUtcNow();
-            await instances.InsertAsync(
-                new AgentInstance(
-                    AgentInstance.CompatibilityFor("examiner"),
-                    "examiner",
-                    1,
-                    V1().Identity,
-                    AgentInstanceLifecycle.Active,
-                    now,
-                    now,
-                    Compatibility: true));
-
-            var definition = V2();
-            var first = service.ResolveCompatibilityAsync(definition).AsTask();
-            var second = service.ResolveCompatibilityAsync(definition).AsTask();
-            var results = await Task.WhenAll(first, second);
-            Assert.All(results, item => Assert.Equal(2, item.ActiveVersion));
-
-            var stored = await instances.FindCompatibilityAsync("examiner");
-            Assert.NotNull(stored);
-            Assert.Equal(2, stored.ActiveVersion);
-        });
-    }
-
-    [Fact]
-    public async Task Concurrent_compatibility_forward_align_mixed_targets_reaches_highest_version()
-    {
-        await ForEachStore(async (sessions, instances, clock) =>
-        {
-            var definitions = new VersionedDefinitions(V1(), V2(), V3());
-            var service = Service(instances, definitions, sessions, clock, 4);
-            var now = clock.GetUtcNow();
-            await instances.InsertAsync(
-                new AgentInstance(
-                    AgentInstance.CompatibilityFor("examiner"),
-                    "examiner",
-                    1,
-                    V1().Identity,
-                    AgentInstanceLifecycle.Active,
-                    now,
-                    now,
-                    Compatibility: true));
-
-            var v2 = V2();
-            var v3 = V3();
-            var toV2 = service.ResolveCompatibilityAsync(v2).AsTask();
-            var toV3 = service.ResolveCompatibilityAsync(v3).AsTask();
-            var results = await Task.WhenAll(toV2, toV3);
-            Assert.All(results, item => Assert.True(item.ActiveVersion >= 2));
-
-            var stored = await instances.FindCompatibilityAsync("examiner");
-            Assert.NotNull(stored);
-            Assert.Equal(3, stored.ActiveVersion);
-        });
+        var sessions = new InMemoryMemoryStore();
+        var instances = new InMemoryAgentInstanceStore();
+        var clock = new FakeTimeProvider(Now);
+        var definitions = new VersionedDefinitions(V1());
+        var service = Service(instances, definitions, sessions, clock, 4);
+        var manager = Manager(definitions, sessions, service, clock, new InMemoryStructuredMemoryStore());
+        await Assert.ThrowsAsync<AgentCoreException>(() => manager.CreateForInstanceAsync(Guid.Empty, SessionMode.Text));
+        await Assert.ThrowsAsync<AgentCoreException>(() => manager.CreateForInstanceAsync(Guid.NewGuid(), SessionMode.Text));
+        Assert.Empty((await sessions.ListCatalogAsync(null, 50, false)).Items);
     }
 
     [Fact]
@@ -206,13 +143,10 @@ public sealed class AgentInstanceTests
             toArchive.Revision);
         Assert.Equal(AgentInstanceLifecycle.Archived, archived.Lifecycle);
 
-        var compatibility = await service.ResolveCompatibilityAsync(V1());
 
         var eligible = await service.ListChatEligibleAsync();
         Assert.Contains(eligible, item => item.InstanceId == active.InstanceId);
         Assert.DoesNotContain(eligible, item => item.InstanceId == toArchive.InstanceId);
-        Assert.DoesNotContain(eligible, item => item.InstanceId == compatibility.InstanceId);
-        Assert.All(eligible, item => Assert.False(item.Compatibility));
         Assert.All(eligible, item => Assert.Equal(AgentInstanceLifecycle.Active, item.Lifecycle));
     }
 
@@ -287,66 +221,6 @@ public sealed class AgentInstanceTests
         Assert.Equal(2, updated.Revision);
     }
 
-    [Fact]
-    public async Task Backfill_assigns_one_compatibility_instance_without_rewriting_history()
-    {
-        await ForEachStore(async (sessions, instances, clock) =>
-        {
-            var older = Now;
-            var tied = Now.AddMinutes(5);
-            var newerV1 = Now.AddHours(1);
-            var stale = SupportPersona("old tone");
-            var winner = SupportPersona("winner tone");
-            var loser = SupportPersona("loser tone");
-            var definitions = new VersionedDefinitions(V1(), V2(), stale, winner, loser);
-            var low = Legacy(LegacyLow, V1(), "legacy line", newerV1);
-            var high = Legacy(LegacyHigh, V2(), "other legacy line", older);
-            await sessions.SaveAsync(low, 0);
-            await sessions.SaveAsync(high, 0);
-            await sessions.SaveAsync(Legacy(TieOlder, stale, "old support", older), 0);
-            await sessions.SaveAsync(Legacy(TieWinner, winner, "winning support", tied), 0);
-            await sessions.SaveAsync(Legacy(TieLoser, loser, "losing support", tied), 0);
-            var service = Service(instances, definitions, sessions, clock, 4);
-            await service.BackfillAsync();
-            await service.BackfillAsync();
-
-            var restoredLow = (await sessions.LoadAsync(LegacyLow))!;
-            var restoredHigh = (await sessions.LoadAsync(LegacyHigh))!;
-            var expected = AgentInstance.CompatibilityFor("examiner");
-            Assert.Equal(expected, restoredLow.AgentInstanceId);
-            Assert.Equal(expected, restoredHigh.AgentInstanceId);
-            Assert.Equal(1, restoredLow.Revision);
-            Assert.Equal(1, restoredHigh.Revision);
-            Assert.Equal(1, restoredLow.Definition.Version);
-            Assert.Equal(2, restoredHigh.Definition.Version);
-            Assert.DoesNotContain("V2_MARKER", restoredLow.Definition.SystemInstructions, StringComparison.Ordinal);
-            Assert.Contains("V2_MARKER", restoredHigh.Definition.SystemInstructions, StringComparison.Ordinal);
-            Assert.Equal("legacy line", Assert.Single(restoredLow.Entries).Text);
-            Assert.Equal("other legacy line", Assert.Single(restoredHigh.Entries).Text);
-            Assert.Equal(V1().Identity, restoredLow.PinnedPersona);
-            Assert.Equal(V2().Identity, restoredHigh.PinnedPersona);
-            var instance = await service.RequireAsync(expected);
-            Assert.True(instance.Compatibility);
-            Assert.Equal(2, instance.ActiveVersion);
-            Assert.Equal(V2().Identity, instance.Persona);
-
-            var supportId = AgentInstance.CompatibilityFor("customer-support");
-            var support = await service.RequireAsync(supportId);
-            Assert.Equal(1, support.ActiveVersion);
-            Assert.Equal("winner tone", support.Persona.Tone);
-            var restoredWinner = (await sessions.LoadAsync(TieWinner))!;
-            var restoredLoser = (await sessions.LoadAsync(TieLoser))!;
-            var restoredOlder = (await sessions.LoadAsync(TieOlder))!;
-            Assert.Equal(supportId, restoredWinner.AgentInstanceId);
-            Assert.Equal(supportId, restoredLoser.AgentInstanceId);
-            Assert.Equal(supportId, restoredOlder.AgentInstanceId);
-            Assert.Equal("winner tone", restoredWinner.PinnedPersona!.Tone);
-            Assert.Equal("loser tone", restoredLoser.PinnedPersona!.Tone);
-            Assert.Equal("old tone", restoredOlder.PinnedPersona!.Tone);
-            Assert.Equal("winning support", Assert.Single(restoredWinner.Entries).Text);
-        });
-    }
-
     private static async Task ForEachStore(
         Func<IMemoryStore, IAgentInstanceStore, TimeProvider, Task> exercise)
     {
@@ -378,7 +252,7 @@ public sealed class AgentInstanceTests
         IMemoryStore sessions,
         TimeProvider clock,
         int count) =>
-        new(instances, definitions, sessions, Ids(count, "019944af-0017-7000-8000-"), clock);
+        new(instances, definitions, Ids(count, "019944af-0017-7000-8000-"), clock);
 
     private static SessionManager Manager(
         IAgentDefinitionStore definitions,
@@ -420,40 +294,6 @@ public sealed class AgentInstanceTests
 
     private static AgentDefinition SupportPersona(string tone) =>
         SampleDefinitions.Support with { Identity = SampleDefinitions.Support.Identity with { Tone = tone } };
-
-    private static SessionSnapshot Legacy(
-        Guid sessionId,
-        AgentDefinition definition,
-        string text,
-        DateTimeOffset? updatedAt = null) =>
-        new(
-            1,
-            sessionId,
-            1,
-            definition,
-            SessionMode.Text,
-            null,
-            SessionStatus.Created,
-            [
-                new ConversationEntry(
-                    Guid.Parse($"019944af-001b-7000-8000-{sessionId.ToString("N")[^12..]}"),
-                    1,
-                    null,
-                    ConversationRole.User,
-                    text,
-                    null,
-                    EntryStatus.Completed,
-                    SessionMode.Text,
-                    0,
-                    text.Length,
-                    Now)
-            ],
-            string.Empty,
-            0,
-            null,
-            null,
-            Now,
-            updatedAt ?? Now);
 
     private sealed class VersionedDefinitions(params AgentDefinition[] definitions) : IAgentDefinitionStore
     {

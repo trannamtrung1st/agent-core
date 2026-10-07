@@ -26,7 +26,6 @@ const config: AdminEffectiveConfiguration = {
   instanceLifecycle: "Active",
   instanceRevision: 1,
   personaRevision: 1,
-  compatibility: false,
   persona: { name: "Alex", role: "Examiner", description: "Practice speaking.", tone: "Supportive" },
   providerPreferences: {
     languageModel: "primary-llm",

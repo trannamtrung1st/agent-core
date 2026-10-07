@@ -685,7 +685,7 @@ public sealed class HistoricalImageRereadTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         if (snapshot.Revision == 1 && snapshot.Entries.Count == 0)
         {
             store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();

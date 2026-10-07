@@ -380,6 +380,17 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             }
 
             await StampP7MigrationsWhenSchemaCompleteAsync(db, cancellationToken).ConfigureAwait(false);
+            // EnsureCreated uses the current model, so this schema already has the
+            // required Session owner and no compatibility discriminator.
+            if (await TableExistsAsync(connection, "AgentWorkspaceItems", cancellationToken).ConfigureAwait(false)
+                && !await ColumnExistsAsync(connection, "AgentInstances", "Compatibility", cancellationToken).ConfigureAwait(false))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ('20261007014134_UnifiedAgentWorkspace', '10.0.12');
+                    """, cancellationToken).ConfigureAwait(false);
+            }
 
             return;
         }
@@ -753,51 +764,6 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         return new SessionCatalogPage(page, next, hasMore);
     }
 
-    public async ValueTask<IReadOnlyList<SessionSnapshot>> ListMissingInstanceAsync(
-        CancellationToken cancellationToken = default)
-    {
-        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var rows = await db.Sessions.AsNoTracking().Include(item => item.Snapshot)
-            .Where(row => row.AgentInstanceId == null)
-            .ToArrayAsync(cancellationToken)
-            .ConfigureAwait(false);
-        return rows.Select(row => ToSnapshot(row, [])).ToArray();
-    }
-
-    public async ValueTask AssignInstanceAsync(
-        Guid sessionId,
-        Guid instanceId,
-        AgentIdentity persona,
-        CancellationToken cancellationToken = default)
-    {
-        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var key = sessionId.ToString("D");
-        var row = await db.Sessions.SingleOrDefaultAsync(item => item.SessionId == key, cancellationToken)
-            .ConfigureAwait(false);
-        if (row is null)
-        {
-            return;
-        }
-
-        var changed = false;
-        if (string.IsNullOrEmpty(row.AgentInstanceId))
-        {
-            row.AgentInstanceId = instanceId.ToString("D");
-            changed = true;
-        }
-
-        if (string.IsNullOrEmpty(row.PinnedPersonaJson))
-        {
-            row.PinnedPersonaJson = JsonSerializer.Serialize(persona, Json);
-            changed = true;
-        }
-
-        if (changed)
-        {
-            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        }
-    }
-
     private async Task<List<EntryRecord>> LoadRestoreEntryRowsAsync(
         AgentCoreDbContext db,
         string sessionId,
@@ -936,7 +902,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.AgentId = snapshot.Definition.Id;
         row.AgentVersion = snapshot.Definition.Version;
         row.DefinitionJson = JsonSerializer.Serialize(snapshot.Definition, Json);
-        row.AgentInstanceId = snapshot.AgentInstanceId?.ToString("D");
+        row.AgentInstanceId = snapshot.AgentInstanceId.ToString("D");
         row.PinnedPersonaJson = snapshot.PinnedPersona is null
             ? null
             : JsonSerializer.Serialize(snapshot.PinnedPersona, Json);
@@ -1047,6 +1013,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             string.IsNullOrEmpty(snapshot.ProfileId) ? null : Guid.Parse(snapshot.ProfileId),
             FromUnix(row.CreatedAtUtc),
             FromUnix(row.UpdatedAtUtc),
+            Guid.Parse(row.AgentInstanceId),
             snapshot.LastUserActivityAtUtc is { } lastUser ? FromUnix(lastUser) : null,
             row.PauseReason,
             string.IsNullOrEmpty(row.Title) ? SessionTitles.Default : row.Title,
@@ -1066,7 +1033,6 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             snapshot.SummaryFormatVersion,
             snapshot.SummaryGeneratedAtUtc is { } generatedAt ? FromUnix(generatedAt) : null,
             ReadSummaryModel(snapshot),
-            string.IsNullOrEmpty(row.AgentInstanceId) ? null : Guid.Parse(row.AgentInstanceId),
             string.IsNullOrEmpty(row.PinnedPersonaJson)
                 ? null
                 : JsonSerializer.Deserialize<AgentIdentity>(row.PinnedPersonaJson, Json),

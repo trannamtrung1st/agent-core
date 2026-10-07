@@ -230,7 +230,7 @@ public sealed class SkillActivationTests
                 "primary-llm",
                 "scripted",
                 ModelSelectionSource.SystemDefault,
-                null));
+                null), AgentInstanceId: Guid.NewGuid());
         var memory = new InMemoryMemoryStore();
         await memory.SaveAsync(snapshot, 0);
         await using var runtime = new SessionRuntime(
@@ -361,7 +361,7 @@ public sealed class SkillActivationTests
                 "primary-llm",
                 "scripted",
                 ModelSelectionSource.SystemDefault,
-                null));
+                null), AgentInstanceId: Guid.NewGuid());
         var memory = new InMemoryMemoryStore();
         memory.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         return new SessionRuntime(

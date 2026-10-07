@@ -106,7 +106,7 @@ public sealed class WebPublicToolRuntimeTests
 
     private static async Task<AgentDefinition> LoadGeneralV2Async()
     {
-        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var store = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         return (await store.GetAsync("general-assistant", 2))!;
     }
 
@@ -153,7 +153,7 @@ public sealed class WebPublicToolRuntimeTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         return new SessionRuntime(
             snapshot,

@@ -120,8 +120,6 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         var definition = await definitions.GetAsync("examiner", 1);
         Assert.NotNull(definition);
         var managed = await instances.CreateAsync("examiner", 1);
-        Assert.False(managed.Compatibility);
-        var compatibility = await instances.ResolveCompatibilityAsync(definition!);
 
         var managedConfig = await client.GetFromJsonAsync<AdminEffectiveConfigurationResponse>(
             $"/api/v2/admin/instances/{managed.InstanceId:D}/effective-config");
@@ -129,15 +127,10 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         Assert.Equal("builtIn", managedConfig!.DefinitionSource);
         Assert.Equal("examiner", managedConfig.DefinitionId);
         Assert.Equal(1, managedConfig.DefinitionVersion);
-        Assert.False(managedConfig.Compatibility);
         Assert.Equal(managed.Revision, managedConfig.InstanceRevision);
         Assert.Equal(managed.PersonaRevision, managedConfig.PersonaRevision);
         Assert.Equal(managed.Persona.Name, managedConfig.Persona.Name);
 
-        var compatibilityConfig = await client.GetFromJsonAsync<AdminEffectiveConfigurationResponse>(
-            $"/api/v2/admin/instances/{compatibility.InstanceId:D}/effective-config");
-        Assert.NotNull(compatibilityConfig);
-        Assert.True(compatibilityConfig!.Compatibility);
         Assert.Null(managedConfig.UnattendedModelCatalogKey);
         Assert.Null(managedConfig.UnattendedReasoningEffort);
     }
@@ -186,7 +179,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
 
         var session = await client.PostAsJsonAsync(
             "/api/v2/sessions",
-            new CreateSessionRequest(null, null, "text", AgentInstanceId: Guid.Parse(instance.InstanceId)));
+            new CreateSessionRequest(Guid.Parse(instance.InstanceId), "text"));
         Assert.Equal(HttpStatusCode.BadRequest, session.StatusCode);
     }
 
@@ -345,7 +338,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         Assert.NotNull(instance);
         var session = await client.PostAsJsonAsync(
             "/api/v2/sessions",
-            new CreateSessionRequest(null, null, "text", AgentInstanceId: Guid.Parse(instance!.InstanceId)));
+            new CreateSessionRequest(Guid.Parse(instance!.InstanceId), "text"));
         session.EnsureSuccessStatusCode();
         var view = await session.Content.ReadFromJsonAsync<SessionViewResponse>();
         Assert.NotNull(view);
@@ -370,8 +363,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
             new AgentIdentity("Broken", "role", "desc", "tone"),
             AgentInstanceLifecycle.Active,
             now,
-            now,
-            Compatibility: false);
+            now);
         await store.InsertAsync(broken);
 
         var response = await client.GetAsync($"/api/v2/admin/instances/{broken.InstanceId:D}/effective-config");
@@ -1474,7 +1466,6 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         Assert.Equal(1, instance.ActiveVersion);
         Assert.Equal(1, instance.PersonaRevision);
         Assert.Equal("Active", instance.Lifecycle);
-        Assert.False(instance.Compatibility);
 
         var events = await client.GetFromJsonAsync<AdminEventListResponse>(
             $"/api/v2/admin/events?targetType=agent.instance&targetId={instance.InstanceId}");
@@ -1797,12 +1788,11 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         createInstance.EnsureSuccessStatusCode();
         var instance = await createInstance.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
         Assert.NotNull(instance);
-        Assert.False(instance!.Compatibility);
         Assert.Equal(publication.Version, instance.ActiveVersion);
 
         var session = await client.PostAsJsonAsync(
             "/api/v2/sessions",
-            new CreateSessionRequest(null, null, "text", AgentInstanceId: Guid.Parse(instance.InstanceId)));
+            new CreateSessionRequest(Guid.Parse(instance.InstanceId), "text"));
         session.EnsureSuccessStatusCode();
         var view = await session.Content.ReadFromJsonAsync<SessionViewResponse>();
         Assert.NotNull(view);
@@ -1813,11 +1803,11 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
 
         var legacy = await client.PostAsJsonAsync(
             "/api/v2/sessions",
-            new CreateSessionRequest("examiner", 1, "text"));
+            new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         legacy.EnsureSuccessStatusCode();
         var legacyView = await legacy.Content.ReadFromJsonAsync<SessionViewResponse>();
         Assert.NotNull(legacyView);
-        Assert.Null(legacyView!.PinnedPersonaRevision);
+        Assert.Equal(1, legacyView!.PinnedPersonaRevision);
 
         var listed = await client.GetFromJsonAsync<WorkspaceNodeResponse[]>(
             $"/api/v2/sessions/{view.SessionId}/workspace?prefix=/agent");
@@ -1828,10 +1818,8 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
             $"/api/v2/sessions/{view.SessionId}/workspace/content?path=/agent/resources/knowledge/policy.md");
         Assert.Equal("runtime-visible policy", System.Text.Encoding.UTF8.GetString(bytes));
 
-        var both = await client.PostAsJsonAsync(
-            "/api/v2/sessions",
-            new CreateSessionRequest("examiner", 1, "text", AgentInstanceId: Guid.Parse(instance.InstanceId)));
-        Assert.Equal(HttpStatusCode.BadRequest, both.StatusCode);
+        var missingOwner = await client.PostAsJsonAsync("/api/v2/sessions", new { agentId = definitionId, agentVersion = publication.Version, mode = "text" });
+        Assert.Equal(HttpStatusCode.BadRequest, missingOwner.StatusCode);
     }
 
     [Fact]
@@ -1930,7 +1918,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         var client = OwnerClient();
         var id = "capability-" + mode.ToLowerInvariant() + "-publication";
         var candidate = SampleDraftCandidate(id) with { Environment = new RoleEnvironment(
-            Workspace: new(Semantics: WorkspaceSemantics.AgentWorkspaceV2), Capabilities: new(mode, mode == "All" ? [] : ToolRegistry.All.Select(d => d.Name).Where(n => n is not (ToolCatalog.WorkspaceRetain or ToolCatalog.WorkspaceCheckout)).ToArray()),
+            Capabilities: new(mode, mode == "All" ? [] : ToolRegistry.All.Select(d => d.Name).ToArray()),
             Projection: new([ToolCatalog.WorkspaceRead])) };
         var create = await client.PostAsJsonAsync("/api/v2/admin/definition-drafts",
             new AdminCreateDefinitionDraftRequest(id, JsonSerializer.SerializeToElement(candidate, JsonOptions())));
@@ -1950,7 +1938,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         Assert.Contains(HarnessChatTools.Inspect, published.Environment.ToolList);
         Assert.Equal(64, published.Environment.Capabilities.AuthorizationFingerprint!.Length);
         Assert.Equal([ToolCatalog.WorkspaceRead], published.Environment.Projection!.AlwaysCapabilities);
-        Assert.DoesNotContain(ToolCatalog.WorkspaceRetain, published.Environment.ToolList);
+        Assert.DoesNotContain("workspace.retain", published.Environment.ToolList);
     }
 
     private static AgentDefinitionCandidate SampleDraftCandidate(string definitionId) =>

@@ -293,33 +293,6 @@ export async function createSessionForInstance(
     body: JSON.stringify(body)
   });
   if (!response.ok) {
-    throw new Error("Unable to create a managed-instance session.");
-  }
-
-  return (await response.json()) as SessionResponse;
-}
-
-export async function createSession(
-  agentId: string,
-  agentVersion?: number,
-  mode = "text",
-  speechLocale?: string | null,
-  model?: SessionModelChoice | null
-): Promise<SessionResponse> {
-  const body: Record<string, unknown> = { agentId, agentVersion, mode };
-  if (speechLocale) {
-    body.speechLocale = speechLocale;
-  }
-  if (model) {
-    body.model = model;
-  }
-
-  const response = await ownerFetch("/api/v2/sessions", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body)
-  });
-  if (!response.ok) {
     throw new Error("Unable to create a session.");
   }
 

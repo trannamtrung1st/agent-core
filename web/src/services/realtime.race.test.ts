@@ -2020,10 +2020,10 @@ describe("realtime race handling", () => {
           language: "en"
         }
       ],
-      chatAgentInstances: [],
+      chatAgentInstances: [{ instanceId: "019944af-00d1-7000-8000-000000000099", definitionId: "examiner", activeVersion: 1, name: "Alex", role: "Examiner", voiceAvailable: true, language: "en" }],
       chatAgentInstancesLoading: false,
       chatAgentInstancesError: null,
-      newChatIdentityKey: "legacy:examiner",
+      newChatIdentityKey: "managed:019944af-00d1-7000-8000-000000000099",
       selectedAgentId: "examiner"
     });
     vi.stubGlobal(

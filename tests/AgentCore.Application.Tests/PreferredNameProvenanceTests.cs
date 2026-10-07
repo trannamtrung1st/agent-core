@@ -60,7 +60,7 @@ public sealed class PreferredNameProvenanceTests
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
         var store = new InMemoryMemoryStore();
         var manager = CreateManager(store, time);
-        var created = await manager.CreateAsync("examiner", null, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
         var profile = await store.LoadProfileAsync(LocalUserProfile.Id);
         Assert.NotNull(profile);
         Assert.False(profile!.Preferences.ContainsKey("preferredName"));
@@ -109,7 +109,7 @@ public sealed class PreferredNameProvenanceTests
         }
 
         var manager = CreateManager(harness.Store, time);
-        await manager.CreateAsync("examiner", null, SessionMode.Text);
+        await manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
         var profile = await harness.Store.LoadProfileAsync(LocalUserProfile.Id);
         Assert.NotNull(profile);
         Assert.False(profile!.Preferences.ContainsKey("preferredName"));
@@ -148,7 +148,7 @@ public sealed class PreferredNameProvenanceTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-0009-7000-8000-{index:D12}")),
             Enumerable.Range(1, 8).Select(index => Guid.Parse($"873f07d1-e264-4c81-a31b-7e59e940b9{index:D2}")).ToArray());
-        return new SessionManager(
+        return OwnedSessions.Manager(
             new StaticDefinitions(SampleDefinitions.Examiner),
             store,
             ids,

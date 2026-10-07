@@ -333,7 +333,7 @@ public sealed class ConversationCompactionTests
             null,
             Now,
             Now,
-            LastEntrySequence: entries.Max(entry => entry.Sequence));
+            LastEntrySequence: entries.Max(entry => entry.Sequence), AgentInstanceId: Guid.NewGuid());
 
     private static List<ConversationEntry> StandardHistory(int count = 45)
     {

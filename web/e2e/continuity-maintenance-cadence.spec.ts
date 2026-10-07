@@ -16,7 +16,7 @@ test('Automatic continuity review separates draft and effective cadence and stay
   await page.getByRole('tab', { name: 'Instances', exact: true }).click();
   await page.getByRole('button', { name: 'New instance', exact: true }).click();
   await select(page, 'Definition', 'General Assistant · general-assistant');
-  await select(page, 'Published version', 'v9 · Built-in · Published');
+  await select(page, 'Published version', 'v16 · Built-in · Published');
   await page.getByRole('dialog', { name: 'New instance', exact: true }).getByRole('button', { name: 'Create instance', exact: true }).click();
   await page.getByRole('tab', { name: 'Continuity', exact: true }).click();
   await page.getByRole('tab', { name: 'Experience', exact: true }).click();

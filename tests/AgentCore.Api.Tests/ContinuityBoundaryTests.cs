@@ -30,7 +30,7 @@ public sealed class ContinuityBoundaryTests
         await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"experience-cancel-{Guid.NewGuid():N}.db"),
             experienceStore: new CancelledExperienceReads(new InMemoryExperienceStore()));
         var s = host.Services;
-        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9);
+        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         var source = await ExperienceJourneyTests.SeedAsync(s, instance.InstanceId);
         var manager = s.GetRequiredService<SessionManager>();
         var saved = await manager.TransitionLifecycleAsync(source.SessionId, target, LifecycleTransitionSource.Legacy);
@@ -41,7 +41,7 @@ public sealed class ContinuityBoundaryTests
         var store = s.GetRequiredService<IWorkItemStore>();
         var id = Guid.NewGuid(); var generation = Guid.NewGuid(); var owner = new WorkOwner(instance.InstanceId, LocalUserProfile.Id);
         await store.CreateAsync(WorkItem.Create(id, owner, new(Guid.NewGuid(), WorkSourceKind.Schedule, null, null, null,
-            $"cancel-source:{id:D}", now, now, "{}", "general-assistant", 9, instance.Persona.Name, instance.Persona),
+            $"cancel-source:{id:D}", now, now, "{}", "general-assistant", 16, instance.Persona.Name, instance.Persona),
             new("synthetic-default", "synthetic", "synthetic", null), 3, now));
         var running = (await store.TryClaimAsync(id, generation, now, now.AddMinutes(3)))!;
         running = await store.CheckpointAsync(id, running.Revision, generation,
@@ -77,7 +77,7 @@ public sealed class ContinuityBoundaryTests
     {
         await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"thought-stop-{Guid.NewGuid():N}.db"));
         var s = host.Services;
-        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9);
+        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         var catalog = new RemovedModelCatalog(s.GetRequiredService<IModelCatalog>());
         var service = new ThoughtRegistrationService(s.GetRequiredService<ITriggerStore>(), s.GetRequiredService<ExperienceService>(),
             s.GetRequiredService<IAgentDefinitionStore>(), catalog, s.GetRequiredService<ITriggerAdmissionGuard>(),
@@ -109,14 +109,14 @@ public sealed class ContinuityBoundaryTests
     {
         await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"experience-work-{Guid.NewGuid():N}.db"));
         var s = host.Services;
-        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9);
+        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         await s.GetRequiredService<IExperienceStore>().ConfigureAsync(instance.InstanceId, 0, true);
         var now = DateTimeOffset.UtcNow;
         var work = s.GetRequiredService<IWorkItemStore>();
         var owner = new WorkOwner(instance.InstanceId, LocalUserProfile.Id);
         var id = Guid.NewGuid(); var generation = Guid.NewGuid();
         var initial = WorkItem.Create(id, owner, new(Guid.NewGuid(), WorkSourceKind.Schedule, null, null, null,
-            $"source:{id:D}", now, now, "{}", "general-assistant", 9, instance.Persona.Name, instance.Persona),
+            $"source:{id:D}", now, now, "{}", "general-assistant", 16, instance.Persona.Name, instance.Persona),
             new("synthetic-default", "synthetic", "synthetic", null), 3, now.AddMinutes(-1));
         await work.CreateAsync(initial);
         var running = (await work.TryClaimAsync(id, generation, now, now.AddMinutes(3)))!;
@@ -151,7 +151,7 @@ public sealed class ContinuityBoundaryTests
         await using (var host = new ExperienceHost(db))
         {
             var services = host.Services;
-            instanceId = (await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9)).InstanceId;
+            instanceId = (await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16)).InstanceId;
             sessionId = (await ExperienceJourneyTests.SeedAsync(services, instanceId)).SessionId;
             await services.GetRequiredService<IExperienceStore>().ConfigureAsync(instanceId, 0, true);
         }
@@ -180,7 +180,7 @@ public sealed class ContinuityBoundaryTests
         var db = Path.Combine(Path.GetTempPath(), $"experience-invalid-{Guid.NewGuid():N}.db");
         await using var host = new ExperienceHost(db, new ExperienceModel(mode));
         var s = host.Services;
-        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9);
+        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         var source = await ExperienceJourneyTests.SeedAsync(s, instance.InstanceId);
         var history = s.GetRequiredService<IMemoryStore>();
         var before = JsonSerializer.Serialize(await history.LoadMetadataAsync(source.SessionId));
@@ -194,7 +194,7 @@ public sealed class ContinuityBoundaryTests
         Assert.Empty(await s.GetRequiredService<IExperienceStore>().PendingAsync(100));
         Assert.Equal(before, JsonSerializer.Serialize(await history.LoadMetadataAsync(source.SessionId)));
         Assert.Empty(await s.GetRequiredService<IStructuredMemoryStore>().ListActiveAsync(source.SessionId));
-        Assert.Equal(9, (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!.ActiveVersion);
+        Assert.Equal(16, (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!.ActiveVersion);
         Assert.Empty(await s.GetRequiredService<ExperienceService>().RecallAsync(instance.InstanceId));
     }
 
@@ -206,7 +206,7 @@ public sealed class ContinuityBoundaryTests
         await using (var host = new ExperienceHost(db))
         {
             var s = host.Services;
-            var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9);
+            var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
             instanceId = instance.InstanceId;
             var source = await ExperienceJourneyTests.SeedAsync(s, instanceId);
             await s.GetRequiredService<IExperienceStore>().ConfigureAsync(instanceId, 0, true);
@@ -239,7 +239,7 @@ public sealed class ContinuityBoundaryTests
         var db = Path.Combine(Path.GetTempPath(), $"thought-frozen-{Guid.NewGuid():N}.db");
         await using var host = new ExperienceHost(db);
         var s = host.Services; var client = TestOwnerCapability.CreateOwnerClient(host);
-        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9);
+        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         var id = instance.InstanceId;
         var source = await ExperienceJourneyTests.SeedAsync(s, id);
         await s.GetRequiredService<IExperienceStore>().ConfigureAsync(id, 0, true);
@@ -266,8 +266,8 @@ public sealed class ContinuityBoundaryTests
         item = (await store.GetAsync(owner, item.WorkItemId))!;
         Assert.Equal(WorkItemStatus.Completed, item.Status);
         Assert.Equal("NoAction", ThoughtCompletion.Outcome(item.Result!.Text));
-        Assert.Equal(9, (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(id))!.ActiveVersion);
-        var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 9))!;
+        Assert.Equal(16, (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(id))!.ActiveVersion);
+        var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
         var tools = s.GetRequiredService<SessionToolExecutor>();
         var forged = await tools.ExecuteAsync(definition, Guid.NewGuid(), new("forged", "harness.tool.select", """{"origin":"UserTurn","enabled":true,"toolName":"http.request"}"""), 10000,
             admission: new(true, TriggerKind.ThoughtActivation, AgentInstanceId: id));
@@ -288,7 +288,7 @@ public sealed class ContinuityBoundaryTests
         store = sqlite ? host.Services.GetRequiredService<IExperienceStore>() : new InMemoryExperienceStore();
         var id = Guid.NewGuid(); var recordId = Guid.NewGuid();
         var record = new AgentExperience(recordId, id, LocalUserProfile.Id, ExperienceSourceKind.Session, Guid.NewGuid(), 2,
-            DateTimeOffset.UtcNow, "general-assistant", 9, recordId, new("synthetic-default", "synthetic", "synthetic", null), DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow, "general-assistant", 16, recordId, new("synthetic-default", "synthetic", "synthetic", null), DateTimeOffset.UtcNow);
         await store.AdmitAsync(record); await store.ResetAsync(id);
         await store.CompleteAsync(id, recordId, new("Late output", [], [], [], [], [], [], []));
         var retained = (await store.GetAsync(id, recordId))!;
@@ -303,7 +303,7 @@ public sealed class ContinuityBoundaryTests
         var model = new InjectionModel();
         await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"experience-injection-{Guid.NewGuid():N}.db"), model);
         var s = host.Services;
-        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9);
+        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         var store = s.GetRequiredService<IExperienceStore>();
         await store.ConfigureAsync(instance.InstanceId, 0, true);
         var source = await ExperienceJourneyTests.SeedAsync(s, instance.InstanceId);
@@ -321,7 +321,7 @@ public sealed class ContinuityBoundaryTests
         Assert.Equal("NoAction", ThoughtCompletion.Outcome(item.Result!.Text));
         Assert.False(item.Result.AttentionRequired);
         Assert.Null(item.Approval);
-        Assert.Equal(9, (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!.ActiveVersion);
+        Assert.Equal(16, (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!.ActiveVersion);
         Assert.Null((await s.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!.HarnessManagement);
         Assert.Empty(await s.GetRequiredService<IWorkItemStore>().ListAttentionAlertKeysAsync(item.WorkItemId));
         Assert.Empty(await s.GetRequiredService<IStructuredMemoryStore>().ListActiveIdentityUserAsync(instance.InstanceId, LocalUserProfile.Id));

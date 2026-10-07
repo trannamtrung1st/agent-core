@@ -329,7 +329,7 @@ public sealed class ManagedInstanceP7DRegressionTests
         IAgentDefinitionStore definitions,
         IMemoryStore sessions,
         TimeProvider clock) =>
-        new(instances, definitions, sessions, Ids(8, "019944af-00f6-7000-8000-"), clock);
+        new(instances, definitions, Ids(8, "019944af-00f6-7000-8000-"), clock);
 
     private static SessionManager Manager(
         IAgentDefinitionStore definitions,

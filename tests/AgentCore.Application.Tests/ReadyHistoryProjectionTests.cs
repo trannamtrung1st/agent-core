@@ -41,7 +41,7 @@ public sealed class ReadyHistoryProjectionTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(durable, 0);
 
         var windowed = HistoryRestoreWindow.Select(allEntries);
@@ -153,7 +153,7 @@ public sealed class ReadyHistoryProjectionTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         if (store.LoadAsync(snapshot.SessionId).AsTask().GetAwaiter().GetResult() is null)
         {
             store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();

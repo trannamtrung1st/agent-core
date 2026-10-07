@@ -241,43 +241,6 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         }
     }
 
-    public ValueTask<IReadOnlyList<SessionSnapshot>> ListMissingInstanceAsync(
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        lock (_gate)
-        {
-            var missing = _sessions.Values
-                .Where(snapshot => snapshot.AgentInstanceId is null)
-                .Select(CloneMeta)
-                .ToArray();
-            return ValueTask.FromResult<IReadOnlyList<SessionSnapshot>>(missing);
-        }
-    }
-
-    public ValueTask AssignInstanceAsync(
-        Guid sessionId,
-        Guid instanceId,
-        AgentIdentity persona,
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        lock (_gate)
-        {
-            if (!_sessions.TryGetValue(sessionId, out var existing))
-            {
-                return ValueTask.CompletedTask;
-            }
-
-            _sessions[sessionId] = existing with
-            {
-                AgentInstanceId = existing.AgentInstanceId ?? instanceId,
-                PinnedPersona = existing.PinnedPersona ?? persona
-            };
-            return ValueTask.CompletedTask;
-        }
-    }
-
     private void Store(SessionSnapshot snapshot, bool replaceEntries = false)
     {
         var merged = MergeEntries(snapshot.SessionId, snapshot.Entries, replaceEntries);

@@ -107,7 +107,7 @@ public sealed class IdentityRuntimeTests
             null,
             LocalUserProfile.Id,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
         await using (var runtime = new SessionRuntime(
             snapshot,
@@ -251,7 +251,7 @@ public sealed class IdentityRuntimeTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
         var runtime = new SessionRuntime(
             snapshot,

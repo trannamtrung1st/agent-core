@@ -1,8 +1,10 @@
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test } from "@playwright/test";
 import { queuedMessages } from "./support/queued-messages";
 
 test("Stop flushes live voice playback, keeps the queue, and leaves capture live", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByRole("button", { name: /^Voice$/ })).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: /^Voice$/ }).click();
   await expect(page.getByTestId("connection")).toHaveText("Listening…", { timeout: 15_000 });

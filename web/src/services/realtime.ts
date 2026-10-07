@@ -6,14 +6,12 @@ import { applyServerEvent, emptySession, hasControlSequenceGap, hasTextOffsetGap
 import { sessionErrorFromMessage, sessionErrorFromWire, type WireError } from "../features/chat/sessionError";
 import { parseSessionIdFromPath, sameSessionId, syncBrowserSessionPath } from "../app/sessionRoute";
 import {
-  createSession,
   createSessionForInstance,
   clearOwnerCapability,
   endSession,
   ensureOwnerCapability,
   getHealth,
   getSession,
-  listAgents,
   listChatAgentInstances,
   listModels,
   reopenSession,
@@ -198,23 +196,14 @@ export function setDraft(draft: string): void {
   useSessionStore.setState({ draft });
 }
 
-export function selectAgent(agentId: string): void {
-  selectChatIdentity(`legacy:${agentId}`);
-}
-
 export function selectChatIdentity(identityKey: string): void {
-  const parsed = parseChatIdentityKey(identityKey);
-  useSessionStore.setState({
-    newChatIdentityKey: identityKey,
-    ...(parsed?.kind === "legacy" ? { selectedAgentId: parsed.agentId } : {})
-  });
+  useSessionStore.setState({ newChatIdentityKey: identityKey });
 }
 
 function newChatVoiceAvailable(snapshot: ReturnType<typeof useSessionStore.getState>): boolean {
   const presentation = resolveNewChatIdentityPresentation(
     snapshot.newChatIdentityKey,
-    snapshot.chatAgentInstances,
-    snapshot.agents
+    snapshot.chatAgentInstances
   );
   return Boolean(presentation?.voiceAvailable);
 }
@@ -1877,25 +1866,20 @@ async function loadChatAgentInstances(): Promise<void> {
   });
   try {
     const chatAgentInstances = await listChatAgentInstances();
-    const snapshot = useSessionStore.getState();
-    const newChatIdentityKey = defaultChatIdentityKey(chatAgentInstances, snapshot.agents);
-    const parsed = parseChatIdentityKey(newChatIdentityKey);
+    const newChatIdentityKey = defaultChatIdentityKey(chatAgentInstances);
     useSessionStore.setState({
       chatAgentInstances,
       chatAgentInstancesError: null,
       chatAgentInstancesLoading: false,
       newChatIdentityKey,
-      ...(parsed?.kind === "legacy" ? { selectedAgentId: parsed.agentId } : {})
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Managed instances unavailable.";
-    const snapshot = useSessionStore.getState();
     useSessionStore.setState({
       chatAgentInstances: [],
       chatAgentInstancesError: message,
       chatAgentInstancesLoading: false,
-      newChatIdentityKey: defaultChatIdentityKey([], snapshot.agents),
-      ...(snapshot.agents[0] ? { selectedAgentId: snapshot.agents[0].id } : {})
+      newChatIdentityKey: defaultChatIdentityKey([]),
     });
   }
 }
@@ -1905,14 +1889,14 @@ export function reloadChatAgentInstances(): Promise<void> {
 }
 
 async function bootstrapInner(): Promise<string> {
-  const [agents, health, models] = await Promise.all([listAgents(), getHealth(), listModels()]);
+  const [health, models] = await Promise.all([getHealth(), listModels()]);
   useSessionStore.setState({
-    agents,
+    agents: [],
     chatAgentInstances: [],
     chatAgentInstancesError: null,
     chatAgentInstancesLoading: true,
     newChatIdentityKey: "",
-    selectedAgentId: agents[0]?.id ?? "examiner",
+    selectedAgentId: "",
     modelCatalog: models.models,
     modelCatalogDefaultKey: models.defaultKey
   });
@@ -2013,8 +1997,7 @@ export async function startConversation(): Promise<boolean> {
         && !isNewChatIdentityReady({
           chatAgentInstancesLoading: snapshot.chatAgentInstancesLoading,
           newChatIdentityKey: snapshot.newChatIdentityKey,
-          chatAgentInstances: snapshot.chatAgentInstances,
-          agents: snapshot.agents
+          chatAgentInstances: snapshot.chatAgentInstances
         })
       ) {
         return false;
@@ -2028,30 +2011,7 @@ export async function startConversation(): Promise<boolean> {
         key: snapshot.pendingModelKey,
         reasoningEffort: snapshot.pendingReasoningEffort
       };
-      const created =
-        identity?.kind === "managed"
-          ? await createSessionForInstance(
-              identity.instanceId,
-              "text",
-              snapshot.pendingSpeechLocale,
-              modelChoice
-            )
-          : await (async () => {
-              if (identity.kind !== "legacy") {
-                throw new Error("Unable to create a session.");
-              }
-              const agent = snapshot.agents.find((item) => item.id === identity.agentId);
-              if (!agent) {
-                throw new Error("Unable to create a session.");
-              }
-              return createSession(
-                agent.id,
-                agent.version,
-                "text",
-                snapshot.pendingSpeechLocale,
-                modelChoice
-              );
-            })();
+      const created = await createSessionForInstance(identity.instanceId, "text", snapshot.pendingSpeechLocale, modelChoice);
       await startConnection(created.sessionId, { syncUrl: "replace" });
       await refreshCatalog(true);
       return useSessionStore.getState().connection === "ready";
@@ -2745,8 +2705,7 @@ export function composerSendEnabled(): boolean {
     const ready = isNewChatIdentityReady({
       chatAgentInstancesLoading: snapshot.chatAgentInstancesLoading,
       newChatIdentityKey: snapshot.newChatIdentityKey,
-      chatAgentInstances: snapshot.chatAgentInstances,
-      agents: snapshot.agents
+      chatAgentInstances: snapshot.chatAgentInstances
     });
     return ready && snapshot.draft.trim().length > 0 && snapshot.connection === "idle";
   }

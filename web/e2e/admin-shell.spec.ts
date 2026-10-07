@@ -1,3 +1,4 @@
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test } from "@playwright/test";
 
 type TransportDiagnostics = {
@@ -18,6 +19,7 @@ async function readTransport(page: import("@playwright/test").Page): Promise<Tra
 
 async function startSyntheticChat(page: import("@playwright/test").Page) {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await page.getByLabel("Message").fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
@@ -63,7 +65,7 @@ test("chat to admin effective config and back with a new turn", async ({ page })
   const chatUrl = page.url();
 
   await openFirstInstanceEffectiveConfig(page);
-  await expect(page.getByText(/Compatibility \/ legacy|Managed/).first()).toBeVisible();
+  await expect(page.getByText("Agent Instance", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("region", { name: "Effective configuration" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Automation", exact: true })).toBeVisible();
 

@@ -26,7 +26,7 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
             "/api/v2/admin/agent-instances",
             new AdminCreateAgentInstanceRequest(
                 "general-assistant",
-                1,
+                16,
                 new AdminPersonaResponse("Tommy", "Assistant", "A named assistant.", "Direct")));
         Assert.Equal(HttpStatusCode.Created, create.StatusCode);
         var instance = await create.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
@@ -34,7 +34,7 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
 
         var session = await client.PostAsJsonAsync(
             "/api/v2/sessions",
-            new CreateSessionRequest(null, null, "text", AgentInstanceId: Guid.Parse(instance!.InstanceId)));
+            new CreateSessionRequest(Guid.Parse(instance!.InstanceId), "text"));
         Assert.Equal(HttpStatusCode.Created, session.StatusCode);
         var view = await session.Content.ReadFromJsonAsync<SessionViewResponse>();
         Assert.Equal("general-assistant", view!.AgentId);
@@ -69,7 +69,7 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task V2_create_list_rename_archive_reopen_and_durable_delete()
     {
         var client = OwnerClient();
-        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         Assert.Equal("examiner", view!.AgentId);
@@ -117,8 +117,8 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task Support_and_compliance_sessions_are_distinct_catalog_rows()
     {
         var client = OwnerClient();
-        var support = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("customer-support", 1, "text"));
-        var compliance = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("compliance", 1, "text"));
+        var support = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "customer-support", 3), "text"));
+        var compliance = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "compliance", 2), "text"));
         support.EnsureSuccessStatusCode();
         compliance.EnsureSuccessStatusCode();
         var supportView = await support.Content.ReadFromJsonAsync<SessionViewResponse>();
@@ -134,7 +134,7 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task V1_delete_leaves_labeled_ended_catalog_row()
     {
         var client = OwnerClient();
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         var ended = await client.DeleteAsync($"/api/v1/sessions/{view!.SessionId}");
         Assert.Equal(HttpStatusCode.NoContent, ended.StatusCode);
@@ -146,7 +146,7 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task V2_durable_delete_removes_ended_catalog_row()
     {
         var client = OwnerClient();
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         var ended = await client.DeleteAsync($"/api/v1/sessions/{view!.SessionId}");
         Assert.Equal(HttpStatusCode.NoContent, ended.StatusCode);
@@ -166,7 +166,7 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task Archive_cancels_live_runtime()
     {
         var client = OwnerClient();
-        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         await using var hub = new HubConnectionBuilder()
             .WithUrl(
@@ -203,8 +203,8 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
     {
         var client = OwnerClient();
         var before = await client.GetFromJsonAsync<SessionCatalogPageResponse>("/api/v2/sessions");
-        var first = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
-        var second = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var first = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
+        var second = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var firstView = await first.Content.ReadFromJsonAsync<SessionViewResponse>();
         await using var hub = CreateHubConnection();
         await hub.StartAsync();
@@ -237,7 +237,7 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
 
         for (var i = 0; i < 52; i++)
         {
-            var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+            var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
             created.EnsureSuccessStatusCode();
         }
 
@@ -257,8 +257,8 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
         {
         }
 
-        var visible = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
-        var archived = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var visible = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
+        var archived = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var visibleView = await visible.Content.ReadFromJsonAsync<SessionViewResponse>();
         var archivedView = await archived.Content.ReadFromJsonAsync<SessionViewResponse>();
         await client.PostAsync($"/api/v2/sessions/{archivedView!.SessionId}/archive", null);
@@ -283,7 +283,7 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task V2_delete_removes_attached_session_without_stale_revision()
     {
         var client = OwnerClient();
-        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         await using var hub = CreateHubConnection();
         await hub.StartAsync();
@@ -304,7 +304,7 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task Attach_without_owner_capability_is_rejected()
     {
         var client = OwnerClient();
-        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         await using var hub = new HubConnectionBuilder()
             .WithUrl(
@@ -336,9 +336,9 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task Switching_hub_attachments_preserves_catalog_order()
     {
         var client = OwnerClient();
-        var firstCreated = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var firstCreated = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var first = await firstCreated.Content.ReadFromJsonAsync<SessionViewResponse>();
-        var secondCreated = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var secondCreated = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var second = await secondCreated.Content.ReadFromJsonAsync<SessionViewResponse>();
 
         await client.PostAsJsonAsync($"/api/v2/sessions/{first!.SessionId}/rename", new RenameSessionRequest("First session"));
@@ -373,7 +373,7 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task Deactivate_pauses_without_archive_and_is_idempotent()
     {
         var client = OwnerClient();
-        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         var first = await client.PostAsync($"/api/v2/sessions/{view!.SessionId}/deactivate", null);
         first.EnsureSuccessStatusCode();
@@ -415,14 +415,14 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task Knowledge_retrieve_is_role_scoped_and_includes_citation()
     {
         var client = OwnerClient();
-        var support = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("customer-support", 1, "text"));
+        var support = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "customer-support", 3), "text"));
         var view = await support.Content.ReadFromJsonAsync<SessionViewResponse>();
         var ok = await client.GetFromJsonAsync<KnowledgeDocumentResponse>(
             $"/api/v2/sessions/{view!.SessionId}/knowledge/support-order-policy");
         Assert.Equal("support-order-policy@demo", ok!.Citation);
         Assert.False(string.IsNullOrWhiteSpace(ok.Content));
 
-        var examiner = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var examiner = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var other = await examiner.Content.ReadFromJsonAsync<SessionViewResponse>();
         var denied = await client.GetAsync($"/api/v2/sessions/{other!.SessionId}/knowledge/support-order-policy");
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);

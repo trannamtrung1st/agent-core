@@ -1,3 +1,4 @@
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -46,6 +47,7 @@ con.close()
 
 async function createSession(page: Page): Promise<string> {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await page.getByLabel("Message").fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });

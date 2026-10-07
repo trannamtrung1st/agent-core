@@ -118,5 +118,5 @@ public sealed class CompletionEvaluatorTests
             now,
             now,
             Purpose: purpose,
-            CompletionPolicy: policy);
+            CompletionPolicy: policy, AgentInstanceId: Guid.NewGuid());
 }

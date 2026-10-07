@@ -14,7 +14,7 @@ internal static class WorkspaceStructureScript
         if (last < 0 || !request.Messages[last].Text.StartsWith(Marker,StringComparison.Ordinal)) return null;
         var command = request.Messages[last].Text[Marker.Length..].Trim();
         var home = command.StartsWith("home",StringComparison.Ordinal);
-        var root = home ? "/home" : "/workspace/working";
+        var root = home ? "/home" : "/working";
         var results = request.Messages.Skip(last+1).Where(m => m.Role == ModelRole.Tool).ToArray();
         if (results.Length==0) return Call(request,ToolCatalog.WorkspaceList,JsonSerializer.Serialize(new {path=root}));
         if(results.Length==1)

@@ -319,12 +319,6 @@ public static class AgentDefinitionValidator
 
         var toolError = ToolAllowlistFindings(environment.ToolList).FirstOrDefault();
         if (toolError is not null) throw new ToolAllowlistValidationException(toolError.Code, toolError.Message);
-        if (environment.WorkspacePolicy.Semantics is not null and not WorkspaceSemantics.AgentWorkspaceV2)
-            throw new ArgumentException("workspace semantics is invalid.");
-        if (environment.WorkspacePolicy.Semantics == WorkspaceSemantics.AgentWorkspaceV2
-            && environment.ToolList.Any(t => t is "workspace.retain" or "workspace.checkout"))
-            throw new ArgumentException("Agent Workspace v2 uses workspace.copy; retain/checkout are legacy tools.");
-
         if (environment.Capabilities is { } authority)
         {
             if (authority.ResolvedCapabilities is null) throw new ArgumentException("capabilities.resolvedCapabilities is required.");

@@ -384,7 +384,7 @@ public sealed class TriggerScheduleSemanticsTests
     [Fact]
     public async Task General_assistant_v10_enables_fixed_interval_without_mutating_v9()
     {
-        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var store = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         var v9 = await store.GetAsync("general-assistant", 9);
         var v10 = await store.GetAsync("general-assistant", 10);
         Assert.NotNull(v9);
@@ -417,7 +417,7 @@ public sealed class TriggerScheduleSemanticsTests
 
     private static async Task<AgentDefinition> LoadAsync(int version)
     {
-        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var store = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         return (await store.GetAsync("general-assistant", version))!;
     }
 

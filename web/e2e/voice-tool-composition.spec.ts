@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { LEGACY_IDENTITY_LABELS, selectLegacyIdentity } from "./support/legacy-identity";
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 
 async function chooseScriptedAlpha(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Model" }).click();
@@ -32,10 +32,10 @@ async function allowGeneralAssistantBrowser(page: Page): Promise<void> {
     }
 
     const instances = (await listed.json()) as {
-      items?: Array<{ instanceId: string; definitionId: string; compatibility?: boolean }>;
+      items?: Array<{ instanceId: string; definitionId: string; lifecycle?: string }>;
     };
     const instance = instances.items?.find(
-      (item) => item.definitionId === "general-assistant" && item.compatibility === true
+      (item) => item.definitionId === "general-assistant" && item.lifecycle === "Active"
     );
     if (!instance) {
       return "missing-instance";
@@ -70,7 +70,7 @@ test("muted voice keeps a browser tool turn in voice", async ({ page }) => {
   test.setTimeout(240_000);
   await page.goto("/");
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
-  await selectLegacyIdentity(page, LEGACY_IDENTITY_LABELS.generalAssistant);
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.generalAssistant);
   await allowGeneralAssistantBrowser(page);
   await chooseScriptedAlpha(page);
   await enterMutedVoice(page);
@@ -95,7 +95,7 @@ test("muted voice keeps a knowledge tool turn in voice", async ({ page }) => {
   test.setTimeout(180_000);
   await page.goto("/");
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
-  await selectLegacyIdentity(page, LEGACY_IDENTITY_LABELS.customerSupport);
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.customerSupport);
   await chooseScriptedAlpha(page);
   await enterMutedVoice(page);
   await page.getByLabel("Message").fill("Run the support case for order 91.");

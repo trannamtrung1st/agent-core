@@ -5,12 +5,10 @@ namespace AgentCore.Contracts.Http;
 public sealed record HealthResponse(string Status, string Profile, int ProtocolVersion);
 
 public sealed record CreateSessionRequest(
-    string? AgentId,
-    int? AgentVersion,
+    Guid? AgentInstanceId,
     string? Mode,
     string? SpeechLocale = null,
-    SessionModelChoiceRequest? Model = null,
-    Guid? AgentInstanceId = null);
+    SessionModelChoiceRequest? Model = null);
 
 /// <param name="Source">Ignored on all lifecycle routes; authority is fixed per route (user vs host).</param>
 public sealed record TransitionLifecycleRequest(string Target, string? Source = null, string? Reason = null);
@@ -26,8 +24,7 @@ public sealed record HostSessionCompletionPolicyRequest(
     bool? UserCancellationAllowed = null);
 
 public sealed record HostCreateSessionRequest(
-    string AgentId,
-    int? AgentVersion,
+    Guid AgentInstanceId,
     string? Mode,
     string? SpeechLocale = null,
     HostSessionPurposeRequest? Purpose = null,

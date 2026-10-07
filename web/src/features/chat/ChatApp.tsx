@@ -219,8 +219,7 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
   );
   const newChatIdentity = resolveNewChatIdentityPresentation(
     state.newChatIdentityKey,
-    state.chatAgentInstances,
-    state.agents
+    state.chatAgentInstances
   );
   const liveAssistant = state.entries.find(
     (entry) => entry.responseId === state.liveResponseId && entry.role === "assistant"
@@ -432,7 +431,6 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
                             What do you want to work on?
                           </Typography.Title>
                           <AgentPicker
-                            agents={state.agents}
                             managedInstances={state.chatAgentInstances}
                             identityKey={state.newChatIdentityKey}
                             error={state.sessionError ?? state.error}

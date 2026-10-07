@@ -236,7 +236,7 @@ public sealed class ExperienceService(IExperienceStore experience, IWorkItemStor
     public async ValueTask<AgentInstance> RequireInstanceAsync(Guid id, CancellationToken ct = default)
     {
         var instance = await instances.FindAsync(id, ct);
-        if (instance is null || instance.Lifecycle != AgentInstanceLifecycle.Active || instance.Compatibility)
+        if (instance is null || instance.Lifecycle != AgentInstanceLifecycle.Active)
             throw AgentCoreErrors.NotFound("Active managed Agent Instance was not found.");
         return instance;
     }

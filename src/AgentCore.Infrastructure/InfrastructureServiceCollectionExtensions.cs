@@ -375,7 +375,6 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IAgentInstanceService>(provider => new AgentInstanceService(
             provider.GetRequiredService<IAgentInstanceStore>(),
             provider.GetRequiredService<IAgentDefinitionStore>(),
-            provider.GetRequiredService<IMemoryStore>(),
             provider.GetRequiredService<IIdGenerator>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetService<ITriggerInstancePolicyReconciliationService>()));

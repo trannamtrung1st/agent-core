@@ -1,3 +1,4 @@
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test, type Page } from "@playwright/test";
 
 async function chooseModel(page: Page, title: string): Promise<void> {
@@ -16,6 +17,7 @@ test("structured Scripted Beta finalizes then shows same speech without a duplic
   page
 }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await chooseModel(page, "Scripted Beta");
   await page.getByLabel("Message").fill("Hello");
@@ -39,6 +41,7 @@ test("structured Scripted Beta none omits secondary speech and custom still uses
   page
 }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await chooseModel(page, "Scripted Beta");
   await page.getByLabel("Message").fill("[test:speech-none]");
@@ -59,6 +62,7 @@ test("structured Scripted Beta none omits secondary speech and custom still uses
 
 test("compatibility Scripted Alpha converges without visible marker syntax", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByLabel("Message").fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();

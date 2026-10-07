@@ -95,7 +95,7 @@ public sealed class PinnedPersonaRevisionMigrationTests
             null,
             null,
             Now,
-            Now);
+            Now, AgentInstanceId: Guid.NewGuid());
 
     private static SessionSnapshot ManagedPinnedSession(Guid sessionId) =>
         new(

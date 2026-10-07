@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import { LEGACY_IDENTITY_LABELS, selectLegacyIdentity } from "./support/legacy-identity";
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 
 async function downloadBytes(page: Page, filename: string): Promise<Buffer> {
   const pending = page.waitForEvent("download");
@@ -23,7 +23,7 @@ test("published real-GUID artifact downloads exact bytes through reload, reconne
     }
   });
   await page.goto("/");
-  await selectLegacyIdentity(page, LEGACY_IDENTITY_LABELS.customerSupport);
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.customerSupport);
   await page.getByRole("button", { name: "Model", exact: true }).click();
   await page.getByTitle("Scripted Alpha", { exact: true }).click();
   await page.getByLabel("Message").fill("Artifact delivery proof for order 91.");
@@ -82,7 +82,7 @@ test("artifact errors retry locally and long filenames remain accessible at all 
     }
   });
   await page.goto("/");
-  await selectLegacyIdentity(page, LEGACY_IDENTITY_LABELS.customerSupport);
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.customerSupport);
   await page.getByLabel("Message").fill("Artifact retry proof for order 91.");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(page.getByText("File unavailable", { exact: true })).toBeVisible({ timeout: 30_000 });

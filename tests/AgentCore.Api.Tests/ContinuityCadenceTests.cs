@@ -32,7 +32,7 @@ public sealed class ContinuityCadenceTests
         await using (var host = new ExperienceHost(db))
         {
             var s = host.Services; var client = TestOwnerCapability.CreateOwnerClient(host);
-            id = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9)).InstanceId;
+            id = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16)).InstanceId;
             var path = PathFor(id);
             var initial = (await client.GetFromJsonAsync<ContinuityMaintenanceResponse>(path))!;
             Assert.Equal(300, initial.EffectiveIntervalSeconds); Assert.Equal(60, initial.MinimumIntervalSeconds);
@@ -82,15 +82,15 @@ public sealed class ContinuityCadenceTests
     public async Task Due_boundaries_instance_intervals_restart_and_racing_scans_preserve_deterministic_admission()
     {
         var db = Db(); var clock = new CadenceClock(DateTimeOffset.FromUnixTimeMilliseconds(1791240000000));
-        Guid fast, slow, disabled, archived, compatibility; Guid fastSession, slowSession;
+        Guid fast, slow, disabled, archived, withoutSessions; Guid fastSession, slowSession;
         await using (var host = new ExperienceHost(db, clock: clock))
         {
             var s = host.Services;
             fast = await Managed(s); slow = await Managed(s); disabled = await Managed(s); archived = await Managed(s);
-            var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 9))!;
-            compatibility = (await s.GetRequiredService<IAgentInstanceService>().ResolveCompatibilityAsync(definition)).InstanceId;
+            var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
+            withoutSessions = (await s.GetRequiredService<IAgentInstanceService>().CreateAsync(definition.Id, definition.Version)).InstanceId;
             var experiences = s.GetRequiredService<IExperienceStore>();
-            foreach (var id in new[] { fast, slow, archived, compatibility }) await experiences.ConfigureAsync(id, 0, true);
+            foreach (var id in new[] { fast, slow, archived, withoutSessions }) await experiences.ConfigureAsync(id, 0, true);
             var instances = s.GetRequiredService<IAgentInstanceStore>(); var a = (await instances.FindAsync(archived))!;
             await instances.UpdateWithExpectedRevisionAsync(new(archived, a.Revision, Lifecycle: AgentInstanceLifecycle.Archived), clock.GetUtcNow());
             var settings = s.GetRequiredService<IContinuityMaintenanceStore>();
@@ -99,7 +99,8 @@ public sealed class ContinuityCadenceTests
             var maintenance = s.GetRequiredService<ContinuityMaintenance>();
             await Task.WhenAll(maintenance.RunOnceAsync().AsTask(), maintenance.RunOnceAsync().AsTask());
             foreach (var id in new[] { fast, slow }) Assert.Single(await experiences.ListAsync(id, 100));
-            foreach (var id in new[] { disabled, archived, compatibility }) Assert.Null((await settings.ReadAsync(id)).LastMaintenanceAtUtc);
+            foreach (var id in new[] { disabled, archived }) Assert.Null((await settings.ReadAsync(id)).LastMaintenanceAtUtc);
+            Assert.Empty(await experiences.ListAsync(withoutSessions, 100));
             await AddCheckpoint(s, fastSession, "Second fast checkpoint"); await AddCheckpoint(s, slowSession, "Second slow checkpoint");
             clock.Advance(TimeSpan.FromSeconds(59)); await maintenance.RunOnceAsync();
             Assert.Single(await experiences.ListAsync(fast, 100));
@@ -137,7 +138,7 @@ public sealed class ContinuityCadenceTests
       ["ContinuityMaintenance:DefaultIntervalSeconds"] = standard.ToString(), ["ContinuityMaintenance:MaximumIntervalSeconds"] = max.ToString() };
     private static string Db() => System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"continuity-cadence-{Guid.NewGuid():N}.db");
     private static string PathFor(Guid id) => $"/api/v2/admin/agent-instances/{id}/continuity-maintenance";
-    private static async Task<Guid> Managed(IServiceProvider s) => (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9)).InstanceId;
+    private static async Task<Guid> Managed(IServiceProvider s) => (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16)).InstanceId;
     private static async Task<Guid> Source(IServiceProvider s, Guid id, string text)
     {
         var source = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(id, SessionMode.Text);

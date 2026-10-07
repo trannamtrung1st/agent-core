@@ -77,7 +77,7 @@ public static class HarnessChatTools
         const string identifier = "^[a-z][a-z0-9._]{0,63}$";
         var fields = new JsonObject
         {
-            ["expectedVersion"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["description"] = "Use the latest harness.inspect expectedVersion." },
+            ["expectedVersion"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["description"] = "Use harness.inspect activeDefinitionVersion as expectedVersion." },
             ["policyRevision"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["description"] = "Use the latest harness.inspect policyRevision." },
             ["expected"] = Text(2000, "Intended reusable behavior or validation outcome."),
             ["observed"] = Text(2000, "What was actually read or checked; do not claim unperformed checks."),
@@ -101,7 +101,7 @@ public static class HarnessChatTools
                         ["description"] = Text(240, "Required on creation; omit on update to preserve the existing description."),
                         ["procedure"] = Text(4000, "Required on creation; omit on update to preserve the existing procedure. No fenced code or script blocks."),
                         ["activationKeywords"] = List(8, Text(64, "Optional unique trimmed activation phrase.")),
-                        ["requiredCapabilities"] = List(8, Text(64, "chat.respond or a tool already selected in harness.inspect; [] is allowed.", identifier)),
+                        ["requiredCapabilities"] = List(8, Text(64, "chat.respond or a tool in activeDefinitionAuthorizedCapabilities from harness.inspect; [] is allowed.", identifier)),
                         ["knowledgeIds"] = List(4, Text(80, "Optional identity from harness.inspect knowledge; Core resolves its resource.")),
                         ["resourcePaths"] = List(4, Text(240, "Optional existing definition-relative resource path, never a workspace path."))
                     }

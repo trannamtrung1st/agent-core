@@ -1,12 +1,11 @@
 import { Alert, Button, Flex, Select, Spin, Typography } from "antd";
-import type { AgentDescriptor, ChatAgentInstance } from "../../services/api";
-import { legacyChatIdentityKey, managedChatIdentityKey, managedInstancePickerLabel } from "./chatIdentity";
+import type { ChatAgentInstance } from "../../services/api";
+import { managedChatIdentityKey, managedInstancePickerLabel } from "./chatIdentity";
 import { SessionFailureAlert } from "./SessionFailureAlert";
 import type { SessionErrorView } from "./sessionError";
 import { SpeechLocalePicker } from "./SpeechLocalePicker";
 
 export function AgentPicker({
-  agents,
   managedInstances,
   identityKey,
   error,
@@ -17,7 +16,6 @@ export function AgentPicker({
   onSpeechLocaleChange,
   onRetryManagedInstances
 }: {
-  agents: AgentDescriptor[];
   managedInstances: ChatAgentInstance[];
   identityKey: string;
   error: SessionErrorView | string | null;
@@ -28,31 +26,8 @@ export function AgentPicker({
   onSpeechLocaleChange: (locale: string | null) => void;
   onRetryManagedInstances: () => void;
 }) {
-  const hasOptions = managedInstances.length > 0 || agents.length > 0;
-  const options = [
-    ...(managedInstances.length > 0
-      ? [
-          {
-            label: "Managed instances",
-            options: managedInstances.map((item) => ({
-              value: managedChatIdentityKey(item.instanceId),
-              label: managedInstancePickerLabel(item)
-            }))
-          }
-        ]
-      : []),
-    ...(agents.length > 0
-      ? [
-          {
-            label: "Legacy compatibility",
-            options: agents.map((agent) => ({
-              value: legacyChatIdentityKey(agent.id),
-              label: `${agent.name} — ${agent.role} (legacy)`
-            }))
-          }
-        ]
-      : [])
-  ];
+  const hasOptions = managedInstances.length > 0;
+  const options = managedInstances.map(item => ({ value: managedChatIdentityKey(item.instanceId), label: managedInstancePickerLabel(item) }));
 
   return (
     <Flex vertical gap={8} className="agent-picker">
@@ -88,6 +63,9 @@ export function AgentPicker({
         onChange={(nextKey) => onIdentityChange(nextKey)}
         style={{ width: "100%" }}
       />
+      {!managedInstancesLoading && !managedInstancesError && !hasOptions ? (
+        <Typography.Text type="secondary">Create an Agent Instance in Admin to start a conversation.</Typography.Text>
+      ) : null}
       <SpeechLocalePicker value={speechLocale} onChange={onSpeechLocaleChange} />
     </Flex>
   );

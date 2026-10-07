@@ -247,8 +247,7 @@ public abstract class AdminLifecycleDeletionTests
                 new AgentIdentity("Guide", "role", "desc", "tone"),
                 AgentInstanceLifecycle.Archived,
                 now,
-                now,
-                Compatibility: false));
+                now));
 
             var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
                 fixture.Deletion.DeleteDefinitionAsync(
@@ -282,7 +281,6 @@ public abstract class AdminLifecycleDeletionTests
                 AgentInstanceLifecycle.Archived,
                 now,
                 now,
-                Compatibility: false,
                 Revision: 2));
 
             await fixture.Deletion.DeleteInstanceAsync(
@@ -296,25 +294,19 @@ public abstract class AdminLifecycleDeletionTests
     }
 
     [Fact]
-    public async Task Active_compatibility_and_stale_instances_are_not_deleted()
+    public async Task Active_and_stale_instances_are_not_deleted()
     {
         await ForEachProfileAsync(async fixture =>
         {
             var now = DateTimeOffset.Parse("2026-09-29T02:40:00Z");
             var activeId = Guid.Parse("019944af-00d1-7000-8000-000000000093");
-            var compatibilityId = Guid.Parse("019944af-00d1-7000-8000-000000000094");
             var staleId = Guid.Parse("019944af-00d1-7000-8000-000000000095");
-            await fixture.Instances.InsertAsync(Instance(activeId, AgentInstanceLifecycle.Active, compatibility: false, now));
-            await fixture.Instances.InsertAsync(Instance(compatibilityId, AgentInstanceLifecycle.Archived, compatibility: true, now));
-            await fixture.Instances.InsertAsync(Instance(staleId, AgentInstanceLifecycle.Archived, compatibility: false, now));
+            await fixture.Instances.InsertAsync(Instance(activeId, AgentInstanceLifecycle.Active, now));
+            await fixture.Instances.InsertAsync(Instance(staleId, AgentInstanceLifecycle.Archived, now));
 
             var active = await Assert.ThrowsAsync<AgentCoreException>(() =>
                 fixture.Deletion.DeleteInstanceAsync(
                     new AdminInstanceDeleteCommand(activeId, 1, fixture.Ids.NewId(), now),
-                    CancellationToken.None).AsTask());
-            var compatibility = await Assert.ThrowsAsync<AgentCoreException>(() =>
-                fixture.Deletion.DeleteInstanceAsync(
-                    new AdminInstanceDeleteCommand(compatibilityId, 1, fixture.Ids.NewId(), now),
                     CancellationToken.None).AsTask());
             var stale = await Assert.ThrowsAsync<AgentCoreException>(() =>
                 fixture.Deletion.DeleteInstanceAsync(
@@ -322,10 +314,8 @@ public abstract class AdminLifecycleDeletionTests
                     CancellationToken.None).AsTask());
 
             Assert.Equal("ValidationError", active.Code);
-            Assert.Equal("ValidationError", compatibility.Code);
             Assert.Equal("Conflict", stale.Code);
             Assert.NotNull(await fixture.Instances.FindAsync(activeId, CancellationToken.None));
-            Assert.NotNull(await fixture.Instances.FindAsync(compatibilityId, CancellationToken.None));
             Assert.NotNull(await fixture.Instances.FindAsync(staleId, CancellationToken.None));
         });
     }
@@ -338,7 +328,7 @@ public abstract class AdminLifecycleDeletionTests
             var now = DateTimeOffset.Parse("2026-09-29T02:50:00Z");
             var instanceId = Guid.Parse("019944af-00d1-7000-8000-000000000096");
             var profileId = Guid.Parse("019944af-00d1-7000-8000-000000000097");
-            await fixture.Instances.InsertAsync(Instance(instanceId, AgentInstanceLifecycle.Archived, compatibility: false, now));
+            await fixture.Instances.InsertAsync(Instance(instanceId, AgentInstanceLifecycle.Archived, now));
             await fixture.Sessions.SaveAsync(Snapshot(instanceId), 0, CancellationToken.None);
             await fixture.Memories.InsertAsync(new StructuredMemoryItem(
                 Guid.Parse("019944af-00d1-7000-8000-000000000098"),
@@ -429,7 +419,7 @@ public abstract class AdminLifecycleDeletionTests
             var now = DateTimeOffset.UtcNow;
             var id = Guid.NewGuid(); var registrationId = Guid.NewGuid();
             var owner = new TriggerOwner(id, Guid.NewGuid());
-            await fixture.Instances.InsertAsync(Instance(id, AgentInstanceLifecycle.Archived, false, now));
+            await fixture.Instances.InsertAsync(Instance(id, AgentInstanceLifecycle.Archived, now));
             await fixture.Triggers.CreateAsync(new TriggerRegistration(registrationId, owner,
                 TriggerRegistrationStatus.Cancelled, "Review experience",
                 new OneShotSchedule(now.AddDays(1), "UTC", DateOnly.FromDateTime(now.UtcDateTime), new TimeOnly(9, 0)),
@@ -466,7 +456,6 @@ public abstract class AdminLifecycleDeletionTests
     private static AgentInstance Instance(
         Guid instanceId,
         AgentInstanceLifecycle lifecycle,
-        bool compatibility,
         DateTimeOffset now) =>
         new(
             instanceId,
@@ -475,8 +464,7 @@ public abstract class AdminLifecycleDeletionTests
             new AgentIdentity("Guide", "role", "desc", "tone"),
             lifecycle,
             now,
-            now,
-            compatibility);
+            now);
 
     private static SessionSnapshot Snapshot(Guid instanceId)
     {
@@ -508,7 +496,7 @@ public abstract class AdminLifecycleDeletionTests
             null,
             null,
             now,
-            now) with
+            now, AgentInstanceId: instanceId) with
         {
             AgentInstanceId = instanceId
         };

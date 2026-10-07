@@ -1,5 +1,7 @@
 # Capability authorization and projection verification
 
+> Historical verification. Identity/workspace compatibility statements are superseded by the unified migration described in [current architecture](../03-system-architecture.md) and [migration verification](agent-workspace-full-migration-verification.md). Original evidence remains unchanged.
+
 This follow-on implements `local/proposals/agent_core_capability_authorization_projection_final_proposal.md` on the reviewed workspace baseline `d78aaa35`. It composes with the accepted Agent Workspace refinement and does not reopen frozen milestones or start P10/P11. The enhancement is accepted on behavior commit `bd83f58c4f608b91eab4fc21079674ca02f283fc` after local runtime verification and all five hosted Synthetic jobs passed. Earlier workspace receipts are separate evidence.
 
 ## Authority and projection

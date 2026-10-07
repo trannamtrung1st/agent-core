@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
-import { LEGACY_IDENTITY_LABELS, selectLegacyIdentity } from "./support/legacy-identity";
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { waitForResponseSettled } from "./support/response-settled";
 
 const dbPath = process.env.PLAYWRIGHT_SQLITE_PATH ?? "";
@@ -208,7 +208,7 @@ test("a detached reminder completes in Background work and cancel survives reloa
   await releaseOtherLiveRuntimes(page, noActiveSession);
   await page.getByRole("button", { name: "Start a new chat" }).click();
   await expect(page.getByRole("combobox", { name: "Identity" })).toBeEnabled({ timeout: 15_000 });
-  await selectLegacyIdentity(page, LEGACY_IDENTITY_LABELS.generalAssistant);
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.generalAssistant);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
 
   const transcript = page.locator(".conversation-scroll");

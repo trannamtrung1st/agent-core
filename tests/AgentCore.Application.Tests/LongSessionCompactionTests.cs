@@ -126,7 +126,7 @@ public sealed class LongSessionCompactionTests
             null,
             Now,
             Now,
-            LastEntrySequence: entries.Max(entry => entry.Sequence));
+            LastEntrySequence: entries.Max(entry => entry.Sequence), AgentInstanceId: Guid.NewGuid());
 
     private static List<ConversationEntry> History(int count)
     {

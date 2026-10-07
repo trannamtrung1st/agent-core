@@ -32,7 +32,7 @@ public sealed class TriggerDurablePolicyTests
         var memory = new InMemoryMemoryStore();
         var v7 = (await definitions.GetAsync("general-assistant", 7))!;
         var v9 = (await definitions.GetAsync("general-assistant", 9))!;
-        var instanceId = AgentInstance.CompatibilityFor("general-assistant");
+        var instanceId = Guid.Parse("019944af-00d1-7000-8000-000000000099");
         await instances.InsertAsync(new AgentInstance(
             instanceId,
             v7.Id,
@@ -40,8 +40,7 @@ public sealed class TriggerDurablePolicyTests
             v7.Identity,
             AgentInstanceLifecycle.Active,
             Now,
-            Now,
-            Compatibility: true));
+            Now));
         await memory.SaveProfileAsync(
             new UserProfile(ProfileId, 1, new Dictionary<string, UserProfileValue>
             {
@@ -83,23 +82,22 @@ public sealed class TriggerDurablePolicyTests
     }
 
     [Fact]
-    public async Task Compatibility_instance_forward_upgrades_and_due_schedule_is_admitted()
+    public async Task Managed_instance_explicitly_upgrades_and_due_schedule_is_admitted()
     {
         var definitions = Definitions();
         var instances = new InMemoryAgentInstanceStore();
         var memory = new InMemoryMemoryStore();
         var clock = new FakeTimeProvider(Now);
-        var instanceService = new AgentInstanceService(instances, definitions, memory, Ids(8), clock);
+        var instanceService = new AgentInstanceService(instances, definitions, Ids(8), clock);
         var v9 = (await definitions.GetAsync("general-assistant", 9))!;
         await instances.InsertAsync(new AgentInstance(
-            AgentInstance.CompatibilityFor("general-assistant"),
+            Guid.Parse("019944af-00d1-7000-8000-000000000099"),
             "general-assistant",
             7,
             v9.Identity,
             AgentInstanceLifecycle.Active,
             Now,
-            Now,
-            Compatibility: true));
+            Now));
         await memory.SaveProfileAsync(
             new UserProfile(ProfileId, 1, new Dictionary<string, UserProfileValue>
             {
@@ -107,7 +105,7 @@ public sealed class TriggerDurablePolicyTests
             }, Now),
             0);
 
-        var resolved = await instanceService.ResolveCompatibilityAsync(v9);
+        var resolved = await instanceService.UpgradeAsync(Guid.Parse("019944af-00d1-7000-8000-000000000099"), 9, 1);
         Assert.Equal(9, resolved.ActiveVersion);
 
         var store = new InMemoryTriggerStore();
@@ -167,7 +165,7 @@ public sealed class TriggerDurablePolicyTests
         var instances = new InMemoryAgentInstanceStore();
         var memory = new InMemoryMemoryStore();
         var clock = new FakeTimeProvider(Now);
-        var instanceService = new AgentInstanceService(instances, definitions, memory, Ids(8), clock);
+        var instanceService = new AgentInstanceService(instances, definitions, Ids(8), clock);
         var v9 = (await definitions.GetAsync("general-assistant", 9))!;
         var managed = await instanceService.CreateAsync("general-assistant", 9);
         await memory.SaveProfileAsync(
@@ -248,7 +246,7 @@ public sealed class TriggerDurablePolicyTests
         var instances = new InMemoryAgentInstanceStore();
         var memory = new InMemoryMemoryStore();
         var v9 = (await definitions.GetAsync("general-assistant", 9))!;
-        var instanceId = AgentInstance.CompatibilityFor("general-assistant");
+        var instanceId = Guid.Parse("019944af-00d1-7000-8000-000000000099");
         await memory.SaveProfileAsync(
             new UserProfile(ProfileId, 1, new Dictionary<string, UserProfileValue>
             {
@@ -289,39 +287,13 @@ public sealed class TriggerDurablePolicyTests
     }
 
     [Fact]
-    public async Task Compatibility_insert_conflict_still_forward_aligns_requested_version()
-    {
-        var definitions = Definitions();
-        var memory = new InMemoryMemoryStore();
-        var clock = new FakeTimeProvider(Now);
-        var v9 = (await definitions.GetAsync("general-assistant", 9))!;
-        var v7 = (await definitions.GetAsync("general-assistant", 7))!;
-        var inner = new InMemoryAgentInstanceStore();
-        var conflictOnInsert = new ConflictOnInsertInstanceStore(
-            inner,
-            new AgentInstance(
-                AgentInstance.CompatibilityFor("general-assistant"),
-                v7.Id,
-                7,
-                v7.Identity,
-                AgentInstanceLifecycle.Active,
-                Now,
-                Now,
-                Compatibility: true));
-        var service = new AgentInstanceService(conflictOnInsert, definitions, memory, Ids(8), clock);
-        var resolved = await service.ResolveCompatibilityAsync(v9);
-        Assert.Equal(9, resolved.ActiveVersion);
-        Assert.Equal(9, (await inner.FindCompatibilityAsync("general-assistant"))!.ActiveVersion);
-    }
-
-    [Fact]
     public async Task Policy_recovery_reactivates_suspended_registration_when_eligible()
     {
         var definitions = Definitions();
         var instances = new InMemoryAgentInstanceStore();
         var memory = new InMemoryMemoryStore();
         var v9 = (await definitions.GetAsync("general-assistant", 9))!;
-        var instanceId = AgentInstance.CompatibilityFor("general-assistant");
+        var instanceId = Guid.Parse("019944af-00d1-7000-8000-000000000099");
         await instances.InsertAsync(new AgentInstance(
             instanceId,
             v9.Id,
@@ -329,8 +301,7 @@ public sealed class TriggerDurablePolicyTests
             v9.Identity,
             AgentInstanceLifecycle.Active,
             Now,
-            Now,
-            Compatibility: true));
+            Now));
         await memory.SaveProfileAsync(
             new UserProfile(ProfileId, 1, new Dictionary<string, UserProfileValue>
             {
@@ -365,8 +336,20 @@ public sealed class TriggerDurablePolicyTests
         Assert.Equal(due, reactivated.NextOccurrenceAtUtc);
     }
 
-    private static FileAgentDefinitionStore Definitions() =>
-        new(FindAgents(), SyntheticProviderAliases.Default);
+    private static IAgentDefinitionStore Definitions()
+    {
+        var builtIns = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var current = builtIns.GetAsync("general-assistant", 16).GetAwaiter().GetResult()!;
+        return new PolicyDefinitions(current);
+    }
+
+    private sealed class PolicyDefinitions(AgentDefinition current) : IAgentDefinitionStore
+    {
+        public ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<IReadOnlyList<AgentDefinition>>([current with { Version = 7, TriggerPolicy = null }, current with { Version = 9 }]);
+        public ValueTask<AgentDefinition?> GetAsync(string id, int? version = null, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<AgentDefinition?>(id != current.Id ? null : version == 7 ? current with { Version = 7, TriggerPolicy = null } : current with { Version = 9 });
+    }
 
     private static string FindAgents()
     {
@@ -397,9 +380,6 @@ public sealed class TriggerDurablePolicyTests
 
         public ValueTask<AgentInstance?> FindAsync(Guid instanceId, CancellationToken cancellationToken = default) =>
             inner.FindAsync(instanceId, cancellationToken);
-
-        public ValueTask<AgentInstance?> FindCompatibilityAsync(string definitionId, CancellationToken cancellationToken = default) =>
-            inner.FindCompatibilityAsync(definitionId, cancellationToken);
 
         public async ValueTask InsertAsync(AgentInstance instance, CancellationToken cancellationToken = default)
         {

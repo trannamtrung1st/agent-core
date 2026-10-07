@@ -24,7 +24,7 @@ public sealed class ContinuityMaintenance(IAgentInstanceStore instances, IMemory
             instanceCursor = instancePage[^1].InstanceId;
             foreach (var instance in instancePage)
             {
-                if (instance.Compatibility || instance.Lifecycle != AgentInstanceLifecycle.Active
+                if (instance.Lifecycle != AgentInstanceLifecycle.Active
                     || !(await experiences.SettingsAsync(instance.InstanceId, ct)).Enabled) continue;
                 var cadence = await settings.ReadAsync(instance.InstanceId, ct);
                 var now = time.GetUtcNow();

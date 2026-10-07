@@ -171,7 +171,7 @@ public sealed class RealComposeHostTests(RealComposeHostFixture fixture)
         Assert.NotNull(agents);
         Assert.Contains(agents!.Agents, agent => agent.Id == "examiner" && agent.VoiceAvailable);
 
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var createdView = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         Assert.Equal("deepseek-v41-flash", createdView!.Model!.CatalogKey);
@@ -195,7 +195,7 @@ public sealed class RealComposeHostTests(RealComposeHostFixture fixture)
 
         var mini = await client.PostAsJsonAsync(
             "/api/v2/sessions",
-            new CreateSessionRequest("examiner", 1, "text", Model: new SessionModelChoiceRequest("gpt-4o-mini-2024-07-18")));
+            new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text", Model: new SessionModelChoiceRequest("gpt-4o-mini-2024-07-18")));
         Assert.Equal(HttpStatusCode.Created, mini.StatusCode);
         var miniView = await mini.Content.ReadFromJsonAsync<SessionViewResponse>();
         Assert.Equal("gpt-4o-mini-2024-07-18", miniView!.Model!.CatalogKey);
@@ -204,7 +204,7 @@ public sealed class RealComposeHostTests(RealComposeHostFixture fixture)
 
         var free = await client.PostAsJsonAsync(
             "/api/v2/sessions",
-            new CreateSessionRequest("examiner", 1, "text", Model: new SessionModelChoiceRequest("openrouter-free")));
+            new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text", Model: new SessionModelChoiceRequest("openrouter-free")));
         Assert.Equal(HttpStatusCode.Created, free.StatusCode);
         var freeView = await free.Content.ReadFromJsonAsync<SessionViewResponse>();
         Assert.Equal("openrouter-free", freeView!.Model!.CatalogKey);
@@ -212,14 +212,14 @@ public sealed class RealComposeHostTests(RealComposeHostFixture fixture)
 
         var lunaSession = await client.PostAsJsonAsync(
             "/api/v2/sessions",
-            new CreateSessionRequest("examiner", 1, "text", Model: new SessionModelChoiceRequest("gpt-5.6-luna", "low")));
+            new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text", Model: new SessionModelChoiceRequest("gpt-5.6-luna", "low")));
         Assert.Equal(HttpStatusCode.Created, lunaSession.StatusCode);
         var lunaView = await lunaSession.Content.ReadFromJsonAsync<SessionViewResponse>();
         Assert.Equal("gpt-5.6-luna", lunaView!.Model!.CatalogKey);
         Assert.Equal("openai/gpt-5.6-luna", lunaView.Model.ModelId);
         Assert.Equal("low", lunaView.Model.ReasoningEffort);
 
-        var voice = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "voice"));
+        var voice = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "voice"));
         Assert.Equal(HttpStatusCode.Created, voice.StatusCode);
     }
 

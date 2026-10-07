@@ -356,24 +356,27 @@ public sealed class HarnessManagementService(
     public async ValueTask<HarnessChatContext?> ChatContextAsync(Guid instanceId, CancellationToken ct)
     {
         var instance = await instances.FindAsync(instanceId, ct);
-        if (instance is null || instance.Compatibility || instance.Lifecycle != AgentInstanceLifecycle.Active
+        if (instance is null || instance.Lifecycle != AgentInstanceLifecycle.Active
             || instance.HarnessManagement is not { } state || state.Policy.Frozen || state.Policy.Mode == HarnessManagementMode.Disabled) return null;
         return new(state.Policy, state.PolicyRevision, instance.ActiveVersion);
     }
 
-    public async ValueTask<object> InspectChatAsync(Guid instanceId, CancellationToken ct)
+    public async ValueTask<object> InspectChatAsync(Guid instanceId, int currentSessionPinnedDefinitionVersion, CancellationToken ct)
     {
         var instance = await RequireInstanceAsync(instanceId, ct);
         var state = RequireEnabled(instance);
         var active = await RequireDefinitionAsync(instance, ct);
         return new
         {
-            expectedVersion = instance.ActiveVersion, policyRevision = state.PolicyRevision,
+            activeDefinitionVersion = instance.ActiveVersion, policyRevision = state.PolicyRevision,
+            currentSessionPinnedDefinitionVersion, changesApplyToFutureSessions = true,
             mode = state.Policy.Mode.ToString(), scopes = state.Policy.Scopes.Select(s => s.ToString()),
-            eligibleTools = state.Policy.EligibleTools.Where(t => toolConfiguration.IsConfigured(t)),
-            instructions = active.SystemInstructions, knowledge = RoleEnvironments.Of(active).KnowledgeList,
-            skills = active.SkillList, selectedTools = RoleEnvironments.Of(active).ToolList,
-            activation = "Changes apply to future Sessions. The current Session keeps its pinned Definition.",
+            authoringEligibleTools = state.Policy.EligibleTools.Where(t => toolConfiguration.IsConfigured(t)),
+            instructions = ToolJsonResults.ClipUtf8Prefix(active.SystemInstructions, 1024),
+            instructionsTruncated = System.Text.Encoding.UTF8.GetByteCount(active.SystemInstructions) > 1024,
+            knowledge = RoleEnvironments.Of(active).KnowledgeList,
+            skills = active.SkillList, activeDefinitionAuthorizedCapabilities = RoleEnvironments.Of(active).ToolList,
+            activation = "authoringEligibleTools is for changing future Definitions only. It is not the current Session tool set. The current Session remains pinned to currentSessionPinnedDefinitionVersion.",
             authoringGuide = "Inspect, read relevant external source material using ordinary tools, then call the offered operation. Skill creation needs name, description and procedure; Core supplies the id. For an existing Skill, provide its name or id and only changed fields; with an id, omitted name, procedure and description stay unchanged. After saving Knowledge, inspect the new active version and explicitly save the Skill binding before reporting it. On validation failure, correct the named field using the tool schema; do not blindly retry. Reinspect on version/policy conflict. Report saved only after a successful tool result.",
             skillPayloadHelp = state.Policy.Allows(HarnessManagementScope.Skills) ? HarnessChatTools.SkillPayloadHelp : null,
             skillUpsertExample = state.Policy.Allows(HarnessManagementScope.Skills) ? new
@@ -807,7 +810,7 @@ public sealed class HarnessManagementService(
     private async ValueTask<AgentInstance> RequireInstanceAsync(Guid id, CancellationToken ct)
     {
         var instance = await instances.FindAsync(id, ct) ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
-        if (instance.Compatibility || instance.Lifecycle != AgentInstanceLifecycle.Active)
+        if (instance.Lifecycle != AgentInstanceLifecycle.Active)
             throw AgentCoreErrors.Validation("Harness management requires an active managed Agent Instance.");
         return instance;
     }

@@ -32,12 +32,14 @@ internal static class ThoughtActivationScript
             if (inspected is null) return Call(HarnessChatTools.Inspect, new { });
             using var inspection = JsonDocument.Parse(inspected.Text);
             var root = inspection.RootElement;
+            if (!root.TryGetProperty("activeDefinitionVersion", out var activeVersion))
+                return Complete("NoAction", "Harness inspection is incomplete; no change was made.", false);
             if (root.TryGetProperty("skills", out var skills) && skills.EnumerateArray().Any(s =>
                 (s.TryGetProperty("name", out var name) || s.TryGetProperty("Name", out name)) && name.GetString() == "Experience review"))
                 return Complete("NoAction", "The review Skill already incorporates the experience; nothing new needs action.", false);
             return Call("harness.skill.upsert", new
             {
-                expectedVersion = root.GetProperty("expectedVersion").GetInt32(),
+                expectedVersion = activeVersion.GetInt32(),
                 policyRevision = root.GetProperty("policyRevision").GetInt64(),
                 skill = new { name = "Experience review", description = "Verify observed state before reviewing store outcomes.",
                     procedure = "Observe current page state before choosing a browser action. Check the outcome and report only confirmed results." }

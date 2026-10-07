@@ -18,11 +18,11 @@ public sealed class SessionWorkspaceLifecycleTests
         Directory.CreateDirectory(templates);
         var workspace = new FileSessionWorkspace(root, templates);
         var manager = CreateManager(new InMemoryMemoryStore(), workspace);
-        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         var physical = Path.Combine(root, created.SessionId.ToString("N"));
         Assert.False(Directory.Exists(physical));
 
-        await manager.WriteWorkspaceAsync(created.SessionId, "/workspace/working/note.txt", "keep"u8.ToArray());
+        await manager.WriteWorkspaceAsync(created.SessionId, "/working/note.txt", "keep"u8.ToArray());
         Assert.True(File.Exists(Path.Combine(physical, "workspace", "working", "note.txt")));
 
         await manager.DeactivateAsync(created.SessionId);
@@ -31,19 +31,19 @@ public sealed class SessionWorkspaceLifecycleTests
         await manager.ArchiveAsync(created.SessionId);
         Assert.True(File.Exists(Path.Combine(physical, "workspace", "working", "note.txt")));
         var archivedWrite = await Assert.ThrowsAsync<AgentCoreException>(
-            () => manager.WriteWorkspaceAsync(created.SessionId, "/workspace/working/note.txt", "x"u8.ToArray()));
+            () => manager.WriteWorkspaceAsync(created.SessionId, "/working/note.txt", "x"u8.ToArray()));
         Assert.Equal("SessionArchived", archivedWrite.Code);
 
         await manager.UnarchiveAsync(created.SessionId);
         var reopened = await manager.ReopenAsync(created.SessionId);
         Assert.Equal(2, reopened.RuntimeEpoch);
-        var kept = await manager.ReadWorkspaceAsync(created.SessionId, "/workspace/working/note.txt");
+        var kept = await manager.ReadWorkspaceAsync(created.SessionId, "/working/note.txt");
         Assert.Equal("keep"u8.ToArray(), kept.Bytes);
 
         await manager.DurablyDeleteAsync(created.SessionId);
         Assert.False(Directory.Exists(physical));
         var missing = await Assert.ThrowsAsync<AgentCoreException>(
-            () => manager.WriteWorkspaceAsync(created.SessionId, "/workspace/working/late.txt", "no"u8.ToArray()));
+            () => manager.WriteWorkspaceAsync(created.SessionId, "/working/late.txt", "no"u8.ToArray()));
         Assert.Equal("NotFound", missing.Code);
     }
 
@@ -52,7 +52,7 @@ public sealed class SessionWorkspaceLifecycleTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-0003-7000-8000-{index:D12}")),
             Enumerable.Range(1, 8).Select(index => Guid.Parse($"873f07d1-e264-4c81-a31b-7e59e940b8{index:D2}")).ToArray());
-        return new SessionManager(
+        return OwnedSessions.Manager(
             new StaticDefinitions(SampleDefinitions.Examiner),
             store,
             ids,

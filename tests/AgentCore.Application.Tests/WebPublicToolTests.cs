@@ -159,7 +159,7 @@ public sealed class WebPublicToolTests
     [Fact]
     public async Task General_assistant_v2_loads_from_agent_store()
     {
-        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var store = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         var v1 = await store.GetAsync("general-assistant", 1);
         var v2 = await store.GetAsync("general-assistant", 2);
         Assert.NotNull(v1);

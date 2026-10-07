@@ -52,18 +52,6 @@ public sealed class SqliteAgentInstanceStore(
         return row is null ? null : Map(row);
     }
 
-    public async ValueTask<AgentInstance?> FindCompatibilityAsync(
-        string definitionId,
-        CancellationToken cancellationToken = default)
-    {
-        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var row = await db.AgentInstances.AsNoTracking()
-            .SingleOrDefaultAsync(
-                item => item.Compatibility && item.DefinitionId == definitionId,
-                cancellationToken)
-            .ConfigureAwait(false);
-        return row is null ? null : Map(row);
-    }
 
     public async ValueTask InsertAsync(AgentInstance instance, CancellationToken cancellationToken = default)
     {
@@ -182,11 +170,6 @@ public sealed class SqliteAgentInstanceStore(
             throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
         }
 
-        if (row.Compatibility)
-        {
-            throw new AgentCoreException("Validation", "Compatibility instances cannot change active version.", 400);
-        }
-
         if (update.ActiveVersion is not int activeVersion)
         {
             throw AgentCoreErrors.Validation("Active version is required.");
@@ -254,11 +237,6 @@ public sealed class SqliteAgentInstanceStore(
         if (row.Revision != update.ExpectedRevision)
         {
             throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
-        }
-
-        if (row.Compatibility)
-        {
-            throw new AgentCoreException("Validation", "Compatibility instances cannot change persona or lifecycle.", 400);
         }
 
         if (update.Persona is not AgentIdentity persona)
@@ -363,11 +341,6 @@ public sealed class SqliteAgentInstanceStore(
         if (row.Revision != update.ExpectedRevision)
         {
             throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
-        }
-
-        if (row.Compatibility)
-        {
-            throw new AgentCoreException("Validation", "Compatibility instances cannot change persona or lifecycle.", 400);
         }
 
         if (update.Lifecycle is not AgentInstanceLifecycle lifecycle)
@@ -512,11 +485,6 @@ public sealed class SqliteAgentInstanceStore(
             throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
         }
 
-        if (row.Compatibility && (update.Persona is not null || update.Lifecycle is not null))
-        {
-            throw new AgentCoreException("Validation", "Compatibility instances cannot change persona or lifecycle.", 400);
-        }
-
         var current = Map(row);
         var persona = update.Persona ?? current.Persona;
         var personaRevision = row.PersonaRevision;
@@ -589,7 +557,6 @@ public sealed class SqliteAgentInstanceStore(
             Enum.Parse<AgentInstanceLifecycle>(row.Lifecycle),
             DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc),
             DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc),
-            row.Compatibility,
             row.Revision,
             row.PersonaRevision,
             row.UnattendedModelCatalogKey,
@@ -606,7 +573,6 @@ public sealed class SqliteAgentInstanceStore(
             Lifecycle = instance.Lifecycle.ToString(),
             CreatedAtUtc = instance.CreatedAt.ToUnixTimeMilliseconds(),
             UpdatedAtUtc = instance.UpdatedAt.ToUnixTimeMilliseconds(),
-            Compatibility = instance.Compatibility,
             Revision = instance.Revision,
             PersonaRevision = instance.PersonaRevision,
             UnattendedModelCatalogKey = instance.UnattendedModelCatalogKey,

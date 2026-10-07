@@ -120,13 +120,13 @@ public sealed class SessionRuntimeCompletionTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-0003-7000-8000-{index:D12}")),
             Enumerable.Range(1, 8).Select(index => Guid.Parse($"873f07d1-e264-4c81-a31b-7e59e940b8{index:D2}")).ToArray());
-        var manager = new SessionManager(
+        var manager = OwnedSessions.Manager(
             new StaticDefinitions(SampleDefinitions.Examiner),
             store,
             ids,
             time,
             new VoiceAvailability { SpeechAdaptersResolved = true });
-        var created = await manager.CreateAsync(
+        var created = await manager.CreateOwnedAsync(
             "examiner",
             null,
             SessionMode.Text,
@@ -158,7 +158,7 @@ public sealed class SessionRuntimeCompletionTests
             now,
             now,
             Purpose: new SessionPurpose(SessionPurposeKind.Goal, "Collect a spoken sample"),
-            CompletionPolicy: new SessionCompletionPolicy(authority, true, true));
+            CompletionPolicy: new SessionCompletionPolicy(authority, true, true), AgentInstanceId: Guid.NewGuid());
 
     private static SessionRuntime Create(
         ISessionOutput output,
@@ -186,7 +186,7 @@ public sealed class SessionRuntimeCompletionTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         if (store.LoadAsync(snapshot.SessionId).AsTask().GetAwaiter().GetResult() is null)
         {
             store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();

@@ -176,7 +176,7 @@ public sealed class TriggerScheduleContinuationTests
                 Enumerable.Range(1, 8).Select(index => Guid.Parse($"019944af-00b4-7000-8000-{index:D12}")),
                 [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf13")]),
             harness.Time);
-        var definition = (await new FileAgentDefinitionStore(
+        var definition = (await new ScenarioDefinitionStore(
             TriggerScheduleRuntimeTests.FindAgentsDirectory(),
             SyntheticProviderAliases.Default).GetAsync("general-assistant", 8))!;
 

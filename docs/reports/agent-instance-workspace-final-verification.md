@@ -1,5 +1,7 @@
 # Agent Instance workspace — final verification
 
+> Historical verification. Identity/workspace compatibility statements are superseded by the unified migration described in [current architecture](../03-system-architecture.md) and [migration verification](agent-workspace-full-migration-verification.md). Original evidence remains unchanged.
+
 Status: closed/frozen on behavior candidate `b21484d4740e2395c6b0b362e64a9e8fb7d5b0cb`, with [hosted Synthetic/Compose run 37474445339](https://github.com/trannamtrung1st/agent-core/actions/runs/37474445339) green on 2026-10-06. This is a bounded post-P9.10 enhancement; historical P9.8/P9.9/P9.10 freeze SHAs remain unchanged and P10/P11 remain unopened.
 
 ## Candidate and scope

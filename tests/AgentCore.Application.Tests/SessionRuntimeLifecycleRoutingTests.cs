@@ -281,7 +281,7 @@ public sealed class SessionRuntimeLifecycleRoutingTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         return new SessionRuntime(
             snapshot,
@@ -324,7 +324,7 @@ public sealed class SessionRuntimeLifecycleRoutingTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         if (store.LoadAsync(snapshot.SessionId).AsTask().GetAwaiter().GetResult() is null)
         {
             store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();

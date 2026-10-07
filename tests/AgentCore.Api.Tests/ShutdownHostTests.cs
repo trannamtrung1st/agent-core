@@ -23,7 +23,7 @@ public sealed class ShutdownHostTests
         Assert.True(host.Admitting);
         await host.DrainAsync();
         var client = TestOwnerCapability.CreateOwnerClient(factory);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         Assert.Equal(HttpStatusCode.ServiceUnavailable, created.StatusCode);
         Assert.False(host.Admitting);
         await using var hub = new HubConnectionBuilder()
@@ -61,7 +61,7 @@ public sealed class ShutdownHostTests
         await using var factory = new AgentCoreApiFactory();
         var host = factory.Services.GetRequiredService<SessionHost>();
         var client = TestOwnerCapability.CreateOwnerClient(factory);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         created.EnsureSuccessStatusCode();
         var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
         await using var hub = new HubConnectionBuilder()
@@ -110,7 +110,7 @@ public sealed class ShutdownHostTests
         await using var factory = new HungDisposeApiFactory();
         var host = factory.Services.GetRequiredService<SessionHost>();
         var client = TestOwnerCapability.CreateOwnerClient(factory);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         created.EnsureSuccessStatusCode();
         var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
         await using var hub = new HubConnectionBuilder()

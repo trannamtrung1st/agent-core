@@ -14,8 +14,8 @@ test('Admin authors scheduled work, runs through background execution, edits and
   await page.getByRole('combobox', { name: 'Definition', exact: true }).fill('general-assistant');
   await page.locator('.ant-select-item-option').filter({ hasText: 'General Assistant' }).click();
   await page.getByRole('combobox', { name: 'Published version', exact: true }).click();
-  await page.getByRole('combobox', { name: 'Published version', exact: true }).fill('v9');
-  await page.locator('.ant-select-item-option').filter({ hasText: 'v9 · Built-in · Published' }).click();
+  await page.getByRole('combobox', { name: 'Published version', exact: true }).fill('v16');
+  await page.locator('.ant-select-item-option').filter({ hasText: 'v16 · Built-in · Published' }).click();
   await page.getByRole('button', { name: 'Create instance', exact: true }).click();
   await page.getByRole('tab', { name: 'Continuity', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'Memory', exact: true })).toBeVisible();

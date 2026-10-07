@@ -94,7 +94,7 @@ public sealed class DefinitionLifecycleMigrationTests
             null,
             null,
             Now,
-            Now);
+            Now, AgentInstanceId: Guid.NewGuid());
 
     private static AgentDefinitionCandidate SampleCandidate(string definitionId) =>
         new(

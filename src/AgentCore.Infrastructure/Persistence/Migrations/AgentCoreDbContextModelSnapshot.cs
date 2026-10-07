@@ -328,9 +328,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<int>("ActiveVersion")
                         .HasColumnType("INTEGER");
 
-                    b.Property<bool>("Compatibility")
-                        .HasColumnType("INTEGER");
-
                     b.Property<long>("CreatedAtUtc")
                         .HasColumnType("INTEGER");
 
@@ -371,9 +368,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasKey("InstanceId");
 
-                    b.HasIndex("DefinitionId")
-                        .IsUnique()
-                        .HasFilter("Compatibility = 1");
+                    b.HasIndex("DefinitionId");
 
                     b.ToTable("AgentInstances", (string)null);
                 });
@@ -1084,6 +1079,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("AgentInstanceId")
+                        .IsRequired()
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
 

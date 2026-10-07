@@ -50,8 +50,8 @@ public sealed class ProfileLiveUpdateRuntimeTests
         var notifier = new TestProfileLiveUpdateNotifier();
         var profiles = new LocalUserProfileService(store, time, notifier);
         var manager = CreateSessionManager(store, time, profiles);
-        var snapshotA = await manager.CreateAsync("examiner", null, SessionMode.Text);
-        var snapshotB = await manager.CreateAsync("examiner", null, SessionMode.Text);
+        var snapshotA = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
+        var snapshotB = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
         var (runtimeA, modelA) = await AttachRuntimeAsync(snapshotA, store, time);
         var (runtimeB, modelB) = await AttachRuntimeAsync(snapshotB, store, time);
         await using (runtimeA)
@@ -109,7 +109,7 @@ public sealed class ProfileLiveUpdateRuntimeTests
     {
         profiles ??= new LocalUserProfileService(store, time);
         var manager = CreateSessionManager(store, time, profiles);
-        var snapshot = await manager.CreateAsync(
+        var snapshot = await manager.CreateOwnedAsync(
             "examiner",
             null,
             SessionMode.Text,
@@ -122,7 +122,7 @@ public sealed class ProfileLiveUpdateRuntimeTests
         FakeTimeProvider time,
         ILocalUserProfileService profiles)
     {
-        return new SessionManager(
+        return OwnedSessions.Manager(
             new StaticDefinitions(SampleDefinitions.Examiner),
             store,
             new DeterministicIdGenerator(

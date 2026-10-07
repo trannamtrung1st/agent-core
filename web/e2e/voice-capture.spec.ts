@@ -1,3 +1,4 @@
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test } from "@playwright/test";
 
 async function startVoice(page: import("@playwright/test").Page): Promise<void> {
@@ -9,6 +10,7 @@ async function startVoice(page: import("@playwright/test").Page): Promise<void> 
 
 test("fake-device AudioWorklet streams PCM only after Mode=voice", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await startVoice(page);
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.workletLoaded() ?? false)).toBe(true);
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.audioFramesSent() ?? 0), { timeout: 15_000 }).toBeGreaterThan(0);
@@ -22,6 +24,7 @@ test("fake-device AudioWorklet streams PCM only after Mode=voice", async ({ page
 
 test("reconnect keeps voice and requires Resume microphone before capture streams", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await startVoice(page);
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.audioFramesSent() ?? 0), { timeout: 15_000 }).toBeGreaterThan(0);
 

@@ -35,7 +35,7 @@ public sealed class SupportComplianceWorkflowTests
                      ("compliance", "Cite retention for this compliance case.")
                  })
         {
-            var created = await manager.CreateAsync(agentId, 1, SessionMode.Text);
+            var created = await manager.CreateOwnedAsync(agentId, 1, SessionMode.Text);
             catalog[agentId] = created.SessionId;
             var uploaded = await attachments.UploadPendingAsync(
                 created.SessionId,
@@ -79,7 +79,7 @@ public sealed class SupportComplianceWorkflowTests
             var reopened = await manager.ReopenAsync(created.SessionId);
             Assert.True(reopened.RuntimeEpoch > created.RuntimeEpoch);
             Assert.Equal(AttachmentState.Bound, (await attachments.GetAsync(created.SessionId, uploaded.AttachmentId))!.State);
-            var working = await manager.ReadWorkspaceAsync(created.SessionId, "/workspace/working/brief.txt");
+            var working = await manager.ReadWorkspaceAsync(created.SessionId, "/working/brief.txt");
             Assert.Equal("case-file"u8.ToArray(), working.Bytes);
             Assert.NotNull(await artifacts.GetAsync(created.SessionId, materialized.ArtifactId));
             Assert.NotNull(await artifacts.GetAsync(created.SessionId, toolArtifactId));
@@ -116,8 +116,8 @@ public sealed class SupportComplianceWorkflowTests
         var inner = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
         var workspace = new OnceFailingWorkspace(inner);
         var manager = CreateManager(store, attachments, workspace, artifacts);
-        var created = await manager.CreateAsync("customer-support", 1, SessionMode.Text);
-        await manager.WriteWorkspaceAsync(created.SessionId, "/workspace/working/note.txt", "keep"u8.ToArray());
+        var created = await manager.CreateOwnedAsync("customer-support", 1, SessionMode.Text);
+        await manager.WriteWorkspaceAsync(created.SessionId, "/working/note.txt", "keep"u8.ToArray());
         var physical = Path.Combine(dir.WorkspaceRoot, created.SessionId.ToString("N"));
         Assert.True(Directory.Exists(physical));
         await Assert.ThrowsAsync<IOException>(() => manager.DurablyDeleteAsync(created.SessionId));
@@ -137,8 +137,8 @@ public sealed class SupportComplianceWorkflowTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 32).Select(index => Guid.Parse($"019944af-00b1-7000-8000-{index:D12}")),
             Enumerable.Range(1, 8).Select(index => Guid.Parse($"873f07d1-e264-4c81-a31b-7e59e940c8{index:D2}")).ToArray());
-        return new SessionManager(
-            new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default),
+        return OwnedSessions.Manager(
+            new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default),
             store,
             ids,
             TimeProvider.System,
@@ -230,12 +230,7 @@ public sealed class SupportComplianceWorkflowTests
             CancellationToken cancellationToken = default) =>
             inner.PatchTextAsync(sessionId, definition, logicalPath, expectedSha256Hex, edits, cancellationToken);
 
-        public ValueTask MoveAsync(
-            Guid sessionId,
-            string sourceLogicalPath,
-            string destinationLogicalPath,
-            CancellationToken cancellationToken = default) =>
-            inner.MoveAsync(sessionId, sourceLogicalPath, destinationLogicalPath, cancellationToken);
+
 
         public ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {

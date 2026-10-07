@@ -360,7 +360,7 @@ public sealed class ExplicitUserMemoryTests
     [Fact]
     public async Task General_assistant_v9_enables_memory_without_mutating_v8()
     {
-        var store = new AgentCore.Infrastructure.Definitions.FileAgentDefinitionStore(
+        var store = new ScenarioDefinitionStore(
             FindAgents(),
             SyntheticProviderAliases.Default);
         var v8 = await store.GetAsync("general-assistant", 8);

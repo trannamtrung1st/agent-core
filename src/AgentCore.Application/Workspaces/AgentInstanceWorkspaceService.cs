@@ -42,8 +42,8 @@ public sealed class AgentInstanceWorkspaceService(
     public async ValueTask<bool> SessionWritableAsync(Guid sessionId, CancellationToken ct)
     {
         var snapshot = await SessionAsync(sessionId, false, ct);
-        if (!WorkspaceSemantics.IsV2(snapshot.Definition) || snapshot.ArchivedAt is not null || snapshot.Status == SessionStatus.Ended
-            || snapshot.AgentInstanceId is not Guid owner) return false;
+        if (snapshot.ArchivedAt is not null || snapshot.Status == SessionStatus.Ended) return false;
+        var owner = snapshot.AgentInstanceId;
         var instance = await RequireAsync(owner, false, ct);
         return instance.Lifecycle == AgentInstanceLifecycle.Active;
     }
@@ -51,64 +51,22 @@ public sealed class AgentInstanceWorkspaceService(
     public async ValueTask<Guid> SessionOwnerAsync(Guid sessionId, CancellationToken ct = default)
     {
         var snapshot = await SessionAsync(sessionId, false, ct);
-        var owner = snapshot.AgentInstanceId ?? throw AgentCoreErrors.Validation("Durable home is unavailable for this execution.");
+        var owner = snapshot.AgentInstanceId;
         await RequireAsync(owner, false, ct);
         return owner;
-    }
-
-    public async ValueTask<AgentWorkspaceItem> RetainAsync(Guid sessionId, string source, string destination,
-        long? expectedRevision = null, string? expectedSha256 = null, CancellationToken cancellationToken = default)
-    {
-        var snapshot = await SessionAsync(sessionId, true, cancellationToken);
-        var owner = snapshot.AgentInstanceId ?? throw AgentCoreErrors.Validation("Durable home is unavailable for this execution.");
-        source = WorkspaceLogicalPath.Resolve(source, sessionId);
-        if (!source.StartsWith("/workspace/", StringComparison.Ordinal)) throw AgentCoreErrors.Forbidden("Retain requires a session scratch source.");
-        destination = AgentHomePath.Normalize(destination);
-        ValidateExpected(expectedRevision, expectedSha256);
-        return await lifecycle.WithInstanceAsync(owner, async ct =>
-        {
-            await RequireAsync(owner, true, ct);
-            await SessionAsync(sessionId, true, ct);
-            var content = await scratch.ReadAsync(sessionId, snapshot.Definition, source, ct);
-            return await store.RetainAsync(owner, destination, content.ContentType, content.Bytes, sessionId, expectedRevision, expectedSha256, ct);
-        }, cancellationToken);
-    }
-
-    public async ValueTask<AgentWorkspaceCheckout> CheckoutAsync(Guid sessionId, string source, string? destination = null,
-        long? expectedRevision = null, string? expectedSha256 = null, CancellationToken cancellationToken = default)
-    {
-        var snapshot = await SessionAsync(sessionId, true, cancellationToken);
-        var owner = snapshot.AgentInstanceId ?? throw AgentCoreErrors.Validation("Durable home is unavailable for this execution.");
-        source = AgentHomePath.Normalize(source);
-        destination = WorkspaceLogicalPath.Resolve(destination ?? Path.GetFileName(source), sessionId);
-        if (!destination.StartsWith("/workspace/working/", StringComparison.Ordinal)) throw AgentCoreErrors.Forbidden("Checkout requires a destination under /workspace/working.");
-        ValidateExpected(expectedRevision, expectedSha256);
-        return await lifecycle.WithInstanceAsync(owner, async ct =>
-        {
-            await RequireAsync(owner, true, ct);
-            await SessionAsync(sessionId, true, ct);
-            var content = await store.ReadAsync(owner, null, source, ct);
-            if ((expectedRevision.HasValue && expectedRevision != content.Item.Revision)
-                || (expectedSha256 is not null && expectedSha256 != content.Item.Sha256Hex))
-                throw AgentCoreErrors.Conflict("Home source changed. Read its current metadata before checkout.");
-            await scratch.EnsureAsync(sessionId, snapshot.Definition, ct);
-            await scratch.WriteNewAsync(sessionId, destination, content.Bytes, ct);
-            return new AgentWorkspaceCheckout(content.Item, destination, content.Bytes.LongLength,
-                Convert.ToHexString(SHA256.HashData(content.Bytes)).ToLowerInvariant());
-        }, cancellationToken);
     }
 
     public async ValueTask<AgentWorkspaceItem> WriteAsync(Guid sessionId, string path, string contentType, ReadOnlyMemory<byte> bytes,
         long? expectedRevision, string? expectedSha256, CancellationToken cancellationToken = default)
     {
         var snapshot = await SessionAsync(sessionId, true, cancellationToken);
-        var owner = snapshot.AgentInstanceId ?? throw AgentCoreErrors.Forbidden("Managed Agent Instance is required.");
-        if (!WorkspaceSemantics.IsV2(snapshot.Definition)) throw AgentCoreErrors.Forbidden("Direct home writes require Agent Workspace v2.");
+        var owner = snapshot.AgentInstanceId;
+
         path = AgentHomePath.Normalize(path); ValidateExpected(expectedRevision, expectedSha256);
         return await lifecycle.WithInstanceAsync(owner, async ct =>
         {
             await RequireAsync(owner, true, ct); await SessionAsync(sessionId, true, ct);
-            return await store.RetainAsync(owner, path, contentType, bytes, sessionId, expectedRevision, expectedSha256, ct);
+            return await store.WriteFileAsync(owner, path, contentType, bytes, sessionId, expectedRevision, expectedSha256, ct);
         }, cancellationToken);
     }
 
@@ -116,8 +74,8 @@ public sealed class AgentInstanceWorkspaceService(
         IReadOnlyList<WorkspaceTextEdit> edits, CancellationToken cancellationToken = default)
     {
         var snapshot = await SessionAsync(sessionId, true, cancellationToken);
-        var owner = snapshot.AgentInstanceId ?? throw AgentCoreErrors.Forbidden("Managed Agent Instance is required.");
-        if (!WorkspaceSemantics.IsV2(snapshot.Definition)) throw AgentCoreErrors.Forbidden("Direct home patches require Agent Workspace v2.");
+        var owner = snapshot.AgentInstanceId;
+
         path = AgentHomePath.Normalize(path); ValidateExpected(null, expectedSha256);
         return await lifecycle.WithInstanceAsync<WorkspacePatchResult>(owner, async ct =>
         {
@@ -125,7 +83,7 @@ public sealed class AgentInstanceWorkspaceService(
             var original = await store.ReadAsync(owner, null, path, ct);
             if (original.Item.Sha256Hex != expectedSha256) throw AgentCoreErrors.Conflict("Home file hash does not match expectedSha256.");
             var bytes = WorkspaceTextPatches.Apply(original.Bytes, edits);
-            var updated = await store.RetainAsync(owner, path, original.Item.ContentType, bytes, sessionId,
+            var updated = await store.WriteFileAsync(owner, path, original.Item.ContentType, bytes, sessionId,
                 original.Item.Revision, expectedSha256, ct);
             return new(path, expectedSha256, updated.Sha256Hex, updated.ByteSize, edits.Count);
         }, cancellationToken);
@@ -135,8 +93,8 @@ public sealed class AgentInstanceWorkspaceService(
         long? expectedRevision, string? expectedSha256, CancellationToken cancellationToken = default)
     {
         var snapshot = await SessionAsync(sessionId, true, cancellationToken);
-        var owner = snapshot.AgentInstanceId ?? throw AgentCoreErrors.Forbidden("Managed Agent Instance is required.");
-        if (!WorkspaceSemantics.IsV2(snapshot.Definition)) throw AgentCoreErrors.Forbidden("Cross-scope copy requires Agent Workspace v2.");
+        var owner = snapshot.AgentInstanceId;
+
         source = WorkspaceLogicalPath.Resolve(source, sessionId); destination = WorkspaceLogicalPath.Resolve(destination, sessionId);
         var sourceHome = AgentHomePath.IsHome(source); var destinationHome = AgentHomePath.IsHome(destination);
         if (sourceHome == destinationHome || !(sourceHome ? destination : source).StartsWith("/workspace/working/", StringComparison.Ordinal))
@@ -157,7 +115,7 @@ public sealed class AgentInstanceWorkspaceService(
         string? expectedTreeSha256, CancellationToken cancellationToken = default)
     {
         var snapshot = await SessionAsync(sessionId, true, cancellationToken);
-        var owner = snapshot.AgentInstanceId ?? throw AgentCoreErrors.Validation("Durable home is unavailable for this execution.");
+        var owner = snapshot.AgentInstanceId;
         operations = WorkspaceStructuralPaths.Normalize(sessionId, operations);
         if (expectedTreeSha256 is null || expectedTreeSha256.Length != 64
             || !expectedTreeSha256.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
@@ -208,7 +166,6 @@ public sealed class AgentInstanceWorkspaceService(
     private async ValueTask<AgentInstance> RequireAsync(Guid owner, bool mutation, CancellationToken ct)
     {
         var instance = await instances.FindAsync(owner, ct) ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
-        if (instance.Compatibility) throw AgentCoreErrors.Validation("Durable home is unavailable for compatibility instances.");
         if (mutation && instance.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Conflict("Archived workspace is read-only.");
         return instance;
     }

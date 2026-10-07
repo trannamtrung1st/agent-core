@@ -213,7 +213,7 @@ public sealed class RichEnvelopeRuntimeTests
             null,
             LocalUserProfile.Id,
             DateTimeOffset.UtcNow,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow, AgentInstanceId: Guid.NewGuid());
         await using var runtime = Create(output, new InMemoryMemoryStore(), model, snapshot, attachments: attachments);
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("Hello", attachmentIds: [attachmentId]);
@@ -285,7 +285,7 @@ public sealed class RichEnvelopeRuntimeTests
             null,
             LocalUserProfile.Id,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         if (store.LoadAsync(snapshot.SessionId).AsTask().GetAwaiter().GetResult() is null)
         {
             store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();

@@ -25,7 +25,7 @@ public sealed class AdminAutomationServiceTests
         var instances = new InMemoryAgentInstanceStore();
         var definitions = new VersionedDefinitions(SampleDefinitions.Examiner with { TriggerPolicy = SchedulingPolicy() });
         var sessions = new InMemoryMemoryStore();
-        var instanceService = new AgentInstanceService(instances, definitions, sessions, Ids(4), clock);
+        var instanceService = new AgentInstanceService(instances, definitions, Ids(4), clock);
         var managed = await instanceService.CreateAsync("examiner", 1);
         await sessions.SaveProfileAsync(
             new UserProfile(ProfileId, 1, new Dictionary<string, UserProfileValue>(StringComparer.Ordinal), Now),
@@ -117,7 +117,7 @@ public sealed class AdminAutomationServiceTests
         var instances = new InMemoryAgentInstanceStore();
         var definitions = new VersionedDefinitions(SampleDefinitions.Examiner with { TriggerPolicy = SchedulingPolicy() });
         var sessions = new InMemoryMemoryStore();
-        var instanceService = new AgentInstanceService(instances, definitions, sessions, Ids(8), clock);
+        var instanceService = new AgentInstanceService(instances, definitions, Ids(8), clock);
         var owned = await instanceService.CreateAsync("examiner", 1);
         var other = await instanceService.CreateAsync("examiner", 1);
         await sessions.SaveProfileAsync(
@@ -156,7 +156,7 @@ public sealed class AdminAutomationServiceTests
         var instances = new InMemoryAgentInstanceStore();
         var definitions = new VersionedDefinitions(SampleDefinitions.Examiner with { TriggerPolicy = SchedulingPolicy() });
         var sessions = new InMemoryMemoryStore();
-        var instanceService = new AgentInstanceService(instances, definitions, sessions, Ids(4), clock);
+        var instanceService = new AgentInstanceService(instances, definitions, Ids(4), clock);
         var managed = await instanceService.CreateAsync("examiner", 1);
         await sessions.SaveProfileAsync(
             new UserProfile(ProfileId, 1, new Dictionary<string, UserProfileValue>(StringComparer.Ordinal), Now),

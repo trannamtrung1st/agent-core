@@ -19,7 +19,7 @@ public sealed class RoleEnvironmentTests
     [Fact]
     public async Task Shipped_roles_pin_distinct_consecutive_caps()
     {
-        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var store = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         var examiner = await store.GetAsync("examiner", 1);
         var support = await store.GetAsync("customer-support", 1);
         var compliance = await store.GetAsync("compliance", 1);
@@ -42,8 +42,8 @@ public sealed class RoleEnvironmentTests
         try
         {
             File.Copy(Path.Combine(FindAgents(), "examiner.json"), Path.Combine(directory.FullName, "examiner.json"));
-            var storeV1 = new FileAgentDefinitionStore(directory.FullName, SyntheticProviderAliases.Default);
-            var manager = new SessionManager(
+            var storeV1 = new ScenarioDefinitionStore(directory.FullName, SyntheticProviderAliases.Default);
+            var manager = OwnedSessions.Manager(
                 storeV1,
                 new InMemoryMemoryStore(),
                 new DeterministicIdGenerator(
@@ -51,7 +51,7 @@ public sealed class RoleEnvironmentTests
                     [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940be01")]),
                 TimeProvider.System,
                 new VoiceAvailability { SpeechAdaptersResolved = true });
-            var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+            var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
             Assert.Equal(1, created.Definition.Version);
             Assert.Equal(1, created.Definition.InitiativePolicy.ConsecutiveCap);
 
@@ -60,7 +60,7 @@ public sealed class RoleEnvironmentTests
                 .Replace("maxConsecutiveProactiveTurns\": 1", "maxConsecutiveProactiveTurns\": 3", StringComparison.Ordinal);
             Directory.CreateDirectory(Path.Combine(directory.FullName, "v2"));
             File.WriteAllText(Path.Combine(directory.FullName, "v2", "examiner.json"), v2);
-            var storeLater = new FileAgentDefinitionStore(directory.FullName, SyntheticProviderAliases.Default);
+            var storeLater = new ScenarioDefinitionStore(directory.FullName, SyntheticProviderAliases.Default);
             var latest = await storeLater.GetAsync("examiner");
             Assert.Equal(2, latest!.Version);
             Assert.Equal(3, latest.InitiativePolicy.ConsecutiveCap);
@@ -186,7 +186,7 @@ public sealed class RoleEnvironmentTests
 
     private static async Task<AgentDefinition> Load(string id)
     {
-        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var store = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         return await store.GetAsync(id) ?? throw new InvalidOperationException(id);
     }
 
@@ -233,7 +233,7 @@ public sealed class RoleEnvironmentTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         return new SessionRuntime(
             snapshot,

@@ -46,14 +46,14 @@ public sealed class SessionToolExecutorTests
     public async Task Host_paths_and_session_mutation_arguments_are_denied()
     {
         var workspace = new RecordingWorkspace();
-        var executor = new SessionToolExecutor(workspace: workspace);
+        var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
         var sessionId = Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842");
         var host = await ExecuteTextAsync(
             executor,
             Support(),
             sessionId,
             new ModelToolCall("c1", ToolCatalog.WorkspaceWrite, """{"path":"/etc/passwd","content":"x"}"""));
-        Assert.Contains("path_outside_workspace", host, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("forbidden", host, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(workspace.Writes);
 
         var windows = await ExecuteTextAsync(

@@ -144,7 +144,7 @@ public sealed class MessagingSkillJourneyTests
                 "primary-llm",
                 "scripted",
                 ModelSelectionSource.SystemDefault,
-                null));
+                null), AgentInstanceId: Guid.NewGuid());
         if (snapshot.Entries.Count == 0)
         {
             memory.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();

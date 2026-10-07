@@ -27,7 +27,7 @@ public sealed class ReasoningChannelRuntimeTests
         var now = time.GetUtcNow();
         var snapshot = new SessionSnapshot(
             1, ids.NewSessionId(), 1, definition, SessionMode.Text, null,
-            SessionStatus.Created, [], string.Empty, 0, null, null, now, now);
+            SessionStatus.Created, [], string.Empty, 0, null, null, now, now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
         await using var runtime = new SessionRuntime(
             snapshot,

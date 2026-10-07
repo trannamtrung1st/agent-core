@@ -18,7 +18,7 @@ public sealed class ArtifactMaterializeTests
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var manager = CreateManager(new InMemoryMemoryStore(), attachments, workspace, artifacts);
-        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         var uploaded = await attachments.UploadPendingAsync(
             created.SessionId,
             "notes.txt",
@@ -30,7 +30,7 @@ public sealed class ArtifactMaterializeTests
         Assert.Equal(uploaded.Sha256Hex, first.Sha256Hex);
         Assert.Equal(uploaded.AttachmentId, first.SourceAttachmentId);
         Assert.Equal("/workspace/working/notes.txt", first.WorkspaceLogicalPath);
-        var working = await manager.ReadWorkspaceAsync(created.SessionId, "/workspace/working/notes.txt");
+        var working = await manager.ReadWorkspaceAsync(created.SessionId, "/working/notes.txt");
         Assert.Equal("hello-artifact"u8.ToArray(), working.Bytes);
         await using var original = await attachments.OpenContentAsync(created.SessionId, uploaded.AttachmentId);
         using var copy = new MemoryStream();
@@ -87,7 +87,7 @@ public sealed class ArtifactMaterializeTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-0003-7000-8000-{index:D12}")),
             Enumerable.Range(1, 8).Select(index => Guid.Parse($"873f07d1-e264-4c81-a31b-7e59e940b8{index:D2}")).ToArray());
-        return new SessionManager(
+        return OwnedSessions.Manager(
             new StaticDefinitions(SampleDefinitions.Examiner),
             store,
             ids,

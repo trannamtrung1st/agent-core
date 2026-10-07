@@ -2,21 +2,25 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { AgentPicker } from "./AgentPicker";
 
-const agents = [
+const instances = [
   {
-    id: "customer-support",
-    version: 1,
+    instanceId: "019944af-00d1-7000-8000-000000000091",
+    definitionId: "customer-support",
+    activeVersion: 3,
     name: "Sam",
     role: "Support",
     description: "Help.",
+    language: "en",
     voiceAvailable: false
   },
   {
-    id: "compliance",
-    version: 1,
+    instanceId: "019944af-00d1-7000-8000-000000000092",
+    definitionId: "compliance",
+    activeVersion: 2,
     name: "Jordan",
     role: "Compliance",
     description: "Cite.",
+    language: "en",
     voiceAvailable: false
   }
 ];
@@ -30,9 +34,8 @@ describe("AgentPicker", () => {
     const onSelect = vi.fn();
     render(
       <AgentPicker
-        agents={agents}
-        managedInstances={[]}
-        identityKey="legacy:customer-support"
+        managedInstances={instances}
+        identityKey="managed:019944af-00d1-7000-8000-000000000091"
         error={null}
         speechLocale=""
         managedInstancesError={null}
@@ -46,20 +49,19 @@ describe("AgentPicker", () => {
     expect(screen.getByRole("combobox", { name: "Identity" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Speech locale" })).toBeInTheDocument();
     expect(screen.getByText("Identity")).toBeInTheDocument();
-    expect(screen.getByText("Sam — Support (legacy)")).toBeInTheDocument();
+    expect(screen.getByText("Sam — Support · v3 · 00000091")).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Model" })).not.toBeInTheDocument();
 
     openIdentityOptions();
-    fireEvent.click(screen.getByTitle("Jordan — Compliance (legacy)"));
-    expect(onSelect).toHaveBeenCalledWith("legacy:compliance");
+    fireEvent.click(screen.getByTitle("Jordan — Compliance · v2 · 00000092"));
+    expect(onSelect).toHaveBeenCalledWith("managed:019944af-00d1-7000-8000-000000000092");
   });
 
   it("surfaces picker errors without a separate start control", () => {
     render(
       <AgentPicker
-        agents={agents}
-        managedInstances={[]}
-        identityKey="legacy:customer-support"
+        managedInstances={instances}
+        identityKey="managed:019944af-00d1-7000-8000-000000000091"
         error="Unable to list agents."
         speechLocale=""
         managedInstancesError={null}
@@ -74,22 +76,11 @@ describe("AgentPicker", () => {
     expect(screen.queryByRole("button", { name: "Start conversation" })).not.toBeInTheDocument();
   });
 
-  it("lists managed instances ahead of legacy agents", () => {
+  it("lists only managed instance identities", () => {
     const onIdentityChange = vi.fn();
     render(
       <AgentPicker
-        agents={agents}
-        managedInstances={[
-          {
-            instanceId: "019944af-00d1-7000-8000-000000000099",
-            definitionId: "examiner",
-            activeVersion: 2,
-            name: "Pinned",
-            role: "Coach",
-            voiceAvailable: true,
-            language: "en"
-          }
-        ]}
+        managedInstances={instances}
         identityKey="managed:019944af-00d1-7000-8000-000000000099"
         error={null}
         managedInstancesError={null}
@@ -102,14 +93,13 @@ describe("AgentPicker", () => {
     );
 
     openIdentityOptions();
-    fireEvent.click(screen.getByTitle("Jordan — Compliance (legacy)"));
-    expect(onIdentityChange).toHaveBeenCalledWith("legacy:compliance");
+    fireEvent.click(screen.getByTitle("Jordan — Compliance · v2 · 00000092"));
+    expect(onIdentityChange).toHaveBeenCalledWith("managed:019944af-00d1-7000-8000-000000000092");
   });
 
   it("shows loading state while managed inventory is unresolved", () => {
     render(
       <AgentPicker
-        agents={agents}
         managedInstances={[]}
         identityKey=""
         error={null}
@@ -130,9 +120,8 @@ describe("AgentPicker", () => {
     const onRetry = vi.fn();
     render(
       <AgentPicker
-        agents={agents}
         managedInstances={[]}
-        identityKey="legacy:customer-support"
+        identityKey="managed:019944af-00d1-7000-8000-000000000091"
         error={null}
         managedInstancesError="Managed instances unavailable."
         managedInstancesLoading={false}
@@ -148,10 +137,9 @@ describe("AgentPicker", () => {
     expect(onRetry).toHaveBeenCalled();
   });
 
-  it("disables identity selection when no agents are available", () => {
+  it("directs empty inventory to Admin and disables selection", () => {
     render(
       <AgentPicker
-        agents={[]}
         managedInstances={[]}
         identityKey=""
         error={null}
@@ -165,5 +153,6 @@ describe("AgentPicker", () => {
     );
 
     expect(screen.getByRole("combobox", { name: "Identity" })).toBeDisabled();
+    expect(screen.getByText("Create an Agent Instance in Admin to start a conversation.")).toBeInTheDocument();
   });
 });

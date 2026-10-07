@@ -132,7 +132,7 @@ public sealed class AdminLifecycleConcurrencyTests
     }
 
     [Fact]
-    public async Task Definition_delete_conflicts_when_legacy_session_creation_holds_gate_first()
+    public async Task Definition_delete_conflicts_when_managed_instance_creation_holds_gate_first()
     {
         var fixture = CreateFixture();
         var now = DateTimeOffset.Parse("2026-09-29T03:30:00Z");
@@ -148,7 +148,7 @@ public sealed class AdminLifecycleConcurrencyTests
                 var definition = await fixture.DefinitionCatalog.GetAsync("field-guide", null, cancellationToken)
                     .ConfigureAwait(false)
                     ?? throw AgentCoreErrors.NotFound("Agent was not found.");
-                var instance = await fixture.InstanceRuntime.ResolveCompatibilityAsync(definition, cancellationToken)
+                var instance = await fixture.InstanceRuntime.CreateAsync(definition.Id, definition.Version, cancellationToken: cancellationToken)
                     .ConfigureAwait(false);
                 await fixture.Sessions.SaveAsync(
                     Snapshot(instance.InstanceId, definition, now),
@@ -167,12 +167,12 @@ public sealed class AdminLifecycleConcurrencyTests
         await reference;
         var error = await Assert.ThrowsAsync<AgentCoreException>(() => delete.AsTask());
         Assert.Equal("Conflict", error.Code);
-        Assert.Contains("session", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("instance", error.Message, StringComparison.OrdinalIgnoreCase);
         Assert.NotNull(await fixture.Definitions.GetPublicationAsync("field-guide", published.Version));
     }
 
     [Fact]
-    public async Task Definition_delete_wins_and_legacy_session_creation_fails()
+    public async Task Definition_delete_wins_and_managed_instance_creation_fails()
     {
         var fixture = CreateFixture();
         var now = DateTimeOffset.Parse("2026-09-29T03:40:00Z");
@@ -193,7 +193,7 @@ public sealed class AdminLifecycleConcurrencyTests
                 fixture.Ids.NewId(),
                 now.AddMinutes(3)));
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var reference = fixture.SessionsManager.CreateAsync("field-guide", null, SessionMode.Text);
+        var reference = fixture.InstancesService.CreateManagedAsync("field-guide", published.Version).AsTask();
         var sawReferenceWaiting = await WaitUntilAsync(() => fixture.Gate.Waiters > 0);
         Assert.True(sawReferenceWaiting);
         release.TrySetResult();
@@ -378,7 +378,7 @@ public sealed class AdminLifecycleConcurrencyTests
             ids,
             deletion,
             gate);
-        var instanceRuntime = new AgentInstanceService(instances, definitionCatalog, sessions, ids, clock);
+        var instanceRuntime = new AgentInstanceService(instances, definitionCatalog, ids, clock);
         var sessionsManager = new SessionManager(
             definitionCatalog,
             sessions,
@@ -434,8 +434,7 @@ public sealed class AdminLifecycleConcurrencyTests
             new AgentIdentity("Guide", "role", "desc", "tone"),
             AgentInstanceLifecycle.Archived,
             now,
-            now,
-            Compatibility: false);
+            now);
 
     private static SessionSnapshot Snapshot(
         Guid instanceId,
@@ -455,7 +454,7 @@ public sealed class AdminLifecycleConcurrencyTests
             null,
             null,
             now,
-            now) with
+            now, AgentInstanceId: instanceId) with
         {
             AgentInstanceId = instanceId
         };
@@ -489,7 +488,7 @@ public sealed class AdminLifecycleConcurrencyTests
             null,
             null,
             now,
-            now) with
+            now, AgentInstanceId: instanceId) with
         {
             AgentInstanceId = instanceId
         };

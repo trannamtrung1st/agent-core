@@ -151,7 +151,7 @@ public sealed class QueuedAttachmentRuntimeTests
                 null,
                 null,
                 time.GetUtcNow(),
-                time.GetUtcNow());
+                time.GetUtcNow(), AgentInstanceId: Guid.NewGuid());
             await harness.Store.SaveAsync(snapshot, 0);
 
             Guid attachmentId;
@@ -272,7 +272,7 @@ public sealed class QueuedAttachmentRuntimeTests
             null,
             null,
             time.GetUtcNow(),
-            time.GetUtcNow());
+            time.GetUtcNow(), AgentInstanceId: Guid.NewGuid());
         if (snapshot.Revision == 1 && snapshot.Entries.Count == 0)
         {
             store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();

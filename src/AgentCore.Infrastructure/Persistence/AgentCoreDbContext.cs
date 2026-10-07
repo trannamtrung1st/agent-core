@@ -22,7 +22,7 @@ public sealed class SessionRecord
     public bool WorkspaceOwned { get; set; } = true;
     public long? ArchivedAtUtc { get; set; }
     public long? DurablyDeletedAtUtc { get; set; }
-    public string? AgentInstanceId { get; set; }
+    public string AgentInstanceId { get; set; } = "";
     public string? PinnedPersonaJson { get; set; }
     public long? PinnedPersonaRevision { get; set; }
     public SnapshotRecord? Snapshot { get; set; }
@@ -253,7 +253,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.Title).HasMaxLength(200).IsRequired();
             entity.Property(row => row.WorkspaceOwned).HasDefaultValue(true);
             entity.HasIndex(row => new { row.DurablyDeletedAtUtc, row.ArchivedAtUtc, row.UpdatedAtUtc, row.SessionId });
-            entity.Property(row => row.AgentInstanceId).HasMaxLength(36);
+            entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();
             entity.HasIndex(row => row.AgentInstanceId);
         });
         modelBuilder.Entity<SnapshotRecord>(entity =>
@@ -378,9 +378,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.UnattendedModelCatalogKey).HasMaxLength(128);
             entity.Property(row => row.UnattendedReasoningEffort).HasMaxLength(64);
             entity.Property(row => row.Revision).IsConcurrencyToken();
-            entity.HasIndex(row => row.DefinitionId)
-                .IsUnique()
-                .HasFilter("Compatibility = 1");
+            entity.HasIndex(row => row.DefinitionId);
         });
         modelBuilder.Entity<TriggerRegistrationRecord>(entity =>
         {

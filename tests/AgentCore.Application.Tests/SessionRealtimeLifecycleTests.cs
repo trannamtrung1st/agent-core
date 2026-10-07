@@ -209,7 +209,7 @@ public sealed class SessionRealtimeLifecycleTests
             null,
             null,
             created,
-            created);
+            created, AgentInstanceId: Guid.NewGuid());
         var store = new InMemoryMemoryStore();
         await store.SaveAsync(snapshot, 0);
         await using var runtime = new SessionRuntime(
@@ -355,15 +355,15 @@ public sealed class SessionRealtimeLifecycleTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-0003-7000-8000-{index:D12}")),
             Enumerable.Range(1, 8).Select(index => Guid.Parse($"873f07d1-e264-4c81-a31b-7e59e940b8{index:D2}")).ToArray());
-        var manager = new SessionManager(
+        var manager = OwnedSessions.Manager(
             new StaticDefinitions(SampleDefinitions.Examiner),
             store,
             ids,
             time,
             new VoiceAvailability { SpeechAdaptersResolved = true });
-        var first = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var first = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         time.Advance(TimeSpan.FromSeconds(1));
-        var second = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var second = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         var firstSnapshot = await manager.GetAsync(first.SessionId);
 
         await using var runtime = Create(new CapturingSessionOutput(), time, new ScriptedLanguageModel(), store, firstSnapshot);
@@ -417,7 +417,7 @@ public sealed class SessionRealtimeLifecycleTests
             null,
             time.GetUtcNow(),
             time.GetUtcNow(),
-            Purpose: new SessionPurpose(SessionPurposeKind.Goal, DeadlineAt: time.GetUtcNow().AddMinutes(3)));
+            Purpose: new SessionPurpose(SessionPurposeKind.Goal, DeadlineAt: time.GetUtcNow().AddMinutes(3)), AgentInstanceId: Guid.NewGuid());
         await using var runtime = Create(output, time, new ScriptedLanguageModel(), store, snapshot);
         Assert.True(await runtime.AttachAsync());
         await runtime.WaitUntilMailboxDrainedAsync();
@@ -455,7 +455,7 @@ public sealed class SessionRealtimeLifecycleTests
             null,
             time.GetUtcNow(),
             time.GetUtcNow(),
-            Purpose: new SessionPurpose(SessionPurposeKind.Goal, DeadlineAt: time.GetUtcNow().AddMinutes(5)));
+            Purpose: new SessionPurpose(SessionPurposeKind.Goal, DeadlineAt: time.GetUtcNow().AddMinutes(5)), AgentInstanceId: Guid.NewGuid());
         await using var runtime = Create(output, time, new ScriptedLanguageModel(), store, snapshot);
         Assert.True(await runtime.AttachAsync());
         await runtime.WaitUntilMailboxDrainedAsync();
@@ -499,7 +499,7 @@ public sealed class SessionRealtimeLifecycleTests
             null,
             time.GetUtcNow(),
             time.GetUtcNow(),
-            Purpose: new SessionPurpose(SessionPurposeKind.Goal, DeadlineAt: time.GetUtcNow().AddMinutes(1)));
+            Purpose: new SessionPurpose(SessionPurposeKind.Goal, DeadlineAt: time.GetUtcNow().AddMinutes(1)), AgentInstanceId: Guid.NewGuid());
         await using var runtime = Create(output, time, new ScriptedLanguageModel(), store, snapshot);
         Assert.True(await runtime.AttachAsync());
         await runtime.WaitUntilMailboxDrainedAsync();
@@ -549,7 +549,7 @@ public sealed class SessionRealtimeLifecycleTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         if (store.LoadAsync(snapshot.SessionId).AsTask().GetAwaiter().GetResult() is null)
         {
             store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();

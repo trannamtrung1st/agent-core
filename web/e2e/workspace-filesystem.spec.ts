@@ -6,16 +6,15 @@ for (const scope of ["scratch", "home"]) test(`native ${scope} filesystem batche
   await expect.poll(() => page.evaluate(() => localStorage.getItem("agent-core.owner-capability"))).not.toBeNull();
   const token = await page.evaluate(() => localStorage.getItem("agent-core.owner-capability"));
   const headers = { "X-AgentCore-Owner-Capability": token! };
-  const created = await page.request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "general-assistant", version: 14 } });
+  const created = await page.request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "general-assistant", version: 16 } });
   expect(created.ok(), await created.text()).toBe(true); const owner = (await created.json()).instanceId;
   const opened = await page.request.post("/api/v2/sessions", { headers, data: { agentInstanceId: owner, mode: "text", modelCatalogKey: "scripted-alpha" } });
   expect(opened.ok()).toBe(true); const session = (await opened.json()).sessionId;
-  const root = scope === "home" ? "/home" : "/workspace/working";
+  const root = scope === "home" ? "/home" : "/working";
   const binary = Buffer.from([0, 255, 128, 13, 10]);
   for (const [name, bytes] of [["text.txt", Buffer.from("hello café\r\n")], ["sub/raw.bin", binary]] as const) {
-    const path = `/workspace/working/inbox/${name}`;
+    const path = `${root}/inbox/${name}`;
     expect((await page.request.put(`/api/v2/sessions/${session}/workspace/content?path=${path}`, { headers, data: bytes })).ok()).toBe(true);
-    if (scope === "home") expect((await page.request.post(`/api/v2/sessions/${session}/workspace/retain`, { headers, data: { source: path, destination: `/home/inbox/${name}` } })).ok()).toBe(true);
   }
   await page.goto(`/c/${session}`); await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 20_000 });
   async function send(command: string) { await page.getByLabel("Message").fill(`synthetic-workspace-filesystem:${command}`); await page.getByRole("button", { name: "Send", exact: true }).click(); }

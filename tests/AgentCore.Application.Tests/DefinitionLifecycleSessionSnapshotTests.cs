@@ -33,7 +33,7 @@ public sealed class DefinitionLifecycleSessionSnapshotTests
             ProfileId: null,
             CreatedAt: now,
             UpdatedAt: now,
-            PinnedPersona: pinned);
+            PinnedPersona: pinned, AgentInstanceId: Guid.NewGuid());
         await memory.SaveAsync(snapshot, 0);
 
         var candidate = AgentDefinitionCandidate.FromDefinition(definition) with

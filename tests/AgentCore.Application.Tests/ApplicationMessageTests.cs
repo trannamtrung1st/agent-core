@@ -177,7 +177,7 @@ public sealed class ApplicationMessageTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         var evaluation = string.Join('\n', CompletionEvaluator.CreateEvaluationRequest(snapshot, now).Messages.Select(item => item.Text));
         Assert.DoesNotContain(FirstText, evaluation, StringComparison.Ordinal);
         Assert.Contains("Shown", evaluation, StringComparison.Ordinal);
@@ -482,7 +482,7 @@ public sealed class ApplicationMessageTests
                 "primary-llm",
                 "scripted",
                 ModelSelectionSource.SystemDefault,
-                null));
+                null), AgentInstanceId: Guid.NewGuid());
         var memory = new InMemoryMemoryStore();
         memory.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         return new SessionRuntime(

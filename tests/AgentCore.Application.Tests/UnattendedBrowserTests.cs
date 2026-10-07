@@ -169,9 +169,9 @@ public sealed class UnattendedBrowserTests
         Assert.Equal("One pending order needs review.", reactive.Text);
         Assert.Equal("Order placed", reactive.Running.OriginLabel);
         Assert.Equal(secretary.Id, scheduled.Running.Provenance.DefinitionId);
-        Assert.Equal(2, scheduled.Running.Provenance.DefinitionVersion);
+        Assert.Equal(3, scheduled.Running.Provenance.DefinitionVersion);
         Assert.Equal(scheduled.Running.Owner, reactive.Running.Owner);
-        Assert.Equal(2, reactive.Running.Provenance.DefinitionVersion);
+        Assert.Equal(3, reactive.Running.Provenance.DefinitionVersion);
         Assert.Equal([instanceId], browser.UnattendedAgents.Distinct());
         Assert.Equal([instanceId], browser.BoundAgents.Distinct());
         Assert.Equal(2, browser.NavigateCalls);
@@ -1067,18 +1067,18 @@ public sealed class UnattendedBrowserTests
     private static async Task<AgentDefinition> LoadSecretaryV2Async()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "agents", "secretary-v2.json")))
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "agents", "secretary-v3.json")))
         {
             directory = directory.Parent;
         }
 
         if (directory is null)
         {
-            throw new DirectoryNotFoundException("agents/secretary-v2.json");
+            throw new DirectoryNotFoundException("agents/secretary-v3.json");
         }
 
         var store = new FileAgentDefinitionStore(Path.Combine(directory.FullName, "agents"), SyntheticProviderAliases.Default);
-        return (await store.GetAsync("secretary", 2))!;
+        return (await store.GetAsync("secretary", 3))!;
     }
 
     private static async Task<DurableOccurrenceOutcome> RunAsync(

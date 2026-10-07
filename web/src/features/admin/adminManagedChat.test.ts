@@ -30,7 +30,6 @@ describe("startManagedPublicationChat", () => {
       instanceId: "019944af-00d1-7000-8000-000000000001",
       definitionId: "examiner",
       activeVersion: 2,
-      compatibility: false,
       lifecycle: "Active",
       revision: 1,
       personaRevision: 1

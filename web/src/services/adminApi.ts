@@ -33,7 +33,6 @@ export type AdminInstanceInventoryItem = {
   definitionId: string;
   activeVersion: number;
   lifecycle: string;
-  compatibility: boolean;
   personaName: string;
   createdAt: string;
   updatedAt: string;
@@ -48,7 +47,6 @@ export type AdminEffectiveConfiguration = {
   instanceLifecycle: string;
   instanceRevision: number;
   personaRevision: number;
-  compatibility: boolean;
   persona: { name: string; role: string; description: string; tone: string };
   providerPreferences: {
     languageModel: string;
@@ -526,7 +524,6 @@ export type AdminAgentInstance = {
   instanceId: string;
   definitionId: string;
   activeVersion: number;
-  compatibility: boolean;
   lifecycle: string;
   revision: number;
   personaRevision: number;

@@ -14,7 +14,7 @@ public sealed class ConversationFailureHistoryTests
     {
         await using var factory = new AgentCoreApiFactory();
         var client = TestOwnerCapability.CreateOwnerClient(factory);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         created.EnsureSuccessStatusCode();
         var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
         var sessionId = Guid.Parse(session.SessionId);

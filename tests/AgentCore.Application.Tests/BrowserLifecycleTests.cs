@@ -26,14 +26,14 @@ public sealed class BrowserLifecycleTests
     {
         var lease = new CountingLease();
         var sessions = new InMemoryMemoryStore();
-        var manager = new SessionManager(
+        var manager = OwnedSessions.Manager(
             new StaticDefinitions(SampleDefinitions.Examiner),
             sessions,
             Ids("019944af-00c1-7000-8000-", "873f07d1-e264-4c81-a31b-7e59e940c1"),
             TimeProvider.System,
             new VoiceAvailability { SpeechAdaptersResolved = true },
             browserLease: lease);
-        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         await manager.DurablyDeleteAsync(created.SessionId);
         Assert.Equal([created.SessionId], lease.Sessions);
 
@@ -254,7 +254,7 @@ public sealed class BrowserLifecycleTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         if (existing is null)
         {
             store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();

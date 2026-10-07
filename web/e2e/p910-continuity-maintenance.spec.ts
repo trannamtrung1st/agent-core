@@ -18,7 +18,7 @@ test('Thought consolidates separately owned Memory and Experience; lineage, opt-
   await page.getByRole('tab', { name: 'Instances', exact: true }).click();
   await page.getByRole('button', { name: 'New instance', exact: true }).click();
   await select(page, 'Definition', 'General Assistant · general-assistant');
-  await select(page, 'Published version', 'v9 · Built-in · Published');
+  await select(page, 'Published version', 'v16 · Built-in · Published');
   await page.getByRole('button', { name: 'Create instance', exact: true }).click();
   await page.getByRole('tab', { name: 'Continuity', exact: true }).click();
   const id = new URL(page.url()).pathname.split('/')[3];

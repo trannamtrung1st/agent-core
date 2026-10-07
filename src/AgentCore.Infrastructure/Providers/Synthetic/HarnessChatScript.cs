@@ -50,7 +50,7 @@ internal static class HarnessChatScript
         var inspection = results.LastOrDefault(m => m.Name == HarnessChatTools.Inspect);
         if (inspection is null) return Call(HarnessChatTools.Inspect, new { });
         using var inspected = JsonDocument.Parse(inspection.Text);
-        if (!inspected.RootElement.TryGetProperty("expectedVersion", out var version)) return Answer("Harness inspection failed; nothing was saved.");
+        if (!inspected.RootElement.TryGetProperty("activeDefinitionVersion", out var version)) return Answer("Harness inspection failed; nothing was saved.");
         var policyRevision = inspected.RootElement.GetProperty("policyRevision").GetInt64();
         if (knowledge && user.Contains("https://", StringComparison.Ordinal))
         {

@@ -1,9 +1,11 @@
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test } from "@playwright/test";
 import { waitForResponseSettled } from "./support/response-settled";
 
 test("long session recalls an early fact after compaction", async ({ page }) => {
   test.setTimeout(180_000);
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await send(page, "Please remember P4A_LONG_FACT for later.");
   for (let index = 0; index < 22; index += 1) {
     await send(page, `continue ${index}`);

@@ -38,7 +38,7 @@ public sealed class PersistenceReceiptTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         await store.Inner.SaveAsync(snapshot, 0);
         await using var runtime = new SessionRuntime(
             snapshot,
@@ -81,7 +81,7 @@ public sealed class PersistenceReceiptTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         await store.Inner.SaveAsync(snapshot, 0);
         await using var runtime = new SessionRuntime(
             snapshot,
@@ -127,7 +127,7 @@ public sealed class PersistenceReceiptTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
         await using var runtime = new SessionRuntime(
             snapshot,
@@ -176,7 +176,7 @@ public sealed class PersistenceReceiptTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
         await using var runtime = new SessionRuntime(
             snapshot,
@@ -226,7 +226,7 @@ public sealed class PersistenceReceiptTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         await harness.Store.SaveAsync(snapshot, 0);
         await using var runtime = new SessionRuntime(
             snapshot,
@@ -271,7 +271,7 @@ public sealed class PersistenceReceiptTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         await inner.SaveAsync(snapshot, 0);
         await using var runtime = new SessionRuntime(
             snapshot,
@@ -315,7 +315,7 @@ public sealed class PersistenceReceiptTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         await store.Inner.SaveAsync(snapshot, 0);
         await using var runtime = new SessionRuntime(
             snapshot,
@@ -361,7 +361,7 @@ public sealed class PersistenceReceiptTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         await store.Inner.SaveAsync(snapshot, 0);
         var output = new CapturingSessionOutput();
         await using var runtime = new SessionRuntime(
@@ -416,7 +416,7 @@ public sealed class PersistenceReceiptTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
         await using var runtime = new SessionRuntime(
             snapshot,
@@ -462,7 +462,7 @@ public sealed class PersistenceReceiptTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         var store = new InMemoryMemoryStore();
         await store.SaveAsync(snapshot, 0);
         await using var runtime = new SessionRuntime(
@@ -513,7 +513,7 @@ public sealed class PersistenceReceiptTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         var store = new InMemoryMemoryStore();
         await store.SaveAsync(snapshot, 0);
         await using var runtime = new SessionRuntime(
@@ -571,7 +571,7 @@ public sealed class PersistenceReceiptTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
         await using var runtime = new SessionRuntime(
             snapshot,
@@ -620,7 +620,7 @@ public sealed class PersistenceReceiptTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
         var output = new CapturingSessionOutput();
         await using var runtime = new SessionRuntime(

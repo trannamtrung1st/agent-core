@@ -1,7 +1,9 @@
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test } from "@playwright/test";
 
 test("validation failures keep structured recoverable details", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await page.getByLabel("Message").fill("x".repeat(8001));
   await page.getByRole("button", { name: "Send" }).click();
   const alert = page.getByTestId("session-failure");
@@ -17,6 +19,7 @@ test("validation failures keep structured recoverable details", async ({ page })
 
 test("rich envelope shows differing spoken text without another message and does not replay thinking after reload", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await page.getByLabel("Message").fill("[test:rich-envelope]");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Shown display.")).toBeVisible({ timeout: 15_000 });

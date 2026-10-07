@@ -157,7 +157,7 @@ public sealed class ResponseProgressRuntimeTests
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var tools = new SessionToolExecutor(
             RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
-            workspace: workspace,
+            workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace),
             artifacts: artifacts);
         var output = new CapturingSessionOutput();
         await using var runtime = CreateSupportRuntime(output, definition, new WorkspaceWriteLanguageModel(), tools, artifacts);
@@ -188,7 +188,7 @@ public sealed class ResponseProgressRuntimeTests
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var tools = new SessionToolExecutor(
             RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
-            workspace: workspace,
+            workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace),
             artifacts: artifacts);
         var output = new CapturingSessionOutput();
         await using var runtime = CreateSupportRuntime(output, definition, new WorkspaceWriteLanguageModel(), tools, artifacts);
@@ -244,7 +244,7 @@ public sealed class ResponseProgressRuntimeTests
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var tools = new SessionToolExecutor(
             RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
-            workspace: workspace,
+            workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace),
             artifacts: artifacts);
         var output = new CapturingSessionOutput();
         await using var runtime = CreateSupportRuntime(output, definition, new WorkspaceWriteLanguageModel(), tools, artifacts);
@@ -284,7 +284,7 @@ public sealed class ResponseProgressRuntimeTests
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var tools = new SessionToolExecutor(
             RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
-            workspace: workspace,
+            workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace),
             artifacts: artifacts);
         var output = new CapturingSessionOutput();
         await using var runtime = CreateSupportRuntime(output, definition, new WorkspaceWriteLanguageModel(), tools, artifacts);
@@ -354,7 +354,7 @@ public sealed class ResponseProgressRuntimeTests
             null,
             null,
             time.GetUtcNow(),
-            time.GetUtcNow());
+            time.GetUtcNow(), AgentInstanceId: Guid.NewGuid());
         await sqlite.Store.SaveAsync(snapshot, 0);
         await using var runtime = new SessionRuntime(
             snapshot,
@@ -391,7 +391,7 @@ public sealed class ResponseProgressRuntimeTests
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var tools = new SessionToolExecutor(
             RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
-            workspace: workspace,
+            workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace),
             artifacts: artifacts);
         var output = new CapturingSessionOutput();
         await using var runtime = CreateSupportRuntime(output, definition, new WorkspaceWriteLanguageModel(), tools, artifacts);
@@ -433,7 +433,7 @@ public sealed class ResponseProgressRuntimeTests
             null,
             null,
             time.GetUtcNow(),
-            time.GetUtcNow());
+            time.GetUtcNow(), AgentInstanceId: Guid.NewGuid());
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         return new SessionRuntime(
             snapshot,
@@ -487,7 +487,7 @@ public sealed class ResponseProgressRuntimeTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         return new SessionRuntime(
             snapshot,
@@ -504,7 +504,7 @@ public sealed class ResponseProgressRuntimeTests
 
     private static async Task<AgentDefinition> Load(string id)
     {
-        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var store = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         return (await store.GetAsync(id, 1))!;
     }
 
@@ -672,7 +672,7 @@ public sealed class ResponseProgressRuntimeTests
             yield return new ModelToolCallEvent(new ModelToolCall(
                 "call-w",
                 ToolCatalog.WorkspaceWrite,
-                """{"path":"/workspace/working/note.txt","content":"late"}"""));
+                """{"path":"/working/note.txt","content":"late"}"""));
             yield return new ModelCompleted(ModelStopReason.ToolCalls);
         }
     }

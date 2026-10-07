@@ -28,7 +28,7 @@ public sealed class ThoughtJourneyTests
     {
         var db = Path.Combine(Path.GetTempPath(), $"thought-interval-{Guid.NewGuid():N}.db");
         await using var host = new ExperienceHost(db);
-        var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9);
+        var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         var client = TestOwnerCapability.CreateOwnerClient(host);
         var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/thoughts";
         var response = await client.PostAsJsonAsync(path, Draft(0, seconds) with { Enabled = false });
@@ -51,7 +51,7 @@ public sealed class ThoughtJourneyTests
         await using (var host = new ExperienceHost(db))
         {
             var s = host.Services;
-            var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9);
+            var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
             instanceId = instance.InstanceId; originalVersion = instance.ActiveVersion;
             var source = await ExperienceJourneyTests.SeedAsync(s, instanceId);
             var service = s.GetRequiredService<ExperienceService>();
@@ -87,7 +87,7 @@ public sealed class ThoughtJourneyTests
             var listed = (await client.GetFromJsonAsync<WorkItemListResponse>(listPath))!;
             Assert.Equal(detail.Intent, Assert.Single(listed.Items, row => row.WorkItemId == detail.WorkItemId).Intent);
             Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/admin/agent-instances/{instanceId}/work-items/{Guid.NewGuid()}")).StatusCode);
-            var other = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9);
+            var other = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
             Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/admin/agent-instances/{other.InstanceId}/work-items/{workId}")).StatusCode);
             using var anonymous = host.CreateClient();
             Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(detailPath)).StatusCode);
@@ -168,7 +168,7 @@ public sealed class ThoughtJourneyTests
         await using (var host = new ExperienceHost(db, clock: clock))
         {
             var services = host.Services;
-            var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9);
+            var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
             instanceId = instance.InstanceId;
             var thoughts = services.GetRequiredService<ThoughtRegistrationService>();
             var registration = await thoughts.SaveAsync(instanceId, null, 0, true, 3600, "Review; do nothing if no useful action is available.", null, null);

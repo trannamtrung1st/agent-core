@@ -14,8 +14,6 @@ public static class ToolCatalog
     public const string WorkspaceWrite = "workspace.write";
     public const string WorkspacePatch = "workspace.patch";
     public const string WorkspaceSearch = "workspace.search";
-    public const string WorkspaceRetain = "workspace.retain";
-    public const string WorkspaceCheckout = "workspace.checkout";
     public const string WorkspaceMkdir = "workspace.mkdir";
     public const string WorkspaceCopy = "workspace.copy";
     public const string WorkspaceDelete = "workspace.delete";
@@ -94,7 +92,6 @@ public static class ToolCatalog
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var name in RoleEnvironments.Of(definition).ToolList)
         {
-            if (name is WorkspaceRetain or WorkspaceCheckout && context is not { AgentWorkspaceAvailable: true, DetachedExecution: false }) continue;
             if (!ToolRegistry.TryGet(name, out var descriptor)
                 || descriptor.OfferRule is not (ToolOfferRule.RoleAllowlist or ToolOfferRule.ConfigurationWhenRoleAllows)
                 || !ToolPolicy.IsOffered(descriptor, definition, context, configurationGate)
@@ -103,7 +100,7 @@ public static class ToolCatalog
                 continue;
             }
 
-            offered.Add(WorkspaceFilesystemPolicy.ForDefinition(definition, descriptor));
+            offered.Add(descriptor.ModelDefinition);
         }
 
         if (ToolRegistry.TryGet(AttachmentsRead, out var attachmentDescriptor)
@@ -123,7 +120,7 @@ public static class ToolCatalog
                 continue;
             }
 
-            offered.Add(WorkspaceFilesystemPolicy.ForDefinition(definition, descriptor));
+            offered.Add(descriptor.ModelDefinition);
         }
 
         AddWorkComplete(offered, seen, definition, context, configurationGate);
@@ -153,7 +150,7 @@ public static class ToolCatalog
                 continue;
             }
 
-            offered.Add(WorkspaceFilesystemPolicy.ForDefinition(definition, descriptor));
+            offered.Add(descriptor.ModelDefinition);
         }
 
         AddWorkComplete(offered, seen, definition, context, configurationGate);
@@ -177,7 +174,7 @@ public static class ToolCatalog
                 continue;
             }
 
-            offered.Add(WorkspaceFilesystemPolicy.ForDefinition(definition, descriptor));
+            offered.Add(descriptor.ModelDefinition);
         }
 
         AddWorkComplete(offered, seen, definition, context, configurationGate);

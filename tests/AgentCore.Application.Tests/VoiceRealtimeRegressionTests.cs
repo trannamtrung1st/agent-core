@@ -796,7 +796,7 @@ public sealed class VoiceRealtimeRegressionTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         if (store.LoadAsync(snapshot.SessionId).AsTask().GetAwaiter().GetResult() is null)
         {
             store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
@@ -819,7 +819,7 @@ public sealed class VoiceRealtimeRegressionTests
 
     private static async Task<AgentDefinition> Load(string id)
     {
-        var catalog = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var catalog = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         return (await catalog.GetAsync(id, 1))!;
     }
 

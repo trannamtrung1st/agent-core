@@ -342,7 +342,7 @@ public sealed class DynamicSkillActivationTests
                 "primary-llm",
                 "scripted",
                 ModelSelectionSource.SystemDefault,
-                null));
+                null), AgentInstanceId: Guid.NewGuid());
         var memory = new InMemoryMemoryStore();
         await memory.SaveAsync(snapshot, 0);
         var created = await turns.CreateAsync(ConversationTurnExecution.AcceptNew(
@@ -549,7 +549,7 @@ public sealed class DynamicSkillActivationTests
                 "primary-llm",
                 "scripted",
                 ModelSelectionSource.SystemDefault,
-                null));
+                null), AgentInstanceId: Guid.NewGuid());
         var memory = new InMemoryMemoryStore();
         memory.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         return new SessionRuntime(

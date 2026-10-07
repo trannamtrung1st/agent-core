@@ -19,8 +19,7 @@ public sealed partial class SessionRuntime
 
     private void HandleWorkspaceCwd(WorkspaceCwdRequested input)
     {
-        if (!WorkspaceSemantics.IsV2(_snapshot.Definition) || _snapshot.AgentInstanceId is null
-            || _deactivated || _responseTerminal || _activeResponseId != input.ResponseId
+        if (_deactivated || _responseTerminal || _activeResponseId != input.ResponseId
             || _epoch != input.Epoch || input.Context.Epoch != _epoch)
         { input.Completed.TrySetResult(null); return; }
         if (input.Next is not null) _workspaceCwd = input.Next;

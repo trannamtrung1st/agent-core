@@ -1,7 +1,9 @@
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test } from "@playwright/test";
 
 test("voice stays full-duplex; mute is input-only; disconnect releases capture", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByRole("button", { name: /^Voice$/ })).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: /^Voice$/ }).click();
   await expect(page.getByTestId("connection")).toHaveText("Listening…", { timeout: 15_000 });
@@ -39,6 +41,7 @@ test("voice stays full-duplex; mute is input-only; disconnect releases capture",
 
 test("muted voice keeps a typed message in voice without Mode changed", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByRole("button", { name: /^Voice$/ })).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: /^Voice$/ }).click();
   await expect(page.getByTestId("connection")).toHaveText("Listening…", { timeout: 15_000 });

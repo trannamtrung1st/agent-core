@@ -622,7 +622,7 @@ public sealed class BrowserToolTests
     [Fact]
     public async Task V11_offer_names_the_fixture_start_and_denied_callers_do_not_navigate()
     {
-        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var store = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         var v10 = (await store.GetAsync("general-assistant", 10))!;
         var v11 = (await store.GetAsync("general-assistant", 11))!;
         Assert.Equal(11, v11.Version);
@@ -706,7 +706,7 @@ public sealed class BrowserToolTests
     [Fact]
     public async Task V12_offers_browser_close_and_v11_does_not()
     {
-        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var store = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         var v11 = (await store.GetAsync("general-assistant", 11))!;
         var v12 = (await store.GetAsync("general-assistant", 12))!;
         var fake = new FakeBrowser();
@@ -881,7 +881,7 @@ public sealed class BrowserToolTests
         await workspace.WriteAsync(session, "/workspace/working/ac-keyboard.png", png);
         var browser = new FakeBrowser { CurrentUrl = new Uri("http://127.0.0.1:5091/") };
         var executor = new SessionToolExecutor(
-            workspace: workspace,
+            workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace),
             artifacts: artifacts,
             browser: browser,
             configurationGate: ToolConfigurationGates.AllowAll);
@@ -891,7 +891,7 @@ public sealed class BrowserToolTests
             new ModelToolCall(
                 "c1",
                 ToolCatalog.ArtifactsCreateFromWorkspace,
-                """{"path":"ac-keyboard.png","displayName":"ac-keyboard.png","contentType":"image/png"}"""),
+                """{"path":"/working/ac-keyboard.png","displayName":"ac-keyboard.png","contentType":"image/png"}"""),
             ToolLimits.MaxOutputBytes,
             admission: UserTurn());
         using var createdDoc = JsonDocument.Parse(created.Text);

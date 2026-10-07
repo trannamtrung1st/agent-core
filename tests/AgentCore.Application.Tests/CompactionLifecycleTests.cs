@@ -391,7 +391,7 @@ public sealed class CompactionLifecycleTests
             null,
             Now,
             Now,
-            LastEntrySequence: entries.Max(entry => entry.Sequence));
+            LastEntrySequence: entries.Max(entry => entry.Sequence), AgentInstanceId: Guid.NewGuid());
 
     private static List<ConversationEntry> LongFactHistory(int count, string fact, int factSequence = 1)
     {

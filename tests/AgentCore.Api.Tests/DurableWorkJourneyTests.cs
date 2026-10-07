@@ -361,7 +361,7 @@ public sealed class DurableWorkJourneyTests
 
     private static async Task<SessionViewResponse> CreateAsync(HttpClient client, string agentId, int? version)
     {
-        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(agentId, version, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, agentId, version), "text"));
         created.EnsureSuccessStatusCode();
         return (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
     }
@@ -369,7 +369,7 @@ public sealed class DurableWorkJourneyTests
     private static async Task<WorkOwner> OwnerAsync(IServiceProvider services, Guid sessionId)
     {
         var snapshot = await services.GetRequiredService<SessionManager>().GetAsync(sessionId);
-        return new WorkOwner(snapshot.AgentInstanceId!.Value, snapshot.ProfileId!.Value);
+        return new WorkOwner(snapshot.AgentInstanceId, snapshot.ProfileId!.Value);
     }
 
     private static async Task AdmitApplicationEventAsync(
@@ -418,7 +418,7 @@ public sealed class DurableWorkJourneyTests
                 createdAt,
                 "{}",
                 "general-assistant",
-                10,
+                16,
                 "Riley"),
             new WorkModelPin("scripted-alpha", "primary-llm", "scripted-alpha", "medium"),
             WorkLimits.DefaultMaxAttempts,

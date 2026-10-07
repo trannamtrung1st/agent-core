@@ -322,7 +322,7 @@ public sealed class SessionMemoryPromptTests
             null,
             LocalUserProfile.Id,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         await sessions.SaveAsync(snapshot, 0);
         await service.WriteAsync(
             new TrustedMemoryOwner(sessionId),

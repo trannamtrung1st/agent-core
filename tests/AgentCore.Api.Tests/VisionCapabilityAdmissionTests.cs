@@ -24,7 +24,7 @@ public sealed class VisionCapabilityAdmissionTests : IClassFixture<AgentCoreApiF
     public async Task SendText_with_image_on_non_vision_model_is_rejected_without_persisting()
     {
         var client = Owner();
-        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         created.EnsureSuccessStatusCode();
         var view = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
         var uploaded = await client.PostAsync(
@@ -55,7 +55,7 @@ public sealed class VisionCapabilityAdmissionTests : IClassFixture<AgentCoreApiF
     public async Task Text_only_SendText_remains_accepted_on_non_vision_model()
     {
         var client = Owner();
-        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var view = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
         await using var hub = await ConnectAsync();
         var leaseTask = ReadyWaiter(hub);

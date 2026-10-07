@@ -21,7 +21,6 @@ const sampleEffective: AdminEffectiveConfiguration = {
   instanceLifecycle: "Active",
   instanceRevision: 1,
   personaRevision: 1,
-  compatibility: true,
   persona: { name: "Alex", role: "Examiner", description: "Practice speaking.", tone: "Supportive" },
   providerPreferences: {
     languageModel: "primary-llm",
@@ -279,8 +278,7 @@ describe("AdminApp", () => {
         definitionId: "examiner",
         activeVersion: 1,
         lifecycle: "Active",
-        compatibility: true,
-        personaName: "Examiner",
+              personaName: "Examiner",
         createdAt: "2026-01-01T00:00:00Z",
         updatedAt: "2026-01-01T00:00:00Z"
       }
@@ -299,7 +297,7 @@ describe("AdminApp", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Instances" }));
     expect(within(screen.getByRole("region", { name: "Instances" })).getByText("1 instance")).toBeInTheDocument();
     expect(within(screen.getByRole("region", { name: "Instances" })).getByText("v1")).toBeInTheDocument();
-    expect(screen.getByText("Compatibility", { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText("Compatibility", { exact: true })).not.toBeInTheDocument();
   });
 
   it("groups immutable versions under one logical definition", async () => {
@@ -477,7 +475,7 @@ describe("AdminApp", () => {
   it("renders effective configuration fields", () => {
     render(<EffectiveConfigView config={sampleEffective} />);
     const identity = screen.getByLabelText("Instance identity");
-    expect(within(identity).getByText("Compatibility / legacy")).toBeInTheDocument();
+    expect(within(identity).queryByText("Compatibility / legacy")).not.toBeInTheDocument();
     expect(within(identity).getByText("Definition status")).toBeInTheDocument();
     expect(screen.getByText("Practice speaking.")).toBeInTheDocument();
     expect(screen.getByText("heuristic")).toBeInTheDocument();
@@ -1109,7 +1107,7 @@ describe("AdminApp", () => {
     await waitFor(() => {
       expect(screen.getByText("Practice speaking.")).toBeInTheDocument();
     });
-    expect(within(screen.getByLabelText("Instance identity")).getByText("Compatibility / legacy")).toBeInTheDocument();
+    expect(screen.queryByText("Compatibility / legacy")).not.toBeInTheDocument();
     expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
     expect(screen.getByText("Practice speaking.")).toBeInTheDocument();
   });
@@ -1134,7 +1132,7 @@ describe("AdminApp", () => {
   it("keeps persona edits after unrelated instance revisions and accepts a newer saved persona", async () => {
     vi.mocked(listAdminDefinitions).mockResolvedValue([]);
     vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
-    const config = { ...sampleEffective, compatibility: false };
+    const config = { ...sampleEffective };
     const props = { onUpdated: vi.fn(), onDeleted: vi.fn() };
     let view!: ReturnType<typeof render>;
     await act(async () => { view = render(<InstanceManagedControls config={config} {...props} />); });
@@ -1155,7 +1153,7 @@ describe("AdminApp", () => {
   });
 
   it("saves managed instance persona from the form tab", async () => {
-    const managedEffective = { ...sampleEffective, compatibility: false };
+    const managedEffective = { ...sampleEffective };
     vi.mocked(listAdminDefinitions).mockResolvedValue([]);
     vi.mocked(listAdminInstances).mockResolvedValue([]);
     vi.mocked(getAdminEffectiveConfig).mockResolvedValue(managedEffective);
@@ -1172,7 +1170,6 @@ describe("AdminApp", () => {
       instanceId: managedEffective.instanceId,
       definitionId: "examiner",
       activeVersion: 1,
-      compatibility: false,
       lifecycle: "Active",
       revision: 2,
       personaRevision: 2
@@ -1202,7 +1199,7 @@ describe("AdminApp", () => {
   });
 
   it("syncs persona form edits into the JSON tab before save", async () => {
-    const managedEffective = { ...sampleEffective, compatibility: false };
+    const managedEffective = { ...sampleEffective };
     vi.mocked(listAdminDefinitions).mockResolvedValue([]);
     vi.mocked(listAdminInstances).mockResolvedValue([]);
     vi.mocked(getAdminEffectiveConfig).mockResolvedValue(managedEffective);
@@ -1229,7 +1226,7 @@ describe("AdminApp", () => {
   });
 
   it("does not save persona JSON that includes non-persona fields", async () => {
-    const managedEffective = { ...sampleEffective, compatibility: false };
+    const managedEffective = { ...sampleEffective };
     vi.mocked(listAdminDefinitions).mockResolvedValue([]);
     vi.mocked(listAdminInstances).mockResolvedValue([]);
     vi.mocked(getAdminEffectiveConfig).mockResolvedValue(managedEffective);
@@ -1273,7 +1270,7 @@ describe("AdminApp", () => {
   });
 
   it("lists built-in and durable versions for active-version changes", async () => {
-    const managedEffective = { ...sampleEffective, compatibility: false, definitionVersion: 2 };
+    const managedEffective = { ...sampleEffective, definitionVersion: 2 };
     vi.mocked(listAdminDefinitions).mockResolvedValue([
       {
         definitionId: "examiner",
@@ -1318,7 +1315,7 @@ describe("AdminApp", () => {
   });
 
   it("confirms archive while keeping unsaved persona form edits", async () => {
-    const managedEffective = { ...sampleEffective, compatibility: false };
+    const managedEffective = { ...sampleEffective };
     vi.mocked(listAdminDefinitions).mockResolvedValue([]);
     vi.mocked(listAdminInstances).mockResolvedValue([]);
     vi.mocked(getAdminEffectiveConfig).mockResolvedValue(managedEffective);
@@ -1327,7 +1324,6 @@ describe("AdminApp", () => {
       instanceId: managedEffective.instanceId,
       definitionId: "examiner",
       activeVersion: 1,
-      compatibility: false,
       lifecycle: "Archived",
       revision: 2,
       personaRevision: 1
@@ -1404,7 +1400,9 @@ describe("AdminApp", () => {
     });
     fireEvent.click(screen.getByRole("tab", { name: "Instances" }));
     fireEvent.click(await screen.findByRole("button", { name: "New instance" }));
-    fireEvent.mouseDown(screen.getByLabelText("Published version"));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("New instance", { exact: true })).toBeInTheDocument();
+    fireEvent.mouseDown(within(dialog).getByLabelText("Published version"));
     await waitFor(() => {
       const options = document.querySelectorAll(".ant-select-item-option-content");
       expect([...options].map(option => option.textContent)).toEqual(["v2 · Built-in · Published"]);
@@ -1516,7 +1514,7 @@ describe("AdminApp", () => {
   });
 
   it("applies a version while retaining dirty persona JSON", async () => {
-    const managedEffective = { ...sampleEffective, compatibility: false, definitionVersion: 1 };
+    const managedEffective = { ...sampleEffective, definitionVersion: 1 };
     vi.mocked(listAdminDefinitions).mockResolvedValue([
       {
         definitionId: "examiner",
@@ -1540,7 +1538,6 @@ describe("AdminApp", () => {
       instanceId: managedEffective.instanceId,
       definitionId: "examiner",
       activeVersion: 2,
-      compatibility: false,
       lifecycle: "Active",
       revision: 2,
       personaRevision: 1
@@ -1629,7 +1626,6 @@ describe("AdminApp", () => {
       instanceId,
       definitionId: "examiner",
       activeVersion: 5,
-      compatibility: false,
       lifecycle: "Active",
       revision: 1,
       personaRevision: 1
@@ -1672,7 +1668,6 @@ describe("AdminApp", () => {
       instanceId,
       definitionId: "examiner",
       activeVersion: 6,
-      compatibility: false,
       lifecycle: "Active",
       revision: 1,
       personaRevision: 1,

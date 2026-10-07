@@ -294,7 +294,7 @@ public sealed class AcceptedTurnDetachDurabilityTests
                 "primary-llm",
                 "scripted",
                 ModelSelectionSource.SystemDefault,
-                null));
+                null), AgentInstanceId: Guid.NewGuid());
         if (snapshot is null)
         {
             memory.SaveAsync(initial, 0).AsTask().GetAwaiter().GetResult();

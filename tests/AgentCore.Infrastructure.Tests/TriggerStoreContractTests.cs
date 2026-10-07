@@ -492,7 +492,7 @@ public sealed class TriggerStoreContractTests
             null,
             null,
             Now,
-            Now);
+            Now, AgentInstanceId: Guid.NewGuid());
 
     private static async Task<List<string>> TableNamesAsync(AgentCoreDbContext db)
     {

@@ -95,8 +95,7 @@ public sealed class AdminAgentInstanceService(
             storedPersona,
             AgentInstanceLifecycle.Active,
             now,
-            now,
-            Compatibility: false);
+            now);
         var append = AdminEventFactory.ManagedInstanceCreated(
             operationId,
             now,
@@ -475,11 +474,6 @@ public sealed class AdminAgentInstanceService(
     {
         var instance = await instances.FindAsync(instanceId, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
-        if (instance.Compatibility)
-        {
-            throw AgentCoreErrors.Validation("Compatibility instances cannot be mutated through the managed API.");
-        }
-
         return instance;
     }
 

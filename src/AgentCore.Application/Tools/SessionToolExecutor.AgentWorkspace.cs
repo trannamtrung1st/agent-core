@@ -15,28 +15,6 @@ public sealed partial class SessionToolExecutor
         catch (AgentCoreException ex) when (ex.Code is "ValidationError" or "NotFound") { return false; }
     }
 
-    private async Task<string> RetainWorkspaceAsync(Guid sessionId, JsonElement args, CancellationToken ct)
-    {
-        if (agentWorkspace is null) return Error("unavailable", "Durable home is unavailable for this execution.");
-        if (args.EnumerateObject().Any(p => p.Name is not ("source" or "destination" or "expectedRevision" or "expectedSha256")))
-            return Error("invalid", "Only source, destination and expected revision/hash are accepted.");
-        if (!TryString(args, "source", out var source) || !TryString(args, "destination", out var destination))
-            return Error("invalid", "source and destination are required.");
-        return JsonSerializer.Serialize(await agentWorkspace.RetainAsync(sessionId, source, destination,
-            ExpectedRevision(args), ExpectedHash(args), ct), JsonOptions);
-    }
-
-    private async Task<string> CheckoutWorkspaceAsync(Guid sessionId, JsonElement args, CancellationToken ct)
-    {
-        if (agentWorkspace is null) return Error("unavailable", "Durable home is unavailable for this execution.");
-        if (args.EnumerateObject().Any(p => p.Name is not ("source" or "destination" or "expectedRevision" or "expectedSha256")))
-            return Error("invalid", "Only source, destination and expected revision/hash are accepted.");
-        if (!TryString(args, "source", out var source)) return Error("invalid", "source is required.");
-        TryString(args, "destination", out var destination);
-        return JsonSerializer.Serialize(await agentWorkspace.CheckoutAsync(sessionId, source, string.IsNullOrEmpty(destination) ? null : destination,
-            ExpectedRevision(args), ExpectedHash(args), ct), JsonOptions);
-    }
-
     private static long? ExpectedRevision(JsonElement args)
     {
         if (!args.TryGetProperty("expectedRevision", out var value)) return null;

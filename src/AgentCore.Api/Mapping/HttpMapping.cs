@@ -47,7 +47,7 @@ public static partial class HttpMapping
             LifecycleTransition.ToWire(snapshot.LifecycleStatus),
             ToSpeechLocale(snapshot),
             ToModel(snapshot, catalog),
-            snapshot.AgentInstanceId?.ToString("D"),
+            snapshot.AgentInstanceId.ToString("D"),
             snapshot.PinnedPersonaRevision,
             identity.Name,
             identity.Role);

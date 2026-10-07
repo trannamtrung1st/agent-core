@@ -14,7 +14,6 @@ const config: AdminEffectiveConfiguration = {
   instanceLifecycle: "Active",
   instanceRevision: 1,
   personaRevision: 1,
-  compatibility: false,
   persona: { name: "Alex", role: "role", description: "desc", tone: "tone" },
   providerPreferences: {
     languageModel: "primary-llm",
@@ -195,7 +194,6 @@ describe("InstanceMemoryAutomationPanel", () => {
       instanceId: config.instanceId,
       definitionId: config.definitionId,
       activeVersion: 1,
-      compatibility: false,
       lifecycle: "Active",
       revision: 2,
       personaRevision: 1,
@@ -292,7 +290,6 @@ describe("InstanceMemoryAutomationPanel", () => {
       instanceId: config.instanceId,
       definitionId: config.definitionId,
       activeVersion: 1,
-      compatibility: false,
       lifecycle: "Active",
       revision: 2,
       personaRevision: 1,

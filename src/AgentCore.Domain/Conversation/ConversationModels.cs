@@ -312,6 +312,7 @@ public sealed record SessionSnapshot(
     Guid? ProfileId,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
+    Guid AgentInstanceId,
     DateTimeOffset? LastUserActivityAt = null,
     string? PauseReason = null,
     string Title = SessionTitles.Default,
@@ -331,10 +332,20 @@ public sealed record SessionSnapshot(
     int SummaryFormatVersion = SummaryFormats.Legacy,
     DateTimeOffset? SummaryGeneratedAt = null,
     ModelGenerationProvenance? SummaryModel = null,
-    Guid? AgentInstanceId = null,
     AgentIdentity? PinnedPersona = null,
     long? PinnedPersonaRevision = null)
 {
+    private Guid _agentInstanceId = RequireOwner(AgentInstanceId);
+
+    public Guid AgentInstanceId
+    {
+        get => _agentInstanceId;
+        init => _agentInstanceId = RequireOwner(value);
+    }
+
+    private static Guid RequireOwner(Guid owner) => owner != Guid.Empty ? owner
+        : throw new ArgumentException("Every Session requires an Agent Instance.", nameof(AgentInstanceId));
+
     public long DurableLastEntrySequence
     {
         get

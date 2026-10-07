@@ -144,7 +144,7 @@ public sealed class ClientSpeechSegmentRuntimeTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
         await using var runtime = new SessionRuntime(
             snapshot,
@@ -344,7 +344,7 @@ public sealed class ClientSpeechSegmentRuntimeTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         return new SessionRuntime(
             snapshot,

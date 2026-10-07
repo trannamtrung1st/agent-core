@@ -9,7 +9,6 @@ public sealed class AgentInstanceRecord
     public string Lifecycle { get; set; } = "";
     public long CreatedAtUtc { get; set; }
     public long UpdatedAtUtc { get; set; }
-    public bool Compatibility { get; set; }
     public long Revision { get; set; } = 1;
     public long PersonaRevision { get; set; } = 1;
     public string? UnattendedModelCatalogKey { get; set; }

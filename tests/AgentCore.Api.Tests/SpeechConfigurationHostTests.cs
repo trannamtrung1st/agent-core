@@ -30,7 +30,7 @@ public sealed class SpeechConfigurationHostTests
         Assert.Null(resolution.Synthesizer);
         Assert.False(resolution.Plan.RecognitionResolvable);
 
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
     }
@@ -66,7 +66,7 @@ public sealed class SpeechConfigurationHostTests
         Assert.False(resolution.Plan.RecognitionResolvable);
         Assert.False(resolution.Plan.SynthesisResolvable);
 
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         Assert.Equal("text", view!.Mode);
@@ -95,7 +95,7 @@ public sealed class SpeechConfigurationHostTests
         Assert.True(resolution.Plan.RecognitionResolvable);
 
         var client = TestOwnerCapability.CreateOwnerClient(factory);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "voice"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "voice"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var agents = await client.GetFromJsonAsync<AgentListResponse>("/api/v1/agents");
         Assert.Contains(agents!.Agents, agent => agent.Id == "examiner" && agent.VoiceAvailable);
@@ -116,7 +116,7 @@ public sealed class SpeechConfigurationHostTests
         Assert.Equal(SpeechTransport.ServerAudio, resolution.Plan.OutputTransport);
 
         var client = TestOwnerCapability.CreateOwnerClient(factory);
-        var voice = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "voice"));
+        var voice = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "voice"));
         Assert.Equal(HttpStatusCode.Created, voice.StatusCode);
         Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
     }
@@ -141,9 +141,9 @@ public sealed class SpeechConfigurationHostTests
         Assert.False(resolution.Plan.RecognitionCapabilities?.PartialTranscripts);
 
         var client = TestOwnerCapability.CreateOwnerClient(factory);
-        var text = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var text = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         Assert.Equal(HttpStatusCode.Created, text.StatusCode);
-        var voice = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "voice"));
+        var voice = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "voice"));
         Assert.Equal(HttpStatusCode.Created, voice.StatusCode);
         Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
     }
@@ -167,9 +167,9 @@ public sealed class SpeechConfigurationHostTests
         Assert.False(string.IsNullOrWhiteSpace(factory.Services.GetRequiredService<SpeechProvidersOptions>().Synthesis.ApiKey));
 
         var client = TestOwnerCapability.CreateOwnerClient(factory);
-        var text = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var text = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         Assert.Equal(HttpStatusCode.Created, text.StatusCode);
-        var voice = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "voice"));
+        var voice = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "voice"));
         Assert.Equal(HttpStatusCode.Created, voice.StatusCode);
         Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
     }
@@ -228,7 +228,7 @@ public sealed class SpeechConfigurationHostTests
         var client = TestOwnerCapability.CreateOwnerClient(factory);
         var agents = await client.GetFromJsonAsync<AgentListResponse>("/api/v1/agents");
         Assert.Contains(agents!.Agents, agent => agent.Id == "examiner" && agent.VoiceAvailable);
-        var voice = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "voice"));
+        var voice = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "voice"));
         Assert.Equal(HttpStatusCode.Created, voice.StatusCode);
         Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
     }

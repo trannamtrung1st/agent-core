@@ -48,9 +48,7 @@ public static class ToolPolicy
                     || admission.TrustedConnection && ToolResources.IsOccurrence(admission.TriggerKind))
                 ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
 
-        if (toolName == ToolCatalog.WorkspaceCwd && !WorkspaceSemantics.IsV2(definition)
-            || toolName is ToolCatalog.WorkspaceRetain or ToolCatalog.WorkspaceCheckout && WorkspaceSemantics.IsV2(definition))
-            return ToolPolicyDecision.Deny;
+
 
         if (!RolePermissions.AllowsTool(definition, toolName))
         {
@@ -186,8 +184,7 @@ public static class ToolPolicy
                 && (context is { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn }
                     || context.TrustedConnection && ToolResources.IsOccurrence(context.Trigger.Kind));
 
-        if (descriptor.Name == ToolCatalog.WorkspaceCwd && (!WorkspaceSemantics.IsV2(definition) || context?.AgentWorkspaceAvailable != true)
-            || descriptor.Name is ToolCatalog.WorkspaceRetain or ToolCatalog.WorkspaceCheckout && WorkspaceSemantics.IsV2(definition))
+        if (descriptor.Name == ToolCatalog.WorkspaceCwd && context?.AgentWorkspaceAvailable != true)
             return false;
 
         if (!RolePermissions.AllowsTool(definition, descriptor.Name))

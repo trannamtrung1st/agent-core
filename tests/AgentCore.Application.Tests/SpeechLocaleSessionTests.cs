@@ -21,7 +21,7 @@ public sealed class SpeechLocaleSessionTests
     {
         var store = new InMemoryMemoryStore();
         var manager = CreateManager(store);
-        var created = await manager.CreateAsync("examiner", null, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
         Assert.Equal("en", created.Definition.ConversationPolicy.Language);
         Assert.Null(created.SpeechLocaleOverride);
         Assert.Equal("en", SpeechLocale.Resolve(created).Effective);
@@ -42,7 +42,7 @@ public sealed class SpeechLocaleSessionTests
     public async Task Invalid_override_is_rejected_at_the_application_boundary()
     {
         var manager = CreateManager(new InMemoryMemoryStore());
-        var created = await manager.CreateAsync("examiner", null, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
         var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
             manager.SetSpeechLocaleAsync(created.SessionId, "en_US"));
         Assert.Equal("ValidationError", error.Code);
@@ -57,7 +57,7 @@ public sealed class SpeechLocaleSessionTests
         var store = new InMemoryMemoryStore();
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
         var manager = CreateManager(store, time);
-        var created = await manager.CreateAsync("examiner", null, SessionMode.Text, speechLocaleOverride: "fr-FR");
+        var created = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text, speechLocaleOverride: "fr-FR");
         var output = new CapturingSessionOutput();
         await using var runtime = CreateRuntime(output, time, store, created);
         await runtime.AttachAsync();
@@ -73,7 +73,7 @@ public sealed class SpeechLocaleSessionTests
     {
         var store = new InMemoryMemoryStore();
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
-        var created = await CreateManager(store, time).CreateAsync(
+        var created = await CreateManager(store, time).CreateOwnedAsync(
             "examiner",
             null,
             SessionMode.Voice,
@@ -97,7 +97,7 @@ public sealed class SpeechLocaleSessionTests
             LocaleSupport = new RejectingLocaleSupport("ja-JP")
         };
         var manager = CreateManager(store, time, voice);
-        var created = await manager.CreateAsync("examiner", null, SessionMode.Text, speechLocaleOverride: "ja-JP");
+        var created = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text, speechLocaleOverride: "ja-JP");
         var output = new CapturingSessionOutput();
         await using var runtime = CreateRuntime(output, time, store, created, voice: voice);
         await runtime.AttachAsync();
@@ -118,7 +118,7 @@ public sealed class SpeechLocaleSessionTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-0003-7000-8000-{index:D12}")),
             Enumerable.Range(1, 8).Select(index => Guid.Parse($"873f07d1-e264-4c81-a31b-7e59e940b8{index:D2}")).ToArray());
-        return new SessionManager(
+        return OwnedSessions.Manager(
             new StaticDefinitions(SampleDefinitions.Examiner),
             store,
             ids,

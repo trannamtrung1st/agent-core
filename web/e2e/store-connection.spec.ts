@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { LEGACY_IDENTITY_LABELS, selectLegacyIdentity } from "./support/legacy-identity";
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 
 test("store connection and quiet background work stay labeled", async ({ page }) => {
   test.setTimeout(120_000);
@@ -23,7 +23,7 @@ test("store connection and quiet background work stay labeled", async ({ page })
   await page.waitForFunction(() => window.localStorage.getItem("agent-core.owner-capability"));
   await page.getByRole("button", { name: "Start a new chat" }).click();
   await expect(page.getByRole("combobox", { name: "Identity" })).toBeEnabled({ timeout: 15_000 });
-  await selectLegacyIdentity(page, LEGACY_IDENTITY_LABELS.generalAssistant);
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.generalAssistant);
   await page.getByLabel("Message").fill("hello");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });

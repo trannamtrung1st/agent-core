@@ -114,7 +114,7 @@ public sealed class AdminMemoryHistoryTests
                 UserRetrieval: true)
         };
         var definitions = new VersionedDefinitions(definition);
-        var instanceService = new AgentInstanceService(instances, definitions, sessions, Ids(8, "019944af-00a6-7000-8000-"), clock);
+        var instanceService = new AgentInstanceService(instances, definitions, Ids(8, "019944af-00a6-7000-8000-"), clock);
         var manager = new SessionManager(
             definitions,
             sessions,

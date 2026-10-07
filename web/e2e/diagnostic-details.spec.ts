@@ -1,9 +1,11 @@
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test } from "@playwright/test";
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 
 test("failed assistant details copy and survive reload", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByLabel("Message").fill("synthetic-fail-turn");
   await page.getByRole("button", { name: "Send" }).click();
@@ -30,6 +32,7 @@ test("failed assistant details copy and survive reload", async ({ page }) => {
 
 test("background work shows a seeded terminal diagnostic", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByLabel("Message").fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();
@@ -76,6 +79,7 @@ test("background work shows a seeded terminal diagnostic", async ({ page }) => {
 
 test("admin inventory keeps a server diagnostic id", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.route("**/api/v2/admin/definitions", async (route) => {
     await route.fulfill({
@@ -98,6 +102,7 @@ test("admin inventory keeps a server diagnostic id", async ({ page }) => {
 
 async function openNewDraftForm(page: import("@playwright/test").Page, definitionId: string) {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByRole("button", { name: "Open Admin" }).click();
   await page.getByRole("button", { name: "New definition" }).click();

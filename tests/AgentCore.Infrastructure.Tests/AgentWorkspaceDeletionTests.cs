@@ -78,7 +78,7 @@ public sealed class AgentWorkspaceDeletionTests
         await using var fixture = await Fixture.CreateAsync(sqlite);
         await fixture.Deletion.DeleteInstanceAsync(fixture.Command);
         await fixture.Instances.InsertAsync(fixture.Instance);
-        var item = await fixture.Home.RetainAsync(fixture.Owner, "/home/new.bin", "application/octet-stream", BytesForNewOwner,
+        var item = await fixture.Home.WriteFileAsync(fixture.Owner, "/home/new.bin", "application/octet-stream", BytesForNewOwner,
             null, null, null);
         await fixture.Deletion.RecoverWorkspaceCleanupAsync();
         Assert.Equal(BytesForNewOwner, (await fixture.Home.ReadAsync(fixture.Owner, item.ItemId, null)).Bytes);
@@ -156,9 +156,9 @@ public sealed class AgentWorkspaceDeletionTests
             }
             var now = TimeProvider.System.GetUtcNow();
             f.Instance = new AgentInstance(f.Owner, "field-guide", 1, new AgentIdentity("Guide", "role", "desc", "tone"),
-                AgentInstanceLifecycle.Archived, now, now, false);
+                AgentInstanceLifecycle.Archived, now, now);
             await f.Instances.InsertAsync(f.Instance);
-            f.Item = await f.Home.RetainAsync(f.Owner, "/home/original.bin", "application/octet-stream", Bytes,
+            f.Item = await f.Home.WriteFileAsync(f.Owner, "/home/original.bin", "application/octet-stream", Bytes,
                 Guid.NewGuid(), null, null);
             f.Command = new(f.Owner, f.Instance.Revision, Guid.NewGuid(), now);
             return f;
@@ -188,8 +188,8 @@ public sealed class AgentWorkspaceDeletionTests
             FailCleanup ? ValueTask.FromException(new IOException("Injected byte cleanup failure.")) : inner.DeleteInstanceContentAsync(id, ct);
         public ValueTask<AgentWorkspacePage> ListAsync(Guid id, string prefix, string? after, int limit, CancellationToken ct = default) => inner.ListAsync(id, prefix, after, limit, ct);
         public ValueTask<AgentWorkspaceContent> ReadAsync(Guid id, Guid? item, string? path, CancellationToken ct = default) => inner.ReadAsync(id, item, path, ct);
-        public ValueTask<AgentWorkspaceItem> RetainAsync(Guid id, string path, string type, ReadOnlyMemory<byte> bytes, Guid? session,
-            long? revision, string? hash, CancellationToken ct = default) => inner.RetainAsync(id, path, type, bytes, session, revision, hash, ct);
+        public ValueTask<AgentWorkspaceItem> WriteFileAsync(Guid id, string path, string type, ReadOnlyMemory<byte> bytes, Guid? session,
+            long? revision, string? hash, CancellationToken ct = default) => inner.WriteFileAsync(id, path, type, bytes, session, revision, hash, ct);
         public ValueTask DeleteAsync(Guid id, Guid item, long revision, CancellationToken ct = default) => inner.DeleteAsync(id, item, revision, ct);
     }
 }

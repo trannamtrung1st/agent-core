@@ -181,7 +181,7 @@ public sealed class WorkspaceStructureTests
             return f;
         }
         public void Reopen() => Home=new(Path.Combine(Root,"blobs"),TimeProvider.System,new SystemIdGenerator(TimeProvider.System),factory,maxFileBytes:quota,maxInstanceBytes:quota);
-        public async Task Write(string path,byte[] bytes) { if(Scratch is not null) await Scratch.WriteAsync(Id,P(path),bytes); else await Home!.RetainAsync(Id,P(path),"application/octet-stream",bytes,null,null,null); }
+        public async Task Write(string path,byte[] bytes) { if(Scratch is not null) await Scratch.WriteAsync(Id,P(path),bytes); else await Home!.WriteFileAsync(Id,P(path),"application/octet-stream",bytes,null,null,null); }
         public async Task<byte[]> Read(string path) => Scratch is not null ? (await Scratch.ReadAsync(Id,Definition,P(path))).Bytes : (await Home!.ReadAsync(Id,null,P(path))).Bytes;
         public async Task<string[]> Paths() => Scratch is null ? (await Home!.ListAsync(Id,"/home",null,100)).Items.Select(i=>i.LogicalPath).Order().ToArray() : (await Enumerate("/workspace/working")).Order().ToArray();
         private async Task<List<string>> Enumerate(string path) {var result=new List<string>(); foreach(var n in await Scratch!.ListAsync(Id,Definition,path)) {result.Add(n.LogicalPath);if(n.Directory)result.AddRange(await Enumerate(n.LogicalPath));}return result;}

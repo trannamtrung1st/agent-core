@@ -1,3 +1,4 @@
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test, type Page } from "@playwright/test";
 import { queuedMessages } from "./support/queued-messages";
 
@@ -9,6 +10,7 @@ test.beforeEach(async ({ page }) => {
 
 async function startVoice(page: Page, options?: { firstAction?: "voice" | "text" }): Promise<void> {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   if (options?.firstAction !== "voice") {
     await page.getByLabel("Message").fill("Hello");
     await page.getByRole("button", { name: "Send" }).click();

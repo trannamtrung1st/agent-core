@@ -18,16 +18,18 @@ public sealed class WorkspaceApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task Execution_view_is_lazy_readonly_overlays_and_writable_workspace()
     {
         var anonymous = _factory.CreateClient();
-        var created = await Owner().PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await Owner().PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(Owner(), "examiner", 1), "text"));
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         var denied = await anonymous.GetAsync($"/api/v2/sessions/{view!.SessionId}/workspace");
         Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
 
         var listed = await Owner().GetFromJsonAsync<WorkspaceNodeResponse[]>(
-            $"/api/v2/sessions/{view.SessionId}/workspace?prefix=/");
-        Assert.Contains(listed!, node => node.LogicalPath == "/workspace");
-        Assert.Contains(listed!, node => node.LogicalPath == "/agent");
-        Assert.Contains(listed!, node => node.LogicalPath == "/attachments");
+            $"/api/v2/sessions/{view.SessionId}/workspace?prefix=/working");
+        Assert.Empty(listed!);
+        var agentNodes = await Owner().GetFromJsonAsync<WorkspaceNodeResponse[]>($"/api/v2/sessions/{view.SessionId}/workspace?prefix=/agent");
+        Assert.Contains(agentNodes!, node => node.LogicalPath == "/agent/definition.json");
+        var attachmentNodes = await Owner().GetFromJsonAsync<WorkspaceNodeResponse[]>($"/api/v2/sessions/{view.SessionId}/workspace?prefix=/attachments");
+        Assert.Empty(attachmentNodes!);
 
         var definition = await Owner().GetByteArrayAsync(
             $"/api/v2/sessions/{view.SessionId}/workspace/content?path=/agent/definition.json");
@@ -39,15 +41,15 @@ public sealed class WorkspaceApiTests : IClassFixture<AgentCoreApiFactory>
         Assert.Equal(HttpStatusCode.Forbidden, mutateAgent.StatusCode);
 
         var written = await Owner().PutAsync(
-            $"/api/v2/sessions/{view.SessionId}/workspace/content?path=/workspace/working/note.txt",
+            $"/api/v2/sessions/{view.SessionId}/workspace/content?path=/working/note.txt",
             new ByteArrayContent("hello"u8.ToArray()));
         Assert.Equal(HttpStatusCode.NoContent, written.StatusCode);
         var roundTrip = await Owner().GetByteArrayAsync(
-            $"/api/v2/sessions/{view.SessionId}/workspace/content?path=/workspace/working/note.txt");
+            $"/api/v2/sessions/{view.SessionId}/workspace/content?path=/working/note.txt");
         Assert.Equal("hello", Encoding.UTF8.GetString(roundTrip));
 
         var traversal = await Owner().GetAsync(
-            $"/api/v2/sessions/{view.SessionId}/workspace/content?path=/workspace/working/../secret");
+            $"/api/v2/sessions/{view.SessionId}/workspace/content?path=/working/../secret");
         Assert.Equal(HttpStatusCode.Forbidden, traversal.StatusCode);
     }
 

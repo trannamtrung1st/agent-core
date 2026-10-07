@@ -159,7 +159,7 @@ public sealed class TriggerScheduleTimeResolutionTests
             var agents = Path.Combine(dir.FullName, "agents");
             if (Directory.Exists(agents))
             {
-                var store = new FileAgentDefinitionStore(agents, SyntheticProviderAliases.Default);
+                var store = new ScenarioDefinitionStore(agents, SyntheticProviderAliases.Default);
                 return (await store.GetAsync("general-assistant", 8))!;
             }
 

@@ -1,3 +1,4 @@
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test } from "@playwright/test";
 import { waitForResponseSettled } from "./support/response-settled";
 
@@ -29,6 +30,7 @@ async function attachPng(page: import("@playwright/test").Page): Promise<void> {
 test("scripted vision completes a later-turn historical image reread", async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
 
   await chooseModel(page, "Scripted Vision");
@@ -52,6 +54,7 @@ test("scripted vision completes a later-turn historical image reread", async ({ 
 test("tools-capable non-vision model does not claim historical image sight", async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
 
   await chooseModel(page, "Scripted Vision");

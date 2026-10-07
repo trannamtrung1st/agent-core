@@ -52,11 +52,11 @@ public sealed class LiveIdentityMaintenanceTests(ITestOutputHelper output)
         var s = host.Services;
         var client = TestOwnerCapability.CreateOwnerClient(host);
         Assert.Contains("Real", await client.GetStringAsync("/health"));
-        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9);
+        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         var id = instance.InstanceId;
         await s.GetRequiredService<IExperienceStore>().ConfigureMaintenanceAsync(id, 0, true);
         await s.GetRequiredService<IExperienceStore>().ConfigureAsync(id, 0, true);
-        var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 9))!;
+        var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
         var memory = s.GetRequiredService<IStructuredMemoryService>();
         var memories = s.GetRequiredService<IStructuredMemoryStore>();
         var profile = await s.GetRequiredService<IMemoryStore>().LoadProfileAsync(LocalUserProfile.Id);
@@ -107,7 +107,7 @@ public sealed class LiveIdentityMaintenanceTests(ITestOutputHelper output)
         Assert.Equal(3, canonical.Provenance.DerivedFromMemoryIds!.Count);
         Assert.Contains("dashboard", canonical.Content, StringComparison.OrdinalIgnoreCase);
         output.WriteLine("Canonical memory: " + canonical.Content);
-        var other = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9);
+        var other = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         await s.GetRequiredService<IExperienceStore>().ConfigureMaintenanceAsync(other.InstanceId, 0, true);
         await SeedMemories(other.InstanceId, [("Frontend language A", "Prefer TypeScript for all frontend examples."), ("Frontend language B", "Prefer Python for all frontend examples.")]);
         var noOp = await Thought(other.InstanceId, "Inspect learned frontend preferences for contradictions. With insufficient evidence to choose one, do not consolidate or forget either. Complete with NoAction and explain that current user clarification is needed.");

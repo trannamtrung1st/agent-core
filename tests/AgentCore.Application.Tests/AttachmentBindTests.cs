@@ -45,7 +45,7 @@ public sealed class AttachmentBindTests
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var store = new InMemoryMemoryStore();
-        var manager = new SessionManager(
+        var manager = OwnedSessions.Manager(
             new TestDefinitions(SampleDefinitions.Examiner),
             store,
             new DeterministicIdGenerator(
@@ -54,7 +54,7 @@ public sealed class AttachmentBindTests
             TimeProvider.System,
             new VoiceAvailability { SpeechAdaptersResolved = true },
             attachments);
-        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         var renamed = await manager.RenameAsync(created.SessionId, "Planning notes");
         var output = new CapturingSessionOutput();
         await using var runtime = CreateRuntime(output, attachments, store, renamed);
@@ -76,7 +76,7 @@ public sealed class AttachmentBindTests
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var store = new InMemoryMemoryStore();
-        var manager = new SessionManager(
+        var manager = OwnedSessions.Manager(
             new TestDefinitions(SampleDefinitions.Examiner),
             store,
             new DeterministicIdGenerator(
@@ -85,7 +85,7 @@ public sealed class AttachmentBindTests
             TimeProvider.System,
             new VoiceAvailability { SpeechAdaptersResolved = true },
             attachments);
-        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         var uploaded = await attachments.UploadPendingAsync(
             created.SessionId,
             "a.txt",
@@ -121,7 +121,7 @@ public sealed class AttachmentBindTests
             null,
             null,
             time.GetUtcNow(),
-            time.GetUtcNow());
+            time.GetUtcNow(), AgentInstanceId: Guid.NewGuid());
         if (existing is null)
         {
             store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();

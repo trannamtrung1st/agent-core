@@ -38,12 +38,11 @@ public static class ToolActionPreparation
         {
             try
             {
-                var normalized = definition is not null && AgentCore.Domain.Definitions.WorkspaceSemantics.IsV2(definition)
-                    ? AgentWorkspacePaths.Arguments(call.Name, args, sessionId, admission?.WorkspaceCwd ?? "/home") : args;
+                var normalized = AgentWorkspacePaths.Arguments(call.Name, args, sessionId, admission?.WorkspaceCwd ?? "/home");
                 var parsed = WorkspaceStructureArguments.Parse(call.Name, normalized);
                 AgentCore.Application.Workspaces.WorkspaceStructuralPaths.Normalize(sessionId, parsed.Operations);
                 var preview = ToolApprovalPreview.Build(call.Name, args);
-                if (definition is not null && AgentCore.Domain.Definitions.WorkspaceSemantics.IsV2(definition))
+                if (definition is not null)
                 {
                     preview.Details["Exact operations"] = AgentWorkspacePaths.Project(normalized.GetRawText());
                     preview.Details["Path scope"] = "Resolved /home paths use this managed identity; /working paths use this Session scratch.";

@@ -16,8 +16,8 @@ public sealed class SessionManagerConcurrencyTests
         var inner = new InMemoryMemoryStore();
         var store = new BarrierProfileStore(inner);
         var manager = CreateManager(store);
-        var first = manager.CreateAsync("examiner", null, SessionMode.Text);
-        var second = manager.CreateAsync("examiner", null, SessionMode.Text);
+        var first = manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
+        var second = manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
         var created = await Task.WhenAll(first, second);
         Assert.Equal(2, created.Length);
         Assert.All(created, snapshot => Assert.Equal(LocalUserProfile.Id, snapshot.ProfileId));
@@ -35,8 +35,8 @@ public sealed class SessionManagerConcurrencyTests
         var store = new BarrierProfileStore(harness.Store);
         var manager = CreateManager(store);
         var created = await Task.WhenAll(
-            manager.CreateAsync("examiner", null, SessionMode.Text),
-            manager.CreateAsync("examiner", null, SessionMode.Text));
+            manager.CreateOwnedAsync("examiner", null, SessionMode.Text),
+            manager.CreateOwnedAsync("examiner", null, SessionMode.Text));
         Assert.All(created, snapshot => Assert.Equal(LocalUserProfile.Id, snapshot.ProfileId));
         var profile = await harness.Store.LoadProfileAsync(LocalUserProfile.Id);
         Assert.NotNull(profile);
@@ -47,7 +47,7 @@ public sealed class SessionManagerConcurrencyTests
     {
         var store = new InMemoryMemoryStore();
         var manager = CreateManager(store);
-        var created = await manager.CreateAsync("examiner", null, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
         await manager.EndAsync(created.SessionId);
         var ended = await store.LoadAsync(created.SessionId);
         Assert.Equal(SessionStatus.Ended, ended!.Status);
@@ -64,7 +64,7 @@ public sealed class SessionManagerConcurrencyTests
         var inner = new InMemoryMemoryStore();
         var store = new BarrierEndStore(inner);
         var manager = CreateManager(store);
-        var created = await manager.CreateAsync("examiner", null, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
         await Task.WhenAll(
             manager.EndAsync(created.SessionId),
             manager.EndAsync(created.SessionId));
@@ -77,7 +77,7 @@ public sealed class SessionManagerConcurrencyTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-0003-7000-8000-{index:D12}")),
             Enumerable.Range(1, 8).Select(index => Guid.Parse($"873f07d1-e264-4c81-a31b-7e59e940b8{index:D2}")).ToArray());
-        return new SessionManager(
+        return OwnedSessions.Manager(
             new StaticDefinitions(SampleDefinitions.Examiner),
             store,
             ids,

@@ -19,7 +19,7 @@ public sealed class WorkspaceArtifactToolTests
         var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
         var definition = WorkspaceTools();
         await workspace.EnsureAsync(session, definition);
-        var executor = new SessionToolExecutor(workspace: workspace);
+        var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
 
         var wrote = await ExecuteTextAsync(
             executor,
@@ -28,7 +28,7 @@ public sealed class WorkspaceArtifactToolTests
             new ModelToolCall("c1", ToolCatalog.WorkspaceWrite, """{"path":"notes.txt","content":"sample workspace content"}"""));
         using (var writeDoc = JsonDocument.Parse(wrote))
         {
-            Assert.Equal("/workspace/working/notes.txt", writeDoc.RootElement.GetProperty("path").GetString());
+            Assert.Equal("/working/notes.txt", writeDoc.RootElement.GetProperty("path").GetString());
         }
 
         await ExecuteTextAsync(
@@ -43,16 +43,17 @@ public sealed class WorkspaceArtifactToolTests
             session,
             new ModelToolCall("c3", ToolCatalog.WorkspaceRead, """{"path":"draft.txt"}"""));
         using var readDoc = JsonDocument.Parse(read);
-        Assert.Equal("/workspace/working/draft.txt", readDoc.RootElement.GetProperty("path").GetString());
+        Assert.Equal("/working/draft.txt", readDoc.RootElement.GetProperty("path").GetString());
         Assert.Equal("hello workspace", readDoc.RootElement.GetProperty("content").GetString());
     }
 
     [Fact]
     public async Task Workspace_write_rejects_host_absolute_paths_with_path_outside_workspace()
     {
-        var executor = new SessionToolExecutor(workspace: new FileSessionWorkspace(
+        var workspace = new FileSessionWorkspace(
             Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
-            Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))));
+            Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
+        var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
         var definition = WorkspaceTools();
         var session = Guid.CreateVersion7();
         var json = await ExecuteTextAsync(
@@ -60,7 +61,7 @@ public sealed class WorkspaceArtifactToolTests
             definition,
             session,
             new ModelToolCall("c1", ToolCatalog.WorkspaceWrite, """{"path":"/test.txt","content":"x"}"""));
-        Assert.Contains("path_outside_workspace", json, StringComparison.Ordinal);
+        Assert.Contains("forbidden", json, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -73,17 +74,17 @@ public sealed class WorkspaceArtifactToolTests
         await workspace.EnsureAsync(session, definition);
         await workspace.WriteAsync(session, "/workspace/working/note.md", "hello"u8.ToArray());
 
-        var executor = new SessionToolExecutor(workspace: workspace);
+        var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
         var json = await ExecuteTextAsync(
             executor,
             definition,
             session,
-            new ModelToolCall("c1", ToolCatalog.WorkspaceList, """{"path":"/workspace/working"}"""));
+            new ModelToolCall("c1", ToolCatalog.WorkspaceList, """{"path":"/working"}"""));
         using var doc = JsonDocument.Parse(json);
         var entries = doc.RootElement.GetProperty("entries");
         Assert.Contains(
             entries.EnumerateArray(),
-            item => item.GetProperty("path").GetString() == "/workspace/working/note.md"
+            item => item.GetProperty("path").GetString() == "/working/note.md"
                 && item.GetProperty("writable").GetBoolean());
         Assert.DoesNotContain("\\\\", json, StringComparison.Ordinal);
         Assert.DoesNotContain(dir.WorkspaceRoot, json, StringComparison.Ordinal);
@@ -101,7 +102,7 @@ public sealed class WorkspaceArtifactToolTests
         await workspace.WriteAsync(session, path, "alpha beta gamma"u8.ToArray());
         var hash = Sha256Hex("alpha beta gamma");
 
-        var executor = new SessionToolExecutor(workspace: workspace);
+        var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
         var patched = await ExecuteTextAsync(
             executor,
             definition,
@@ -109,7 +110,7 @@ public sealed class WorkspaceArtifactToolTests
             new ModelToolCall(
                 "c1",
                 ToolCatalog.WorkspacePatch,
-                $$"""{"path":"{{path}}","expectedSha256":"{{hash}}","edits":[{"oldText":"beta","newText":"BETA"}]}"""));
+                $$"""{"path":"{{AgentWorkspacePaths.Public(path)}}","expectedSha256":"{{hash}}","edits":[{"oldText":"beta","newText":"BETA"}]}"""));
         Assert.Contains("\"editsApplied\":1", patched, StringComparison.Ordinal);
         var read = await workspace.ReadAsync(session, definition, path);
         Assert.Equal("alpha BETA gamma", Encoding.UTF8.GetString(read.Bytes));
@@ -121,7 +122,7 @@ public sealed class WorkspaceArtifactToolTests
             new ModelToolCall(
                 "c2",
                 ToolCatalog.WorkspacePatch,
-                $$"""{"path":"{{path}}","expectedSha256":"{{hash}}","edits":[{"oldText":"BETA","newText":"x"}]}"""));
+                $$"""{"path":"{{AgentWorkspacePaths.Public(path)}}","expectedSha256":"{{hash}}","edits":[{"oldText":"BETA","newText":"x"}]}"""));
         Assert.Contains("Conflict", stale, StringComparison.OrdinalIgnoreCase);
         read = await workspace.ReadAsync(session, definition, path);
         Assert.Equal("alpha BETA gamma", Encoding.UTF8.GetString(read.Bytes));
@@ -139,7 +140,7 @@ public sealed class WorkspaceArtifactToolTests
         const string path = "/workspace/working/out.md";
         await workspace.WriteAsync(session, path, "# Title"u8.ToArray());
 
-        var executor = new SessionToolExecutor(workspace: workspace, artifacts: artifacts);
+        var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace), artifacts: artifacts);
         var result = await ExecuteTextAsync(
             executor,
             definition,
@@ -147,13 +148,13 @@ public sealed class WorkspaceArtifactToolTests
             new ModelToolCall(
                 "c1",
                 ToolCatalog.ArtifactsCreateFromWorkspace,
-                """{"path":"/workspace/working/out.md","displayName":"out.md","contentType":"text/markdown"}"""));
+                """{"path":"/working/out.md","displayName":"out.md","contentType":"text/markdown"}"""));
         using var doc = JsonDocument.Parse(result);
         var artifactId = doc.RootElement.GetProperty("artifactId").GetGuid();
         var listed = await artifacts.ListAsync(session);
         var record = Assert.Single(listed);
         Assert.Equal(artifactId, record.ArtifactId);
-        Assert.Equal(path, record.WorkspaceLogicalPath);
+        Assert.Equal(AgentWorkspacePaths.Public(path), record.WorkspaceLogicalPath);
         Assert.Equal("text/markdown", record.ContentType);
 
         var verify = await ExecuteTextAsync(
@@ -162,7 +163,7 @@ public sealed class WorkspaceArtifactToolTests
             session,
             new ModelToolCall("c2", ToolCatalog.ArtifactsVerify, $$"""{"artifactId":"{{artifactId:D}}"}"""));
         Assert.Contains(record.Sha256Hex, verify, StringComparison.Ordinal);
-        Assert.Contains(path, verify, StringComparison.Ordinal);
+        Assert.Contains(AgentWorkspacePaths.Public(path), verify, StringComparison.Ordinal);
         Assert.Contains("createdAt", verify, StringComparison.Ordinal);
     }
 
@@ -178,7 +179,7 @@ public sealed class WorkspaceArtifactToolTests
         await workspace.WriteAsync(session, "/workspace/working/reports/summary.txt", "hello workspace"u8.ToArray());
         await workspace.WriteAsync(session, "/workspace/working/draft..txt", "sample in a dotted name"u8.ToArray());
         await workspace.WriteAsync(session, "/workspace/working/pixel.bin", new byte[] { 0, 1, 2, 3 });
-        var executor = new SessionToolExecutor(workspace: workspace);
+        var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
 
         var json = await ExecuteTextAsync(
             executor,
@@ -191,8 +192,8 @@ public sealed class WorkspaceArtifactToolTests
         using var document = JsonDocument.Parse(json);
         var matches = document.RootElement.GetProperty("matches");
         Assert.Equal(2, matches.GetArrayLength());
-        Assert.Contains("/workspace/working/notes.md", json, StringComparison.Ordinal);
-        Assert.Contains("/workspace/working/draft..txt", json, StringComparison.Ordinal);
+        Assert.Contains("/working/notes.md", json, StringComparison.Ordinal);
+        Assert.Contains("/working/draft..txt", json, StringComparison.Ordinal);
         Assert.DoesNotContain("pixel.bin", json, StringComparison.Ordinal);
         Assert.Contains("sample workspace content", json, StringComparison.Ordinal);
     }
@@ -205,7 +206,7 @@ public sealed class WorkspaceArtifactToolTests
         var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
         var definition = WorkspaceTools();
         await workspace.EnsureAsync(session, definition);
-        var executor = new SessionToolExecutor(workspace: workspace);
+        var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
         await ExecuteTextAsync(
             executor,
             definition,
@@ -216,7 +217,7 @@ public sealed class WorkspaceArtifactToolTests
             definition,
             session,
             new ModelToolCall("c2", ToolCatalog.WorkspaceMove, """{"source":"draft.txt","destination":"reports/draft.txt"}"""));
-        Assert.Contains("/workspace/working/reports/draft.txt", moved, StringComparison.Ordinal);
+        Assert.Contains("/working/reports/draft.txt", moved, StringComparison.Ordinal);
         var read = await ExecuteTextAsync(
             executor,
             definition,
@@ -236,19 +237,13 @@ public sealed class WorkspaceArtifactToolTests
         AgentDefinition definition,
         Guid sessionId,
         ModelToolCall call) =>
-        (await executor.ExecuteAsync(definition, sessionId, call, ToolLimits.MaxOutputBytes)).Text;
+        (await executor.ExecuteAsync(definition, sessionId, call, ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn, WorkspaceCwd: "/working"))).Text;
 
     [Fact]
-    public void Explicit_workspace_policy_enables_tree_move_without_an_unrelated_structural_tool_grant()
+    public void Canonical_move_schema_includes_tree_guards_for_every_definition()
     {
-        var legacy = WorkspaceTools() with { Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.WorkspaceMove]) };
-        var managed = legacy with { Environment = legacy.Environment! with { Workspace = new WorkspaceTemplatePolicy(Semantics: WorkspaceSemantics.AgentWorkspaceV2) } };
-        Assert.False(WorkspaceFilesystemPolicy.AllowsStructure(legacy));
-        Assert.True(WorkspaceFilesystemPolicy.AllowsStructure(managed));
-        using var oldSchema = JsonDocument.Parse(WorkspaceFilesystemPolicy.ForDefinition(legacy, ToolRegistry.Get(ToolCatalog.WorkspaceMove)).ParametersJson);
-        using var newSchema = JsonDocument.Parse(WorkspaceFilesystemPolicy.ForDefinition(managed, ToolRegistry.Get(ToolCatalog.WorkspaceMove)).ParametersJson);
-        Assert.False(oldSchema.RootElement.GetProperty("properties").TryGetProperty("expectedTreeSha256", out _));
-        Assert.True(newSchema.RootElement.GetProperty("properties").TryGetProperty("expectedTreeSha256", out _));
+        using var schema = JsonDocument.Parse(ToolRegistry.Get(ToolCatalog.WorkspaceMove).ModelDefinition.ParametersJson);
+        Assert.True(schema.RootElement.GetProperty("properties").TryGetProperty("expectedTreeSha256", out _));
     }
 
     private static AgentDefinition WorkspaceTools() => new(

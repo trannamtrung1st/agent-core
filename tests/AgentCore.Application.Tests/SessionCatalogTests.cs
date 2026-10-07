@@ -28,7 +28,7 @@ public sealed class SessionCatalogTests
     public async Task Create_pins_agent_version_default_title_and_workspace_ownership()
     {
         var manager = CreateManager(new InMemoryMemoryStore());
-        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         Assert.Equal(SessionTitles.Default, created.Title);
         Assert.True(created.WorkspaceOwned);
         Assert.Equal(0, created.RuntimeEpoch);
@@ -42,9 +42,9 @@ public sealed class SessionCatalogTests
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));
         var manager = CreateManager(new InMemoryMemoryStore(), time);
-        var first = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var first = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         time.Advance(TimeSpan.FromSeconds(1));
-        var second = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var second = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         time.Advance(TimeSpan.FromSeconds(1));
         await manager.RenameAsync(first.SessionId, "Older chat");
         var page = await manager.ListCatalogAsync(cursor: null, limit: 1, includeArchived: false);
@@ -60,7 +60,7 @@ public sealed class SessionCatalogTests
     public async Task Archive_hides_from_default_catalog_and_reopen_is_noop_when_not_paused()
     {
         var manager = CreateManager(new InMemoryMemoryStore());
-        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         await manager.ArchiveAsync(created.SessionId);
         var hidden = await manager.ListCatalogAsync(null, 50, includeArchived: false);
         Assert.Empty(hidden.Items);
@@ -75,7 +75,7 @@ public sealed class SessionCatalogTests
     public async Task Ended_rows_remain_labeled_and_cannot_reopen()
     {
         var manager = CreateManager(new InMemoryMemoryStore());
-        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         await manager.EndAsync(created.SessionId);
         var page = await manager.ListCatalogAsync(null, 50, false);
         Assert.Equal(SessionStatus.Ended, page.Items[0].Status);
@@ -87,7 +87,7 @@ public sealed class SessionCatalogTests
     public async Task Durable_delete_removes_ended_sessions()
     {
         var manager = CreateManager(new InMemoryMemoryStore());
-        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         await manager.EndAsync(created.SessionId);
         var ended = await manager.GetAsync(created.SessionId);
         await manager.DurablyDeleteAsync(created.SessionId);
@@ -100,7 +100,7 @@ public sealed class SessionCatalogTests
     {
         var store = new InMemoryMemoryStore();
         var manager = CreateManager(store);
-        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         await manager.RenameAsync(created.SessionId, "Renamed");
         await manager.DurablyDeleteAsync(created.SessionId);
         await manager.DurablyDeleteAsync(created.SessionId);
@@ -118,9 +118,9 @@ public sealed class SessionCatalogTests
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));
         var manager = CreateManager(new InMemoryMemoryStore(), time);
-        var first = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var first = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         time.Advance(TimeSpan.FromSeconds(1));
-        var second = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var second = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
 
         var before = await manager.ListCatalogAsync(null, 50, false);
         Assert.Equal([second.SessionId, first.SessionId], before.Items.Select(item => item.SessionId).ToArray());
@@ -138,7 +138,7 @@ public sealed class SessionCatalogTests
     public async Task Reopen_on_created_session_is_idempotent()
     {
         var manager = CreateManager(new InMemoryMemoryStore());
-        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         var first = await manager.ReopenAsync(created.SessionId);
         Assert.Equal(created.RuntimeEpoch, first.RuntimeEpoch);
         Assert.Equal(created.Revision, first.Revision);
@@ -153,7 +153,7 @@ public sealed class SessionCatalogTests
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));
         var store = new InMemoryMemoryStore();
         var manager = CreateManager(store, time);
-        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         var activityAt = time.GetUtcNow();
         await manager.DeactivateAsync(created.SessionId);
         var loaded = await manager.GetAsync(created.SessionId);
@@ -177,7 +177,7 @@ public sealed class SessionCatalogTests
     public async Task Reopen_from_paused_returns_created_and_clears_pause_reason()
     {
         var manager = CreateManager(new InMemoryMemoryStore());
-        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         var paused = await manager.DeactivateAsync(created.SessionId);
         Assert.Equal(SessionStatus.Paused, paused.Status);
         Assert.Equal("manual", paused.PauseReason);
@@ -192,7 +192,7 @@ public sealed class SessionCatalogTests
     public async Task Deactivate_pauses_without_archive_or_delete_and_is_idempotent()
     {
         var manager = CreateManager(new InMemoryMemoryStore());
-        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         var first = await manager.DeactivateAsync(created.SessionId);
         Assert.Equal(SessionStatus.Paused, first.Status);
         Assert.Equal(1, first.RuntimeEpoch);
@@ -210,7 +210,7 @@ public sealed class SessionCatalogTests
         var sessions = new InMemoryMemoryStore();
         var memories = new InMemoryStructuredMemoryStore();
         var manager = CreateManager(sessions, structuredMemory: memories);
-        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         var service = new StructuredMemoryService(
             memories,
             new DeterministicIdGenerator(
@@ -234,7 +234,7 @@ public sealed class SessionCatalogTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-0003-7000-8000-{index:D12}")),
             Enumerable.Range(1, 8).Select(index => Guid.Parse($"873f07d1-e264-4c81-a31b-7e59e940b8{index:D2}")).ToArray());
-        return new SessionManager(
+        return OwnedSessions.Manager(
             new StaticDefinitions(SampleDefinitions.Examiner),
             store,
             ids,

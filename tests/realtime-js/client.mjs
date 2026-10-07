@@ -129,43 +129,37 @@ async function attachSession(connection, sessionId, sequence = 0, extra = {}) {
   return connection.invoke("Attach", command(sessionId, sequence, "session.attach", { lastServerSequence: null }, extra));
 }
 
-async function createSession() {
-  await ensureOwner();
-  const response = await fetch(`${base}/api/v1/sessions`, {
+async function provisionInstance(definitionId, version) {
+  const response = await fetch(`${base}/api/v2/admin/agent-instances`, {
     method: "POST",
     headers: await ownerHeaders({ "content-type": "application/json" }),
-    body: JSON.stringify({ agentId: "examiner", mode: "text" })
+    body: JSON.stringify({ definitionId, version })
   });
-  if (!response.ok) {
-    throw new Error(`create failed ${response.status}`);
-  }
+  if (!response.ok) throw new Error(`instance create failed ${response.status}: ${await response.text()}`);
+  return (await response.json()).instanceId;
+}
+
+async function createOwnedSession(definitionId, version, mode) {
+  const agentInstanceId = await provisionInstance(definitionId, version);
+  const response = await fetch(`${base}/api/v2/sessions`, {
+    method: "POST",
+    headers: await ownerHeaders({ "content-type": "application/json" }),
+    body: JSON.stringify({ agentInstanceId, mode })
+  });
+  if (!response.ok) throw new Error(`session create failed ${response.status}`);
   return response.json();
 }
 
-async function createGeneralAssistantSession(agentVersion = 3) {
-  await ensureOwner();
-  const response = await fetch(`${base}/api/v1/sessions`, {
-    method: "POST",
-    headers: await ownerHeaders({ "content-type": "application/json" }),
-    body: JSON.stringify({ agentId: "general-assistant", agentVersion, mode: "text" })
-  });
-  if (!response.ok) {
-    throw new Error(`general-assistant create failed ${response.status}`);
-  }
-  return response.json();
+async function createSession() {
+  return createOwnedSession("examiner", 1, "text");
+}
+
+async function createApprovalSession() {
+  return createOwnedSession("approval-demo", 1, "text");
 }
 
 async function createVoiceSession() {
-  await ensureOwner();
-  const response = await fetch(`${base}/api/v1/sessions`, {
-    method: "POST",
-    headers: await ownerHeaders({ "content-type": "application/json" }),
-    body: JSON.stringify({ agentId: "examiner", mode: "voice" })
-  });
-  if (!response.ok) {
-    throw new Error(`voice create failed ${response.status}`);
-  }
-  return response.json();
+  return createOwnedSession("examiner", 1, "voice");
 }
 
 async function ackClientSpeech(connection, sessionId, sequence, attachmentId, responseId, textEndExclusive) {
@@ -1142,10 +1136,10 @@ async function run() {
     case "capacity": {
       const a = await createSession();
       const b = await createSession();
-      const extra = await fetch(`${base}/api/v1/sessions`, {
+      const extra = await fetch(`${base}/api/v2/sessions`, {
         method: "POST",
         headers: await ownerHeaders({ "content-type": "application/json" }),
-        body: JSON.stringify({ agentId: "examiner", mode: "text" })
+        body: JSON.stringify({ agentInstanceId: await provisionInstance("examiner", 1), mode: "text" })
       });
       if (!extra.ok) {
         throw new Error(`create should succeed, got ${extra.status}`);
@@ -1575,7 +1569,7 @@ async function run() {
       break;
     }
     case "approval-stale-respond": {
-      const session = await createGeneralAssistantSession(3);
+      const session = await createApprovalSession();
       const connection = await connect();
       await attachSession(connection, session.sessionId);
       await waitFor((evt) => evt.type === "session.ready");
@@ -1614,7 +1608,7 @@ async function run() {
       break;
     }
     case "approval-reject-respond": {
-      const session = await createGeneralAssistantSession(3);
+      const session = await createApprovalSession();
       const connection = await connect();
       await attachSession(connection, session.sessionId);
       await waitFor((evt) => evt.type === "session.ready");

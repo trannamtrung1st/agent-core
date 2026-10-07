@@ -32,12 +32,6 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                 throw AgentCoreErrors.NotFound("Agent instance was not found.");
             }
 
-            if (instance.Compatibility)
-            {
-                throw AgentCoreErrors.Validation(
-                    "Compatibility instances cannot be deleted through the managed Admin path.");
-            }
-
             if (instance.Lifecycle != AgentInstanceLifecycle.Archived)
             {
                 throw AgentCoreErrors.Validation("Archive this instance before deleting it.");
@@ -98,25 +92,12 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
         }
     }
 
-    public ValueTask<AgentInstance?> FindCompatibilityAsync(string definitionId, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        lock (_gate)
-        {
-            var found = _instances.Values.FirstOrDefault(item =>
-                item.Compatibility && string.Equals(item.DefinitionId, definitionId, StringComparison.Ordinal));
-            return ValueTask.FromResult(found);
-        }
-    }
-
     public ValueTask InsertAsync(AgentInstance instance, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            if (_instances.ContainsKey(instance.InstanceId)
-                || (instance.Compatibility && _instances.Values.Any(item =>
-                    item.Compatibility && string.Equals(item.DefinitionId, instance.DefinitionId, StringComparison.Ordinal))))
+            if (_instances.ContainsKey(instance.InstanceId))
             {
                 throw new AgentCoreException("Conflict", "Agent instance already exists.", 409);
             }
@@ -240,11 +221,6 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                     throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
                 }
 
-                if (instance.Compatibility)
-                {
-                    throw new AgentCoreException("Validation", "Compatibility instances cannot change active version.", 400);
-                }
-
                 if (update.ActiveVersion is not int activeVersion)
                 {
                     throw AgentCoreErrors.Validation("Active version is required.");
@@ -312,11 +288,6 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                 if (instance.Revision != update.ExpectedRevision)
                 {
                     throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
-                }
-
-                if (instance.Compatibility)
-                {
-                    throw new AgentCoreException("Validation", "Compatibility instances cannot change persona or lifecycle.", 400);
                 }
 
                 if (update.Persona is not AgentIdentity persona)
@@ -422,11 +393,6 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                 if (instance.Revision != update.ExpectedRevision)
                 {
                     throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
-                }
-
-                if (instance.Compatibility)
-                {
-                    throw new AgentCoreException("Validation", "Compatibility instances cannot change persona or lifecycle.", 400);
                 }
 
                 if (update.Lifecycle is not AgentInstanceLifecycle lifecycle)
@@ -564,12 +530,6 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
             if (instance.Revision != update.ExpectedRevision)
             {
                 throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
-            }
-
-            if (instance.Compatibility
-                && (update.Persona is not null || update.Lifecycle is not null))
-            {
-                throw new AgentCoreException("Validation", "Compatibility instances cannot change persona or lifecycle.", 400);
             }
 
             var persona = update.Persona ?? instance.Persona;

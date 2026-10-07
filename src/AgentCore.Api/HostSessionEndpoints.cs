@@ -29,16 +29,15 @@ public static class HostSessionEndpoints
                     throw AgentCoreErrors.ShuttingDown();
                 }
 
-                if (body is null || string.IsNullOrWhiteSpace(body.AgentId))
+                if (body is null || body.AgentInstanceId == Guid.Empty)
                 {
-                    throw AgentCoreErrors.Validation("agentId is required.");
+                    throw AgentCoreErrors.Validation("agentInstanceId is required.");
                 }
 
                 var purpose = HttpMapping.ParseHostPurpose(body.Purpose, body.MaxDurationSeconds, out var maxDuration);
                 var policy = HttpMapping.ParseHostPolicy(body.CompletionPolicy);
-                var snapshot = await sessions.CreateAsync(
-                        body.AgentId,
-                        body.AgentVersion,
+                var snapshot = await sessions.CreateForInstanceAsync(
+                        body.AgentInstanceId,
                         HttpMapping.ParseMode(body.Mode),
                         cancellationToken,
                         purpose,

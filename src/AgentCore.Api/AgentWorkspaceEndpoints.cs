@@ -39,22 +39,7 @@ public static class AgentWorkspaceEndpoints
             try { await workspace.DeleteAsync(instanceId, itemId, expectedRevision, ct); return Results.NoContent(); }
             catch (AgentCoreException ex) { return ProblemResults.From(ex); }
         });
-        var session = app.MapGroup("/api/v2/sessions/{sessionId:guid}/workspace")
-            .AddEndpointFilter<OwnerCapabilityFilter>().DisableAntiforgery();
-        session.MapPost("retain", async (Guid sessionId, WorkspaceRetainRequest request, AgentInstanceWorkspaceService workspace, CancellationToken ct) =>
-        {
-            try { return Results.Json(MapItem(await workspace.RetainAsync(sessionId, request.Source, request.Destination, request.ExpectedRevision, request.ExpectedSha256, ct))); }
-            catch (AgentCoreException ex) { return ProblemResults.From(ex); }
-        });
-        session.MapPost("checkout", async (Guid sessionId, WorkspaceCheckoutRequest request, AgentInstanceWorkspaceService workspace, CancellationToken ct) =>
-        {
-            try
-            {
-                var result = await workspace.CheckoutAsync(sessionId, request.Source, request.Destination, request.ExpectedRevision, request.ExpectedSha256, ct);
-                return Results.Json(new WorkspaceCheckoutResponse(MapItem(result.Source), result.Destination, result.ByteSize, result.Sha256Hex));
-            }
-            catch (AgentCoreException ex) { return ProblemResults.From(ex); }
-        });
+
     }
 
     private static AgentWorkspaceItemResponse MapItem(AgentWorkspaceItem item) => new(item.ItemId, item.AgentInstanceId, item.LogicalPath,

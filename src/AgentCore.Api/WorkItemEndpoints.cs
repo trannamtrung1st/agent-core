@@ -217,12 +217,12 @@ public static class WorkItemEndpoints
     {
         var snapshot = await sessions.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
         var local = await profiles.GetLocalProfileAsync(cancellationToken).ConfigureAwait(false);
-        if (snapshot.ProfileId != local.ProfileId || snapshot.AgentInstanceId is not Guid instanceId)
+        if (snapshot.ProfileId != local.ProfileId)
         {
             throw AgentCoreErrors.NotFound("Session was not found.");
         }
 
-        return new WorkOwner(instanceId, local.ProfileId);
+        return new WorkOwner(snapshot.AgentInstanceId, local.ProfileId);
     }
 
     private static async Task<WorkItem> RequireItemAsync(

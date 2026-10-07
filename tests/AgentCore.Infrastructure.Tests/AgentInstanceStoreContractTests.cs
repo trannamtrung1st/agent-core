@@ -157,25 +157,20 @@ public abstract class AgentInstanceStoreContractTests
     }
 
     [Fact]
-    public async Task Compatibility_instance_rejects_persona_and_lifecycle_mutations()
+    public async Task Independent_instances_of_same_definition_are_mutable()
     {
         await ForEachStoresAsync(async store =>
         {
             var now = DateTimeOffset.Parse("2026-01-06T00:00:00Z");
-            var compat = SampleManaged(now) with
-            {
-                InstanceId = AgentInstance.CompatibilityFor("examiner"),
-                Compatibility = true
-            };
-            await store.InsertAsync(compat);
-            var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
-                store.UpdateWithExpectedRevisionAsync(
-                    new AgentInstanceRevisionUpdate(
-                        compat.InstanceId,
-                        1,
-                        Persona: compat.Persona with { Tone = "nope" }),
-                    now.AddMinutes(1)).AsTask());
-            Assert.Equal("Validation", error.Code);
+            var first = SampleManaged(now);
+            var second = SampleManaged(now);
+            await store.InsertAsync(first);
+            await store.InsertAsync(second);
+            var updated = await store.UpdateWithExpectedRevisionAsync(
+                new AgentInstanceRevisionUpdate(first.InstanceId, 1,
+                    Persona: first.Persona with { Tone = "Warm" }, ExpectedPersonaRevision: 1), now.AddMinutes(1));
+            Assert.Equal("Warm", updated.Persona.Tone);
+            Assert.Equal(second.Persona, (await store.FindAsync(second.InstanceId))!.Persona);
         });
     }
 
@@ -187,8 +182,7 @@ public abstract class AgentInstanceStoreContractTests
             new AgentIdentity("Demo", "Guide", "Helps.", "Calm"),
             AgentInstanceLifecycle.Active,
             now,
-            now,
-            Compatibility: false);
+            now);
 }
 
 public sealed class InMemoryAgentInstanceStoreContractTests : AgentInstanceStoreContractTests
@@ -218,8 +212,7 @@ public sealed class SqliteAgentInstanceStoreContractTests : AgentInstanceStoreCo
                 new AgentIdentity("Demo", "Guide", "Helps.", "Calm"),
                 AgentInstanceLifecycle.Active,
                 now,
-                now,
-                Compatibility: false);
+                now);
             await store.InsertAsync(instance);
             var first = TryUpdateAsync(
                 store,

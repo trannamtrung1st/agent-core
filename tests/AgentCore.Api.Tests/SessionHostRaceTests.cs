@@ -28,7 +28,7 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
     public async Task Concurrent_delete_and_reattach_rejects_ended_session()
     {
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         created.EnsureSuccessStatusCode();
         var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
         await using var hub = await ConnectAsync();
@@ -56,7 +56,7 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
     {
         var host = _factory.Services.GetRequiredService<SessionHost>();
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         created.EnsureSuccessStatusCode();
         var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
         var sessionId = Guid.Parse(session.SessionId);
@@ -104,7 +104,7 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
 
         var host = factory.Services.GetRequiredService<SessionHost>();
         var client = TestOwnerCapability.CreateOwnerClient(factory);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         created.EnsureSuccessStatusCode();
         var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
 
@@ -194,7 +194,7 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
         var host = factory.Services.GetRequiredService<SessionHost>();
         var store = factory.Services.GetRequiredService<IMemoryStore>();
         var client = TestOwnerCapability.CreateOwnerClient(factory);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         created.EnsureSuccessStatusCode();
         var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
         var sessionId = Guid.Parse(session.SessionId);
@@ -251,7 +251,7 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
         {
             var snapshot = await store.LoadAsync(sessionId);
             var assistant = snapshot?.Entries.LastOrDefault(entry => entry.Role == ConversationRole.Assistant);
-            if (assistant is not null && assistant.Text.StartsWith("Hello, this is", StringComparison.Ordinal))
+            if (assistant is not null && assistant.Status == EntryStatus.Completed && assistant.Text.StartsWith("Hello, this is", StringComparison.Ordinal))
             {
                 return;
             }

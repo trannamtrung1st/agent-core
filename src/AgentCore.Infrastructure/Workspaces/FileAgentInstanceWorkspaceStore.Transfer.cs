@@ -40,7 +40,7 @@ public sealed partial class FileAgentInstanceWorkspaceStore
         if (transfer.Entries.Count == 1 && !transfer.Entries[0].Directory)
         {
             var entry = transfer.Entries[0];
-            await RetainAsync(instanceId, destination, entry.ContentType, entry.Bytes, sourceSessionId, expectedRevision, expectedSha256, cancellationToken);
+            await WriteFileAsync(instanceId, destination, entry.ContentType, entry.Bytes, sourceSessionId, expectedRevision, expectedSha256, cancellationToken);
             return;
         }
         await WithAsync(instanceId, async ct =>

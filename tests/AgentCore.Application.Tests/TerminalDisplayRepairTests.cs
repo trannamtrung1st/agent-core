@@ -33,7 +33,7 @@ public sealed class TerminalDisplayRepairTests
             var document = string.Concat(Enumerable.Repeat("# Scrum playbook\nObserve the current evidence before making changes.\n", 1_500));
             var inner = new DocumentModel(document, structured);
             var model = new SemanticResponseLanguageModel(inner);
-            var executor = new SessionToolExecutor(workspace: workspace, artifacts: artifacts, configurationGate: ToolConfigurationGates.AllowAll);
+            var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace), artifacts: artifacts, configurationGate: ToolConfigurationGates.AllowAll);
             await using var runtime = CreateCore(model, null, null,
                 [ToolCatalog.WorkspaceWrite, ToolCatalog.ArtifactsCreateFromWorkspace], executor, new SessionArtifactAuthorizer(artifacts));
             await runtime.AttachAsync();
@@ -537,7 +537,7 @@ public sealed class TerminalDisplayRepairTests
                 "primary-llm",
                 "scripted",
                 ModelSelectionSource.SystemDefault,
-                null));
+                null), AgentInstanceId: Guid.NewGuid());
         var store = new InMemoryMemoryStore();
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         return new SessionRuntime(
@@ -570,9 +570,9 @@ public sealed class TerminalDisplayRepairTests
             Requests.Add(request);
             ModelToolCall? call = Requests.Count switch
             {
-                1 => new("document", ToolCatalog.WorkspaceWrite, JsonSerializer.Serialize(new { path = "playbook.md", content = document })),
-                2 => new("artifact", ToolCatalog.ArtifactsCreateFromWorkspace, """{"path":"playbook.md","displayName":"Scrum playbook.md"}"""),
-                4 => new("note", ToolCatalog.WorkspaceWrite, JsonSerializer.Serialize(new { path = "notes.md", content = document })),
+                1 => new("document", ToolCatalog.WorkspaceWrite, JsonSerializer.Serialize(new { path = "/working/playbook.md", content = document })),
+                2 => new("artifact", ToolCatalog.ArtifactsCreateFromWorkspace, """{"path":"/working/playbook.md","displayName":"Scrum playbook.md"}"""),
+                4 => new("note", ToolCatalog.WorkspaceWrite, JsonSerializer.Serialize(new { path = "/working/notes.md", content = document })),
                 _ => null
             };
             if (call is not null)

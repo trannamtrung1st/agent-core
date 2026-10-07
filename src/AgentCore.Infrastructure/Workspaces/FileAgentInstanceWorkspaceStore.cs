@@ -53,7 +53,7 @@ public sealed partial class FileAgentInstanceWorkspaceStore(
             return new AgentWorkspaceContent(item, bytes);
         }, cancellationToken);
 
-    public ValueTask<AgentWorkspaceItem> RetainAsync(Guid instanceId, string path, string contentType, ReadOnlyMemory<byte> bytes,
+    public ValueTask<AgentWorkspaceItem> WriteFileAsync(Guid instanceId, string path, string contentType, ReadOnlyMemory<byte> bytes,
         Guid? sourceSessionId, long? expectedRevision, string? expectedSha256, CancellationToken cancellationToken = default) =>
         WithAsync(instanceId, async ct =>
         {

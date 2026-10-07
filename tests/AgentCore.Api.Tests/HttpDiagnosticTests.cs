@@ -20,7 +20,7 @@ public sealed class HttpDiagnosticTests
     {
         await using var factory = new AgentCoreApiFactory();
         var client = TestOwnerCapability.CreateOwnerClient(factory);
-        var validation = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("", 1, "text"));
+        var validation = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(Guid.Empty, "text"));
         Assert.Equal(HttpStatusCode.BadRequest, validation.StatusCode);
         await AssertNoDiagnosticIdAsync(validation);
 
@@ -30,7 +30,7 @@ public sealed class HttpDiagnosticTests
 
         var host = factory.Services.GetRequiredService<SessionHost>();
         await host.DrainAsync();
-        var shutdown = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var shutdown = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         Assert.Equal(HttpStatusCode.ServiceUnavailable, shutdown.StatusCode);
         await AssertNoDiagnosticIdAsync(shutdown);
     }
@@ -40,7 +40,7 @@ public sealed class HttpDiagnosticTests
     {
         await using var factory = new SaveFailureApiFactory(AgentCoreErrors.Persistence("forced session save failure"));
         var client = TestOwnerCapability.CreateOwnerClient(factory);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         Assert.Equal(HttpStatusCode.ServiceUnavailable, created.StatusCode);
         var body = await created.Content.ReadAsStringAsync();
         using var json = JsonDocument.Parse(body);
@@ -62,7 +62,7 @@ public sealed class HttpDiagnosticTests
         await using var factory = new SaveFailureApiFactory(
             AgentCoreErrors.Persistence("forced session save failure", known));
         var client = TestOwnerCapability.CreateOwnerClient(factory);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         Assert.Equal(HttpStatusCode.ServiceUnavailable, created.StatusCode);
         using var json = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
         Assert.Equal(known.ToString("D"), json.RootElement.GetProperty("diagnosticId").GetString());
@@ -74,7 +74,7 @@ public sealed class HttpDiagnosticTests
     {
         await using var factory = new SaveFailureApiFactory(new InvalidOperationException("secret-provider-body"));
         var client = TestOwnerCapability.CreateOwnerClient(factory);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         Assert.Equal(HttpStatusCode.InternalServerError, created.StatusCode);
         var body = await created.Content.ReadAsStringAsync();
         using var json = JsonDocument.Parse(body);

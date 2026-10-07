@@ -180,7 +180,7 @@ public sealed class BoundedHistorySessionApiTests
             var db = Path.Combine(Path.GetTempPath(), $"agent-core-hist-{Guid.NewGuid():N}.db");
             var factory = new DurableSqliteHostFactory(db);
             var client = TestOwnerCapability.CreateOwnerClient(factory);
-            var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+            var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
             created.EnsureSuccessStatusCode();
             var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
             var sessionId = Guid.Parse(view!.SessionId);

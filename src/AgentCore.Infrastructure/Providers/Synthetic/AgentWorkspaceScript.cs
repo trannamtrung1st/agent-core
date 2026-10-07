@@ -14,7 +14,7 @@ internal static class AgentWorkspaceScript
         if (last < 0 || !request.Messages[last].Text.StartsWith(Marker, StringComparison.Ordinal)) return null;
         var tools = request.Messages.Skip(last + 1).Where(m => m.Role == ModelRole.Tool).ToArray();
         var command = request.Messages[last].Text[Marker.Length..].Trim();
-        var path = command == "publish" ? "/workspace/working/store-review.md" : "/home/reports/store-review.md";
+        var path = "/home/reports/store-review.md";
         if (tools.Length == 0)
         {
             var name = command == "publish" ? ToolCatalog.ArtifactsCreateFromWorkspace : command == "search" ? ToolCatalog.WorkspaceSearch : ToolCatalog.WorkspaceRead;

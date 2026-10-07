@@ -1,7 +1,9 @@
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test } from "@playwright/test";
 
 test("speech locale override does not rewrite text chat", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await page.getByLabel("Speech locale").click();
   await page.getByTitle("French (fr-FR)").click();
   await page.getByLabel("Message").fill("Hello");
@@ -22,6 +24,7 @@ test("speech locale override does not rewrite text chat", async ({ page }) => {
 
 test("new chat speech locale is available before the first send", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByLabel("Identity")).toBeVisible();
   await expect(page.getByLabel("Speech locale")).toBeVisible();
   await expect(page.getByLabel("Message")).toBeEnabled();

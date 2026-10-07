@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createSession, deleteAllSessions, durableDeleteSession, listCatalog } from "./api";
+import { createSessionForInstance, deleteAllSessions, durableDeleteSession, listCatalog } from "./api";
 
 describe("catalog owner fetch", () => {
   afterEach(() => {
@@ -33,7 +33,7 @@ describe("catalog owner fetch", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ token: "t2" }) })
       .mockResolvedValueOnce({ ok: false, status: 401 });
     vi.stubGlobal("fetch", fetchMock);
-    await expect(createSession("examiner", 1)).rejects.toThrow("Local owner access is unavailable.");
+    await expect(createSessionForInstance("019944af-00d1-7000-8000-000000000099")).rejects.toThrow("Local owner access is unavailable.");
     expect(window.localStorage.getItem("agent-core.owner-capability")).toBeNull();
   });
 

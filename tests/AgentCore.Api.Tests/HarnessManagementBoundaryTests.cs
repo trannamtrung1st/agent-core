@@ -12,7 +12,7 @@ public sealed class HarnessManagementBoundaryTests
     private static async Task<(AgentInstance Instance, HarnessReview Review)> Start(AgentCoreApiFactory factory,
         HarnessManagementMode mode, HarnessManagementScope[] scopes, string[]? tools = null)
     {
-        var instance = await factory.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        var instance = await factory.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         var service = factory.Services.GetRequiredService<HarnessManagementService>();
         instance = await service.ConfigureAsync(instance.InstanceId, instance.Revision,
             new(mode, scopes, ["knowledge:support-order-policy"], tools ?? []));
@@ -25,7 +25,7 @@ public sealed class HarnessManagementBoundaryTests
     {
         Assert.False(HarnessChatTools.Allows(HarnessChatTools.Inspect, new(HarnessManagementPolicy.Disabled, 1, 7)));
         await using var factory = new AgentCoreApiFactory();
-        var instance = await factory.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        var instance = await factory.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         var service = factory.Services.GetRequiredService<HarnessManagementService>();
         await Assert.ThrowsAsync<AgentCoreException>(async () => await service.ConfigureAsync(instance.InstanceId, instance.Revision,
             new(HarnessManagementMode.Managed, [HarnessManagementScope.ToolSelection], [], ["demo.sensitive_action"])));
@@ -55,7 +55,7 @@ public sealed class HarnessManagementBoundaryTests
             review.Draft.Revision, review.Draft.Candidate with { SystemInstructions = "Concurrent owner change." });
         await Assert.ThrowsAsync<AgentCoreException>(async () => await service.DecideApprovalAsync(instance.InstanceId,
             instance.Revision, approval.ApprovalId, approval.ActionHash, true));
-        Assert.Equal(7, (await service.ReviewAsync(instance.InstanceId)).ActiveVersion);
+        Assert.Equal(16, (await service.ReviewAsync(instance.InstanceId)).ActiveVersion);
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public sealed class HarnessManagementBoundaryTests
         Assert.DoesNotContain("ProviderPreferences", projection);
         Assert.DoesNotContain("PersonaJson", projection);
         Assert.DoesNotContain("ActionHash", projection);
-        Assert.Equal(7, (await service.ReviewAsync(instance.InstanceId)).ActiveVersion);
+        Assert.Equal(16, (await service.ReviewAsync(instance.InstanceId)).ActiveVersion);
     }
 
     [Theory]
@@ -96,7 +96,7 @@ public sealed class HarnessManagementBoundaryTests
         var approval = Assert.Single(instance.HarnessManagement!.Preparation!.Approvals);
         instance = await service.DecideApprovalAsync(instance.InstanceId, instance.Revision, approval.ApprovalId, approval.ActionHash, true);
         Assert.True((await service.ReviewAsync(instance.InstanceId)).Draft!.Revision > review.Draft.Revision);
-        Assert.Equal(7, instance.ActiveVersion);
+        Assert.Equal(16, instance.ActiveVersion);
     }
 
     [Fact]
@@ -104,7 +104,7 @@ public sealed class HarnessManagementBoundaryTests
     {
         await using var factory = new AgentCoreApiFactory();
         var (instance, review) = await Start(factory, HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources, HarnessManagementScope.Skills]);
-        var other = await factory.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        var other = await factory.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         var service = factory.Services.GetRequiredService<HarnessManagementService>();
         Assert.Equal(HarnessManagementMode.Disabled, (await service.ReviewAsync(other.InstanceId)).State.Policy.Mode);
         var prepId = review.State.Preparation!.PreparationId;
@@ -128,7 +128,7 @@ public sealed class HarnessManagementBoundaryTests
         await Edit(new("knowledge.remove", review.Draft!.Revision, Id: "reference"));
         Assert.DoesNotContain(review.Resources, r => r.LogicalPath == "knowledge/reference");
         Assert.DoesNotContain(review.Draft!.Candidate.SkillList, s => s.Id == skill.Id);
-        Assert.Equal(7, review.ActiveVersion);
+        Assert.Equal(16, review.ActiveVersion);
     }
 
     [Fact]
@@ -146,7 +146,7 @@ public sealed class HarnessManagementBoundaryTests
         instance = await service.CancelAsync(instance.InstanceId, instance.Revision);
         await Assert.ThrowsAsync<AgentCoreException>(async () => await service.RequestOperationAsync(instance.InstanceId, prepId,
             new("knowledge.remove", review.Draft.Revision, Id: "support-order-policy")));
-        Assert.Equal(7, instance.ActiveVersion);
+        Assert.Equal(16, instance.ActiveVersion);
     }
 
     [Theory]
@@ -174,7 +174,7 @@ public sealed class HarnessManagementBoundaryTests
         await Assert.ThrowsAsync<AgentCoreException>(async () => await service.PromoteAsync(instance.InstanceId, instance.Revision, review.Draft.Revision));
         instance = await service.VerifyAsync(instance.InstanceId, prepId);
         Assert.Equal(HarnessPreparationStatus.Failed, instance.HarnessManagement!.Preparation!.Status);
-        Assert.Equal(7, instance.ActiveVersion);
+        Assert.Equal(16, instance.ActiveVersion);
         instance = await service.StartAsync(instance.InstanceId, instance.Revision, "Prepare a corrected candidate.");
         Assert.NotEqual(prepId, instance.HarnessManagement!.Preparation!.PreparationId);
     }
@@ -208,7 +208,7 @@ public sealed class HarnessManagementBoundaryTests
         var approval = Assert.Single(instance.HarnessManagement!.Preparation!.Approvals);
         instance = await service.DecideApprovalAsync(instance.InstanceId, instance.Revision, approval.ApprovalId, approval.ActionHash, true);
         var after = await service.ReviewAsync(instance.InstanceId);
-        Assert.Equal(7, after.ActiveVersion);
+        Assert.Equal(16, after.ActiveVersion);
         Assert.True(after.Draft!.Revision > review.Draft.Revision);
         if (tool == "http.request" && enabled == true)
             Assert.Equal(ToolPolicyDecision.RequireApproval, ToolPolicy.EvaluateExecution(after.Draft.Candidate.ToPublished(1), tool, ToolConfigurationGates.AllowAll));
@@ -232,6 +232,6 @@ public sealed class HarnessManagementBoundaryTests
         await Assert.ThrowsAsync<AgentCoreException>(async () => await service.PromoteAsync(instance.InstanceId, instance.Revision, review.Draft!.Revision));
         await Assert.ThrowsAsync<AgentCoreException>(async () => await service.RecordAgentEvidenceAsync(instance.InstanceId, prep.PreparationId,
             new("Agent", oldRevision, "Stale", HarnessEvidenceStatus.Verified, "Old", "Old")));
-        Assert.Equal(7, review.ActiveVersion);
+        Assert.Equal(16, review.ActiveVersion);
     }
 }

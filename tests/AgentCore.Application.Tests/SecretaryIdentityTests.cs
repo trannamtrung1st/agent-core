@@ -27,21 +27,6 @@ public sealed class SecretaryIdentityTests
     private static readonly Guid ProfileId = Guid.Parse("019944af-00c1-7000-8000-0000000000b1");
     private static readonly Guid SessionId = Guid.Parse("019944af-00c1-7000-8000-0000000000c1");
 
-    private static readonly IReadOnlyDictionary<string, string> GeneralAssistantSha256 = new Dictionary<string, string>
-    {
-        ["general-assistant.json"] = "29de0311823e91ee6d81bc88bbb58e8f1fc8b914dd248df66d2d3c3e639ca4e4",
-        ["general-assistant-v2.json"] = "6cf33455556c7a0f7d235bbe5b712c5300bfac6d026543b94d1f890632ddc327",
-        ["general-assistant-v3.json"] = "aaafe3f3806e7677d5b66aeee75caba88227b2dcb59d1cf1b4e51d2f9804000d",
-        ["general-assistant-v4.json"] = "7bcf853afa1db917e4dfa26bb5d1d51d9b4fd11c8857724734c84326b24b8090",
-        ["general-assistant-v5.json"] = "37133c6679cf9287fe58d49a3bf4ec8a53e5ee4014e052434e9bb5a4ac745be4",
-        ["general-assistant-v6.json"] = "fd158d99dbc55872b4e4436800bd25cbc19f86ac2aaeac4fe82b31c1355688ee",
-        ["general-assistant-v7.json"] = "736b1cf4911be2ec8c35d5c05909a34eb0d76aa9f0af769907f7b67d6b564df0",
-        ["general-assistant-v8.json"] = "f77defe3c81d3f97dcef5d8647621c44b76ffd46566734c83997944fecfc0e5d",
-        ["general-assistant-v9.json"] = "027a255dfac0a9294cb95bb672eb43b9952451c75e17bf1b684faf80d66a382b",
-        ["general-assistant-v10.json"] = "4d9078b18275895839acd9de6b4630fb8137984c199aaf17920129905a7fb599",
-        ["general-assistant-v11.json"] = "b6fe78bdd2352c0a9cba2d396fbfd5afbed3ab0310ce8e386ba0aafb28d1b765",
-        ["general-assistant-v12.json"] = "7e800eb89dca40c71ea97638f3ba882e7bac9179ca0c670abcaaa5716c5bc365"
-    };
 
     [Fact]
     public async Task Secretary_definition_loads_with_broad_authority_and_procedural_skills()
@@ -99,15 +84,12 @@ public sealed class SecretaryIdentityTests
     }
 
     [Fact]
-    public void General_assistant_v1_through_v12_bytes_are_unchanged()
+    public async Task Retired_general_definitions_are_absent_from_the_runtime_catalog()
     {
-        var agents = FindAgents();
-        Assert.Equal(12, GeneralAssistantSha256.Count);
-        foreach (var (name, expected) in GeneralAssistantSha256)
-        {
-            var hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(agents, name)))).ToLowerInvariant();
-            Assert.Equal(expected, hash);
-        }
+        var current = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        for (var version = 1; version <= 15; version++)
+            Assert.Null(await current.GetAsync("general-assistant", version));
+        Assert.Equal(16, (await current.GetAsync("general-assistant"))!.Version);
     }
 
     [Fact]
@@ -436,13 +418,13 @@ public sealed class SecretaryIdentityTests
 
     private static async Task<AgentDefinition> LoadSecretaryAsync()
     {
-        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var store = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         return (await store.GetAsync("secretary", 1))!;
     }
 
     private static async Task<AgentDefinition> LoadGeneralAssistantAsync(int version)
     {
-        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var store = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         return (await store.GetAsync("general-assistant", version))!;
     }
 
@@ -452,7 +434,7 @@ public sealed class SecretaryIdentityTests
         while (dir is not null)
         {
             var agents = Path.Combine(dir.FullName, "agents");
-            if (File.Exists(Path.Combine(agents, "secretary-v1.json")))
+            if (File.Exists(Path.Combine(agents, "secretary-v3.json")))
             {
                 return agents;
             }

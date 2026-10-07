@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { LEGACY_IDENTITY_LABELS, selectLegacyIdentity } from "./support/legacy-identity";
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { queuedMessages } from "./support/queued-messages";
 import { waitForResponseSettled } from "./support/response-settled";
 
@@ -45,7 +45,7 @@ async function startLongHoldResponse(page: Page): Promise<void> {
 }
 
 async function selectCustomerSupport(page: Page): Promise<void> {
-  await selectLegacyIdentity(page, LEGACY_IDENTITY_LABELS.customerSupport);
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.customerSupport);
 }
 
 async function chooseScriptedAlpha(page: Page): Promise<void> {
@@ -96,6 +96,7 @@ test("progress is visible, replaced, cleared on final, reload, disconnect, and s
 }) => {
   test.setTimeout(180_000);
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await selectCustomerSupport(page);
   await chooseScriptedAlpha(page);
@@ -162,6 +163,7 @@ test("progress is visible, replaced, cleared on final, reload, disconnect, and s
 
 test("session path survives refresh", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await page.getByLabel("Message").fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
@@ -180,6 +182,7 @@ test("refresh mid-stream restores the same durable execution and continues witho
 }) => {
   test.setTimeout(60_000);
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByLabel("Message").fill("[test:durable-stream] Introduce yourself");
   await page.getByRole("button", { name: "Send" }).click();
@@ -223,6 +226,7 @@ test("reopening past detach grace while response is still running resumes live s
 }) => {
   test.setTimeout(120_000);
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page
     .getByLabel("Message")
@@ -282,6 +286,7 @@ test("closing the page past detach grace keeps the accepted execution and durabl
 }) => {
   test.setTimeout(60_000);
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByLabel("Message").fill("[test:durable-stream] Continue after close");
   await page.getByRole("button", { name: "Send" }).click();
@@ -316,6 +321,7 @@ test("closing the page past detach grace keeps the accepted execution and durabl
 test("Stop after refresh durably interrupts the same execution", async ({ page }) => {
   test.setTimeout(60_000);
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByLabel("Message").fill("Please hold the line");
   await page.getByRole("button", { name: "Send" }).click();
@@ -350,6 +356,7 @@ test("Stop after refresh durably interrupts the same execution", async ({ page }
 
 test("synthetic text conversation, pending voice, and disconnect cleanup", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByRole("navigation", { name: "Chats" })).toBeVisible();
   await expect(page.getByLabel("Identity")).toBeVisible();
   await page.getByLabel("Message").fill("Hello");
@@ -385,6 +392,7 @@ test("synthetic text conversation, pending voice, and disconnect cleanup", async
 
 test("queued send and Stop keep the local queue without starting R2", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await page.getByLabel("Message").fill("Please hold the line");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
@@ -405,6 +413,7 @@ const STEER_PROBE = "[test:steer-probe]";
 
 test("Steer interrupts R1 promptly and auto-dispatch follows completion", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await startLongHoldResponse(page);
   const r1Length = await assistantBodyTextLength(page, 0);
 
@@ -432,6 +441,7 @@ test("Steer interrupts R1 promptly and auto-dispatch follows completion", async 
 
 test("Steer middle queue item keeps head and tail queued", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await startLongHoldResponse(page);
   const r1Length = await assistantBodyTextLength(page, 0);
 
@@ -460,6 +470,7 @@ test("Steer middle queue item keeps head and tail queued", async ({ page }) => {
 
 test("queued attachment stays with the queued item until dispatch", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await page.getByLabel("Message").fill("Please hold the line");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
@@ -478,6 +489,7 @@ test("queued attachment stays with the queued item until dispatch", async ({ pag
 
 test("manual pause via deactivate shows Resume and keeps history", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await page.getByLabel("Message").fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
@@ -508,6 +520,7 @@ test("manual pause via deactivate shows Resume and keeps history", async ({ page
 
 test("markdown response renders and survives reopen", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByLabel("Message").fill("Show markdown");
   await page.getByRole("button", { name: "Send" }).click();

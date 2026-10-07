@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 
-test("managed home survives deleted source, checks out a revision and delivers a fresh Artifact", async ({ page }, testInfo) => {
+test("managed home survives deleted source, guards a revision and delivers a fresh Artifact", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   await page.goto("/");
   await expect.poll(() => page.evaluate(() => localStorage.getItem("agent-core.owner-capability"))).not.toBeNull();
@@ -10,7 +10,7 @@ test("managed home survives deleted source, checks out a revision and delivers a
   const headers = { "X-AgentCore-Owner-Capability": token! };
   const request = page.request;
   async function instance() {
-    const response = await request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "general-assistant", version: 13 } });
+    const response = await request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "general-assistant", version: 16 } });
     expect(response.ok(), await response.text()).toBe(true); return (await response.json()).instanceId as string;
   }
   async function session(id: string) {
@@ -18,12 +18,11 @@ test("managed home survives deleted source, checks out a revision and delivers a
     expect(response.ok(), await response.text()).toBe(true); return (await response.json()).sessionId as string;
   }
   const a = await instance(); const b = await instance(); const a1 = await session(a);
-  const scratch = "/workspace/working/store-review.md"; const home = "/home/reports/store-review.md";
+  const scratch = "/working/store-review.md"; const home = "/home/reports/store-review.md";
   const source = Buffer.from("# Store review\r\nExact source: café\n");
   expect((await request.put(`/api/v2/sessions/${a1}/workspace/content?path=${scratch}`, { headers, data: source })).ok()).toBe(true);
-  expect((await (await request.get(`/api/v2/agent-instances/${a}/workspace`, { headers })).json()).items).toHaveLength(0);
-  const retained = await request.post(`/api/v2/sessions/${a1}/workspace/retain`, { headers, data: { source: scratch, destination: home } });
-  expect(retained.ok(), await retained.text()).toBe(true); const first = await retained.json();
+  expect((await request.put(`/api/v2/sessions/${a1}/workspace/content?path=${home}`, { headers, data: source })).ok()).toBe(true);
+  const first = (await (await request.get(`/api/v2/agent-instances/${a}/workspace`, { headers })).json()).items.find((item: { logicalPath: string }) => item.logicalPath === home);
   expect(first.sha256Hex).toBe(createHash("sha256").update(source).digest("hex"));
   expect((await request.delete(`/api/v1/sessions/${a1}`, { headers })).ok()).toBe(true);
   expect((await request.delete(`/api/v2/sessions/${a1}`, { headers })).ok()).toBe(true);
@@ -36,13 +35,12 @@ test("managed home survives deleted source, checks out a revision and delivers a
   }).toPass(); await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(page.locator(".chat-message-assistant").last()).toContainText(home, { timeout: 30_000 });
   const read = await request.get(`/api/v2/sessions/${a2}/workspace/content?path=${home}`, { headers }); expect(await read.body()).toEqual(source);
-  const checkout = await request.post(`/api/v2/sessions/${a2}/workspace/checkout`, { headers, data: { source: home, destination: scratch, expectedRevision: first.revision, expectedSha256: first.sha256Hex } });
-  expect(checkout.ok(), await checkout.text()).toBe(true); expect((await checkout.json()).sha256Hex).toBe(first.sha256Hex);
   const revised = Buffer.from("# Revised store review\nKept exact bytes across conversations.\n");
-  expect((await request.put(`/api/v2/sessions/${a2}/workspace/content?path=${scratch}`, { headers, data: revised })).ok()).toBe(true);
-  const replacement = await request.post(`/api/v2/sessions/${a2}/workspace/retain`, { headers, data: { source: scratch, destination: home, expectedRevision: first.revision, expectedSha256: first.sha256Hex } });
-  expect(replacement.ok(), await replacement.text()).toBe(true); const second = await replacement.json(); expect(second.revision).toBe(2);
-  expect((await request.post(`/api/v2/sessions/${a2}/workspace/retain`, { headers, data: { source: scratch, destination: home, expectedRevision: first.revision } })).status()).toBe(409);
+  const replacement = await request.put(`/api/v2/sessions/${a2}/workspace/content?path=${home}&expectedRevision=${first.revision}`, { headers, data: revised });
+  expect(replacement.ok(), await replacement.text()).toBe(true);
+  const second = (await (await request.get(`/api/v2/agent-instances/${a}/workspace`, { headers })).json()).items.find((item: { logicalPath: string }) => item.logicalPath === home);
+  expect(second.revision).toBe(2);
+  expect((await request.put(`/api/v2/sessions/${a2}/workspace/content?path=${home}&expectedRevision=${first.revision}`, { headers, data: source })).status()).toBe(409);
   await page.getByLabel("Message").fill("synthetic-agent-workspace: publish"); await page.getByRole("button", { name: "Send", exact: true }).click();
   const card = page.getByRole("group", { name: "store-review.md", exact: true }); await expect(card).toBeVisible({ timeout: 30_000 });
   await expect(card).toContainText(`${revised.length} B`);

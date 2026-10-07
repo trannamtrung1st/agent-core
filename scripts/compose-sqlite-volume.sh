@@ -4,12 +4,13 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 
+export AGENTCORE_COMPOSE_PORT="${AGENTCORE_COMPOSE_PORT:-5080}"
 compose=(docker compose)
 "${compose[@]}" up --build -d
 
 ready=0
 for _ in $(seq 1 90); do
-  if curl -fsS http://127.0.0.1:5080/health >/tmp/agent-core-health.json 2>/dev/null; then
+  if curl -fsS http://127.0.0.1:${AGENTCORE_COMPOSE_PORT}/health >/tmp/agent-core-health.json 2>/dev/null; then
     ready=1
     break
   fi
@@ -22,6 +23,8 @@ if [[ "$ready" -ne 1 ]]; then
 fi
 
 python3 - <<'PY'
+import os
+port = os.environ["AGENTCORE_COMPOSE_PORT"]
 import json, urllib.error, urllib.parse, urllib.request
 
 def load(path):
@@ -44,7 +47,7 @@ assert health["status"] == "healthy", health
 assert health["profile"] == "Synthetic", health
 
 status, issued_body = request(
-    "http://127.0.0.1:5080/api/v1/local/owner-capability",
+    f"http://127.0.0.1:{port}/api/v1/local/owner-capability",
     method="POST",
     dest="/tmp/agent-core-owner.json",
 )
@@ -57,10 +60,14 @@ owner_headers = {
     "X-AgentCore-Owner-Capability": token,
 }
 
+_, initial_body = request(f"http://127.0.0.1:{port}/api/v2/admin/agent-instances", method="POST",
+    data=json.dumps({"definitionId": "examiner", "version": 1}).encode(), headers=owner_headers)
+initial_instance = json.loads(initial_body)["instanceId"]
+
 status, created_body = request(
-    "http://127.0.0.1:5080/api/v2/sessions",
+    f"http://127.0.0.1:{port}/api/v2/sessions",
     method="POST",
-    data=json.dumps({"agentId": "examiner", "mode": "text"}).encode(),
+    data=json.dumps({"agentInstanceId": initial_instance, "mode": "text"}).encode(),
     headers=owner_headers,
     dest="/tmp/agent-core-session.json",
 )
@@ -70,7 +77,7 @@ assert created["agentId"] == "examiner", created
 print("created", created["sessionId"])
 
 status, catalog_body = request(
-    "http://127.0.0.1:5080/api/v2/sessions",
+    f"http://127.0.0.1:{port}/api/v2/sessions",
     headers={"X-AgentCore-Owner-Capability": token},
     dest="/tmp/agent-core-catalog.json",
 )
@@ -81,7 +88,7 @@ print("catalog", created["sessionId"])
 
 marker = "compose-admin-survival"
 status, fork_body = request(
-    "http://127.0.0.1:5080/api/v2/admin/definition-drafts/fork",
+    f"http://127.0.0.1:{port}/api/v2/admin/definition-drafts/fork",
     method="POST",
     data=json.dumps(
         {"definitionId": "examiner", "sourceVersion": 1, "sourceKind": "ForkBuiltIn"}
@@ -93,7 +100,7 @@ draft_id = fork["draftId"]
 candidate = fork["candidate"]
 candidate["systemInstructions"] = candidate.get("systemInstructions", "") + "\n" + marker
 status, updated_body = request(
-    f"http://127.0.0.1:5080/api/v2/admin/definition-drafts/{draft_id}",
+    f"http://127.0.0.1:{port}/api/v2/admin/definition-drafts/{draft_id}",
     method="PUT",
     data=json.dumps({"expectedRevision": fork["revision"], "candidate": candidate}).encode(),
     headers=owner_headers,
@@ -103,14 +110,14 @@ resource_path = "knowledge/compose-policy.md"
 resource_bytes = b"compose resource survival"
 content_headers = {**owner_headers, "Content-Type": "text/plain"}
 status, stored_body = request(
-    f"http://127.0.0.1:5080/api/v2/admin/definition-drafts/{draft_id}/resources/content",
+    f"http://127.0.0.1:{port}/api/v2/admin/definition-drafts/{draft_id}/resources/content",
     method="POST",
     data=resource_bytes,
     headers=content_headers,
 )
 stored = json.loads(stored_body)
 status, _bind_body = request(
-    f"http://127.0.0.1:5080/api/v2/admin/definition-drafts/{draft_id}/resources",
+    f"http://127.0.0.1:{port}/api/v2/admin/definition-drafts/{draft_id}/resources",
     method="PUT",
     data=json.dumps(
         {
@@ -126,12 +133,12 @@ status, _bind_body = request(
     headers=owner_headers,
 )
 status, draft_body = request(
-    f"http://127.0.0.1:5080/api/v2/admin/definition-drafts/{draft_id}",
+    f"http://127.0.0.1:{port}/api/v2/admin/definition-drafts/{draft_id}",
     headers=owner_headers,
 )
 draft_after_bind = json.loads(draft_body)
 status, pub_body = request(
-    f"http://127.0.0.1:5080/api/v2/admin/definition-drafts/{draft_id}/publish",
+    f"http://127.0.0.1:{port}/api/v2/admin/definition-drafts/{draft_id}/publish",
     method="POST",
     data=json.dumps({"expectedRevision": draft_after_bind["revision"]}).encode(),
     headers=owner_headers,
@@ -141,16 +148,16 @@ pub_version = publication["version"]
 assert pub_version > 1, publication
 
 status, inst_body = request(
-    "http://127.0.0.1:5080/api/v2/admin/agent-instances",
+    f"http://127.0.0.1:{port}/api/v2/admin/agent-instances",
     method="POST",
     data=json.dumps({"definitionId": "examiner", "version": pub_version}).encode(),
     headers=owner_headers,
 )
 instance = json.loads(inst_body)
-assert instance.get("compatibility") is False, instance
+assert "compatibility" not in instance, instance
 
 status, managed_body = request(
-    "http://127.0.0.1:5080/api/v2/sessions",
+    f"http://127.0.0.1:{port}/api/v2/sessions",
     method="POST",
     data=json.dumps({"agentInstanceId": instance["instanceId"], "mode": "text"}).encode(),
     headers=owner_headers,
@@ -161,13 +168,13 @@ assert managed["agentInstanceId"] == instance["instanceId"], managed
 assert managed["agentVersion"] == pub_version, managed
 
 status, events_body = request(
-    "http://127.0.0.1:5080/api/v2/admin/events?limit=50",
+    f"http://127.0.0.1:{port}/api/v2/admin/events?limit=50",
     headers=owner_headers,
 )
 events_text = events_body.decode("utf-8") if isinstance(events_body, bytes) else events_body
 assert marker not in events_text, "draft marker leaked into admin events"
 status, pub_resources_body = request(
-    f"http://127.0.0.1:5080/api/v2/admin/definitions/examiner/publications/{pub_version}/resources",
+    f"http://127.0.0.1:{port}/api/v2/admin/definitions/examiner/publications/{pub_version}/resources",
     headers=owner_headers,
 )
 pub_resources = json.loads(pub_resources_body)
@@ -177,7 +184,7 @@ assert any(item["contentSha256"] == content_sha256 for item in pub_resources["it
 
 agent_resource_path = f"/agent/resources/{resource_path}"
 workspace_url = (
-    f"http://127.0.0.1:5080/api/v2/sessions/{managed['sessionId']}/workspace/content?path="
+    f"http://127.0.0.1:{port}/api/v2/sessions/{managed['sessionId']}/workspace/content?path="
     + urllib.parse.quote(agent_resource_path, safe="")
 )
 status, workspace_body = request(workspace_url, headers=owner_headers)
@@ -185,18 +192,18 @@ workspace_text = workspace_body.decode("utf-8") if isinstance(workspace_body, by
 assert resource_bytes.decode("utf-8") in workspace_text, workspace_text
 
 # New-mode binary home writes and scratch retain their distinct lifetimes after recreation.
-status, v2_owner_body = request("http://127.0.0.1:5080/api/v2/admin/agent-instances", method="POST",
-    data=json.dumps({"definitionId": "general-assistant", "version": 15}).encode(), headers=owner_headers)
+status, v2_owner_body = request(f"http://127.0.0.1:{port}/api/v2/admin/agent-instances", method="POST",
+    data=json.dumps({"definitionId": "general-assistant", "version": 16}).encode(), headers=owner_headers)
 v2_owner = json.loads(v2_owner_body)["instanceId"]
-status, v2_session_body = request("http://127.0.0.1:5080/api/v2/sessions", method="POST",
+status, v2_session_body = request(f"http://127.0.0.1:{port}/api/v2/sessions", method="POST",
     data=json.dumps({"agentInstanceId": v2_owner, "mode": "text"}).encode(), headers=owner_headers)
 v2_session = json.loads(v2_session_body)["sessionId"]
 v2_bytes = bytes([0, 255, 128, 13, 10])
 for v2_path in ("/home/binary.dat", "/working/binary.dat"):
-    status, _ = request(f"http://127.0.0.1:5080/api/v2/sessions/{v2_session}/workspace/content?path={v2_path}",
+    status, _ = request(f"http://127.0.0.1:{port}/api/v2/sessions/{v2_session}/workspace/content?path={v2_path}",
         method="PUT", data=v2_bytes, headers={**owner_headers, "Content-Type": "application/octet-stream"})
     assert status == 204, status
-req = urllib.request.Request(f"http://127.0.0.1:5080/api/v2/sessions/{v2_session}/workspace/content?path=/home/binary.dat",
+req = urllib.request.Request(f"http://127.0.0.1:{port}/api/v2/sessions/{v2_session}/workspace/content?path=/home/binary.dat",
     method="PUT", data=b"unguarded", headers={**owner_headers, "Content-Type": "application/octet-stream"})
 try:
     urllib.request.urlopen(req)
@@ -204,30 +211,29 @@ try:
 except urllib.error.HTTPError as error: assert error.code == 409
 json.dump({"instanceId": v2_owner, "sessionId": v2_session}, open("/tmp/agent-core-v2-survival.json", "w"))
 
-# A retained copy is independent of the source Session and survives container recreation.
+# Durable home outlives its originating Session and container recreation.
 status, home_source_body = request(
-    "http://127.0.0.1:5080/api/v2/sessions", method="POST",
+    f"http://127.0.0.1:{port}/api/v2/sessions", method="POST",
     data=json.dumps({"agentInstanceId": instance["instanceId"], "mode": "text"}).encode(), headers=owner_headers)
 home_source = json.loads(home_source_body)["sessionId"]
-home_bytes = b"compose retained workspace exact bytes\r\n"
-status, _ = request(f"http://127.0.0.1:5080/api/v2/sessions/{home_source}/workspace/content?path=retained.txt",
+home_bytes = b"compose durable workspace exact bytes\r\n"
+request(f"http://127.0.0.1:{port}/api/v2/sessions/{home_source}/workspace/content?path=/home/reports/report.txt",
     method="PUT", data=home_bytes, headers=owner_headers)
-status, home_body = request(f"http://127.0.0.1:5080/api/v2/sessions/{home_source}/workspace/retain", method="POST",
-    data=json.dumps({"source": "retained.txt", "destination": "/home/reports/retained.txt"}).encode(), headers=owner_headers)
-home_item = json.loads(home_body)
+_, page_body = request(f"http://127.0.0.1:{port}/api/v2/agent-instances/{instance['instanceId']}/workspace", headers=owner_headers)
+home_item = next(item for item in json.loads(page_body)["items"] if item["logicalPath"] == "/home/reports/report.txt")
 assert home_item["byteSize"] == len(home_bytes), home_item
-request(f"http://127.0.0.1:5080/api/v2/sessions/{home_source}", method="DELETE", headers=owner_headers)
+request(f"http://127.0.0.1:{port}/api/v2/sessions/{home_source}", method="DELETE", headers=owner_headers)
 with open("/tmp/agent-core-home-survival.json", "w") as target:
     json.dump({"instanceId": instance["instanceId"], "item": home_item, "text": home_bytes.decode()}, target)
 
 status, cadence_body = request(
-    f"http://127.0.0.1:5080/api/v2/admin/agent-instances/{instance['instanceId']}/continuity-maintenance",
+    f"http://127.0.0.1:{port}/api/v2/admin/agent-instances/{instance['instanceId']}/continuity-maintenance",
     headers=owner_headers,
 )
 cadence = json.loads(cadence_body)
 assert cadence["effectiveIntervalSeconds"] == 300 and cadence["usesDefault"], cadence
 status, cadence_body = request(
-    f"http://127.0.0.1:5080/api/v2/admin/agent-instances/{instance['instanceId']}/continuity-maintenance",
+    f"http://127.0.0.1:{port}/api/v2/admin/agent-instances/{instance['instanceId']}/continuity-maintenance",
     method="PUT",
     data=json.dumps({"expectedRevision": cadence["revision"], "intervalSeconds": 900}).encode(),
     headers=owner_headers,
@@ -327,7 +333,7 @@ rm -rf "$seed_dir"
 ready=0
 for _ in $(seq 1 90); do
   if curl -fsS -H "X-AgentCore-Owner-Capability: ${owner_token}" \
-    "http://127.0.0.1:5080/api/v2/sessions/${session_id}" >/tmp/agent-core-session-reopen.json 2>/dev/null; then
+    "http://127.0.0.1:${AGENTCORE_COMPOSE_PORT}/api/v2/sessions/${session_id}" >/tmp/agent-core-session-reopen.json 2>/dev/null; then
     ready=1
     break
   fi
@@ -340,6 +346,8 @@ if [[ "$ready" -ne 1 ]]; then
 fi
 
 python3 - <<PY
+import os
+port = os.environ["AGENTCORE_COMPOSE_PORT"]
 import json, urllib.request
 
 session_id = "${session_id}"
@@ -349,7 +357,7 @@ assert body["sessionId"] == session_id, body
 assert body["agentId"] == "examiner", body
 
 req = urllib.request.Request(
-    "http://127.0.0.1:5080/api/v2/sessions",
+    f"http://127.0.0.1:{port}/api/v2/sessions",
     headers={"X-AgentCore-Owner-Capability": token},
 )
 with urllib.request.urlopen(req) as response:
@@ -364,7 +372,7 @@ def get(url):
         payload = response.read()
         return response.status, payload.decode("utf-8")
 
-status, listed = get(f"http://127.0.0.1:5080/api/v2/sessions/{session_id}/work-items")
+status, listed = get(f"http://127.0.0.1:{port}/api/v2/sessions/{session_id}/work-items")
 assert status == 200, listed
 for secret in ("SECRET_BODY", "SECRET_EVIDENCE", "SECRET_CHECKPOINT", "Compose result survived."):
     assert secret not in listed, secret
@@ -373,11 +381,11 @@ assert {item["workItemId"] for item in items} >= {work["completedId"], work["app
 approval = next(item for item in items if item["workItemId"] == work["approvalWorkId"])
 assert approval["status"] == "needsApproval", approval
 assert approval["approvalPreview"] == "POST https://example.invalid/compose", approval
-status, detail = get(f"http://127.0.0.1:5080/api/v2/sessions/{session_id}/work-items/{work['approvalWorkId']}")
+status, detail = get(f"http://127.0.0.1:{port}/api/v2/sessions/{session_id}/work-items/{work['approvalWorkId']}")
 assert status == 200, detail
 for secret in ("SECRET_BODY", "SECRET_EVIDENCE", "SECRET_CHECKPOINT"):
     assert secret not in detail, secret
-status, result = get(f"http://127.0.0.1:5080/api/v2/sessions/{session_id}/work-items/{work['completedId']}/result")
+status, result = get(f"http://127.0.0.1:{port}/api/v2/sessions/{session_id}/work-items/{work['completedId']}/result")
 assert status == 200, result
 assert "Compose result survived." in result, result
 for secret in ("SECRET_BODY", "SECRET_EVIDENCE", "SECRET_CHECKPOINT"):
@@ -386,6 +394,8 @@ print("work survived", work["completedId"], work["approvalWorkId"])
 PY
 
 python3 - <<PY
+import os
+port = os.environ["AGENTCORE_COMPOSE_PORT"]
 import json, urllib.error, urllib.parse, urllib.request
 
 token = open("/tmp/agent-core-owner-token.txt").read()
@@ -401,31 +411,31 @@ def get(url):
         return response.status, response.read().decode("utf-8")
 
 status, config_json = get(
-    f"http://127.0.0.1:5080/api/v2/admin/instances/{instance_id}/effective-config"
+    f"http://127.0.0.1:{port}/api/v2/admin/instances/{instance_id}/effective-config"
 )
 assert status == 200, config_json
 config = json.loads(config_json)
 assert config["definitionVersion"] == pub_version, config
-assert config.get("compatibility") is False, config
+assert "compatibility" not in config, config
 
-status, managed_json = get(f"http://127.0.0.1:5080/api/v2/sessions/{managed_session_id}")
+status, managed_json = get(f"http://127.0.0.1:{port}/api/v2/sessions/{managed_session_id}")
 assert status == 200, managed_json
 managed = json.loads(managed_json)
 assert managed["sessionId"] == managed_session_id, managed
 assert managed["agentInstanceId"] == instance_id, managed
 assert managed["agentVersion"] == pub_version, managed
 
-status, events = get("http://127.0.0.1:5080/api/v2/admin/events?limit=50")
+status, events = get(f"http://127.0.0.1:{port}/api/v2/admin/events?limit=50")
 assert status == 200, events
 assert marker not in events, events
 assert "PublicationCreated" in events or "publication.created" in events.lower(), events
 
-status, publications = get("http://127.0.0.1:5080/api/v2/admin/definitions/examiner/publications")
+status, publications = get(f"http://127.0.0.1:{port}/api/v2/admin/definitions/examiner/publications")
 assert status == 200, publications
 assert f'"version":{pub_version}' in publications.replace(" ", "") or f'"version": {pub_version}' in publications, publications
 
 status, cadence_body = get(
-    f"http://127.0.0.1:5080/api/v2/admin/agent-instances/{instance_id}/continuity-maintenance"
+    f"http://127.0.0.1:{port}/api/v2/admin/agent-instances/{instance_id}/continuity-maintenance"
 )
 cadence = json.loads(cadence_body)
 assert status == 200 and cadence["configuredIntervalSeconds"] == 900, cadence
@@ -436,7 +446,7 @@ print("continuity cadence survived", instance_id, cadence["effectiveIntervalSeco
 resource_path = admin["resourcePath"]
 content_sha256 = admin["contentSha256"]
 status, pub_resources = get(
-    f"http://127.0.0.1:5080/api/v2/admin/definitions/examiner/publications/{pub_version}/resources"
+    f"http://127.0.0.1:{port}/api/v2/admin/definitions/examiner/publications/{pub_version}/resources"
 )
 assert status == 200, pub_resources
 resources = json.loads(pub_resources)
@@ -448,33 +458,33 @@ assert any(
 resource_text = admin["resourceText"]
 agent_resource_path = f"/agent/resources/{resource_path}"
 workspace_url = (
-    f"http://127.0.0.1:5080/api/v2/sessions/{managed_session_id}/workspace/content?path="
+    f"http://127.0.0.1:{port}/api/v2/sessions/{managed_session_id}/workspace/content?path="
     + urllib.parse.quote(agent_resource_path, safe="/")
 )
 status, workspace = get(workspace_url)
 assert status == 200, workspace
 assert resource_text in workspace, workspace
 home = json.load(open("/tmp/agent-core-home-survival.json"))
-status, retained = get(f"http://127.0.0.1:5080/api/v2/agent-instances/{home['instanceId']}/workspace/{home['item']['itemId']}/content")
+status, retained = get(f"http://127.0.0.1:{port}/api/v2/agent-instances/{home['instanceId']}/workspace/{home['item']['itemId']}/content")
 assert status == 200 and retained == home["text"], (status, retained)
-status, listed_home = get(f"http://127.0.0.1:5080/api/v2/agent-instances/{home['instanceId']}/workspace")
+status, listed_home = get(f"http://127.0.0.1:{port}/api/v2/agent-instances/{home['instanceId']}/workspace")
 assert any(item["sha256Hex"] == home["item"]["sha256Hex"] and not item["directory"] for item in json.loads(listed_home)["items"])
 assert any(item["logicalPath"] == "/home/reports" and item["directory"] for item in json.loads(listed_home)["items"])
 assert len(json.loads(listed_home)["treeSha256"]) == 64
 v2 = json.load(open("/tmp/agent-core-v2-survival.json"))
 v2_bytes = bytes([0, 255, 128, 13, 10])
 for path in ("/home/binary.dat", "/working/binary.dat"):
-    req = urllib.request.Request(f"http://127.0.0.1:5080/api/v2/sessions/{v2['sessionId']}/workspace/content?path={path}", headers={"X-AgentCore-Owner-Capability": token})
+    req = urllib.request.Request(f"http://127.0.0.1:{port}/api/v2/sessions/{v2['sessionId']}/workspace/content?path={path}", headers={"X-AgentCore-Owner-Capability": token})
     with urllib.request.urlopen(req) as response: assert response.read() == v2_bytes
-req = urllib.request.Request(f"http://127.0.0.1:5080/api/v2/sessions/{v2['sessionId']}", method="DELETE", headers={"X-AgentCore-Owner-Capability": token})
+req = urllib.request.Request(f"http://127.0.0.1:{port}/api/v2/sessions/{v2['sessionId']}", method="DELETE", headers={"X-AgentCore-Owner-Capability": token})
 with urllib.request.urlopen(req) as response: assert response.status == 204
-req = urllib.request.Request("http://127.0.0.1:5080/api/v2/sessions", method="POST",
+req = urllib.request.Request(f"http://127.0.0.1:{port}/api/v2/sessions", method="POST",
     data=json.dumps({"agentInstanceId": v2["instanceId"], "mode": "text"}).encode(),
     headers={"X-AgentCore-Owner-Capability": token, "Content-Type": "application/json"})
 with urllib.request.urlopen(req) as response: fresh = json.load(response)["sessionId"]
-req = urllib.request.Request(f"http://127.0.0.1:5080/api/v2/sessions/{fresh}/workspace/content?path=/home/binary.dat", headers={"X-AgentCore-Owner-Capability": token})
+req = urllib.request.Request(f"http://127.0.0.1:{port}/api/v2/sessions/{fresh}/workspace/content?path=/home/binary.dat", headers={"X-AgentCore-Owner-Capability": token})
 with urllib.request.urlopen(req) as response: assert response.read() == v2_bytes
-req = urllib.request.Request(f"http://127.0.0.1:5080/api/v2/sessions/{fresh}/workspace/content?path=/working/binary.dat", headers={"X-AgentCore-Owner-Capability": token})
+req = urllib.request.Request(f"http://127.0.0.1:{port}/api/v2/sessions/{fresh}/workspace/content?path=/working/binary.dat", headers={"X-AgentCore-Owner-Capability": token})
 try:
     urllib.request.urlopen(req)
     raise AssertionError("new Session inherited scratch")
@@ -484,8 +494,8 @@ print("agent workspace survived source deletion and container recreation", home[
 print("admin survived", instance_id, managed_session_id, pub_version, resource_path)
 PY
 
-spa="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:5080/)"
-api_missing="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:5080/api/v1/missing)"
+spa="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:${AGENTCORE_COMPOSE_PORT}/)"
+api_missing="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:${AGENTCORE_COMPOSE_PORT}/api/v1/missing)"
 [[ "$spa" == "200" ]]
 [[ "$api_missing" == "404" ]]
 

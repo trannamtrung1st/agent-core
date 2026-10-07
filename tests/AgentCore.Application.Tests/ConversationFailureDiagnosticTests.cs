@@ -430,7 +430,7 @@ public sealed class ConversationFailureDiagnosticTests
             now,
             now,
             ModelSelection: modelSelection,
-            AgentInstanceId: agentInstanceId);
+            AgentInstanceId: agentInstanceId ?? Guid.NewGuid());
         memory.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         var runtime = new SessionRuntime(
             snapshot,

@@ -254,11 +254,6 @@ internal static class AdminEndpoints
                         persona,
                         cancellationToken)
                     .ConfigureAwait(false);
-                if (instance.Compatibility)
-                {
-                    throw AgentCoreErrors.Conflict("Managed instance creation produced a compatibility row.");
-                }
-
                 return Results.Json(AdminHttpMapping.ToAgentInstance(instance), statusCode: StatusCodes.Status201Created);
             }
             catch (AgentCoreException ex)

@@ -410,7 +410,7 @@ public sealed class UserTextQueueTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
         var output = new CapturingSessionOutput();
         var recorded = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
@@ -481,7 +481,7 @@ public sealed class UserTextQueueTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
         var output = new CapturingSessionOutput();
         var model = new ScriptedLanguageModel(["should-not-run"]);
@@ -697,7 +697,7 @@ public sealed class UserTextQueueTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         memory.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         return new SessionRuntime(
             snapshot,

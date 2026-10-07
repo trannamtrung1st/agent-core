@@ -1,7 +1,9 @@
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test } from "@playwright/test";
 
 test("voice assistant text survives refresh", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByLabel("Message").fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();
@@ -30,6 +32,7 @@ test("voice assistant text survives refresh", async ({ page }) => {
 
 test("output worklet acknowledges playback while capture stays active", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByRole("button", { name: /^Voice$/ })).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: /^Voice$/ }).click();
   await expect(page.getByTestId("connection")).toHaveText("Listening…", { timeout: 15_000 });
@@ -48,6 +51,7 @@ test("output worklet acknowledges playback while capture stays active", async ({
 
 test("two completed voice turns reset worklet identity and consume each response independently", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByRole("button", { name: /^Voice$/ })).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: /^Voice$/ }).click();
   await expect(page.getByTestId("connection")).toHaveText("Listening…", { timeout: 15_000 });
@@ -74,6 +78,7 @@ test("two completed voice turns reset worklet identity and consume each response
 
 test("disconnect during playback keeps voice and requires resume before capture", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByRole("button", { name: /^Voice$/ })).toBeVisible({ timeout: 15_000 });
   await startListening(page);
   await page.getByLabel("Message").fill("Hello");

@@ -34,7 +34,7 @@ public sealed class SessionModelApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task Create_without_model_uses_the_system_default()
     {
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
-        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         created.EnsureSuccessStatusCode();
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         Assert.Equal("scripted-alpha", view!.Model!.CatalogKey);
@@ -50,7 +50,7 @@ public sealed class SessionModelApiTests : IClassFixture<AgentCoreApiFactory>
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
         var created = await client.PostAsJsonAsync(
             "/api/v2/sessions",
-            new CreateSessionRequest("examiner", 1, "text", Model: new SessionModelChoiceRequest("scripted-beta")));
+            new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text", Model: new SessionModelChoiceRequest("scripted-beta")));
         created.EnsureSuccessStatusCode();
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         Assert.Equal("scripted-beta", view!.Model!.CatalogKey);
@@ -64,11 +64,7 @@ public sealed class SessionModelApiTests : IClassFixture<AgentCoreApiFactory>
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
         var created = await client.PostAsJsonAsync(
             "/api/v2/host/sessions",
-            new HostCreateSessionRequest(
-                "examiner",
-                1,
-                "text",
-                Model: new SessionModelChoiceRequest("scripted-alpha", "high")));
+            new HostCreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text", Model: new SessionModelChoiceRequest("scripted-alpha", "high")));
         created.EnsureSuccessStatusCode();
         var host = await created.Content.ReadFromJsonAsync<HostSessionViewResponse>();
         Assert.Equal("scripted-alpha", host!.Model!.CatalogKey);
@@ -80,11 +76,12 @@ public sealed class SessionModelApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task Browser_body_cannot_supply_provider_routing()
     {
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
+        var agentInstanceId = TestInstances.Create(client, "examiner", 1);
         var created = await client.PostAsync(
             "/api/v2/sessions",
             new StringContent(
-                """
-                {"agentId":"examiner","agentVersion":1,"mode":"text","model":{"key":"scripted-alpha","providerAlias":"evil","modelId":"secret-model","apiKey":"sk-test","baseUrl":"https://evil.example"}}
+                $$$"""
+                {"agentInstanceId":"{{{agentInstanceId}}}","mode":"text","model":{"key":"scripted-alpha","providerAlias":"evil","modelId":"secret-model","apiKey":"sk-test","baseUrl":"https://evil.example"}}
                 """,
                 Encoding.UTF8,
                 "application/json"));
@@ -101,7 +98,7 @@ public sealed class SessionModelApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task Session_model_mutation_persists_catalog_choice()
     {
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
-        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         var changed = await client.PostAsJsonAsync(
             $"/api/v2/sessions/{view!.SessionId}/model",
@@ -118,7 +115,7 @@ public sealed class SessionModelApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task Ended_session_cannot_change_model()
     {
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
-        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         var ended = await client.DeleteAsync($"/api/v1/sessions/{view!.SessionId}");
         ended.EnsureSuccessStatusCode();

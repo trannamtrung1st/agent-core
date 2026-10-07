@@ -50,7 +50,6 @@ public sealed class P4ClosureTests
             var instances = new AgentInstanceService(
                 new SqliteAgentInstanceStore(factory, new SystemIdGenerator(clock)),
                 definitions,
-                sessions,
                 Ids(8, "019944af-001f-7000-8000-"),
                 clock);
             var alice = await instances.CreateAsync("customer-support", 1);

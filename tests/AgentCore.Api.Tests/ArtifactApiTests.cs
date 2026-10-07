@@ -19,7 +19,7 @@ public sealed class ArtifactApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task Materialize_and_download_require_capability_and_fail_closed()
     {
         var anonymous = _factory.CreateClient();
-        var created = await Owner().PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await Owner().PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(Owner(), "examiner", 1), "text"));
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         var uploaded = await Owner().PostAsync(
             $"/api/v2/sessions/{view!.SessionId}/attachments",
@@ -58,7 +58,7 @@ public sealed class ArtifactApiTests : IClassFixture<AgentCoreApiFactory>
         var bytes = await download.Content.ReadAsByteArrayAsync();
         Assert.Equal(Encoding.UTF8.GetBytes("hello-artifact"), bytes);
 
-        var other = await Owner().PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var other = await Owner().PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(Owner(), "examiner", 1), "text"));
         var otherView = await other.Content.ReadFromJsonAsync<SessionViewResponse>();
         var leaked = await Owner().GetAsync(
             $"/api/v2/sessions/{otherView!.SessionId}/artifacts/{artifact.ArtifactId}");

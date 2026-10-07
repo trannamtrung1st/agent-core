@@ -139,7 +139,7 @@ public sealed class PromptContextBuilderTests
         Assert.Contains(ConversationLanguagePolicy.PromptInstruction("en"), fixedIdentity, StringComparison.Ordinal);
         Assert.DoesNotContain("Respond in", SampleDefinitions.Examiner.SystemInstructions, StringComparison.Ordinal);
 
-        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var store = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         var general = await store.GetAsync("general-assistant", 1);
         Assert.NotNull(general);
         Assert.True(ConversationLanguagePolicy.IsAuto(general!.ConversationPolicy.Language));

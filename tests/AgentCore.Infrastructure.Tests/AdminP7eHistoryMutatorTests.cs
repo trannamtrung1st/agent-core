@@ -337,7 +337,7 @@ public abstract class AdminP7eHistoryMutatorTests
             TriggerPolicy = SchedulingPolicy()
         };
         var definitions = new SingleDefinitionStore(definition);
-        var instanceService = new AgentInstanceService(instances, definitions, sessions, ids, clock);
+        var instanceService = new AgentInstanceService(instances, definitions, ids, clock);
         var memoryService = new StructuredMemoryService(structured, ids, clock);
         var profile = new FixedProfile(ProfileId, clock);
         var adminMemory = new AdminMemoryService(instances, definitions, sessions, structured, memoryService, profile);
@@ -371,7 +371,7 @@ public abstract class AdminP7eHistoryMutatorTests
             TriggerPolicy = SchedulingPolicy()
         };
         var definitions = new SingleDefinitionStore(definition);
-        var instanceService = new AgentInstanceService(instances, definitions, sessions, ids, clock);
+        var instanceService = new AgentInstanceService(instances, definitions, ids, clock);
         var memoryService = new StructuredMemoryService(structured, ids, clock);
         var profile = new FixedProfile(ProfileId, clock);
         var adminMemory = new AdminMemoryService(instances, definitions, sessions, structured, memoryService, profile);

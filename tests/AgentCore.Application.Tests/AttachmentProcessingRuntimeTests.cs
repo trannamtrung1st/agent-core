@@ -284,7 +284,7 @@ public sealed class AttachmentProcessingRuntimeTests
             null,
             null,
             time.GetUtcNow(),
-            time.GetUtcNow());
+            time.GetUtcNow(), AgentInstanceId: Guid.NewGuid());
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         return new SessionRuntime(
             snapshot,

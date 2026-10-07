@@ -19,7 +19,6 @@ public sealed record AdminInstanceInventoryItemResponse(
     string DefinitionId,
     int ActiveVersion,
     string Lifecycle,
-    bool Compatibility,
     string PersonaName,
     string CreatedAt,
     string UpdatedAt);
@@ -33,7 +32,6 @@ public sealed record AdminEffectiveConfigurationResponse(
     string InstanceLifecycle,
     long InstanceRevision,
     long PersonaRevision,
-    bool Compatibility,
     AdminPersonaResponse Persona,
     AdminProviderPreferencesResponse ProviderPreferences,
     AdminEffectiveModelResponse EffectiveModel,
@@ -296,7 +294,6 @@ public sealed record AdminAgentInstanceResponse(
     string InstanceId,
     string DefinitionId,
     int ActiveVersion,
-    bool Compatibility,
     string Lifecycle,
     long Revision,
     long PersonaRevision,

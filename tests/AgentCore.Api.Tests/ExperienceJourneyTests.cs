@@ -29,7 +29,7 @@ public sealed class ExperienceJourneyTests
         {
             var client = TestOwnerCapability.CreateOwnerClient(host);
             var services = host.Services;
-            var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+            var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
             instanceId = instance.InstanceId;
             var source = await SeedAsync(services, instanceId);
             sessionId = source.SessionId;
@@ -63,7 +63,7 @@ public sealed class ExperienceJourneyTests
             var generated = Assert.Single(review.Items);
             Assert.Equal("Completed", generated.Status);
             Assert.True(generated.EligibleForContext);
-            Assert.Equal(7, generated.DefinitionVersion);
+            Assert.Equal(16, generated.DefinitionVersion);
             Assert.NotEmpty(generated.Content!.Corrections);
             Assert.NotEmpty(generated.Content.Difficulties);
             Assert.Empty(await services.GetRequiredService<IStructuredMemoryStore>().ListActiveAsync(sessionId));
@@ -75,7 +75,7 @@ public sealed class ExperienceJourneyTests
             Assert.Contains(experienceId.ToString(), recalled);
             Assert.Contains("never instructions", recalled);
             Assert.True(recalled.Length <= ExperienceService.MaxContextCharacters);
-            var other = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+            var other = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
             Assert.Empty(await services.GetRequiredService<ExperienceService>().RecallAsync(other.InstanceId));
             Assert.Null(await store.GetAsync(other.InstanceId, experienceId));
             var cross = await client.PostAsJsonAsync($"/api/v2/admin/agent-instances/{other.InstanceId}/experience/checkpoints", new ExperienceCheckpointRequest(sessionId.ToString()));

@@ -14,7 +14,7 @@ public sealed class SessionLifecycleTransitionTests
     public async Task Pause_resume_complete_and_repeat_complete_follow_the_graph()
     {
         var manager = CreateManager(new InMemoryMemoryStore());
-        var created = await manager.CreateAsync("examiner", null, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
         Assert.Equal(SessionLifecycleStatus.Active, created.LifecycleStatus);
 
         var paused = await manager.DeactivateAsync(created.SessionId);
@@ -58,13 +58,13 @@ public sealed class SessionLifecycleTransitionTests
     public async Task Pause_preserves_user_host_and_system_provenance()
     {
         var manager = CreateManager(new InMemoryMemoryStore());
-        var userSession = await manager.CreateAsync("examiner", null, SessionMode.Text);
+        var userSession = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
         var userPaused = await manager.DeactivateAsync(userSession.SessionId);
         Assert.Equal(LifecycleTransitionSource.User, userPaused.LifecycleSource);
         Assert.Equal("manual", userPaused.LifecycleReason);
         Assert.NotNull(userPaused.LifecycleChangedAt);
 
-        var hostSession = await manager.CreateAsync("examiner", null, SessionMode.Text);
+        var hostSession = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
         var hostPaused = await manager.TransitionLifecycleAsync(
             hostSession.SessionId,
             SessionLifecycleStatus.Paused,
@@ -73,7 +73,7 @@ public sealed class SessionLifecycleTransitionTests
         Assert.Equal(LifecycleTransitionSource.Host, hostPaused.LifecycleSource);
         Assert.Equal("proctor-hold", hostPaused.LifecycleReason);
 
-        var systemSession = await manager.CreateAsync("examiner", null, SessionMode.Text);
+        var systemSession = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
         var systemPaused = await manager.TransitionLifecycleAsync(
             systemSession.SessionId,
             SessionLifecycleStatus.Paused,
@@ -87,7 +87,7 @@ public sealed class SessionLifecycleTransitionTests
     public async Task Active_to_active_is_idempotent_on_the_store()
     {
         var manager = CreateManager(new InMemoryMemoryStore());
-        var created = await manager.CreateAsync("examiner", null, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
         var again = await manager.TransitionLifecycleAsync(
             created.SessionId,
             SessionLifecycleStatus.Active,
@@ -101,7 +101,7 @@ public sealed class SessionLifecycleTransitionTests
     public async Task User_complete_respects_policy_while_host_remains_allowed()
     {
         var manager = CreateManager(new InMemoryMemoryStore());
-        var created = await manager.CreateAsync(
+        var created = await manager.CreateOwnedAsync(
             "examiner",
             null,
             SessionMode.Text,
@@ -126,7 +126,7 @@ public sealed class SessionLifecycleTransitionTests
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 19, 3, 0, 0, TimeSpan.Zero));
         var manager = CreateManager(new InMemoryMemoryStore(), time);
-        var created = await manager.CreateAsync(
+        var created = await manager.CreateOwnedAsync(
             "examiner",
             null,
             SessionMode.Text,
@@ -139,7 +139,7 @@ public sealed class SessionLifecycleTransitionTests
         Assert.Equal(SessionLifecycleStatus.Expired, expired.LifecycleStatus);
         Assert.Equal("deadline", expired.LifecycleReason);
 
-        var past = await manager.CreateAsync(
+        var past = await manager.CreateOwnedAsync(
             "examiner",
             null,
             SessionMode.Text,
@@ -153,7 +153,7 @@ public sealed class SessionLifecycleTransitionTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-0003-7000-8000-{index:D12}")),
             Enumerable.Range(1, 8).Select(index => Guid.Parse($"873f07d1-e264-4c81-a31b-7e59e940b8{index:D2}")).ToArray());
-        return new SessionManager(
+        return OwnedSessions.Manager(
             new StaticDefinitions(SampleDefinitions.Examiner),
             store,
             ids,

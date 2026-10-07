@@ -148,8 +148,7 @@ public sealed class DurableWorkContextFactoryTests
             liveDefinition.Identity with { Name = instanceDisplayName },
             lifecycle,
             Now,
-            Now,
-            false));
+            Now));
 
         var definitions = new MultiVersionDefinitionStore(
             SampleDefinitions.Examiner,

@@ -16,7 +16,7 @@ public sealed class PublicationKnowledgeRetrieveTests
     {
         var agentsDir = FindAgents();
         var builtIns = new FileAgentDefinitionStore(agentsDir, SyntheticProviderAliases.Default);
-        var builtin = await builtIns.GetAsync("customer-support", 1, CancellationToken.None);
+        var builtin = await builtIns.GetAsync("customer-support", 3, CancellationToken.None);
         Assert.NotNull(builtin);
 
         var now = DateTimeOffset.Parse("2026-01-06T00:00:00Z");
@@ -71,7 +71,7 @@ public sealed class PublicationKnowledgeRetrieveTests
             new AgentDefinitionDraftPublish(
                 draftAfterResource!.DraftId,
                 draftAfterResource.Revision,
-                [1, 2],
+                [1, 2, 3],
                 now.AddMinutes(2)),
             CancellationToken.None);
 
@@ -96,7 +96,7 @@ public sealed class PublicationKnowledgeRetrieveTests
     {
         var agentsDir = FindAgents();
         var builtIns = new FileAgentDefinitionStore(agentsDir, SyntheticProviderAliases.Default);
-        var builtin = await builtIns.GetAsync("customer-support", 1, CancellationToken.None);
+        var builtin = await builtIns.GetAsync("customer-support", 3, CancellationToken.None);
         Assert.NotNull(builtin);
 
         var now = DateTimeOffset.Parse("2026-01-06T00:00:00Z");
@@ -135,7 +135,7 @@ public sealed class PublicationKnowledgeRetrieveTests
         await BindAsync(content, resources, afterLegacy!, "knowledge/refund-policy.md", "Explicit refund body", now.AddMinutes(2));
         var ready = await admin.GetDraftAsync(draft.DraftId, CancellationToken.None);
         var published = await admin.PublishDraftAsync(
-            new AgentDefinitionDraftPublish(ready!.DraftId, ready.Revision, [1, 2], now.AddMinutes(3)),
+            new AgentDefinitionDraftPublish(ready!.DraftId, ready.Revision, [1, 2, 3], now.AddMinutes(3)),
             CancellationToken.None);
 
         var resolver = new DefinitionBoundKnowledgeContentResolver(
@@ -181,7 +181,7 @@ public sealed class PublicationKnowledgeRetrieveTests
         while (dir is not null)
         {
             var agents = Path.Combine(dir.FullName, "agents");
-            if (Directory.Exists(agents) && File.Exists(Path.Combine(agents, "customer-support.json")))
+            if (Directory.Exists(agents) && File.Exists(Path.Combine(agents, "customer-support-v3.json")))
             {
                 return agents;
             }

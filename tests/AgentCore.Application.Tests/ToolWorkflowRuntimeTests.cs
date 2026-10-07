@@ -86,7 +86,7 @@ public sealed class ToolWorkflowRuntimeTests
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
         var workspace = new CountingWorkspace();
-        var tools = new SessionToolExecutor(knowledge, workspace: workspace, artifacts: artifacts);
+        var tools = new SessionToolExecutor(knowledge, workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace), artifacts: artifacts);
         var model = new MultiFileLanguageModel();
         var output = new CapturingSessionOutput();
         await using var runtime = CreateRuntime(output, definition, model, tools, artifacts);
@@ -117,7 +117,7 @@ public sealed class ToolWorkflowRuntimeTests
         var workspace = new CountingWorkspace();
         var tools = new SessionToolExecutor(
             knowledge,
-            workspace: workspace,
+            workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace),
             artifacts: artifacts,
             configurationGate: ToolConfigurationGates.AllowAll);
         var model = new BoundedWriteLanguageModel(25);
@@ -145,7 +145,7 @@ public sealed class ToolWorkflowRuntimeTests
         var definition = await Load("customer-support");
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
-        var tools = new SessionToolExecutor(knowledge, workspace: workspace, artifacts: artifacts);
+        var tools = new SessionToolExecutor(knowledge, workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace), artifacts: artifacts);
         var model = new WorkspaceWriteLanguageModel();
         var output = new CapturingSessionOutput();
         await using var runtime = CreateRuntime(output, definition, model, tools, artifacts);
@@ -199,7 +199,7 @@ public sealed class ToolWorkflowRuntimeTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         return new SessionRuntime(
             snapshot,
@@ -216,7 +216,7 @@ public sealed class ToolWorkflowRuntimeTests
 
     private static async Task<AgentDefinition> Load(string id)
     {
-        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var store = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         return (await store.GetAsync(id, 1))!;
     }
 
@@ -310,7 +310,7 @@ public sealed class ToolWorkflowRuntimeTests
                 yield return new ModelToolCallEvent(new ModelToolCall(
                     $"call-{rounds + 1}",
                     ToolCatalog.WorkspaceWrite,
-                    $$"""{"path":"/workspace/working/file-{{rounds + 1}}.txt","content":"n"}"""));
+                    $$"""{"path":"/working/file-{{rounds + 1}}.txt","content":"n"}"""));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls);
                 yield break;
             }
@@ -339,7 +339,7 @@ public sealed class ToolWorkflowRuntimeTests
                 yield return new ModelToolCallEvent(new ModelToolCall(
                     $"call-{rounds + 1}",
                     ToolCatalog.WorkspaceWrite,
-                    $$"""{"path":"/workspace/working/file-{{rounds + 1}}.txt","content":"n"}"""));
+                    $$"""{"path":"/working/file-{{rounds + 1}}.txt","content":"n"}"""));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls);
                 yield break;
             }
@@ -428,7 +428,7 @@ public sealed class ToolWorkflowRuntimeTests
             yield return new ModelToolCallEvent(new ModelToolCall(
                 "call-w",
                 ToolCatalog.WorkspaceWrite,
-                """{"path":"/workspace/working/note.txt","content":"late"}"""));
+                """{"path":"/working/note.txt","content":"late"}"""));
             yield return new ModelCompleted(ModelStopReason.ToolCalls);
         }
     }

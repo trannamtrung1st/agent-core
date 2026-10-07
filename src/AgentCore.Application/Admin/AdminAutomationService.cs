@@ -119,11 +119,6 @@ public sealed class AdminAutomationService(
     {
         var instance = await instances.FindAsync(instanceId, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
-        if (instance.Compatibility)
-        {
-            throw AgentCoreErrors.Forbidden("Automation administration requires a managed instance.");
-        }
-
         return instance;
     }
 

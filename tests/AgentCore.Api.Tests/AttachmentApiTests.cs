@@ -23,7 +23,7 @@ public sealed class AttachmentApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task Upload_bind_and_content_require_capability_and_fail_closed()
     {
         var anonymous = _factory.CreateClient();
-        var created = await Owner().PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await Owner().PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(Owner(), "examiner", 1), "text"));
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         var denied = await anonymous.PostAsync(
             $"/api/v2/sessions/{view!.SessionId}/attachments",
@@ -42,7 +42,7 @@ public sealed class AttachmentApiTests : IClassFixture<AgentCoreApiFactory>
             $"/api/v2/sessions/{view.SessionId}/attachments");
         Assert.Contains(listed!, item => item.AttachmentId == attachment.AttachmentId);
 
-        var other = await Owner().PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var other = await Owner().PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(Owner(), "examiner", 1), "text"));
         var otherView = await other.Content.ReadFromJsonAsync<SessionViewResponse>();
         var leaked = await Owner().GetAsync(
             $"/api/v2/sessions/{otherView!.SessionId}/attachments/{attachment.AttachmentId}");
@@ -71,7 +71,7 @@ public sealed class AttachmentApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task Archive_and_delete_denials_are_distinct()
     {
         var client = Owner();
-        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         await client.PostAsync($"/api/v2/sessions/{view!.SessionId}/archive", null);
         var archived = await client.PostAsync(
@@ -93,7 +93,7 @@ public sealed class AttachmentApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task Zip_is_rejected_even_with_unread_policy()
     {
         var client = Owner();
-        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         using var zip = FileContent("x.zip", "PK\u0003\u0004abcd", "application/zip");
         zip.Headers.TryAddWithoutValidation("X-AgentCore-Allow-Store-Unread", "true");
@@ -105,7 +105,7 @@ public sealed class AttachmentApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task Ended_session_can_read_attachments_but_not_upload()
     {
         var client = Owner();
-        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         var uploaded = await client.PostAsync(
             $"/api/v2/sessions/{view!.SessionId}/attachments",

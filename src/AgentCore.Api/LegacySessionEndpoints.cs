@@ -14,52 +14,6 @@ public static class LegacySessionEndpoints
     {
         var group = app.MapGroup("/api/v1/sessions").AddEndpointFilter<OwnerCapabilityFilter>();
 
-        group.MapPost("", async (
-            CreateSessionRequest? body,
-            SessionManager sessions,
-            SessionHost host,
-            HttpContext http,
-            IModelCatalog catalog,
-            CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                if (!host.Admitting)
-                {
-                    throw AgentCoreErrors.ShuttingDown();
-                }
-
-                if (body is null || string.IsNullOrWhiteSpace(body.AgentId))
-                {
-                    throw AgentCoreErrors.Validation("agentId is required.");
-                }
-
-                if (body.AgentInstanceId is Guid instanceId && instanceId != Guid.Empty)
-                {
-                    throw AgentCoreErrors.Validation("agentInstanceId is not supported on this route.");
-                }
-
-                var snapshot = await sessions.CreateAsync(
-                        body.AgentId,
-                        body.AgentVersion,
-                        HttpMapping.ParseMode(body.Mode),
-                        cancellationToken,
-                        speechLocaleOverride: body.SpeechLocale,
-                        modelKey: body.Model?.Key,
-                        reasoningEffort: body.Model?.ReasoningEffort,
-                        modelSource: ModelSelectionSource.User)
-                    .ConfigureAwait(false);
-                var view = HttpMapping.ToView(snapshot, activeResponseId: null, catalog);
-                var location = $"/api/v1/sessions/{view.SessionId}";
-                http.Response.Headers.Location = location;
-                return Results.Json(view, statusCode: StatusCodes.Status201Created);
-            }
-            catch (AgentCoreException ex)
-            {
-                return ProblemResults.From(ex);
-            }
-        });
-
         group.MapGet("{sessionId:guid}", async (
             Guid sessionId,
             SessionManager sessions,

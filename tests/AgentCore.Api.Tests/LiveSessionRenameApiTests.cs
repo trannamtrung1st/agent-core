@@ -25,7 +25,7 @@ public sealed class LiveSessionRenameApiTests : IClassFixture<AgentCoreApiFactor
         var client = OwnerClient();
         var host = _factory.Services.GetRequiredService<SessionHost>();
         var store = _factory.Services.GetRequiredService<IMemoryStore>();
-        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         created.EnsureSuccessStatusCode();
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         var sessionId = Guid.Parse(view!.SessionId);

@@ -334,7 +334,7 @@ public sealed class ToolApprovalTests
 
     private static async Task<AgentDefinition> LoadGeneralV3()
     {
-        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var store = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         return (await store.GetAsync("general-assistant", 3))!;
     }
 
@@ -382,7 +382,7 @@ public sealed class ToolApprovalTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         return new SessionRuntime(
             snapshot,

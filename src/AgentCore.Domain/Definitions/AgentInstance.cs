@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-
 namespace AgentCore.Domain.Definitions;
 
 public enum AgentInstanceLifecycle
@@ -17,17 +14,8 @@ public sealed record AgentInstance(
     AgentInstanceLifecycle Lifecycle,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    bool Compatibility,
     long Revision = 1,
     long PersonaRevision = 1,
     string? UnattendedModelCatalogKey = null,
     string? UnattendedReasoningEffort = null,
-    HarnessManagementState? HarnessManagement = null)
-{
-    public static Guid CompatibilityFor(string definitionId)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(definitionId);
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes("agent-core:compatibility:v1:" + definitionId));
-        return new Guid(hash.AsSpan(0, 16));
-    }
-}
+    HarnessManagementState? HarnessManagement = null);

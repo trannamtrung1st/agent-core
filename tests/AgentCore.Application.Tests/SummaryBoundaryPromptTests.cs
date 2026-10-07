@@ -409,7 +409,7 @@ public sealed class SummaryBoundaryPromptTests
             null,
             Now,
             Now,
-            LastEntrySequence: entries.Max(entry => entry.Sequence));
+            LastEntrySequence: entries.Max(entry => entry.Sequence), AgentInstanceId: Guid.NewGuid());
 
     private static ConversationEntry Entry(
         long sequence,

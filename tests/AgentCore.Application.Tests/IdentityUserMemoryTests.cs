@@ -42,7 +42,7 @@ public sealed class IdentityUserMemoryTests
             var admission = Admission();
             var persona = SampleDefinitions.Examiner.Identity with { Tone = "pinned tone" };
             await instances.InsertAsync(new AgentInstance(
-                Alice, "examiner", 1, persona, AgentInstanceLifecycle.Active, Now, Now, false));
+                Alice, "examiner", 1, persona, AgentInstanceLifecycle.Active, Now, Now));
             await sessions.SaveAsync(Snapshot(Session1, persona), 0);
 
             var source = await service.WriteAsync(

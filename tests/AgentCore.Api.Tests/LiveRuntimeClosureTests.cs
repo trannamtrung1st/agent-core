@@ -44,7 +44,7 @@ public sealed class LiveRuntimeClosureTests(ITestOutputHelper output)
                 ["Providers:LanguageModels:primary-llm:DefaultModel"] = options.DefaultModel,
                 ["Providers:LanguageModels:primary-llm:Tools"] = "true", ["Providers:LanguageModels:primary-llm:StructuredOutput"] = "false" }));
         var s = host.Services;
-        var id = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 9)).InstanceId;
+        var id = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16)).InstanceId;
         var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(id, SessionMode.Text);
         var now = DateTimeOffset.UtcNow;
         var memories = s.GetRequiredService<IStructuredMemoryStore>();
@@ -77,12 +77,12 @@ public sealed class LiveRuntimeClosureTests(ITestOutputHelper output)
             var source = await ExperienceJourneyTests.SeedAsync(s, id);
             var eid = Guid.NewGuid();
             var e = new AgentExperience(eid, id, LocalUserProfile.Id, ExperienceSourceKind.Session, source.SessionId, 2, now,
-                "general-assistant", 9, eid, new("deepseek-v41-flash", "primary-llm", options.DefaultModel, null), now);
+                "general-assistant", 16, eid, new("deepseek-v41-flash", "primary-llm", options.DefaultModel, null), now);
             await experiences.AdmitAsync(e);
             await experiences.CompleteAsync(id, eid, new(goal, [attempt], [], ["Recorded the specific project context"], [], [], [], [lesson]));
             distinct.Add(e);
         }
-        var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 9))!;
+        var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
         var search = new ModelToolCall("budget-check", ToolCatalog.ContinuitySearch, """{"query":"Aurora","limit":10}""");
         var partial = await s.GetRequiredService<SessionToolExecutor>().ExecuteAsync(definition, Guid.Empty, search, 1500,
             admission: new(true, TriggerKind.ThoughtActivation, AgentInstanceId: id));

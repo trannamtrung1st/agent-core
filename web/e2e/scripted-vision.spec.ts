@@ -1,3 +1,4 @@
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test } from "@playwright/test";
 
 function pngBuffer(): Buffer {
@@ -30,6 +31,7 @@ test("vision incompatibility blocks send until Scripted Vision is selected", asy
   });
 
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
 
   await page.getByLabel("Message").fill("Warm up");

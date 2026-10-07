@@ -9,7 +9,6 @@ export type DraftEnvironment = {
   harness: string[];
   toolAllowlist: string[];
   workspaceTemplateId: string;
-  workspaceSemantics?: string;
   capabilityMode?: "Selected" | "All";
   alwaysCapabilities?: string[];
   knowledgeSources: DraftKnowledgeSource[];
@@ -74,7 +73,6 @@ export function readDraftEnvironment(candidate: unknown): DraftEnvironment {
     capabilityMode: asRecord(environment.capabilities)?.mode as "Selected" | "All" | undefined,
     alwaysCapabilities: environment.projection ? readStringList(asRecord(environment.projection)?.alwaysCapabilities) : undefined,
     workspaceTemplateId: templateId,
-    workspaceSemantics: typeof workspace?.semantics === "string" ? workspace.semantics : undefined,
     knowledgeSources: readKnowledgeSources(environment.knowledgeSources),
     allowUnreadUnsupportedAttachmentTypes:
       attachments?.allowUnreadUnsupportedTypes === true
@@ -90,7 +88,6 @@ function normalizeDraftEnvironment(env: DraftEnvironment): DraftEnvironment {
     harness: [...env.harness].sort(),
     toolAllowlist: [...env.toolAllowlist].sort(),
     workspaceTemplateId: env.workspaceTemplateId,
-    workspaceSemantics: env.workspaceSemantics,
     capabilityMode: env.capabilityMode,
     alwaysCapabilities: env.alwaysCapabilities?.slice().sort(),
     knowledgeSources: env.knowledgeSources.map((item) => ({
@@ -108,8 +105,7 @@ export function applyDraftEnvironmentToCandidate(
   environment: DraftEnvironment
 ): Record<string, unknown> {
   const workspace = {
-    ...(environment.workspaceTemplateId.trim().length > 0 ? { templateId: environment.workspaceTemplateId.trim() } : {}),
-    ...(environment.workspaceSemantics ? { semantics: environment.workspaceSemantics } : {})
+    ...(environment.workspaceTemplateId.trim().length > 0 ? { templateId: environment.workspaceTemplateId.trim() } : {})
   };
 
   const knowledgeSources = environment.knowledgeSources.map((item) => {

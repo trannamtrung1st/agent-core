@@ -575,7 +575,6 @@ public sealed class DurableReminderTests
             var instanceService = new AgentInstanceService(
                 harness.Instances,
                 harness.Definitions,
-                harness.Sessions,
                 new GuidGenerator(),
                 harness.Time,
                 reconciliation);
@@ -1715,7 +1714,7 @@ public sealed class DurableReminderTests
             observedAt,
             evidence,
             "general-assistant",
-            10,
+            16,
             "Riley");
 
     private static WorkModelPin Pin(SessionModelSelection selection) =>
@@ -1879,8 +1878,7 @@ public sealed class DurableReminderTests
             definition.Identity,
             AgentInstanceLifecycle.Active,
             Now,
-            Now,
-            false));
+            Now));
         var definitions = new SingleDefinitionStore(definition);
         var memories = new OwnerMemoryDouble(Now);
         var recording = new RecordingModel(modelFactory?.Invoke() ?? new ScriptedLanguageModel(["Oven is ready."]));
@@ -1929,7 +1927,7 @@ public sealed class DurableReminderTests
     private static async Task<AgentDefinition> LoadDefinitionAsync()
     {
         var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
-        return (await store.GetAsync("general-assistant", 10))!;
+        return (await store.GetAsync("general-assistant", 16))!;
     }
 
     private static string FindAgents()

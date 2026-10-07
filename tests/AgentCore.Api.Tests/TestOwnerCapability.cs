@@ -10,6 +10,9 @@ namespace AgentCore.Api.Tests;
 internal static class TestOwnerCapability
 {
     private static readonly ConditionalWeakTable<IServiceProvider, TokenBox> Tokens = [];
+    private static readonly ConditionalWeakTable<HttpClient, IServiceProvider> Clients = [];
+
+    public static bool TryGetServices(HttpClient client, out IServiceProvider? services) => Clients.TryGetValue(client, out services);
 
     public static string Token(IServiceProvider services) =>
         Tokens.GetValue(
@@ -33,8 +36,12 @@ internal static class TestOwnerCapability
     public static void Apply(HttpConnectionOptions options, IServiceProvider services) =>
         options.Headers[OwnerCapabilityHeaders.Name] = Token(services);
 
-    public static void Apply(HttpClient client, IServiceProvider services) =>
+    public static void Apply(HttpClient client, IServiceProvider services)
+    {
+        Clients.Remove(client);
+        Clients.Add(client, services);
         client.DefaultRequestHeaders.TryAddWithoutValidation(OwnerCapabilityHeaders.Name, Token(services));
+    }
 
     private sealed record TokenBox(string Value);
 }

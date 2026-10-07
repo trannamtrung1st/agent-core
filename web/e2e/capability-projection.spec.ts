@@ -11,7 +11,7 @@ test("Admin pins All with always projection and Chat loads only the needed inter
   await expect.poll(() => page.evaluate(() => localStorage.getItem("agent-core.owner-capability"))).not.toBeNull();
   const token = await page.evaluate(() => localStorage.getItem("agent-core.owner-capability"));
   const headers = { "X-AgentCore-Owner-Capability": token! };
-  const builtIn = JSON.parse(await readFile(new URL("../../agents/general-assistant-v15.json", import.meta.url), "utf8"));
+  const builtIn = JSON.parse(await readFile(new URL("../../agents/general-assistant-v16.json", import.meta.url), "utf8"));
   const id = `capability-journey-${Date.now()}`;
   const { id: _id, version: _version, ...candidate } = builtIn;
   candidate.definitionId = id;
@@ -76,7 +76,7 @@ test("Admin pins All with always projection and Chat loads only the needed inter
   const written = await send("write");
   await expect(written).toContainText('"name":"workspace.write"');
   await expect(written).not.toContainText('"error":');
-  const output = await page.request.get(`/api/v2/sessions/${session}/workspace/content?path=/home/loaded-capability.txt`, { headers });
+  const output = await page.request.get(`/api/v2/sessions/${session}/workspace/content?path=/working/loaded-capability.txt`, { headers });
   expect(await output.body()).toEqual(Buffer.from("Loaded exact capability café\r\n"));
   await expect(await send("inspect")).not.toContainText("workspace.write");
   expect(errors).toEqual([]);

@@ -40,7 +40,7 @@ Logging and projections for Admin must stay redacted: never log owner-capability
 
 There is no separate Admin metrics namespace yet; treat Admin like other HTTP surfaces (ASP.NET request logging, bounded error codes). If Admin-specific **counters or histograms** are added later, tag only bounded low-cardinality values such as `operation`, `outcome`, and resource **kind** (never instance/definition UUIDs, operation ids, or summary JSON bodies). **Traces and structured logs** may include safe resource ids for correlation, consistent with the latency-instrumentation rule that session/event/response ids belong in traces/logs, not metric labels. **Spans** follow the same split: bounded tags on metrics; richer attributes on trace activities only.
 
-**Compose and browser verification:** default Synthetic Compose smoke (`scripts/compose-sqlite-volume.sh`) proves SQLite volume survival for legacy sessions, catalog, redacted Background Work APIs, and an owner-protected Admin fork/publish/managed-instance/managed-session path with safe `AdminEvents` list redaction across container recreate. The P7 whole-phase Admin journey (resources, evaluations, full §8 steps) still runs in Playwright with a **disposable** SQLite file (`PLAYWRIGHT_SQLITE_PATH`, isolated `admin-lifecycle` project in CI). The later Admin authoring journey uses a separate `p76-admin` project and `data/playwright/p76-admin.db`, also deleted before that CI step. Compose also uploads/binds a draft knowledge resource, publishes, and verifies publication resource metadata survives recreate; managed-session `/agent` resource read is checked before recreate ([P7G report](reports/p7g-history-rollback-final-gate.md)).
+**Compose and browser verification:** default Synthetic Compose smoke (`scripts/compose-sqlite-volume.sh`) proves SQLite volume survival for instance-owned Sessions, catalog, redacted Background Work APIs, and an owner-protected Admin fork/publish/managed-instance/managed-session path with safe `AdminEvents` list redaction across container recreate. The P7 whole-phase Admin journey (resources, evaluations, full §8 steps) still runs in Playwright with a **disposable** SQLite file (`PLAYWRIGHT_SQLITE_PATH`, isolated `admin-lifecycle` project in CI). The later Admin authoring journey uses a separate `p76-admin` project and `data/playwright/p76-admin.db`, also deleted before that CI step. Compose also uploads/binds a draft knowledge resource, publishes, and verifies publication resource metadata survives recreate; managed-session `/agent` resource read is checked before recreate ([P7G report](reports/p7g-history-rollback-final-gate.md)).
 
 `DiagnosticId` names one failure occurrence and may be shown or copied. `CorrelationId` remains the logical operation or turn. `TraceId` is copied only from a real `Activity.Current` and is omitted when none exists. Unexpected catches log the exception object with a `DiagnosticLog` record. Present allowlisted fields sit on that record: `DiagnosticId`, `CorrelationId`, `TraceId`, `SessionId`, `ResponseId`, `AgentInstanceId`, `TriggerRegistrationId`, `TriggerOccurrenceId`, `WorkItemId`, `ErrorCategory`, `ErrorCode`, `ProviderAlias`, `FailureReason`, and `ProviderResponseChannel`. Absent fields are omitted. Conversation and model failures include `AgentInstanceId` and `ProviderAlias` when the pinned session already has them. Provider `InvalidResponse` failures may also include bounded `FailureReason` and `ProviderResponseChannel` on the same `DiagnosticLog` line. Those values name the violated contract, not raw model output. `outputLimit` and `toolCallTruncated` are part of that allowlist. The same tokens may appear on the history failure reference. Those identifiers are not metric labels. A terminal session-end persistence failure publishes `Session` / `SessionPersistenceUnavailable` / `Persistent save failed.` and keeps the exception object on that log line. Expired-claim recovery still assigns one `DiagnosticId` inside the store. `RecoverExpiredClaimsAsync` returns the recovered count and the newly terminal failures. `DurableReminderExecutor` logs those failures with the stored id. It does not mint another. `Observability:OtlpEnabled` still does not attach an exporter.
 
@@ -284,3 +284,32 @@ An enabled active instance without a previous evaluation timestamp is due on the
 Run only one authoritative writable Agent Core host per database and `Persistence:AgentWorkspaceRoot`; writable replicas sharing these roots are unsupported. Back up/restore both together as described in [workspace persistence](15-persistence-and-configuration.md#agent-instance-home-persistence).
 
 `WorkspaceCleanupHostedService` retries committed instance-deletion receipts at startup and every five minutes. Failed cleanup logs a bounded warning and retries later without restoring the deleted owner. Physical leftovers remain inaccessible; do not remove the Admin receipts needed for recovery. An exact repeated internal deletion command can also finish cleanup; the HTTP delete endpoint generates its own operation id. Logical-commit failure leaves the archived instance and its workspace intact.
+
+## Unified workspace reset and isolated verification
+
+Migration `20261007014134_UnifiedAgentWorkspace` refuses databases with compatibility owners or Sessions whose AgentInstanceId is null/empty. Startup reports **Legacy data reset required**. It does not reset, convert, or reassign data. Fresh databases have required Session ownership and no instance identity discriminator. The runtime catalog contains only supported built-in versions; create an Agent Instance explicitly in Admin before starting Chat. Empty Chat shows that guidance.
+
+For native development, stop the API first and preserve or discard its **configured** SQLite file (including WAL/SHM) together with AttachmentRoot, WorkspaceRoot, AgentWorkspaceRoot, ArtifactRoot and DefinitionResourceRoot. Default relative data paths resolve under the API content root. With the default `src/AgentCore.Api/data` paths, this explicit operator-run backup/reset flow starts a fresh instance:
+
+```bash
+# API stopped; repository root. Keeps a recoverable copy of all default data.
+mv src/AgentCore.Api/data "src/AgentCore.Api/data.before-unified-$(date +%Y%m%d-%H%M%S)"
+dotnet run --project src/AgentCore.Api
+```
+
+If ConnectionString or roots were overridden, move those configured paths instead; do not mix the old database with fresh blob roots. Keep the backup until the new installation is verified. No development/restart script performs this reset automatically.
+
+For Compose, after saving any data that is needed, the explicit destructive reset is:
+
+```bash
+docker compose down -v
+docker compose up --build -d
+```
+
+This destroys that Compose project's persisted data. For verification alongside another running application, choose a separate project and port:
+
+```bash
+COMPOSE_PROJECT_NAME=agent-core-unified-check AGENTCORE_COMPOSE_PORT=5087 ./scripts/compose-sqlite-volume.sh
+```
+
+The smoke recreates the application container and verifies owned Session/catalog, home exact bytes, current Session scratch, fresh Session scratch isolation, publication resources and safe Background Work records. It retains its isolated volume on normal shutdown. Every database/blob persistence root still has one authoritative writer.

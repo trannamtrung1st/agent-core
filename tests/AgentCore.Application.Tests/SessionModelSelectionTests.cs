@@ -19,7 +19,7 @@ public sealed class SessionModelSelectionTests
     public async Task Create_without_model_pins_the_system_default()
     {
         var manager = CreateManager(new InMemoryMemoryStore());
-        var created = await manager.CreateAsync("examiner", null, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
         Assert.Equal("scripted-alpha", created.ModelSelection!.CatalogKey);
         Assert.Equal(ModelSelectionSource.SystemDefault, created.ModelSelection.SelectionSource);
         Assert.Equal("medium", created.ModelSelection.ReasoningEffort);
@@ -29,7 +29,7 @@ public sealed class SessionModelSelectionTests
     public async Task Create_with_explicit_model_persists_that_choice()
     {
         var manager = CreateManager(new InMemoryMemoryStore());
-        var created = await manager.CreateAsync(
+        var created = await manager.CreateOwnedAsync(
             "examiner",
             null,
             SessionMode.Text,
@@ -45,13 +45,13 @@ public sealed class SessionModelSelectionTests
     {
         var store = new InMemoryMemoryStore();
         var created = await CreateManager(store, TestModelCatalogs.WithDefault("scripted-alpha"))
-            .CreateAsync("examiner", null, SessionMode.Text);
+            .CreateOwnedAsync("examiner", null, SessionMode.Text);
         Assert.Equal("scripted-alpha", created.ModelSelection!.CatalogKey);
 
         var later = CreateManager(store, TestModelCatalogs.WithDefault("scripted-beta"));
         var loaded = await later.GetAsync(created.SessionId);
         Assert.Equal("scripted-alpha", loaded.ModelSelection!.CatalogKey);
-        var fresh = await later.CreateAsync("examiner", null, SessionMode.Text);
+        var fresh = await later.CreateOwnedAsync("examiner", null, SessionMode.Text);
         Assert.Equal("scripted-beta", fresh.ModelSelection!.CatalogKey);
         Assert.Equal(ModelSelectionSource.SystemDefault, fresh.ModelSelection.SelectionSource);
     }
@@ -61,8 +61,8 @@ public sealed class SessionModelSelectionTests
     {
         var store = new InMemoryMemoryStore();
         var manager = CreateManager(store);
-        var first = await manager.CreateAsync("examiner", null, SessionMode.Text, modelKey: "scripted-alpha", modelSource: ModelSelectionSource.User);
-        var second = await manager.CreateAsync("examiner", null, SessionMode.Text, modelKey: "scripted-alpha", modelSource: ModelSelectionSource.User);
+        var first = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text, modelKey: "scripted-alpha", modelSource: ModelSelectionSource.User);
+        var second = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text, modelKey: "scripted-alpha", modelSource: ModelSelectionSource.User);
         await manager.SetModelAsync(first.SessionId, "scripted-beta", null, ModelSelectionSource.User);
         Assert.Equal("scripted-beta", (await manager.GetAsync(first.SessionId)).ModelSelection!.CatalogKey);
         Assert.Equal("scripted-alpha", (await manager.GetAsync(second.SessionId)).ModelSelection!.CatalogKey);
@@ -72,7 +72,7 @@ public sealed class SessionModelSelectionTests
     public async Task Terminal_sessions_cannot_change_model()
     {
         var manager = CreateManager(new InMemoryMemoryStore());
-        var created = await manager.CreateAsync("examiner", null, SessionMode.Text);
+        var created = await manager.CreateOwnedAsync("examiner", null, SessionMode.Text);
         await manager.EndAsync(created.SessionId);
         var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
             manager.SetModelAsync(created.SessionId, "scripted-beta", null, ModelSelectionSource.User));
@@ -105,7 +105,7 @@ public sealed class SessionModelSelectionTests
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var store = new GatedModelSelectionStore(gate);
         var output = new CapturingSessionOutput();
-        var snapshot = await CreateManager(store.Inner).CreateAsync("examiner", null, SessionMode.Text);
+        var snapshot = await CreateManager(store.Inner).CreateOwnedAsync("examiner", null, SessionMode.Text);
         await using var runtime = CreateRuntime(output, time, store, snapshot, new ScriptedLanguageModel());
         await runtime.AttachAsync();
         await runtime.WaitUntilMailboxDrainedAsync();
@@ -127,7 +127,7 @@ public sealed class SessionModelSelectionTests
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var store = new GatedModelSelectionStore(gate);
         var output = new CapturingSessionOutput();
-        var snapshot = await CreateManager(store.Inner).CreateAsync("examiner", null, SessionMode.Text);
+        var snapshot = await CreateManager(store.Inner).CreateOwnedAsync("examiner", null, SessionMode.Text);
         await using var runtime = CreateRuntime(output, time, store, snapshot, new ScriptedLanguageModel());
         await runtime.AttachAsync();
         await runtime.WaitUntilMailboxDrainedAsync();
@@ -148,7 +148,7 @@ public sealed class SessionModelSelectionTests
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 19, 10, 0, 0, TimeSpan.Zero));
         var store = new FailingModelSelectionStore();
         var output = new CapturingSessionOutput();
-        var snapshot = await CreateManager(store.Inner).CreateAsync("examiner", null, SessionMode.Text);
+        var snapshot = await CreateManager(store.Inner).CreateOwnedAsync("examiner", null, SessionMode.Text);
         await using var runtime = CreateRuntime(output, time, store, snapshot, new ScriptedLanguageModel());
         await runtime.AttachAsync();
         await runtime.WaitUntilMailboxDrainedAsync();
@@ -172,7 +172,7 @@ public sealed class SessionModelSelectionTests
         var store = new InMemoryMemoryStore();
         var output = new CapturingSessionOutput();
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var snapshot = await CreateManager(store).CreateAsync("examiner", null, SessionMode.Text);
+        var snapshot = await CreateManager(store).CreateOwnedAsync("examiner", null, SessionMode.Text);
         await using var runtime = CreateRuntime(
             output,
             time,
@@ -197,7 +197,7 @@ public sealed class SessionModelSelectionTests
         var store = new InMemoryMemoryStore();
         var output = new CapturingSessionOutput();
         var resolver = new RecordingResolver();
-        var snapshot = await CreateManager(store).CreateAsync("examiner", null, SessionMode.Text);
+        var snapshot = await CreateManager(store).CreateOwnedAsync("examiner", null, SessionMode.Text);
         await using var runtime = CreateRuntime(
             output,
             time,
@@ -230,7 +230,7 @@ public sealed class SessionModelSelectionTests
         var store = new InMemoryMemoryStore();
         var output = new CapturingSessionOutput();
         var resolver = new RecordingResolver();
-        var created = await CreateManager(store).CreateAsync(
+        var created = await CreateManager(store).CreateOwnedAsync(
             "examiner",
             null,
             SessionMode.Text,
@@ -257,7 +257,7 @@ public sealed class SessionModelSelectionTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-0003-7000-8000-{index:D12}")),
             Enumerable.Range(1, 8).Select(_ => Guid.NewGuid()).ToArray());
-        return new SessionManager(
+        return OwnedSessions.Manager(
             new StaticDefinitions(SampleDefinitions.Examiner),
             store,
             ids,
@@ -307,7 +307,7 @@ public sealed class SessionModelSelectionTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
 
     private sealed class StaticDefinitions(AgentDefinition definition) : IAgentDefinitionStore
     {

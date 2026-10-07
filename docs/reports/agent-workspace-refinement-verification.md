@@ -1,5 +1,7 @@
 # Agent Workspace refinement verification
 
+> Historical verification. Identity/workspace compatibility statements are superseded by the unified migration described in [current architecture](../03-system-architecture.md) and [migration verification](agent-workspace-full-migration-verification.md). Original evidence remains unchanged.
+
 The requested enhancement evolves the completed workspace baseline `181580c96d57761463b8525328660be3903005df`. It does not reopen a historical phase or start P10/P11. The enhancement is accepted on published snapshot `0cadbe57a1d1c2b90b95c774e15eb2343601767f`, containing behavior commit `7bc2789d68508bb64988183a2ada2db2b507557e`. [Hosted Synthetic run 37506942347](https://github.com/trannamtrung1st/agent-core/actions/runs/37506942347) completed successfully in all five jobs. The hosted receipt was finalized after that run. The subsequent review below records a separate bounded approval-preview correction.
 
 ## Architecture and compatibility

@@ -1,3 +1,4 @@
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test, type Page } from "@playwright/test";
 
 async function startTextSession(page: Page, text = "Hello"): Promise<void> {
@@ -32,6 +33,7 @@ async function endConversation(page: Page): Promise<void> {
 test("narrow viewport opens the chat list in a drawer", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByRole("button", { name: "Open chats" })).toBeVisible();
   await expect(page.getByTestId("session-rail")).toHaveCount(0);
   await page.getByRole("button", { name: "Open chats" }).click();
@@ -42,6 +44,7 @@ test("narrow viewport opens the chat list in a drawer", async ({ page }) => {
 
 test("deletes the active chat in one confirmation without revision conflict", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await page.getByLabel("Message").fill("Please hold the line");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
@@ -81,6 +84,7 @@ test("session catalog orders by latest update, renames, and deletes ended sessio
   const revisedTitle = `First session revised ${stamp}`;
 
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByRole("navigation", { name: "Chats" })).toBeVisible();
 
   await startTextSession(page, firstTitle);
@@ -164,6 +168,7 @@ test("returns from an ended chat to a live session without stuck Connecting", as
   const endedTitle = `Ended session ${stamp}`;
 
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await startTextSession(page, liveTitle);
   await returnToPicker(page);
   await renameFirstRow(page, liveTitle);

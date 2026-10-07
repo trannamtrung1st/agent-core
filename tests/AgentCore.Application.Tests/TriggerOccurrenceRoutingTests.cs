@@ -626,7 +626,7 @@ public sealed class TriggerOccurrenceRoutingTests
         var seen = new RecordingResolver(new ScriptedLanguageModel());
         var harness = await StartAsync(catalog: catalog, resolver: seen);
         await using var runtime = harness.Runtime;
-        var definitions = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var definitions = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         await harness.Instances.UpdateWithExpectedRevisionAsync(
             new AgentInstanceRevisionUpdate(
                 InstanceId,
@@ -701,7 +701,7 @@ public sealed class TriggerOccurrenceRoutingTests
         var seen = new RecordingResolver(new ScriptedLanguageModel());
         var harness = await StartAsync(catalog: catalog, resolver: seen);
         await using var runtime = harness.Runtime;
-        var definitions = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var definitions = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         var registrationId = Guid.Parse("019944af-00c3-7000-8000-0000000000c6");
         await harness.Store.CreateAsync(new TriggerRegistration(
             registrationId,
@@ -760,7 +760,7 @@ public sealed class TriggerOccurrenceRoutingTests
         var seen = new RecordingResolver(new ScriptedLanguageModel());
         var harness = await StartAsync(catalog: catalog, resolver: seen);
         await using var runtime = harness.Runtime;
-        var definitions = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var definitions = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         var pin = new ExecutionModelPin(
             "retired-model",
             "primary-llm",
@@ -910,7 +910,7 @@ public sealed class TriggerOccurrenceRoutingTests
         _ = store;
         var instances = new InMemoryAgentInstanceStore();
         var memory = new InMemoryMemoryStore();
-        var definitions = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var definitions = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         if (includeInstance)
         {
             var definition = (await definitions.GetAsync(definitionId, version))!;
@@ -921,8 +921,7 @@ public sealed class TriggerOccurrenceRoutingTests
                 definition.Identity,
                 AgentInstanceLifecycle.Active,
                 Now,
-                Now,
-                false));
+                Now));
             await memory.SaveProfileAsync(
                 new UserProfile(ProfileId, 1, new Dictionary<string, UserProfileValue>
                 {
@@ -996,7 +995,7 @@ public sealed class TriggerOccurrenceRoutingTests
 
     private static async Task<AgentDefinition> LoadAsync(string id, int version)
     {
-        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var store = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         return (await store.GetAsync(id, version).ConfigureAwait(false))!;
     }
 

@@ -471,7 +471,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
                         secondary: item.instanceId,
                         description: `Pinned to v${item.activeVersion}`,
                         version: item.activeVersion,
-                        tag: item.compatibility ? "Compatibility" : "Managed",
+                        tag: "Agent Instance",
                         status: item.lifecycle,
                         detail: `Updated ${formatAdminTimestamp(item.updatedAt)}`,
                         updatedAt: item.updatedAt,
@@ -1634,7 +1634,7 @@ function DraftEditor({
   const selectableCatalog = capabilities.capabilityMode ? capabilityCatalog : capabilityCatalog.filter(c => toolNames.includes(c.name));
   const allCapabilityNames = capabilityCatalog.map(c => c.name);
   const authorizedNames = capabilities.capabilityMode === "All"
-    ? allCapabilityNames.filter(n => capabilities.workspaceSemantics === "agentWorkspaceV2" ? !["workspace.retain", "workspace.checkout"].includes(n) : n !== "workspace.cwd")
+    ? allCapabilityNames
     : capabilities.toolAllowlist;
   const saveBlocked = candidateLocked || (editorView === "form" && !catalogReady);
   const [resources, setResources] = useState<AdminDefinitionDraftResource[]>([]);
@@ -1875,9 +1875,9 @@ function DraftEditor({
                     <Typography.Text strong>Capability access</Typography.Text>
                     <Select aria-label="Capability access" value={capabilities.capabilityMode ?? "Legacy"}
                       disabled={busy || candidateLocked || !catalogReady || toolRegistryLoading}
-                      options={[{ value: "Legacy", label: "Legacy projection (compatibility)" }, { value: "Selected", label: "Selected capabilities" }, { value: "All", label: "All current capabilities" }]}
+                      options={[{ value: "Legacy", label: "Tool allowlist projection" }, { value: "Selected", label: "Selected capabilities" }, { value: "All", label: "All current capabilities" }]}
                       onChange={mode => onCapabilitiesChange({ ...capabilities, capabilityMode: mode === "Legacy" ? undefined : mode as "Selected" | "All",
-                        toolAllowlist: mode === "All" ? allCapabilityNames.filter(n => capabilities.workspaceSemantics === "agentWorkspaceV2" ? !["workspace.retain", "workspace.checkout"].includes(n) : n !== "workspace.cwd") : capabilities.toolAllowlist,
+                        toolAllowlist: mode === "All" ? allCapabilityNames : capabilities.toolAllowlist,
                         alwaysCapabilities: capabilities.alwaysCapabilities ?? [] })} />
                   </label>
                   {capabilities.capabilityMode === "All" ? <Typography.Text type="secondary">All capabilities currently known to Core are included in the next publication as an immutable snapshot. Later capabilities are not automatically granted.</Typography.Text> : null}
@@ -1905,14 +1905,7 @@ function DraftEditor({
                 </section>
                 <section className="admin-draft-form-section" aria-label="Workspace behavior">
                   <Typography.Title level={5}>Workspace behavior</Typography.Title>
-                  <label className="admin-draft-field">
-                    <Typography.Text strong>Workspace semantics</Typography.Text>
-                    <Select aria-label="Workspace semantics" value={capabilities.workspaceSemantics ?? "legacy"}
-                      onChange={(value) => onCapabilitiesChange({ ...capabilities, workspaceSemantics: value === "legacy" ? undefined : value })}
-                      options={[{ value: "legacy", label: "Legacy · Session scratch by default" }, { value: "agentWorkspaceV2", label: "Agent Workspace · /home by default" }]}
-                      disabled={busy || candidateLocked} />
-                    <Typography.Text type="secondary">Applies to this new definition only. Agent Workspace requires a managed instance; use copy instead of retain/checkout.</Typography.Text>
-                  </label>
+                  <Typography.Text type="secondary">Every Session starts in durable /home. Use explicit /working paths for temporary files and workspace.copy to transfer files or trees.</Typography.Text>
                   <label className="admin-draft-field">
                     <Typography.Text strong>Workspace template ID</Typography.Text>
                     <Input
@@ -2300,17 +2293,15 @@ export function PublicationResourcesSummary({
 }
 
 function InstanceIdentityTags({
-  compatibility,
   lifecycle,
   definitionStatus
 }: {
-  compatibility: boolean;
   lifecycle: string;
   definitionStatus?: string;
 }) {
   return (
     <Flex gap={8} wrap="wrap">
-      {compatibility ? <Tag color="gold">Compatibility / legacy</Tag> : <Tag color="blue">Managed</Tag>}
+      <Tag color="blue">Agent Instance</Tag>
       <Tag>{lifecycle}</Tag>
       {definitionStatus ? <Tag>{definitionStatus}</Tag> : null}
     </Flex>
@@ -2388,19 +2379,16 @@ export function InstanceDetail({
   const resolved = effective.data?.instanceId === instanceId ? effective.data : null;
   useEffect(() => {
     if (!resolved || !tab) return;
-    const availableTab = resolved.compatibility && tab !== "connections" ? "effective"
-      : resolved.instanceLifecycle !== "Active" && tab === "automation" ? "identity" : tab;
+    const availableTab = resolved.instanceLifecycle !== "Active" && tab === "automation" ? "identity" : tab;
     if (availableTab !== tab) navigateToAppPath(adminInstancePath(instanceId, availableTab), true);
   }, [resolved, instanceId, tab]);
   const headerIdentity = resolved
     ? {
-        compatibility: resolved.compatibility,
         lifecycle: resolved.instanceLifecycle,
         definitionStatus: resolved.definitionStatus
       }
     : row
       ? {
-          compatibility: row.compatibility,
           lifecycle: row.lifecycle,
           definitionStatus: undefined as string | undefined
         }
@@ -2443,23 +2431,22 @@ export function InstanceDetail({
         <div inert={effective.kind !== "ready"}>
           <Tabs
             className="admin-draft-tabs admin-instance-tabs"
-            activeKey={resolved.compatibility && activeTab !== "connections" ? "effective"
-              : resolved.instanceLifecycle !== "Active" && activeTab === "automation" ? "identity" : activeTab}
+            activeKey={resolved.instanceLifecycle !== "Active" && activeTab === "automation" ? "identity" : activeTab}
             onChange={key => setActiveTab(key as AdminInstanceTab)}
             items={[
-              ...(!resolved.compatibility ? [{
+              ...([{
                 key: "identity",
                 label: "Identity & version",
                 children: <InstanceManagedControls config={resolved} onUpdated={onInstanceChanged} onDeleted={onInstanceDeleted} />
-              }] : []),
-              ...(!resolved.compatibility ? [{
+              }]),
+              ...([{
                 key: "continuity", label: "Continuity",
                 children: <Flex vertical gap={token.padding}>{resolved.instanceLifecycle === "Active" ? <IdentityMaintenanceSection instanceId={instanceId} /> : null}<Tabs activeKey={continuityTab} onChange={key => setActiveTab("continuity", key as AdminInstanceSection)} aria-label="Continuity sections" items={[
                   { key: "memory", label: "Memory", children: <InstanceMemoryAutomationPanel config={resolved} section="memory" /> },
                   { key: "experience", label: "Experience", children: resolved.instanceLifecycle === "Active" ? <ExperienceSection instanceId={instanceId} active={activeTab === "continuity" && continuityTab === "experience"} onWork={viewRun} selection={activeTab === "continuity" && continuityTab === "experience" ? experienceSelection : undefined} /> : <Alert type="info" showIcon title="Experience is available when this instance is active" description="Unarchive the instance from Identity & version to inspect its experience." /> }
                 ]} /></Flex>
-              }] : []),
-              ...(!resolved.compatibility && resolved.instanceLifecycle === "Active" ? [{
+              }]),
+              ...(resolved.instanceLifecycle === "Active" ? [{
                 key: "automation", label: "Automation",
                 children: <Flex vertical gap={16}>
                   <Typography.Text type="secondary">A Schedule or Thought produces a Run when it fires. Core decides how that run is executed.</Typography.Text>
@@ -2473,12 +2460,12 @@ export function InstanceDetail({
                   ]} />
                 </Flex>
               }] : []),
-              ...(!resolved.compatibility ? [{ key: "workspace", label: "Workspace", children:
+              ...([{ key: "workspace", label: "Workspace", children:
                 <InstanceWorkspaceSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} />
-              }] : []),
-              ...(!resolved.compatibility ? [{ key: "runs", label: "Runs", children:
+              }]),
+              ...([{ key: "runs", label: "Runs", children:
                 resolved.instanceLifecycle === "Active" ? <InstanceRunsSection instanceId={instanceId} open={activeTab === "runs"} inline onRun={viewRun} onClose={() => setActiveTab("automation")} /> : <Alert type="info" showIcon title="Runs are available when this instance is active" description="Unarchive the instance from Identity & version to inspect execution history." />
-              }] : []),
+              }]),
               {
                 key: "connections",
                 label: "Connections",
@@ -2501,7 +2488,7 @@ export function InstanceDetail({
                     </Typography.Text>
                   </div>
                   <div className="admin-definition-panel-body">
-                    <EffectiveConfigView config={resolved} hidePersona={!resolved.compatibility} />
+                    <EffectiveConfigView config={resolved} hidePersona />
                   </div>
                 </section>
               )
@@ -2510,7 +2497,7 @@ export function InstanceDetail({
         />
         </div>
       ) : null}
-      {resolved?.instanceLifecycle === "Active" && !resolved.compatibility ? <InstanceRunsSection instanceId={instanceId}
+      {resolved?.instanceLifecycle === "Active" ? <InstanceRunsSection instanceId={instanceId}
         open={runDetailsOpen} detailsOnly selectedWorkItemId={selectedWorkItemId} onSource={viewSource}
         onClose={() => { restoreRunFocus.current = true; setRunDetailsOpen(false); }}
         afterClose={() => { if (restoreRunFocus.current && runOpener.current?.isConnected) runOpener.current.focus({ preventScroll: true }); }} /> : null}
@@ -2915,15 +2902,13 @@ export function EffectiveConfigView({
       >
         <Typography.Title level={5}>Instance identity</Typography.Title>
         <InstanceIdentityTags
-          compatibility={config.compatibility}
-          lifecycle={config.instanceLifecycle}
+                    lifecycle={config.instanceLifecycle}
           definitionStatus={config.definitionStatus}
         />
         <Descriptions {...detailLayout} bordered size="small" column={1}>
           <Descriptions.Item label="Instance id">{config.instanceId}</Descriptions.Item>
           <Descriptions.Item label="Definition status">{config.definitionStatus}</Descriptions.Item>
           <Descriptions.Item label="Lifecycle">{config.instanceLifecycle}</Descriptions.Item>
-          <Descriptions.Item label="Compatibility mode">{config.compatibility ? "Yes" : "No"}</Descriptions.Item>
         </Descriptions>
       </section>
       {hidePersona ? null : (

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "general-assistant",
-  "version": 15,
+  "version": 16,
   "identity": {
     "name": "Riley",
     "role": "General assistant",
@@ -118,9 +118,7 @@
       "browser.act",
       "browser.close"
     ],
-    "workspace": {
-      "semantics": "agentWorkspaceV2"
-    }
+    "workspace": {}
   },
   "skills": [
     {

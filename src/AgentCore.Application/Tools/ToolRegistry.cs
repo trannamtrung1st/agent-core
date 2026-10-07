@@ -53,44 +53,34 @@ public static class ToolRegistry
                 ToolEffect.Write, scope: ToolResourceScope.Session),
             [ToolCatalog.WorkspaceRead] = Descriptor(
                 ToolCatalog.WorkspaceRead,
-                "Read a file from the session workspace. Relative paths and bare filenames resolve from the working directory (for example notes.txt). Explicit /home (durable, read-only), /agent, /attachments, and /workspace logical paths may be used when permitted.",
+                "Read a file in durable /home or temporary /working. Relative paths resolve from Session cwd (initially /home). Returns home revision/hash for safe edits. /agent and /attachments remain read-only.",
                 """{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}""",
                 ToolEffect.ReadOnly,
                 scope: ToolResourceScope.Session),
             [ToolCatalog.WorkspaceList] = Descriptor(
                 ToolCatalog.WorkspaceList,
-                "List bounded workspace metadata. /home contains intentionally retained durable work; /workspace is session scratch. Relative paths resolve from the working directory; omit path to list the working directory.",
+                "List the current directory, or an explicit /home or /working directory. Returns bounded metadata and the durable whole-tree token for structural changes. Relative paths resolve from Session cwd.",
                 """{"type":"object","properties":{"path":{"type":"string"}}}""",
                 ToolEffect.ReadOnly,
                 scope: ToolResourceScope.Session),
             [ToolCatalog.WorkspaceWrite] = Descriptor(
                 ToolCatalog.WorkspaceWrite,
-                "Write a UTF-8 file in the session workspace. Relative paths and bare filenames resolve from the working directory (for example notes.txt).",
-                """{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}""",
+                "Create a UTF-8 file directly in /home or /working. Relative paths use Session cwd. Existing /home files require current expectedRevision or expectedSha256; stale writes fail.",
+                """{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string"},"content":{"type":"string"},"expectedRevision":{"type":"integer","minimum":1},"expectedSha256":{"type":"string"}},"required":["path","content"]}""",
                 ToolEffect.Write,
                 scope: ToolResourceScope.Session),
             [ToolCatalog.WorkspacePatch] = Descriptor(
                 ToolCatalog.WorkspacePatch,
-                "Apply exact-once UTF-8 text replacements in the session workspace. Relative paths resolve from the working directory. Requires expectedSha256.",
+                "Apply exact-once UTF-8 edits in /home or /working. Requires current expectedSha256; stale or ambiguous edits fail. Relative paths use Session cwd.",
                 """{"type":"object","properties":{"path":{"type":"string"},"expectedSha256":{"type":"string"},"edits":{"type":"array","items":{"type":"object","properties":{"oldText":{"type":"string"},"newText":{"type":"string"}},"required":["oldText","newText"]}}},"required":["path","expectedSha256","edits"]}""",
                 ToolEffect.Write,
                 scope: ToolResourceScope.Session),
             [ToolCatalog.WorkspaceSearch] = Descriptor(
                 ToolCatalog.WorkspaceSearch,
-                "Search filenames and bounded UTF-8 text under a workspace directory, including durable /home for managed sessions. Relative paths resolve from the working directory. Skips binary contents. Use this instead of reading files one by one.",
+                "Search filenames and bounded UTF-8 text from Session cwd or an explicit /home or /working directory. Skips binary contents. /agent and /attachments remain read-only.",
                 """{"type":"object","properties":{"query":{"type":"string"},"path":{"type":"string"},"glob":{"type":"string"},"maxResults":{"type":"integer"}},"required":["query"]}""",
                 ToolEffect.ReadOnly,
                 scope: ToolResourceScope.Session),
-            [ToolCatalog.WorkspaceRetain] = Descriptor(
-                ToolCatalog.WorkspaceRetain,
-                "Intentionally keep a session scratch file under durable /home for this managed identity. Do not retain temporary/intermediate files by default. Retain useful outputs/sources or files the user wants kept. Existing destinations require current expectedRevision or expectedSha256. This copies bytes; it does not write memory or publish an Artifact.",
-                """{"type":"object","additionalProperties":false,"properties":{"source":{"type":"string"},"destination":{"type":"string"},"expectedRevision":{"type":"integer","minimum":1},"expectedSha256":{"type":"string"}},"required":["source","destination"]}""",
-                ToolEffect.Write, scope: ToolResourceScope.Session),
-            [ToolCatalog.WorkspaceCheckout] = Descriptor(
-                ToolCatalog.WorkspaceCheckout,
-                "Copy a durable /home file to separate session /workspace/working scratch before editing or using session tools. Does not overwrite an existing destination. Optionally check expectedRevision or expectedSha256. Publish a fresh session Artifact when the user needs a downloadable deliverable.",
-                """{"type":"object","additionalProperties":false,"properties":{"source":{"type":"string"},"destination":{"type":"string"},"expectedRevision":{"type":"integer","minimum":1},"expectedSha256":{"type":"string"}},"required":["source"]}""",
-                ToolEffect.Write, scope: ToolResourceScope.Session),
             [ToolCatalog.WorkspaceMkdir] = Descriptor(
                 ToolCatalog.WorkspaceMkdir,
                 "Create a directory and parents in scratch or managed /home. Existing directories succeed unchanged. Home requires expectedTreeSha256 from workspace.list. Concrete paths only.",
@@ -98,12 +88,12 @@ public static class ToolRegistry
                 ToolEffect.Write, scope: ToolResourceScope.Session, replaySafety: ToolReplaySafety.ReplaySafe),
             [ToolCatalog.WorkspaceCopy] = Descriptor(
                 ToolCatalog.WorkspaceCopy,
-                "Copy a file or entire directory tree, including binary files and empty directories, within one workspace scope. Destination must not exist; no merging. Home requires current expectedTreeSha256. No globs or cross-scope copies; use retain/checkout for that.",
-                """{"type":"object","additionalProperties":false,"properties":{"source":{"type":"string"},"destination":{"type":"string"},"expectedTreeSha256":{"type":"string"}},"required":["source","destination"]}""",
+                "Copy exact bytes or a whole tree with empty folders, within or across /home and /working. Creates parents; never merges or overwrites by default. Same-scope /home copy requires expectedTreeSha256. Cross-scope copy to an existing durable file requires current destination expectedRevision or expectedSha256; directory/scratch overwrites are forbidden.",
+                """{"type":"object","additionalProperties":false,"properties":{"source":{"type":"string"},"destination":{"type":"string"},"expectedTreeSha256":{"type":"string"},"expectedRevision":{"type":"integer","minimum":1},"expectedSha256":{"type":"string"}},"required":["source","destination"]}""",
                 ToolEffect.Write, scope: ToolResourceScope.Session),
             [ToolCatalog.WorkspaceMove] = Descriptor(
                 ToolCatalog.WorkspaceMove,
-                "Move or rename a file or complete directory within one workspace scope. Destination must not exist. No merging, globs, or moves into descendants. Home requires current expectedTreeSha256 from workspace.list.",
+                "Move or rename a file or complete tree within /home or within /working. Relative paths use Session cwd. Home requires expectedTreeSha256; destination must not exist. Cross-root moves and moving cwd/ancestors are forbidden.",
                 """{"type":"object","additionalProperties":false,"properties":{"source":{"type":"string"},"destination":{"type":"string"},"expectedTreeSha256":{"type":"string"}},"required":["source","destination"]}""",
                 ToolEffect.Write, scope: ToolResourceScope.Session),
             [ToolCatalog.WorkspaceDelete] = Descriptor(
@@ -124,7 +114,7 @@ public static class ToolRegistry
                 scope: ToolResourceScope.Session),
             [ToolCatalog.ArtifactsCreateFromWorkspace] = Descriptor(
                 ToolCatalog.ArtifactsCreateFromWorkspace,
-                "Create a session artifact from a workspace file without sending file bytes in arguments. Relative paths resolve from the working directory.",
+                "Publish a fresh Session-owned downloadable Artifact from /home or /working. Relative paths resolve from Session cwd. This copies exact file bytes; it does not change workspace persistence.",
                 """{"type":"object","properties":{"path":{"type":"string"},"displayName":{"type":"string"},"contentType":{"type":"string"}},"required":["path","displayName"]}""",
                 ToolEffect.Write,
                 scope: ToolResourceScope.Session),
@@ -136,7 +126,7 @@ public static class ToolRegistry
                 scope: ToolResourceScope.Session),
             [ToolCatalog.SandboxRun] = Descriptor(
                 ToolCatalog.SandboxRun,
-                "Run a least-privilege sandbox command (echo, true, cat of /workspace/working files). Not a host process or shell.",
+                "Run a bounded offline sandbox command (echo, true, cat of /working files). Sandbox relative paths resolve from /working, independently of workspace.cwd. Copy /home sources to /working first.",
                 """{"type":"object","properties":{"verb":{"type":"string"},"arguments":{"type":"array","items":{"type":"string"}},"exportPath":{"type":"string"}},"required":["verb"]}""",
                 ToolEffect.Write,
                 scope: ToolResourceScope.Session),

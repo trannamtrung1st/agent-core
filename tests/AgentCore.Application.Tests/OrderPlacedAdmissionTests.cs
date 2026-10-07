@@ -270,7 +270,7 @@ public sealed class OrderPlacedAdmissionTests
         string? unattendedModel = null,
         IIdGenerator? ids = null)
     {
-        var definitions = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var definitions = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         var definition = (await definitions.GetAsync(definitionId, version))!;
         instances ??= new InMemoryAgentInstanceStore();
         var memory = new InMemoryMemoryStore();
@@ -283,7 +283,6 @@ public sealed class OrderPlacedAdmissionTests
             AgentInstanceLifecycle.Active,
             Now,
             Now,
-            false,
             UnattendedModelCatalogKey: unattendedModel));
         var profiles = new LocalUserProfileService(memory, TimeProvider.System);
         var profile = await profiles.GetLocalProfileAsync();

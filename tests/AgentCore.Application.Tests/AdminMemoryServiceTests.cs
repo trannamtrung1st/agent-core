@@ -37,7 +37,7 @@ public sealed class AdminMemoryServiceTests
                 UserRetrieval: true)
         };
         var definitions = new VersionedDefinitions(definition);
-        var instanceService = new AgentInstanceService(instances, definitions, sessions, Ids(8, "019944af-00a6-7000-8000-"), clock);
+        var instanceService = new AgentInstanceService(instances, definitions, Ids(8, "019944af-00a6-7000-8000-"), clock);
         var manager = new SessionManager(
             definitions,
             sessions,
@@ -137,7 +137,7 @@ public sealed class AdminMemoryServiceTests
                 UserRetrieval: true)
         };
         var definitions = new VersionedDefinitions(definition);
-        var instanceService = new AgentInstanceService(instances, definitions, sessions, Ids(8, "019944af-00c6-7000-8000-"), clock);
+        var instanceService = new AgentInstanceService(instances, definitions, Ids(8, "019944af-00c6-7000-8000-"), clock);
         var manager = new SessionManager(
             definitions,
             sessions,
@@ -227,7 +227,7 @@ public sealed class AdminMemoryServiceTests
                 UserRetrieval: true)
         };
         var definitions = new VersionedDefinitions(definition);
-        var instanceService = new AgentInstanceService(instances, definitions, sessions, Ids(8, "019944af-00d7-7000-8000-"), clock);
+        var instanceService = new AgentInstanceService(instances, definitions, Ids(8, "019944af-00d7-7000-8000-"), clock);
         var manager = new SessionManager(
             definitions,
             sessions,
@@ -342,7 +342,7 @@ public sealed class AdminMemoryServiceTests
                 UserRetrieval: false)
         };
         var definitions = new VersionedDefinitions(definition);
-        var instanceService = new AgentInstanceService(instances, definitions, sessions, Ids(8, "019944af-00db-7000-8000-"), clock);
+        var instanceService = new AgentInstanceService(instances, definitions, Ids(8, "019944af-00db-7000-8000-"), clock);
         var manager = new SessionManager(
             definitions,
             sessions,
@@ -389,7 +389,7 @@ public sealed class AdminMemoryServiceTests
             MemoryPolicy = new MemoryPolicy(SessionMemory: true, UserPromotion: true, UserRetrieval: false)
         };
         var definitions = new VersionedDefinitions(definition);
-        var instanceService = new AgentInstanceService(instances, definitions, sessions, Ids(4, "019944af-00dd-7000-8000-"), clock);
+        var instanceService = new AgentInstanceService(instances, definitions, Ids(4, "019944af-00dd-7000-8000-"), clock);
         var admin = new AdminMemoryService(
             instances,
             definitions,
@@ -415,7 +415,7 @@ public sealed class AdminMemoryServiceTests
             MemoryPolicy = new MemoryPolicy(SessionMemory: true, IdentityUserPromotion: true)
         };
         var definitions = new VersionedDefinitions(definition);
-        var instanceService = new AgentInstanceService(instances, definitions, sessions, Ids(4, "019944af-00b6-7000-8000-"), clock);
+        var instanceService = new AgentInstanceService(instances, definitions, Ids(4, "019944af-00b6-7000-8000-"), clock);
         var admin = new AdminMemoryService(
             instances,
             definitions,

@@ -35,7 +35,7 @@ public sealed class SqliteHostRecoveryTests
             {
                 var client = first.CreateClient();
                 TestOwnerCapability.Apply(client, first.Services);
-                var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+                var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
                 created.EnsureSuccessStatusCode();
                 var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
                 sessionId = session.SessionId;
@@ -111,7 +111,7 @@ public sealed class SqliteHostRecoveryTests
                 host.AfterUserTextPersisted = ct => Task.Delay(Timeout.InfiniteTimeSpan, ct);
                 var client = first.CreateClient();
                 TestOwnerCapability.Apply(client, first.Services);
-                var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+                var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
                 created.EnsureSuccessStatusCode();
                 var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
                 sessionId = session.SessionId;
@@ -196,7 +196,7 @@ public sealed class SqliteHostRecoveryTests
             {
                 var client = first.CreateClient();
                 TestOwnerCapability.Apply(client, first.Services);
-                var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+                var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
                 created.EnsureSuccessStatusCode();
                 var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
                 sessionId = session.SessionId;
@@ -256,7 +256,7 @@ public sealed class SqliteHostRecoveryTests
         var host = factory.Services.GetRequiredService<SessionHost>();
         var client = factory.CreateClient();
         TestOwnerCapability.Apply(client, factory.Services);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         created.EnsureSuccessStatusCode();
         var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
         var sessionId = Guid.Parse(session.SessionId);
@@ -280,7 +280,7 @@ public sealed class SqliteHostRecoveryTests
         await using var factory = new FailingEndSqliteFactory();
         var client = factory.CreateClient();
         TestOwnerCapability.Apply(client, factory.Services);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         created.EnsureSuccessStatusCode();
         var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
         await using var hub = new HubConnectionBuilder()
@@ -347,7 +347,7 @@ public sealed class SqliteHostRecoveryTests
         var host = factory.Services.GetRequiredService<SessionHost>();
         var client = factory.CreateClient();
         TestOwnerCapability.Apply(client, factory.Services);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         created.EnsureSuccessStatusCode();
         var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
         var sessionId = Guid.Parse(session.SessionId);
@@ -423,7 +423,7 @@ public sealed class SqliteHostRecoveryTests
             {
                 var client = factory.CreateClient();
                 TestOwnerCapability.Apply(client, factory.Services);
-                var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+                var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
                 created.EnsureSuccessStatusCode();
                 var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
                 sessionId = session.SessionId;
@@ -540,7 +540,7 @@ public sealed class SqliteHostRecoveryTests
     {
         using var http = new HttpClient { BaseAddress = new Uri(baseAddress) };
         http.DefaultRequestHeaders.TryAddWithoutValidation(OwnerCapabilityHeaders.Name, IssueOwnerHttp(baseAddress));
-        var created = await http.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await http.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(http, "examiner", 1), "text"));
         created.EnsureSuccessStatusCode();
         var session = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         return session!.SessionId;

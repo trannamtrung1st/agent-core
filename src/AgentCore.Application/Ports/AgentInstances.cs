@@ -14,7 +14,6 @@ public interface IAgentInstanceStore
 
     ValueTask<AgentInstance?> FindAsync(Guid instanceId, CancellationToken cancellationToken = default);
 
-    ValueTask<AgentInstance?> FindCompatibilityAsync(string definitionId, CancellationToken cancellationToken = default);
 
     ValueTask InsertAsync(AgentInstance instance, CancellationToken cancellationToken = default);
 
@@ -73,9 +72,6 @@ public interface IAgentInstanceService
         int? version = null,
         CancellationToken cancellationToken = default);
 
-    ValueTask<AgentInstance> ResolveCompatibilityAsync(
-        AgentDefinition definition,
-        CancellationToken cancellationToken = default);
 
     ValueTask<AgentInstance> UpgradeAsync(
         Guid instanceId,
@@ -101,5 +97,4 @@ public interface IAgentInstanceService
     ValueTask<IReadOnlyList<AgentInstance>> ListChatEligibleAsync(
         CancellationToken cancellationToken = default);
 
-    ValueTask BackfillAsync(CancellationToken cancellationToken = default);
 }

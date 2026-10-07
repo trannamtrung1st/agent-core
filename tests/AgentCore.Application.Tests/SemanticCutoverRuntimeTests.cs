@@ -354,7 +354,7 @@ public sealed class SemanticCutoverRuntimeTests
             null,
             LocalUserProfile.Id,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
         store ??= new InMemoryMemoryStore();
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         synthesizer ??= voice ? new RecordingSynthesizer() : null;

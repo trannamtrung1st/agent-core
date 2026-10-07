@@ -49,20 +49,20 @@ public sealed class HealthAndSessionLifecycleTests : IClassFixture<AgentCoreApiF
     }
 
     [Fact]
-    public async Task V1_session_create_rejects_managed_instance_identity()
+    public async Task Removed_v1_session_creation_returns_not_found()
     {
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
         var response = await client.PostAsJsonAsync(
             "/api/v1/sessions",
-            new CreateSessionRequest(null, null, "text", AgentInstanceId: Guid.CreateVersion7()));
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            new CreateSessionRequest(Guid.CreateVersion7(), "text"));
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
     public async Task Session_lifecycle_create_get_history_end()
     {
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         Assert.NotNull(created.Headers.Location);
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
@@ -95,7 +95,7 @@ public sealed class HealthAndSessionLifecycleTests : IClassFixture<AgentCoreApiF
     public async Task Session_view_exposes_lifecycle_status_without_private_policy()
     {
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
-        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         using var createdDoc = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
         Assert.Equal("active", createdDoc.RootElement.GetProperty("lifecycleStatus").GetString());
@@ -123,7 +123,7 @@ public sealed class HealthAndSessionLifecycleTests : IClassFixture<AgentCoreApiF
     public async Task Synthetic_voice_create_is_available()
     {
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "voice"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "voice"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         Assert.Equal("voice", view!.Mode);
@@ -134,7 +134,7 @@ public sealed class HealthAndSessionLifecycleTests : IClassFixture<AgentCoreApiF
     public async Task There_is_no_public_text_chat_http_endpoint()
     {
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", null, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", null), "text"));
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         var chat = await client.PostAsJsonAsync($"/api/v1/sessions/{view!.SessionId}/messages", new { text = "hi" });
         Assert.Equal(HttpStatusCode.MethodNotAllowed, chat.StatusCode);

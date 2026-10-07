@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { LEGACY_IDENTITY_LABELS, selectLegacyIdentity } from "./support/legacy-identity";
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 
 test("email harness approval modal approves synthetic send", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
-  await selectLegacyIdentity(page, LEGACY_IDENTITY_LABELS.generalAssistant);
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.generalAssistant);
 
   await page.getByLabel("Message").fill("Please run the email harness end to end.");
   await page.getByRole("button", { name: "Send" }).click();

@@ -135,12 +135,6 @@ public sealed class InMemoryAdminLifecycleDeletion(
 
     private static void EnsureDeletableInstance(AgentInstance instance, long expectedRevision)
     {
-        if (instance.Compatibility)
-        {
-            throw AgentCoreErrors.Validation(
-                "Compatibility instances cannot be deleted through the managed Admin path.");
-        }
-
         if (instance.Lifecycle != AgentInstanceLifecycle.Archived)
         {
             throw AgentCoreErrors.Validation("Archive this instance before deleting it.");
@@ -180,12 +174,6 @@ public sealed class SqliteAdminLifecycleDeletion(
             .SingleOrDefaultAsync(item => item.InstanceId == key, cancellationToken)
             .ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
-        if (row.Compatibility)
-        {
-            throw AgentCoreErrors.Validation(
-                "Compatibility instances cannot be deleted through the managed Admin path.");
-        }
-
         if (!string.Equals(row.Lifecycle, nameof(AgentInstanceLifecycle.Archived), StringComparison.Ordinal))
         {
             throw AgentCoreErrors.Validation("Archive this instance before deleting it.");

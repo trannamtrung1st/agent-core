@@ -27,7 +27,7 @@ public sealed class CommandAdmissionTests : IClassFixture<AgentCoreApiFactory>
         try
         {
             var client = TestOwnerCapability.CreateOwnerClient(_factory);
-            var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+            var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
             created.EnsureSuccessStatusCode();
             var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
             await using var hub = await ConnectAsync();
@@ -100,7 +100,7 @@ public sealed class CommandAdmissionTests : IClassFixture<AgentCoreApiFactory>
         try
         {
             var client = TestOwnerCapability.CreateOwnerClient(_factory);
-            var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+            var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
             created.EnsureSuccessStatusCode();
             var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
             await using var hub = await ConnectAsync();
@@ -155,7 +155,7 @@ public sealed class CommandAdmissionTests : IClassFixture<AgentCoreApiFactory>
     public async Task Unknown_user_text_behavior_is_rejected()
     {
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         created.EnsureSuccessStatusCode();
         var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
         await using var hub = await ConnectAsync();
@@ -187,7 +187,7 @@ public sealed class CommandAdmissionTests : IClassFixture<AgentCoreApiFactory>
     public async Task CancelResponse_rejects_unknown_and_missing_ids()
     {
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         created.EnsureSuccessStatusCode();
         var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
         await using var hub = await ConnectAsync();

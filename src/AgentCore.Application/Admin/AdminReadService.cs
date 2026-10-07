@@ -189,7 +189,6 @@ public sealed class AdminReadService(
             instance.DefinitionId,
             instance.ActiveVersion,
             instance.Lifecycle,
-            instance.Compatibility,
             instance.Persona.Name,
             instance.CreatedAt,
             instance.UpdatedAt);
@@ -222,7 +221,6 @@ public sealed record AdminInstanceInventoryItem(
     string DefinitionId,
     int ActiveVersion,
     AgentInstanceLifecycle Lifecycle,
-    bool Compatibility,
     string PersonaName,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
@@ -257,7 +255,6 @@ public sealed record AdminEffectiveConfiguration(
     string InstanceLifecycle,
     long InstanceRevision,
     long PersonaRevision,
-    bool Compatibility,
     AgentIdentity Persona,
     ProviderPreferences ProviderPreferences,
     AdminEffectiveModel EffectiveModel,

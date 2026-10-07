@@ -892,7 +892,7 @@ public sealed class MemoryStoreContractTests
             null,
             null,
             new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero),
-            new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
+            new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero), AgentInstanceId: Guid.NewGuid());
 
     [Fact]
     public async Task Failure_reference_reopens_and_a_null_column_stays_null()

@@ -1,3 +1,4 @@
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test, type Page } from "@playwright/test";
 
 async function startTextSession(page: Page, text: string): Promise<void> {
@@ -17,6 +18,7 @@ test("session model selection is isolated between chats", async ({ page }) => {
   const textB = `Isolation B ${stamp}`;
 
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByRole("button", { name: "Model" })).toBeVisible();
   await expect(page.getByLabel("Reasoning effort")).toBeVisible();
   await page.getByRole("button", { name: "Model" }).click();

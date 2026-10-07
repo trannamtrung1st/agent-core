@@ -76,12 +76,12 @@ public static class TriggerScheduleEndpoints
     {
         var snapshot = await sessions.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
         var local = await profiles.GetLocalProfileAsync(cancellationToken).ConfigureAwait(false);
-        if (snapshot.ProfileId != local.ProfileId || snapshot.AgentInstanceId is not Guid instanceId)
+        if (snapshot.ProfileId != local.ProfileId)
         {
             throw AgentCoreErrors.NotFound("Session was not found.");
         }
 
-        return new TriggerOwner(instanceId, local.ProfileId);
+        return new TriggerOwner(snapshot.AgentInstanceId, local.ProfileId);
     }
 
     internal static TriggerScheduleResponse ToResponse(TriggerRegistration registration)

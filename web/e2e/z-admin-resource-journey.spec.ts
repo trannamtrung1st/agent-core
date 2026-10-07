@@ -109,7 +109,6 @@ test("admin resource publish managed chat exposes publication under agent", asyn
     instanceId: string;
     definitionId: string;
     activeVersion: number;
-    compatibility: boolean;
   };
   const sessionRequest = sessionResponse.request().postDataJSON() as {
     agentInstanceId?: string;
@@ -121,7 +120,6 @@ test("admin resource publish managed chat exposes publication under agent", asyn
     agentVersion: number;
   };
 
-  expect(instance.compatibility).toBe(false);
   expect(instance.definitionId).toBe("examiner");
   expect(instance.activeVersion).toBe(publishedVersion);
   expect(sessionRequest.agentInstanceId).toBe(instance.instanceId);

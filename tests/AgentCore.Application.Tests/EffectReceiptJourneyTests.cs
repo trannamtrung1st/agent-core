@@ -98,7 +98,7 @@ public sealed class EffectReceiptJourneyTests
                 "primary-llm",
                 "scripted",
                 ModelSelectionSource.SystemDefault,
-                null));
+                null), AgentInstanceId: Guid.NewGuid());
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         var browser = new ClosingBrowser();
         return new SessionRuntime(

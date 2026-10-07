@@ -1,3 +1,4 @@
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
@@ -8,6 +9,7 @@ test.beforeEach(async ({ page }) => {
 
 test("fake Browser STT listens without PCM STT and keeps the composer", async ({ page }) => {
   await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await page.getByLabel("Message").fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });

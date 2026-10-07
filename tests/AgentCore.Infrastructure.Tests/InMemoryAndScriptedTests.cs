@@ -268,6 +268,6 @@ public sealed class InMemoryAndScriptedTests
             null,
             null,
             now,
-            now);
+            now, AgentInstanceId: Guid.NewGuid());
     }
 }

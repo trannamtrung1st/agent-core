@@ -29,7 +29,7 @@ export function catalogShell() {
     chatAgentInstances: state.chatAgentInstances,
     chatAgentInstancesError: state.chatAgentInstancesError,
     chatAgentInstancesLoading: false,
-    newChatIdentityKey: defaultChatIdentityKey(state.chatAgentInstances, state.agents),
+    newChatIdentityKey: defaultChatIdentityKey(state.chatAgentInstances),
     selectedAgentId: state.selectedAgentId,
     modelCatalog: state.modelCatalog,
     modelCatalogDefaultKey: state.modelCatalogDefaultKey,

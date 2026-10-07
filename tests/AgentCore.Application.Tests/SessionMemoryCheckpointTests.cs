@@ -211,7 +211,7 @@ public sealed class SessionMemoryCheckpointTests
             null,
             LocalUserProfile.Id,
             Now,
-            Now);
+            Now, AgentInstanceId: Guid.NewGuid());
 
     private static MemoryAdmissionContext Admission() =>
         new("application", [], new HashSet<string>(StringComparer.Ordinal));

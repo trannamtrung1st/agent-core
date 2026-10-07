@@ -2634,9 +2634,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var authorizedTools = request.Tools;
         var pinnedSkills = activeSkillIds.ToArray();
         var loadedCapabilities = LoadedCapabilitiesFor(request.ResponseId);
-        var workspaceCwd = WorkspaceSemantics.IsV2(_snapshot.Definition)
-            ? await RequestWorkspaceCwdAsync(cause, request.ResponseId, null, cancellationToken).ConfigureAwait(false) : null;
-        if (WorkspaceSemantics.IsV2(_snapshot.Definition) && workspaceCwd is null) return;
+        var workspaceCwd = await RequestWorkspaceCwdAsync(cause, request.ResponseId, null, cancellationToken).ConfigureAwait(false);
+        if (workspaceCwd is null) return;
         var steps = 0;
         var harnessSources = new List<HarnessSourceReceipt>();
         var outputBytes = 0;
@@ -5575,13 +5574,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         if (kind is not (TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent)
             || _applicationConnections is null
-            || _snapshot.AgentInstanceId is not Guid agentInstanceId
-            || agentInstanceId == Guid.Empty)
+)
         {
             return false;
         }
 
-        var connection = await _applicationConnections.GetByAgentAsync(agentInstanceId, cancellationToken)
+        var connection = await _applicationConnections.GetByAgentAsync(_snapshot.AgentInstanceId, cancellationToken)
             .ConfigureAwait(false);
         return connection?.Status == ApplicationConnectionStatus.Connected;
     }

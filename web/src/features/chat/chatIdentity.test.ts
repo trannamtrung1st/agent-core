@@ -1,84 +1,28 @@
 import { describe, expect, it } from "vitest";
-import {
-  defaultChatIdentityKey,
-  legacyChatIdentityKey,
-  managedChatIdentityKey,
-  managedInstancePickerLabel,
-  parseChatIdentityKey,
-  isNewChatIdentityReady,
-  resolveNewChatIdentityPresentation
-} from "./chatIdentity";
+import { defaultChatIdentityKey, managedChatIdentityKey, managedInstancePickerLabel, parseChatIdentityKey, isNewChatIdentityReady, resolveNewChatIdentityPresentation } from "./chatIdentity";
 
-describe("isNewChatIdentityReady", () => {
-  it("blocks send until managed inventory finishes loading", () => {
-    expect(
-      isNewChatIdentityReady({
-        chatAgentInstancesLoading: true,
-        newChatIdentityKey: "",
-        chatAgentInstances: [],
-        agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true, language: "en" }]
-      })
-    ).toBe(false);
+const instance = {
+  instanceId: "019944af-00d1-7000-8000-000000000099", definitionId: "examiner",
+  activeVersion: 2, name: "Pinned", role: "Coach", voiceAvailable: false, language: "en"
+};
+
+describe("instance chat identity", () => {
+  it("selects an instance and resolves its pinned presentation", () => {
+    const key = defaultChatIdentityKey([instance]);
+    expect(key).toBe(managedChatIdentityKey(instance.instanceId));
+    expect(parseChatIdentityKey(key)).toEqual({ kind: "managed", instanceId: instance.instanceId });
+    expect(resolveNewChatIdentityPresentation(key, [instance])).toEqual({ displayName: "Pinned", voiceAvailable: false, language: "en" });
+    expect(managedInstancePickerLabel(instance)).toContain("00000099");
   });
-});
-
-describe("chatIdentity", () => {
-  it("prefers managed instances for the default new-chat identity", () => {
-    const key = defaultChatIdentityKey(
-      [
-        {
-          instanceId: "019944af-00d1-7000-8000-000000000099",
-          definitionId: "examiner",
-          activeVersion: 2,
-          name: "Pinned",
-          role: "Coach",
-          voiceAvailable: true,
-          language: "en"
-        }
-      ],
-      [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true, language: "en" }]
-    );
-    expect(key).toBe(managedChatIdentityKey("019944af-00d1-7000-8000-000000000099"));
-    expect(parseChatIdentityKey(key)).toEqual({
-      kind: "managed",
-      instanceId: "019944af-00d1-7000-8000-000000000099"
-    });
+  it("keeps empty inventory empty and rejects definition keys", () => {
+    expect(defaultChatIdentityKey([])).toBe("");
+    expect(parseChatIdentityKey("legacy:examiner")).toBeNull();
+    expect(resolveNewChatIdentityPresentation("legacy:examiner", [instance])).toBeNull();
   });
-
-  it("falls back to legacy agents when no managed instances exist", () => {
-    const key = defaultChatIdentityKey([], [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true, language: "en" }]);
-    expect(key).toBe(legacyChatIdentityKey("examiner"));
-  });
-
-  it("disambiguates duplicate managed rows with a short instance id", () => {
-    const label = managedInstancePickerLabel({
-      instanceId: "019944af-00d1-7000-8000-000000000099",
-      definitionId: "examiner",
-      activeVersion: 1,
-      name: "Alex",
-      role: "Examiner",
-      voiceAvailable: true,
-      language: "en"
-    });
-    expect(label).toContain("00000099");
-  });
-
-  it("uses managed persona and voice metadata for new-chat presentation", () => {
-    const presentation = resolveNewChatIdentityPresentation(
-      managedChatIdentityKey("019944af-00d1-7000-8000-000000000099"),
-      [
-        {
-          instanceId: "019944af-00d1-7000-8000-000000000099",
-          definitionId: "examiner",
-          activeVersion: 2,
-          name: "Pinned",
-          role: "Coach",
-          voiceAvailable: false,
-          language: "en"
-        }
-      ],
-      [{ id: "examiner", version: 1, name: "Sam", role: "Support", description: "", voiceAvailable: true, language: "en" }]
-    );
-    expect(presentation).toEqual({ displayName: "Pinned", voiceAvailable: false, language: "en" });
+  it("requires resolved inventory containing the selected instance", () => {
+    const input = { chatAgentInstancesLoading: false, newChatIdentityKey: managedChatIdentityKey(instance.instanceId), chatAgentInstances: [instance] };
+    expect(isNewChatIdentityReady(input)).toBe(true);
+    expect(isNewChatIdentityReady({ ...input, chatAgentInstancesLoading: true })).toBe(false);
+    expect(isNewChatIdentityReady({ ...input, chatAgentInstances: [] })).toBe(false);
   });
 });

@@ -14,28 +14,61 @@ namespace AgentCore.Api.Tests;
 public sealed class HarnessChatAuthoringTests
 {
     [Fact]
+    public async Task Inspect_separates_future_authoring_from_the_current_session_pin()
+    {
+        await using var factory = new AgentCoreApiFactory();
+        var services = factory.Services;
+        var authoring = services.GetRequiredService<HarnessManagementService>();
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
+        instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
+            new(HarnessManagementMode.Managed, [HarnessManagementScope.ToolSelection], [], []));
+        var sessions = services.GetRequiredService<AgentCore.Application.Sessions.SessionManager>();
+        var current = await sessions.CreateForInstanceAsync(instance.InstanceId, AgentCore.Domain.Conversation.SessionMode.Text);
+        var executor = services.GetRequiredService<SessionToolExecutor>();
+        var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId);
+        var args = JsonSerializer.Serialize(new { expectedVersion = 16, policyRevision = instance.HarnessManagement!.PolicyRevision,
+            id = ToolCatalog.WorkspaceMove, enabled = false, expected = "Future sessions omit move.", observed = "Owner removes the capability." });
+        using var action = JsonDocument.Parse(args);
+        var grant = new ToolApprovalGrant(Guid.NewGuid(), "harness.tool.select", ToolActionHash.Compute("harness.tool.select", action.RootElement), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var saved = await executor.ExecuteAsync(current.Definition, current.SessionId, new("change", "harness.tool.select", args), 100000, approvalGrant: grant, admission: admission);
+        Assert.Contains("\"saved\":true", saved.Text);
+        var inspection = await executor.ExecuteAsync(current.Definition, current.SessionId, new("inspect", "harness.inspect", "{}"), 100000, admission: admission);
+        using var json = JsonDocument.Parse(inspection.Text);
+        var root = json.RootElement;
+        Assert.Equal(17, root.GetProperty("activeDefinitionVersion").GetInt32());
+        Assert.Equal(16, root.GetProperty("currentSessionPinnedDefinitionVersion").GetInt32());
+        Assert.True(root.GetProperty("changesApplyToFutureSessions").GetBoolean());
+        Assert.True(root.TryGetProperty("authoringEligibleTools", out _));
+        Assert.DoesNotContain(ToolCatalog.WorkspaceMove, root.GetProperty("activeDefinitionAuthorizedCapabilities").EnumerateArray().Select(v => v.GetString()));
+        Assert.Contains(ToolCatalog.WorkspaceMove, RoleEnvironments.Of((await sessions.GetAsync(current.SessionId)).Definition).ToolList);
+        var fresh = await sessions.CreateForInstanceAsync(instance.InstanceId, AgentCore.Domain.Conversation.SessionMode.Text);
+        Assert.Equal(17, fresh.Definition.Version);
+        Assert.DoesNotContain(ToolCatalog.WorkspaceMove, RoleEnvironments.Of(fresh.Definition).ToolList);
+    }
+
+    [Fact]
     public async Task Managed_chat_forks_the_runtime_effective_built_in_when_a_durable_version_collides()
     {
         await using var factory = new AgentCoreApiFactory();
         var services = factory.Services;
         var definitions = services.GetRequiredService<IAgentDefinitionStore>();
-        var builtIn = (await definitions.GetAsync("general-assistant", 7))!;
+        var builtIn = (await definitions.GetAsync("general-assistant", 16))!;
         var adminStore = services.GetRequiredService<IAgentDefinitionAdminStore>();
         var now = DateTimeOffset.UtcNow;
         var collision = await adminStore.CreateDraftAsync(new AgentDefinitionDraftCreate(builtIn.Id,
             AgentDefinitionCandidate.FromDefinition(builtIn) with { SystemInstructions = "Durable collision sentinel." },
             DefinitionDraftSourceKind.New, null, now));
         var durable = await adminStore.PublishDraftAsync(new AgentDefinitionDraftPublish(collision.DraftId,
-            collision.Revision, Enumerable.Range(1, 6).ToArray(), now));
-        Assert.Equal(7, durable.Version);
-        Assert.Equal(builtIn.SystemInstructions, (await definitions.GetAsync(builtIn.Id, 7))!.SystemInstructions);
+            collision.Revision, Enumerable.Range(1, 15).ToArray(), now));
+        Assert.Equal(16, durable.Version);
+        Assert.Equal(builtIn.SystemInstructions, (await definitions.GetAsync(builtIn.Id, 16))!.SystemInstructions);
 
         var authoring = services.GetRequiredService<HarnessManagementService>();
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync(builtIn.Id, 7);
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync(builtIn.Id, 16);
         instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
             new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []));
         var context = (await authoring.ChatContextAsync(instance.InstanceId, default))!;
-        var payload = JsonSerializer.Serialize(new { expectedVersion = 7, policyRevision = context.PolicyRevision,
+        var payload = JsonSerializer.Serialize(new { expectedVersion = 16, policyRevision = context.PolicyRevision,
             skill = new { name = "Kubernetes review", description = "Guide a safe cluster review.",
                 procedure = "Confirm context and namespace before proposing a change." } });
         var result = await services.GetRequiredService<SessionToolExecutor>().ExecuteAsync(builtIn, Guid.NewGuid(),
@@ -43,7 +76,7 @@ public sealed class HarnessChatAuthoringTests
             admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId));
         Assert.True(result.Text.Contains("\"saved\":true", StringComparison.Ordinal), result.Text);
         var updated = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
-        Assert.Equal(7, updated.HarnessManagement!.Preparation!.BaseVersion);
+        Assert.Equal(16, updated.HarnessManagement!.Preparation!.BaseVersion);
         Assert.Equal(DefinitionDraftSourceKind.ForkBuiltIn,
             (await adminStore.GetDraftAsync(updated.HarnessManagement.Preparation.DraftId))!.SourceKind);
         var future = (await definitions.GetAsync(builtIn.Id, updated.ActiveVersion))!;
@@ -59,10 +92,10 @@ public sealed class HarnessChatAuthoringTests
         var services = factory.Services;
         Assert.False(services.GetRequiredService<IToolConfigurationGate>().IsConfigured(ToolCatalog.BrowserNavigate));
         var definitions = services.GetRequiredService<IAgentDefinitionStore>();
-        var builtIn = (await definitions.GetAsync("general-assistant", 12))!;
+        var builtIn = (await definitions.GetAsync("general-assistant", 16))!;
         Assert.Contains(ToolCatalog.BrowserNavigate, RoleEnvironments.Of(builtIn).ToolList);
         var authoring = services.GetRequiredService<HarnessManagementService>();
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync(builtIn.Id, 12);
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync(builtIn.Id, 16);
         instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
             new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []));
         var context = (await authoring.ChatContextAsync(instance.InstanceId, default))!;
@@ -79,7 +112,7 @@ public sealed class HarnessChatAuthoringTests
             return (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
         }
 
-        var first = await SaveAsync(12, "Kubernetes review");
+        var first = await SaveAsync(16, "Kubernetes review");
         Assert.Equal(DefinitionDraftSourceKind.ForkBuiltIn,
             (await services.GetRequiredService<IAgentDefinitionAdminStore>().GetDraftAsync(first.HarnessManagement!.Preparation!.DraftId))!.SourceKind);
         var second = await SaveAsync(first.ActiveVersion, "Kubernetes study");
@@ -112,10 +145,10 @@ public sealed class HarnessChatAuthoringTests
         await using var factory = new AgentCoreApiFactory();
         var services = factory.Services;
         var authoring = services.GetRequiredService<HarnessManagementService>();
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
             new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []));
-        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
         var executor = services.GetRequiredService<SessionToolExecutor>();
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId);
         var inspection = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("inspect", "harness.inspect", "{}"), 100000, admission: admission);
@@ -125,7 +158,7 @@ public sealed class HarnessChatAuthoringTests
         Assert.Contains("\"saved\":true", result.Text);
         var updated = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
         var future = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(updated.DefinitionId, updated.ActiveVersion))!;
-        var skill = Assert.Single(future.SkillList);
+        var skill = Assert.Single(future.SkillList, skill => skill.Id == "operations-review");
         Assert.Equal("operations-review", skill.Id);
         Assert.Contains("\"skillId\":\"operations-review\"", result.Text);
         Assert.DoesNotContain(updated.HarnessManagement!.Preparation!.Evidence, evidence => evidence.Actor == "Agent");
@@ -134,7 +167,7 @@ public sealed class HarnessChatAuthoringTests
         var plan = SkillLoadAdmission.Plan(future, [], 0, [skill.Id]);
         Assert.Contains(skill.Id, plan.Admitted);
         Assert.Contains(example.GetProperty("skill").GetProperty("procedure").GetString()!, PromptContextBuilder.BuildActiveSkillSystem(future, plan.Admitted));
-        Assert.Empty(pinned.SkillList);
+        Assert.DoesNotContain(pinned.SkillList, skill => skill.Id == "operations-review");
     }
 
     [Theory]
@@ -149,10 +182,10 @@ public sealed class HarnessChatAuthoringTests
         await using var factory = new AgentCoreApiFactory();
         var services = factory.Services;
         var authoring = services.GetRequiredService<HarnessManagementService>();
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
             new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []));
-        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
         var executor = services.GetRequiredService<SessionToolExecutor>();
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId);
         var inspection = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("inspect", "harness.inspect", "{}"), 100000, admission: admission);
@@ -162,7 +195,7 @@ public sealed class HarnessChatAuthoringTests
         var rejected = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("bad", "harness.skill.upsert", invalid.ToJsonString()), 100000, admission: admission);
         Assert.Contains(expectedError, rejected.Text);
         var afterRejection = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
-        Assert.Equal(7, afterRejection.ActiveVersion);
+        Assert.Equal(16, afterRejection.ActiveVersion);
         Assert.Null(afterRejection.HarnessManagement!.Preparation);
         var corrected = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("fixed", "harness.skill.upsert", example.ToJsonString()), 100000, admission: admission);
         Assert.Contains("\"saved\":true", corrected.Text);
@@ -174,10 +207,10 @@ public sealed class HarnessChatAuthoringTests
         await using var factory = new AgentCoreApiFactory();
         var services = factory.Services;
         var authoring = services.GetRequiredService<HarnessManagementService>();
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
             new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []));
-        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
         var executor = services.GetRequiredService<SessionToolExecutor>();
         var inspection = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("inspect", "harness.inspect", "{}"), 100000,
             admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId));
@@ -197,17 +230,17 @@ public sealed class HarnessChatAuthoringTests
         await using var factory = new AgentCoreApiFactory();
         var services = factory.Services;
         var authoring = services.GetRequiredService<HarnessManagementService>();
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
             new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []));
-        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
         var executor = services.GetRequiredService<SessionToolExecutor>();
         var context = (await authoring.ChatContextAsync(instance.InstanceId, default))!;
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId);
         string Payload(int version, string procedure) => JsonSerializer.Serialize(new { expectedVersion = version,
             policyRevision = context.PolicyRevision, skill = new { name = "Kubernetes Learning and Cluster Support",
                 description = "Review cluster work safely.", procedure } });
-        var firstPayload = JsonSerializer.Serialize(new { expectedVersion = 7, policyRevision = context.PolicyRevision,
+        var firstPayload = JsonSerializer.Serialize(new { expectedVersion = 16, policyRevision = context.PolicyRevision,
             skill = new { name = "Kubernetes Learning and Cluster Support", description = "Review cluster work safely.",
                 procedure = "Confirm context before each change.", activationKeywords = new[] { "cluster review" },
                 requiredCapabilities = new[] { "chat.respond" } } });
@@ -235,7 +268,7 @@ public sealed class HarnessChatAuthoringTests
         Assert.Equal(afterPartial.ActiveVersion, unchanged.ActiveVersion);
         Assert.Equal(afterPartial.Revision, unchanged.Revision);
         var future = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(unchanged.DefinitionId, unchanged.ActiveVersion))!;
-        var skill = Assert.Single(future.SkillList);
+        var skill = Assert.Single(future.SkillList, skill => skill.Id == "kubernetes-learning-and-cluster-support");
         Assert.Equal("Confirm context, then check namespace before each change.", skill.Procedure);
         Assert.Equal(["cluster review", "payments"], skill.ActivationKeywords);
         Assert.Equal(["chat.respond"], skill.RequiredCapabilities);
@@ -247,17 +280,17 @@ public sealed class HarnessChatAuthoringTests
         await using var factory = new AgentCoreApiFactory();
         var services = factory.Services;
         var authoring = services.GetRequiredService<HarnessManagementService>();
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
             new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []));
-        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
         var executor = services.GetRequiredService<SessionToolExecutor>();
         var context = (await authoring.ChatContextAsync(instance.InstanceId, default))!;
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId);
         string Payload(int version, string? id) => JsonSerializer.Serialize(new { expectedVersion = version,
             policyRevision = context.PolicyRevision, skill = new { id, name = "Cluster Review",
                 description = "Review a cluster change.", procedure = "Check context and namespace." } });
-        var first = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("one", "harness.skill.upsert", Payload(7, "cluster-review-a")), 100000,
+        var first = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("one", "harness.skill.upsert", Payload(16, "cluster-review-a")), 100000,
             admission: admission);
         Assert.Contains("\"saved\":true", first.Text);
         var afterFirst = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
@@ -281,10 +314,10 @@ public sealed class HarnessChatAuthoringTests
         await using var factory = new AgentCoreApiFactory();
         var services = factory.Services;
         var authoring = services.GetRequiredService<HarnessManagementService>();
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
             new(HarnessManagementMode.Managed, [HarnessManagementScope.Skills], [], []));
-        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
         var executor = services.GetRequiredService<SessionToolExecutor>();
         var inspection = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("inspect", "harness.inspect", "{}"), 100000,
             admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId));
@@ -294,9 +327,9 @@ public sealed class HarnessChatAuthoringTests
             admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId));
         Assert.Contains("\"saved\":false", result.Text);
         Assert.Contains("missing_skill_resource", result.Text);
-        Assert.Contains("skills[0].resourcePaths[0]", result.Text);
+        Assert.Contains("skills[1].resourcePaths[0]", result.Text);
         var unchanged = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
-        Assert.Equal(7, unchanged.ActiveVersion);
+        Assert.Equal(16, unchanged.ActiveVersion);
         Assert.Equal(HarnessPreparationStatus.Failed, unchanged.HarnessManagement!.Preparation!.Status);
     }
 
@@ -306,13 +339,13 @@ public sealed class HarnessChatAuthoringTests
         await using var factory = new AgentCoreApiFactory();
         var services = factory.Services;
         var authoring = services.GetRequiredService<HarnessManagementService>();
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
             new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources, HarnessManagementScope.Skills], [], []));
         var executor = services.GetRequiredService<SessionToolExecutor>();
-        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
         var context = (await authoring.ChatContextAsync(instance.InstanceId, default))!;
-        var knowledge = JsonSerializer.Serialize(new { expectedVersion = 7, policyRevision = context.PolicyRevision,
+        var knowledge = JsonSerializer.Serialize(new { expectedVersion = 16, policyRevision = context.PolicyRevision,
             id = "cluster-guide", content = "Confirm context and namespace before any change.", source = "conversation:user",
             expected = "Retain safe cluster guidance.", observed = "Owner supplied the guidance." });
         var savedKnowledge = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("learn", "harness.knowledge.upsert", knowledge), 100000,
@@ -328,7 +361,7 @@ public sealed class HarnessChatAuthoringTests
         updated = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
         var future = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(updated.DefinitionId, updated.ActiveVersion))!;
         Assert.Equal(KnowledgeSourcePaths.ResolveBackingPath(future.Environment!.KnowledgeList.Single(k => k.Identity == "cluster-guide")),
-            Assert.Single(Assert.Single(future.SkillList).ResourcePaths));
+            Assert.Single(Assert.Single(future.SkillList, skill => skill.Id == "cluster-review").ResourcePaths));
     }
 
     [Fact]
@@ -337,15 +370,15 @@ public sealed class HarnessChatAuthoringTests
         await using var factory = new AgentCoreApiFactory();
         var services = factory.Services;
         var authoring = services.GetRequiredService<HarnessManagementService>();
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
             new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources, HarnessManagementScope.Skills], [], []));
         var context = (await authoring.ChatContextAsync(instance.InstanceId, default))!;
-        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
         var executor = services.GetRequiredService<SessionToolExecutor>();
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId);
         const string procedure = "Confirm cluster context, inspect current state, plan rollback, and verify the result.";
-        var create = JsonSerializer.Serialize(new { expectedVersion = 7, policyRevision = context.PolicyRevision,
+        var create = JsonSerializer.Serialize(new { expectedVersion = 16, policyRevision = context.PolicyRevision,
             skill = new { name = "Kubernetes safety", description = "Review cluster changes safely.", procedure } });
         var created = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("create", "harness.skill.upsert", create),
             100000, admission: admission);
@@ -374,7 +407,7 @@ public sealed class HarnessChatAuthoringTests
         var afterRepair = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
         var future = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(instance.DefinitionId,
             afterRepair.ActiveVersion))!;
-        var skill = Assert.Single(future.SkillList);
+        var skill = Assert.Single(future.SkillList, skill => skill.Id == "kubernetes-safety");
         Assert.Equal(procedure, skill.Procedure);
         Assert.Equal("Review cluster changes safely.", skill.Description);
         Assert.Equal(KnowledgeSourcePaths.ResolveBackingPath("cluster-guide", null), Assert.Single(skill.ResourcePaths));
@@ -387,26 +420,26 @@ public sealed class HarnessChatAuthoringTests
         var services = factory.Services;
         var admin = services.GetRequiredService<AdminAgentInstanceService>();
         var authoring = services.GetRequiredService<HarnessManagementService>();
-        var instance = await admin.CreateManagedAsync("general-assistant", 7);
+        var instance = await admin.CreateManagedAsync("general-assistant", 16);
         instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision, new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources], [], []));
-        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
         var executor = services.GetRequiredService<SessionToolExecutor>();
         var context = await executor.HarnessContextAsync(instance.InstanceId, default);
         var offered = ToolCatalog.For(pinned, new(pinned, [], "", null, AgentCore.Domain.Conversation.SessionMode.Text, null, false, null,
             new(Guid.NewGuid(), TriggerKind.UserTurn, "Learn this for future conversations"), Harness: context), executorGate(services));
         Assert.Contains(offered, t => t.Name == "harness.knowledge.upsert");
         Assert.DoesNotContain(offered, t => t.Name == "harness.skill.upsert");
-        var args = JsonSerializer.Serialize(new { expectedVersion = 7, policyRevision = context!.PolicyRevision,
+        var args = JsonSerializer.Serialize(new { expectedVersion = 16, policyRevision = context!.PolicyRevision,
             id = "owner-policy", content = "Orders need payment, shipping and fraud review.", source = "conversation:user",
             expected = "Reusable order policy can be retained.", observed = "Owner supplied enduring role knowledge." });
         var result = await executor.ExecuteAsync(pinned, Guid.NewGuid(), new("learn", "harness.knowledge.upsert", args), 100000,
             admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId, OwnerTurnText: "Orders need payment, shipping and fraud review."));
         Assert.Contains("\"saved\":true", result.Text);
         var updated = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;
-        Assert.True(updated.ActiveVersion > 7);
+        Assert.True(updated.ActiveVersion > 16);
         await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(async () => await authoring.CancelAsync(instance.InstanceId, updated.Revision));
         Assert.Equal(HarnessPreparationStatus.Published, (await authoring.ReviewAsync(instance.InstanceId)).State.Preparation!.Status);
-        Assert.Equal(7, pinned.Version);
+        Assert.Equal(16, pinned.Version);
         var future = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync(updated.DefinitionId, updated.ActiveVersion))!;
         Assert.Contains(future.Environment!.KnowledgeList, k => k.Identity == "owner-policy");
         Assert.Equal(HarnessPreparationStatus.Published, updated.HarnessManagement!.Preparation!.Status);
@@ -431,25 +464,25 @@ public sealed class HarnessChatAuthoringTests
         await using var factory = new AgentCoreApiFactory();
         var services = factory.Services;
         var service = services.GetRequiredService<HarnessManagementService>();
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         instance = await service.ConfigureAsync(instance.InstanceId, instance.Revision, new(mode, [scope], [], []));
-        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
         var tools = services.GetRequiredService<SessionToolExecutor>();
         var context = await tools.HarnessContextAsync(instance.InstanceId, default);
-        var args = JsonSerializer.Serialize(new { expectedVersion = 7, policyRevision = context!.PolicyRevision,
+        var args = JsonSerializer.Serialize(new { expectedVersion = 16, policyRevision = context!.PolicyRevision,
             id = name == "harness.tool.configure" ? "attachments.read" : name == "harness.tool.select" ? "web.fetch" : "policy",
             enabled = false, allowUnreadUnsupportedTypes = true, content = "Reusable owner policy.", source = "conversation:user", expected = "Retain policy", observed = "Owner supplied it." });
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId, OwnerTurnText: "Retain this policy.");
         var call = new ModelToolCall("change", name, args);
         Assert.Contains("approval_required", (await tools.ExecuteAsync(pinned, Guid.NewGuid(), call, 100000, admission: admission)).Text);
-        Assert.Equal(7, (await service.ReviewAsync(instance.InstanceId)).ActiveVersion);
+        Assert.Equal(16, (await service.ReviewAsync(instance.InstanceId)).ActiveVersion);
         using var json = JsonDocument.Parse(args);
         var grant = new ToolApprovalGrant(Guid.NewGuid(), name, ToolActionHash.Compute(name, json.RootElement), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         Assert.Contains("stale_approval", (await tools.ExecuteAsync(pinned, Guid.NewGuid(), call, 100000, approvalGrant: grant with { ActionHash = "altered" }, admission: admission)).Text);
         instance = await service.ConfigureAsync(instance.InstanceId, instance.Revision, instance.HarnessManagement!.Policy);
         var stale = await tools.ExecuteAsync(pinned, Guid.NewGuid(), call, 100000, approvalGrant: grant, admission: admission);
         Assert.Contains("changed", stale.Text);
-        Assert.Equal(7, (await service.ReviewAsync(instance.InstanceId)).ActiveVersion);
+        Assert.Equal(16, (await service.ReviewAsync(instance.InstanceId)).ActiveVersion);
         var freshArgs = args.Replace($"\"policyRevision\":{context.PolicyRevision}", $"\"policyRevision\":{instance.HarnessManagement!.PolicyRevision}");
         using var freshJson = JsonDocument.Parse(freshArgs);
         var result = await tools.ExecuteAsync(pinned, Guid.NewGuid(), call with { ArgumentsJson = freshArgs }, 100000,
@@ -465,27 +498,27 @@ public sealed class HarnessChatAuthoringTests
         var services = factory.Services;
         var service = services.GetRequiredService<HarnessManagementService>();
         var tools = services.GetRequiredService<SessionToolExecutor>();
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 7);
-        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 7))!;
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
         Assert.Null(await tools.HarnessContextAsync(instance.InstanceId, default));
         instance = await service.ConfigureAsync(instance.InstanceId, instance.Revision, new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources], [], []));
         var ctx = await tools.HarnessContextAsync(instance.InstanceId, default);
         Assert.Equal(ToolPolicyDecision.Deny, tools.EvaluateExecutionPolicy(pinned, "harness.knowledge.upsert", admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId, Harness: ctx, SupportsTools: false)));
         Assert.Equal(ToolPolicyDecision.Deny, tools.EvaluateExecutionPolicy(pinned, "harness.skill.upsert", admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId, Harness: ctx)));
         Assert.Equal(ToolPolicyDecision.Deny, tools.EvaluateExecutionPolicy(pinned, "harness.knowledge.upsert", admission: new(true, TriggerKind.ScheduledOccurrence, AgentInstanceId: instance.InstanceId, Harness: ctx)));
-        var args = JsonSerializer.Serialize(new { expectedVersion = 7, policyRevision = ctx!.PolicyRevision, id = "unread", source = "https://unread.example", content = "Unproven content", expected = "Read it", observed = "Claimed success" });
+        var args = JsonSerializer.Serialize(new { expectedVersion = 16, policyRevision = ctx!.PolicyRevision, id = "unread", source = "https://unread.example", content = "Unproven content", expected = "Read it", observed = "Claimed success" });
         var call = new ModelToolCall("unread", "harness.knowledge.upsert", args);
         Assert.Contains("Read the source", (await tools.ExecuteAsync(pinned, Guid.NewGuid(), call, 100000, admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId))).Text);
         instance = await service.ConfigureAsync(instance.InstanceId, instance.Revision, instance.HarnessManagement!.Policy with { Frozen = true });
         Assert.Null(await tools.HarnessContextAsync(instance.InstanceId, default));
         Assert.Contains("forbidden", (await tools.ExecuteAsync(pinned, Guid.NewGuid(), call, 100000, admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId, Harness: ctx))).Text);
-        Assert.Equal(7, instance.ActiveVersion);
+        Assert.Equal(16, instance.ActiveVersion);
     }
 
     [Fact]
     public void Harness_approval_shows_the_actual_semantic_operation_and_untruncated_change()
     {
-        using var content = JsonDocument.Parse(JsonSerializer.Serialize(new { content = new string('x', 600) + " exact tail", expectedVersion = 7, policyRevision = 1 }));
+        using var content = JsonDocument.Parse(JsonSerializer.Serialize(new { content = new string('x', 600) + " exact tail", expectedVersion = 16, policyRevision = 1 }));
         Assert.EndsWith("exact tail", ToolApprovalPreview.Build("harness.instructions.update", content.RootElement).Details["Change"]);
         using var tool = JsonDocument.Parse("""{"id":"http.request","enabled":false,"content":"misleading unrelated content","expectedVersion":7,"policyRevision":1}""");
         var preview = ToolApprovalPreview.Build("harness.tool.select", tool.RootElement);

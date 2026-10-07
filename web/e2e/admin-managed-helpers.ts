@@ -23,7 +23,6 @@ export type ManagedInstance = {
   instanceId: string;
   definitionId: string;
   activeVersion: number;
-  compatibility: boolean;
   personaRevision: number;
 };
 
@@ -139,7 +138,6 @@ export async function publishExaminerP7gFirstPublication(page: Page) {
   const instance = (await (await instanceResponsePromise).json()) as ManagedInstance;
   const firstSession = (await (await sessionResponsePromise).json()) as SessionView;
 
-  expect(instance.compatibility).toBe(false);
   expect(firstSession.agentInstanceId).toBe(instance.instanceId);
   expect(firstSession.agentVersion).toBe(Number(version));
 
@@ -203,7 +201,6 @@ export async function publishExaminerDraftAndCreateManagedInstance(page: Page) {
   const instance = (await instanceResponse.json()) as ManagedInstance;
   const firstSession = (await sessionResponse.json()) as SessionView;
 
-  expect(instance.compatibility).toBe(false);
   expect(instance.definitionId).toBe("examiner");
   expect(instance.personaRevision).toBe(1);
   expect(firstSession.agentInstanceId).toBe(instance.instanceId);

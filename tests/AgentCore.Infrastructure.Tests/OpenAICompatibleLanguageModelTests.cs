@@ -256,7 +256,7 @@ public sealed class OpenAICompatibleLanguageModelTests
         var now = time.GetUtcNow();
         var snapshot = new SessionSnapshot(
             1, ids.NewSessionId(), 1, definition, SessionMode.Text, null,
-            SessionStatus.Created, [], string.Empty, 0, null, null, now, now);
+            SessionStatus.Created, [], string.Empty, 0, null, null, now, now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
         await using var runtime = new SessionRuntime(
             snapshot,
@@ -696,7 +696,7 @@ public sealed class OpenAICompatibleLanguageModelTests
         var now = time.GetUtcNow();
         var snapshot = new SessionSnapshot(
             1, ids.NewSessionId(), 1, definition, SessionMode.Text, null,
-            SessionStatus.Created, [], string.Empty, 0, null, null, now, now);
+            SessionStatus.Created, [], string.Empty, 0, null, null, now, now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
         await using var runtime = new SessionRuntime(
             snapshot,
@@ -891,7 +891,7 @@ public sealed class OpenAICompatibleLanguageModelTests
                     "primary-llm",
                     "deepseek/deepseek-v4.1-flash",
                     ModelSelectionSource.SystemDefault,
-                    "medium"));
+                    "medium"), AgentInstanceId: Guid.NewGuid());
             await memory.SaveAsync(snapshot, 0);
             await using var runtime = new SessionRuntime(
                 snapshot,

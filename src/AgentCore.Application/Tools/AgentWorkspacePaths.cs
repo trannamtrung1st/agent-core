@@ -5,7 +5,7 @@ using AgentCore.Application.Workspaces;
 
 namespace AgentCore.Application.Tools;
 
-/// <summary>V2 public paths are resolved once against a trusted mailbox snapshot before storage dispatch.</summary>
+/// <summary>Public workspace paths are resolved once against a trusted mailbox snapshot before storage dispatch.</summary>
 public static class AgentWorkspacePaths
 {
     public const string Working = "/working";

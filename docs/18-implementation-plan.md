@@ -7,9 +7,9 @@ This user-authorized follow-on composes with the completed Agent Workspace refin
 
 ## Post-filesystem managed workspace refinement
 
-This user-requested bounded follow-on adds explicit `agentWorkspaceV2`, Session-local cwd, direct CAS-safe home write/patch, single-operation cross-root binary/tree copy, new owner-nested scratch provisioning and canonical Admin tool-count validation. General Assistant v15 has 31 tools; published v12/v13/v14 remain immutable. Existing phase freezes are unchanged and P10/P11 remain unopened.
+The workspace refinement is superseded by the authorized full migration: one real Agent Instance owner per Session, durable `/home`, temporary `/working`, transient mailbox cwd and canonical copy/move contracts. Runtime built-ins are current versions only; retired immutable files remain in Git. General Assistant is v16. Existing phase freezes remain historical; P10/P11 remain unopened.
 
-Acceptance requires new and compatibility runtime journeys; cwd failure/ancestor rules; durable create/replacement/patch conflicts; binary and empty-tree copies, quotas and ownership isolation; Session deletion/SQLite reopen/Compose survival; normal Artifact delivery and sandbox/approval regressions; Form 31/32/invalid33 and backend field/code diagnostics; canonical docs and green hosted Synthetic jobs. Cross-store batches and richer home sandbox mounts remain deferred. Dynamic model tool projection is supplied by the subsequent capability enhancement above. [The refinement verification report](reports/agent-workspace-refinement-verification.md) records acceptance evidence; historical workspace reports remain unchanged.
+Full migration acceptance requires mandatory ownership and empty Chat guidance; exact file/tree cross-root copy, the four-file c#→csharp rename, CAS and lifecycle conflicts, Artifact delivery, Session deletion and owner deletion recovery; legacy-data rejection; full backend/frontend tests/build, Synthetic Playwright, Compose recreation, synchronized normative docs and hosted CI. See the migration verification report for the current measured gate status. Cwd persistence, cross-store batches and home sandbox mounts remain deferred.
 
 
 This is the ordered implementation handoff. Each milestone must satisfy its acceptance criteria before dependent work begins. Scope remains conversational presence, not a general autonomous-agent platform. [Roadmap](08-development-roadmap.md) is the short index; this document owns the detailed gates. Observability hooks, cancellation and tests begin with the first slice, although full instrumentation/tuning is Milestone 12.
@@ -390,7 +390,7 @@ The requested configurable Continuity maintenance cadence is included in that cl
 
 ## Bounded post-P9.10 Agent Instance workspace
 
-Accepted scope: one managed identity-owned `/home`, explicit retain/checkout, bounded tool-driven read/list/search, optimistic replacement, owner Admin inspection/download/delete, source Session deletion survival and local SQLite/Compose restart durability. Prior P9.8/P9.9/P9.10 freezes remain unchanged; this does not start P10/P11. No shared/application/task workspace, remote storage or Artifact ownership change is included.
+Historical accepted scope (superseded by the full migration): one managed identity-owned `/home`, explicit retain/checkout, bounded tool-driven read/list/search, optimistic replacement, owner Admin inspection/download/delete, source Session deletion survival and local SQLite/Compose restart durability. Prior P9.8/P9.9/P9.10 freezes remain unchanged; this does not start P10/P11. No shared/application/task workspace, remote storage or Artifact ownership change is included.
 
 Acceptance requires focused/full backend and frontend gates, production build, canonical cross-session Synthetic browser journey, existing Artifact/continuity/browser regression, SQLite/Compose survival, synchronized docs, exact published behavior SHA and green hosted Synthetic/Compose on that SHA. Status and AC1–AC20 evidence are recorded in [final verification](reports/agent-instance-workspace-final-verification.md); local passing checks alone do not freeze this enhancement.
 

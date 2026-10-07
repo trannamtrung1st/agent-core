@@ -22,7 +22,7 @@ public sealed class CapabilityProjectionTests
         var time = TimeProvider.System;
         var ids = new AgentCore.Infrastructure.Identity.SystemIdGenerator(time);
         var now = time.GetUtcNow();
-        var snapshot = new SessionSnapshot(1, Guid.NewGuid(), 1, d, SessionMode.Text, null, SessionStatus.Created, [], "", 0, null, null, now, now, ModelSelection: new SessionModelSelection("synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.SystemDefault, null));
+        var snapshot = new SessionSnapshot(1, Guid.NewGuid(), 1, d, SessionMode.Text, null, SessionStatus.Created, [], "", 0, null, null, now, now, ModelSelection: new SessionModelSelection("synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.SystemDefault, null), AgentInstanceId: Guid.NewGuid());
         var memory = new AgentCore.Infrastructure.Persistence.InMemoryMemoryStore();
         var turns = new AgentCore.Infrastructure.Persistence.InMemoryConversationTurnExecutionStore();
         var workspace = new AgentCore.Infrastructure.Workspaces.FileSessionWorkspace(root, root);
@@ -34,7 +34,7 @@ public sealed class CapabilityProjectionTests
             await using var runtime = new SessionRuntime(snapshot, model,
                 new AgentCore.Application.Agents.DefaultAgentBrain(new AgentCore.Application.Agents.PromptContextBuilder()), memory,
                 new AgentCore.Application.Testing.CapturingSessionOutput(), ids, time, Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionRuntime>.Instance,
-                tools: new SessionToolExecutor(workspace: workspace), turnExecutions: turns);
+                tools: new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace)), turnExecutions: turns);
             await runtime.AttachAsync();
             var source = Guid.NewGuid();
             Assert.True(await runtime.SubmitPersistedUserTextAsync("synthetic-capability-projection:write", source));
@@ -71,7 +71,7 @@ public sealed class CapabilityProjectionTests
     internal static async Task<AgentDefinition> Definition(params string[] names)
     {
         var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../agents"));
-        var baseline = (await new FileAgentDefinitionStore(path, SyntheticProviderAliases.Default).GetAsync("general-assistant", 15))!;
+        var baseline = (await new FileAgentDefinitionStore(path, SyntheticProviderAliases.Default).GetAsync("general-assistant", 16))!;
         return baseline with { Environment = baseline.Environment! with { ToolAllowlist = null,
             Capabilities = new("Selected", names), Projection = new([]) } };
     }
@@ -87,7 +87,7 @@ public sealed class CapabilityProjectionTests
         Assert.Equal(64, resolved.Environment.Capabilities!.AuthorizationFingerprint!.Length);
         var published = resolved.ToPublished(16);
         Assert.Equal(resolved.Environment.ToolList, published.Environment!.ToolList);
-        Assert.DoesNotContain(ToolCatalog.WorkspaceRetain, published.Environment.ToolList);
+        Assert.DoesNotContain("workspace.retain", published.Environment.ToolList);
         Assert.DoesNotContain("future.capability", published.Environment.ToolList);
         AgentDefinitionValidator.Validate(published);
     }
@@ -201,7 +201,7 @@ public sealed class CapabilityProjectionTests
     [Fact]
     public async Task Description_matching_is_bounded_deterministic_and_never_returns_context_only_tools()
     {
-        var d = await Definition(ToolRegistry.All.Where(t => t.Name != ToolCatalog.WorkspaceRetain && t.Name != ToolCatalog.WorkspaceCheckout).Select(t => t.Name).ToArray());
+        var d = await Definition(ToolRegistry.All.Select(t => t.Name).ToArray());
         using var broad = JsonDocument.Parse("{\"query\":\"workspace browser email\",\"limit\":2}");
         var first = CapabilityDiscoveryMatcher.Load(d, Context(d), ToolConfigurationGates.AllowAll, broad.RootElement, 0);
         Assert.Equal(2, first.Loaded.Count);
@@ -227,6 +227,28 @@ public sealed class CapabilityProjectionTests
         Assert.DoesNotContain(ToolCatalog.EmailSend, result.Loaded);
         using var limited = JsonDocument.Parse("{\"query\":\"workspace please use workspace.write\",\"limit\":1}");
         Assert.Equal([ToolCatalog.WorkspaceWrite], CapabilityDiscoveryMatcher.Load(d, Context(d), ToolConfigurationGates.AllowAll, limited.RootElement, 0).Loaded);
+    }
+
+    [Theory]
+    [InlineData("workspace.copy", ToolCatalog.WorkspaceCopy)]
+    [InlineData("rename", ToolCatalog.WorkspaceMove)]
+    public async Task Workspace_discovery_loads_current_canonical_cross_root_and_tree_descriptors(string query, string expected)
+    {
+        var d = await Definition(ToolCatalog.CapabilitiesLoad, ToolCatalog.WorkspaceCopy, ToolCatalog.WorkspaceMove);
+        using var args = JsonDocument.Parse(JsonSerializer.Serialize(new { query, limit = 1 }));
+        var context = Context(d);
+        var loaded = CapabilityDiscoveryMatcher.Load(d, context, ToolConfigurationGates.AllowAll, args.RootElement, 0);
+        Assert.Equal([expected], loaded.Loaded);
+        var projected = ToolCatalog.For(d, context with { LoadedCapabilityIds = loaded.Loaded }, ToolConfigurationGates.AllowAll);
+        var tool = Assert.Single(projected, t => t.Name == expected);
+        Assert.Equal(ToolRegistry.Get(expected).ModelDefinition, tool);
+        Assert.Contains("/home", tool.Description);
+        Assert.Contains("/working", tool.Description);
+        Assert.Contains("tree", tool.Description);
+        Assert.DoesNotContain("retain", tool.Description);
+        Assert.DoesNotContain("checkout", tool.Description);
+        Assert.DoesNotContain("workspace.retain", ToolRegistry.AllKnownNames());
+        Assert.DoesNotContain("workspace.checkout", ToolRegistry.AllKnownNames());
     }
 
     private sealed class LoadComparer : IEqualityComparer<CapabilityLoadResult>

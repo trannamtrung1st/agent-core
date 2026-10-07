@@ -38,7 +38,6 @@ internal static class AdminHttpMapping
             item.DefinitionId,
             item.ActiveVersion,
             item.Lifecycle.ToString(),
-            item.Compatibility,
             item.PersonaName,
             item.CreatedAt.ToString("o"),
             item.UpdatedAt.ToString("o"));
@@ -48,7 +47,6 @@ internal static class AdminHttpMapping
             instance.InstanceId.ToString("D"),
             instance.DefinitionId,
             instance.ActiveVersion,
-            instance.Compatibility,
             instance.Lifecycle.ToString(),
             instance.Revision,
             instance.PersonaRevision,
@@ -66,7 +64,6 @@ internal static class AdminHttpMapping
             config.InstanceLifecycle,
             config.InstanceRevision,
             config.PersonaRevision,
-            config.Compatibility,
             ToPersona(config.Persona),
             ToProviderPreferences(config.ProviderPreferences),
             ToEffectiveModel(config.EffectiveModel),
