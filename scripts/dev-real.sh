@@ -41,32 +41,81 @@ load_env() {
   fi
 }
 
+process_running() {
+  kill -0 "$1" 2>/dev/null && [[ "$(ps -p "$1" -o stat= 2>/dev/null)" != *Z* ]]
+}
+
+terminate_tree() {
+  local pid="$1" child
+  for child in $(pgrep -P "$pid" || true); do terminate_tree "$child"; done
+  kill "$pid" 2>/dev/null || true
+}
+
+stop_service() {
+  local file="$1"
+  local pid group attempt cwd
+  [[ -f "$file" ]] || return 0
+  pid="$(cat "$file" 2>/dev/null || true)"
+  if [[ "$pid" =~ ^[0-9]+$ ]] && process_running "$pid"; then
+    # Do not signal a reused PID or another project's development server.
+    cwd="$( { lsof -a -p "$pid" -d cwd -Fn 2>/dev/null || true; } | sed -n 's/^n//p')"
+    if [[ "$cwd" != "$root" && "$cwd" != "$root/web" ]]; then
+      echo "Ignoring stale PID $pid in $file (not this workspace)." >&2
+      rm -f "$file"
+      return 0
+    fi
+    group="$( { ps -p "$pid" -o pgid= 2>/dev/null || true; } | tr -d ' ')"
+    if [[ "$group" == "$pid" ]]; then
+      kill -TERM -- "-$pid" 2>/dev/null || true
+    else
+      # Compatibility with PID files created by the older launcher.
+      terminate_tree "$pid"
+    fi
+    for attempt in $(seq 1 30); do
+      process_running "$pid" || break
+      sleep 1
+    done
+    if process_running "$pid"; then
+      if [[ "$group" == "$pid" ]]; then
+        kill -KILL -- "-$pid" 2>/dev/null || true
+      else
+        kill -KILL "$pid" 2>/dev/null || true
+      fi
+    fi
+  fi
+  rm -f "$file"
+}
+
 stop_api_web() {
-  if [[ -f "$api_pid_file" ]]; then
-    local pid
-    pid="$(cat "$api_pid_file" 2>/dev/null || true)"
-    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-      kill "$pid" 2>/dev/null || true
-    fi
-  fi
-  if [[ -f "$web_pid_file" ]]; then
-    local pid
-    pid="$(cat "$web_pid_file" 2>/dev/null || true)"
-    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-      kill "$pid" 2>/dev/null || true
-    fi
-  fi
-  pkill -f "AgentCore.Api" 2>/dev/null || true
-  pkill -f "vite/bin/vite" 2>/dev/null || true
-  rm -f "$api_pid_file" "$web_pid_file"
-  sleep 1
+  stop_service "$api_pid_file"
+  stop_service "$web_pid_file"
+}
+
+launch_service() {
+  local cwd="$1" log="$2" pid_file="$3"
+  shift 3
+  # A separate session survives the launching terminal/command's process-group
+  # cleanup. stdin is detached too; logs and the leader PID stay inspectable.
+  python3 - "$cwd" "$log" "$pid_file" "$@" <<'PYTHON'
+import pathlib, subprocess, sys
+cwd, log, pid_file, *command = sys.argv[1:]
+with open(log, "wb") as output:
+    process = subprocess.Popen(command, cwd=cwd, stdin=subprocess.DEVNULL,
+        stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
+pathlib.Path(pid_file).write_text(str(process.pid) + "\n")
+PYTHON
 }
 
 wait_for_url() {
   local url="$1"
   local label="$2"
+  local pid_file="$3"
   local attempt
   for attempt in $(seq 1 120); do
+    if ! process_running "$(cat "$pid_file")"; then
+      echo "$label exited before becoming ready (see $api_log / $web_log)." >&2
+      return 1
+    fi
     if curl -fsS --max-time 3 "$url" >/dev/null 2>&1; then
       return 0
     fi
@@ -83,24 +132,12 @@ start_nopcommerce() {
 
 start_api() {
   load_env
-  : >"$api_log"
-  (
-    cd "$root"
-    nohup dotnet run --project src/AgentCore.Api --launch-profile http-openrouter \
-      >>"$api_log" 2>&1 &
-    echo $! >"$api_pid_file"
-    disown -h 2>/dev/null || true
-  )
+  launch_service "$root" "$api_log" "$api_pid_file" \
+    dotnet run --project src/AgentCore.Api --launch-profile http-openrouter
 }
 
 start_web() {
-  : >"$web_log"
-  (
-    cd "$root/web"
-    nohup pnpm run dev >>"$web_log" 2>&1 &
-    echo $! >"$web_pid_file"
-    disown -h 2>/dev/null || true
-  )
+  launch_service "$root/web" "$web_log" "$web_pid_file" pnpm run dev
 }
 
 verify_nopcommerce_plugin() {
@@ -146,8 +183,11 @@ cmd_start() {
   start_api
   start_web
 
-  wait_for_url "$api_health" "API"
-  wait_for_url "$web_health" "Vite"
+  if ! wait_for_url "$api_health" "API" "$api_pid_file" \
+    || ! wait_for_url "$web_health" "Vite" "$web_pid_file"; then
+    stop_api_web
+    return 1
+  fi
 
   echo ""
   echo "Real dev stack is up."
@@ -179,7 +219,8 @@ cmd_stop() {
     (cd "$root" && ./scripts/nopcommerce-demo.sh stop)
   fi
   echo "Stopped API and web."
-  [[ "$with_store" == 1 ]] && echo "Stopped nopCommerce demo."
+  if [[ "$with_store" == 1 ]]; then echo "Stopped nopCommerce demo."; fi
+  return 0
 }
 
 cmd_status() {

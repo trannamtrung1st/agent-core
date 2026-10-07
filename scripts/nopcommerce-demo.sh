@@ -311,6 +311,10 @@ PY
 bring_up() {
   prepare_env
   "${compose[@]}" up -d
+  # A previously running web process can cache a failed SQL/DNS connection
+  # while the database is restarting. Restart it after Compose confirms SQL
+  # is healthy, before requiring HTTP success from that process.
+  "${compose[@]}" restart nopcommerce-web
   wait_for_http
   install_if_needed
   apply_seed

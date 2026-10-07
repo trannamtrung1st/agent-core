@@ -163,6 +163,8 @@ OPENROUTER_API_KEY=<backend-secret>
 
 Speech adapter overrides remain in [Configuration](15-persistence-and-configuration.md#hosted-and-on-prem-provider-configurations); they do not change Real Compose until DI selects them.
 
+The native Real stack can be managed with `scripts/dev-real.sh start`, `restart`, `stop` and `status`; use `restart --api-only` to leave nopCommerce alone. It requires Python 3, `lsof`, .NET and pnpm on PATH, plus the configured Real environment. API/Vite launch in separate process sessions and remain running when the initiating terminal command exits. PID files and logs live in `local/dev`; shutdown targets only recorded processes belonging to this workspace, waits for graceful exit, and preserves SQLite/store volumes. Failed startup reports the exited service and cleans up the partial API/web stack. `stop` returns success when no services are running. Launcher regressions run with `python3 -m unittest discover -s scripts/tests -p 'test_dev_real.py' -v` without Docker, credentials or provider calls.
+
 The nopCommerce demo is a second Compose project, not an overlay on `docker-compose.yml`. It does not mount `agent-core-data`, does not change Agent Core's SQLite file, and does not install Chromium in the Agent Core image. Synthetic CI does not start it. Copy the `NOPCOMMERCE_*` placeholders from `.env.example` into the gitignored root `.env`. `NOPCOMMERCE_DB_PASSWORD` is required. Leave `NOPCOMMERCE_ADMIN_PASSWORD` empty to generate it once; the script prints a new password on the operator terminal and does not write it into agent definitions, model context, or ordinary log files.
 
 ```text
@@ -170,6 +172,8 @@ scripts/nopcommerce-demo.sh start
 scripts/nopcommerce-demo.sh stop
 scripts/nopcommerce-demo.sh reset
 ```
+
+On start, Compose waits for SQL health, then restarts the web container before its first HTTP readiness check. This recovers a previously running nopCommerce process that cached a SQL/DNS failure during a database restart, without resetting installed configuration or database volumes.
 
 `start` and `stop` use project name `nopcommerce-demo` only. `reset` runs `docker compose -p nopcommerce-demo -f docker-compose.nopcommerce.yml down -v`, starts again, installs sample data, and applies `deploy/nopcommerce/seed/demo-conditions.sql` (one low-stock product and one pending order). It must not delete Agent Core volumes. Pinned images, with RepoDigests recorded after pull on 2026-10-02, are `nopcommerceteam/nopcommerce:4.90.8` (`sha256:a4043d78041cdf4aa7c2a68dea613212ba5841cf3a05b23ac0240ae258906a79`) and `mcr.microsoft.com/mssql/server:2022-CU22-ubuntu-22.04` (`sha256:db9a8fe3098b7e8bbde41106bdc7caee942e97124e5fdb71b872ca208de3092d`). The SQL Server image is linux/amd64. The store is published only on `http://127.0.0.1:5088`. After start and after reset, the storefront and `/admin` responses, including every redirect, stay on that origin. `localhost`, another host, `https`, or another port fails the script. Admin sign-in uses `NOPCOMMERCE_ADMIN_EMAIL` (default `demo-owner@example.com`). `start` installs `deploy/nopcommerce/plugin/AgentCore.OrderEvents`. Set `AGENTCORE_WEBHOOK_URL` and `AGENTCORE_WEBHOOK_TOKEN` before `start` when the plugin should emit `order.placed`. An agent that investigates the store needs `http://127.0.0.1:5088` in `Browser:NavigationOrigins` and `Browser:InteractionOrigins`. The product image for a later publish journey is `deploy/nopcommerce/assets/ac-keyboard.png`.
 
