@@ -16,6 +16,38 @@ public sealed class SkillActivationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task Older_session_context_cannot_overfill_the_current_instance_Always_budget(bool sqlite)
+    {
+        await using var db = sqlite ? await SqliteTestHarness.CreateMigratedAsync() : null;
+        var ids = new SystemIdGenerator(TimeProvider.System); var clock = new FakeTimeProvider(Now);
+        IAgentInstanceStore store = sqlite ? new SqliteAgentInstanceStore(db!.Factory, ids) : new InMemoryAgentInstanceStore();
+        var original = Definition(1, new SkillSpec("review", "Review", "Review", "OLD", SkillProjection.Always, true, [], []));
+        var current = Definition(2,
+            new SkillSpec("review", "Review", "Review", new string('a', 4000), SkillProjection.Always, true, [], []),
+            new SkillSpec("added", "Added", "Added", new string('b', 4000), SkillProjection.Always, true, [], []));
+        var defs = new Definitions(original, current); var instances = new AgentInstanceService(store, defs, ids, clock);
+        var owner = await instances.CreateAsync(original.Id, 1);
+        var pin = await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, original);
+        await instances.UpgradeAsync(owner.InstanceId, 2, owner.Revision);
+        owner = (await store.FindAsync(owner.InstanceId))!;
+        var before = await store.ReadSkillsAsync(owner.InstanceId);
+        var service = new AgentInstanceSkillService(store, defs, ids, clock);
+        var error = await Assert.ThrowsAsync<AgentCoreException>(() => service.WriteAsync(owner.InstanceId, "create",
+            input: new("Local", "Local", "ONE", SkillProjection.Always, true, []), actor: SkillAuthor.Agent, context: original).AsTask());
+        Assert.Contains("8000-character", error.Message);
+        Assert.Equal(owner, await store.FindAsync(owner.InstanceId));
+        var after = await store.ReadSkillsAsync(owner.InstanceId);
+        Assert.Equal(before.DefinitionStates, after.DefinitionStates); Assert.Equal(before.InstanceSkills, after.InstanceSkills);
+        Assert.Equal("OLD", Assert.Single(pin).Procedure);
+        Assert.Equal(8000, (await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, current)).Sum(s => s.Procedure.Length));
+        var allowed = await service.WriteAsync(owner.InstanceId, "create", input: new("Local", "Local", "DEFERRED", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent, context: original);
+        Assert.Contains(await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, current), s => s.Key == allowed.Key && s.Projection == SkillProjection.OnDemand);
+        Assert.Equal("OLD", Assert.Single(pin).Procedure);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task Failed_version_reconciliation_leaves_owner_and_skill_rows_unchanged(bool sqlite)
     {
         await using var db = sqlite ? await SqliteTestHarness.CreateMigratedAsync() : null;

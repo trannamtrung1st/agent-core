@@ -91,7 +91,10 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
         }
         var next = new InstanceSkillSnapshot(snapshot.DefinitionStates.Select(s => state?.DefinitionSkillId == s.DefinitionSkillId ? state : s).ToArray(),
             snapshot.InstanceSkills.Where(s => s.SkillId != delete && s.SkillId != local?.SkillId).Concat(local is null ? [] : new[] { local }).ToArray());
-        _ = EffectiveSkillCatalogResolver.Resolve(definition, next);
+        // Writes affect future executions: validate against the owner's current version,
+        // while the trusted execution context continues to govern authorization/copy content.
+        var futureDefinition = definition.Version == owner.ActiveVersion ? definition : await DefinitionAsync(owner, ct);
+        _ = EffectiveSkillCatalogResolver.Resolve(futureDefinition, next);
         var history = actor == SkillAuthor.Admin ? new AdminEventAppend(ids.NewId(), now, AdminEventActorKind.LocalOwner,
             AdminEventOperationKind.InstanceSkillsChanged, "agent.instance", id.ToString("D"), owner.Revision + 1,
             definition.Version, JsonSerializer.Serialize(new { instanceId = id.ToString("D"), operation, skillKey = key ?? "instance:" + local!.SkillId.ToString("D") })) : null;
