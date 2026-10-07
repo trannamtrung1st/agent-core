@@ -50,6 +50,8 @@ public sealed record ToolDescriptor(
     public string Category => Name.StartsWith("trigger.", StringComparison.Ordinal) ? "scheduling" : Name.Split('.')[0];
     public string Summary => ModelDefinition.Description.Length <= 240 ? ModelDefinition.Description : ModelDefinition.Description[..240];
     public IReadOnlyList<string> Tags => Category switch { "browser" => ["website", "navigate", "interact"], "email" => ["mail", "messages", "draft", "send"], "scheduling" => ["schedule", "reminder"], _ => [Category] };
+    public bool DefinitionAuthorizable => OfferRule is ToolOfferRule.RoleAllowlist
+        or ToolOfferRule.ConfigurationWhenRoleAllows or ToolOfferRule.SessionAttachmentsWhenRoleAllows;
     public bool Discoverable => OfferRule is ToolOfferRule.RoleAllowlist or ToolOfferRule.ConfigurationWhenRoleAllows;
     public string DefaultProjectionClass => Name is ToolCatalog.CapabilitiesLoad or ToolCatalog.SkillsLoad ? "bootstrap" : Discoverable ? "onDemand" : "contextOnly";
 }

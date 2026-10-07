@@ -186,7 +186,7 @@ internal static class AdminEndpoints
 
         group.MapGet("/tools", (IToolConfigurationGate gate) =>
         {
-            var catalog = ToolRegistry.All.OrderBy(d => d.Name, StringComparer.Ordinal).ToArray();
+            var catalog = ToolRegistry.DefinitionAuthorizable.OrderBy(d => d.Name, StringComparer.Ordinal).ToArray();
             var legacyNames = catalog.Where(d => d.OfferRule is ToolOfferRule.RoleAllowlist
                 or ToolOfferRule.SessionAttachmentsWhenRoleAllows or ToolOfferRule.ConfigurationWhenRoleAllows).Select(d => d.Name).ToArray();
             return Results.Json(new AdminToolRegistryResponse(legacyNames, null,

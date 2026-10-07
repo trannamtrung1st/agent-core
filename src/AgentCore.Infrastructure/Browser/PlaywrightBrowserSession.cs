@@ -1282,9 +1282,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserPassword
             var origin = uri.GetLeftPart(UriPartial.Authority);
             var value = await resolve(origin, ct);
             // Register before any effect; reflection after navigation still remains redacted.
-            session.ProtectedValues.Add(value);
-            session.ProtectedValues.Add(Uri.EscapeDataString(value));
-            session.ProtectedValues.Add(System.Net.WebUtility.HtmlEncode(value));
+            if (!session.ProtectedValues.TryRegister(value)) return Result("user_intervention_required");
             // A page may navigate independently during the resolver await. Recheck before dispatch.
             if (session.Page.Url != uri.AbsoluteUri || live.Generation != session.Generation
                 || !await IsAttachedAsync(live.Handle)) return Result("stale_reference");
@@ -3364,7 +3362,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserPassword
 
     private sealed class SessionBrowser(IBrowserContext context, IPage page)
     {
-        public List<string> ProtectedValues { get; } = [];
+        public ProtectedBrowserValues ProtectedValues { get; } = new();
 
         public IBrowserContext Context { get; } = context;
 

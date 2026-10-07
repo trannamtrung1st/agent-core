@@ -72,7 +72,7 @@ public sealed class CapabilityProjectionTests
     {
         var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../agents"));
         var baseline = (await new FileAgentDefinitionStore(path, SyntheticProviderAliases.Default).GetAsync("general-assistant", 16))!;
-        return baseline with { Environment = baseline.Environment! with { ToolAllowlist = null,
+        return baseline with { Skills = [], Environment = baseline.Environment! with { ToolAllowlist = null,
             Capabilities = new("Selected", names), Projection = new([]) } };
     }
     internal static AgentContext Context(AgentDefinition d) => new(d, [], "", null, SessionMode.Text, null, false, null, new(Guid.NewGuid(), TriggerKind.UserTurn, "email"), AgentWorkspaceAvailable: true);
@@ -83,7 +83,14 @@ public sealed class CapabilityProjectionTests
         var d = await Definition();
         var draft = AgentDefinitionCandidate.FromDefinition(d) with { Environment = d.Environment! with { Capabilities = new("All", []) } };
         var resolved = CapabilityAuthorizationResolver.ResolveCandidate(draft);
-        Assert.True(resolved.Environment!.ToolList.Count > 32);
+        Assert.NotEmpty(resolved.Environment!.ToolList);
+        Assert.All(resolved.Environment.ToolList, n => Assert.True(ToolRegistry.Get(n).DefinitionAuthorizable));
+        Assert.DoesNotContain(ToolCatalog.CredentialsList, resolved.Environment.ToolList);
+        Assert.DoesNotContain(ToolCatalog.ContinuitySearch, resolved.Environment.ToolList);
+        Assert.Contains(ToolCatalog.AttachmentsRead, resolved.Environment.ToolList);
+        var context = Context(resolved.ToPublished(16)) with { AgentInstanceId = Guid.NewGuid(), CredentialMetadataAvailable = true };
+        Assert.True(ToolPolicy.IsOffered(resolved.ToPublished(16), context, ToolCatalog.CredentialsList, ToolConfigurationGates.AllowAll));
+        Assert.Equal(ToolPolicyDecision.Allow, ToolPolicy.EvaluateExecution(resolved.ToPublished(16), ToolCatalog.CapabilitiesLoad, ToolConfigurationGates.AllowAll, admission: new(false, TriggerKind.UserTurn)));
         Assert.Equal(64, resolved.Environment.Capabilities!.AuthorizationFingerprint!.Length);
         var published = resolved.ToPublished(16);
         Assert.Equal(resolved.Environment.ToolList, published.Environment!.ToolList);
@@ -137,7 +144,8 @@ public sealed class CapabilityProjectionTests
         d = d with { Environment = d.Environment! with { Projection = new([ToolCatalog.WorkspaceRead]) },
             Skills = [new("write", "Write", "Write a file", "Use tools", [], [ToolCatalog.WorkspaceWrite], [])] };
         c = c with { Definition = d, ActiveSkillIds = ["write"], LoadedCapabilityIds = [ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceWrite] };
-        Assert.Equal(3, ToolCatalog.For(d, c, ToolConfigurationGates.AllowAll).Count);
+        Assert.Equal(4, ToolCatalog.For(d, c, ToolConfigurationGates.AllowAll).Count);
+        Assert.Contains(ToolCatalog.SkillsLoad, ToolCatalog.For(d, c, ToolConfigurationGates.AllowAll).Select(t => t.Name));
         Assert.Empty(ToolCatalog.For(d, c with { ModelSupportsTools = false }, ToolConfigurationGates.AllowAll));
         Assert.DoesNotContain(ToolCatalog.WorkspaceWrite, ToolCatalog.For(d, Context(d), ToolConfigurationGates.AllowAll).Select(t => t.Name));
     }

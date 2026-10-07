@@ -70,13 +70,21 @@ public sealed class CredentialService(ICredentialStore store, IAgentCredentialBi
         await RequireInstance(instanceId, true, ct);
         await bindings.UnbindAsync(instanceId, bindingId, revision, instanceRevision, ct);
     }
-    public async ValueTask<IReadOnlyList<BoundCredentialMetadata>> SafeMetadataAsync(Guid instanceId, CancellationToken ct = default)
+    public ValueTask<IReadOnlyList<BoundCredentialMetadata>> SafeMetadataAsync(Guid instanceId, CancellationToken ct = default) =>
+        SafeMetadataPageAsync(instanceId, null, int.MaxValue, ct);
+
+    public async ValueTask<IReadOnlyList<BoundCredentialMetadata>> SafeMetadataPageAsync(Guid instanceId, string? cursor, int limit, CancellationToken ct = default)
     {
         if (await instances.FindAsync(instanceId, ct) is not { Lifecycle: AgentInstanceLifecycle.Active }) return [];
         var result = new List<BoundCredentialMetadata>();
-        foreach (var binding in await bindings.ListBindingsAsync(instanceId, ct))
-            if (await store.GetAsync(binding.CredentialId, ct) is { Status: CredentialStatus.Active } c)
-                result.Add(new(binding.Reference, c.DisplayName, c.Kind.ToString(), c.Metadata));
+        foreach (var binding in (await bindings.ListBindingsAsync(instanceId, ct))
+            .Where(b => cursor is null || string.CompareOrdinal(b.Reference, cursor) > 0)
+            .OrderBy(b => b.Reference, StringComparer.Ordinal))
+        {
+            if (await store.GetAsync(binding.CredentialId, ct) is not { Status: CredentialStatus.Active } c) continue;
+            result.Add(new(binding.Reference, c.DisplayName, c.Kind.ToString(), c.Metadata));
+            if (result.Count >= limit) break;
+        }
         return result;
     }
     public async ValueTask<string> ResolvePasswordAsync(Guid instanceId, string reference, string origin, CancellationToken ct = default)

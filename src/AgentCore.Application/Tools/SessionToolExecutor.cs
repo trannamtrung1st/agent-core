@@ -55,7 +55,7 @@ public sealed partial class SessionToolExecutor(
     public ITriggerCommandAuthorizer TriggerCommandAuthorizer => _triggerAuthorizer;
 
     public async ValueTask<bool> CredentialMetadataAvailableAsync(Guid? id, CancellationToken ct) =>
-        id is Guid owner && credentials is not null && (await credentials.SafeMetadataAsync(owner, ct)).Count > 0;
+        id is Guid owner && credentials is not null && (await credentials.SafeMetadataPageAsync(owner, null, 1, ct)).Count > 0;
 
     public ValueTask<string> ExperienceContextAsync(Guid? instanceId, CancellationToken ct) =>
         experience?.RecallAsync(instanceId, ct) ?? ValueTask.FromResult("");
@@ -122,6 +122,22 @@ public sealed partial class SessionToolExecutor(
     };
 
     public async Task<ToolExecutionResult> ExecuteAsync(
+        AgentDefinition definition,
+        Guid sessionId,
+        ModelToolCall call,
+        int remainingOutputBytes,
+        CancellationToken cancellationToken = default,
+        ToolApprovalGrant? approvalGrant = null,
+        TriggerCommandContext? triggerCommand = null,
+        ToolExecutionAdmission? admission = null)
+    {
+        var result = await ExecuteCoreAsync(definition, sessionId, call, remainingOutputBytes,
+            cancellationToken, approvalGrant, triggerCommand, admission).ConfigureAwait(false);
+        // Discovery failures from admission/parsing must respect the budget too.
+        return call.Name == ToolCatalog.CredentialsList ? FitResult(remainingOutputBytes, result.Text) : result;
+    }
+
+    private async Task<ToolExecutionResult> ExecuteCoreAsync(
         AgentDefinition definition,
         Guid sessionId,
         ModelToolCall call,
@@ -231,9 +247,11 @@ public sealed partial class SessionToolExecutor(
         {
             if (call.Name == ToolCatalog.CredentialsList)
             {
-                if (args.EnumerateObject().Any()) return TextResult(Error("invalid", "Credential listing accepts no arguments."));
-                if (credentials is null || admission?.AgentInstanceId is not Guid owner) return TextResult(Error("forbidden", "Credential metadata is unavailable."));
-                return TextResult(JsonSerializer.Serialize(new { items = await credentials.SafeMetadataAsync(owner, cancellationToken) }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+                if (credentials is null || admission?.AgentInstanceId is not Guid owner)
+                    return FitResult(remainingOutputBytes, Error("forbidden", "Credential metadata is unavailable."));
+                var request = CredentialDiscovery.Parse(args);
+                return FitResult(remainingOutputBytes, CredentialDiscovery.Serialize(
+                    await credentials.SafeMetadataPageAsync(owner, request.Cursor, request.Limit + 1, cancellationToken), request, remainingOutputBytes));
             }
             if (ToolCatalog.IsIdentityMaintenance(call.Name))
             {

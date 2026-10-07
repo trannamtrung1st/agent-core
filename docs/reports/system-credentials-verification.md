@@ -4,7 +4,7 @@ Date: 2026-10-07. Implements the authorized System Credentials proposal as a bou
 
 ## Candidate status
 
-Implementation and local verification are complete. The exact-candidate hosted Synthetic gate is pending below; this report does not yet declare a freeze.
+The review corrections are under verification; previous local evidence remains valid for unchanged behavior. The exact-candidate hosted Synthetic gate is pending below; this report does not yet declare a freeze.
 
 ## Delivered behavior
 
@@ -22,7 +22,7 @@ Every AC below refers to the proposal's numbered functional criteria; grouped ro
 | --- | --- |
 | AC1–AC10: create, bounds, safe readback, ciphertext, replacement, disabled resolution, immutable kind, bound deletion | `CredentialApiTests`; `SystemCredentialTests` InMemory/SQLite parity, protection/reopen/corruption/missing-key tests; `CredentialsSection.test.tsx`; `system-credentials.spec.ts` |
 | AC11–AC18: shared resource, per-agent aliases, uniqueness, isolation, unbind/delete/archive | `SystemCredentialTests.Shared_credential_rotation_isolation_disable_unbind_and_bound_delete`; `CredentialApiTests.Owner_shared_resource_journey_has_no_value_readback_and_enforces_lifecycle`; UI shared binding/archive journey |
-| AC19–AC22: contextual safe listing and fingerprint separation | `BrowserCredentialSinkTests` captured list projection and unbind; `CapabilityProjectionTests`, `ToolRegistryPolicyTests`; ToolCatalog/ToolProjectionService review |
+| AC19–AC22: contextual safe listing and fingerprint separation | `SystemCredentialTests.Discovery_pages_complete_records_under_execution_budget_and_bindings_do_not_change_fingerprint` (InMemory/SQLite); `AdminApiTests` All/Selected publication and selectable catalog; `CapabilityProjectionTests`; Chromium safe-list/unbind journey |
 | AC23–AC27: capability independence and no harness credential authority | capability projection/load, routing, policy and unattended-browser suites; harness tools remain limited to their existing definition surface; Secretary v4 capability assertions |
 | AC28–AC32: connection retirement | production symbol/route scan; `CredentialApiTests` old route 404; `SystemCredentialTests.Upgrade_drops_legacy_rows_without_importing_or_touching_profiles`; AgentContext/prompt/policy review |
 | AC33–AC35: generic browser and owner profile isolation | `AgentBrowserProfileTests`; `BrowserCredentialSinkTests.Authenticated_owner_profile_reopens_isolates_another_owner_and_detached_login_requires_attention`; Real nopCommerce restart journey |
@@ -78,3 +78,13 @@ Verification: five focused frontend tests pass, including reserved object keys a
 ## Hosted freeze gate
 
 Pending: publish the exact behavior candidate, record its full SHA and hosted Synthetic run URL, and verify successful backend, frontend, browser core, browser acceptance and Compose jobs on that SHA. No completion/freeze claim is made while this gate is pending.
+
+## Final review corrections
+
+The external review correctly found that the earlier AC22 assertion had not exercised All resolution: `ToolRegistry.All` leaked `credentials.list` into grant snapshots. Definition resolution now uses explicit authorizable descriptors for All and Selected, and the Admin selectable catalog uses the same set. Runtime policy retains context-owned eligibility without requiring accidental Definition grants. Credential binding/unbinding fingerprint regressions run against both stores.
+
+Credential listing now retrieves only the requested eligible page plus one record for hasMore, paginates by ordinal alias and fits complete records to the remaining output budget, with a bounded output-limit result when no record fits. Browser redaction state deduplicates variants and fails closed at 256 variants or 1 MiB without evicting earlier values. Chromium exercises rejection and repeated reuse. Credential Admin history receipts are explicitly deferred in the Technology Decisions owner; no protected payload history is introduced.
+
+The previous candidate c4b0d4b0 hosted attempt passed backend, Compose, 17 acceptance and 105 core browser tests, but its frontend job hit an existing 30-second Admin test timeout; that candidate was not frozen. These fixes require a new exact-candidate hosted gate.
+
+Review-focused verification: 18 Infrastructure tests passed, including actual Chromium redaction-capacity rejection/reuse and both discovery stores; the complete Application suite passed 1,307 with one opt-in skip, and all 70 Admin API tests passed. The complete corrected backend and exact-candidate hosted gates are recorded when finalized below. Changed Markdown links/anchors/fences and `git diff --check` pass.

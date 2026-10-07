@@ -2,6 +2,8 @@ using System.Text.Json;
 using AgentCore.Application.Credentials;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Tools;
+using AgentCore.Infrastructure.Definitions;
 using AgentCore.Domain.Credentials;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Credentials;
@@ -61,6 +63,68 @@ public sealed class SystemCredentialTests
             await Assert.ThrowsAsync<AgentCoreException>(() => service.DeleteAsync(c.CredentialId, c.Revision).AsTask());
             await service.UnbindAsync(b.InstanceId, gb.BindingId, gb.Revision, b.Revision);
             await service.DeleteAsync(c.CredentialId, c.Revision); Assert.Empty(await service.ListAsync());
+        }
+        finally { SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Discovery_pages_complete_records_under_execution_budget_and_bindings_do_not_change_fingerprint(bool sqlite)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "credential-discovery-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        try
+        {
+            var instances = new InMemoryAgentInstanceStore(); var owner = NewInstance();
+            IAgentInstanceStore owners = instances; ICredentialStore store; IAgentCredentialBindingStore bindings;
+            if (sqlite)
+            {
+                var factory = Factory(root); await using var db = factory.CreateDbContext(); await db.Database.MigrateAsync();
+                owners = new SqliteAgentInstanceStore(factory, new SystemIdGenerator(TimeProvider.System));
+                var adapter = new SqliteCredentialStore(factory); store = adapter; bindings = adapter;
+            }
+            else { var adapter = new InMemoryCredentialStore(instances); store = adapter; bindings = adapter; }
+            await owners.InsertAsync(owner);
+            var service = new CredentialService(store, bindings, new LocalCredentialProtector(Path.Combine(root, "keys")), owners, new SystemIdGenerator(TimeProvider.System), TimeProvider.System);
+            var dir = new DirectoryInfo(AppContext.BaseDirectory); while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "AgentCore.sln"))) dir = dir.Parent;
+            var definition = (await new FileAgentDefinitionStore(Path.Combine(dir!.FullName, "agents"), SyntheticProviderAliases.Default).GetAsync("secretary", 4))!;
+            var draft = AgentDefinitionCandidate.FromDefinition(definition) with { Environment = definition.Environment! with { ToolAllowlist = null, Capabilities = new("All", []), Projection = new([]) } };
+            var before = CapabilityAuthorizationResolver.ResolveCandidate(draft).Environment!.Capabilities!;
+            Assert.DoesNotContain(ToolCatalog.CredentialsList, before.ResolvedCapabilities);
+            var granted = new List<CredentialBindingView>();
+            for (var i = 24; i >= 0; i--)
+            {
+                var credential = await service.CreateAsync("Credential " + i, "Password", new Dictionary<string,string> { ["label"] = new string('界', 1500) }, [], "protected-fixture");
+                granted.Add(await service.BindAsync(owner.InstanceId, credential.CredentialId, $"alias-{i:D2}", owner.Revision));
+            }
+            definition = CapabilityAuthorizationResolver.ResolveCandidate(draft).ToPublished(4);
+            var executor = new SessionToolExecutor(credentials: service);
+            var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: owner.InstanceId);
+            async Task<string> List(string args, int budget) => (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("list", ToolCatalog.CredentialsList, args), budget, admission: admission)).Text;
+            var references = new List<string>(); string? cursor = null;
+            do
+            {
+                var output = await List(cursor is null ? "{\"limit\":100}" : JsonSerializer.Serialize(new { cursor, limit = 100 }), 12000);
+                Assert.True(System.Text.Encoding.UTF8.GetByteCount(output) <= 12000);
+                Assert.DoesNotContain("protected-fixture", output);
+                using var page = JsonDocument.Parse(output);
+                var items = page.RootElement.GetProperty("items").EnumerateArray().ToArray(); Assert.NotEmpty(items);
+                foreach (var item in items) { references.Add(item.GetProperty("reference").GetString()!); Assert.Equal(new string('界', 1500), item.GetProperty("metadata").GetProperty("label").GetString()); }
+                cursor = page.RootElement.GetProperty("nextCursor").GetString();
+                Assert.Equal(cursor is not null, page.RootElement.GetProperty("hasMore").GetBoolean());
+            } while (cursor is not null);
+            Assert.Equal(Enumerable.Range(0, 25).Select(i => $"alias-{i:D2}"), references);
+            using (var defaultPage = JsonDocument.Parse(await List("{}", ToolLimits.MaxOutputBytes)))
+            { Assert.Equal(20, defaultPage.RootElement.GetProperty("items").GetArrayLength()); Assert.True(defaultPage.RootElement.GetProperty("hasMore").GetBoolean()); }
+            Assert.Contains("output_limit", await List("{}", 100));
+            foreach (var invalid in new[] { "{}", "[]", "{", "{\"owner\":\"other\"}", "{\"sessionId\":\"other\"}", "{\"limit\":0}" })
+                Assert.True(System.Text.Encoding.UTF8.GetByteCount(await List(invalid, 1)) <= 1);
+            Assert.Contains("Validation", await List("{\"limit\":0}", 1000));
+            Assert.Contains("Validation", await List("{\"owner\":\"other\"}", 1000));
+            Assert.Equal(before.AuthorizationFingerprint, CapabilityAuthorizationResolver.ResolveCandidate(draft).Environment!.Capabilities!.AuthorizationFingerprint);
+            foreach (var binding in granted) await service.UnbindAsync(owner.InstanceId, binding.BindingId, binding.Revision, owner.Revision);
+            Assert.Equal(before.AuthorizationFingerprint, CapabilityAuthorizationResolver.ResolveCandidate(draft).Environment!.Capabilities!.AuthorizationFingerprint);
+            Assert.Contains("\"hasMore\":false", await List("{}", 1000));
         }
         finally { SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }

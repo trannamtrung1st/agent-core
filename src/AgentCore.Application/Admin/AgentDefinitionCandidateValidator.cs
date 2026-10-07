@@ -57,6 +57,8 @@ internal static class AgentDefinitionCandidateValidator
         IToolConfigurationGate configurationGate,
         IReadOnlyList<string>? sourceTools = null)
     {
+        var contextProjection = CollectContextProjectionFindings(candidate);
+        if (contextProjection.Length > 0) return contextProjection;
         candidate = CapabilityAuthorizationResolver.ResolveCandidate(candidate);
         var findings = new List<DefinitionValidationFinding>();
         findings.AddRange(CollectPersistenceFindings(candidate, aliases));
@@ -83,6 +85,8 @@ internal static class AgentDefinitionCandidateValidator
     {
         if (System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(candidate).Length > MaxCandidateBytes)
             return [Blocking("candidate", "document_too_large", "Definition candidate must fit within 1 MiB.")];
+        var contextProjection = CollectContextProjectionFindings(candidate);
+        if (contextProjection.Length > 0) return contextProjection;
         candidate = CapabilityAuthorizationResolver.ResolveCandidate(candidate);
         var findings = new List<DefinitionValidationFinding>();
         findings.AddRange(CollectStructureFindings(candidate));
@@ -103,6 +107,11 @@ internal static class AgentDefinitionCandidateValidator
         findings.AddRange(CollectSecretFindings(candidate));
         return findings;
     }
+
+    private static DefinitionValidationFinding[] CollectContextProjectionFindings(AgentDefinitionCandidate candidate) =>
+        (candidate.Environment?.Projection?.AlwaysCapabilities ?? [])
+            .Where(n => ToolRegistry.TryGet(n, out var descriptor) && !descriptor.Discoverable && n != ToolCatalog.CapabilitiesLoad)
+            .Select(n => Blocking("environment.projection.alwaysCapabilities", "context_only_capability", $"{n} is controlled by execution context.")).ToArray();
 
     private static IEnumerable<DefinitionValidationFinding> CollectStructureFindings(AgentDefinitionCandidate candidate)
     {

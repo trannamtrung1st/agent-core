@@ -70,6 +70,32 @@ public sealed class BrowserCredentialSinkTests(BrowserHostFixture fixture) : ICl
         finally { await fixture.Session.ReleaseAsync(session); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
+    [Fact]
+    public async Task Redaction_capacity_denies_new_password_effect_but_allows_reuse_and_masks_prior_reflection()
+    {
+        var session = Guid.NewGuid();
+        try
+        {
+            var navigated = await fixture.Session.NavigateAsync(new(session, new(fixture.Session.Fixture.Origin + "/credential-login?reflect=1")));
+            var reference = navigated.Observation!.Elements.Single(e => e.Actions.Contains("fill_credential")).Ref;
+            var first = new string('&', 60000);
+            var filled = await fixture.Session.FillCredentialAsync(session, reference, (_, _) => ValueTask.FromResult(first));
+            Assert.Null(filled.ErrorCode); Assert.DoesNotContain(first, filled.Observation!.VisibleText);
+            reference = filled.Observation.Elements.Single(e => e.Actions.Contains("fill_credential")).Ref;
+            var denied = await fixture.Session.FillCredentialAsync(session, reference, (_, _) => ValueTask.FromResult(first + "x"));
+            Assert.Equal("user_intervention_required", denied.ErrorCode);
+            var observed = await fixture.Session.ObserveAsync(session);
+            Assert.DoesNotContain(first, observed.Observation!.VisibleText);
+            Assert.Contains("redacted", observed.Observation.VisibleText);
+            Assert.DoesNotContain("[redacted]x", observed.Observation.VisibleText);
+            reference = observed.Observation.Elements.Single(e => e.Actions.Contains("fill_credential")).Ref;
+            var reused = await fixture.Session.FillCredentialAsync(session, reference, (_, _) => ValueTask.FromResult(first));
+            Assert.Null(reused.ErrorCode);
+            Assert.Contains("redacted", reused.Observation!.VisibleText);
+        }
+        finally { await fixture.Session.ReleaseAsync(session); }
+    }
+
     [Theory]
     [InlineData("/signup")]
     [InlineData("/challenge")]

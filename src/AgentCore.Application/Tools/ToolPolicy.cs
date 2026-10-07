@@ -21,7 +21,7 @@ public static class ToolPolicy
         if (descriptor.OfferRule == ToolOfferRule.CredentialAuthority)
             return admission is { AgentInstanceId: not null, SupportsTools: true } ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
 
-        if (definition.Environment?.Capabilities is not null && !RolePermissions.AllowsTool(definition, toolName)) return ToolPolicyDecision.Deny;
+        if (descriptor.DefinitionAuthorizable && definition.Environment?.Capabilities is not null && !RolePermissions.AllowsTool(definition, toolName)) return ToolPolicyDecision.Deny;
 
         if (descriptor.OfferRule == ToolOfferRule.IdentityMaintenanceAuthority)
             return admission is { AgentInstanceId: not null, SupportsTools: true }
@@ -50,7 +50,7 @@ public static class ToolPolicy
                 && (admission is { Detached: false, TriggerKind: TriggerKind.UserTurn }
                     || admission.AgentInstanceId is not null && ToolResources.IsOccurrence(admission.TriggerKind))
                 ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
-        if (!RolePermissions.AllowsTool(definition, toolName))
+        if (descriptor.DefinitionAuthorizable && !RolePermissions.AllowsTool(definition, toolName))
         {
             return ToolPolicyDecision.Deny;
         }
@@ -143,7 +143,7 @@ public static class ToolPolicy
         if (descriptor.OfferRule == ToolOfferRule.CredentialAuthority)
             return context is { AgentInstanceId: not null, ModelSupportsTools: true, CredentialMetadataAvailable: true };
 
-        if (definition.Environment?.Capabilities is not null && !RolePermissions.AllowsTool(definition, descriptor.Name)) return false;
+        if (descriptor.DefinitionAuthorizable && definition.Environment?.Capabilities is not null && !RolePermissions.AllowsTool(definition, descriptor.Name)) return false;
 
         if (context is not null && !context.ModelSupportsTools)
         {
@@ -192,7 +192,7 @@ public static class ToolPolicy
         if (descriptor.Name == ToolCatalog.WorkspaceCwd && context?.AgentWorkspaceAvailable != true)
             return false;
 
-        if (!RolePermissions.AllowsTool(definition, descriptor.Name))
+        if (descriptor.DefinitionAuthorizable && !RolePermissions.AllowsTool(definition, descriptor.Name))
         {
             return false;
         }

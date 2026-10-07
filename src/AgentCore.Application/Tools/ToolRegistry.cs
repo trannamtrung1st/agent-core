@@ -8,8 +8,8 @@ public static class ToolRegistry
         new Dictionary<string, ToolDescriptor>(StringComparer.Ordinal)
         {
             [ToolCatalog.CredentialsList] = Descriptor(ToolCatalog.CredentialsList,
-                "List this Agent Instance's active bound credentials: safe aliases, kinds and non-secret metadata only. Never returns protected values. Bindings do not grant capabilities.",
-                """{"type":"object","additionalProperties":false,"properties":{}}""",
+                "List this Agent Instance's active bound credentials: safe aliases, kinds and non-secret metadata only. Never returns protected values. Bindings do not grant capabilities. Results are ordered by alias; use nextCursor to continue.",
+                """{"type":"object","additionalProperties":false,"properties":{"cursor":{"type":"string","maxLength":64},"limit":{"type":"integer","minimum":1,"maximum":100}}}""",
                 ToolEffect.ReadOnly, ToolOfferRule.CredentialAuthority),
             [ToolCatalog.CapabilitiesLoad] = Descriptor(ToolCatalog.CapabilitiesLoad,
                 "Discover and load authorized, eligible interfaces for this execution. Describe a concrete goal; load only when current tools are insufficient.",
@@ -294,6 +294,8 @@ public static class ToolRegistry
 
     private static readonly IReadOnlyDictionary<string, ToolDescriptor> Contextual = HarnessChatTools.Descriptors().ToDictionary(d => d.Name, StringComparer.Ordinal);
     public static IEnumerable<ToolDescriptor> All => Registered.Values.Concat(Contextual.Values);
+
+    public static IEnumerable<ToolDescriptor> DefinitionAuthorizable => All.Where(d => d.DefinitionAuthorizable);
 
     public static bool TryGet(string toolName, out ToolDescriptor descriptor) =>
         Registered.TryGetValue(toolName, out descriptor!) || Contextual.TryGetValue(toolName, out descriptor!);
