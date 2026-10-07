@@ -205,11 +205,13 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await automations.getByLabel('Automation instructions', { exact: true }).fill('Review Atlas follow-up obligations; do nothing when nothing needs action.');
     await automations.getByLabel('Schedule maximum occurrences', { exact: true }).fill('5');
     await automations.getByRole('button', { name: 'Create automation', exact: true }).click();
-    await automations.getByRole('button', { name: 'View automation: Atlas follow-up review', exact: true }).click();
+    const source = automations.getByRole('button', { name: 'View automation: Atlas follow-up review', exact: true });
+    await expect(source).toBeVisible();
+    if (await source.getAttribute('aria-expanded') !== 'true') await source.click();
     await expect(automations.getByRole('region', { name: 'Automation details', exact: true }).getByText('Admin owner', { exact: true })).toBeVisible();
     await automations.getByRole('button', { name: 'Run automation now', exact: true }).click();
     await expect(automations.getByText(/Completed · No action/).first()).toBeVisible({ timeout: 30_000 });
-    await automations.getByRole('button', { name: 'View last run', exact: true }).click();
+    await automations.getByRole('button', { name: 'View last run: Atlas follow-up review', exact: true }).click();
     const work = page.getByRole('dialog', { name: 'Run details', exact: true });
     await expect(work.getByText('Atlas follow-up review', { exact: true })).toBeVisible();
     await work.getByRole('button', { name: 'View automation', exact: true }).click();
@@ -237,7 +239,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await automations.getByRole('button', { name: 'Save automation', exact: true }).click();
     await automations.getByRole('button', { name: 'Run automation now', exact: true }).click();
     await expect(automations.getByText(/Completed · Needs attention/).first()).toBeVisible({ timeout: 30_000 });
-    await automations.getByRole('button', { name: 'View last run', exact: true }).click();
+    await automations.getByRole('button', { name: 'View last run: Call John', exact: true }).click();
     await expect(work.locator('.background-work-metadata').getByText('Needs attention', { exact: true })).toBeVisible();
     await work.getByRole('button', { name: 'View automation', exact: true }).click();
     await automations.getByRole('button', { name: 'Delete automation', exact: true }).click();

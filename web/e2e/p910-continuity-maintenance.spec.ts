@@ -91,7 +91,9 @@ test('Automation consolidates separately owned Memory and Experience; lineage, o
     await automations.getByLabel('Automation name', { exact: true }).fill(marker);
     await automations.getByLabel('Automation instructions', { exact: true }).fill(marker);
     await automations.getByRole('button', { name: 'Create automation', exact: true }).click();
-    await automations.getByRole('button', { name: `View automation: ${marker}`, exact: true }).click();
+    const source = automations.getByRole('button', { name: `View automation: ${marker}`, exact: true });
+    await expect(source).toBeVisible();
+    if (await source.getAttribute('aria-expanded') !== 'true') await source.click();
     await automations.getByRole('button', { name: 'Run automation now', exact: true }).click();
     await expect(automations.getByRole('row').filter({ hasText: marker }).getByText(/Completed · Action completed/).first()).toBeVisible({ timeout: 30_000 });
   }
@@ -101,7 +103,7 @@ test('Automation consolidates separately owned Memory and Experience; lineage, o
   const work = await (await page.request.get(root + '/work-items', { headers })).json();
   const maintenance = work.items.filter((w: { origin: string; automationId?: string }) => w.origin === 'Automation · Manual' && w.automationId);
   expect(maintenance).toHaveLength(2); expect(maintenance.every((w: { attentionRequired: boolean }) => !w.attentionRequired)).toBe(true);
-  await automations.getByRole('button', { name: 'View last run', exact: true }).click();
+  await automations.getByRole('button', { name: 'View last run: synthetic-maintain-experience', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Run details', exact: true }).getByText('synthetic-maintain-experience', { exact: true }).first()).toBeVisible();
   await page.getByRole('dialog', { name: 'Run details', exact: true }).getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('tab', { name: 'Continuity', exact: true }).click();
