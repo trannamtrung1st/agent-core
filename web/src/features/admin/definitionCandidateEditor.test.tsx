@@ -4,6 +4,7 @@ import { applyCandidateJson, candidateForPersistence, candidateToJson, type Defi
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminApp } from "./AdminApp";
 import { DefinitionCandidateEditor } from "./definitionCandidateEditor";
+import { DefinitionSkillsSection } from "./DefinitionSkillsSection";
 
 vi.mock("../../services/adminApi", () => ({
   listAdminDefinitions: vi.fn(),
@@ -273,8 +274,8 @@ describe("definition candidate editor", () => {
       draftId, 2, expect.objectContaining({ triggerPolicy: expect.objectContaining({ minRecurrenceDays: 2 }) })));
   });
 
-  it("round-trips a skill through form and JSON and keeps a forked skill", async () => {
-    const changed = await renderCandidate({
+  it("validates and adds a Skill while preserving inherited content", async () => {
+    const initial = {
       ...storedCandidate,
       skills: [
         {
@@ -287,7 +288,14 @@ describe("definition candidate editor", () => {
           resourcePaths: []
         }
       ]
-    });
+    };
+    const changed = vi.fn<(candidate: DefinitionCandidate) => void>();
+    function ControlledSkills() {
+      const [value, setValue] = useState<DefinitionCandidate>(initial);
+      return <DefinitionSkillsSection candidate={value} busy={false} readOnly={false}
+        onChange={next => { changed(next); setValue(next); }} />;
+    }
+    await act(async () => { render(<ControlledSkills />); });
 
     expect(screen.getByText(/Required capabilities are requirements, not grants/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Details" }));
@@ -304,6 +312,22 @@ describe("definition candidate editor", () => {
     setText("Resource paths", "notes/refund.md");
     fireEvent.click(screen.getByRole("button", { name: "Save Skill" }));
     await waitFor(() => expect(screen.getByText("Refund")).toBeInTheDocument());
+    const saved = candidateForPersistence(changed.mock.lastCall![0]) as {
+      skills: Array<{ id: string; procedure: string; requiredCapabilities: string[]; resourcePaths: string[] }>;
+    };
+    expect(saved.skills[0]).toEqual(initial.skills[0]);
+    expect(saved.skills[1]).toMatchObject({ id: "refund.handle", procedure: "REFUND_PROCEDURE",
+      requiredCapabilities: ["workspace.read", "chat.respond"], resourcePaths: ["notes/refund.md"] });
+  });
+
+  it("round-trips Skills through form and JSON without changing inherited content", async () => {
+    const inherited = { id: "order.lookup", name: "Order lookup", description: "Look up an order",
+      procedure: "ORDER_PROCEDURE", projection: "OnDemand", defaultEnabled: true,
+      requiredCapabilities: ["web.search"], resourcePaths: [] };
+    const refund = { id: "refund.handle", name: "Refund", description: "refund, return",
+      procedure: "REFUND_PROCEDURE", projection: "OnDemand", defaultEnabled: true,
+      requiredCapabilities: ["workspace.read", "chat.respond"], resourcePaths: ["notes/refund.md"] };
+    const changed = await renderCandidate({ ...storedCandidate, skills: [inherited, refund] });
     fireEvent.click(screen.getByRole("radio", { name: "Advanced JSON" }));
     const json = screen.getByRole("textbox", { name: "Advanced JSON" }) as HTMLTextAreaElement;
     expect(json.value).toContain("REFUND_PROCEDURE");
@@ -314,12 +338,8 @@ describe("definition candidate editor", () => {
     expect(await screen.findByText("REFUND_PROCEDURE_EDITED")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Close inspection" }));
 
-    const saved = candidateForPersistence(changed.mock.lastCall![0]) as {
-      skills: Array<{ id: string; procedure: string; requiredCapabilities: string[] }>;
-    };
-    expect(saved.skills.map((skill) => skill.id)).toEqual(["order.lookup", "refund.handle"]);
-    expect(saved.skills[1]?.procedure).toBe("REFUND_PROCEDURE_EDITED");
-    expect(saved.skills[1]?.requiredCapabilities).toEqual(["workspace.read", "chat.respond"]);
+    const saved = candidateForPersistence(changed.mock.lastCall![0]) as { skills: unknown[] };
+    expect(saved.skills).toEqual([inherited, { ...refund, procedure: "REFUND_PROCEDURE_EDITED" }]);
   });
 
   it("edits every supported candidate area through the form and saves that candidate", async () => {
