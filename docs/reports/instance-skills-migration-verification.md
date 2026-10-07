@@ -1,6 +1,6 @@
 # Agent Instance Skills migration verification
 
-Date: 2026-10-07. Requested scope: `local/proposals/agent_core_instance_skills_full_migration_proposal.md`. Candidate: working tree based on `e7fb4a62` (uncommitted implementation; no published behavior SHA yet).
+Date: 2026-10-07. Requested scope: `local/proposals/agent_core_instance_skills_full_migration_proposal.md`. Original cutover: `c4d66400` based on `e7fb4a62`. A follow-up startup review is included in the pending published candidate; exact hosted SHA/results will be recorded when available.
 
 ## Status
 
@@ -51,7 +51,7 @@ Compose recreated an isolated Synthetic container and verified exact local Skill
 | Isolated `scripts/compose-sqlite-volume.sh` | Passed, including exact Skill survival assertions |
 | EF `migrations has-pending-model-changes` | Passed: no pending model changes |
 | Markdown links/fences/complete JSON examples and `git diff HEAD --check` | Passed: 15 changed Markdown files, 464 local links/anchors, 15 complete JSON blocks; no diff whitespace errors |
-| Hosted `.github/workflows/synthetic.yml` | Pending publication of the final candidate and its exact-SHA run |
+| Hosted `.github/workflows/synthetic.yml` | Pending: user explicitly approved committing and pushing current changes to `trannamtrung1st/agent-core` branch `main` on the follow-up review turn |
 
 The earlier frontend command started before the final malformed-input handling was edited; its cached module disagreed with a newly added test. Three existing large Definition-editor tests also exceeded 30 seconds while broad jobs overlapped. The focused editor rerun passed all 21 tests; the final full rerun passed all 712. Both retain the existing timeouts and assertions. An existing API reattach test observed the completion event before mailbox cleanup; its assertion now waits on the internal mailbox barrier. All four focused reattach tests pass. These failed runs are not counted as green gates.
 
@@ -67,4 +67,12 @@ Current source/test/fixture/UI cleanup searches are clean for `ActivationKeyword
 
 Verification uses fresh disposable SQLite/project data. Old demo publications/executions are intentionally unsupported by this cutover and must be reset before that old data is reused. No live-provider calls or user database resets were used for acceptance evidence. The skipped tests are Application 1, Infrastructure 9 and API 3 opt-in checks; the default key-free suites have no failures.
 
-Final closure requires all local gates green, then the final candidate committed/published and all required hosted Synthetic jobs green on that exact behavior SHA. Local evidence alone does not mark the proposal complete.
+All original cutover local gates are green. The first push was rejected by automatic approval review; the user subsequently explicitly authorized commit/push to `main` and requested a consistency/startup review. Final closure requires all required hosted Synthetic jobs green on the exact published candidate SHA.
+
+## Follow-up consistency and Real startup review
+
+The failed Real launcher log identified old persisted Session `SkillSpec` JSON missing `projection` and `defaultEnabled`. Read-only inspection found three affected Sessions and 44 executions with empty catalog/key JSON. Schema migration alone cannot turn that data into the new ownership/snapshot contract. Startup now validates stored Session/publication/draft Skill fields and required execution JSON before crash recovery, reporting `Legacy Skill data reset required` with the backup/reset instructions. It never infers defaults, converts stored JSON or synthesizes a pin.
+
+With both native ports stopped, the configured default data folder (including database, WAL/SHM, protected keys and all data roots) was moved intact to `local/dev/backups/before-instance-skills-20261007-200323`. The backup is gitignored. `scripts/dev-real.sh start --api-only` succeeded with API and Vite reporting Real. Local HTTP creation of an Instance Skill, launcher restart and exact inspection readback confirmed content, revision, author/timestamps and projection persistence. No live provider/model request was made. The verification resources and hosts are cleaned up after this check. The launcher remains an explicit non-resetting script.
+
+The budget rejection path was traced to the existing canonical validation result; no redundant service change was retained. A new owner API regression passes: two enabled 4000-character Always procedures fit, the next is HTTP 400 with the 8000-character message, and Skill readback/owner revision remain unchanged. The full backend rerun passed Domain 150, Application 1302, Infrastructure 820 and API 361 plus plugin 4 (2637 passed, 13 opt-in skips). A final focused run of startup/missing-pin/reopen tests passed all 10 after the guard was settled. Launcher lifecycle tests passed all three with process inspection available; their sandbox-only attempt was blocked by `ps` permissions. Frontend behavior/code is unchanged from the 712-unit/126-browser green migration gates; hosted CI repeats the whole final candidate.

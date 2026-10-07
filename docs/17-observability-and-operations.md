@@ -275,6 +275,21 @@ Run only one authoritative writable Agent Core host per database and `Persistenc
 
 `WorkspaceCleanupHostedService` retries committed instance-deletion receipts at startup and every five minutes. Failed cleanup logs a bounded warning and retries later without restoring the deleted owner. Physical leftovers remain inaccessible; do not remove the Admin receipts needed for recovery. An exact repeated internal deletion command can also finish cleanup; the HTTP delete endpoint generates its own operation id. Logical-commit failure leaves the archived instance and its workspace intact.
 
+## Instance Skills local data reset
+
+The Instance Skills cutover requires explicit `projection` and `defaultEnabled` in stored Definition Skills and complete execution catalog/key JSON. Startup rejects incompatible Session/publication/draft Skill JSON or executions without pins with **Legacy Skill data reset required**, before crash recovery. A schema migration does not rewrite existing JSON or initialize legacy ownership state. No development script silently resets or converts this data.
+
+If `scripts/dev-real.sh` fails with this reset message (or the older missing `projection`/`defaultEnabled` JSON exception), stop the API and preserve its configured SQLite database, WAL/SHM and data roots together. For the default native paths:
+
+```bash
+scripts/dev-real.sh stop
+mkdir -p local/dev/backups
+mv src/AgentCore.Api/data "local/dev/backups/before-instance-skills-$(date +%Y%m%d-%H%M%S)"
+scripts/dev-real.sh start --api-only
+```
+
+This starts a fresh local installation; recreate owners in Admin. Keep the backup for inspection, and do not restore its old JSON into the new installation. If persistence paths were overridden, back up those actual paths together instead. Startup itself makes no provider generation request; Real text/voice checks remain explicit opt-in.
+
 ## Unified workspace reset and isolated verification
 
 Migration `20261007014134_UnifiedAgentWorkspace` refuses databases with compatibility owners or Sessions whose AgentInstanceId is null/empty. Startup reports **Legacy data reset required**. It does not reset, convert, or reassign data. Filesystem startup also refuses raw-GUID workspace directories, the obsolete split home tree, and Session trees with a physical `workspace/` intermediate directory, reporting **Legacy workspace layout/data reset required** without moving or deleting bytes. Fresh databases have required Session ownership and no instance identity discriminator. The runtime catalog contains only supported built-in versions; create an Agent Instance explicitly in Admin before starting Chat. Empty Chat shows that guidance.

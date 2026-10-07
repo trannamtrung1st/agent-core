@@ -13,6 +13,26 @@ namespace AgentCore.Api.Tests;
 public sealed class AgentInstanceSkillTests
 {
     [Fact]
+    public async Task Combined_Always_budget_returns_validation_and_preserves_owner_and_skills()
+    {
+        await using var host = new AgentCoreApiFactory();
+        using var client = host.CreateClient();
+        client.DefaultRequestHeaders.Add(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(host.Services));
+        var owner = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
+        var path = $"/api/v2/admin/agent-instances/{owner.InstanceId}/skills";
+        var input = new { name = "Always", description = "Always procedure", procedure = new string('a', 4000), projection = "Always", enabled = true, requiredCapabilities = Array.Empty<string>() };
+        (await client.PostAsJsonAsync(path, input)).EnsureSuccessStatusCode();
+        (await client.PostAsJsonAsync(path, input)).EnsureSuccessStatusCode();
+        var before = await client.GetStringAsync(path);
+        var ownerBefore = await host.Services.GetRequiredService<IAgentInstanceStore>().FindAsync(owner.InstanceId);
+        var rejected = await client.PostAsJsonAsync(path, input);
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        Assert.Contains("8000-character", await rejected.Content.ReadAsStringAsync());
+        Assert.Equal(before, await client.GetStringAsync(path));
+        Assert.Equal(ownerBefore, await host.Services.GetRequiredService<IAgentInstanceStore>().FindAsync(owner.InstanceId));
+    }
+
+    [Fact]
     public async Task Owner_skill_journey_shares_tool_policy_and_rejects_stale_wrong_origin_and_foreign_scope()
     {
         await using var host = new AgentCoreApiFactory();

@@ -11,6 +11,29 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed class SkillPinStoreTests
 {
     [Fact]
+    public async Task Startup_rejects_old_execution_without_catalog_instead_of_synthesizing_a_pin()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-old-pin-{Guid.NewGuid():N}.db");
+        var factory = new SqliteContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
+        try
+        {
+            var memory = new SqliteMemoryStore(factory, TimeProvider.System);
+            await memory.EnsureCreatedAsync();
+            await new SqliteConversationTurnExecutionStore(factory).CreateAsync(Execution(Guid.NewGuid(), Guid.NewGuid(), DateTimeOffset.UtcNow, []));
+            await using var db = await factory.CreateDbContextAsync();
+            await db.Database.ExecuteSqlRawAsync("UPDATE ConversationTurnExecutions SET PinnedSkillCatalogJson = ''");
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(async () => await memory.EnsureCreatedAsync());
+            Assert.Contains("Legacy Skill data reset required", error.Message);
+            Assert.Equal("", (await db.ConversationTurnExecutions.SingleAsync()).PinnedSkillCatalogJson);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task Sqlite_reopen_keeps_the_complete_catalog_and_active_keys()
     {
         var path = Path.Combine(Path.GetTempPath(), $"agent-core-skill-pin-{Guid.NewGuid():N}.db");

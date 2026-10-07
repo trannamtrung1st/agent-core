@@ -32,6 +32,38 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         await RepairEnsureCreatedP7SchemaGapsAsync(db, cancellationToken).ConfigureAwait(false);
         await StampP7MigrationsWhenSchemaCompleteAsync(db, cancellationToken).ConfigureAwait(false);
         await db.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
+        await ValidateStoredSkillContractAsync(db, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task ValidateStoredSkillContractAsync(AgentCoreDbContext db, CancellationToken cancellationToken)
+    {
+        // Reject incompatible persisted contracts before crash recovery deserializes them.
+        // This is a reset guard, never a legacy reader or automatic conversion.
+        var connection = db.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            WITH Definitions(Json) AS (
+                SELECT DefinitionJson FROM Sessions
+                UNION ALL SELECT PayloadJson FROM AgentDefinitionPublications
+                UNION ALL SELECT CandidateJson FROM AgentDefinitionDrafts
+            )
+            , Skills AS (
+                SELECT Skill.type AS Kind, CASE WHEN Skill.type = 'object' THEN Skill.value ELSE '{}' END AS Body
+                FROM Definitions, json_each(CASE WHEN json_valid(Definitions.Json) THEN Definitions.Json ELSE '{}' END, '$.skills') AS Skill
+            )
+            SELECT EXISTS(SELECT 1 FROM Definitions WHERE NOT json_valid(Json)) OR
+                EXISTS(SELECT 1 FROM Skills
+                    WHERE Kind != 'object' OR json_type(Body, '$.projection') IS NOT 'text'
+                        OR json_extract(Body, '$.projection') NOT IN ('Always', 'OnDemand')
+                        OR json_type(Body, '$.defaultEnabled') NOT IN ('true', 'false')
+                        OR json_type(Body, '$.defaultEnabled') IS NULL) OR
+                EXISTS(SELECT 1 FROM ConversationTurnExecutions
+                    WHERE NOT json_valid(PinnedSkillCatalogJson) OR NOT json_valid(ActiveSkillKeysJson));
+            """;
+        if (Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)) != 0)
+            throw new InvalidOperationException("Legacy Skill data reset required: stop the API, back up the configured database and data roots together, then start with fresh data. See docs/17-observability-and-operations.md. Stored Skill JSON is incompatible with the Instance Skills cutover.");
     }
 
     private static async Task StampLegacyEnsureCreatedAsync(AgentCoreDbContext db, CancellationToken cancellationToken)
