@@ -4,7 +4,7 @@ Date: 2026-10-07. Implements the authorized System Credentials proposal as a bou
 
 ## Candidate status
 
-The review corrections are under verification; previous local evidence remains valid for unchanged behavior. The exact-candidate hosted Synthetic gate is pending below; this report does not yet declare a freeze.
+**Closed/frozen on verified behavior `55d31056b871e05c553f09aa2946815280add3e3` (`55d31056`), 2026-10-07.** [Hosted Synthetic/Compose workflow `37584505116`](https://github.com/trannamtrung1st/agent-core/actions/runs/37584505116) completed successfully on that exact SHA; all five jobs are green. This bookkeeping commit changes documentation only and does not move the behavior freeze. The System Credentials / Application Connection migration is complete; historical milestone freezes are unchanged and P10/P11 remain unopened.
 
 ## Delivered behavior
 
@@ -77,7 +77,17 @@ Verification: five focused frontend tests pass, including reserved object keys a
 
 ## Hosted freeze gate
 
-Pending: publish the exact behavior candidate, record its full SHA and hosted Synthetic run URL, and verify successful backend, frontend, browser core, browser acceptance and Compose jobs on that SHA. No completion/freeze claim is made while this gate is pending.
+**Closed/frozen on verified behavior `55d31056b871e05c553f09aa2946815280add3e3` (`55d31056`), 2026-10-07.** [Hosted Synthetic/Compose workflow `37584505116`](https://github.com/trannamtrung1st/agent-core/actions/runs/37584505116) completed successfully on that exact SHA; all five jobs are green. This bookkeeping commit changes documentation only and does not move the behavior freeze.
+
+| Exact-candidate hosted job | Result |
+| --- | --- |
+| Synthetic backend | PASS |
+| Synthetic frontend (unit tests and production build) | PASS |
+| Synthetic Playwright core | PASS |
+| Synthetic Playwright acceptance | PASS |
+| Synthetic Compose smoke | PASS |
+
+GitHub reports `status=completed`, `conclusion=success` and the full candidate SHA above. Local and Real journey evidence in this report complements this key-free hosted gate. Credential Admin history receipts remain explicitly deferred as recorded in Technology Decisions; no further behavior change belongs to this closure.
 
 ## Final review corrections
 
@@ -85,9 +95,9 @@ The external review correctly found that the earlier AC22 assertion had not exer
 
 Credential listing now retrieves only the requested eligible page plus one record for hasMore, paginates by ordinal alias and fits complete records to the remaining output budget, with a bounded output-limit result when no record fits. Browser redaction state deduplicates variants and fails closed at 256 variants or 1 MiB without evicting earlier values. Chromium exercises rejection and repeated reuse. Credential Admin history receipts are explicitly deferred in the Technology Decisions owner; no protected payload history is introduced.
 
-The previous candidate c4b0d4b0 hosted attempt passed backend, Compose, 17 acceptance and 105 core browser tests, but its frontend job hit an existing 30-second Admin test timeout; that candidate was not frozen. These fixes require a new exact-candidate hosted gate.
+The previous candidate c4b0d4b0 hosted attempt passed backend, Compose, 17 acceptance and 105 core browser tests, but its frontend job hit an existing 30-second Admin test timeout; that candidate was not frozen. The final exact-candidate hosted gate above verifies these fixes.
 
-Review-focused verification: 18 Infrastructure tests passed, including actual Chromium redaction-capacity rejection/reuse and both discovery stores; the complete Application suite passed 1,307 with one opt-in skip, and all 70 Admin API tests passed. The complete corrected backend and exact-candidate hosted gates are recorded when finalized below. Changed Markdown links/anchors/fences and `git diff --check` pass.
+Review-focused verification: 18 Infrastructure tests passed, including actual Chromium redaction-capacity rejection/reuse and both discovery stores; the complete Application suite passed 1,307 with one opt-in skip, and all 70 Admin API tests passed. The complete corrected backend and all exact-candidate hosted gates passed as recorded above. Changed Markdown links/anchors/fences and `git diff --check` pass.
 
 ## Credential UI polish and hosted regression repair
 
@@ -95,6 +105,6 @@ The authorized polish uses existing Ant Design v6/Admin panels, collection toolb
 
 Playwright MCP exercised actual create, shared binding, injected 409 conflict/retry, search/no-match recovery, expanded details, profile-reset cancellation and replacement cancel/reopen against the isolated Synthetic host at 5087/5187. At 1440/768/390px, document width equaled viewport width, tables owned horizontal scrolling, and the tall form retained header/footer inside the 900px viewport with 8px metadata gaps. The final navigation had zero console errors; the deliberately injected binding conflict is the expected 409 network entry. Screenshots are local evidence under `local/verification/system-credentials/credentials-polish-*`; protected inputs are never persisted in screenshots.
 
-Candidate `634d16683a5fcb7a96cd663b17b885809d0face4` [hosted run](https://github.com/trannamtrung1st/agent-core/actions/runs/37581945780) passed backend, acceptance (17) and Compose; frontend (718/720) hit two instance-creation timeouts, and core (104/105) retained a stale evaluation selector for context-owned `capabilities.load`. It is not frozen. The core regression now evaluates an ordinary Definition-authorizable tool and explicitly asserts both `capabilities.load` and `credentials.list` are absent from saved All grants, while still checking contextual bootstrap availability in Chat. Instance-creation tests now enter the Instances route directly, avoiding unrelated Definitions inventory mounting before the tested dialog journey; queries are scoped to the intended dialog and all creation/persona assertions remain, with unchanged timeouts. The new combined candidate must pass every hosted job before closure.
+Candidate `634d16683a5fcb7a96cd663b17b885809d0face4` [hosted run](https://github.com/trannamtrung1st/agent-core/actions/runs/37581945780) passed backend, acceptance (17) and Compose; frontend (718/720) hit two instance-creation timeouts, and core (104/105) retained a stale evaluation selector for context-owned `capabilities.load`. It is not frozen. The core regression now evaluates an ordinary Definition-authorizable tool and explicitly asserts both `capabilities.load` and `credentials.list` are absent from saved All grants, while still checking contextual bootstrap availability in Chat. Instance-creation tests now enter the Instances route directly, avoiding unrelated Definitions inventory mounting before the tested dialog journey; queries are scoped to the intended dialog and all creation/persona assertions remain, with unchanged timeouts. The combined candidate `55d31056` passed every hosted job as recorded above.
 
-Local polish validation: `pnpm run test --run src/features/admin/AdminApp.test.tsx --maxWorkers=1` passed all 39; the final scoped rerun passed the two previously timed-out cases in 5.8s/2.7s. Credential/AgentPicker unit tests passed all 14; strict TypeScript/Vite production build passed (existing bundle-size advisory only). Isolated Playwright passed seven affected scenarios: four approval regressions, capability projection, quiet binding/background work, and the complete shared-credential CRUD/reset journey. The added reset-cancel check initially raced the closing confirmation; explicitly awaiting dismissal fixed the test, and the complete journey then passed in 10s. Markdown relative links/fences and `git diff --check` passed. Hosted validation remains pending for the resulting exact candidate.
+Local polish validation: `pnpm run test --run src/features/admin/AdminApp.test.tsx --maxWorkers=1` passed all 39; the final scoped rerun passed the two previously timed-out cases in 5.8s/2.7s. Credential/AgentPicker unit tests passed all 14; strict TypeScript/Vite production build passed (existing bundle-size advisory only). Isolated Playwright passed seven affected scenarios: four approval regressions, capability projection, quiet binding/background work, and the complete shared-credential CRUD/reset journey. The added reset-cancel check initially raced the closing confirmation; explicitly awaiting dismissal fixed the test, and the complete journey then passed in 10s. Markdown relative links/fences and `git diff --check` passed. Hosted validation subsequently passed all five jobs on `55d31056`; the frozen behavior is recorded above.
