@@ -13,6 +13,30 @@ namespace AgentCore.Api.Tests;
 public sealed class AgentInstanceSkillTests
 {
     [Fact]
+    public async Task Optional_readable_ids_are_owner_scoped_auto_generated_and_stable()
+    {
+        await using var host = new AgentCoreApiFactory();
+        using var client = host.CreateClient(); client.DefaultRequestHeaders.Add(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(host.Services));
+        var admin = host.Services.GetRequiredService<AdminAgentInstanceService>();
+        var first = await admin.CreateManagedAsync("general-assistant", 16); var second = await admin.CreateManagedAsync("general-assistant", 16);
+        string Path(Guid id) => $"/api/v2/admin/agent-instances/{id}/skills";
+        var input = new { id = "review", name = "Review", description = "Review evidence", procedure = "Check evidence", projection = "OnDemand", enabled = true, requiredCapabilities = Array.Empty<string>() };
+        foreach (var owner in new[] { first, second }) (await client.PostAsJsonAsync(Path(owner.InstanceId), input)).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(Path(first.InstanceId), input)).StatusCode);
+        var generated = await client.PostAsJsonAsync(Path(first.InstanceId), input with { id = "" }); generated.EnsureSuccessStatusCode();
+        Assert.Equal("instance:review-2", (await generated.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("key").GetString());
+        var invalid = await client.PostAsJsonAsync(Path(first.InstanceId), input with { id = "Bad ID" }); Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        var unicode = await client.PostAsJsonAsync(Path(first.InstanceId), input with { id = "", name = "İstanbul Review" }); unicode.EnsureSuccessStatusCode();
+        Assert.Equal("instance:stanbul-review", (await unicode.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("key").GetString());
+        var renamed = await client.PatchAsJsonAsync(Path(first.InstanceId) + "/instance:review", new { id = "different", expectedRevision = 1, input.name, input.description, input.procedure, input.projection, input.enabled, input.requiredCapabilities });
+        Assert.Equal(HttpStatusCode.BadRequest, renamed.StatusCode);
+        Assert.Equal("instance:review", (await client.GetFromJsonAsync<JsonElement>(Path(second.InstanceId) + "/instance:review")).GetProperty("key").GetString());
+        var resolver = new EffectiveSkillCatalogResolver(host.Services.GetRequiredService<IAgentInstanceStore>());
+        var definition = (await host.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync(first.DefinitionId, 16))!;
+        Assert.Contains(await resolver.ResolveAsync(first.InstanceId, definition), s => s.Key == "instance:review-2");
+    }
+
+    [Fact]
     public async Task Combined_Always_budget_returns_validation_and_preserves_owner_and_skills()
     {
         await using var host = new AgentCoreApiFactory();

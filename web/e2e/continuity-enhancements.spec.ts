@@ -27,7 +27,8 @@ test('Unified Automation authoring retains admitted instructions and source focu
   await automations.getByLabel('Schedule maximum occurrences', { exact: true }).fill('5');
   await automations.getByRole('button', { name: 'Create automation', exact: true }).click();
   const source = automations.getByRole('button', { name: 'View automation: Review current orders', exact: true });
-  await source.click();
+  await expect(source).toBeVisible();
+  if (await source.getAttribute('aria-expanded') !== 'true') await source.click();
   await expect(automations.getByRole('region', { name: 'Automation details', exact: true }).getByText('Admin owner', { exact: true })).toBeVisible();
   const id = new URL(page.url()).pathname.split('/')[3];
   const token = (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))!;
@@ -41,11 +42,11 @@ test('Unified Automation authoring retains admitted instructions and source focu
   await run.evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
   await expect(automations.getByText(/Completed · No action/).first()).toBeVisible({ timeout: 30_000 });
   expect(calls).toBe(1);
-  const runLink = automations.getByRole('button', { name: 'View last run', exact: true });
+  const runLink = automations.getByRole('button', { name: 'View last run: Review current orders', exact: true });
   await runLink.click();
   const details = page.getByRole('dialog', { name: 'Run details', exact: true });
   await expect(details.getByText(row.instructions, { exact: true })).toBeVisible();
-  await expect(details.getByText(/Model:.*No action/)).toBeVisible();
+  await expect(details.locator('.background-work-metadata').getByText('No action', { exact: true })).toBeVisible();
   await details.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(runLink).toBeFocused(); await runLink.click();
   const updatedName = 'Updated order review';
@@ -73,14 +74,14 @@ test('Unified Automation authoring retains admitted instructions and source focu
   errors.splice(0); // The deliberate 503 is the tested recovery boundary.
   await page.getByRole('tab', { name: 'Automation', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
-  await updatedSource.click();
+  if (await updatedSource.getAttribute('aria-expanded') !== 'true') await updatedSource.click();
   await automations.getByRole('button', { name: 'Edit automation', exact: true }).click();
   await automations.getByLabel('Automation instructions', { exact: true }).fill('Review current orders with a longer instruction that wraps at a narrow viewport.');
   await automations.getByRole('button', { name: 'Save automation', exact: true }).click();
   await automations.getByRole('button', { name: 'Disable automation', exact: true }).click();
   await expect(automations.getByRole('button', { name: 'Run automation now', exact: true })).toBeDisabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-  await page.reload(); await updatedSource.click();
+  await page.reload(); if (await updatedSource.getAttribute('aria-expanded') !== 'true') await updatedSource.click();
   await expect(automations.getByRole('button', { name: 'Run automation now', exact: true })).toBeDisabled();
   const persisted = (await (await page.request.get(path, { headers })).json()).items[0];
   expect(persisted.status).toBe('Disabled'); expect(persisted.authorizationOrigin).toBe('AdminOwner'); expect(persisted.lastWorkItemId).toBeTruthy();

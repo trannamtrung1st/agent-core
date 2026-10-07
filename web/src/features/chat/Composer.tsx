@@ -296,7 +296,7 @@ export function Composer({
   const hiddenCount = Math.max(0, pendingSendQueue.length - visibleQueue.length);
 
   return (
-    <Flex vertical gap={8} className="dock">
+    <Flex vertical gap={token.paddingXS} className="dock">
       {error ? <SessionFailureAlert error={error} sessionId={sessionId} /> : null}
       {imageIncompatibilityMessage ? (
         <Alert type="warning" showIcon message={imageIncompatibilityMessage} />
@@ -348,7 +348,7 @@ export function Composer({
                       <span className="pending-send-queue-status pending-send-queue-status-error">{item.error}</span>
                     ) : null}
                   </div>
-                  <Flex gap={4} align="center" className="pending-send-queue-actions">
+                  <Flex gap={token.paddingXS} align="center" className="pending-send-queue-actions">
                     <Tooltip title="Steer">
                       <Button
                         type="text"
@@ -437,8 +437,8 @@ export function Composer({
             event.target.value = "";
           }}
         />
-        <Flex justify="space-between" align="center" gap={8} wrap="wrap" className="composer-toolbar">
-          <Flex gap={8} align="center" wrap="wrap" className="composer-toolbar-start">
+        <Flex justify="space-between" align="center" gap={token.paddingXS} wrap="wrap" className="composer-toolbar">
+          <Flex gap={token.paddingXS} align="center" wrap="wrap" className="composer-toolbar-start">
             {modelControls}
             <Tooltip title="Attach">
               <Button
@@ -473,7 +473,7 @@ export function Composer({
               </>
             ) : null}
           </Flex>
-          <Flex gap={4} align="center" className="composer-toolbar-end">
+          <Flex gap={token.paddingXS} align="center" className="composer-toolbar-end">
             {canRetry ? (
               <Button aria-label="Retry" onClick={onRetry}>
                 Retry

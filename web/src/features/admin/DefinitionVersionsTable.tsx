@@ -5,8 +5,9 @@ import { getAdminDefinitionVersion, type AdminDefinitionInventoryItem, type Admi
 import { describeAdminError } from "./adminErrors";
 import { AdminRetryAction } from "./adminFailure";
 import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
-import { DefinitionCandidateEditor, PublishedSkillList, type DefinitionEditorView } from "./definitionCandidateEditor";
-import { candidateToJson, readSkills, type DefinitionCandidate } from "./definitionCandidate";
+import { DefinitionCandidateEditor, type DefinitionEditorView } from "./definitionCandidateEditor";
+import { candidateToJson, type DefinitionCandidate } from "./definitionCandidate";
+import { DefinitionSkillsSection } from "./DefinitionSkillsSection";
 import { readDraftEnvironment } from "./draftEnvironment";
 
 export function DefinitionVersionsTable({ rows, publications, busy, onChat, onDeprecate, renderResources }: {
@@ -47,13 +48,13 @@ export function DefinitionVersionsTable({ rows, publications, busy, onChat, onDe
         rowKey={row => `${row.source}:${row.version}`}
         dataSource={data.filter(row => [`v${row.version}`, row.displayName, row.source === "builtIn" ? "Built-in" : "Durable", row.status]
           .some(value => value.toLowerCase().includes(query)))}
-        scroll={{ x: 1100 }} pagination={pagination}
+        scroll={{ x: 1150 }} pagination={pagination}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={query || rows.length > 0 ? "No matches. Clear search or filters to see all results." : "No published versions yet."} /> }}
         columns={[
           { title: "Version", dataIndex: "version", width: 210, defaultSortOrder: "descend",
             sorter: (a, b) => a.version - b.version,
-            render: (version: number, row) => <Flex gap={token.paddingXS} align="center">
+            render: (version: number, row) => <Flex className="admin-table-actions" gap={token.paddingXS} align="center">
               <Button type="link" size="small" aria-label={`View v${version} (${row.source})`}
                 onClick={(event) => { triggerLabelRef.current = event.currentTarget.getAttribute("aria-label"); setSelected(row); setDrawerOpen(true); }}>v{version}</Button>
               {version === latest ? <Tag color="blue">Latest</Tag>
@@ -78,7 +79,7 @@ export function DefinitionVersionsTable({ rows, publications, busy, onChat, onDe
           { title: "Skills", key: "skills", width: 80, align: "right",
             sorter: (a, b) => (a.publication?.skills?.length ?? -1) - (b.publication?.skills?.length ?? -1),
             render: (_, row) => row.publication ? row.publication.skills?.length ?? 0 : "—" },
-          { title: "Actions", key: "actions", width: 230, render: (_, row) => <Flex gap={token.paddingXS}>
+          { title: "Actions", key: "actions", width: 280, render: (_, row) => <Flex className="admin-table-actions" gap={token.paddingXS}>
             {row.publication ? <>
               <Button size="small" aria-label={`Start managed chat for v${row.version}`}
                 disabled={busy || row.publication.status !== "Active"} onClick={() => onChat(row.version)}>Chat</Button>
@@ -126,10 +127,6 @@ function DefinitionVersionDetails({ row, renderResources }: {
     return () => { current = false; };
   }, [row.definitionId, row.version, row.source, attempt]);
   const environment = candidate ? readDraftEnvironment(candidate) : null;
-  const skills = candidate ? readSkills(candidate).map(skill => ({
-    ...skill,
-    requiredCapabilities: skill.requiredCapabilities.split(",").map(value => value.trim()).filter(Boolean)
-  })) : [];
   return (
     <section aria-label="Version details" className="admin-version-details" style={{ gap: token.paddingSM }}>
       <Typography.Paragraph type="secondary">Inspect this immutable version. Create a draft to make changes.</Typography.Paragraph>
@@ -137,11 +134,12 @@ function DefinitionVersionDetails({ row, renderResources }: {
         action={<AdminRetryAction diagnosticId={error.diagnosticId} onRetry={() => setAttempt(value => value + 1)} />} />
         : !candidate ? <Spin aria-label="Loading version details" />
         : <>
-          <PublishedSkillList skills={skills} />
           <Tabs className="admin-draft-tabs" items={[
           { key: "definition", label: "Definition", children: <DefinitionCandidateEditor
-            candidate={candidate} view={view} jsonText={candidateToJson(candidate)} busy={false} readOnly
+            candidate={candidate} view={view} jsonText={candidateToJson(candidate)} busy={false} readOnly showSkills={false}
             onViewChange={setView} onCandidateChange={() => {}} onJsonTextChange={() => {}} /> },
+          { key: "skills", label: "Skills", children: <DefinitionSkillsSection
+            candidate={candidate} busy={false} readOnly onChange={() => {}} /> },
           { key: "capabilities", label: "Capabilities", children: <Descriptions {...detailLayout} bordered column={1} size="small">
             <Descriptions.Item label="Capability access">{environment?.capabilityMode ?? "Legacy projection"}</Descriptions.Item>
             <Descriptions.Item label="Authorized capabilities">{environment?.toolAllowlist.join(", ") || "None"}</Descriptions.Item>

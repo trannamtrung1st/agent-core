@@ -20,9 +20,26 @@ import { useDrawerPages } from "./useDrawerPages";
 import { DrawerListFooter } from "./DrawerListFooter";
 import { useWorkReadState } from "./workReadState";
 
-import { runOriginLabel, runStatusLabel, runOutcomeLabel, runSource, type RunSource } from "./runPresentation";
+import { runOriginLabel, runStatusLabel, runOutcomeLabel, runTriggerLabel, runSource, type RunSource } from "./runPresentation";
 
 const noRuns = async () => [];
+
+/** One reading inset for long run instructions, approval previews and results. */
+function RunTextSection({ label, item, children, result = false }: {
+  label: string; item: WorkItem; children: string; result?: boolean;
+}) {
+  const { token } = theme.useToken();
+  return <section className={`background-work-detail${result ? " background-work-result" : ""}`}>
+    <Flex align="center" gap={token.paddingXS} className={result ? "background-work-detail-heading" : undefined}>
+      {result ? <CheckCircleOutlined aria-hidden /> : null}
+      <Typography.Text type="secondary" className="background-work-detail-label">{label}</Typography.Text>
+    </Flex>
+    <div role="region" aria-label={`${label} for ${item.automationName ?? runOriginLabel(item.origin)}`}
+      tabIndex={0} className="background-work-long-content ac-scroll-pane">
+      <Typography.Paragraph className="background-work-detail-body">{children}</Typography.Paragraph>
+    </div>
+  </section>;
+}
 
 function retryLabel(item: WorkItem, fallback: string) {
   if (item.status === "retrying" && item.attemptCount && item.maxAttempts) {
@@ -333,8 +350,8 @@ export function BackgroundWorkDrawer({
       <li key={item.workItemId} data-work-item-id={item.workItemId} tabIndex={item.workItemId === selectedWorkItemId ? -1 : undefined}
         className={`background-work-item${item.workItemId === selectedWorkItemId ? " background-work-selected" : ""}`}>
         <Flex vertical gap={token.paddingSM} className="background-work-item-content">
-          <Flex align="flex-start" justify="space-between" gap={token.paddingSM}>
-            <Flex vertical>
+          <Flex align="flex-start" justify="space-between" gap={token.paddingSM} wrap>
+            <Flex vertical className="background-work-item-title">
               <Typography.Text strong className="background-work-origin" aria-label={`Source: ${runOriginLabel(item.origin)}`}>
                 {item.automationName ?? runOriginLabel(item.origin)}
               </Typography.Text>
@@ -349,18 +366,18 @@ export function BackgroundWorkDrawer({
             </Tag>
           </Flex>
 
-          <Flex wrap gap={token.paddingXS}>
+          <Flex wrap gap={token.paddingXS} className="background-work-timestamps">
           <Typography.Text type="secondary">Created <time dateTime={item.createdAt}>{formatChatTime(item.createdAt) ?? item.createdAt}</time></Typography.Text>
           {results[item.workItemId]?.completedAt ? <Typography.Text type="secondary">Completed <time dateTime={results[item.workItemId].completedAt}>{formatChatTime(results[item.workItemId].completedAt) ?? results[item.workItemId].completedAt}</time></Typography.Text> : null}
           <Typography.Text type="secondary">Updated <time dateTime={item.updatedAt}>{formatChatTime(item.updatedAt) ?? item.updatedAt}</time></Typography.Text>
           </Flex>
-          {item.triggerSummary ? <Typography.Text type="secondary">{item.triggerSummary}</Typography.Text> : null}
-          {item.instructions ? <div className="background-work-detail">
-            <Typography.Text type="secondary" className="background-work-detail-label">{"Instructions"}</Typography.Text>
-            <Typography.Paragraph className="background-work-detail-body">{item.instructions}</Typography.Paragraph>
-          </div> : null}
-          {item.modelKey ? <Typography.Text type="secondary">Model: {item.modelKey}{item.outcome ? ` · ${runOutcomeLabel(item.outcome)}` : ""}</Typography.Text> : null}
-          <Typography.Text type="secondary" style={{ overflowWrap: "anywhere" }}>Run {item.workItemId}</Typography.Text>
+          {item.triggerSummary ? <Typography.Text type="secondary" className="background-work-trigger">{runTriggerLabel(item.triggerSummary)}</Typography.Text> : null}
+          <dl className="background-work-metadata">
+            {item.modelKey ? <><dt>Model</dt><dd>{item.modelKey}</dd></> : null}
+            {item.outcome ? <><dt>Outcome</dt><dd>{runOutcomeLabel(item.outcome)}</dd></> : null}
+            <dt>Run</dt><dd>{item.workItemId}</dd>
+          </dl>
+          {item.instructions ? <RunTextSection label="Instructions" item={item}>{item.instructions}</RunTextSection> : null}
           {item.sourceId && item.origin === "Automation · Manual" && !item.automationId ? <Typography.Text type="secondary" style={{ overflowWrap: "anywhere" }}>Checkpoint: {item.sourceId}</Typography.Text> : null}
           {item.progress ? (
             <Typography.Text type="secondary" className="background-work-progress">
@@ -402,14 +419,7 @@ export function BackgroundWorkDrawer({
           ) : null}
 
           {item.needsApproval && item.approvalPreview ? (
-            <div className="background-work-detail">
-              <Typography.Text type="secondary" className="background-work-detail-label">
-                Approval required
-              </Typography.Text>
-              <Typography.Paragraph className="background-work-detail-body">
-                {item.approvalPreview}
-              </Typography.Paragraph>
-            </div>
+            <RunTextSection label="Approval required" item={item}>{item.approvalPreview}</RunTextSection>
           ) : null}
 
           {isUnread(item) ? (
@@ -425,17 +435,7 @@ export function BackgroundWorkDrawer({
           {item.status === "completed" && !results[item.workItemId] && !resultErrors[item.workItemId] ? <Spin aria-label="Loading run result" /> : null}
           {resultErrors[item.workItemId] ? <Alert type="error" showIcon title="Run result could not be loaded" description={resultErrors[item.workItemId]} action={<Button onClick={() => setResultRetry(value => value + 1)}>Retry result</Button>} /> : null}
           {results[item.workItemId] ? (
-            <div className="background-work-detail background-work-result">
-              <Flex align="center" gap={token.paddingXS} className="background-work-detail-heading">
-                <CheckCircleOutlined aria-hidden />
-                <Typography.Text type="secondary" className="background-work-detail-label">
-                  Result
-                </Typography.Text>
-              </Flex>
-              <Typography.Paragraph className="background-work-detail-body">
-                {results[item.workItemId]?.text}
-              </Typography.Paragraph>
-            </div>
+            <RunTextSection label="Result" item={item} result>{results[item.workItemId].text}</RunTextSection>
           ) : null}
 
           {source || item.needsApproval || item.cancellationAvailable ? (
@@ -558,6 +558,6 @@ export function BackgroundWorkDrawer({
       <Typography.Text type="secondary">Execution history from Automations and manual review.</Typography.Text></div>
     <div className="admin-definition-panel-body">{content}</div>
   </section>;
-  return <Drawer title={<Flex vertical gap={0}><Typography.Text strong id="background-work-drawer-title">{detailsOnly ? "Run details" : "Background work"}</Typography.Text>{!detailsOnly ? <Typography.Text type="secondary" className="background-work-subtitle">Runs from Automations and manual review</Typography.Text> : null}</Flex>} aria-labelledby="background-work-drawer-title" placement="right" size={detailsOnly ? "min(640px, 100vw)" : wide ? 400 : 320} afterOpenChange={visible => { if (!visible) afterClose?.(); }} open={open} onClose={onClose}
+  return <Drawer title={<Flex vertical gap={0}><Typography.Text strong id="background-work-drawer-title">{detailsOnly ? "Run details" : "Background work"}</Typography.Text>{!detailsOnly ? <Typography.Text type="secondary" className="background-work-subtitle">Runs from Automations and manual review</Typography.Text> : null}</Flex>} aria-labelledby="background-work-drawer-title" placement="right" size={wide ? "min(640px, 100vw)" : "100vw"} afterOpenChange={visible => { if (!visible) afterClose?.(); }} open={open} onClose={onClose}
     onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } }} className={`background-work-drawer${detailsOnly ? " run-details-drawer" : ""}`}>{content}</Drawer>;
 }

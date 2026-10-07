@@ -171,6 +171,22 @@ describe("Owner schedule authoring", () => {
     expect(onWork).toHaveBeenCalledWith("run-11");
   });
 
+  it("retains a hidden editor draft when another automation is disabled", async () => {
+    request.mockResolvedValue({ items: [row] });
+    const ui = (active: boolean) => <ConfigProvider><App>
+      <InstanceAutomationsSection instanceId="instance" active={active} onWork={vi.fn()} /></App></ConfigProvider>;
+    const mounted = render(ui(true));
+    fireEvent.click(await screen.findByRole("button", { name: `View automation: ${row.name}` }));
+    fireEvent.click(screen.getByRole("button", { name: "New automation" }));
+    fireEvent.change(screen.getByLabelText("Automation instructions"), { target: { value: "Keep this draft" } });
+    mounted.rerender(ui(false));
+    fireEvent.click(screen.getByRole("button", { name: "Disable automation" }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith("instance", "automations/scheduled", "PUT", expect.objectContaining({ enabled: false })));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Disable automation" })).toBeEnabled());
+    await act(async () => { mounted.rerender(ui(true)); });
+    expect(screen.getByLabelText("Automation instructions")).toHaveValue("Keep this draft");
+  });
+
   it("pauses polling while hidden and retains the unsaved task when shown", async () => {
     const ui = (active: boolean) => <App><InstanceAutomationsSection instanceId="instance" active={active} onWork={vi.fn()} /></App>;
     const mounted = render(ui(true));

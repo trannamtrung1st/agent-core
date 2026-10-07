@@ -23,8 +23,8 @@ public sealed class UnattendedBrowserTests
     public async Task Work_recovery_keeps_loaded_instance_content_and_new_work_resolves_current_catalog()
     {
         var browser = new RecordingBrowser(); var agents = await ActiveAgentsAsync(OwnerId); var definition = Definition();
-        var now = DateTimeOffset.Parse("2026-10-07T00:00:00Z"); var localId = Guid.NewGuid(); var alwaysId = Guid.NewGuid();
-        var localKey = "instance:" + localId.ToString("D"); var alwaysKey = "instance:" + alwaysId.ToString("D");
+        var now = DateTimeOffset.Parse("2026-10-07T00:00:00Z"); var localId = Guid.NewGuid().ToString("D"); var alwaysId = Guid.NewGuid().ToString("D");
+        var localKey = "instance:" + localId; var alwaysKey = "instance:" + alwaysId;
         await agents.MutateSkillsAsync(new(OwnerId, 1, InstanceSkill: new(localId, OwnerId, "Accounting", "Check totals", "OLD_PROCEDURE",
             SkillProjection.OnDemand, true, [], 1, now, now, SkillAuthor.Agent)));
         await agents.MutateSkillsAsync(new(OwnerId, 2, InstanceSkill: new(alwaysId, OwnerId, "Startup", "Startup guidance", "ALWAYS_PROCEDURE",
@@ -46,7 +46,7 @@ public sealed class UnattendedBrowserTests
         Assert.Equal(1, pinned.LoadCount); Assert.Equal(new[] { alwaysKey, localKey }.Order(), pinned.ActiveKeys.Order());
         await agents.MutateSkillsAsync(new(OwnerId, 3, InstanceSkill: new(localId, OwnerId, "Accounting", "Check totals", "NEW_PROCEDURE",
             SkillProjection.OnDemand, true, [], 2, now, now, SkillAuthor.Agent), ExpectedSkillRevision: 1));
-        await agents.MutateSkillsAsync(new(OwnerId, 4, InstanceSkill: new(Guid.NewGuid(), OwnerId, "Later", "Created after admission", "LATER_PROCEDURE",
+        await agents.MutateSkillsAsync(new(OwnerId, 4, InstanceSkill: new(Guid.NewGuid().ToString("D"), OwnerId, "Later", "Created after admission", "LATER_PROCEDURE",
             SkillProjection.OnDemand, true, [], 1, now, now, SkillAuthor.Agent)));
         await work.RecoverExpiredClaimsAsync(now.AddMinutes(1)); generation = Guid.NewGuid();
         var reclaimed = (await work.TryClaimAsync(WorkId, generation, now.AddMinutes(1), now.AddMinutes(5)))!;

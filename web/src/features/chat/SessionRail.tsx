@@ -276,7 +276,6 @@ export function SessionRail({
         void setIncludeArchived(!includeArchived);
       }
     },
-    { type: "divider" },
     {
       key: "delete-all",
       danger: true,

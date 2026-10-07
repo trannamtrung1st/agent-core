@@ -37,6 +37,7 @@ import {
 } from "./draftEnvironment";
 import {
   applyCandidateJson,
+  automationNumberErrors,
   candidateForPersistence,
   candidateToJson,
   candidatesEqual,
@@ -67,6 +68,7 @@ import {
   type AdminCreateInstancePersona,
   forkAdminDefinitionDraft,
   getAdminDefinitionDraft,
+  getAdminDefinitionVersion,
   getAdminEffectiveConfig,
   listAdminDefinitionDrafts,
   listAdminDefinitionPublications,
@@ -613,13 +615,42 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
     description: "",
     tone: ""
   });
+  const [personaSource, setPersonaSource] = useState<string | null>(null);
+  const [personaLoading, setPersonaLoading] = useState(false);
+  const [personaError, setPersonaError] = useState<AdminFailureNotice | null>(null);
+  const [personaRetry, setPersonaRetry] = useState(0);
   const [busy, setBusy] = useState(false);
   const selectedGroup = groups.find((group) => group.definitionId === definitionId) ?? null;
   const instanceVersions = instanceVersionRows(selectedGroup?.versions ?? []);
   const selectedVersion = instanceVersions.find((row) => row.version === version) ?? null;
+  const source = selectedVersion?.source;
+  const sourceKey = selectedVersion ? `${definitionId}:${source}:${version}` : null;
   const customPersonaReady = personaFieldsReady(persona);
-  const canCreate = Boolean(selectedGroup && selectedVersion) && (personaMode === "default" || customPersonaReady)
+  const canCreate = Boolean(selectedGroup && selectedVersion) && (personaMode === "default" ||
+    (customPersonaReady && !personaLoading && personaSource === sourceKey))
     && (harnessMode === "Disabled" || harnessAreas.length > 0);
+
+  useEffect(() => {
+    if (!open || !definitionId || version === null || !source) return;
+    let cancelled = false;
+    setPersonaSource(null);
+    setPersonaLoading(true);
+    setPersonaError(null);
+    setPersona({ name: "", role: "", description: "", tone: "" });
+    void getAdminDefinitionVersion(definitionId, version, source)
+      .then(definition => {
+        const defaults = parsePersonaJson(JSON.stringify(definition.identity));
+        if (!cancelled) {
+          setPersona(defaults);
+          setPersonaSource(`${definitionId}:${source}:${version}`);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setPersonaError(describeAdminError(error, "Definition persona could not be loaded."));
+      })
+      .finally(() => { if (!cancelled) setPersonaLoading(false); });
+    return () => { cancelled = true; };
+  }, [open, definitionId, version, source, personaRetry]);
 
   const openModal = () => {
     const first = groups[0];
@@ -741,12 +772,18 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
               <Radio value="custom">Custom persona</Radio>
             </Radio.Group>
             {personaMode === "custom" ? (
-              <div className="admin-draft-field-grid">
-                <PersonaField label="Persona name" value={persona.name} disabled={busy} onChange={(name) => setPersona({ ...persona, name })} />
-                <PersonaField label="Persona role" value={persona.role} disabled={busy} onChange={(role) => setPersona({ ...persona, role })} />
-                <PersonaField label="Persona description" value={persona.description} disabled={busy} onChange={(description) => setPersona({ ...persona, description })} />
-                <PersonaField label="Persona tone" value={persona.tone} disabled={busy} onChange={(tone) => setPersona({ ...persona, tone })} />
-              </div>
+              <>
+                {personaLoading ? <Typography.Text type="secondary" role="status">Loading Definition persona…</Typography.Text> : null}
+                {personaError ? <Alert type="error" showIcon title={personaError.message}
+                  description={personaError.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: personaError.diagnosticId }} /> : undefined}
+                  action={<Button disabled={busy} onClick={() => setPersonaRetry(value => value + 1)}>Retry</Button>} /> : null}
+                <div className="admin-draft-field-grid">
+                  <PersonaField label="Persona name" value={persona.name} disabled={busy || personaLoading || personaSource !== sourceKey} onChange={(name) => setPersona({ ...persona, name })} />
+                  <PersonaField label="Persona role" value={persona.role} disabled={busy || personaLoading || personaSource !== sourceKey} onChange={(role) => setPersona({ ...persona, role })} />
+                  <PersonaField label="Persona description" value={persona.description} disabled={busy || personaLoading || personaSource !== sourceKey} onChange={(description) => setPersona({ ...persona, description })} />
+                  <PersonaField label="Persona tone" value={persona.tone} disabled={busy || personaLoading || personaSource !== sourceKey} onChange={(tone) => setPersona({ ...persona, tone })} />
+                </div>
+              </>
             ) : null}
           </Flex>
         )}
@@ -1192,7 +1229,7 @@ function DefinitionDetail({
   };
 
   const saveDraft = async () => {
-    if (!activeDraft || jsonError) {
+    if (!activeDraft || jsonError || automationNumberErrors(candidate).length > 0) {
       return;
     }
     setBusy(true);
@@ -1638,7 +1675,11 @@ function DraftEditor({
   const authorizedNames = capabilities.capabilityMode === "All"
     ? allCapabilityNames
     : capabilities.toolAllowlist;
-  const saveBlocked = candidateLocked || (editorView === "form" && !catalogReady);
+  const numberErrors = automationNumberErrors(candidate);
+  const saveBlocked = candidateLocked || numberErrors.length > 0 || (editorView === "form" && !catalogReady);
+  const saveBlockedMessage = candidateLocked
+    ? "Advanced JSON is invalid — fix it before saving. This does not change the draft revision."
+    : numberErrors[0]?.message ?? "Authoring options are loading. Wait before saving or use Advanced JSON.";
   const [resources, setResources] = useState<AdminDefinitionDraftResource[]>([]);
   const [resourcesLoading, setResourcesLoading] = useState(false);
   const [logicalPath, setLogicalPath] = useState("");
@@ -1785,7 +1826,7 @@ function DraftEditor({
         </Typography.Text>
       </Flex>
       <DraftEditorActions
-        dirty={dirty} busy={busy} publishEligible={publishEligible} saveBlocked={saveBlocked}
+        dirty={dirty} busy={busy} publishEligible={publishEligible} saveBlocked={saveBlocked} saveBlockedMessage={saveBlockedMessage}
         onSave={onSave} onPublish={onPublish} onDelete={onDelete}
       />
       <Tabs
@@ -2166,6 +2207,7 @@ function DraftEditorActions({
   busy,
   publishEligible,
   saveBlocked = false,
+  saveBlockedMessage,
   onSave,
   onPublish,
   onDelete
@@ -2174,6 +2216,7 @@ function DraftEditorActions({
   busy: boolean;
   publishEligible: boolean;
   saveBlocked?: boolean;
+  saveBlockedMessage?: string;
   onSave: () => void;
   onPublish: () => void;
   onDelete: () => void;
@@ -2198,7 +2241,7 @@ function DraftEditorActions({
       </Flex>
       {saveBlocked ? (
         <Typography.Text type="danger">
-          Advanced JSON is invalid — fix it before saving. This does not change the draft revision.
+          {saveBlockedMessage}
         </Typography.Text>
       ) : dirty ? (
         <Typography.Text type="warning">

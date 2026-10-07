@@ -482,18 +482,22 @@ Scratch delete/batch approval binds exact paths and recursive intent, but not th
 
 ## Agent Instance Skill HTTP and tool contract
 
-All HTTP routes below are under `/api/v2/admin/agent-instances/{instanceId}/skills` and require the existing trusted-local owner capability. Keys are URL-encoded canonical `definition:<id>` or `instance:<Guid>` strings.
+All HTTP routes below are under `/api/v2/admin/agent-instances/{instanceId}/skills` and require the existing trusted-local owner capability. Keys are URL-encoded canonical `definition:<id>` or `instance:<skill-id>` strings.
 
 | Method/path | Operation |
 | --- | --- |
 | GET collection | Definition/local metadata; no full procedure bodies |
 | GET `/{key}` | Complete read-only/editable inspection |
-| POST collection | Create local Skill, Core-generated identity |
+| POST collection | Create local Skill, optional readable ID |
 | PATCH `/{key}` | Update local content with `expectedRevision` |
 | PUT `/{key}/enabled` | `{expectedRevision, enabled}` for either origin |
 | DELETE `/{key}?expectedRevision=N` | Delete local Skill only |
 | POST `/{key}/customize` | `{expectedRevision}`; atomic independent copy plus source disable; returns `{instanceSkill,definitionSkill:{key,enabled:false,revision}}` |
 
-Create/update content is `{name, description, procedure, projection, enabled, requiredCapabilities}` with projection exactly `Always`/`OnDemand`; update additionally requires the current revision. Responses use camelCase and string origin/projection. Views include key, origin, description, revision, current Definition version or local source provenance, and `missingCapabilities`. Invalid/wrong-origin/resource-bound customization is 400; missing owner/key is 404; stale revision is 409; missing owner capability is 401. Archived owners are read-only. Admin mutations append safe operation/key history atomically; model writes retain Agent provenance without false Admin events.
+Create/update content is `{name, description, procedure, projection, enabled, requiredCapabilities}` with projection exactly `Always`/`OnDemand`; update additionally requires the current revision. Create additionally accepts optional `id`: empty or omitted generates from the name with an owner-local collision suffix. New IDs match `^[a-z][a-z0-9._-]{0,63}$`. Duplicate IDs within the same instance return 409; the same ID in a different instance is allowed. Update cannot change an existing ID (400). Existing UUID IDs remain valid and unchanged. Responses use camelCase and string origin/projection. Views include key, origin, description, revision, current Definition version or local source provenance, and `missingCapabilities`. Invalid/wrong-origin/resource-bound customization is 400; missing owner/key is 404; stale revision is 409; missing owner capability is 401. Archived owners are read-only. Admin mutations append safe operation/key history atomically; model writes retain Agent provenance without false Admin events.
 
 Ordinary `skills.list/inspect/create/update/set_enabled/delete/customize` use the same service and CAS rules, strict additionalProperties=false tool schemas and trusted owner context. Writes are non-replayable; requirements never grant authority. `skills.load` retains `{ids:[canonicalKey,...]}` and loads only pinned OnDemand entries. Existing tool-result error envelopes and output limits apply; no new SignalR envelope is introduced.
+
+### Definition draft Automation policy number errors
+
+Draft create/update returns HTTP 400 for missing required, fractional, unreadable or out-of-range integer Automation policy limits. The optional minimum fixed interval retains its 60-second default when omitted. The existing validation problem includes `field` (for example `triggerPolicy.minRecurrenceDays`), `validationCode: "invalid_integer"` (or `"out_of_range"` for a whole number outside its bounds), and an actionable `detail`: “Minimum recurrence days must be a whole number from 1 to 365.” The same mapping applies to max active registrations, one-shot horizon days and minimum fixed interval seconds using their canonical bounds. Rejected draft updates do not change persisted candidate content or revision.

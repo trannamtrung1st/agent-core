@@ -14,7 +14,7 @@ async function createInstance(page: import("@playwright/test").Page) {
 
 test("Admin read recovery and one-time clipboard guidance stay on the affected surface", async ({ page }) => {
   await page.goto("/admin/event-sources");
-  await expect(page.getByLabel("Event source name", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New event source", exact: true })).toBeVisible();
   expect(await page.getByRole("button", { name: "New definition", exact: true }).count()).toBe(0);
   expect(await page.getByRole("button", { name: "New instance", exact: true }).count()).toBe(0);
   let fail = true;
@@ -26,8 +26,9 @@ test("Admin read recovery and one-time clipboard guidance stay on the affected s
   await expect(page.getByText("No event sources yet.", { exact: true })).toHaveCount(0);
   fail = false;
   await page.getByRole("button", { name: "Retry", exact: true }).click();
-  await expect(page.getByLabel("Event source name", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New event source", exact: true })).toBeVisible();
   await page.unrouteAll({ behavior: "wait" });
+  await page.getByRole("button", { name: "New event source", exact: true }).click();
   await page.getByLabel("Event source name", { exact: true }).fill(`Polish fixture ${Date.now()}`);
   await page.getByRole("button", { name: "Create event source", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Copy this credential", exact: true });
@@ -43,6 +44,65 @@ test("Admin read recovery and one-time clipboard guidance stay on the affected s
   await expect(page.getByText(/Copy failed/)).toHaveCount(0);
 });
 
+test("Event source drawer retains failed drafts, locks saving and reveals created sources through filters", async ({ page }) => {
+  await page.goto("/admin/event-sources");
+  const opener = page.getByRole("button", { name: "New event source", exact: true });
+  await expect(opener).toBeVisible();
+  await page.getByRole("columnheader", { name: /Status/ }).getByRole("button").click();
+  await page.getByRole("menuitem").filter({ hasText: "Revoked" }).getByRole("checkbox").check();
+  await page.getByRole("button", { name: "OK", exact: true }).click();
+  await opener.click();
+  const drawer = page.getByRole("dialog", { name: "New event source", exact: true });
+  const input = drawer.getByLabel("Event source name", { exact: true });
+  await input.fill("x".repeat(81));
+  await expect(input).toHaveValue("x".repeat(80));
+  await page.keyboard.press("Escape");
+  await expect(drawer).toBeHidden();
+  await expect(opener).toBeFocused();
+  await opener.click();
+  await expect(input).toHaveValue("");
+  const sourceName = `Drawer recovery ${Date.now()}`;
+  await input.fill(sourceName);
+  let fail = true;
+  let release!: () => void;
+  const savingGate = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/api/v2/admin/event-sources", async route => {
+    if (route.request().method() !== "POST") return route.continue();
+    if (fail) return route.fulfill({ status: 503, contentType: "application/problem+json",
+      body: JSON.stringify({ title: "Temporary creation failure", status: 503, diagnosticId: "drawer-recovery" }) });
+    await savingGate;
+    await route.continue();
+  });
+  const create = drawer.getByRole("button", { name: "Create event source", exact: true });
+  await create.click();
+  await expect(drawer.getByRole("alert")).toContainText("Temporary creation failure");
+  await expect(drawer.getByRole("button", { name: "Error details", exact: true })).toBeVisible();
+  await expect(input).toHaveValue(sourceName);
+  fail = false;
+  try {
+    const posted = page.waitForRequest(request => request.method() === "POST" && request.url().endsWith("/event-sources"));
+    await create.click();
+    await posted;
+    await expect(create).toHaveAttribute("aria-busy", "true");
+    await expect(drawer.getByRole("button", { name: "Cancel", exact: true })).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(drawer).toBeVisible();
+  } finally { release(); }
+  const credential = page.getByRole("dialog", { name: "Copy this credential", exact: true });
+  await expect(credential).toBeVisible();
+  await credential.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(credential).toBeHidden();
+  await expect(page.getByText(sourceName, { exact: true })).toBeVisible();
+  const rotate = page.getByRole("button", { name: `Rotate credential for ${sourceName}`, exact: true });
+  await rotate.click();
+  await page.getByRole("dialog", { name: "Rotate this credential?", exact: true })
+    .getByRole("button", { name: "Rotate credential", exact: true }).click();
+  await expect(credential).toBeVisible();
+  await credential.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(credential).toBeHidden();
+  await expect(rotate).toBeFocused();
+});
+
 test("Hidden automation keeps drafts, stops polling and saves a local picker time as UTC", async ({ page }) => {
   test.setTimeout(60_000);
   await createInstance(page);
@@ -51,9 +111,10 @@ test("Hidden automation keeps drafts, stops polling and saves a local picker tim
   const task = `Date picker fixture ${Date.now()}`;
   await page.getByLabel("Automation name", { exact: true }).fill(task);
   await page.getByLabel("Automation instructions", { exact: true }).fill(task);
-  await page.getByRole("tab", { name: "Policies & models", exact: true }).click();
-  await expect(page.getByRole("tab", { name: "Policies & models", exact: true })).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("tab", { name: "Identity & version", exact: true }).click();
+  // Browser navigation can leave the tab while its modal drawer is open.
+  // Clicking a tab behind the drawer mask would never exercise this transition.
+  await page.goBack();
+  await expect(page.getByRole("tab", { name: "Identity & version", exact: true })).toHaveAttribute("aria-selected", "true");
   const requests: string[] = [];
   const record = (request: import("@playwright/test").Request) => {
     if (/\/automations(?:\?|$)/.test(request.url())) requests.push(request.url());
@@ -62,8 +123,8 @@ test("Hidden automation keeps drafts, stops polling and saves a local picker tim
   await page.waitForTimeout(5500);
   page.off("request", record);
   expect(requests).toEqual([]);
-  await page.getByRole("tab", { name: "Automation", exact: true }).click();
-  await page.getByRole("tab", { name: "Automations", exact: true }).click();
+  await page.goForward();
+  await expect(page.getByRole("tab", { name: "Automations", exact: true })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByLabel("Automation instructions", { exact: true })).toHaveValue(task);
   await page.getByLabel("Schedule timing", { exact: true }).click();
   await page.locator(".ant-select-item-option").filter({ hasText: /^Once$/ }).click();

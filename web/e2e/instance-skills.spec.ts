@@ -52,6 +52,7 @@ test('Instance Skills: authorized Chat creation, next-turn load, owner editor an
   await definition.getByRole('button', { name: 'Inspect', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Definition Skill content', exact: true })).toContainText('Search the trusted fixture');
   await page.getByRole('button', { name: 'Close inspection' }).click();
+  await expect(page.getByRole('dialog')).toBeHidden();
   await definition.getByRole('button', { name: 'Customize', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('independent Instance Skill');
   await page.getByRole('dialog').getByRole('button', { name: 'Customize', exact: true }).click();
@@ -89,8 +90,9 @@ test('Definition upgrade and rollback preserve disabled choices and independent 
   await dialog.getByLabel('Definition ID').fill(definitionId); await dialog.getByRole('button', { name: 'Create draft' }).click();
   let editor = draftEditorSection(page);
   await editor.getByRole('button', { name: 'Add skill' }).click();
-  await editor.getByLabel('Skill 1 id').fill('review'); await editor.getByLabel('Skill 1 name').fill('Review');
-  await editor.getByLabel('Skill 1 description').fill('Reusable review'); await editor.getByLabel('Skill 1 procedure').fill('ORIGINAL_DEFINITION');
+  await page.getByRole('dialog').getByLabel('Skill ID', { exact: true }).fill('review'); await page.getByRole('dialog').getByLabel('Skill name', { exact: true }).fill('Review');
+  await page.getByRole('dialog').getByLabel('Description', { exact: true }).fill('Reusable review'); await page.getByRole('dialog').getByLabel('Procedure', { exact: true }).fill('ORIGINAL_DEFINITION');
+  await page.getByRole('dialog').getByRole('button', { name: 'Save Skill', exact: true }).click();
   await editor.getByRole('button', { name: 'Save draft' }).click(); await expect(page.getByText('Draft saved.')).toBeVisible();
   await completeDefinitionDraftPublishGate(page, editor); await publishDraftFromInstructions(page, editor);
   const id = await create(page, `Upgrade ${Date.now()}`, definitionId);
@@ -102,7 +104,9 @@ test('Definition upgrade and rollback preserve disabled choices and independent 
   await page.getByLabel('Procedure', { exact: true }).fill('LOCAL_INDEPENDENT'); await page.getByRole('button', { name: 'Save Skill' }).click();
   await expect(page.getByRole('region', { name: 'Instance Skill editor' })).toBeHidden();
   await page.goto(`/admin/definitions/${definitionId}`); editor = await forkDurablePublicationDraft(page, 1);
-  await editor.getByLabel('Skill 1 procedure').fill('UPGRADED_DEFINITION'); await editor.getByRole('button', { name: 'Save draft' }).click();
+  await editor.getByRole('region', { name: 'Skills', exact: true }).getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.getByRole('dialog').getByLabel('Procedure', { exact: true }).fill('UPGRADED_DEFINITION');
+  await page.getByRole('dialog').getByRole('button', { name: 'Save Skill', exact: true }).click(); await editor.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.getByText('Draft saved.')).toBeVisible();
   await completeDefinitionDraftPublishGate(page, editor); await publishDraftFromInstructions(page, editor);
   await page.goto(`/admin/instances/${id}`);
@@ -113,6 +117,7 @@ test('Definition upgrade and rollback preserve disabled choices and independent 
   await expect(reusable).toContainText('Version 2'); await expect(reusable.getByRole('switch')).not.toBeChecked();
   await reusable.getByRole('button', { name: 'Inspect' }).click(); await expect(page.getByRole('region', { name: 'Definition Skill content' })).toContainText('UPGRADED_DEFINITION');
   await page.getByRole('button', { name: 'Close inspection' }).click();
+  await expect(page.getByRole('dialog')).toBeHidden();
   await local.getByRole('button', { name: 'Edit' }).click(); await expect(page.getByLabel('Procedure', { exact: true })).toHaveValue('LOCAL_INDEPENDENT');
   await page.getByRole('button', { name: 'Cancel editing' }).click();
   await page.getByRole('tab', { name: 'Identity & version', exact: true }).click(); await page.getByLabel('Target definition version').click();
@@ -120,4 +125,40 @@ test('Definition upgrade and rollback preserve disabled choices and independent 
   await expect(page.getByText('Active version set to v1.')).toBeVisible(); await page.getByRole('tab', { name: 'Skills', exact: true }).click();
   await expect(reusable.getByRole('switch')).not.toBeChecked(); await reusable.getByRole('button', { name: 'Inspect' }).click();
   await expect(page.getByRole('region', { name: 'Definition Skill content' })).toContainText('ORIGINAL_DEFINITION');
+});
+
+test('Skills drawer retains failed drafts and inspection uses the shared read-only drawer', async ({ page }) => {
+  const id = await create(page, `Drawer ${Date.now()}`);
+  await page.goto(`/admin/instances/${id}/skills`);
+  const definition = page.getByRole('region', { name: 'Definition Skills', exact: true });
+  const inspect = definition.getByRole('button', { name: 'Inspect', exact: true });
+  await inspect.click();
+  await expect(page.getByRole('dialog').getByRole('region', { name: 'Definition Skill content' })).toContainText('Search the trusted fixture');
+  await page.getByRole('button', { name: 'Close inspection' }).click();
+  await expect(page.getByRole('dialog')).toBeHidden();
+  await expect(inspect).toBeFocused();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const opener = page.getByRole('button', { name: 'New Instance Skill', exact: true });
+  await opener.click();
+  const drawer = page.getByRole('dialog', { name: 'New Instance Skill', exact: true });
+  await drawer.getByRole('button', { name: 'Save Skill', exact: true }).click();
+  await expect(drawer.getByText('Please enter Skill name')).toBeVisible();
+  await drawer.getByLabel('Skill name', { exact: true }).fill('Drawer review');
+  await drawer.getByLabel('Description', { exact: true }).fill('Review supporting evidence.');
+  await drawer.getByLabel('Procedure', { exact: true }).fill('Retain evidence before changing totals.');
+  const endpoint = `**/api/v2/admin/agent-instances/${id}/skills`;
+  await page.route(endpoint, route => route.request().method() === 'POST'
+    ? route.fulfill({ status: 503, contentType: 'application/problem+json', body: JSON.stringify({ detail: 'Service unavailable. Try saving again.' }) })
+    : route.continue());
+  await drawer.getByRole('button', { name: 'Save Skill', exact: true }).click();
+  await expect(drawer.getByText('Service unavailable. Try saving again.')).toBeVisible();
+  await expect(drawer.getByLabel('Procedure', { exact: true })).toHaveValue('Retain evidence before changing totals.');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.unroute(endpoint);
+  await drawer.getByRole('button', { name: 'Save Skill', exact: true }).click();
+  await expect(drawer).toBeHidden();
+  await expect(opener).toBeFocused();
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Instance Skills', exact: true }).getByText('Drawer review', { exact: true })).toBeVisible();
+  await opener.click(); await page.keyboard.press('Escape'); await expect(drawer).toBeHidden();
 });

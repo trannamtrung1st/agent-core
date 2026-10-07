@@ -21,7 +21,7 @@ public sealed class EffectiveSkillCatalogResolver(IAgentInstanceStore instances)
                 s.Description, s.Procedure, s.Projection, s.RequiredCapabilities.ToArray(), s.ResourcePaths.ToArray()));
         }
         entries.AddRange(state.InstanceSkills.Where(s => s.Enabled).OrderBy(s => s.SkillId).Select(s =>
-            new EffectiveSkill("instance:" + s.SkillId.ToString("D"), SkillOrigin.Instance, s.SkillId.ToString("D"), s.Name,
+            new EffectiveSkill("instance:" + s.SkillId, SkillOrigin.Instance, s.SkillId, s.Name,
                 s.Description, s.Procedure, s.Projection, s.RequiredCapabilities.ToArray(), [])));
         if (entries.Where(s => s.Projection == SkillProjection.Always).Sum(s => s.Procedure.Length) > SkillPolicy.MaxActiveProcedureCharacters)
             throw AgentCoreErrors.Validation("Enabled Always Skills exceed the 8000-character procedure context budget.");

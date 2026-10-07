@@ -34,7 +34,7 @@ describe("Definition version inspection", () => {
   it("retries a failed inspection and renders the immutable form and JSON read-only", async () => {
     vi.mocked(getAdminDefinitionVersion)
       .mockRejectedValueOnce(new Error("Version load failed"))
-      .mockResolvedValueOnce({ definitionId: "examiner", systemInstructions: "Built-in instructions", goals: ["A long immutable goal that remains readable on a narrow screen"] });
+      .mockResolvedValueOnce({ definitionId: "examiner", systemInstructions: "Built-in instructions", goals: ["A long immutable goal that remains readable on a narrow screen"], skills: [{ id: "sample.hello", name: "Sample hello", description: "A greeting procedure", procedure: "Say hello", projection: "OnDemand", defaultEnabled: true, requiredCapabilities: [] }] });
     await renderVersions();
     fireEvent.click(screen.getByRole("button", { name: "View v1 (builtIn)" }));
     expect(await screen.findByText("Version load failed")).toBeInTheDocument();
@@ -49,6 +49,13 @@ describe("Definition version inspection", () => {
     expect(within(details).getByLabelText("Goal 1")).toHaveValue("A long immutable goal that remains readable on a narrow screen");
     expect(within(details).queryByRole("button", { name: "Add goal" })).not.toBeInTheDocument();
     expect(within(details).queryByRole("button", { name: "Remove goal 1" })).not.toBeInTheDocument();
+    expect(within(details).queryByText("Sample hello")).not.toBeInTheDocument();
+    fireEvent.click(within(details).getByRole("tab", { name: "Skills" }));
+    const skills = within(details).getByRole("region", { name: "Skills" });
+    expect(within(skills).getByText("Sample hello")).toBeInTheDocument();
+    expect(within(skills).queryByRole("button", { name: "Add skill" })).not.toBeInTheDocument();
+    expect(within(skills).queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+    fireEvent.click(within(details).getByRole("tab", { name: "Definition" }));
     fireEvent.click(within(details).getByText("Advanced JSON", { exact: true }));
     expect(within(details).getByLabelText("Advanced JSON", { selector: "textarea" })).toHaveAttribute("readonly");
     expect(within(details).queryByRole("button", { name: "Save draft" })).not.toBeInTheDocument();

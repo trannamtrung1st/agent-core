@@ -1,24 +1,23 @@
+import { DefinitionSkillsSection } from './DefinitionSkillsSection';
 import { useEffect, useId, useState } from "react";
 import { Alert, Button, Flex, Input, InputNumber, Segmented, Select, Switch, Typography } from "antd";
 import { DeleteOutlined } from "@ant-design/icons";
 import {
   applyVoiceEnabled,
+  automationNumberErrors,
   memoryPolicyDefaults,
   patchRecord,
   readBoolean,
   readCandidateStringList,
   readMetadataRows,
   readNumber,
-  readSkills,
   readString,
   triggerPolicyDefaults,
   writeMetadataRows,
   writeModelDefault,
   writeNullableString,
   writePath,
-  writeSkills,
-  type DefinitionCandidate,
-  type SkillDraft
+  type DefinitionCandidate
 } from "./definitionCandidate";
 import { listAdminAuthoringOptions, type AdminAuthoringOptions } from "../../services/adminApi";
 import { describeAdminError } from "./adminErrors";
@@ -53,6 +52,7 @@ export function DefinitionCandidateEditor({
   jsonText,
   busy,
   readOnly = false,
+  showSkills = true,
   onCandidateChange,
   onJsonTextChange,
   onViewChange
@@ -62,6 +62,7 @@ export function DefinitionCandidateEditor({
   jsonText: string;
   busy: boolean;
   readOnly?: boolean;
+  showSkills?: boolean;
   onCandidateChange: (candidate: DefinitionCandidate) => void;
   onJsonTextChange: (text: string) => void;
   onViewChange: (view: DefinitionEditorView) => void;
@@ -121,6 +122,7 @@ export function DefinitionCandidateEditor({
           candidate={candidate}
           busy={busy}
           readOnly={readOnly}
+          showSkills={showSkills}
           authoring={authoring}
           authoringError={authoringError}
           authoringDiagnosticId={authoringDiagnosticId}
@@ -135,6 +137,7 @@ function DefinitionCandidateForm({
   candidate,
   busy,
   readOnly,
+  showSkills,
   authoring,
   authoringError,
   authoringDiagnosticId,
@@ -143,6 +146,7 @@ function DefinitionCandidateForm({
   candidate: DefinitionCandidate;
   busy: boolean;
   readOnly: boolean;
+  showSkills: boolean;
   authoring: AdminAuthoringOptions | null;
   authoringError: string | null;
   authoringDiagnosticId: string | null;
@@ -254,41 +258,7 @@ function DefinitionCandidateForm({
         </label>
       </section>
 
-      <section className="admin-draft-form-section" aria-label="Skills">
-        <Typography.Title level={5}>Skills</Typography.Title>
-        <Typography.Paragraph type="secondary">
-          Skills are procedures for this definition. Required capabilities are requirements, not grants. They do not add tools, credentials, or approval.
-        </Typography.Paragraph>
-        {readSkills(candidate).length === 0 ? (
-          <Typography.Text type="secondary">No skills yet. A definition without skills runs with an empty skill set.</Typography.Text>
-        ) : (
-          readSkills(candidate).map((skill, index) => (
-            <SkillCard
-              key={`skill-${index}`}
-              index={index}
-              skill={skill}
-              disabled={busy}
-              readOnly={readOnly}
-              onChange={(next) => {
-                const skills = readSkills(candidate).map((item, itemIndex) => (itemIndex === index ? next : item));
-                onCandidateChange(writeSkills(candidate, skills));
-              }}
-              onRemove={() => {
-                const existing = Array.isArray(candidate.skills) ? candidate.skills : [];
-                const nextExisting = existing.filter((_, itemIndex) => itemIndex !== index);
-                const skills = readSkills(candidate).filter((_, itemIndex) => itemIndex !== index);
-                onCandidateChange(writeSkills({ ...candidate, skills: nextExisting }, skills));
-              }}
-            />
-          ))
-        )}
-        {!readOnly ? <Button
-          onClick={() => onCandidateChange(writeSkills(candidate, [...readSkills(candidate), emptySkill()]))}
-          disabled={busy}
-        >
-          Add skill
-        </Button> : null}
-      </section>
+      {showSkills && <DefinitionSkillsSection candidate={candidate} busy={busy} readOnly={readOnly} onChange={onCandidateChange} />}
 
       <section className="admin-draft-form-section" aria-label="Behavior and conversation">
         <Typography.Title level={5}>Behavior &amp; conversation</Typography.Title>
@@ -653,6 +623,8 @@ function DefinitionCandidateForm({
           <NumberField
             label="Max active registrations"
             value={readNumber(candidate, ["triggerPolicy", "maxActiveRegistrations"])}
+            hint="Whole registrations. 1 to 32."
+            error={automationNumberErrors(candidate).find(item => item.field === "maxActiveRegistrations")?.message}
             disabled={busy || readOnly}
             onChange={(value) =>
               onCandidateChange(
@@ -668,6 +640,8 @@ function DefinitionCandidateForm({
           <NumberField
             label="One-shot horizon days"
             value={readNumber(candidate, ["triggerPolicy", "oneShotHorizonDays"])}
+            hint="Whole days. 1 to 365."
+            error={automationNumberErrors(candidate).find(item => item.field === "oneShotHorizonDays")?.message}
             disabled={busy || readOnly}
             onChange={(value) =>
               onCandidateChange(
@@ -678,6 +652,8 @@ function DefinitionCandidateForm({
           <NumberField
             label="Minimum recurrence days"
             value={readNumber(candidate, ["triggerPolicy", "minRecurrenceDays"])}
+            hint="Whole days. 1 to 365."
+            error={automationNumberErrors(candidate).find(item => item.field === "minRecurrenceDays")?.message}
             disabled={busy || readOnly}
             onChange={(value) =>
               onCandidateChange(
@@ -688,6 +664,8 @@ function DefinitionCandidateForm({
           <NumberField
             label="Minimum fixed interval seconds"
             value={readNumber(candidate, ["triggerPolicy", "minFixedIntervalSeconds"])}
+            hint="Whole seconds. 60 to 604800."
+            error={automationNumberErrors(candidate).find(item => item.field === "minFixedIntervalSeconds")?.message}
             disabled={busy || readOnly}
             onChange={(value) =>
               onCandidateChange(
@@ -778,145 +756,6 @@ function DefinitionCandidateForm({
   );
 }
 
-function emptySkill(): SkillDraft {
-  return {
-    id: "",
-    name: "",
-    description: "",
-    procedure: "",
-    projection: "OnDemand",
-    defaultEnabled: true,
-    requiredCapabilities: "",
-    resourcePaths: ""
-  };
-}
-
-function SkillCard({
-  index,
-  skill,
-  disabled,
-  readOnly,
-  onChange,
-  onRemove
-}: {
-  index: number;
-  skill: SkillDraft;
-  disabled: boolean;
-  readOnly: boolean;
-  onChange: (skill: SkillDraft) => void;
-  onRemove: () => void;
-}) {
-  const number = index + 1;
-  return (
-    <div className="admin-skill-card" aria-label={`Skill ${number}`}>
-      <Flex justify="space-between" align="center" gap={8} wrap="wrap">
-        <Typography.Text strong>{skill.name.trim() || `Skill ${number}`}</Typography.Text>
-        {!readOnly ? <Button
-          danger
-          type="text"
-          icon={<DeleteOutlined />}
-          aria-label={`Remove skill ${number}`}
-          disabled={disabled}
-          onClick={onRemove}
-        /> : null}
-      </Flex>
-      <div className="admin-draft-field-grid">
-        <TextField
-          readOnly={readOnly}
-          label={`Skill ${number} id`}
-          hint="Lowercase id, such as refund.handle."
-          value={skill.id}
-          disabled={disabled}
-          onChange={(id) => onChange({ ...skill, id })}
-        />
-        <TextField
-          readOnly={readOnly}
-          label={`Skill ${number} name`}
-          value={skill.name}
-          disabled={disabled}
-          onChange={(name) => onChange({ ...skill, name })}
-        />
-      </div>
-      <TextField
-        readOnly={readOnly}
-        label={`Skill ${number} description`}
-        value={skill.description}
-        disabled={disabled}
-        onChange={(description) => onChange({ ...skill, description })}
-      />
-      <label className="admin-draft-field">
-        <Typography.Text strong>{`Skill ${number} procedure`}</Typography.Text>
-        <Input.TextArea
-          aria-label={`Skill ${number} procedure`}
-          readOnly={readOnly}
-          rows={4}
-          value={skill.procedure}
-          disabled={disabled}
-          className="admin-draft-instructions"
-          onChange={(event) => onChange({ ...skill, procedure: event.target.value })}
-        />
-      </label>
-      <label>Skill {number} projection
-        <Select aria-label={`Skill ${number} projection`} value={skill.projection} disabled={disabled || readOnly} options={[{value: "Always", label: "Always"}, {value: "OnDemand", label: "On demand"}]} onChange={projection => onChange({ ...skill, projection })} />
-      </label>
-      <label>Skill {number} default enabled <Switch aria-label={`Skill ${number} default enabled`} checked={skill.defaultEnabled} disabled={disabled || readOnly} onChange={defaultEnabled => onChange({ ...skill, defaultEnabled })} /></label>
-      {skill.projection === undefined || skill.defaultEnabled === undefined ? <Typography.Text type="danger">Choose an explicit projection and default enabled state before publishing.</Typography.Text> : null}
-      <TextField
-        readOnly={readOnly}
-        label={`Skill ${number} required capabilities`}
-        hint="Comma-separated requirements, not grants. They do not add tools, credentials, or approval."
-        value={skill.requiredCapabilities}
-        disabled={disabled}
-        onChange={(requiredCapabilities) => onChange({ ...skill, requiredCapabilities })}
-      />
-      <TextField
-        readOnly={readOnly}
-        label={`Skill ${number} resource paths`}
-        hint="Comma-separated relative paths."
-        value={skill.resourcePaths}
-        disabled={disabled}
-        onChange={(resourcePaths) => onChange({ ...skill, resourcePaths })}
-      />
-      {skill.id.trim().length === 0 ? (
-        <Typography.Text type="danger">Skill id is required before publish.</Typography.Text>
-      ) : null}
-    </div>
-  );
-}
-
-export type PublishedSkill = {
-  id: string;
-  name: string;
-  requiredCapabilities: string[];
-};
-
-export function PublishedSkillList({ skills }: { skills?: PublishedSkill[] | null }) {
-  if (!skills) {
-    return null;
-  }
-
-  if (skills.length === 0) {
-    return <Typography.Text type="secondary">No skills on this published version.</Typography.Text>;
-  }
-
-  return (
-    <ul className="admin-published-skills" aria-label="Published skills">
-      {skills.map((skill) => (
-        <li key={skill.id}>
-          <Typography.Text>
-            {skill.name} ({skill.id})
-          </Typography.Text>
-          <Typography.Text type="secondary">
-            {skill.requiredCapabilities.length === 0
-              ? " No required capabilities. Requirements do not grant tools, credentials, or approval."
-              : ` Requires ${skill.requiredCapabilities.join(", ")}. Requirements do not grant tools, credentials, or approval.`}
-          </Typography.Text>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 function TextField({
   label,
   hint,
@@ -962,6 +801,7 @@ function TextField({
 function NumberField({
   label,
   hint,
+  error,
   value,
   disabled,
   step,
@@ -969,18 +809,22 @@ function NumberField({
 }: {
   label: string;
   hint?: string;
+  error?: string;
   value: number | null;
   disabled: boolean;
   step?: number;
   onChange: (value: number | null) => void;
 }) {
   const hintId = useId();
+  const errorId = useId();
   return (
     <label className="admin-draft-field">
       <Typography.Text strong>{label}</Typography.Text>
       <InputNumber
         aria-label={label}
-        aria-describedby={hint ? hintId : undefined}
+        aria-describedby={[hint ? hintId : null, error ? errorId : null].filter(Boolean).join(" ") || undefined}
+        aria-invalid={error ? true : undefined}
+        status={error ? "error" : undefined}
         value={value}
         disabled={disabled}
         step={step}
@@ -991,6 +835,7 @@ function NumberField({
           {hint}
         </Typography.Text>
       ) : null}
+      {error ? <Typography.Text id={errorId} type="danger" role="alert">{error}</Typography.Text> : null}
     </label>
   );
 }

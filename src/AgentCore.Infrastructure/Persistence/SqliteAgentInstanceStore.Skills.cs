@@ -26,7 +26,7 @@ public sealed partial class SqliteAgentInstanceStore
         var states = await db.AgentDefinitionSkillStates.AsNoTracking().Where(s => s.AgentInstanceId == id).ToArrayAsync(ct);
         var skills = await db.AgentInstanceSkills.AsNoTracking().Where(s => s.AgentInstanceId == id).ToArrayAsync(ct);
         return new(states.Select(s => new AgentDefinitionSkillState(instanceId, s.DefinitionSkillId, s.Enabled, s.Revision, DateTimeOffset.FromUnixTimeMilliseconds(s.UpdatedAtUtc))).ToArray(),
-            skills.Select(s => new AgentInstanceSkill(Guid.Parse(s.SkillId), instanceId, s.Name, s.Description, s.Procedure,
+            skills.Select(s => new AgentInstanceSkill(s.SkillId, instanceId, s.Name, s.Description, s.Procedure,
                 (SkillProjection)s.Projection, s.Enabled, JsonSerializer.Deserialize<string[]>(s.RequiredCapabilitiesJson, Json) ?? throw AgentCoreErrors.Persistence("Invalid stored Skill requirements."),
                 s.Revision, DateTimeOffset.FromUnixTimeMilliseconds(s.CreatedAtUtc), DateTimeOffset.FromUnixTimeMilliseconds(s.UpdatedAtUtc),
                 (SkillAuthor)s.CreatedBy, s.SourceDefinitionId, s.SourceDefinitionVersion, s.SourceDefinitionSkillId)).ToArray());
@@ -47,9 +47,9 @@ public sealed partial class SqliteAgentInstanceStore
             row.Enabled = state.Enabled; row.Revision = state.Revision; row.UpdatedAtUtc = state.UpdatedAt.ToUnixTimeMilliseconds();
         }
         var skillId = m.DeleteSkillId ?? m.InstanceSkill?.SkillId;
-        if (skillId is Guid id)
+        if (skillId is string id)
         {
-            var key = id.ToString("D");
+            var key = id;
             var row = await db.AgentInstanceSkills.SingleOrDefaultAsync(s => s.AgentInstanceId == ownerId && s.SkillId == key, ct);
             if (row?.Revision != m.ExpectedSkillRevision) throw AgentCoreErrors.Conflict("Instance Skill revision is stale.");
             if (m.DeleteSkillId is not null) { if (row is null) throw AgentCoreErrors.NotFound("Instance Skill was not found."); db.AgentInstanceSkills.Remove(row); }

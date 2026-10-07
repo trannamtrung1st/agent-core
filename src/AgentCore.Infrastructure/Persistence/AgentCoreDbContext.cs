@@ -237,8 +237,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             e.HasOne<AgentInstanceRecord>().WithMany().HasForeignKey(s => s.AgentInstanceId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<AgentInstanceSkillRecord>(e => {
-            e.ToTable("AgentInstanceSkills"); e.HasKey(s => s.SkillId);
-            e.Property(s => s.SkillId).HasMaxLength(36); e.Property(s => s.AgentInstanceId).HasMaxLength(36);
+            e.ToTable("AgentInstanceSkills"); e.HasKey(s => new { s.AgentInstanceId, s.SkillId });
+            e.Property(s => s.SkillId).HasMaxLength(64); e.Property(s => s.AgentInstanceId).HasMaxLength(36);
             e.Property(s => s.Name).IsRequired().HasMaxLength(80);
             e.Property(s => s.Description).IsRequired().HasMaxLength(240);
             e.Property(s => s.Procedure).IsRequired().HasMaxLength(4000);

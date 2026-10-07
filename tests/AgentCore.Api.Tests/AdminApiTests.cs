@@ -564,6 +564,89 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Theory]
+    [InlineData("minRecurrenceDays", "Minimum recurrence days", 365)]
+    [InlineData("oneShotHorizonDays", "One-shot horizon days", 365)]
+    [InlineData("maxActiveRegistrations", "Max active registrations", 32)]
+    [InlineData("minFixedIntervalSeconds", "Minimum fixed interval seconds", 604800)]
+    public async Task Fractional_automation_policy_returns_field_error_without_saving(
+        string field, string label, int maximum)
+    {
+        var client = OwnerClient();
+        var id = "integer-policy-" + field.ToLowerInvariant();
+        var candidate = SampleDraftCandidate(id) with
+        {
+            TriggerPolicy = new TriggerPolicy(false, false, true, true, true, false, 1, 365, 1, ["schedule"])
+        };
+        var valid = JsonSerializer.SerializeToElement(candidate, JsonOptions());
+        var invalid = JsonNode.Parse(valid.GetRawText())!.AsObject();
+        invalid["triggerPolicy"]![field] = 0.5;
+        var rejected = await client.PostAsJsonAsync("/api/v2/admin/definition-drafts",
+            new AdminCreateDefinitionDraftRequest(id, JsonSerializer.SerializeToElement(invalid)));
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        var problem = await rejected.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("triggerPolicy." + field, problem.GetProperty("field").GetString());
+        Assert.Equal("invalid_integer", problem.GetProperty("validationCode").GetString());
+        Assert.Equal($"{label} must be a whole number from {(field == "minFixedIntervalSeconds" ? 60 : 1)} to {maximum}.",
+            problem.GetProperty("detail").GetString());
+
+        var created = await client.PostAsJsonAsync("/api/v2/admin/definition-drafts",
+            new AdminCreateDefinitionDraftRequest(id, valid));
+        created.EnsureSuccessStatusCode();
+        var draft = (await created.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>())!;
+        var badUpdate = await client.PutAsJsonAsync($"/api/v2/admin/definition-drafts/{draft.DraftId}",
+            new AdminUpdateDefinitionDraftRequest(draft.Revision, JsonSerializer.SerializeToElement(invalid)));
+        Assert.Equal(HttpStatusCode.BadRequest, badUpdate.StatusCode);
+        var unchanged = (await client.GetFromJsonAsync<AdminDefinitionDraftResponse>(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}"))!;
+        Assert.Equal(draft.Revision, unchanged.Revision);
+        Assert.Equal(draft.Candidate.GetProperty("triggerPolicy").GetProperty(field).GetInt32(),
+            unchanged.Candidate.GetProperty("triggerPolicy").GetProperty(field).GetInt32());
+        var repaired = await client.PutAsJsonAsync($"/api/v2/admin/definition-drafts/{draft.DraftId}",
+            new AdminUpdateDefinitionDraftRequest(draft.Revision, valid));
+        repaired.EnsureSuccessStatusCode();
+    }
+
+    [Theory]
+    [InlineData("0", "out_of_range")]
+    [InlineData("366", "out_of_range")]
+    [InlineData("null", "invalid_integer")]
+    [InlineData(null, "invalid_integer")]
+    public async Task Automation_limit_missing_or_out_of_range_has_precise_validation(string? value, string code)
+    {
+        var candidate = SampleDraftCandidate("policy-shape") with
+        { TriggerPolicy = new TriggerPolicy(false, false, true, true, true, false, 1, 365, 1, ["schedule"]) };
+        var json = JsonNode.Parse(JsonSerializer.Serialize(candidate, JsonOptions()))!;
+        if (value is null) json["triggerPolicy"]!.AsObject().Remove("minRecurrenceDays");
+        else json["triggerPolicy"]!["minRecurrenceDays"] = JsonNode.Parse(value);
+        var response = await OwnerClient().PostAsJsonAsync("/api/v2/admin/definition-drafts",
+            new AdminCreateDefinitionDraftRequest(candidate.DefinitionId, JsonSerializer.SerializeToElement(json)));
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("triggerPolicy.minRecurrenceDays", problem.GetProperty("field").GetString());
+        Assert.Equal(code, problem.GetProperty("validationCode").GetString());
+        Assert.Equal("Minimum recurrence days must be a whole number from 1 to 365.", problem.GetProperty("detail").GetString());
+    }
+
+    [Fact]
+    public async Task Automation_optional_fixed_interval_retains_default_and_case_insensitive_shape()
+    {
+        var candidate = SampleDraftCandidate("policy-optional") with
+        { TriggerPolicy = new TriggerPolicy(false, false, true, true, true, false, 1, 365, 1, ["schedule"]) };
+        var json = JsonNode.Parse(JsonSerializer.Serialize(candidate, JsonOptions()))!;
+        var policy = json["triggerPolicy"]!.DeepClone().AsObject();
+        policy.Remove("minFixedIntervalSeconds");
+        policy.Remove("minRecurrenceDays");
+        policy["MinRecurrenceDays"] = 1;
+        json.AsObject().Remove("triggerPolicy");
+        json["TriggerPolicy"] = policy;
+        var response = await OwnerClient().PostAsJsonAsync("/api/v2/admin/definition-drafts",
+            new AdminCreateDefinitionDraftRequest(candidate.DefinitionId, JsonSerializer.SerializeToElement(json)));
+        response.EnsureSuccessStatusCode();
+        var draft = (await response.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>())!;
+        Assert.Equal(60, draft.Candidate.GetProperty("triggerPolicy").GetProperty("minFixedIntervalSeconds").GetInt32());
+    }
+
+    [Theory]
     [InlineData(2, "duplicate_tool")]
     [InlineData(1, "invalid_tool_name")]
     public async Task Admin_definition_authoring_returns_precise_tool_shape_failure(int count, string expectedCode)

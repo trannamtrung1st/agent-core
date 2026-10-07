@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   applyCandidateJson,
+  skillIdFromName,
+  automationNumberErrors,
+  triggerPolicyDefaults,
   applyVoiceEnabled,
   candidateForPersistence,
   candidateToJson,
@@ -230,5 +233,34 @@ describe("definitionCandidate", () => {
       expect(applied.candidate.skills).toEqual(preserved.skills);
     }
     expect(writeSkills(preserved, []).skills).toBeUndefined();
+  });
+});
+
+describe("automation policy number validation", () => {
+  it.each([0.5, 0, 366, null, "1"])("rejects invalid recurrence %s", value => {
+    expect(automationNumberErrors({ triggerPolicy: { ...triggerPolicyDefaults, minRecurrenceDays: value } })).toEqual([
+      { field: "minRecurrenceDays", message: "Minimum recurrence days must be a whole number from 1 to 365." }
+    ]);
+  });
+  it.each([1, 365])("accepts whole-day boundary %s", value => {
+    expect(automationNumberErrors({ triggerPolicy: { ...triggerPolicyDefaults, minRecurrenceDays: value } })).toEqual([]);
+  });
+  it.each(["maxActiveRegistrations", "oneShotHorizonDays", "minRecurrenceDays"])("rejects missing required limit %s", field => {
+    expect(automationNumberErrors({ triggerPolicy: { ...triggerPolicyDefaults, [field]: undefined } })[0]?.field).toBe(field);
+  });
+  it("preserves absent optional policy fields", () => {
+    expect(automationNumberErrors({})).toEqual([]);
+    expect(automationNumberErrors({ triggerPolicy: { ...triggerPolicyDefaults, minFixedIntervalSeconds: undefined } })).toEqual([]);
+  });
+});
+
+describe('automatic Skill IDs', () => {
+  it('generates a readable owner-local identity and suffixes collisions', () => {
+    expect(skillIdFromName('Refund handling', [])).toBe('refund-handling');
+    expect(skillIdFromName('Refund handling', ['refund-handling'])).toBe('refund-handling-2');
+    expect(skillIdFromName('Refund handling', [])).toBe('refund-handling');
+    expect(skillIdFromName('123 review', [])).toBe('skill-123-review');
+    expect(skillIdFromName('İstanbul Review', [])).toBe('stanbul-review');
+    expect(skillIdFromName('x'.repeat(90), ['x'.repeat(64)])).toHaveLength(64);
   });
 });

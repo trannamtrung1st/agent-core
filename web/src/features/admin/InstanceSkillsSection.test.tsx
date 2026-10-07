@@ -10,16 +10,28 @@ const view = (archived = false) => <ConfigProvider><App><InstanceSkillsSection i
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(listInstanceSkills).mockResolvedValue([definition, local]); vi.mocked(inspectInstanceSkill).mockImplementation(async (_id, key) => key === definition.key ? definition : local); vi.mocked(toggleInstanceSkill).mockResolvedValue(definition); vi.mocked(customizeInstanceSkill).mockResolvedValue({ instanceSkill: local, definitionSkill: { key: definition.key, enabled: false, revision: definition.revision + 1 } }); vi.mocked(deleteInstanceSkill).mockResolvedValue(local); vi.mocked(createInstanceSkill).mockResolvedValue(local); });
 describe('Instance Skills ownership', () => {
   it('groups both same-name origins, warns about missing capabilities, and toggles with revision', async () => {
-    render(view()); await screen.findByText('Reusable review');
+    render(view()); await screen.findByText('Reusable review', {}, { timeout: 5000 });
     expect(within(screen.getByRole('region', { name: 'Definition Skills' })).getByText('Review')).toBeInTheDocument();
     expect(within(screen.getByRole('region', { name: 'Instance Skills' })).getByText('Review')).toBeInTheDocument();
     expect(screen.getByText('Missing authority: workspace.read')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('switch', { name: 'Enable Definition Skill Review' }));
     await waitFor(() => expect(toggleInstanceSkill).toHaveBeenCalledWith('owner', definition, false));
   });
+  it('searches capability and copy provenance without changing ownership', async () => {
+    vi.mocked(listInstanceSkills).mockResolvedValue([definition, { ...local, sourceDefinitionId: 'original-agent', sourceDefinitionVersion: 3, sourceDefinitionSkillId: 'review.copy' }]);
+    render(view()); await screen.findByText('Independent review', {}, { timeout: 5000 });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search Skills' }), { target: { value: 'original-agent' } });
+    expect(screen.getByText('Independent review')).toBeInTheDocument();
+    expect(screen.queryByText('Reusable review')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search Skills' }), { target: { value: 'workspace.read' } });
+    expect(screen.getByText('Independent review')).toBeInTheDocument();
+    expect(screen.getByText('Reusable review')).toBeInTheDocument();
+    expect(customizeInstanceSkill).not.toHaveBeenCalled();
+  });
   it('keeps Definition content read-only and confirms explicit independent customization', async () => {
-    render(view()); await screen.findByText('Reusable review'); fireEvent.click(screen.getByRole('button', { name: 'Inspect' }));
-    await screen.findByText('UPSTREAM'); expect(screen.getByLabelText('Procedure')).not.toBeVisible();
+    render(view()); await screen.findByText('Reusable review', {}, { timeout: 5000 }); fireEvent.click(screen.getByRole('button', { name: 'Inspect' }));
+    await screen.findByText('UPSTREAM'); expect(within(screen.getByRole('dialog')).getByRole('region', { name: 'Definition Skill content' })).toBeInTheDocument(); expect(screen.queryByLabelText('Procedure')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close inspection' }));
     fireEvent.click(screen.getByRole('button', { name: 'Customize' }));
     const dialog = await screen.findByRole('dialog'); expect(within(dialog).getByText(/independent Instance Skill/)).toBeInTheDocument();
     expect(customizeInstanceSkill).not.toHaveBeenCalled(); fireEvent.click(within(dialog).getByRole('button', { name: 'Customize' }));
@@ -27,18 +39,18 @@ describe('Instance Skills ownership', () => {
   });
   it('retains an editable draft on conflicts and confirms local deletion', async () => {
     vi.mocked(updateInstanceSkill).mockRejectedValue(new Error('Skill revision is stale.'));
-    render(view()); await screen.findByText('Independent review'); fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
-    const procedure = await screen.findByLabelText('Procedure'); await waitFor(() => expect(procedure).toBeVisible()); fireEvent.change(procedure, { target: { value: 'EDITED' } });
+    render(view()); await screen.findByText('Independent review', {}, { timeout: 5000 }); fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await waitFor(() => expect(screen.getByLabelText('Procedure')).toBeVisible()); const procedure = screen.getByLabelText('Procedure'); fireEvent.change(procedure, { target: { value: 'EDITED' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save Skill' }));
     await waitFor(() => expect(updateInstanceSkill).toHaveBeenCalled()); expect(procedure).toHaveValue('EDITED');
-    await screen.findByRole('button', { name: 'Retry Skills' });
+    expect(within(screen.getByRole('dialog')).getByRole('alert')).toHaveTextContent('Skill revision is stale.');
     fireEvent.click(screen.getByRole('button', { name: 'Cancel editing' }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete' })); expect(deleteInstanceSkill).not.toHaveBeenCalled();
     fireEvent.click(await screen.findByRole('button', { name: 'Delete Skill' }));
     await waitFor(() => expect(deleteInstanceSkill).toHaveBeenCalledWith('owner', local));
   });
   it('creates an independent Skill with explicit projection and required capabilities', async () => {
-    render(view()); await screen.findByText('Reusable review');
+    render(view()); await screen.findByText('Reusable review', {}, { timeout: 5000 });
     const opener = screen.getByRole('button', { name: 'New Instance Skill' }); opener.focus(); fireEvent.click(opener);
     await waitFor(() => expect(screen.getByLabelText('Skill name')).toBeVisible()); fireEvent.change(screen.getByLabelText('Skill name'), { target: { value: 'Accounting' } });
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Check totals' } });
@@ -56,12 +68,13 @@ describe('Instance Skills ownership', () => {
     expect(screen.getByText(/Create a local Skill or Customize/)).toBeInTheDocument();
   });
   it('disables mutation on archived instances', async () => {
-    render(view(true)); await screen.findByText('Reusable review');
+    render(view(true)); await screen.findByText('Reusable review', {}, { timeout: 5000 });
     expect(screen.getByRole('button', { name: 'New Instance Skill' })).toBeDisabled(); expect(screen.getByRole('button', { name: 'Customize' })).toBeDisabled();
     expect(screen.getByRole('switch', { name: 'Enable Instance Skill Review' })).toBeDisabled();
     const button = within(screen.getByRole('region', { name: 'Instance Skills' })).getByRole('button', { name: 'Inspect' });
     button.focus(); fireEvent.click(button); await screen.findByRole('region', { name: 'Instance Skill content' });
-    expect(screen.getByRole('heading', { name: 'Review', level: 4 })).toHaveFocus();
+    expect(screen.getByRole('heading', { name: 'Procedure', level: 5 })).toBeVisible();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Close inspection' })).toHaveFocus());
     fireEvent.click(screen.getByRole('button', { name: 'Close inspection' }));
     await waitFor(() => expect(button).toHaveFocus());
   });

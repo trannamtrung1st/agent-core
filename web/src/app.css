@@ -6,22 +6,11 @@
 
 :root {
   color-scheme: dark;
-  --ac-color-primary: #1677ff;
-  --ac-color-success: #52c41a;
-  --ac-color-success-hover: #73d13d;
-  --ac-color-text: rgba(255, 255, 255, 0.88);
-  --ac-color-text-secondary: rgba(255, 255, 255, 0.65);
-  --ac-color-text-tertiary: rgba(255, 255, 255, 0.45);
-  --ac-color-layout: #000000;
-  --ac-color-container: #141414;
-  --ac-color-elevated: #1f1f1f;
-  --ac-color-border: #303030;
-  --ac-color-fill: rgba(255, 255, 255, 0.08);
-  --ac-color-bubble: rgba(255, 255, 255, 0.12);
+  /* Color, spacing and AntD radii are supplied by AppShell's resolved theme. */
   --ac-shadow-composer: 0 6px 16px rgba(0, 0, 0, 0.45);
-  --ac-space-compact: 8px;
-  --ac-space-default: 12px;
-  --ac-space-section: 16px;
+  --ac-radius-chip: 12px;
+  --ac-radius-composer: 16px;
+  --ac-radius-bubble: 18px;
   --ac-conversation-max: 52rem;
   --ac-header-height: 56px;
 }
@@ -31,12 +20,11 @@ body,
 #root {
   height: 100%;
   margin: 0;
-  background: var(--ac-color-layout);
-  color: var(--ac-color-text);
+  background: #000;
 }
 
 ::selection {
-  background: rgba(22, 119, 255, 0.35);
+  background: var(--ac-color-primary-bg);
   color: var(--ac-color-text);
 }
 
@@ -154,7 +142,7 @@ body,
   min-width: 32px;
   height: 32px;
   padding: 0;
-  border-radius: 6px;
+  border-radius: var(--ac-radius-control);
   color: var(--ac-color-text-secondary);
 }
 
@@ -217,7 +205,7 @@ body,
 }
 
 .chat-header-status-alarm::before {
-  background: var(--ant-color-error);
+  background: var(--ac-color-error);
 }
 
 /* Cap the header meta text so a long value (for example a connection error)
@@ -282,7 +270,7 @@ body,
 }
 
 .session-failure-meta {
-  font-size: var(--ant-font-size-sm);
+  font-size: var(--ac-font-size-label);
 }
 
 .session-failure-actions {
@@ -437,7 +425,7 @@ body,
   max-width: min(100%, 36rem);
   padding: var(--ac-space-compact) var(--ac-space-default);
   background: var(--ac-color-bubble);
-  border-radius: 18px;
+  border-radius: var(--ac-radius-bubble);
 }
 
 .user-bubble-text {
@@ -495,7 +483,7 @@ body,
 }
 
 .chat-message-status-interactive.ant-tag:focus-visible {
-  outline: 2px solid var(--ant-color-primary);
+  outline: 2px solid var(--ac-color-primary);
   outline-offset: 2px;
 }
 
@@ -549,7 +537,7 @@ body,
   max-width: 240px;
   max-height: 180px;
   object-fit: contain;
-  border-radius: 8px;
+  border-radius: var(--ac-radius-surface);
 }
 
 .file-chip {
@@ -560,7 +548,7 @@ body,
   min-width: 0;
   padding: var(--ac-space-compact) var(--ac-space-default);
   border: 1px solid var(--ac-color-border);
-  border-radius: 12px;
+  border-radius: var(--ac-radius-chip);
   background: var(--ac-color-elevated);
   text-decoration: none;
   color: inherit;
@@ -614,6 +602,49 @@ body,
   font-weight: 400;
 }
 
+.background-work-drawer .ant-drawer-body {
+  padding: var(--ac-space-section);
+}
+
+.background-work-timestamps,
+.background-work-trigger {
+  font-size: var(--ac-font-size-label);
+}
+
+.background-work-metadata {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr);
+  gap: var(--ac-space-compact) var(--ac-space-default);
+  margin: 0;
+  font-size: var(--ac-font-size-label);
+}
+
+.background-work-metadata dt {
+  color: var(--ac-color-text-secondary);
+}
+
+.background-work-item-title {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.background-work-metadata dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.background-work-long-content {
+  max-height: clamp(8rem, 24dvh, 16rem);
+  min-width: 0;
+  overscroll-behavior: contain;
+}
+
+.background-work-long-content:focus-visible {
+  outline: 2px solid var(--ac-color-primary);
+  outline-offset: 2px;
+  border-radius: var(--ac-radius-inline);
+}
+
 .background-work-loading,
 .schedule-loading {
   padding-block: calc(var(--ac-space-section) * 2);
@@ -656,7 +687,7 @@ body,
   min-height: 24px;
   margin: 0;
   padding-inline: var(--ac-space-compact);
-  border-radius: 12px;
+  border-radius: var(--ac-radius-chip);
   font-weight: 500;
 }
 
@@ -689,13 +720,13 @@ body,
   min-width: 0;
   padding: var(--ac-space-default);
   border: 1px solid var(--ac-color-border);
-  border-radius: 8px;
+  border-radius: var(--ac-radius-surface);
   background: var(--ac-color-elevated);
 }
 
 .background-work-detail-heading,
 .schedule-detail-heading {
-  color: var(--ant-color-success);
+  color: var(--ac-color-success);
 }
 
 .background-work-detail-label,
@@ -726,7 +757,7 @@ body,
   min-height: 24px;
   margin: 0;
   padding-inline: var(--ac-space-compact);
-  border-radius: 12px;
+  border-radius: var(--ac-radius-chip);
 }
 
 .schedule-next {
@@ -762,7 +793,7 @@ body,
   overflow: auto;
   padding: var(--ac-space-default);
   background: var(--ac-color-elevated);
-  border-radius: 8px;
+  border-radius: var(--ac-radius-surface);
 }
 
 .markdown-message code {
@@ -773,7 +804,7 @@ body,
 .markdown-message :not(pre) > code {
   padding: 0.1em 0.35em;
   background: var(--ac-color-elevated);
-  border-radius: 4px;
+  border-radius: var(--ac-radius-inline);
 }
 
 .markdown-message table {
@@ -883,7 +914,7 @@ body,
 }
 
 .model-picker-composer .model-picker-model.ant-btn {
-  border-radius: 6px;
+  border-radius: var(--ac-radius-control);
 }
 
 .model-picker-model.ant-btn::before,
@@ -923,7 +954,7 @@ body,
   width: min(20rem, calc(100vw - 32px));
   padding: var(--ac-space-compact);
   overflow: hidden;
-  border-radius: 16px;
+  border-radius: var(--ac-radius-composer);
   background: var(--ac-color-elevated);
   border: 1px solid var(--ac-color-border);
   box-shadow: var(--ac-shadow-composer);
@@ -1090,7 +1121,7 @@ body,
   gap: var(--ac-space-compact);
   min-width: 0;
   padding: var(--ac-space-compact);
-  border-radius: 8px;
+  border-radius: var(--ac-radius-surface);
 }
 
 .session-row-body:hover,
@@ -1215,7 +1246,7 @@ body,
 
 .pending-send-queue {
   padding: var(--ac-space-compact) var(--ac-space-default);
-  border-radius: 12px;
+  border-radius: var(--ac-radius-chip);
   border: 1px solid var(--ac-color-border);
   background: var(--ac-color-elevated);
 }
@@ -1242,7 +1273,7 @@ body,
 .pending-send-queue-toggle:focus-visible {
   outline: 2px solid var(--ac-color-primary);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--ac-radius-inline);
 }
 
 .pending-send-queue-toggle:hover {
@@ -1313,7 +1344,7 @@ body,
 }
 
 .pending-send-queue-status-error {
-  color: var(--ant-color-error);
+  color: var(--ac-color-error);
 }
 
 .pending-send-queue-more {
@@ -1336,7 +1367,7 @@ body,
   flex-direction: column;
   gap: var(--ac-space-compact);
   padding: var(--ac-space-compact);
-  border-radius: 16px;
+  border-radius: var(--ac-radius-composer);
   background: var(--ac-color-elevated);
   border: 1px solid var(--ac-color-border);
   box-shadow: var(--ac-shadow-composer);
@@ -1377,7 +1408,7 @@ body,
   min-width: 32px;
   height: 32px;
   padding: 0 !important;
-  border-radius: 6px;
+  border-radius: var(--ac-radius-control);
   line-height: 0;
 }
 
@@ -1396,12 +1427,12 @@ body,
 
 .composer-voice-live.ant-btn {
   color: var(--ac-color-success-hover) !important;
-  background: rgba(82, 196, 26, 0.18) !important;
+  background: var(--ac-color-success-bg) !important;
 }
 
 .composer-voice-live.ant-btn:not(:disabled):hover {
-  color: #95de64 !important;
-  background: rgba(82, 196, 26, 0.28) !important;
+  color: var(--ac-color-success-hover) !important;
+  background: color-mix(in srgb, var(--ac-color-success) 24%, var(--ac-color-elevated)) !important;
 }
 
 @media (max-width: 767px) {
@@ -1423,6 +1454,18 @@ body,
 
   .composer-toolbar {
     min-height: 44px;
+  }
+
+  .composer-toolbar-start {
+    flex: 1 1 0;
+  }
+
+  .composer-toolbar-start .model-picker {
+    flex-basis: 100%;
+  }
+
+  .composer-toolbar-end {
+    align-self: flex-end;
   }
 
   .composer-icon.ant-btn,
@@ -1468,7 +1511,7 @@ body,
   min-height: var(--ac-header-height);
   height: auto !important;
   line-height: normal !important;
-  padding-block: var(--ac-space-default) !important;
+  padding-block: var(--ac-space-compact) !important;
   padding-inline: var(--ac-space-section) !important;
   background: var(--ac-color-container);
   border-bottom: 1px solid var(--ac-color-border);
@@ -1510,25 +1553,29 @@ body,
   margin-block: var(--ac-space-compact) 0;
 }
 
-.admin-inventory-section {
+.admin-inventory-section,
+.admin-definition-panel {
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--ac-color-border);
-  border-radius: 8px;
+  border-radius: var(--ac-radius-surface);
   background: var(--ac-color-container);
 }
 
-.admin-inventory-heading {
+.admin-inventory-heading,
+.admin-definition-panel-heading {
   min-height: 56px;
   padding: var(--ac-space-section);
   border-block-end: 1px solid var(--ac-color-border);
 }
 
-.admin-inventory-heading .ant-typography {
+.admin-inventory-heading .ant-typography,
+.admin-definition-panel-heading .ant-typography {
   margin: 0;
 }
 
-.admin-inventory-heading h4.ant-typography {
+.admin-inventory-heading h4.ant-typography,
+.admin-definition-panel-heading h4.ant-typography {
   font-size: 16px;
   line-height: 1.3;
 }
@@ -1618,28 +1665,13 @@ body,
   gap: var(--ac-space-section);
 }
 
-.admin-definition-panel {
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--ac-color-border);
-  border-radius: 8px;
-  background: var(--ac-color-container);
-}
 
-.admin-definition-panel-heading {
-  min-height: 56px;
-  padding: var(--ac-space-section);
-  border-block-end: 1px solid var(--ac-color-border);
-}
 
-.admin-definition-panel-heading .ant-typography {
-  margin: 0;
-}
 
-.admin-definition-panel-heading h4.ant-typography {
-  font-size: 16px;
-  line-height: 1.3;
-}
+
+
+
+
 
 .admin-definition-panel-heading .ant-typography-secondary {
   font-size: 12px;
@@ -1808,7 +1840,7 @@ body,
   overflow: clip;
   scroll-margin-block-start: var(--ac-space-section);
   border: 1px solid var(--ac-color-border);
-  border-radius: 8px;
+  border-radius: var(--ac-radius-surface);
   background: var(--ac-color-container);
 }
 
@@ -1885,20 +1917,6 @@ body,
   border-block-start: 1px solid var(--ac-color-border);
 }
 
-.admin-skill-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ac-space-default);
-  min-width: 0;
-  padding: var(--ac-space-default);
-  border: 1px solid var(--ac-color-border);
-}
-
-.admin-published-skills {
-  margin: 0;
-  padding-inline-start: 1.25rem;
-}
-
 .admin-draft-form-section > h5.ant-typography,
 .admin-draft-section-heading h5.ant-typography {
   margin: 0;
@@ -1967,7 +1985,7 @@ body,
 .admin-draft-switch-row {
   padding: var(--ac-space-default);
   border: 1px solid var(--ac-color-border);
-  border-radius: 8px;
+  border-radius: var(--ac-radius-surface);
   background: var(--ac-color-elevated);
 }
 
@@ -1986,7 +2004,7 @@ body,
   gap: var(--ac-space-compact);
   padding: var(--ac-space-compact);
   border: 1px solid var(--ac-color-border);
-  border-radius: 8px;
+  border-radius: var(--ac-radius-surface);
   background: var(--ac-color-elevated);
 }
 
@@ -2073,7 +2091,7 @@ body,
   gap: var(--ac-space-compact);
   padding: var(--ac-space-default);
   border: 1px dashed var(--ac-color-border);
-  border-radius: var(--ac-radius-control, 8px);
+  border-radius: var(--ac-radius-surface);
   min-width: 0;
 }
 
@@ -2357,7 +2375,7 @@ body,
   gap: var(--ac-space-compact);
 }
 .chat-approval .ant-modal-footer .ant-btn + .ant-btn { margin-inline-start: 0; }
-.harness-approval { border-inline-start: 2px solid var(--ant-color-primary); padding-inline-start: 12px; }
+.harness-approval { border-inline-start: 2px solid var(--ac-color-primary); padding-inline-start: 12px; }
 
 .harness-management-content > .ant-typography { margin-block-end: 0; }
 .harness-evidence > .ant-typography { max-width: 72ch; }
@@ -2377,7 +2395,8 @@ body,
   padding: var(--ac-space-default) var(--ac-space-section);
 }
 
-.admin-definition-panel-body .admin-collection-toolbar {
+.admin-definition-panel-body .admin-collection-toolbar,
+.admin-versions-section > .admin-collection-toolbar {
   padding: 0;
 }
 
@@ -2394,12 +2413,33 @@ body,
 }
 
 .admin-collection-table .ant-table-cell {
-  white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+.admin-collection-table .ant-table-cell:not(.ant-table-cell-ellipsis) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.admin-collection-table .ant-table-cell .ant-btn-link:not(.admin-collection-name) {
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  text-align: start;
 }
 
 .admin-collection-table .ant-alert {
   white-space: normal;
+}
+
+.admin-table-actions {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.admin-table-actions > .ant-btn,
+.admin-table-actions > .ant-tag {
+  flex-shrink: 0;
 }
 
 .admin-collection-name.ant-btn {
@@ -2444,8 +2484,8 @@ body,
 .admin-version-details .ant-input[disabled],
 .admin-version-details .ant-input-number-disabled .ant-input-number-input,
 .admin-version-details .ant-select-disabled .ant-select-content {
-  color: var(--ant-color-text);
-  -webkit-text-fill-color: var(--ant-color-text);
+  color: var(--ac-color-text);
+  -webkit-text-fill-color: var(--ac-color-text);
 }
 
 .admin-versions-section > h5.ant-typography {
@@ -2502,4 +2542,21 @@ body,
   padding: 0;
   border: 0;
   outline: none;
+}
+
+/* Product text controls keep one visible keyboard focus policy. */
+.model-picker-model.ant-btn:focus-visible:not(:disabled),
+.model-picker-option.ant-btn:focus-visible:not(:disabled),
+.session-new-chat.ant-btn:focus-visible:not(:disabled),
+.session-row-open.ant-btn:focus-visible:not(:disabled),
+.session-row-more.ant-btn:focus-visible:not(:disabled),
+.session-overflow.ant-btn:focus-visible:not(:disabled),
+.chat-header-icon-action.ant-btn:focus-visible:not(:disabled),
+.chat-header-admin.ant-btn:focus-visible:not(:disabled) {
+  outline: 2px solid var(--ac-color-primary) !important;
+  outline-offset: -2px;
+}
+
+.composer-shell:focus-within {
+  border-color: var(--ac-color-primary);
 }

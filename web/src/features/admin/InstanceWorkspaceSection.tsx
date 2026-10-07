@@ -64,7 +64,7 @@ export function InstanceWorkspaceSection({ instanceId, archived }: { instanceId:
       {loading && !page ? <Spin aria-label="Loading workspace" /> : null}
       {page ? <>
         <AdminCollectionToolbar value={search} onChange={setSearch} label="workspace items" />
-        <Table<AgentWorkspaceItem> size="small" rowKey="itemId" loading={loading} dataSource={items} pagination={pagination} scroll={{ x: 840 }}
+        <Table<AgentWorkspaceItem> className="admin-collection-table" size="small" rowKey="itemId" loading={loading} dataSource={items} pagination={pagination} scroll={{ x: 880 }}
           locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search ? "No matching items" : "No workspace items yet"} /> }}
           columns={[
             { title: "Path", dataIndex: "logicalPath", ellipsis: true, width: 260, render: (value: string) => <span title={value}>{value}</span> },
@@ -72,7 +72,7 @@ export function InstanceWorkspaceSection({ instanceId, archived }: { instanceId:
             { title: "Size", dataIndex: "byteSize", align: "right", width: 90, render: artifactSize },
             { title: "Updated", dataIndex: "updatedAt", width: 165, render: (value: string) => <time dateTime={value}>{new Date(value).toLocaleString()}</time> },
             { title: "Source", dataIndex: "sourceSessionId", ellipsis: true, width: 140, render: (value: string | null) => value ? <span title={`Conversation ${value}`}>Conversation {value}</span> : "—" },
-            { title: "Actions", width: 180, render: (_, item) => <Flex wrap gap={token.paddingXS}>
+            { title: "Actions", width: 220, render: (_, item) => <Flex className="admin-table-actions" gap={token.paddingXS}>
               <Button aria-label={`Download ${item.logicalPath}`} disabled={!!busy || item.directory} onClick={() => void save(item)}>Download</Button>
               <Button danger aria-label={`Delete ${item.logicalPath}`} disabled={archived || !!busy || loading} onClick={() => confirmAction(modal, {
                 title: item.directory ? "Delete empty folder?" : "Delete workspace file?", content: `Delete ${item.logicalPath} from this agent's workspace. Existing conversation Artifacts are kept.`,

@@ -1,42 +1,38 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, App, Button, Empty, Flex, Form, Input, Select, Spin, Switch, Table, Tag, Typography, theme } from 'antd';
+import { Alert, App, Button, Empty, Flex, Grid, Spin, Switch, Table, Tag, Typography, theme } from 'antd';
+import { SkillDrawer, type SkillDrawerValue } from './SkillDrawer';
 import { confirmAction } from '../../app/confirmAction';
 import { listInstanceSkills, inspectInstanceSkill, createInstanceSkill, updateInstanceSkill, toggleInstanceSkill, customizeInstanceSkill, deleteInstanceSkill, type InstanceSkill, type SkillInput } from '../../services/instanceSkills';
 import { describeAdminError, type AdminFailureNotice } from './adminErrors';
 import { AdminErrorNotice } from './adminFailure';
 import { AdminCollectionToolbar, useAdminCollectionSearch } from './AdminCollectionToolbar';
 
-type SkillForm = Omit<SkillInput, 'requiredCapabilities'> & { capabilities: string };
+
 export function InstanceSkillsSection({ instanceId, archived, active = true, onUpdated }: { instanceId: string; archived: boolean; active?: boolean; onUpdated?: () => void }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
+  const compact = !Grid.useBreakpoint().md;
   const [skills, setSkills] = useState<InstanceSkill[] | null>(null); const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false); const [error, setError] = useState<AdminFailureNotice | null>(null);
+  const [drawerVisible, setDrawerVisible] = useState(false);
   const [editing, setEditing] = useState<InstanceSkill | 'new' | null>(null); const [inspected, setInspected] = useState<InstanceSkill | null>(null);
-  const [form] = Form.useForm<SkillForm>(); const { search, setSearch, pagination } = useAdminCollectionSearch();
+  const [drawerValue, setDrawerValue] = useState<SkillDrawerValue | null>(null); const { search, setSearch, pagination } = useAdminCollectionSearch();
   const generation = useRef(0);
   const returnFocus = useRef<HTMLElement | null>(null);
   const restoreFocus = useRef(false);
-  const editorPanel = useRef<HTMLElement>(null); const inspectionPanel = useRef<HTMLElement>(null);
   const closePanel = () => {
     setEditing(null); setInspected(null);
     restoreFocus.current = true;
   };
   useEffect(() => {
-    if (!restoreFocus.current || busy || loading || editing || inspected) return;
+    if (!restoreFocus.current || busy || loading || editing || inspected || drawerVisible) return;
     restoreFocus.current = false;
     if (returnFocus.current?.isConnected) returnFocus.current.focus();
-  }, [busy, loading, editing, inspected]);
-  useEffect(() => {
-    const panel = inspected ? inspectionPanel.current : editing ? editorPanel.current : null;
-    if (!panel) return;
-    const heading = panel.querySelector('h4');
-    heading?.focus(); panel.scrollIntoView?.({ block: 'nearest' });
-  }, [editing, inspected]);
+  }, [busy, loading, editing, inspected, drawerVisible]);
   const owner = useRef(instanceId); owner.current = instanceId;
   useEffect(() => {
     generation.current++; restoreFocus.current = false; setSkills(null); setEditing(null); setInspected(null); setBusy(false);
     return () => { generation.current++; };
-  }, [instanceId, form]);
+  }, [instanceId]);
   const reload = useCallback(async () => {
     const request = ++generation.current;
     const current = () => generation.current === request && owner.current === instanceId;
@@ -62,47 +58,62 @@ export function InstanceSkillsSection({ instanceId, archived, active = true, onU
     try {
       const value = skill ? await inspectInstanceSkill(instanceId, skill.key) : null;
       if (!current()) return;
+      setDrawerValue(value ? { ...value, id: value.key.slice(value.key.indexOf(':') + 1), capabilities: value.requiredCapabilities.join(', ') } : { name: '', description: '', procedure: '', projection: 'OnDemand', enabled: true, capabilities: '' });
       if (value && (value.origin === 'Definition' || archived)) { setEditing(null); setInspected(value); return; }
       setEditing(value ?? 'new'); setInspected(null);
-      form.setFieldsValue(value ? { ...value, capabilities: value.requiredCapabilities.join(', ') } : { name: '', description: '', procedure: '', projection: 'OnDemand', enabled: true, capabilities: '' });
     } catch (e) { if (current()) setError(describeAdminError(e, 'Unable to inspect the Skill. Retry to load its current content.')); }
     finally { if (owner.current === instanceId) setBusy(false); }
   }
-  async function save(value: SkillForm) {
-    const input: SkillInput = { name: value.name, description: value.description, procedure: value.procedure, projection: value.projection, enabled: value.enabled, requiredCapabilities: value.capabilities.split(',').map(s => s.trim()).filter(Boolean) };
+  async function save(value: SkillDrawerValue) {
+    if (!editing || archived || !value.projection || value.enabled === undefined) return;
+    const input: SkillInput = { ...(editing === 'new' && value.id?.trim() ? { id: value.id.trim() } : {}), name: value.name, description: value.description, procedure: value.procedure, projection: value.projection, enabled: value.enabled, requiredCapabilities: value.capabilities.split(',').map(s => s.trim()).filter(Boolean) };
     await mutate(() => editing === 'new' ? createInstanceSkill(instanceId, input) : updateInstanceSkill(instanceId, editing as InstanceSkill, input), true);
   }
-  const visible = (skills ?? []).filter(s => `${s.name} ${s.description}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
+  const visible = (skills ?? []).filter(s => `${s.name} ${s.description} ${s.key} ${s.projection === 'Always' ? 'Always' : 'On demand'} ${s.requiredCapabilities.join(' ')} ${s.sourceDefinitionId ?? ''} ${s.sourceDefinitionSkillId ?? ''}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
   function group(origin: InstanceSkill['origin']) {
     const definition = origin === 'Definition';
     return <section className="admin-definition-panel" aria-label={`${origin} Skills`}>
       <div className="admin-definition-panel-heading"><Typography.Title level={4}>{origin} Skills</Typography.Title><Typography.Text type="secondary">{definition ? 'Reusable procedures from the active Definition. Content is read-only; enabled choices belong to this instance.' : 'Independent procedures owned by this instance, retained across sessions and Definition changes.'}</Typography.Text></div>
-      <div className="admin-definition-panel-body"><Table<InstanceSkill> size="small" rowKey="key" loading={loading} pagination={pagination} scroll={{ x: 720 }} dataSource={visible.filter(s => s.origin === origin)}
+      <div className="admin-definition-panel-body"><Table<InstanceSkill> size="small" rowKey="key" loading={loading} pagination={pagination}
+        className="admin-collection-table" style={{ containerType: 'inline-size' }}
+        scroll={{ x: compact ? 800 : 1360 }} dataSource={visible.filter(s => s.origin === origin)}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search ? 'No matching Skills' : definition ? 'This Definition has no reusable Skills.' : 'Create a local Skill or Customize a Definition Skill to keep your own procedure.'} /> }}
         columns={[
-          { title: 'Skill', width: 280, render: (_, s) => <Flex vertical gap={token.paddingXS}><Typography.Text strong style={{ overflowWrap: 'anywhere' }}>{s.name}</Typography.Text><Typography.Text type="secondary" style={{ overflowWrap: 'anywhere' }}>{s.description}</Typography.Text><Flex wrap gap={token.paddingXS}><Tag>{origin}</Tag><Tag>{s.projection === 'Always' ? 'Always' : 'On demand'}</Tag>{s.definitionVersion ? <Typography.Text type="secondary">Version {s.definitionVersion}</Typography.Text> : null}</Flex>{s.sourceDefinitionId ? <Typography.Text type="secondary">Copied from {s.sourceDefinitionId} v{s.sourceDefinitionVersion} · {s.sourceDefinitionSkillId}</Typography.Text> : null}{s.missingCapabilities.length ? <Alert type="warning" showIcon title={`Missing authority: ${s.missingCapabilities.join(', ')}`} /> : null}</Flex> },
-          { title: 'Requires', width: 170, render: (_, s) => <Typography.Text style={{ overflowWrap: 'anywhere' }}>{s.requiredCapabilities.join(', ') || 'No capabilities'}</Typography.Text> },
+          { title: 'Skill', width: compact ? 270 : 180, onCell: () => ({ style: { whiteSpace: 'normal' } }), render: (_, s) => <Flex vertical gap={token.paddingXS}>
+            <Typography.Text strong ellipsis={!compact} title={s.name} style={compact ? { overflowWrap: 'anywhere' } : undefined}>{s.name}</Typography.Text>
+            {compact ? <>
+              <Typography.Text type="secondary" style={{ overflowWrap: 'anywhere' }}>{s.description}</Typography.Text>
+              <Flex wrap gap={token.paddingXS}><Tag>{s.projection === 'Always' ? 'Always' : 'On demand'}</Tag>{s.definitionVersion ? <Typography.Text type="secondary">Version {s.definitionVersion}</Typography.Text> : null}</Flex>
+              {s.sourceDefinitionId ? <Typography.Text type="secondary" style={{ overflowWrap: 'anywhere' }}>Copied from {s.sourceDefinitionId} v{s.sourceDefinitionVersion} · {s.sourceDefinitionSkillId}</Typography.Text> : null}
+              <Typography.Text type="secondary" style={{ overflowWrap: 'anywhere' }}>Requires: {s.requiredCapabilities.join(', ') || 'No capabilities'}</Typography.Text>
+              {s.missingCapabilities.length ? <Typography.Text type="warning" style={{ overflowWrap: 'anywhere' }}>Missing authority: {s.missingCapabilities.join(', ')}</Typography.Text> : null}
+            </> : null}
+          </Flex> },
+          { title: 'Skill ID', width: 180, onCell: () => ({ style: { whiteSpace: 'normal' } }), render: (_, s) => <Typography.Text type="secondary" ellipsis title={s.key.slice(s.key.indexOf(':') + 1)}>{s.key.slice(s.key.indexOf(':') + 1)}</Typography.Text> },
+          { title: 'Description', width: 220, responsive: ['md'], onCell: () => ({ style: { whiteSpace: 'normal' } }), render: (_, s) => <Typography.Text ellipsis title={s.description}>{s.description}</Typography.Text> },
+          { title: 'Activation', width: 120, responsive: ['md'], render: (_, s) => <Tag>{s.projection === 'Always' ? 'Always' : 'On demand'}</Tag> },
+          { title: definition ? 'Version' : 'Provenance', width: 160, responsive: ['md'], onCell: () => ({ style: { whiteSpace: 'normal' } }), render: (_, s) => <Typography.Text type="secondary" ellipsis title={definition ? `Version ${s.definitionVersion}` : s.sourceDefinitionId ? `Copied from ${s.sourceDefinitionId} v${s.sourceDefinitionVersion} · ${s.sourceDefinitionSkillId}` : 'Created in this instance'}>{definition ? `Version ${s.definitionVersion}` : s.sourceDefinitionId ? `Copied from ${s.sourceDefinitionId} v${s.sourceDefinitionVersion} · ${s.sourceDefinitionSkillId}` : 'Created in this instance'}</Typography.Text> },
+          { title: 'Requires', width: 170, responsive: ['md'], onCell: () => ({ style: { whiteSpace: 'normal' } }), render: (_, s) => <Flex vertical gap={token.paddingXS}><Typography.Text ellipsis title={s.requiredCapabilities.join(', ') || 'No capabilities'}>{s.requiredCapabilities.join(', ') || 'No capabilities'}</Typography.Text>{s.missingCapabilities.length ? <Typography.Text type="warning" style={{ overflowWrap: 'anywhere' }}>Missing authority: {s.missingCapabilities.join(', ')}</Typography.Text> : null}</Flex> },
           { title: 'Enabled', width: 90, render: (_, s) => <Switch aria-label={`Enable ${origin} Skill ${s.name}`} checked={s.enabled} disabled={archived || busy || loading} onChange={enabled => void mutate(() => toggleInstanceSkill(instanceId, s, enabled))} /> },
-          { title: 'Actions', width: 180, render: (_, s) => <Flex wrap gap={token.paddingXS}><Button disabled={busy} onClick={() => void open(s)}>{definition || archived ? 'Inspect' : 'Edit'}</Button>{definition ? <Button disabled={archived || busy} onClick={() => confirmAction(modal, { title: 'Customize Definition Skill?', content: 'Creates an independent Instance Skill and disables this Definition Skill. Future Definition changes will not update the copy.', okText: 'Customize', onOk: () => mutate(() => customizeInstanceSkill(instanceId, s)) })}>Customize</Button> : <Button danger disabled={archived || busy} onClick={() => confirmAction(modal, { title: 'Delete Instance Skill?', content: `Delete ${s.name}? This removes the local procedure for future executions.`, okText: 'Delete Skill', danger: true, onOk: () => mutate(() => deleteInstanceSkill(instanceId, s)) })}>Delete</Button>}</Flex> }
+          { title: 'Actions', width: 240, render: (_, s) => <Flex className="admin-table-actions" gap={token.paddingXS}><Button disabled={busy} aria-expanded={definition || archived ? inspected?.key === s.key : undefined} onClick={() => void open(s)}>{definition || archived ? 'Inspect' : 'Edit'}</Button>{definition ? <Button disabled={archived || busy} onClick={() => confirmAction(modal, { title: 'Customize Definition Skill?', content: 'Creates an independent Instance Skill and disables this Definition Skill. Future Definition changes will not update the copy.', okText: 'Customize', onOk: () => mutate(() => customizeInstanceSkill(instanceId, s)) })}>Customize</Button> : <Button danger disabled={archived || busy} onClick={() => confirmAction(modal, { title: 'Delete Instance Skill?', content: `Delete ${s.name}? This removes the local procedure for future executions.`, okText: 'Delete Skill', danger: true, onOk: () => mutate(() => deleteInstanceSkill(instanceId, s)) })}>Delete</Button>}</Flex> }
         ]} /></div>
     </section>;
   }
   return <Flex vertical gap={token.padding}>
-    <Typography.Paragraph type="secondary">Skills do not grant capabilities. Enabled Skills with the same name both remain available. Changes apply to the next execution.</Typography.Paragraph>
+    <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Skills do not grant capabilities. Enabled Skills with the same name both remain available. Changes apply to the next execution.</Typography.Paragraph>
     {archived ? <Alert type="info" showIcon title="Archived Skills are read-only" /> : null}
     <Flex wrap align="center" gap={token.paddingXS}><Button type="primary" disabled={archived || busy} onClick={() => void open()}>New Instance Skill</Button><Button disabled={loading || busy} onClick={() => void reload()}>Reload Skills</Button></Flex>
-    {error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button onClick={() => void reload()}>Retry Skills</Button>} /> : null}
+    {error && !editing ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button onClick={() => void reload()}>Retry Skills</Button>} /> : null}
     {loading && !skills ? <Spin aria-label="Loading Skills" /> : null}
     {skills ? <><AdminCollectionToolbar value={search} onChange={setSearch} label="Skills" />{group('Definition')}{group('Instance')}</> : null}
-    {inspected ? <section ref={inspectionPanel} className="admin-definition-panel" aria-label={`${inspected.origin} Skill content`}><div className="admin-definition-panel-heading"><Typography.Title level={4} tabIndex={-1}>{inspected.name}</Typography.Title><Button onClick={closePanel}>Close inspection</Button></div><div className="admin-definition-panel-body"><Typography.Paragraph style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{inspected.procedure}</Typography.Paragraph></div></section> : null}
-    <section ref={editorPanel} hidden={!editing} style={{ display: editing ? undefined : 'none' }} className="admin-definition-panel" aria-label="Instance Skill editor"><div className="admin-definition-panel-heading"><Typography.Title level={4} tabIndex={-1}>{editing === 'new' ? 'New Instance Skill' : 'Edit Instance Skill'}</Typography.Title></div><div className="admin-definition-panel-body"><Form form={form} layout="vertical" onFinish={value => void save(value)} style={{ maxWidth: '48rem' }} disabled={busy || archived}>
-      <Form.Item name="name" label="Skill name" rules={[{ required: true, whitespace: true, max: 80 }]}><Input maxLength={80} /></Form.Item>
-      <Form.Item name="description" label="Description" rules={[{ required: true, whitespace: true, max: 240 }]}><Input.TextArea maxLength={240} rows={2} /></Form.Item>
-      <Form.Item name="procedure" label="Procedure" rules={[{ required: true, whitespace: true, max: 4000 }]}><Input.TextArea maxLength={4000} rows={6} /></Form.Item>
-      <Form.Item name="projection" label="Projection" rules={[{ required: true }]}><Select options={[{ value: 'Always', label: 'Always · active at execution start' }, { value: 'OnDemand', label: 'On demand · loaded when needed' }]} /></Form.Item>
-      <Form.Item name="capabilities" label="Required capabilities" extra="Comma-separated authorized capability names. Requirements never grant authority."><Input /></Form.Item>
-      <Form.Item name="enabled" label="Enabled" valuePropName="checked"><Switch /></Form.Item>
-      <Flex wrap gap={token.paddingXS}><Button type="primary" htmlType="submit" loading={busy}>Save Skill</Button></Flex>
-    </Form><Button disabled={busy} onClick={closePanel}>Cancel editing</Button></div></section>
+    <SkillDrawer open={Boolean(editing || inspected) && active} value={drawerValue}
+      title={inspected ? `${inspected.origin} Skill details` : editing === 'new' ? 'New Instance Skill' : 'Edit Instance Skill'}
+      idReadOnly={Boolean(inspected) || editing !== 'new'} validateId={id => id && (skills ?? []).some(s => s.origin === 'Instance' && s.key === `instance:${id}`) ? 'This Skill ID already exists in this Agent Instance.' : null}
+      readOnly={Boolean(inspected)} busy={busy} afterOpenChange={setDrawerVisible} focusTriggerAfterClose={false}
+      onClose={() => { if (!busy) closePanel(); }} onSave={save}
+      contentLabel={inspected ? `${inspected.origin} Skill content` : 'Instance Skill editor'}
+      context={inspected?.origin === 'Definition' ? 'Reusable procedure from the active Definition. Customize it to create an independent Instance Skill.' : 'An independent procedure for this instance. Changes apply to the next execution.'}
+      notice={error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} /> : null}
+    />
   </Flex>;
 }

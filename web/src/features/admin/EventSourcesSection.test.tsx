@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { App as AntApp } from "antd";
+import { App as AntApp, ConfigProvider } from "antd";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EventSourcesSection, webhookUrl } from "./EventSourcesSection";
 
@@ -22,9 +22,9 @@ const sourceId = "22222222-2222-2222-2222-222222222222";
 
 function renderSection() {
   return render(
-    <AntApp>
+    <ConfigProvider theme={{ token: { motion: false } }}><AntApp>
       <EventSourcesSection />
-    </AntApp>
+    </AntApp></ConfigProvider>
   );
 }
 
@@ -61,10 +61,11 @@ describe("EventSourcesSection", () => {
     renderSection();
     expect(await screen.findByText("No event sources yet.")).toBeInTheDocument();
     expect(screen.getByText(/does not grant an agent/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "New event source" }));
     fireEvent.change(screen.getByLabelText("Event source name"), { target: { value: "Demo Store" } });
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create event source" })); });
     await waitFor(() => expect(createEventSource).toHaveBeenCalledWith("Demo Store"));
-    const credential = await screen.findByRole("dialog");
+    const credential = (await screen.findByLabelText("Event source credential")).closest('[role="dialog"]') as HTMLElement;
     expect(within(credential).getByText("Copy this credential")).toBeInTheDocument();
     expect(within(credential).getByLabelText("Event source credential")).toHaveValue("secret-credential-value");
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
@@ -106,7 +107,7 @@ describe("EventSourcesSection", () => {
     expect(screen.queryByText("No event sources yet.")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByText("No event sources yet.")).toBeVisible();
-    expect(screen.getByRole("textbox", { name: "Event source name" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "New event source" })).toBeVisible();
   });
 
   it("keeps clipboard failure and manual copy inside the one-time credential dialog", async () => {
@@ -114,15 +115,41 @@ describe("EventSourcesSection", () => {
     vi.mocked(createEventSource).mockResolvedValue({ sourceId, sourceKey, token: "one-time-token", status: "Active" });
     Object.assign(navigator, { clipboard: { writeText: vi.fn().mockRejectedValue(new Error("Denied")) } });
     renderSection();
+    fireEvent.click(await screen.findByRole("button", { name: "New event source" }));
     fireEvent.change(await screen.findByLabelText("Event source name"), { target: { value: "Store" } });
     fireEvent.click(screen.getByRole("button", { name: "Create event source" }));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = (await screen.findByLabelText("Event source credential")).closest('[role="dialog"]') as HTMLElement;
     fireEvent.click(within(dialog).getByRole("button", { name: "Copy event source credential" }));
     await waitFor(() => expect(within(dialog).getByText("Copy failed. Select the value and copy it manually.")).toBeVisible());
     expect(within(dialog).getByLabelText("Event source credential")).toHaveValue("one-time-token");
     fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
     await waitFor(() => expect(screen.queryByLabelText("Event source credential")).not.toBeInTheDocument());
     expect(screen.queryByText(/Copy failed/)).not.toBeInTheDocument();
+  });
+
+  it("retains a failed creation draft for retry and clears cancelled drafts", async () => {
+    vi.mocked(listEventSources).mockResolvedValue([]);
+    vi.mocked(createEventSource).mockRejectedValueOnce(new Error("Temporary failure"))
+      .mockResolvedValueOnce({ sourceId, sourceKey, token: "retry-token", status: "Active" });
+    renderSection();
+    fireEvent.click(await screen.findByRole("button", { name: "New event source" }));
+    const drawer = await screen.findByRole("dialog", { name: "New event source" });
+    expect(within(drawer).getByRole("button", { name: "Create event source" })).toBeDisabled();
+    fireEvent.change(within(drawer).getByLabelText("Event source name"), { target: { value: " Retry Store " } });
+    fireEvent.click(within(drawer).getByRole("button", { name: "Create event source" }));
+    expect(await within(drawer).findByText("Temporary failure")).toBeVisible();
+    expect(within(drawer).getByLabelText("Event source name")).toHaveValue(" Retry Store ");
+    fireEvent.click(within(drawer).getByRole("button", { name: "Create event source" }));
+    const credential = (await screen.findByLabelText("Event source credential")).closest('[role="dialog"]') as HTMLElement;
+    expect(createEventSource).toHaveBeenLastCalledWith("Retry Store");
+    fireEvent.click(within(credential).getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "New event source" }));
+    fireEvent.change(screen.getByLabelText("Event source name"), { target: { value: "Discard me" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "New event source" }));
+    expect(screen.getByLabelText("Event source name")).toHaveValue("");
   });
 
 });

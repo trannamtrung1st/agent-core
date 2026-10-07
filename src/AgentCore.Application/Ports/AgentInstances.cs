@@ -105,5 +105,5 @@ public interface IAgentInstanceService
 public sealed record InstanceSkillSnapshot(IReadOnlyList<AgentDefinitionSkillState> DefinitionStates, IReadOnlyList<AgentInstanceSkill> InstanceSkills);
 public sealed record SkillMutation(Guid InstanceId, long ExpectedInstanceRevision,
     AgentDefinitionSkillState? DefinitionState = null, AgentInstanceSkill? InstanceSkill = null,
-    Guid? DeleteSkillId = null, long? ExpectedSkillRevision = null, long? ExpectedStateRevision = null,
+    string? DeleteSkillId = null, long? ExpectedSkillRevision = null, long? ExpectedStateRevision = null,
     AdminEventAppend? History = null);

@@ -443,23 +443,31 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentInstanceSkillRecord", b =>
                 {
-                    b.Property<string>("SkillId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("AgentInstanceId")
-                        .IsRequired()
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(80)
+                    b.Property<string>("SkillId")
+                        .HasMaxLength(64)
                         .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(240)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Procedure")
@@ -470,39 +478,30 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<int>("Projection")
                         .HasColumnType("INTEGER");
 
-                    b.Property<bool>("Enabled")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("RequiredCapabilitiesJson")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("CreatedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("CreatedBy")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("SourceDefinitionId")
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("SourceDefinitionVersion")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("SourceDefinitionSkillId")
-                        .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
                     b.Property<long>("Revision")
                         .IsConcurrencyToken()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("SourceDefinitionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SourceDefinitionSkillId")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("SourceDefinitionVersion")
+                        .HasColumnType("INTEGER");
+
                     b.Property<long>("UpdatedAtUtc")
                         .HasColumnType("INTEGER");
 
-                    b.HasKey("SkillId");
+                    b.HasKey("AgentInstanceId", "SkillId");
 
                     b.HasIndex("AgentInstanceId", "UpdatedAtUtc");
 

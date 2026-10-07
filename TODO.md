@@ -1383,6 +1383,8 @@ Always keep this section.
 
 - [ ] Admin assistant agent remains a future idea.
 - [ ] PNG, more file generation/processing.
+- [ ] Add mentioning skills, files, etc...
+- [ ] Consider skills catalog at system level...
 - [x] P9.7 owns bounded, configurable agent-assisted/self-managed harness authoring; do not track a second generic “self-improvement” runtime here.
 - [x] P9.8 — Session Retrospection / Agent Experience (bounded experience with provenance; optional existing memory admission).
 - [ ] team work, agent communication, workflow, orchestration, etc .... like grok bot
@@ -1443,4 +1445,4 @@ The original unified Automation cutover passed all five hosted Synthetic/Compose
 
 ## Agent Instance Skills migration (2026-10-07)
 
-Full architectural cutover is locally verified; hosted exact-SHA acceptance remains pending: stable-id Definition enabled state, independent owner-local procedures, explicit projection/defaults, immutable execution catalogs, ordinary authorized management tools, Admin UI and atomic persistence. Keyword activation and Harness Skill authoring are retired. Historical milestones keep their original evidence; current verification and remaining gates are tracked in [migration report](docs/reports/instance-skills-migration-verification.md).
+Full architectural cutover is closed/frozen on `9c2d40e0`; all five [exact-SHA hosted jobs](https://github.com/trannamtrung1st/agent-core/actions/runs/37649033738) passed: stable-id Definition enabled state, independent owner-local procedures, explicit projection/defaults, immutable execution catalogs, ordinary authorized management tools, Admin UI and atomic persistence. Keyword activation and Harness Skill authoring are retired. Historical milestones keep their original evidence; current verification and closure evidence are tracked in [migration report](docs/reports/instance-skills-migration-verification.md).

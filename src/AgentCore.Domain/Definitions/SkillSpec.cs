@@ -25,7 +25,7 @@ public sealed record SkillSpec(
 public sealed record AgentDefinitionSkillState(Guid AgentInstanceId, string DefinitionSkillId,
     bool Enabled, long Revision, DateTimeOffset UpdatedAt);
 
-public sealed record AgentInstanceSkill(Guid SkillId, Guid AgentInstanceId,
+public sealed record AgentInstanceSkill(string SkillId, Guid AgentInstanceId,
     string Name, string Description, string Procedure, SkillProjection Projection, bool Enabled,
     IReadOnlyList<string> RequiredCapabilities, long Revision, DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt, SkillAuthor CreatedBy, string? SourceDefinitionId = null,
@@ -39,7 +39,7 @@ public static class SkillKeys
 {
     public static bool IsValid(string? key) => key is not null &&
         (key.StartsWith("definition:", StringComparison.Ordinal) && SkillIds.IsValid(key[11..])
-        || key.StartsWith("instance:", StringComparison.Ordinal) && Guid.TryParseExact(key[9..], "D", out var id) && id != Guid.Empty);
+        || key.StartsWith("instance:", StringComparison.Ordinal) && (SkillIds.IsValid(key[9..]) || Guid.TryParseExact(key[9..], "D", out var id) && id != Guid.Empty));
 }
 
 public static class SkillPolicy

@@ -244,12 +244,12 @@ describe("BackgroundWorkDrawer", () => {
   it("uses the wide and narrow drawer widths", async () => {
     const wide = renderDrawer(async () => [], { wide: true });
     expect(await screen.findByText("No runs yet. Runs appear when Automations or manual reviews execute.")).toBeInTheDocument();
-    expect(document.querySelector(".ant-drawer-content-wrapper")).toHaveStyle({ width: "400px" });
+    expect(document.querySelector(".ant-drawer-content-wrapper")).toHaveStyle({ width: "min(640px, 100vw)" });
     wide.unmount();
 
     renderDrawer(async () => [], { wide: false });
     expect(await screen.findByText("No runs yet. Runs appear when Automations or manual reviews execute.")).toBeInTheDocument();
-    expect(document.querySelector(".ant-drawer-content-wrapper")).toHaveStyle({ width: "320px" });
+    expect(document.querySelector(".ant-drawer-content-wrapper")).toHaveStyle({ width: "100vw" });
   });
 
   it("reuses a slow result request across polls until it completes", async () => {

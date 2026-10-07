@@ -12,6 +12,16 @@ export function runOutcomeLabel(value: string | null | undefined) {
 export function runOriginLabel(origin: string) {
   return origin;
 }
+
+/** Localize the legacy one-shot ISO summary without rewriting other trigger kinds. */
+export function runTriggerLabel(summary: string) {
+  const match = /^Once · (\d{4}-\d{2}-\d{2}T.+)$/.exec(summary);
+  if (!match) return summary;
+  const date = new Date(match[1]);
+  return Number.isNaN(date.getTime()) ? summary : `Once · ${date.toLocaleString(undefined, {
+    year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short"
+  })}`;
+}
 export type AutomationSelection = { kind: "automation"; automationId: string; request: number };
 export type RunSource = Omit<AutomationSelection, "request"> | { kind: "experience"; workItemId: string };
 export function runSource(item: WorkItem): RunSource | null {

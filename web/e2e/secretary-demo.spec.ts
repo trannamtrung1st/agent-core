@@ -238,7 +238,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await automations.getByRole('button', { name: 'Run automation now', exact: true }).click();
     await expect(automations.getByText(/Completed · Needs attention/).first()).toBeVisible({ timeout: 30_000 });
     await automations.getByRole('button', { name: 'View last run', exact: true }).click();
-    await expect(work.getByText(/Model:.*Needs attention/)).toBeVisible();
+    await expect(work.locator('.background-work-metadata').getByText('Needs attention', { exact: true })).toBeVisible();
     await work.getByRole('button', { name: 'View automation', exact: true }).click();
     await automations.getByRole('button', { name: 'Delete automation', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Delete automation', exact: true }).click();

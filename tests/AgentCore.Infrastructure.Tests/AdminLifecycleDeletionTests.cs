@@ -135,6 +135,30 @@ public abstract class AdminLifecycleDeletionTests
     protected abstract Task ForEachProfileAsync(Func<DeletionFixture, Task> exercise);
 
     [Fact]
+    public async Task Skill_identity_is_unique_per_owner_and_reusable_across_owners()
+    {
+        await ForEachProfileAsync(async fixture =>
+        {
+            var now = DateTimeOffset.Parse("2026-10-08T00:00:00Z");
+            var first = Guid.NewGuid(); var second = Guid.NewGuid(); var skillId = Guid.NewGuid().ToString("D");
+            foreach (var owner in new[] { first, second })
+            {
+                await fixture.Instances.InsertAsync(Instance(owner, AgentInstanceLifecycle.Active, now));
+                await fixture.Instances.MutateSkillsAsync(new(owner, 1, InstanceSkill: new(skillId, owner,
+                    "Review", "Review evidence", "Original", SkillProjection.OnDemand, true, [], 1, now, now, SkillAuthor.Admin)));
+            }
+            var original = Assert.Single((await fixture.Instances.ReadSkillsAsync(first)).InstanceSkills);
+            await Assert.ThrowsAsync<AgentCoreException>(() => fixture.Instances.MutateSkillsAsync(new(first, 2, InstanceSkill: original)).AsTask());
+            Assert.Equal(2, (await fixture.Instances.FindAsync(first))!.Revision);
+            await fixture.Instances.MutateSkillsAsync(new(first, 2, InstanceSkill: original with { Procedure = "Updated", Revision = 2 }, ExpectedSkillRevision: 1));
+            Assert.Equal("Original", Assert.Single((await fixture.Instances.ReadSkillsAsync(second)).InstanceSkills).Procedure);
+            await fixture.Instances.MutateSkillsAsync(new(first, 3, DeleteSkillId: skillId, ExpectedSkillRevision: 2));
+            Assert.Empty((await fixture.Instances.ReadSkillsAsync(first)).InstanceSkills);
+            Assert.Equal(skillId, Assert.Single((await fixture.Instances.ReadSkillsAsync(second)).InstanceSkills).SkillId);
+        });
+    }
+
+    [Fact]
     public async Task Safe_definition_delete_removes_authoring_state_keeps_history_and_allows_id_reuse()
     {
         await ForEachProfileAsync(async fixture =>
@@ -283,7 +307,7 @@ public abstract class AdminLifecycleDeletionTests
                 now,
                 Revision: 2), initialSkills: [new SkillSpec("review", "Review", "Review", "Review", SkillProjection.OnDemand, true, [], [])]);
 
-            await fixture.Instances.MutateSkillsAsync(new(instanceId, 2, InstanceSkill: new(fixture.Ids.NewId(), instanceId,
+            await fixture.Instances.MutateSkillsAsync(new(instanceId, 2, InstanceSkill: new(fixture.Ids.NewId().ToString("D"), instanceId,
                 "Local", "Local guidance", "Local procedure", SkillProjection.OnDemand, true, [], 1, now, now, SkillAuthor.Agent)));
             await fixture.Instances.UpdateWithExpectedRevisionAsync(new(instanceId, 3, Lifecycle: AgentInstanceLifecycle.Archived), now);
             var ownedSkills = await fixture.Instances.ReadSkillsAsync(instanceId);

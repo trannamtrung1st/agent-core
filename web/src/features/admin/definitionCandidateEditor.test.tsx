@@ -254,6 +254,25 @@ describe("definition candidate editor", () => {
     vi.clearAllMocks();
   });
 
+  it("blocks fractional recurrence with an inline error and saves after correction", async () => {
+    mockDraft();
+    await openDraft();
+    setSpin("Minimum recurrence days", "0.5");
+    expect(screen.getByLabelText("Minimum recurrence days")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("Minimum recurrence days")).toHaveAccessibleDescription(
+      "Whole days. 1 to 365. Minimum recurrence days must be a whole number from 1 to 365.");
+    expect(screen.getByRole("button", { name: /^Save draft$/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole("tab", { name: /^Capabilities$/ }));
+    expect(screen.getByRole("button", { name: /^Save draft$/ })).toBeDisabled();
+    expect(updateAdminDefinitionDraft).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("tab", { name: /^Definition$/ }));
+    setSpin("Minimum recurrence days", "2");
+    expect(screen.getByLabelText("Minimum recurrence days")).not.toHaveAttribute("aria-invalid", "true");
+    fireEvent.click(screen.getByRole("button", { name: /^Save draft$/ }));
+    await waitFor(() => expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(
+      draftId, 2, expect.objectContaining({ triggerPolicy: expect.objectContaining({ minRecurrenceDays: 2 }) })));
+  });
+
   it("round-trips a skill through form and JSON and keeps a forked skill", async () => {
     const changed = await renderCandidate({
       ...storedCandidate,
@@ -271,34 +290,29 @@ describe("definition candidate editor", () => {
     });
 
     expect(screen.getByText(/Required capabilities are requirements, not grants/)).toBeInTheDocument();
-    expect(screen.getByLabelText("Skill 1 procedure")).toHaveValue("ORDER_PROCEDURE");
-    expect(screen.getByLabelText("Skill 1 required capabilities")).toHaveAccessibleDescription(
-      /requirements, not grants/
-    );
-
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
+    expect(await screen.findByText("ORDER_PROCEDURE")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Close inspection" }));
     fireEvent.click(screen.getByRole("button", { name: "Add skill" }));
-    expect(screen.getByText("Skill id is required before publish.")).toBeInTheDocument();
-    setText("Skill 2 id", "refund.handle");
-    setText("Skill 2 name", "Refund");
-    setText("Skill 2 procedure", "REFUND_PROCEDURE");
-    setText("Skill 2 description", "refund,");
-    expect(screen.getByLabelText("Skill 2 description")).toHaveValue("refund,");
-    setText("Skill 2 description", "refund, return");
-    setText("Skill 2 required capabilities", "workspace.read, chat.respond");
-    setText("Skill 2 resource paths", "notes/refund.md");
-
+    fireEvent.click(screen.getByRole("button", { name: "Save Skill" }));
+    expect(await screen.findByText("Please enter Skill name", {}, { timeout: 5000 })).toBeVisible();
+    setText("Skill ID", "refund.handle");
+    setText("Skill name", "Refund");
+    setText("Procedure", "REFUND_PROCEDURE");
+    setText("Description", "refund, return");
+    setText("Required capabilities", "workspace.read, chat.respond");
+    setText("Resource paths", "notes/refund.md");
+    fireEvent.click(screen.getByRole("button", { name: "Save Skill" }));
+    await waitFor(() => expect(screen.getByText("Refund")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("radio", { name: "Advanced JSON" }));
     const json = screen.getByRole("textbox", { name: "Advanced JSON" }) as HTMLTextAreaElement;
     expect(json.value).toContain("REFUND_PROCEDURE");
     expect(json.value).toContain("ORDER_PROCEDURE");
-    fireEvent.change(json, {
-      target: {
-        value: json.value.replace("REFUND_PROCEDURE", "REFUND_PROCEDURE_EDITED")
-      }
-    });
+    fireEvent.change(json, { target: { value: json.value.replace("REFUND_PROCEDURE", "REFUND_PROCEDURE_EDITED") } });
     fireEvent.click(screen.getByRole("radio", { name: "Form" }));
-    expect(screen.getByLabelText("Skill 2 procedure")).toHaveValue("REFUND_PROCEDURE_EDITED");
-    expect(screen.getByLabelText("Skill 1 procedure")).toHaveValue("ORDER_PROCEDURE");
+    fireEvent.click(screen.getAllByRole("button", { name: "Details" })[1]);
+    expect(await screen.findByText("REFUND_PROCEDURE_EDITED")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Close inspection" }));
 
     const saved = candidateForPersistence(changed.mock.lastCall![0]) as {
       skills: Array<{ id: string; procedure: string; requiredCapabilities: string[] }>;
@@ -342,7 +356,9 @@ describe("definition candidate editor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add goal" }));
     setText("Goal 2", "Keep answers short");
     setText("System instructions", "Edited instructions");
-    setText("Skill 1 procedure", "REFUND_PROCEDURE_EDITED");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    setText("Procedure", "REFUND_PROCEDURE_EDITED");
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save Skill" })); });
     await chooseOption("Interruption style", "Answer the new turn");
     fireEvent.click(screen.getByLabelText("Acknowledge interruption"));
     fireEvent.click(screen.getByLabelText("Avoid unsupported claims"));

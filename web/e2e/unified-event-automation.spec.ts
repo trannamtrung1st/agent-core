@@ -44,7 +44,7 @@ test('Completed Automation can be deleted while its quiet Run remains inspectabl
   await page.getByRole('button', { name: `View automation · schedule run ${work[0].workItemId}`, exact: true }).click();
   const run = page.getByRole('dialog', { name: 'Run details', exact: true });
   await expect(run.getByText(instructions, { exact: true })).toBeVisible();
-  await expect(run.getByText(/Model:.*No action/)).toBeVisible();
+  await expect(run.locator('.background-work-metadata').getByText('No action', { exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -65,9 +65,10 @@ test('Connections ingress activates configured Event instructions once and Runs 
   await page.getByRole('tab', { name: 'Event sources', exact: true }).click();
   const sources = page.getByRole('region', { name: 'Event sources', exact: true });
   const sourceName = `Orders ${Date.now()}`;
-  await sources.getByLabel('Event source name', { exact: true }).fill(sourceName);
+  await sources.getByRole('button', { name: 'New event source', exact: true }).click();
+  await page.getByLabel('Event source name', { exact: true }).fill(sourceName);
   const issued = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/event-sources') && r.ok());
-  await sources.getByRole('button', { name: 'Create event source', exact: true }).click();
+  await page.getByRole('button', { name: 'Create event source', exact: true }).click();
   const credential = await (await issued).json();
   await page.getByRole('dialog', { name: 'Copy this credential', exact: true }).getByRole('button', { name: 'Done', exact: true }).click();
   await expect(page.getByLabel('Event source credential', { exact: true })).toHaveCount(0);
@@ -85,7 +86,8 @@ test('Connections ingress activates configured Event instructions once and Runs 
   await expect(automations.getByLabel('Schedule time zone', { exact: true })).toHaveCount(0);
   await automations.getByRole('button', { name: 'Create automation', exact: true }).click();
   const source = automations.getByRole('button', { name: `View automation: ${name}`, exact: true });
-  await expect(source).toBeVisible(); await source.click();
+  await expect(source).toBeVisible();
+  if (await source.getAttribute('aria-expanded') !== 'true') await source.click();
   await expect(automations.getByRole('region', { name: 'Automation details', exact: true })).toContainText(`Order placed · ${sourceName}`);
   await expect(automations.getByText('On event', { exact: true })).toBeVisible();
   const owner = (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))!;
@@ -103,7 +105,7 @@ test('Connections ingress activates configured Event instructions once and Runs 
   const work = (await (await page.request.get(path + '/work-items', { headers })).json()).items;
   expect(work).toHaveLength(1); expect(work[0].automationId).toBe(row.automationId);
   expect(work[0].instructions).toBe(instructions); expect(work[0].attentionRequired).toBe(false);
-  await automations.getByRole('button', { name: 'View last run', exact: true }).click();
+  await automations.getByRole('button', { name: `View last run: ${name}`, exact: true }).click();
   const details = page.getByRole('dialog', { name: 'Run details', exact: true });
   await expect(details.getByText(instructions, { exact: true })).toBeVisible();
   await details.getByRole('button', { name: 'View automation', exact: true }).click();

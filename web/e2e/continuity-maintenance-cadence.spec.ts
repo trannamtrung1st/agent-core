@@ -26,7 +26,9 @@ test('Recurring continuity review uses the shared Automation editor and Continui
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   }
   await region.getByRole('button', { name: 'Create automation', exact: true }).click();
-  await region.getByRole('button', { name: 'View automation: Daily continuity review', exact: true }).click();
+  const source = region.getByRole('button', { name: 'View automation: Daily continuity review', exact: true });
+  await expect(source).toBeVisible();
+  if (await source.getAttribute('aria-expanded') !== 'true') await source.click();
   await region.getByRole('button', { name: 'Run automation now', exact: true }).click();
   await expect(region.getByText(/Completed · No action/).first()).toBeVisible({ timeout: 30_000 });
   await page.reload();

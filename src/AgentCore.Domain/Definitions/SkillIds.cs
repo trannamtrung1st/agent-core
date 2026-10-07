@@ -13,8 +13,9 @@ public static class SkillIds
     public static string FromName(string name, IEnumerable<string> existing)
     {
         var slug = new StringBuilder();
-        foreach (var character in name.ToLowerInvariant())
+        foreach (var original in name)
         {
+            var character = original is >= 'A' and <= 'Z' ? (char)(original + ('a' - 'A')) : original;
             if (character is >= 'a' and <= 'z' or >= '0' and <= '9') slug.Append(character);
             else if (slug.Length > 0 && slug[^1] != '-') slug.Append('-');
         }

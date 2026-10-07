@@ -1,6 +1,6 @@
 import { AdminErrorNotice } from "./adminFailure";
-import { useCallback, useEffect, useRef, useState, type Key } from "react";
-import { Alert, App, Button, DatePicker, Descriptions, Empty, Flex, Form, Input, InputNumber, Select, Spin, Switch, Table, Tag, Typography, theme } from "antd";
+import { useCallback, useEffect, useId, useRef, useState, type Key } from "react";
+import { Alert, App, Button, DatePicker, Descriptions, Drawer, Empty, Flex, Form, Grid, Input, InputNumber, Select, Spin, Switch, Table, Tag, Typography, theme } from "antd";
 import dayjs from "dayjs";
 import { confirmAction } from "../../app/confirmAction";
 import { listModels, type ModelDescriptor } from "../../services/api";
@@ -23,6 +23,14 @@ const blank = (): AutomationDraft => ({ expectedRevision: 0, enabled: true, name
 export function InstanceAutomationsSection({ instanceId, onWork, selection, active = true }: { instanceId: string; active?: boolean; onWork: (workId?: string) => void; selection?: AutomationSelection }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
   const { search, setSearch, pagination } = useAdminCollectionSearch();
+  const screens = Grid.useBreakpoint();
+  const formId = useId();
+  const editorOpener = useRef<HTMLElement | null>(null);
+  const savedFocus = useRef<string | null>(null);
+  const restoreEditorFocus = useRef(false);
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const nameInput = useRef<import("antd").InputRef>(null);
+  const [editorError, setEditorError] = useState<AdminFailureNotice | null>(null);
   const newButton = useRef<HTMLButtonElement>(null);
   const [savedSelection, setSavedSelection] = useState<AutomationSelection>();
   useEffect(() => setSavedSelection(undefined), [selection]);
@@ -35,6 +43,12 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
   const [editor, setEditor] = useState<string | null>(null);
   const [error, setError] = useState<AdminFailureNotice | null>(null);
   const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!restoreEditorFocus.current || busy || drawerVisible || editor || !active) return;
+    const source = savedFocus.current ? document.querySelector<HTMLButtonElement>(`[data-automation-id="${savedFocus.current}"]`) : null;
+    (source ?? (editorOpener.current?.isConnected ? editorOpener.current : newButton.current))?.focus();
+    savedFocus.current = null; restoreEditorFocus.current = false;
+  }, [busy, drawerVisible, editor, active, review]);
   const [pending, setPending] = useState<Record<string, string | null>>({});
   const order = useRef({ generation: 0, mutating: false, pending: {} as Record<string, string | null> });
   const apply = useCallback((next: AutomationReview) => {
@@ -72,24 +86,31 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
   useEffect(() => {
     if (selection?.kind === "automation") void reload(true);
   }, [selection, reload]);
-  async function mutate(path: string, body: unknown, method = "POST") {
+  async function mutate(path: string, body: unknown, method = "POST", saveEditor = false) {
     const runId = /^automations\/([^/]+)\/run$/.exec(path)?.[1];
     if (order.current.mutating || runId && runId in order.current.pending) return;
     order.current.mutating = true; ++order.current.generation; setBusy(true); setError(null);
+    if (saveEditor) setEditorError(null);
     if (runId) { order.current.pending = { ...order.current.pending, [runId]: review?.items.find(i => i.automationId === runId)?.lastWorkItemId ?? null }; setPending(order.current.pending); }
     let accepted = false;
+    let savedId: string | undefined;
     try {
-      const saved = await request<Automation>(instanceId, path, method, body); accepted = true;
-      if (saved?.automationId && method === "PUT") setSavedSelection({ kind: "automation", automationId: saved.automationId, request: Date.now() });
+      const saved = await request<Automation>(instanceId, path, method, body); accepted = true; savedId = saved?.automationId;
+      if (savedId && !saveEditor && method === "PUT") setSavedSelection({ kind: "automation", automationId: saved.automationId, request: Date.now() });
       if (method === "DELETE") { setExpanded([]); setSavedSelection(undefined); }
-      if (path === "automations" || method === "PUT") { setEditor(null); setDraft(blank()); }
+      if (saveEditor) savedFocus.current = saved?.automationId ?? null;
       apply(await request<AutomationReview>(instanceId, "automations"));
-      if (path === "automations" && saved?.automationId) requestAnimationFrame(() =>
-        document.querySelector<HTMLButtonElement>(`[data-automation-id="${saved.automationId}"]`)?.focus());
     } catch (reason) {
       if (runId && !accepted) { const next = { ...order.current.pending }; delete next[runId]; order.current.pending = next; setPending(next); }
-      setError(describeAdminError(reason, "Automation update failed. Reload for the current revision."));
-    } finally { order.current.mutating = false; setBusy(false); }
+      const failure = describeAdminError(reason, "Automation update failed. Reload for the current revision.");
+      if (saveEditor && !accepted) setEditorError(failure); else setError(failure);
+    } finally {
+      if (saveEditor && accepted) {
+        if (savedId) setSavedSelection({ kind: "automation", automationId: savedId, request: Date.now() });
+        setEditor(null); setDraft(blank());
+      }
+      order.current.mutating = false; setBusy(false);
+    }
   }
   const tableVersion = useAutomationSelection(savedSelection ?? selection, "automation", review?.items.map(item => item.automationId) ?? [], setSearch, setExpanded);
   const timing = draft.trigger.kind === "schedule" ? draft.trigger.schedule : defaultTiming();
@@ -110,7 +131,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
   const valid = draft.name.trim().length > 0 && draft.name.trim().length <= 120 && draft.instructions.trim().length > 0 && draft.instructions.trim().length <= 2000
     && (isSchedule ? scheduleValid : draft.trigger.kind === "event" && sources.some(source => source.sourceId === (draft.trigger.kind === "event" ? draft.trigger.eventSourceId : "") && source.status === "Active"));
   function setTiming(change: Partial<ScheduleTiming>) { setDraft({ ...draft, trigger: { kind: "schedule", schedule: { ...timing, ...change } } }); }
-  function edit(item: Automation) { setEditor(item.automationId); setDraft({ expectedRevision: item.revision, enabled: item.enabled, name: item.name, instructions: item.instructions,
+  function edit(item: Automation) { editorOpener.current = document.activeElement as HTMLElement; setEditorError(null); setEditor(item.automationId); setDraft({ expectedRevision: item.revision, enabled: item.enabled, name: item.name, instructions: item.instructions,
     trigger: item.trigger, modelKey: item.modelKey, reasoningEffort: item.reasoningEffort }); }
   return <section className="admin-definition-panel" aria-label="Automations">
     <div className="admin-definition-panel-heading"><Typography.Title level={4}>Automations</Typography.Title>
@@ -119,15 +140,37 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
       {loading ? <Spin aria-label="Loading automations" /> : null}
       {selection?.kind === "automation" && !loading && !error && review && !review.items.some(item => item.automationId === selection.automationId) ? <Alert type="info" showIcon title="This source configuration is no longer available" description="It may have been deleted or retired. Its run remains available in Runs." /> : null}
       {error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button disabled={busy} onClick={() => void reload()}>Reload automations</Button>} /> : null}
-      <Flex wrap gap={token.paddingXS}><Button ref={newButton} disabled={busy} onClick={() => { setDraft(blank()); setEditor("new"); }}>New automation</Button>
+      <Flex wrap gap={token.paddingXS}><Button type="primary" ref={newButton} disabled={busy} onClick={() => { editorOpener.current = newButton.current; setEditorError(null); setDraft(blank()); setEditor("new"); }}>New automation</Button>
         <Button disabled={busy} onClick={() => void reload()}>Refresh automations</Button><Button onClick={() => onWork()}>View runs</Button></Flex>
-      {editor ? <Form layout="vertical" className="admin-config-form" onKeyDown={event => {
+      <Drawer open={!!editor && active} title={editor === "new" ? "New automation" : "Edit automation"}
+        size={screens.md ? 640 : "100%"} getContainer={false} rootStyle={{ position: "fixed" }}
+        rootClassName="admin-automation-drawer" styles={{ body: { padding: token.padding }, footer: { padding: token.padding } }}
+        focusable={{ trap: !!editor && active, focusTriggerAfterClose: false }}
+        closable={!busy} maskClosable={!busy} keyboard={!busy} onClose={() => setEditor(null)}
+        afterOpenChange={open => {
+          if (!open && !editor && active) restoreEditorFocus.current = true;
+          setDrawerVisible(open);
+          if (open) {
+            const focused = document.activeElement;
+            // Do not interrupt a control used while the drawer was animating in.
+            if (focused === document.body || focused?.classList.contains("ant-drawer") || focused?.getAttribute("role") === "dialog") nameInput.current?.focus();
+          }
+        }}
+        footer={<Flex wrap justify="flex-end" gap={token.paddingXS}>
+          <Button disabled={busy} onClick={() => setEditor(null)}>Cancel automation edit</Button>
+          <Button type="primary" aria-label={editor === "new" ? "Create automation" : "Save automation"} htmlType="submit" form={formId} disabled={!valid || busy} loading={busy}>{editor === "new" ? "Create automation" : "Save automation"}</Button>
+        </Flex>}>
+        {editorError ? <Alert style={{ marginBlockEnd: token.padding }} type="error" showIcon
+          title={<AdminErrorNotice message={editorError.message} diagnosticId={editorError.diagnosticId} showDetailsLabel />}
+          action={<Button disabled={busy} onClick={() => void reload()}>Reload automations</Button>} /> : null}
+        {editor ? <Form id={formId} layout="vertical" className="admin-config-form" onKeyDown={event => {
         if (event.key === "Enter" && (event.target as HTMLElement).closest(".ant-picker")) event.preventDefault();
       }} onFinish={() => {
+        if (!valid || busy) return;
         const body = { ...draft, trigger: isSchedule ? { kind: "schedule", schedule: timing.kind === "fixedInterval" && !timing.anchorAtUtc ? { ...timing, anchorAtUtc: new Date(Date.now() + timing.interval * 1000).toISOString() } : timing } : draft.trigger };
-        void mutate(editor === "new" ? "automations" : `automations/${editor}`, body, editor === "new" ? "POST" : "PUT");
+        void mutate(editor === "new" ? "automations" : `automations/${editor}`, body, editor === "new" ? "POST" : "PUT", true);
       }}>
-        <Form.Item label="Name"><Input aria-label="Automation name" maxLength={120} value={draft.name} disabled={busy} onChange={e => setDraft({ ...draft, name: e.target.value })} /></Form.Item>
+        <Form.Item label="Name"><Input ref={nameInput} aria-label="Automation name" maxLength={120} value={draft.name} disabled={busy} onChange={e => setDraft({ ...draft, name: e.target.value })} /></Form.Item>
         <Form.Item label="Instructions" extra={`${draft.instructions.length} / 2000 characters`}><Input.TextArea aria-label="Automation instructions" rows={4} maxLength={2000} value={draft.instructions} disabled={busy} onChange={e => setDraft({ ...draft, instructions: e.target.value })} /></Form.Item>
         <Form.Item label="When"><Select aria-label="Automation trigger" value={draft.trigger.kind} disabled={busy} options={[{ value: "schedule", label: "Schedule" }, { value: "event", label: "Event" }]}
           onChange={kind => setDraft({ ...draft, trigger: kind === "schedule" ? { kind, schedule: defaultTiming() } : { kind: "event", eventSourceId: "", eventType: "order.placed" } })} /></Form.Item>
@@ -182,9 +225,8 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
         <Form.Item label="Execution model" extra="Uses the instance unattended default unless you select a model. Each admitted run keeps its model."><ExecutionModelFields models={models}
           modelKey={draft.modelKey ?? ""} reasoningEffort={draft.reasoningEffort ?? ""} disabled={busy} modelLabel="Automation execution model" effortLabel="Automation reasoning effort" defaultLabel="Unattended default"
           onChange={(modelKey, reasoningEffort) => setDraft({ ...draft, modelKey: modelKey || null, reasoningEffort: reasoningEffort || null })} /></Form.Item>
-        <Flex wrap gap={token.paddingXS}><Button type="primary" htmlType="submit" disabled={!valid || busy} loading={busy}>{editor === "new" ? "Create automation" : "Save automation"}</Button>
-          <Button disabled={busy} onClick={() => setEditor(null)}>Cancel automation edit</Button></Flex>
       </Form> : null}
+      </Drawer>
       {review ? review.items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No automations yet. Create one here or ask the agent in Chat to do something later." /> :
         <>
         <AdminCollectionToolbar label="automations" value={search} onChange={setSearch} />
@@ -193,7 +235,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
             item.authorizationOrigin === "CurrentUserTurn" ? "Chat user request" : "Admin owner", item.sourceSessionId ?? "",
             item.effectiveModelKey ?? item.modelKey ?? "Unattended default", item.executionStatus ?? ""]
             .some(value => value.toLowerCase().includes(search.trim().toLowerCase()))).sort((a, b) => Number(b.automationId === selection?.automationId) - Number(a.automationId === selection?.automationId))}
-          scroll={{ x: 1470 }} pagination={pagination}
+          scroll={{ x: 1530 }} pagination={pagination}
           locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No matches. Clear search or filters to see all results." /> }}
           columns={[
             { title: "Name", key: "task", width: 350, ellipsis: true,
@@ -207,7 +249,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
             { title: "Next run", key: "next", width: 220,
               sorter: (a, b) => (a.enabled && !terminal.includes(a.status) ? a.nextRunAt ?? "" : "").localeCompare(b.enabled && !terminal.includes(b.status) ? b.nextRunAt ?? "" : ""),
               render: (_, item) => item.enabled && !terminal.includes(item.status) && item.trigger.kind === "event" ? "On event" : date(item.enabled && !terminal.includes(item.status) ? item.nextRunAt : null) },
-            { title: "Last run", key: "execution", width: 180,
+            { title: "Last run", key: "execution", width: 240,
               filters: [...new Set(review.items.map(item => item.executionStatus ?? "Not yet"))].map(value => ({ text: runStatusLabel(value), value })),
               onFilter: (value, item) => (item.executionStatus ?? "Not yet") === value,
               render: (_, item) => item.lastWorkItemId ? <Button type="link" size="small" aria-label={`View last run: ${item.name}`} onClick={() => onWork(item.lastWorkItemId!)}>{runStatusLabel(item.executionStatus ?? "View run")}{item.outcome ? ` · ${runOutcomeLabel(item.outcome)}` : ""}</Button> : "Not yet" },

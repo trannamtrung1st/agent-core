@@ -107,8 +107,9 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   await page.getByRole("tab", { name: "Event sources", exact: true }).click();
   const sourcesRegion = page.getByRole("region", { name: "Event sources" });
   await expect(sourcesRegion.getByText("No event sources yet.")).toBeVisible();
-  await sourcesRegion.getByLabel("Event source name").fill("Demo Store");
-  const create = sourcesRegion.getByRole("button", { name: "Create event source" });
+  await sourcesRegion.getByRole("button", { name: "New event source" }).click();
+  await page.getByLabel("Event source name").fill("Demo Store");
+  const create = page.getByRole("button", { name: "Create event source" });
   await create.focus();
   await expect(create).toBeFocused();
   await page.keyboard.press("Enter");

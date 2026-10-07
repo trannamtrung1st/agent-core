@@ -87,7 +87,9 @@ test('Experience informs an authorized Instance Skill Automation; next activatio
   await initiative.getByLabel('Automation name', { exact: true }).fill('Review recent experience');
   await initiative.getByLabel('Automation instructions', { exact: true }).fill('synthetic-automation-improve: review recent experience and improve only when useful. Otherwise do nothing.');
   await initiative.getByRole('button', { name: 'Create automation', exact: true }).click();
-  await initiative.getByRole('button', { name: 'View automation: Review recent experience', exact: true }).click();
+  const automationSource = initiative.getByRole('button', { name: 'View automation: Review recent experience', exact: true });
+  await expect(automationSource).toBeVisible();
+  if (await automationSource.getAttribute('aria-expanded') !== 'true') await automationSource.click();
   const runPattern = `**/api/v2/admin/agent-instances/${id}/automations/*/run`;
   const statusPattern = `**/api/v2/admin/agent-instances/${id}/automations`;
   const previousStatus = await page.request.get(`/api/v2/admin/agent-instances/${id}/automations`, {
@@ -119,10 +121,10 @@ test('Experience informs an authorized Instance Skill Automation; next activatio
   await expect(initiative.getByText(/Completed · Action completed/).first()).toBeVisible({ timeout: 30_000 });
   expect(runRequests).toBe(1);
   await page.unroute(runPattern);
-  await initiative.getByRole('button', { name: 'View last run', exact: true }).click();
+  await initiative.getByRole('button', { name: 'View last run: Review recent experience', exact: true }).click();
   const work = page.getByRole('dialog', { name: 'Run details', exact: true });
   await expect(work.getByText('Review recent experience', { exact: true })).toBeVisible();
-  await expect(work.getByText(/Model:.*Action completed/)).toBeVisible({ timeout: 30_000 });
+  await expect(work.locator('.background-work-metadata').getByText('Action completed', { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(work.getByRole('button', { name: 'Approve Automation · Manual', exact: true })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('automation-instance-skill-desktop.png'), fullPage: true });
   await page.locator('.background-work-selected').getByRole('button', { name: 'View automation', exact: true }).click();

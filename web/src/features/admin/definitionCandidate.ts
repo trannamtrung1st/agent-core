@@ -1,5 +1,24 @@
 export type DefinitionCandidate = Record<string, unknown>;
 
+const automationNumberRules = [
+  { field: "maxActiveRegistrations", label: "Max active registrations", min: 1, max: 32 },
+  { field: "oneShotHorizonDays", label: "One-shot horizon days", min: 1, max: 365 },
+  { field: "minRecurrenceDays", label: "Minimum recurrence days", min: 1, max: 365 },
+  { field: "minFixedIntervalSeconds", label: "Minimum fixed interval seconds", min: 60, max: 604800 }
+] as const;
+
+export function automationNumberErrors(candidate: DefinitionCandidate) {
+  const policy = candidate.triggerPolicy;
+  if (typeof policy !== "object" || policy === null || Array.isArray(policy)) return [];
+  return automationNumberRules.flatMap(({ field, label, min, max }) => {
+    const value = (policy as Record<string, unknown>)[field];
+    // Only fixed interval has a constructor default; the other limits are required.
+    if (value === undefined && field === "minFixedIntervalSeconds") return [];
+    return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max
+      ? [] : [{ field, message: `${label} must be a whole number from ${min} to ${max}.` }];
+  });
+}
+
 export type MetadataRow = {
   key: string;
   value: string;
@@ -396,4 +415,17 @@ function stableStringify(value: unknown): string {
   const record = value as Record<string, unknown>;
   const keys = Object.keys(record).sort();
   return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(",")}}`;
+}
+
+export function skillIdFromName(name: string, existing: string[]): string {
+  let stem = name.replace(/[A-Z]/g, character => character.toLowerCase()).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  if (!/^[a-z]/.test(stem)) stem = `skill-${stem}`;
+  stem = stem.slice(0, 64).replace(/-+$/g, '');
+  if (!existing.includes(stem)) return stem;
+  for (let suffix = 2; suffix <= 999; suffix++) {
+    const tail = `-${suffix}`;
+    const id = stem.slice(0, 64 - tail.length).replace(/-+$/g, '') + tail;
+    if (!existing.includes(id)) return id;
+  }
+  throw new Error('No available Skill identity remains for this name.');
 }

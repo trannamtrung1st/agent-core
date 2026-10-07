@@ -78,6 +78,7 @@ vi.mock("../../services/adminApi", () => ({
   listAdminDefinitionDrafts: vi.fn(),
   listAdminDefinitionPublications: vi.fn(),
   getAdminDefinitionDraft: vi.fn(),
+  getAdminDefinitionVersion: vi.fn().mockResolvedValue({ identity: { name: "Examiner", role: "Examiner", description: "Practice speaking.", tone: "Supportive" } }),
   deleteAdminDefinitionDraft: vi.fn(),
   updateAdminDefinitionDraft: vi.fn(),
   publishAdminDefinitionDraft: vi.fn(),
@@ -140,6 +141,7 @@ import {
   createAdminAgentInstance,
   forkAdminDefinitionDraft,
   getAdminDefinitionDraft,
+  getAdminDefinitionVersion,
   getAdminEffectiveConfig,
   deleteAdminDefinitionDraft,
   listAdminDefinitionDrafts,
@@ -1656,6 +1658,76 @@ describe("AdminApp", () => {
     expect(createAdminAgentInstance).toHaveBeenCalledTimes(1);
   });
 
+  it("prefills custom persona from the exact Definition and retains edits across mode toggles", async () => {
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      { definitionId: "examiner", version: 5, source: "durable", status: "published", displayName: "Examiner" },
+      { definitionId: "examiner", version: 4, source: "durable", status: "published", displayName: "Examiner" }
+    ]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(getAdminDefinitionVersion).mockImplementation(async (_, version) => ({ identity:
+      { name: `Examiner ${version}`, role: "Examiner", description: "Practice speaking.", tone: "Supportive" }
+    }));
+    await act(async () => { render(<AdminApp route={{ area: "admin", view: "home", collection: "instances" }} />); });
+    fireEvent.click(screen.getByRole("button", { name: "New instance" }));
+    const dialog = within(screen.getByRole("dialog", { name: "New instance" }));
+    fireEvent.click(dialog.getByRole("radio", { name: "Custom persona" }));
+    await waitFor(() => expect(dialog.getByLabelText("Persona name")).toHaveValue("Examiner 5"));
+    expect(dialog.getByLabelText("Persona role")).toHaveValue("Examiner");
+    expect(dialog.getByLabelText("Persona description")).toHaveValue("Practice speaking.");
+    expect(dialog.getByLabelText("Persona tone")).toHaveValue("Supportive");
+    fireEvent.change(dialog.getByLabelText("Persona name"), { target: { value: "Tommy" } });
+    fireEvent.click(dialog.getByRole("radio", { name: "Definition persona" }));
+    fireEvent.click(dialog.getByRole("radio", { name: "Custom persona" }));
+    expect(dialog.getByLabelText("Persona name")).toHaveValue("Tommy");
+    fireEvent.mouseDown(dialog.getByLabelText("Published version"));
+    fireEvent.click(await screen.findByText("v4 · Durable · Published"));
+    await waitFor(() => expect(dialog.getByLabelText("Persona name")).toHaveValue("Examiner 4"));
+    expect(getAdminDefinitionVersion).toHaveBeenLastCalledWith("examiner", 4, "durable");
+  });
+
+  it("ignores stale persona defaults after a version change", async () => {
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      { definitionId: "examiner", version: 5, source: "durable", status: "published", displayName: "Examiner" },
+      { definitionId: "examiner", version: 4, source: "durable", status: "published", displayName: "Examiner" }
+    ]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    let releaseOld!: (value: Record<string, unknown>) => void;
+    const old = new Promise<Record<string, unknown>>(resolve => { releaseOld = resolve; });
+    vi.mocked(getAdminDefinitionVersion).mockImplementation((_, version) => version === 5 ? old : Promise.resolve({
+      identity: { name: "Version four", role: "Guide", description: "Version four description", tone: "Direct" }
+    }));
+    await act(async () => { render(<AdminApp route={{ area: "admin", view: "home", collection: "instances" }} />); });
+    fireEvent.click(screen.getByRole("button", { name: "New instance" }));
+    const dialog = within(screen.getByRole("dialog", { name: "New instance" }));
+    fireEvent.click(dialog.getByRole("radio", { name: "Custom persona" }));
+    expect(dialog.getByRole("button", { name: "Create instance" })).toBeDisabled();
+    fireEvent.mouseDown(dialog.getByLabelText("Published version"));
+    fireEvent.click(await screen.findByText("v4 · Durable · Published"));
+    await waitFor(() => expect(dialog.getByLabelText("Persona name")).toHaveValue("Version four"));
+    fireEvent.change(dialog.getByLabelText("Persona name"), { target: { value: "Edited four" } });
+    await act(async () => { releaseOld({ identity: { name: "Old five", role: "Old", description: "Old", tone: "Old" } }); });
+    expect(dialog.getByLabelText("Persona name")).toHaveValue("Edited four");
+    expect(dialog.getByLabelText("Persona role")).toHaveValue("Guide");
+  });
+
+  it("retries failed persona defaults before allowing custom creation", async () => {
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      { definitionId: "examiner", version: 5, source: "durable", status: "published", displayName: "Examiner" }
+    ]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(getAdminDefinitionVersion).mockRejectedValueOnce(new Error("Definition temporarily unavailable"))
+      .mockResolvedValueOnce({ identity: { name: "Recovered", role: "Guide", description: "Recovered persona", tone: "Direct" } });
+    await act(async () => { render(<AdminApp route={{ area: "admin", view: "home", collection: "instances" }} />); });
+    fireEvent.click(screen.getByRole("button", { name: "New instance" }));
+    const dialog = within(screen.getByRole("dialog", { name: "New instance" }));
+    fireEvent.click(dialog.getByRole("radio", { name: "Custom persona" }));
+    await dialog.findByText("Definition temporarily unavailable");
+    expect(dialog.getByRole("button", { name: "Create instance" })).toBeDisabled();
+    fireEvent.click(dialog.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(dialog.getByLabelText("Persona name")).toHaveValue("Recovered"));
+    expect(dialog.getByRole("button", { name: "Create instance" })).toBeEnabled();
+  });
+
   it("warns on a deprecated version and sends a custom persona", async () => {
     vi.mocked(listAdminDefinitions).mockResolvedValue([
       {
@@ -1695,6 +1767,7 @@ describe("AdminApp", () => {
       dialog.getByText("v6 is deprecated. New instances normally use the latest active publication.")
     ).toBeInTheDocument();
     fireEvent.click(dialog.getByRole("radio", { name: "Custom persona" }));
+    await waitFor(() => expect(dialog.getByLabelText("Persona name")).toBeEnabled());
     fireEvent.change(dialog.getByLabelText("Persona name"), { target: { value: "Casey" } });
     fireEvent.change(dialog.getByLabelText("Persona role"), { target: { value: "Guide" } });
     fireEvent.change(dialog.getByLabelText("Persona description"), { target: { value: "A field guide." } });

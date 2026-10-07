@@ -46,30 +46,34 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
   await expect(editor.getByText(/Required capabilities are requirements, not grants/)).toBeVisible();
 
   await editor.getByRole("button", { name: "Add skill" }).click();
-  await expect(editor.getByText("Skill id is required before publish.")).toBeVisible();
-  await editor.getByLabel("Skill 1 id").fill("refund.handle");
-  await editor.getByLabel("Skill 1 name").fill("Refund");
-  await editor.getByLabel("Skill 1 procedure").fill("REFUND_PROCEDURE");
-  await editor.getByLabel("Skill 1 description").fill("Procedural guidance.");
-  await editor.getByLabel("Skill 1 projection").click();
+  const drawer = page.getByRole("dialog", { name: "New Definition Skill" });
+  await drawer.getByRole("button", { name: "Save Skill" }).click();
+  await expect(drawer.getByText("Please enter Skill name")).toBeVisible();
+  await expect(drawer.getByLabel("Skill ID", { exact: true })).toHaveValue("");
+  await drawer.getByLabel("Skill ID", { exact: true }).fill("refund.handle");
+  await drawer.getByLabel("Skill name", { exact: true }).fill("Refund");
+  await drawer.getByLabel("Procedure", { exact: true }).fill("REFUND_PROCEDURE");
+  await drawer.getByLabel("Description", { exact: true }).fill("Procedural guidance.");
+  await drawer.getByLabel("Activation", { exact: true }).click();
   await page.locator(".ant-select-item-option").filter({ hasText: "Always" }).click();
-  await editor.getByLabel("Skill 1 required capabilities").fill("chat.respond");
-  await expect(editor.getByText("Skill id is required before publish.")).toHaveCount(0);
-  await expect(editor.getByText("Unsaved changes — save before using Test & Publish.")).toBeVisible();
-  await expect(editor.getByRole("button", { name: "Publish…" })).toBeDisabled();
+  await drawer.getByLabel("Required capabilities", { exact: true }).fill("chat.respond");
 
-  await editor.getByLabel("Skill 1 id").focus();
+  await drawer.getByLabel("Skill ID", { exact: true }).focus();
   await page.keyboard.press("Tab");
-  await expect(editor.getByLabel("Skill 1 name")).toBeFocused();
-  const focusShadow = await editor.getByLabel("Skill 1 name").evaluate((element) => getComputedStyle(element).boxShadow);
+  await expect(drawer.getByLabel("Skill name", { exact: true })).toBeFocused();
+  const focusShadow = await drawer.getByLabel("Skill name", { exact: true }).evaluate((element) => getComputedStyle(element).boxShadow);
   expect(focusShadow).not.toBe("none");
 
+  await drawer.getByRole("button", { name: "Save Skill" }).click();
+  await expect(drawer).toBeHidden();
   await editor.getByRole("button", { name: "Add skill" }).click();
-  await editor.getByLabel("Skill 2 id").fill("order.lookup");
-  await editor.getByLabel("Skill 2 name").fill("Order lookup");
-  await editor.getByLabel("Skill 2 procedure").fill("ORDER_PROCEDURE");
-  await editor.getByLabel("Skill 2 description").fill("Procedural guidance.");
+  await drawer.getByLabel("Skill ID", { exact: true }).fill("order.lookup");
+  await drawer.getByLabel("Skill name", { exact: true }).fill("Order lookup");
+  await drawer.getByLabel("Procedure", { exact: true }).fill("ORDER_PROCEDURE");
+  await drawer.getByLabel("Description", { exact: true }).fill("Procedural guidance.");
 
+  await drawer.getByRole("button", { name: "Save Skill" }).click();
+  await expect(drawer).toBeHidden();
   await editor.locator(".admin-draft-view-switch").getByText("Advanced JSON", { exact: true }).click();
   const json = editor.getByRole("textbox", { name: "Advanced JSON" });
   await expect(json).toHaveValue(/REFUND_PROCEDURE/);
@@ -81,8 +85,13 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
   await json.fill(validJson);
   await expect(editor.getByRole("alert").filter({ hasText: "Advanced JSON is invalid" })).toHaveCount(0);
   await editor.locator(".admin-draft-view-switch").getByText("Form", { exact: true }).click();
-  await expect(editor.getByLabel("Skill 1 procedure")).toHaveValue("REFUND_PROCEDURE");
-  await expect(editor.getByLabel("Skill 2 procedure")).toHaveValue("ORDER_PROCEDURE");
+  const skills = editor.getByRole("region", { name: "Skills", exact: true });
+  await skills.getByRole("row").filter({ hasText: "Refund" }).getByRole("button", { name: "Details", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("REFUND_PROCEDURE");
+  await page.getByRole("button", { name: "Close inspection" }).click();
+  await skills.getByRole("row").filter({ hasText: "Order lookup" }).getByRole("button", { name: "Details", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("ORDER_PROCEDURE");
+  await page.getByRole("button", { name: "Close inspection" }).click();
   await saveDraft(page, editor);
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -112,12 +121,31 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
   await publishDraftFromInstructions(page, editor);
 
   await page.getByRole("button", { name: "View v1 (durable)", exact: true }).click();
-  const published = page.getByRole("region", { name: "Version details", exact: true }).getByRole("list", { name: "Published skills" });
+  const versionDetails = page.getByRole("region", { name: "Version details", exact: true });
+  await expect(versionDetails.getByRole("region", { name: "Skills", exact: true })).toHaveCount(0);
+  await versionDetails.getByRole("tab", { name: "Skills", exact: true }).click();
+  const published = versionDetails.getByRole("region", { name: "Skills", exact: true });
   await expect(published).toBeVisible({ timeout: 15_000 });
-  await expect(published).toContainText("Refund (refund.handle)");
-  await expect(published).toContainText("Order lookup (order.lookup)");
-  await expect(published).toContainText("Requirements do not grant tools, credentials, or approval.");
-  await expect(published.getByRole("textbox")).toHaveCount(0);
+  await expect(published).toContainText("Refund");
+  await expect(published).toContainText("refund.handle");
+  await expect(published).toContainText("Order lookup");
+  await expect(published).toContainText("order.lookup");
+  await expect(published).toContainText("Required capabilities are requirements, not grants.");
+  await expect(published.getByRole("button", { name: "Add skill" })).toHaveCount(0);
+  await published.getByRole("row").filter({ hasText: "Refund" }).getByRole("button", { name: "Details", exact: true }).click();
+  const publishedSkill = page.getByRole("dialog", { name: "Definition Skill details", exact: true });
+  await expect(publishedSkill).toContainText("REFUND_PROCEDURE");
+  await expect(publishedSkill.getByRole("button", { name: "Save Skill" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(publishedSkill).toBeHidden();
+  await expect(page.getByRole("dialog", { name: "Version details", exact: true })).toBeVisible();
+  await expect(published.getByRole("row").filter({ hasText: "Refund" }).getByRole("button", { name: "Details", exact: true })).toBeFocused();
+  for (const width of [1440, 768, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(published.getByRole("row").filter({ hasText: "Refund" })).toContainText("chat.respond");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByRole("dialog", { name: "Version details", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
 
   const instanceResponsePromise = page.waitForResponse(

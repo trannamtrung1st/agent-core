@@ -48,15 +48,19 @@ test("P8.5 sends one intermediate message, loads the missed skill, and keeps one
 
   const editor = draftEditorSection(page);
   await editor.getByRole("button", { name: "Add skill" }).click();
-  await editor.getByLabel("Skill 1 id").fill("billing.review");
-  await editor.getByLabel("Skill 1 name").fill("Billing review");
-  await editor.getByLabel("Skill 1 procedure").fill("BILLING_PROCEDURE");
-  await editor.getByLabel("Skill 1 description").fill("Procedural guidance.");
+  await page.getByRole("dialog", { name: "New Definition Skill" }).getByLabel("Skill ID", { exact: true }).fill("billing.review");
+  await page.getByRole("dialog", { name: "New Definition Skill" }).getByLabel("Skill name", { exact: true }).fill("Billing review");
+  await page.getByRole("dialog", { name: "New Definition Skill" }).getByLabel("Procedure", { exact: true }).fill("BILLING_PROCEDURE");
+  await page.getByRole("dialog", { name: "New Definition Skill" }).getByLabel("Description", { exact: true }).fill("Procedural guidance.");
+  await page.getByRole("dialog").getByRole("button", { name: "Save Skill" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
   await editor.getByRole("button", { name: "Add skill" }).click();
-  await editor.getByLabel("Skill 2 id").fill("order.lookup");
-  await editor.getByLabel("Skill 2 name").fill("Order lookup");
-  await editor.getByLabel("Skill 2 procedure").fill("ORDER_PROCEDURE");
-  await editor.getByLabel("Skill 2 description").fill("Procedural guidance.");
+  await page.getByRole("dialog", { name: "New Definition Skill" }).getByLabel("Skill ID", { exact: true }).fill("order.lookup");
+  await page.getByRole("dialog", { name: "New Definition Skill" }).getByLabel("Skill name", { exact: true }).fill("Order lookup");
+  await page.getByRole("dialog", { name: "New Definition Skill" }).getByLabel("Procedure", { exact: true }).fill("ORDER_PROCEDURE");
+  await page.getByRole("dialog", { name: "New Definition Skill" }).getByLabel("Description", { exact: true }).fill("Procedural guidance.");
+  await page.getByRole("dialog").getByRole("button", { name: "Save Skill" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
   await saveDraft(page, editor);
   await ensureToolAllowlisted(page, editor, "workspace.list");
   await completeDefinitionDraftPublishGate(page, editor);

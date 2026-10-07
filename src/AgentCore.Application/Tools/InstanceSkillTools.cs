@@ -17,6 +17,7 @@ public static class InstanceSkillTools
             void Add(string name, JsonObject field) { properties[name] = field; required.Add(name); }
             if (op is not ("list" or "create")) Add("key", new() { ["type"] = "string", ["maxLength"] = 75 });
             if (op is "update" or "set_enabled" or "delete" or "customize") Add("expectedRevision", new() { ["type"] = "integer", ["minimum"] = 1 });
+            if (op == "create") properties["id"] = new JsonObject { ["type"] = "string", ["maxLength"] = 64, ["description"] = "Optional ID unique within this instance. Empty generates from name." };
             if (op is "create" or "update")
             {
                 foreach (var (field, max) in new[] { ("name", 80), ("description", 240), ("procedure", 4000) })
@@ -37,7 +38,7 @@ public static class InstanceSkillTools
         if (!a.TryGetProperty("projection", out var projection) || projection.ValueKind != JsonValueKind.String
             || projection.GetString() is not ("Always" or "OnDemand")) throw AgentCoreErrors.Validation("projection must be Always or OnDemand.");
         return new(a.GetProperty("name").GetString()!, a.GetProperty("description").GetString()!, a.GetProperty("procedure").GetString()!,
-            projection.GetString() == "Always" ? SkillProjection.Always : SkillProjection.OnDemand, a.GetProperty("enabled").GetBoolean(), a.GetProperty("requiredCapabilities").EnumerateArray().Select(c => c.GetString()!).ToArray());
+            projection.GetString() == "Always" ? SkillProjection.Always : SkillProjection.OnDemand, a.GetProperty("enabled").GetBoolean(), a.GetProperty("requiredCapabilities").EnumerateArray().Select(c => c.GetString()!).ToArray(), a.TryGetProperty("id", out var id) ? id.GetString() : null);
     }
 }
 public sealed partial class SessionToolExecutor

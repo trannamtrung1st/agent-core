@@ -1,0 +1,11 @@
+# New Instance persona defaults
+
+Date: 2026-10-07. Custom persona now starts with the identity from the exact selected published Definition version. Operators can edit any of the four existing fields. Switching to Definition persona and back keeps edits; changing the Definition/version loads its defaults. Default persona submission remains `null`, preserving the server-owned Definition identity path.
+
+The existing owner-authorized version API supplies defaults. Loading blocks editing/custom creation; failures show a safe inline error, retained diagnostic id when available and Retry. Default persona creation remains available. Cancelled/stale responses cannot overwrite a newer selection or custom edits. No new API, persona schema or styling system is added.
+
+MCP used an isolated Synthetic in-memory host to load default identities, edit the name, toggle persona modes without losing edits, change Definition and create “Tommy from Definition” from General Assistant v16. Reload confirmed its custom name and unchanged Definition role, description and tone. A deliberately injected version-read 503 blocked custom creation; removing the fault and Retry loaded defaults and enabled creation. Desktop 1280px and mobile 390px had no document overflow. The injected 503 was the expected recovery failure; there were no unrelated product errors. Captures: [desktop](assets/instance-persona-defaults-desktop.png), [mobile](assets/instance-persona-defaults-mobile.png).
+
+Regression coverage exercises exact-version defaults, mode-toggle preservation, changed-version defaults, stale-response rejection, failure/retry and unchanged default/custom payload semantics. The full Admin suite passed 40 cases; a final focused run passed 11 persona cases, including the two additional stale-response/retry regressions added after the full run started. Production build passed with the existing bundle-size warning. Historical migration and milestone freeze SHAs remain unchanged.
+
+Final integrated regression: all three Skills Playwright journeys passed in 32.3 seconds against the updated Synthetic host, including custom-persona instance creation, owner editing, publication upgrade/rollback and independent local Skills.

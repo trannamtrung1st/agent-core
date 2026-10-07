@@ -1,10 +1,10 @@
 # Agent Instance Skills migration verification
 
-Date: 2026-10-07. Requested scope: `local/proposals/agent_core_instance_skills_full_migration_proposal.md`. Original cutover: `c4d66400` based on `e7fb4a62`. A follow-up startup review is included in the pending published candidate; exact hosted SHA/results will be recorded when available.
+Date: 2026-10-07. Requested scope: `local/proposals/agent_core_instance_skills_full_migration_proposal.md`. Original cutover: `c4d66400` based on `e7fb4a62`. Startup, Customize-result, approval ACK and browser deadline corrections are included in verified freeze candidate `9c2d40e0d3a72268b72adbbecaf0654b5918b294`.
 
 ## Status
 
-Implementation is present as a single architectural cutover. All local backend/frontend/browser/persistence regression gates are green. Hosted Synthetic/Compose on the final published behavior SHA has not run; proposal acceptance criterion 20 and final closure remain pending. Historical P8/P8.5/P9.7 reports retain their original evidence and do not verify this migration.
+Implementation is present as a single architectural cutover. All local backend/frontend/browser/persistence regression gates are green. All five [hosted Synthetic/Compose jobs](https://github.com/trannamtrung1st/agent-core/actions/runs/37649033738) passed on exact behavior SHA `9c2d40e0d3a72268b72adbbecaf0654b5918b294`. Proposal acceptance criterion 20 is complete; this migration is closed/frozen on that candidate. Historical P8/P8.5/P9.7 reports retain their original evidence and do not verify this migration.
 
 ## Implemented contracts
 
@@ -26,7 +26,7 @@ Implementation is present as a single architectural cutover. All local backend/f
 | 14–17: Harness removal, direct cutover, fresh data, shared write rules | cleanup search, EF migration/model check, common `AgentInstanceSkillService`, canonical docs |
 | 18: store parity, rollback, reopen and deletion | InMemory/SQLite Skill contract cases and `AdminLifecycleDeletionTests` |
 | 19: bounded UI finish | MCP desktop/mobile actions, four valid captures, fresh finish review and documentation handoff |
-| 20: regression and exact-SHA hosted verification | local results below; hosted gate pending |
+| 20: regression and exact-SHA hosted verification | local results below; all five exact-SHA hosted jobs green on `9c2d40e0` |
 
 ## Executed behavior
 
@@ -100,3 +100,13 @@ Local approval hardening gates passed: full backend 2642 passed / 13 opt-in skip
 The settle loop checked its deadline between reads but did not bound the awaited Playwright state read. The narrow correction bounds every read by the remaining deadline and rejects late stability results. Internal timeout yields false; caller cancellation propagates its cancellation token. Evaluation remains read-only, with no detached runtime continuation or ownership change. A deliberately stalled-read regression failed before the fix while caller cancellation already passed. The existing continuous-change assertion remains unchanged. Final local and exact-SHA hosted verification will be recorded before closure.
 
 Local browser deadline checks passed: all 10 focused settle/deadline cases, then the full Infrastructure suite (823 passed, nine opt-in skips, zero failed). Real Chromium still returns `settled` false for continuous changes within the existing 2.5-second guard, includes delayed content after navigation/actions, and propagates explicit cancellation. The stalled evaluation remains unfinished when the bounded wait returns false; explicit caller cancellation preserves its token. Documentation links/anchors, complete JSON examples and whitespace checks passed.
+
+## Exact-SHA closure
+
+All five jobs in [run 37649033738](https://github.com/trannamtrung1st/agent-core/actions/runs/37649033738) passed on `9c2d40e0d3a72268b72adbbecaf0654b5918b294` on 2026-10-07. Backend: Domain 150, Infrastructure 817, Application 1306 and API 361 (2634 passed, 19 skipped, zero failed). Six Infrastructure skips were unavailable Docker sandbox checks; the other 13 were opt-in checks. The local Infrastructure suite passed all six Docker cases, and hosted Compose passed actual container/SQLite survival. Frontend: 712 tests in 94 files plus production build. Playwright core: 110 passed. Acceptance: 16 passed, including all six P9.7 cases in 54.9 seconds. Compose: passed. No failed test assertion or requested wait was loosened. Historical failure runs remain recorded above.
+
+## Skill form polish after the verified candidate
+
+The requested Definition Skill form polish reuses the existing `SelectField` and `SwitchField` product compositions. Projection has its label above a full-width dropdown with the shared 8px field gap; default-enabled uses the shared switch row with a 12px label gap. No new styling system or behavior is introduced. Invalid missing values retain their existing explicit-validation requirement. This visual follow-up does not move the migration freeze SHA.
+
+MCP on an isolated Synthetic in-memory host created a Skill, selected Always, disabled it, saved/reloaded, then enabled it by keyboard and saved/reloaded again. Values persisted. Desktop 1280px, intermediate 760px and mobile 390px had no document overflow; computed field/control widths matched. The batched desktop/mobile inspection included a long Skill name. Related API requests succeeded; the only console error was the existing favicon 404. Focused frontend checks: 21 tests passed; build passed with the existing bundle-size warning; all three Skills browser journeys passed in 31.4 seconds, including owner editing and Definition upgrade/rollback. Captures: [desktop](assets/skill-form-polish-desktop.png), [mobile](assets/skill-form-polish-mobile.png).

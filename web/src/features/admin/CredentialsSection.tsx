@@ -137,7 +137,7 @@ export function CredentialsSection() {
           { title: "Metadata & origins", width: 280, render: (_, c) => <CredentialPolicySummary credential={c} /> },
           { title: "Bindings", dataIndex: "bindingCount", width: 80, align: "right" },
           { title: "Updated", width: 180, render: (_, c) => <time dateTime={c.updatedAtUtc}>{new Date(c.updatedAtUtc).toLocaleString()}</time> },
-          { title: "Actions", width: 300, render: (_, c) => <Flex gap={token.paddingXS} wrap>
+          { title: "Actions", width: 300, render: (_, c) => <Flex className="admin-table-actions" gap={token.paddingXS}>
             <Button disabled={busy} onClick={() => open("edit", c)}>Edit</Button><Button disabled={busy} onClick={() => open("replace", c)}>Replace value</Button>
             <Button danger disabled={busy || c.bindingCount > 0} onClick={() => confirmAction(modal, { title: `Delete ${c.displayName}?`, content: "This permanently removes the credential. Unbind all agents first.", okText: "Delete credential", danger: true, onOk: () => remove(c) })}>Delete</Button>
           </Flex> }

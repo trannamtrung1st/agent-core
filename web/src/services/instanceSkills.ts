@@ -1,6 +1,6 @@
 import { ownerFetch } from './api';
 import { adminProblemMessage } from './adminApi';
-export type SkillInput = { name: string; description: string; procedure: string; projection: 'Always' | 'OnDemand'; enabled: boolean; requiredCapabilities: string[] };
+export type SkillInput = { id?: string; name: string; description: string; procedure: string; projection: 'Always' | 'OnDemand'; enabled: boolean; requiredCapabilities: string[] };
 export type InstanceSkill = SkillInput & { key: string; origin: 'Definition' | 'Instance'; revision: number; definitionVersion: number | null; sourceDefinitionId: string | null; sourceDefinitionVersion: number | null; sourceDefinitionSkillId: string | null; missingCapabilities: string[] };
 const path = (id: string, key?: string) => `/api/v2/admin/agent-instances/${encodeURIComponent(id)}/skills${key ? '/' + encodeURIComponent(key) : ''}`;
 async function request<T>(url: string, method = 'GET', body?: unknown): Promise<T> {

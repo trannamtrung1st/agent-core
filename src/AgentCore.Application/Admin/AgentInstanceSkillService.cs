@@ -7,7 +7,7 @@ using AgentCore.Domain.Definitions;
 namespace AgentCore.Application.Admin;
 
 public sealed record InstanceSkillInput(string Name, string Description, string Procedure, SkillProjection Projection,
-    bool Enabled, IReadOnlyList<string> RequiredCapabilities);
+    bool Enabled, IReadOnlyList<string> RequiredCapabilities, string? Id = null);
 public sealed record InstanceSkillView(string Key, SkillOrigin Origin, string Name, string Description, string Procedure,
     SkillProjection Projection, bool Enabled, IReadOnlyList<string> RequiredCapabilities, long Revision,
     int? DefinitionVersion, string? SourceDefinitionId, int? SourceDefinitionVersion, string? SourceDefinitionSkillId,
@@ -50,7 +50,7 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
         var now = DateTimeOffset.FromUnixTimeMilliseconds(time.GetUtcNow().ToUnixTimeMilliseconds());
         AgentInstanceSkill? local = null;
         AgentDefinitionSkillState? state = null;
-        Guid? delete = null;
+        string? delete = null;
         long? oldSkillRevision = null;
         long? oldStateRevision = null;
         var current = operation == "create" ? null : (Views(definition, snapshot).SingleOrDefault(s => s.Key == key)
@@ -61,17 +61,22 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
             case "create":
                 if (input is null) throw AgentCoreErrors.Validation("Skill content is required.");
                 Validate(input, definition);
-                local = new(ids.NewId(), id, input.Name, input.Description, input.Procedure, input.Projection, input.Enabled,
+                var requestedId = input.Id?.Trim();
+                var skillId = string.IsNullOrEmpty(requestedId) ? SkillIds.FromName(input.Name, snapshot.InstanceSkills.Select(s => s.SkillId)) : requestedId;
+                if (!SkillIds.IsValid(skillId)) throw AgentCoreErrors.Validation("Skill ID must start with a lowercase letter and use lowercase letters, digits, dots, underscores or hyphens, up to 64 characters.");
+                if (snapshot.InstanceSkills.Any(s => s.SkillId == skillId)) throw AgentCoreErrors.Conflict("This Skill ID already exists in this Agent Instance.");
+                local = new(skillId, id, input.Name, input.Description, input.Procedure, input.Projection, input.Enabled,
                     input.RequiredCapabilities.ToArray(), 1, now, now, actor);
                 break;
             case "update":
             case "delete":
                 if (current!.Origin != SkillOrigin.Instance) throw AgentCoreErrors.Validation("Definition Skill content is read-only; use Customize or change enabled state.");
-                var existing = snapshot.InstanceSkills.Single(s => "instance:" + s.SkillId.ToString("D") == key);
+                var existing = snapshot.InstanceSkills.Single(s => "instance:" + s.SkillId == key);
                 oldSkillRevision = existing.Revision;
                 if (operation == "delete") { delete = existing.SkillId; break; }
                 if (input is null) throw AgentCoreErrors.Validation("Skill content is required.");
                 Validate(input, definition);
+                if (!string.IsNullOrWhiteSpace(input.Id) && input.Id != existing.SkillId) throw AgentCoreErrors.Validation("Skill ID cannot change after creation.");
                 local = existing with { Name = input.Name, Description = input.Description, Procedure = input.Procedure,
                     Projection = input.Projection, Enabled = input.Enabled, RequiredCapabilities = input.RequiredCapabilities.ToArray(),
                     Revision = existing.Revision + 1, UpdatedAt = now };
@@ -80,7 +85,7 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
                 if (enabled is null) throw AgentCoreErrors.Validation("Enabled is required.");
                 if (current!.Origin == SkillOrigin.Instance)
                 {
-                    var previous = snapshot.InstanceSkills.Single(s => "instance:" + s.SkillId.ToString("D") == key);
+                    var previous = snapshot.InstanceSkills.Single(s => "instance:" + s.SkillId == key);
                     oldSkillRevision = previous.Revision;
                     local = previous with { Enabled = enabled.Value, Revision = previous.Revision + 1, UpdatedAt = now };
                 }
@@ -96,7 +101,7 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
                 var source = definition.SkillList.Single(s => "definition:" + s.Id == key);
                 if (source.ResourcePaths.Count > 0) throw AgentCoreErrors.Validation("This Skill binds Definition resources; an independent Instance copy cannot preserve those bindings.");
                 Validate(new(source.Name, source.Description, source.Procedure, source.Projection, true, source.RequiredCapabilities), definition);
-                local = new(ids.NewId(), id, source.Name, source.Description, source.Procedure, source.Projection, true,
+                local = new(SkillIds.FromName(source.Name, snapshot.InstanceSkills.Select(s => s.SkillId)), id, source.Name, source.Description, source.Procedure, source.Projection, true,
                     source.RequiredCapabilities.ToArray(), 1, now, now, actor, definition.Id, definition.Version, source.Id);
                 var old = snapshot.DefinitionStates.Single(s => s.DefinitionSkillId == source.Id);
                 oldStateRevision = old.Revision;
@@ -112,11 +117,11 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
         _ = EffectiveSkillCatalogResolver.Resolve(futureDefinition, next);
         var history = actor == SkillAuthor.Admin ? new AdminEventAppend(ids.NewId(), now, AdminEventActorKind.LocalOwner,
             AdminEventOperationKind.InstanceSkillsChanged, "agent.instance", id.ToString("D"), owner.Revision + 1,
-            definition.Version, JsonSerializer.Serialize(new { instanceId = id.ToString("D"), operation, skillKey = key ?? "instance:" + local!.SkillId.ToString("D") })) : null;
+            definition.Version, JsonSerializer.Serialize(new { instanceId = id.ToString("D"), operation, skillKey = key ?? "instance:" + local!.SkillId })) : null;
         ct.ThrowIfCancellationRequested();
         await instances.MutateSkillsAsync(new(id, owner.Revision, state, local, delete, oldSkillRevision, oldStateRevision, history), ct);
         if (delete is not null) return (current!, null);
-        var written = Views(definition, next).Single(s => s.Key == (local is not null ? "instance:" + local.SkillId.ToString("D") : key));
+        var written = Views(definition, next).Single(s => s.Key == (local is not null ? "instance:" + local.SkillId : key));
         return (written, operation == "customize" ? new("definition:" + state!.DefinitionSkillId, state.Enabled, state.Revision) : null);
     }
     private static void Validate(InstanceSkillInput input, AgentDefinition definition)
@@ -134,7 +139,7 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
             var state = snapshot.DefinitionStates.SingleOrDefault(x => x.DefinitionSkillId == s.Id) ?? throw AgentCoreErrors.Persistence("Definition Skill state is missing.");
             return new InstanceSkillView("definition:" + s.Id, SkillOrigin.Definition, s.Name, s.Description, s.Procedure, s.Projection,
                 state.Enabled, s.RequiredCapabilities, state.Revision, d.Version, null, null, null, Missing(s.RequiredCapabilities));
-        }).Concat(snapshot.InstanceSkills.OrderBy(s => s.CreatedAt).Select(s => new InstanceSkillView("instance:" + s.SkillId.ToString("D"),
+        }).Concat(snapshot.InstanceSkills.OrderBy(s => s.CreatedAt).Select(s => new InstanceSkillView("instance:" + s.SkillId,
             SkillOrigin.Instance, s.Name, s.Description, s.Procedure, s.Projection, s.Enabled, s.RequiredCapabilities, s.Revision,
             null, s.SourceDefinitionId, s.SourceDefinitionVersion, s.SourceDefinitionSkillId, Missing(s.RequiredCapabilities), s.CreatedBy, s.CreatedAt, s.UpdatedAt))).ToArray();
     }

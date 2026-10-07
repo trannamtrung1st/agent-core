@@ -286,7 +286,7 @@ public static class ToolRegistry
                 ToolReplaySafety.NonReplayable),
             [ToolCatalog.SkillsLoad] = Descriptor(
                 ToolCatalog.SkillsLoad,
-                "Load OnDemand procedures by canonical keys (definition:<id> or instance:<Guid>) from this execution’s pinned effective Skill catalog. Required capabilities stay requirements and do not grant tools, credentials, or approval.",
+                "Load OnDemand procedures by canonical keys (definition:<id> or instance:<skill-id>) from this execution’s pinned effective Skill catalog. Required capabilities stay requirements and do not grant tools, credentials, or approval.",
                 """{"type":"object","additionalProperties":false,"properties":{"ids":{"type":"array","minItems":1,"maxItems":4,"items":{"type":"string"}}},"required":["ids"]}""",
                 ToolEffect.ReadOnly,
                 ToolOfferRule.CurrentExecutionCapability,

@@ -5,6 +5,14 @@ namespace AgentCore.Domain.Tests;
 public sealed class AgentDefinitionValidatorTests
 {
     [Fact]
+    public void Generated_skill_ids_use_the_same_ascii_rules_as_browser_authoring()
+    {
+        Assert.Equal("stanbul-review", SkillIds.FromName("İstanbul Review", []));
+        Assert.Equal("review-2", SkillIds.FromName("Review", ["review"]));
+        Assert.Equal("skill-123-review", SkillIds.FromName("123 review", []));
+    }
+
+    [Fact]
     public void Rejects_non_positive_version()
     {
         var definition = new AgentDefinition(
@@ -131,6 +139,14 @@ public sealed class AgentDefinitionValidatorTests
         Assert.Equal(3, published.Version);
         Assert.Equal("refund.handle", Assert.Single(published.SkillList).Id);
         AgentDefinitionValidator.Validate(published);
+    }
+
+    [Fact]
+    public void Skill_ids_are_scoped_to_the_definition()
+    {
+        AgentDefinitionValidator.Validate(Valid([Skill("review")]) with { Id = "first" });
+        AgentDefinitionValidator.Validate(Valid([Skill("review")]) with { Id = "second" });
+        Assert.Throws<ArgumentException>(() => AgentDefinitionValidator.Validate(Valid([Skill("review"), Skill("review")])));
     }
 
     [Theory]
