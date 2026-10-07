@@ -30,7 +30,9 @@ describe("System credentials", () => {
       metadata: credential.metadata, allowedOrigins: credential.allowedOrigins }));
   });
   it("clears transient protected input after replacement failure and cancel", async () => {
-    vi.mocked(api.replaceCredentialValue).mockRejectedValue(new Error("Revision conflict"));
+    vi.mocked(api.replaceCredentialValue).mockRejectedValue(Object.assign(new Error("Revision conflict"), {
+      name: "AdminRequestError", diagnosticId: "credential-write-diagnostic"
+    }));
     view(); fireEvent.click(await screen.findByRole("button", { name: "Replace value" }));
     const dialog = within(await screen.findByRole("dialog", { name: "Replace protected value" }));
     const input = dialog.getByLabelText("Protected value", { exact: true });
@@ -40,11 +42,26 @@ describe("System credentials", () => {
     fireEvent.click(dialog.getByRole("button", { name: "Save credential" }));
     await waitFor(() => expect(input).toHaveValue(""));
     expect(dialog.getByRole("alert")).toHaveTextContent("Revision conflict");
+    fireEvent.click(dialog.getByRole("button", { name: "Error details" }));
+    expect(await screen.findByText("credential-write-diagnostic")).toBeInTheDocument();
     fireEvent.change(input, { target: { value: "must-clear-on-cancel" } });
     fireEvent.click(dialog.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     fireEvent.click(screen.getByRole("button", { name: "Replace value" }));
     expect(within(await screen.findByRole("dialog", { name: "Replace protected value" })).getByLabelText("Protected value", { exact: true })).toHaveValue("");
+  });
+  it("round trips dynamic metadata keys that collide with JavaScript object properties", async () => {
+    const reservedKeys = { ...credential, metadata: JSON.parse('{"__proto__":"safe value","constructor":"safe constructor"}') };
+    vi.mocked(api.listCredentials).mockResolvedValue([reservedKeys]);
+    vi.mocked(api.updateCredential).mockResolvedValue(reservedKeys);
+    view(); fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "Edit credential" }));
+    await waitFor(() => expect(dialog.getByLabelText("Metadata key 1")).toHaveValue("__proto__"));
+    fireEvent.click(dialog.getByRole("button", { name: "Save credential" }));
+    await waitFor(() => expect(api.updateCredential).toHaveBeenCalled());
+    const sent = vi.mocked(api.updateCredential).mock.calls[0][1].metadata;
+    expect(Object.keys(sent)).toEqual(["__proto__", "constructor"]);
+    expect(JSON.parse(JSON.stringify(sent))).toEqual(reservedKeys.metadata);
   });
   it("shows a collection load failure and retries to an empty inventory", async () => {
     vi.mocked(api.listCredentials).mockRejectedValueOnce(new Error("Network unavailable")).mockResolvedValue([]);

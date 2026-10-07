@@ -7,12 +7,13 @@ import { adminHomePath, navigateToAppPath } from "../../app/appRoute";
 import { bindCredential, createCredential, deleteCredential, listCredentialBindings, listCredentials,
   replaceCredentialValue, resetBrowserProfile, unbindCredential, updateCredential,
   type CredentialBinding, type SystemCredential } from "../../services/adminApi";
-import { describeAdminError } from "./adminErrors";
+import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
+import { AdminErrorNotice } from "./adminFailure";
 
 const kinds = ["Password", "ApiKey", "Token", "Certificate", "PrivateKey", "Generic"];
 type Fields = { displayName: string; kind: string; status: string; metadata: Array<{ key: string; value: string }>; origins: string; protectedValue?: string };
 function metadata(rows: Fields["metadata"] = []) {
-  const result: Record<string, string> = {};
+  const result: Record<string, string> = Object.create(null);
   for (const { key, value } of rows) {
     if (Object.keys(result).some(k => k.toLowerCase() === key.trim().toLowerCase())) throw new Error("Metadata keys must be unique.");
     result[key.trim()] = value ?? "";
@@ -51,12 +52,12 @@ function ProtectedValueField() {
 export function CredentialsSection() {
   const { token } = theme.useToken(); const { modal, message } = App.useApp();
   const [items, setItems] = useState<SystemCredential[]>([]); const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>(); const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<AdminFailureNotice>(); const [busy, setBusy] = useState(false);
   const [dialog, setDialog] = useState<{ kind: "create" | "edit" | "replace"; item?: SystemCredential }>();
-  const [dialogError, setDialogError] = useState<string>(); const [form] = Form.useForm<Fields>();
+  const [dialogError, setDialogError] = useState<AdminFailureNotice>(); const [form] = Form.useForm<Fields>();
   const { search, setSearch, pagination } = useAdminCollectionSearch();
   const load = useCallback(async () => { setLoading(true); setError(undefined);
-    try { setItems(await listCredentials()); } catch (e) { setError(describeAdminError(e, "Unable to load credentials.").message); }
+    try { setItems(await listCredentials()); } catch (e) { setError(describeAdminError(e, "Unable to load credentials.")); }
     finally { setLoading(false); } }, []);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
@@ -77,18 +78,18 @@ export function CredentialsSection() {
       else if (dialog.kind === "replace") await replaceCredentialValue(dialog.item!, values.protectedValue!);
       else await updateCredential(dialog.item!, safeFields(values));
       close(); await load(); message.success("Credential saved");
-    } catch (e) { setDialogError(describeAdminError(e, "Credential could not be saved. Enter the protected value again to retry.").message); }
+    } catch (e) { setDialogError(describeAdminError(e, "Credential could not be saved. Enter the protected value again to retry.")); }
     finally { form.setFieldValue("protectedValue", undefined); setBusy(false); }
   }
   async function remove(item: SystemCredential) {
     setBusy(true); try { await deleteCredential(item); await load(); }
-    catch (e) { setError(describeAdminError(e, "Credential could not be deleted.").message); } finally { setBusy(false); }
+    catch (e) { setError(describeAdminError(e, "Credential could not be deleted.")); } finally { setBusy(false); }
   }
   return <Flex vertical gap={token.padding}>
     <Flex justify="space-between" align="center" wrap gap={token.paddingXS}><Typography.Title level={4} style={{ margin: 0 }}>System credentials</Typography.Title>
       <Button type="primary" onClick={() => open("create")}>Create credential</Button></Flex>
     <Typography.Text type="secondary">Reusable protected values. Agents receive access through explicit bindings; bindings do not grant tools.</Typography.Text>
-    {error && <Alert type="error" showIcon title={error} action={<Button onClick={() => void load()}>Retry</Button>} />}
+    {error && <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button onClick={() => void load()}>Retry</Button>} />}
     {loading ? <Spin aria-label="Loading credentials" /> : <>
       <AdminCollectionToolbar label="credentials" value={search} onChange={setSearch} />
       <Table<SystemCredential> rowKey="credentialId" scroll={{ x: 850 }} pagination={pagination} locale={{ emptyText: <Empty description="No credentials yet" /> }}
@@ -106,8 +107,8 @@ export function CredentialsSection() {
         ]} />
     </>}
     <Modal open={!!dialog} title={dialog?.kind === "create" ? "Create credential" : dialog?.kind === "replace" ? "Replace protected value" : "Edit credential"}
-      onCancel={close} onOk={() => void save().catch(() => {})} confirmLoading={busy} okText="Save credential" okButtonProps={{ disabled: busy }} mask={{ closable: false }} forceRender>
-      {dialogError && <Alert type="error" showIcon title={dialogError} />}
+      onCancel={close} onOk={() => void save().catch(() => {})} confirmLoading={busy} okText="Save credential" okButtonProps={{ disabled: busy, "aria-label": "Save credential" }} mask={{ closable: false }} forceRender>
+      {dialogError && <Alert type="error" showIcon title={<AdminErrorNotice message={dialogError.message} diagnosticId={dialogError.diagnosticId} showDetailsLabel />} />}
       <Form form={form} layout="vertical" autoComplete="off" initialValues={{ kind: "Password", status: "Active", metadata: [], origins: "" }}>
         {dialog?.kind === "replace" ? <ProtectedValueField /> : <CredentialFields create={dialog?.kind === "create"} />}
       </Form>
@@ -118,18 +119,18 @@ export function CredentialsSection() {
 export function InstanceCredentialsSection({ instanceId, revision, archived }: { instanceId: string; revision: number; archived: boolean }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
   const [bindings, setBindings] = useState<CredentialBinding[]>([]); const [choices, setChoices] = useState<SystemCredential[]>([]);
-  const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState<string>();
+  const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState<AdminFailureNotice>();
   const [open, setOpen] = useState(false); const [form] = Form.useForm<{ credentialId: string; reference: string }>();
   const load = useCallback(async () => { setLoading(true); setError(undefined); try { const [grants, credentials] = await Promise.all([listCredentialBindings(instanceId), listCredentials()]); setBindings(grants); setChoices(credentials); }
-    catch (e) { setError(describeAdminError(e, "Unable to load bindings.").message); } finally { setLoading(false); } }, [instanceId]);
+    catch (e) { setError(describeAdminError(e, "Unable to load bindings.")); } finally { setLoading(false); } }, [instanceId]);
   useEffect(() => { void load(); }, [load, revision]);
   async function mutate(action: () => Promise<unknown>) { setBusy(true); setError(undefined); try { await action(); setOpen(false); form.resetFields(); await load(); }
-    catch (e) { setError(describeAdminError(e, "Binding operation failed. Reload the instance if its revision changed.").message); } finally { setBusy(false); } }
+    catch (e) { setError(describeAdminError(e, "Binding operation failed. Reload the instance if its revision changed.")); } finally { setBusy(false); } }
   return <Flex vertical gap={token.padding}>
     <Flex justify="space-between" align="center" gap={token.paddingXS} wrap><Typography.Title level={4} style={{ margin: 0 }}>Credential bindings</Typography.Title>
       <Flex gap={token.paddingXS} wrap><Button onClick={() => navigateToAppPath(adminHomePath("credentials"))}>Manage system credentials</Button><Button type="primary" disabled={archived || busy} onClick={() => setOpen(true)}>Bind credential</Button></Flex></Flex>
     {archived && <Alert type="info" title="Archived instance bindings are read-only and cannot be used." />}
-    {error && <Alert type="error" title={error} showIcon action={<Button onClick={() => void load()}>Retry</Button>} />}
+    {error && <Alert type="error" title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} showIcon action={<Button onClick={() => void load()}>Retry</Button>} />}
     {loading ? <Spin aria-label="Loading credential bindings" /> : <Table<CredentialBinding> rowKey="bindingId" pagination={false} scroll={{ x: 620 }} locale={{ emptyText: <Empty description="No credentials bound" /> }} dataSource={bindings} columns={[
       { title: "Reference", dataIndex: "reference" }, { title: "Credential", render: (_, b) => <Flex vertical><Typography.Text>{b.credential.displayName}</Typography.Text><Typography.Text type="secondary">{b.credential.kind} · {b.credential.status}</Typography.Text></Flex> },
       { title: "Metadata & origins", render: (_, b) => <Flex vertical style={{ maxWidth: 280, overflowWrap: "anywhere" }}>{Object.entries(b.credential.metadata).map(([k, v]) => <Typography.Text key={k}>{k}: {v}</Typography.Text>)}{b.credential.allowedOrigins.map(o => <Typography.Text key={o} type="secondary">{o}</Typography.Text>)}</Flex> },

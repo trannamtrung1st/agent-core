@@ -1,11 +1,13 @@
 import { test, expect, type Page } from "@playwright/test";
 
 async function owner(page: Page, path: string, method = "GET", body?: unknown) {
-  return page.evaluate(async ({path, method, body}) => {
+  const responseText = await page.evaluate(async ({path, method, body}) => {
     const response = await fetch(`/api/v2/admin/${path}`, { method, headers: { "X-AgentCore-Owner-Capability": localStorage.getItem("agent-core.owner-capability")!, "Content-Type": "application/json" }, ...(body === undefined ? {} : {body: JSON.stringify(body)}) });
     const text = await response.text(); if (!response.ok) throw new Error(`${response.status} ${text}`);
-    return text ? JSON.parse(text) : null;
+    return text;
   }, {path, method, body});
+  // Transport JSON as text so Playwright's object bridge cannot alter dynamic keys.
+  return responseText ? JSON.parse(responseText) : null;
 }
 
 test("shared system credentials have safe CRUD, explicit bindings, profile reset and mobile navigation", async ({page}) => {
@@ -23,6 +25,9 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
   await create.getByRole("button", {name:"Add metadata"}).click();
   await create.getByLabel("Metadata key 1").fill("username");
   await create.getByLabel("Metadata value 1").fill("operator@example.test");
+  await create.getByRole("button", {name:"Add metadata"}).click();
+  await create.getByLabel("Metadata key 2").fill("__proto__");
+  await create.getByLabel("Metadata value 2").fill("safe metadata value");
   await create.getByLabel("Allowed origins").fill("https://store.example.test");
   await create.getByLabel("Protected value", {exact:true}).fill("ui-known-private-9847");
   await expect(create.locator(".ant-input-password-icon")).toHaveCount(0);
@@ -32,12 +37,17 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
   const row = page.getByRole("row").filter({hasText:name}); await expect(row).toContainText("operator@example.test");
   const c = (await owner(page,"credentials")).items.find((x: {displayName:string}) => x.displayName === name);
   expect(JSON.stringify(c)).not.toContain("ui-known-private-9847");
+  expect(Object.hasOwn(c.metadata, "__proto__")).toBe(true);
+  expect(c.metadata.__proto__).toBe("safe metadata value");
   await row.getByRole("button", {name:"Replace value"}).click();
   const replace = page.getByRole("dialog", {name:"Replace protected value"});
   const input = replace.getByLabel("Protected value", {exact:true}); await expect(input).toHaveValue("");
-  await page.route(`**/credentials/${c.credentialId}/value`, route => route.fulfill({status:409,json:{title:"Stale credential revision",detail:"Reload the credential."}}), {times:1});
+  await page.route(`**/credentials/${c.credentialId}/value`, route => route.fulfill({status:409,json:{title:"Stale credential revision",detail:"Reload the credential.",diagnosticId:"credential-write-diagnostic"}}), {times:1});
   await input.fill("must-clear-on-failure-5937"); await replace.getByRole("button", {name:/Save credential/}).click();
   await expect(input).toHaveValue(""); await expect(replace.getByRole("alert")).toBeVisible();
+  await replace.getByRole("button", {name:"Error details",exact:true}).click();
+  await expect(page.getByText("credential-write-diagnostic", {exact:true})).toBeVisible();
+  await replace.getByRole("button", {name:"Error details",exact:true}).click();
   await expect(replace.getByRole("button", {name:/Save credential/})).toBeEnabled();
   await expect(replace.getByRole("button", {name:/Save credential/})).not.toHaveClass(/ant-btn-loading/);
   await input.fill("rotated-private-9546"); await replace.getByRole("button", {name:/Save credential/}).click(); await expect(replace).toBeHidden();
@@ -60,6 +70,8 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
   const edit = page.getByRole("dialog", {name:"Edit credential"}); await expect(edit.getByLabel("Kind")).toHaveCount(0); await expect(edit.locator("input[type=password]")).toHaveCount(0);
   await expect(edit.getByLabel("Metadata key 1")).toHaveValue("username");
   await expect(edit.getByLabel("Metadata value 1")).toHaveValue("operator@example.test");
+  await expect(edit.getByLabel("Metadata key 2")).toHaveValue("__proto__");
+  await expect(edit.getByLabel("Metadata value 2")).toHaveValue("safe metadata value");
   await edit.getByRole("combobox", {name:"Status"}).click(); await page.getByTitle("Disabled", {exact:true}).click();
   await edit.getByRole("button", {name:/Save credential/}).click(); await expect(edit).toBeHidden(); await expect(row).toContainText("Disabled");
   await page.goto(`/admin/instances/${a.instanceId}/connections`); await expect(page).toHaveURL(new RegExp(`/instances/${a.instanceId}/credentials$`));
