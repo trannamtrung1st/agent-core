@@ -194,7 +194,7 @@ public static class TriggerText
 
         if (System.Text.Encoding.UTF8.GetByteCount(evidence) > TriggerLimits.MaxEvidenceBytes)
         {
-            throw new ArgumentException("Occurrence evidence must be at most 4 KiB.");
+            throw new ArgumentException($"Occurrence evidence must be at most {TriggerLimits.MaxEvidenceBytes} bytes.");
         }
 
         return evidence;
@@ -343,7 +343,7 @@ public sealed class FixedIntervalSchedule : TriggerSchedule
     {
         if (intervalSeconds is < TriggerLimits.MinFixedIntervalSeconds or > TriggerLimits.MaxFixedIntervalSeconds)
         {
-            throw new ArgumentException("Fixed interval must be between 15 seconds and 7 days.");
+            throw new ArgumentException($"Fixed interval must be between {TriggerLimits.MinFixedIntervalSeconds} seconds and {TimeSpan.FromSeconds(TriggerLimits.MaxFixedIntervalSeconds).TotalDays} days.");
         }
 
         if (anchorAtUtc.Offset != TimeSpan.Zero)
