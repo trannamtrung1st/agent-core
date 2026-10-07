@@ -55,6 +55,9 @@ jobs:
       - name: Build Infrastructure tests
         run: dotnet build tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --nologo
 
+      - name: Prepare Ubuntu browser dependencies
+        run: sudo python3 scripts/prepare-ci-apt.py
+
       - name: Install .NET Playwright Chromium
         run: pwsh tests/AgentCore.Infrastructure.Tests/bin/Debug/net10.0/playwright.ps1 install --with-deps chromium
 
@@ -134,6 +137,9 @@ jobs:
       - name: Build Synthetic API host
         run: dotnet build src/AgentCore.Api/AgentCore.Api.csproj --nologo
 
+      - name: Prepare Ubuntu browser dependencies
+        run: sudo python3 scripts/prepare-ci-apt.py
+
       - name: Install .NET Playwright Chromium
         run: pwsh src/AgentCore.Api/bin/Debug/net10.0/playwright.ps1 install --with-deps chromium
 
@@ -199,6 +205,9 @@ jobs:
       # Build the actual host and install its Chromium on each isolated browser runner.
       - name: Build Synthetic API host
         run: dotnet build src/AgentCore.Api/AgentCore.Api.csproj --nologo
+
+      - name: Prepare Ubuntu browser dependencies
+        run: sudo python3 scripts/prepare-ci-apt.py
 
       - name: Install .NET Playwright Chromium
         run: pwsh src/AgentCore.Api/bin/Debug/net10.0/playwright.ps1 install --with-deps chromium
