@@ -79,10 +79,10 @@ public sealed class TriggerInstancePolicyReconciliationTests
         var managed = await service.CreateAsync("examiner", 1);
         var owner = new TriggerOwner(managed.InstanceId, ProfileId);
         var due = Now.AddHours(1);
-        var registration = new TriggerRegistration(
+        var registration = new Automation(
             Guid.Parse("019944af-00e2-7000-8000-000000000001"),
             owner,
-            TriggerRegistrationStatus.Active,
+            AutomationStatus.Active,
             "Reminder",
             new OneShotSchedule(due, "UTC", null, null),
             due,
@@ -95,15 +95,15 @@ public sealed class TriggerInstancePolicyReconciliationTests
         await store.CreateAsync(registration);
 
         await service.UpgradeAsync(managed.InstanceId, 2, managed.Revision);
-        var suspended = (await store.GetAsync(owner, registration.RegistrationId))!;
-        Assert.Equal(TriggerRegistrationStatus.SuspendedPolicy, suspended.Status);
+        var suspended = (await store.GetAsync(owner, registration.AutomationId))!;
+        Assert.Equal(AutomationStatus.SuspendedPolicy, suspended.Status);
         Assert.NotNull(suspended.SuspensionReason);
 
         var upgraded = await instances.FindAsync(managed.InstanceId);
         Assert.NotNull(upgraded);
         await service.UpgradeAsync(upgraded!.InstanceId, 1, upgraded.Revision);
-        var reactivated = (await store.GetAsync(owner, registration.RegistrationId))!;
-        Assert.Equal(TriggerRegistrationStatus.Active, reactivated.Status);
+        var reactivated = (await store.GetAsync(owner, registration.AutomationId))!;
+        Assert.Equal(AutomationStatus.Active, reactivated.Status);
         Assert.Null(reactivated.SuspensionReason);
     }
 
@@ -130,10 +130,10 @@ public sealed class TriggerInstancePolicyReconciliationTests
         var due = Now.AddMinutes(1);
         var activeId = Guid.Parse("019944af-00e3-7000-8000-000000000001");
         var completedId = Guid.Parse("019944af-00e3-7000-8000-000000000002");
-        await store.CreateAsync(new TriggerRegistration(
+        await store.CreateAsync(new Automation(
             activeId,
             owner,
-            TriggerRegistrationStatus.Active,
+            AutomationStatus.Active,
             "Future reminder",
             new OneShotSchedule(due, "UTC", null, null),
             due,
@@ -143,10 +143,10 @@ public sealed class TriggerInstancePolicyReconciliationTests
             1,
             new TriggerProvenance(TriggerAuthorizationOrigin.CurrentUserTurn, null, null, Now, Now),
             null));
-        await store.CreateAsync(new TriggerRegistration(
+        await store.CreateAsync(new Automation(
             completedId,
             owner,
-            TriggerRegistrationStatus.Completed,
+            AutomationStatus.Completed,
             "Done",
             new OneShotSchedule(Now.AddHours(-1), "UTC", null, null),
             null,
@@ -160,18 +160,18 @@ public sealed class TriggerInstancePolicyReconciliationTests
         var archived = await service.SetLifecycleAsync(managed.InstanceId, AgentInstanceLifecycle.Archived, managed.Revision);
         Assert.Equal(AgentInstanceLifecycle.Archived, archived.Lifecycle);
         var suspended = (await store.GetAsync(owner, activeId))!;
-        Assert.Equal(TriggerRegistrationStatus.SuspendedPolicy, suspended.Status);
-        Assert.Equal(TriggerRegistrationStatus.Completed, (await store.GetAsync(owner, completedId))!.Status);
+        Assert.Equal(AutomationStatus.SuspendedPolicy, suspended.Status);
+        Assert.Equal(AutomationStatus.Completed, (await store.GetAsync(owner, completedId))!.Status);
 
         clock.Advance(TimeSpan.FromMinutes(2));
         var scheduler = new TriggerScheduler(store, NullLogger<TriggerScheduler>.Instance, guard);
         var pass = await scheduler.RunOnceAsync(clock.GetUtcNow());
         Assert.Equal(0, pass.Admitted);
-        Assert.Equal(TriggerRegistrationStatus.SuspendedPolicy, (await store.GetAsync(owner, activeId))!.Status);
+        Assert.Equal(AutomationStatus.SuspendedPolicy, (await store.GetAsync(owner, activeId))!.Status);
 
         var restored = await service.SetLifecycleAsync(archived.InstanceId, AgentInstanceLifecycle.Active, archived.Revision);
-        Assert.Equal(TriggerRegistrationStatus.Active, (await store.GetAsync(owner, activeId))!.Status);
-        Assert.Equal(TriggerRegistrationStatus.Completed, (await store.GetAsync(owner, completedId))!.Status);
+        Assert.Equal(AutomationStatus.Active, (await store.GetAsync(owner, activeId))!.Status);
+        Assert.Equal(AutomationStatus.Completed, (await store.GetAsync(owner, completedId))!.Status);
         _ = restored;
     }
 

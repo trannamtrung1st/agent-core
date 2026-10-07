@@ -260,7 +260,7 @@ internal static class AdminHttpMapping
 
     public static AdminAutomationRegistrationResponse ToAutomationRegistration(AdminAutomationRegistration item) =>
         new(
-            item.RegistrationId.ToString("D"),
+            item.AutomationId.ToString("D"),
             item.Intent,
             ToAutomationStatus(item.Status),
             item.ScheduleKind,
@@ -278,13 +278,13 @@ internal static class AdminHttpMapping
             item.ModelOverrideReasoningEffort,
             item.ModelSource);
 
-    private static string ToAutomationStatus(TriggerRegistrationStatus status) => status switch
+    private static string ToAutomationStatus(AutomationStatus status) => status switch
     {
-        TriggerRegistrationStatus.Active => "active",
-        TriggerRegistrationStatus.Completed => "completed",
-        TriggerRegistrationStatus.Cancelled => "cancelled",
-        TriggerRegistrationStatus.Expired => "expired",
-        TriggerRegistrationStatus.SuspendedPolicy => "suspendedPolicy",
+        AutomationStatus.Active => "active",
+        AutomationStatus.Completed => "completed",
+        AutomationStatus.Cancelled => "cancelled",
+        AutomationStatus.Expired => "expired",
+        AutomationStatus.SuspendedPolicy => "suspendedPolicy",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
     };
 
@@ -335,9 +335,9 @@ internal static class AdminHttpMapping
             credential.Token,
             credential.Status.ToString());
 
-    public static AdminEventSubscriptionResponse ToEventSubscription(TriggerRegistration registration) =>
+    public static AdminEventSubscriptionResponse ToEventSubscription(Automation registration) =>
         new(
-            registration.RegistrationId.ToString("D"),
+            registration.AutomationId.ToString("D"),
             registration.EventSourceId?.ToString("D") ?? "",
             registration.EventType ?? "",
             registration.Status.ToString(),

@@ -94,7 +94,7 @@ public sealed class DurableOccurrenceExecution(
             SupportsVision: model.Capabilities.Vision,
             CaptureScope: running.WorkItemId.ToString("D"),
             WorkItemId: running.WorkItemId,
-            Harness: triggerKind == TriggerKind.ThoughtActivation ? await tools.HarnessContextAsync(running.Owner.AgentInstanceId, cancellationToken) : null,
+            Harness: await tools.HarnessContextAsync(running.Owner.AgentInstanceId, cancellationToken),
             SupportsTools: model.Capabilities.Tools, Model: running.Model);
         var observationRequired = restoredObservation;
         string? blockedActionHash = restoredBlockedHash;
@@ -391,19 +391,10 @@ public sealed class DurableOccurrenceExecution(
                         false).ConfigureAwait(false);
                 }
 
-                if (triggerKind == TriggerKind.ThoughtActivation)
-                {
-                    if (!ThoughtCompletion.TryParse(args, messages, out var thoughtResult, out var thoughtAttention, out var thoughtRejection))
-                        return new DurableOccurrenceFailed(running, "invalid-completion", thoughtRejection);
-                    RuntimeTelemetry.RecordThought(thoughtAttention ? "attention" : ThoughtCompletion.Outcome(thoughtResult));
-                    return new DurableOccurrenceCompleted(running, thoughtResult, thoughtAttention);
-                }
-                if (!WorkCompletionRequest.TryParse(args, out var summary, out var attentionRequired, out var rejection))
-                {
+                if (!WorkCompletionRequest.TryParse(args, messages, out var result, out var attentionRequired, out var rejection))
                     return new DurableOccurrenceFailed(running, "invalid-completion", rejection);
-                }
-
-                return new DurableOccurrenceCompleted(running, summary, attentionRequired);
+                RuntimeTelemetry.RecordWork(attentionRequired ? "attention" : WorkCompletionRequest.Outcome(result));
+                return new DurableOccurrenceCompleted(running, result, attentionRequired);
             }
 
             var resultBudget = Math.Min(RemainingOutput(outputBytes),

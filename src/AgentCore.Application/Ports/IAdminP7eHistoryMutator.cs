@@ -21,9 +21,9 @@ public interface IAdminP7eHistoryMutator
         Action<AdminEvent, AdminEventAppend, int> ensureReplay,
         CancellationToken cancellationToken = default);
 
-    ValueTask CancelTriggerRegistrationWithHistoryAsync(
+    ValueTask CancelAutomationWithHistoryAsync(
         Guid instanceId,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         AdminEventAppend append,
         Action<AdminEvent, AdminEventAppend> ensureReplay,

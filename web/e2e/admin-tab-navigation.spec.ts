@@ -36,8 +36,8 @@ for (const width of [1440, 390]) {
     let configurationReads = 0;
     page.on("request", request => { if (request.url().endsWith(`${instanceId}/effective-config`)) configurationReads++; });
     await page.getByRole("tab", { name: "Automation", exact: true }).click();
-    await page.getByRole("tab", { name: "Thoughts", exact: true }).click();
-    await expect(page).toHaveURL(`${new URL(base, page.url())}/automation/thoughts`);
+    await page.getByRole("tab", { name: "Policies & models", exact: true }).click();
+    await expect(page).toHaveURL(`${new URL(base, page.url())}/automation/controls`);
     await page.getByRole("tab", { name: "Identity & version", exact: true }).click();
     await expect(page.getByLabel("Persona name", { exact: true })).toHaveValue("Unsaved tab navigation edit");
     expect(configurationReads).toBe(0);
@@ -46,11 +46,11 @@ for (const width of [1440, 390]) {
       ["Identity & version", undefined, "identity"],
       ["Continuity", "Memory", "continuity/memory"],
       ["Continuity", "Experience", "continuity/experience"],
-      ["Automation", "Schedules", "automation/schedules"],
-      ["Automation", "Thoughts", "automation/thoughts"],
+      ["Automation", "Automations", "automation/automations"],
       ["Automation", "Policies & models", "automation/controls"],
       ["Runs", undefined, "runs"],
-      ["Credentials", undefined, "credentials"],
+      ["Connections", "Credentials", "connections/credentials"],
+      ["Connections", "Event sources", "connections/event-sources"],
       ["Effective configuration", undefined, "effective"]
     ] as const) {
       await page.getByRole("tab", { name: tab, exact: true }).click();
@@ -62,8 +62,8 @@ for (const width of [1440, 390]) {
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
     }
     await page.goto(`${base}/automation/unknown-section`);
-    await expect(page.getByRole("tab", { name: "Schedules", exact: true })).toHaveAttribute("aria-selected", "true");
-    await page.getByRole("tab", { name: "Thoughts", exact: true }).click();
+    await expect(page.getByRole("tab", { name: "Automations", exact: true })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("tab", { name: "Policies & models", exact: true }).click();
     await page.getByRole("tab", { name: "Continuity", exact: true }).click();
     await page.getByRole("tab", { name: "Experience", exact: true }).click();
     await page.goBack();
@@ -76,7 +76,7 @@ for (const width of [1440, 390]) {
     await page.getByRole("button", { name: "Archive instance", exact: true }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Archive", exact: true }).click();
     await expect(page.getByRole("button", { name: "Unarchive instance", exact: true })).toBeVisible();
-    await page.goto(`${base}/automation/thoughts`);
+    await page.goto(`${base}/automation/controls`);
     await expect(page).toHaveURL(new URL(`${base}/identity`, page.url()).href);
     await expect(page.getByRole("tab", { name: "Identity & version", exact: true })).toHaveAttribute("aria-selected", "true");
     await page.getByRole("button", { name: /Back to inventory/ }).click();

@@ -252,9 +252,9 @@ public sealed class IdentityMaintenanceJourneyTests
                 var source = await memory.WriteAsync(new(session.SessionId), new(MemoryKind.Preference, subject, "Prefer TypeScript for frontend examples.", []), admission);
                 sourceId = (await memory.PromoteToIdentityUserAsync(new(session.SessionId), source.MemoryId, new(id, LocalUserProfile.Id), true, admission)).MemoryId;
             }
-            var thoughts = s.GetRequiredService<ThoughtRegistrationService>();
+            var thoughts = s.GetRequiredService<AdminAutomationAuthoringService>();
             var r = await thoughts.SaveAsync(id, null, 0, true, 3600, "synthetic-maintain-memory", null, null);
-            await thoughts.RunNowAsync(id, r.RegistrationId, r.Revision);
+            await thoughts.RunNowAsync(id, r.AutomationId, r.Revision);
             await ThoughtJourneyTests.Intake(s);
             await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
             var work = Assert.Single(await s.GetRequiredService<IWorkItemStore>().ListAsync(new(id, LocalUserProfile.Id), 100));
@@ -305,14 +305,14 @@ public sealed class IdentityMaintenanceJourneyTests
             var source = await memory.WriteAsync(new(session.SessionId), new(MemoryKind.Preference, subject, content, []), admission);
             await memory.PromoteToIdentityUserAsync(new(session.SessionId), source.MemoryId, new(id, LocalUserProfile.Id), true, admission);
         }
-        var thoughts = s.GetRequiredService<ThoughtRegistrationService>();
+        var thoughts = s.GetRequiredService<AdminAutomationAuthoringService>();
         var r = await thoughts.SaveAsync(id, null, 0, true, 3600, "synthetic-maintain-memory", null, null);
-        await thoughts.RunNowAsync(id, r.RegistrationId, r.Revision); await ThoughtJourneyTests.Intake(s);
+        await thoughts.RunNowAsync(id, r.AutomationId, r.Revision); await ThoughtJourneyTests.Intake(s);
         await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
         var store = s.GetRequiredService<IWorkItemStore>();
         var work = Assert.Single(await store.ListAsync(new(id, LocalUserProfile.Id), 100));
         Assert.Equal(WorkItemStatus.Completed, work.Status);
-        Assert.Equal("NoAction", ThoughtCompletion.Outcome(work.Result!.Text));
+        Assert.Equal("NoAction", WorkCompletionRequest.Outcome(work.Result!.Text));
         Assert.False(work.Result.AttentionRequired);
         Assert.Empty(metrics.Outcomes);
         Assert.Empty(await store.ListAttentionAlertKeysAsync(work.WorkItemId));
@@ -340,7 +340,7 @@ public sealed class IdentityMaintenanceJourneyTests
             sources.Add((await memory.PromoteToIdentityUserAsync(new(session.SessionId), source.MemoryId, new(id, LocalUserProfile.Id), true, admission)).MemoryId);
         }
         var tools = s.GetRequiredService<SessionToolExecutor>();
-        var thought = new ToolExecutionAdmission(true, TriggerKind.ThoughtActivation, AgentInstanceId: id);
+        var thought = new ToolExecutionAdmission(true, TriggerKind.ManualInvocation, AgentInstanceId: id);
         object Payload(string content = "Prefer TypeScript for frontend examples.") => new { sourceMemoryIds = sources, kind = "Preference", subject = "Frontend examples", content };
         var invalid = new[] { "[]", JsonSerializer.Serialize(new { sourceMemoryIds = sources, kind = "Fact", subject = "Frontend examples", content = "Wrong kind" }),
             JsonSerializer.Serialize(new { sourceMemoryIds = sources, kind = "Preference", subject = "Frontend examples", content = "Untrusted", ownerInstanceId = Guid.NewGuid() }),
@@ -352,7 +352,7 @@ public sealed class IdentityMaintenanceJourneyTests
             Assert.Equal(2, await s.GetRequiredService<IStructuredMemoryStore>().CountActiveIdentityUserAsync(id, LocalUserProfile.Id));
         }
         var valid = new ModelToolCall("valid", ToolCatalog.MemoryConsolidate, JsonSerializer.Serialize(Payload()));
-        foreach (var denied in new[] { thought with { SupportsTools = false }, thought with { TriggerKind = TriggerKind.ScheduledOccurrence } })
+        foreach (var denied in new[] { thought with { SupportsTools = false }, thought with { TriggerKind = TriggerKind.LongSilence } })
             Assert.Contains("forbidden", (await tools.ExecuteAsync(definition, Guid.Empty, valid, 8000, admission: denied)).Text);
         // Schema constraints supplied as properties receive actionable validation, never relaxed acceptance.
         var extra = valid with { ArgumentsJson = JsonSerializer.Serialize(new { sourceMemoryIds = sources, kind = "Preference", subject = "Frontend examples", content = "Safe", minItems = 2 }) };
@@ -395,7 +395,7 @@ public sealed class IdentityMaintenanceJourneyTests
             }
             sourceId = stored[0].MemoryId;
             var tools = s.GetRequiredService<SessionToolExecutor>();
-            var thought = new ToolExecutionAdmission(true, TriggerKind.ThoughtActivation, AgentInstanceId: id, WorkItemId: Guid.NewGuid());
+            var thought = new ToolExecutionAdmission(true, TriggerKind.ManualInvocation, AgentInstanceId: id, WorkItemId: Guid.NewGuid());
             memoryCall = new("maintenance-memory", ToolCatalog.MemoryConsolidate, JsonSerializer.Serialize(new { sourceMemoryIds = stored.Select(m => m.MemoryId), kind = "Preference", subject = "Frontend language", content = "Prefer TypeScript for frontend examples." }));
             var args = JsonSerializer.Deserialize<JsonElement>(memoryCall.ArgumentsJson);
             Assert.Equal(ToolPolicyDecision.Allow, await tools.EvaluateExecutionPolicyAsync(definition, Guid.Empty, memoryCall, args, thought, default));
@@ -467,7 +467,7 @@ public sealed class IdentityMaintenanceJourneyTests
             Assert.Equal(ExperienceSourceKind.Consolidation, experience.SourceKind);
             var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
             var tools = s.GetRequiredService<SessionToolExecutor>();
-            var thought = new ToolExecutionAdmission(true, TriggerKind.ThoughtActivation, AgentInstanceId: id);
+            var thought = new ToolExecutionAdmission(true, TriggerKind.ManualInvocation, AgentInstanceId: id);
             Assert.Equal(resultId, JsonSerializer.Deserialize<JsonElement>((await tools.ExecuteAsync(definition, Guid.Empty, memoryCall, 8000, admission: thought)).Text).GetProperty("memoryId").GetGuid());
             (await client.PutAsJsonAsync(path + "/maintenance", new IdentityMaintenanceConfigurationRequest(settings.Revision, false))).EnsureSuccessStatusCode();
             Assert.Contains("PolicyDenied", (await tools.ExecuteAsync(definition, Guid.Empty, memoryCall, 8000, admission: thought)).Text);

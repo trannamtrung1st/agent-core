@@ -41,7 +41,7 @@ public sealed class ScheduleDraftAdmissionTests
             "en",
             null);
         Assert.NotNull(retained);
-        Assert.Equal("Say hello to me", retained!.Intent);
+        Assert.Equal("Say hello to me", retained!.Instructions);
         Assert.False(eligible);
     }
 

@@ -30,8 +30,8 @@ public sealed class DurableWorkJourneyTests
                 var now = host.Services.GetRequiredService<TimeProvider>().GetUtcNow();
                 var due = now.AddHours(2);
                 var owner = await OwnerAsync(host.Services, Guid.Parse(sessionId));
-                await host.Services.GetRequiredService<ITriggerRegistrationService>().CreateAsync(
-                    new TriggerRegistrationDraft(
+                await host.Services.GetRequiredService<IAutomationService>().CreateAsync(
+                    new AutomationDraft(
                         new TriggerOwner(owner.AgentInstanceId, owner.ProfileId),
                         "Call John",
                         new OneShotSchedule(due, "UTC"),
@@ -52,7 +52,7 @@ public sealed class DurableWorkJourneyTests
                 var listed = await client.GetFromJsonAsync<WorkItemListResponse>($"/api/v2/sessions/{sessionId}/work-items");
                 var item = Assert.Single(listed!.Items);
                 Assert.Equal("completed", item.Status);
-                Assert.Equal("Scheduled reminder", item.Origin);
+                Assert.Equal("Automation · Schedule", item.Origin);
                 workItemId = Guid.Parse(item.WorkItemId);
                 var result = await client.GetFromJsonAsync<WorkItemResultResponse>(
                     $"/api/v2/sessions/{sessionId}/work-items/{item.WorkItemId}/result");
@@ -247,10 +247,10 @@ public sealed class DurableWorkJourneyTests
             var sessionId = session.SessionId;
             var now = host.Services.GetRequiredService<TimeProvider>().GetUtcNow();
             var owner = await OwnerAsync(host.Services, Guid.Parse(sessionId));
-            var triggers = host.Services.GetRequiredService<ITriggerRegistrationService>();
+            var triggers = host.Services.GetRequiredService<IAutomationService>();
             var due = now.AddMinutes(-1);
             await triggers.CreateAsync(
-                new TriggerRegistrationDraft(
+                new AutomationDraft(
                     new TriggerOwner(owner.AgentInstanceId, owner.ProfileId),
                     "First reminder",
                     new OneShotSchedule(due, "UTC"),
@@ -273,7 +273,7 @@ public sealed class DurableWorkJourneyTests
 
             await gate.Started.Task;
             await triggers.CreateAsync(
-                new TriggerRegistrationDraft(
+                new AutomationDraft(
                     new TriggerOwner(owner.AgentInstanceId, owner.ProfileId),
                     "Second reminder",
                     new OneShotSchedule(due, "UTC"),
@@ -318,8 +318,8 @@ public sealed class DurableWorkJourneyTests
             var now = host.Services.GetRequiredService<TimeProvider>().GetUtcNow();
             var due = now.AddMinutes(-1);
             var owner = await OwnerAsync(host.Services, Guid.Parse(session.SessionId));
-            await host.Services.GetRequiredService<ITriggerRegistrationService>().CreateAsync(
-                new TriggerRegistrationDraft(
+            await host.Services.GetRequiredService<IAutomationService>().CreateAsync(
+                new AutomationDraft(
                     new TriggerOwner(owner.AgentInstanceId, owner.ProfileId),
                     "Call John",
                     new OneShotSchedule(due, "UTC"),

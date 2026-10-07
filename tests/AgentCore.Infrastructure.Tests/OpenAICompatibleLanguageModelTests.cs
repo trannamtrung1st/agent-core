@@ -556,13 +556,13 @@ public sealed class OpenAICompatibleLanguageModelTests
     }
 
     [Fact]
-    public async Task Private_retrospection_contract_round_trips_without_becoming_a_registry_grant()
+    public async Task Experience_record_contract_round_trips_as_a_semantic_capability()
     {
-        const string body = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"record_1\",\"function\":{\"name\":\"experience_record\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n";
+        const string body = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"record_1\",\"function\":{\"name\":\"experience.record\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n";
         var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
         var model = Create(handler, tools: true);
         var contract = AgentCore.Application.Experience.ExperienceService.RecordContract;
-        Assert.False(ToolRegistry.TryGet(contract.Name, out _));
+        Assert.True(ToolRegistry.TryGet(contract.Name, out _));
         var events = await CollectAsync(model, new ModelRequest(Guid.NewGuid(), [new(ModelRole.User, "Retrospect")],
             Tools: [contract], ToolChoice: ModelToolChoice.Named, ToolChoiceName: contract.Name));
         Assert.Equal(contract.Name, Assert.IsType<ModelToolCallEvent>(events[0]).Call.Name);

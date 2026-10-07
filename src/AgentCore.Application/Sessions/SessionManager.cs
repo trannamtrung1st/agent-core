@@ -564,11 +564,6 @@ public sealed class SessionManager
         try
         {
             await _store.SaveAsync(next, snapshot.Revision, cancellationToken).ConfigureAwait(false);
-            // Offline lifecycle transitions own the same durable boundary as runtime transitions.
-            // Once committed, request cancellation cannot cancel secondary admission or change the source result.
-            if (_experience is not null && next.AgentInstanceId is Guid instanceId
-                && (target == SessionLifecycleStatus.Paused || SessionLifecycle.IsTerminal(target)))
-                await _experience.TrySessionBoundaryAsync(instanceId, sessionId, CancellationToken.None).ConfigureAwait(false);
             return next;
         }
         catch (AgentCoreException ex) when (ex.Code is "SessionPersistenceUnavailable" or "Conflict")

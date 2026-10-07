@@ -55,7 +55,7 @@ public sealed class UnattendedBrowserTests
             (item, body, ct) => store.CheckpointAsync(item.WorkItemId, item.Revision, nextGeneration, body, null, now.AddMinutes(1), ct),
             store, nextGeneration, now.AddMinutes(1), Ids(), CancellationToken.None);
         var completed = Assert.IsType<DurableOccurrenceCompleted>(continued);
-        Assert.Equal("Recovered exact interfaces", completed.Text);
+        Assert.Equal("Recovered exact interfaces", WorkCompletionRequest.Summary(completed.Text));
         Assert.Contains(Assert.Single(resumedModel.Requests).Tools!, t => t.Name == ToolCatalog.EmailSearch);
         Assert.Equal(1, DurableToolCallCheckpoint.ReadCapabilityState(completed.Running.Checkpoint).Calls);
         var fresh = new RecordingScriptModel(false, () => CompleteRound("Fresh work"));
@@ -145,10 +145,10 @@ public sealed class UnattendedBrowserTests
             TriggerKind.ScheduledOccurrence,
             new ScriptModel(
                 () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
-                () => ToolRound(Call(ToolCatalog.WorkComplete, """{"summary":"No store changes need attention.","attentionRequired":false}"""))));
+                () => ToolRound(Call(ToolCatalog.WorkComplete, """{"summary":"No store changes need attention.","attentionRequired":false,"outcome":"ActionCompleted"}"""))));
         Assert.False(scheduled.AttentionRequired);
-        Assert.Equal("No store changes need attention.", scheduled.Text);
-        Assert.Equal("Scheduled reminder", scheduled.Running.OriginLabel);
+        Assert.Equal("No store changes need attention.", WorkCompletionRequest.Summary(scheduled.Text));
+        Assert.Equal("Automation · Schedule", scheduled.Running.OriginLabel);
 
         var reactive = await RunSecretaryModeAsync(
             browser,
@@ -162,10 +162,10 @@ public sealed class UnattendedBrowserTests
             TriggerKind.ApplicationEvent,
             new ScriptModel(
                 () => ToolRound(Call(ToolCatalog.BrowserNavigate, $$"""{"url":"{{Store}}/admin/orders"}""")),
-                () => ToolRound(Call(ToolCatalog.WorkComplete, """{"summary":"One pending order needs review.","attentionRequired":true}"""))));
+                () => ToolRound(Call(ToolCatalog.WorkComplete, """{"summary":"One pending order needs review.","attentionRequired":true,"outcome":"AttentionRequested"}"""))));
         Assert.True(reactive.AttentionRequired);
-        Assert.Equal("One pending order needs review.", reactive.Text);
-        Assert.Equal("Order placed", reactive.Running.OriginLabel);
+        Assert.Equal("One pending order needs review.", WorkCompletionRequest.Summary(reactive.Text));
+        Assert.Equal("Automation · Event", reactive.Running.OriginLabel);
         Assert.Equal(secretary.Id, scheduled.Running.Provenance.DefinitionId);
         Assert.Equal(3, scheduled.Running.Provenance.DefinitionVersion);
         Assert.Equal(scheduled.Running.Owner, reactive.Running.Owner);
@@ -977,7 +977,7 @@ public sealed class UnattendedBrowserTests
             new ScriptModel(
                 () => ToolRound(act),
                 () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
-                () => ToolRound(Call(ToolCatalog.WorkComplete, """{"summary":"Order checked.","attentionRequired":false}"""))),
+                () => ToolRound(Call(ToolCatalog.WorkComplete, """{"summary":"Order checked.","attentionRequired":false,"outcome":"ActionCompleted"}"""))),
             definition,
             TriggerKind.ApplicationEvent,
             (current, body, token) =>
@@ -992,14 +992,14 @@ public sealed class UnattendedBrowserTests
             CancellationToken.None);
 
         var completed = Assert.IsType<DurableOccurrenceCompleted>(outcome);
-        Assert.Equal("Order checked.", completed.Text);
+        Assert.Equal("Order checked.", WorkCompletionRequest.Summary(completed.Text));
         Assert.False(completed.AttentionRequired);
         Assert.Equal(0, browser.ActCalls);
         Assert.True(browser.ObserveCalls >= 1);
         Assert.NotNull(checkpoint);
         Assert.Contains("already_completed", checkpoint, StringComparison.Ordinal);
         Assert.Contains("replayed", checkpoint, StringComparison.Ordinal);
-        Assert.Equal("Order placed", succeeded.OriginLabel);
+        Assert.Equal("Automation · Event", succeeded.OriginLabel);
     }
 
     private static async Task<DurableOccurrenceCompleted> RunSecretaryModeAsync(
@@ -1115,7 +1115,7 @@ public sealed class UnattendedBrowserTests
     ];
 
     private static IReadOnlyList<ModelGenerationEvent> CompleteRound(string summary) =>
-        ToolRound(Call(ToolCatalog.WorkComplete, $$"""{"summary":"{{summary}}","attentionRequired":false}"""));
+        ToolRound(Call(ToolCatalog.WorkComplete, $$"""{"summary":"{{summary}}","attentionRequired":false,"outcome":"ActionCompleted"}"""));
 
     private static IReadOnlyList<ModelGenerationEvent> TextRound(string text) =>
     [
@@ -1221,7 +1221,7 @@ public sealed class UnattendedBrowserTests
             yield return new ModelToolCallEvent(new ModelToolCall(
                 "done",
                 ToolCatalog.WorkComplete,
-                """{"summary":"observed","attentionRequired":false}"""));
+                """{"summary":"observed","attentionRequired":false,"outcome":"ActionCompleted"}"""));
             yield return new ModelCompleted(ModelStopReason.ToolCalls);
         }
     }

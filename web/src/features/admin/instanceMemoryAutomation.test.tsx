@@ -84,17 +84,12 @@ vi.mock("../../services/adminApi", () => ({
   listAdminLearnedMemory: vi.fn(),
   deleteAdminLearnedMemory: vi.fn(),
   resetAdminLearnedMemoryScope: vi.fn(),
-  listAdminAutomationRegistrations: vi.fn(),
-  cancelAdminAutomationRegistration: vi.fn(),
   setAdminUnattendedModel: vi.fn(),
-  setAdminRegistrationModel: vi.fn()
 }));
 
 import {
   deleteAdminLearnedMemory,
-  listAdminAutomationRegistrations,
   listAdminLearnedMemory,
-  setAdminRegistrationModel,
   setAdminUnattendedModel
 } from "../../services/adminApi";
 
@@ -153,118 +148,6 @@ async function chooseMemoryScope(label: string) {
 }
 
 describe("InstanceMemoryAutomationPanel", () => {
-  it("loads identity-user memory and automation registrations", async () => {
-    vi.mocked(listAdminLearnedMemory).mockResolvedValue([memoryRow]);
-    vi.mocked(listAdminAutomationRegistrations).mockResolvedValue([
-      {
-        registrationId: "019944af-00e5-7000-8000-000000000002",
-        intent: "Reminder",
-        status: "active",
-        scheduleKind: "oneShot",
-        timeZoneId: "UTC",
-        scheduleSummary: "Once tomorrow",
-        nextOccurrenceAtUtc: "2026-09-26T09:00:00.000Z",
-        revision: 1,
-        suspensionReason: null,
-        provenance: {
-          authorizationOrigin: "CurrentUserTurn",
-          sourceSessionId: "873f07d1-e264-4c81-a31b-7e59e940b842",
-          createdAt: "2026-09-25T00:00:00.000Z",
-          updatedAt: "2026-09-25T00:00:00.000Z"
-        }
-      }
-    ]);
-
-    renderPanel();
-
-    fireEvent.click(screen.getByRole("button", { name: "Load items" }));
-    await waitFor(() => expect(screen.getByText("Dark mode")).toBeInTheDocument());
-    expect(listAdminLearnedMemory).toHaveBeenCalledWith(config.instanceId, "IdentityUser", undefined);
-
-    fireEvent.click(screen.getByRole("tab", { name: "Automation" }));
-    fireEvent.click(screen.getByRole("button", { name: "Review advanced registrations" }));
-    await waitFor(() => expect(screen.getByText("Reminder")).toBeInTheDocument());
-    expect(screen.getByText("CurrentUserTurn")).toBeInTheDocument();
-    expect(screen.getByText(/UTC · next/i)).toBeInTheDocument();
-    expect(await screen.findByText("Effective source: Conversation default (Synthetic)")).toBeInTheDocument();
-  });
-
-  it("saves an unattended model and a registration override", async () => {
-    vi.mocked(setAdminUnattendedModel).mockResolvedValue({
-      instanceId: config.instanceId,
-      definitionId: config.definitionId,
-      activeVersion: 1,
-      lifecycle: "Active",
-      revision: 2,
-      personaRevision: 1,
-      unattendedModelCatalogKey: "synthetic-default",
-      unattendedReasoningEffort: "low"
-    });
-    vi.mocked(listAdminAutomationRegistrations).mockResolvedValue([
-      {
-        registrationId: "019944af-00e5-7000-8000-000000000002",
-        intent: "Reminder",
-        status: "active",
-        scheduleKind: "oneShot",
-        timeZoneId: "UTC",
-        scheduleSummary: "Once tomorrow",
-        nextOccurrenceAtUtc: "2026-09-26T09:00:00.000Z",
-        revision: 1,
-        suspensionReason: null,
-        provenance: {
-          authorizationOrigin: "CurrentUserTurn",
-          sourceSessionId: null,
-          createdAt: "2026-09-25T00:00:00.000Z",
-          updatedAt: "2026-09-25T00:00:00.000Z"
-        },
-        modelSource: "Conversation default"
-      }
-    ]);
-    vi.mocked(setAdminRegistrationModel).mockResolvedValue({
-      registrationId: "019944af-00e5-7000-8000-000000000002",
-      intent: "Reminder",
-      status: "active",
-      scheduleKind: "oneShot",
-      timeZoneId: "UTC",
-      scheduleSummary: "Once tomorrow",
-      nextOccurrenceAtUtc: "2026-09-26T09:00:00.000Z",
-      revision: 2,
-      suspensionReason: null,
-      provenance: {
-        authorizationOrigin: "CurrentUserTurn",
-        sourceSessionId: null,
-        createdAt: "2026-09-25T00:00:00.000Z",
-        updatedAt: "2026-09-25T00:00:00.000Z"
-      },
-      modelOverrideCatalogKey: "synthetic-default",
-      modelSource: "Trigger override"
-    });
-    renderPanel();
-    fireEvent.click(screen.getByRole("tab", { name: "Automation" }));
-    await chooseSelectOption("Unattended model", "Synthetic");
-    await chooseSelectOption("Unattended reasoning effort", "low");
-    fireEvent.click(screen.getByRole("button", { name: "Save unattended model" }));
-    await waitFor(() => expect(setAdminUnattendedModel).toHaveBeenCalledWith(
-      config.instanceId,
-      1,
-      "synthetic-default",
-      "low"
-    ));
-    expect(screen.getByText("Effective source: Unattended default (Synthetic)")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Review advanced registrations" }));
-    await chooseSelectOption("Model for Reminder", "Synthetic");
-    fireEvent.click(screen.getByRole("button", { name: "Save model for Reminder" }));
-    await waitFor(() => expect(setAdminRegistrationModel).toHaveBeenCalledWith(
-      config.instanceId,
-      "019944af-00e5-7000-8000-000000000002",
-      1,
-      "synthetic-default",
-      null
-    ));
-    expect(await screen.findByText("Trigger override")).toBeInTheDocument();
-  });
-
   it("does not present an unsaved or rejected model selection as effective", async () => {
     vi.mocked(setAdminUnattendedModel).mockRejectedValueOnce(new Error("Save unavailable"));
     renderPanel();

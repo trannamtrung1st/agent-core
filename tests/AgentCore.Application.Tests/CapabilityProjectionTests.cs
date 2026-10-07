@@ -173,7 +173,7 @@ public sealed class CapabilityProjectionTests
         Assert.Empty(CapabilityDiscoveryMatcher.Load(d, Context(d), ToolConfigurationGates.AllowAll, j.RootElement, 0).Loaded);
         Assert.Equal(ToolPolicyDecision.Deny, ToolPolicy.EvaluateExecution(d, ToolCatalog.EmailSend, ToolConfigurationGates.AllowAll));
         Assert.False(ToolPolicy.IsOffered(d, Context(d) with { DetachedExecution = true }, ToolCatalog.CapabilitiesLoad, ToolConfigurationGates.AllowAll));
-        foreach (var kind in new[] { TriggerKind.ApplicationEvent, TriggerKind.ScheduledOccurrence, TriggerKind.ThoughtActivation })
+        foreach (var kind in new[] { TriggerKind.ApplicationEvent, TriggerKind.ScheduledOccurrence, TriggerKind.ManualInvocation })
         {
             var c = Context(d) with { DetachedExecution = true, Trigger = new(Guid.NewGuid(), kind, null) };
             Assert.False(ToolPolicy.IsOffered(d, c, ToolCatalog.CapabilitiesLoad, ToolConfigurationGates.AllowAll));

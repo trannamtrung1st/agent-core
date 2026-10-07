@@ -52,7 +52,7 @@ internal static class WorkStoreMapping
         row.CurrentApprovalId = item.Approval is null ? null : Id(item.Approval.ApprovalId);
         row.SourceOccurrenceId = Id(item.Provenance.SourceOccurrenceId);
         row.SourceKind = (int)item.Provenance.SourceKind;
-        row.RegistrationId = OptionalId(item.Provenance.RegistrationId);
+        row.AutomationId = OptionalId(item.Provenance.AutomationId);
         row.SourceSessionId = OptionalId(item.Provenance.SourceSessionId);
         row.SourceEventId = OptionalId(item.Provenance.SourceEventId);
         row.DedupeKey = item.Provenance.DedupeKey;
@@ -162,7 +162,7 @@ internal static class WorkStoreMapping
             new WorkProvenance(
                 Guid.Parse(row.SourceOccurrenceId),
                 (WorkSourceKind)row.SourceKind,
-                ParseOptional(row.RegistrationId),
+                ParseOptional(row.AutomationId),
                 ParseOptional(row.SourceSessionId),
                 ParseOptional(row.SourceEventId),
                 row.DedupeKey,

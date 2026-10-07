@@ -7,7 +7,7 @@ async function select(page: Page, label: string, value: string) {
   await page.locator('.ant-select-item-option').filter({ hasText: value }).last().click();
 }
 
-test('Thought consolidates separately owned Memory and Experience; lineage, opt-out, explicit forget and reload remain accurate', async ({ page }, info) => {
+test('Automation consolidates separately owned Memory and Experience; lineage, opt-out, explicit forget and reload remain accurate', async ({ page }, info) => {
   test.setTimeout(180_000);
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -84,24 +84,25 @@ test('Thought consolidates separately owned Memory and Experience; lineage, opt-
 
   await page.goto(`/admin/instances/${id}`);
   await page.getByRole('tab', { name: 'Automation', exact: true }).click();
-  await page.getByRole('tab', { name: 'Thoughts', exact: true }).click();
-  const thoughts = page.getByRole('region', { name: 'Thoughts', exact: true });
+  await page.getByRole('tab', { name: 'Automations', exact: true }).click();
+  const automations = page.getByRole('region', { name: 'Automations', exact: true });
   async function createAndRun(marker: string) {
-    await thoughts.getByLabel('Thinking prompt', { exact: true }).fill(marker);
-    await thoughts.getByRole('switch', { name: 'Enable thought activation', exact: true }).click();
-    await thoughts.getByRole('button', { name: 'Create thought', exact: true }).click();
-    await thoughts.getByRole('button', { name: `View thought: ${marker}`, exact: true }).click();
-    await thoughts.getByRole('button', { name: 'Run now', exact: true }).click();
-    await expect(thoughts.getByRole('row').filter({ hasText: marker }).getByText('Action completed', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await automations.getByRole('button', { name: 'New automation', exact: true }).click();
+    await automations.getByLabel('Automation name', { exact: true }).fill(marker);
+    await automations.getByLabel('Automation instructions', { exact: true }).fill(marker);
+    await automations.getByRole('button', { name: 'Create automation', exact: true }).click();
+    await automations.getByRole('button', { name: `View automation: ${marker}`, exact: true }).click();
+    await automations.getByRole('button', { name: 'Run automation now', exact: true }).click();
+    await expect(automations.getByRole('row').filter({ hasText: marker }).getByText(/Completed · Action completed/).first()).toBeVisible({ timeout: 30_000 });
   }
   await createAndRun('synthetic-maintain-memory');
-  await thoughts.getByRole('button', { name: 'View thought: synthetic-maintain-memory', exact: true }).click();
+  await automations.getByRole('button', { name: 'View automation: synthetic-maintain-memory', exact: true }).click();
   await createAndRun('synthetic-maintain-experience');
   const work = await (await page.request.get(root + '/work-items', { headers })).json();
-  const maintenance = work.items.filter((w: { origin: string }) => w.origin === 'Thought activation');
+  const maintenance = work.items.filter((w: { origin: string; automationId?: string }) => w.origin === 'Automation · Manual' && w.automationId);
   expect(maintenance).toHaveLength(2); expect(maintenance.every((w: { attentionRequired: boolean }) => !w.attentionRequired)).toBe(true);
-  await thoughts.getByRole('button', { name: 'View run', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Run details', exact: true }).getByText('Thought', { exact: true }).first()).toBeVisible();
+  await automations.getByRole('button', { name: 'View last run', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Run details', exact: true }).getByText('synthetic-maintain-experience', { exact: true }).first()).toBeVisible();
   await page.getByRole('dialog', { name: 'Run details', exact: true }).getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('tab', { name: 'Continuity', exact: true }).click();
   await page.getByRole('tab', { name: 'Memory', exact: true }).click();
@@ -123,11 +124,11 @@ test('Thought consolidates separately owned Memory and Experience; lineage, opt-
   }
   await setting.click(); await expect(setting).toHaveAttribute('aria-checked', 'false');
   await page.getByRole('tab', { name: 'Automation', exact: true }).click();
-  await page.getByRole('tab', { name: 'Thoughts', exact: true }).click();
-  if (!(await thoughts.getByRole('button', { name: 'Run now', exact: true }).isVisible()))
-    await thoughts.getByRole('button', { name: 'View thought: synthetic-maintain-experience', exact: true }).click();
-  await thoughts.getByRole('button', { name: 'Run now', exact: true }).click();
-  await expect(thoughts.getByText('No action', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('tab', { name: 'Automations', exact: true }).click();
+  if (!(await automations.getByRole('button', { name: 'Run automation now', exact: true }).isVisible()))
+    await automations.getByRole('button', { name: 'View automation: synthetic-maintain-experience', exact: true }).click();
+  await automations.getByRole('button', { name: 'Run automation now', exact: true }).click();
+  await expect(automations.getByText(/Completed · No action/).first()).toBeVisible({ timeout: 30_000 });
   await page.getByRole('tab', { name: 'Continuity', exact: true }).click();
   await page.getByRole('tab', { name: 'Memory', exact: true }).click();
   const canonical = await (await page.request.get(root + '/learned-memory?scope=IdentityUser', { headers })).json();

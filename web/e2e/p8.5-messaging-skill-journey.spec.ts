@@ -29,7 +29,7 @@ test("P8.5 sends one intermediate message, loads the missed skill, and keeps one
   const failedRequests: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") {
-      consoleErrors.push(message.text());
+      consoleErrors.push(`${message.text()} [${message.location().url}]`);
     }
   });
   page.on("requestfailed", (request) => {

@@ -204,9 +204,9 @@ public sealed class AdminEventSummaryPolicyTests
     }
 
     [Fact]
-    public void TriggerRegistrationRevoked_summary_includes_revision()
+    public void AutomationRevoked_summary_includes_revision()
     {
-        var append = AdminEventFactory.TriggerRegistrationRevoked(
+        var append = AdminEventFactory.AutomationRevoked(
             Guid.NewGuid(),
             DateTimeOffset.Parse("2026-09-25T12:00:00Z"),
             Guid.Parse("019944af-00d1-7000-8000-000000000097"),

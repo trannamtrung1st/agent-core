@@ -85,7 +85,7 @@ public sealed class LiveRuntimeClosureTests(ITestOutputHelper output)
         var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
         var search = new ModelToolCall("budget-check", ToolCatalog.ContinuitySearch, """{"query":"Aurora","limit":10}""");
         var partial = await s.GetRequiredService<SessionToolExecutor>().ExecuteAsync(definition, Guid.Empty, search, 1500,
-            admission: new(true, TriggerKind.ThoughtActivation, AgentInstanceId: id));
+            admission: new(true, TriggerKind.ManualInvocation, AgentInstanceId: id));
         using (var json = JsonDocument.Parse(partial.Text))
         {
             Assert.True(json.RootElement.GetProperty("truncated").GetBoolean());
@@ -93,16 +93,16 @@ public sealed class LiveRuntimeClosureTests(ITestOutputHelper output)
             Assert.DoesNotContain("output_limit", partial.Text);
             output.WriteLine("Reduced-budget search retained {0} complete records in {1} bytes.", json.RootElement.GetProperty("result").GetArrayLength(), Encoding.UTF8.GetByteCount(partial.Text));
         }
-        var thoughts = s.GetRequiredService<ThoughtRegistrationService>();
+        var thoughts = s.GetRequiredService<AdminAutomationAuthoringService>();
         var r = await thoughts.SaveAsync(id, null, 0, true, 3600, "try to consolidate your memory and experience", null, null);
-        await thoughts.RunNowAsync(id, r.RegistrationId, r.Revision); await ThoughtJourneyTests.Intake(s);
+        await thoughts.RunNowAsync(id, r.AutomationId, r.Revision); await ThoughtJourneyTests.Intake(s);
         await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
-        var work = (await s.GetRequiredService<IWorkItemStore>().ListAsync(new(id, LocalUserProfile.Id), 100)).Single(w => w.Provenance.SourceKind == WorkSourceKind.ThoughtActivation);
+        var work = (await s.GetRequiredService<IWorkItemStore>().ListAsync(new(id, LocalUserProfile.Id), 100)).Single(w => w.Provenance.SourceKind == WorkSourceKind.ManualInvocation);
         output.WriteLine("Real Thought status={0}; outcome={1}; checkpointBytes={2}; calls={3}; failure={4}", work.Status,
-            work.Result is null ? null : ThoughtCompletion.Outcome(work.Result.Text), Encoding.UTF8.GetByteCount(work.Checkpoint!.PayloadJson),
+            work.Result is null ? null : WorkCompletionRequest.Outcome(work.Result.Text), Encoding.UTF8.GetByteCount(work.Checkpoint!.PayloadJson),
             string.Join(", ", model.Calls.Select(c => c.Name)), work.Failure?.Code);
         Assert.Equal(WorkItemStatus.Completed, work.Status);
-        Assert.Contains(ThoughtCompletion.Outcome(work.Result!.Text), new[] { "NoAction", "ActionCompleted" });
+        Assert.Contains(WorkCompletionRequest.Outcome(work.Result!.Text), new[] { "NoAction", "ActionCompleted" });
         Assert.False(work.Result.AttentionRequired); Assert.Null(work.Failure);
         Assert.InRange(model.Calls.Count(c => ToolCatalog.IsIdentityMaintenance(c.Name)), 0, 1);
         foreach (var call in model.Calls.Where(c => ToolCatalog.IsIdentityMaintenance(c.Name)))
@@ -119,8 +119,8 @@ public sealed class LiveRuntimeClosureTests(ITestOutputHelper output)
         foreach (var e in distinct) Assert.Equal(ExperienceVisibility.Eligible, (await experiences.GetAsync(id, e.ExperienceId))!.Visibility);
         Assert.Contains(model.Calls, c => c.Name == ToolCatalog.WorkComplete);
         Assert.All(model.Requests, request => Assert.DoesNotContain(request.Messages, m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.ContinuitySearch && m.Text.Contains("output_limit")));
-        var current = (await s.GetRequiredService<ITriggerStore>().GetAsync(new(id, LocalUserProfile.Id), r.RegistrationId))!;
-        await thoughts.SaveAsync(id, r.RegistrationId, current.Revision, false, 3600, "try to consolidate your memory and experience", null, null);
+        var current = (await s.GetRequiredService<ITriggerStore>().GetAsync(new(id, LocalUserProfile.Id), r.AutomationId))!;
+        await thoughts.SaveAsync(id, r.AutomationId, current.Revision, false, 3600, "try to consolidate your memory and experience", null, null);
     }
     private sealed class Resolver(ILanguageModel model) : ILanguageModelResolver
     { public ILanguageModel Resolve(SessionModelSelection selection, ModelPurpose purpose) => model; }

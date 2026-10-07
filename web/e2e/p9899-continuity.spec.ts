@@ -12,7 +12,7 @@ async function send(page: Page, text: string) {
   await page.getByRole('button', { name: 'Send', exact: true }).click();
 }
 
-test('Experience informs an approved thought; next activation stays quiet; owner controls work at narrow width', async ({ page }) => {
+test('Experience informs an approved Automation; next activation stays quiet; owner controls work at narrow width', async ({ page }, testInfo) => {
   test.setTimeout(150_000);
   const errors: string[] = [];
   const reviewerName = `Continuity reviewer ${Date.now()}`;
@@ -43,7 +43,7 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   await page.getByRole("tab", { name: "Continuity", exact: true }).click();
   await page.getByRole("tab", { name: "Experience", exact: true }).click();
   const experience = page.getByRole('region', { name: 'Experience', exact: true });
-  const initiative = page.getByRole('region', { name: 'Thoughts', exact: true });
+  const initiative = page.getByRole('region', { name: 'Automations', exact: true });
   await expect(experience.getByText('No experience yet. Enable experience and retrospect a completed task.')).toBeVisible();
   await experience.getByRole('switch', { name: 'Enable experience', exact: true }).click();
   await expect(experience.getByText('Enabled · completed work may be retrospected')).toBeVisible();
@@ -64,8 +64,8 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   await page.goto(`/admin/instances/${id}`);
   await page.getByRole("tab", { name: "Continuity", exact: true }).click();
   await page.getByRole("tab", { name: "Experience", exact: true }).click();
-  // Persisted pause admits automatic retrospection; explicit request resolves to that checkpoint.
-  await expect(experience.getByRole('button', { name: 'View experience: Review observable completed work', exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  // Pausing retains the source; a manual review uses generic Run execution.
+  await expect(experience.getByText(/No experience yet/)).toBeVisible();
   await experience.getByRole("button", { name: "Enter Session ID", exact: true }).click();
   await experience.getByLabel('Session ID', { exact: true }).fill(sessionId);
   await experience.getByRole('button', { name: 'Retrospect now', exact: true }).click();
@@ -78,7 +78,7 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   await expect(experience.getByRole('button', { name: 'View experience: Review observable completed work', exact: true })).toHaveCount(1);
   await page.locator('.admin-header').getByRole('button', { name: /Chat$/ }).first().click();
   await page.getByRole('button', { name: 'Start a new chat', exact: true }).click();
-  await select(page, 'Identity', 'Continuity reviewer');
+  await select(page, 'Identity', reviewerName);
   await send(page, 'Use my recent experience before acting.');
   await expect(page.getByText('I will observe current page state before acting, based on earlier experience. Current policy still controls every action.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Open Admin' }).click();
@@ -86,15 +86,15 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   await page.getByRole("tab", { name: "Continuity", exact: true }).click();
   await page.getByRole("tab", { name: "Experience", exact: true }).click();
   await page.getByRole('tab', { name: 'Automation', exact: true }).click();
-  await page.getByRole('tab', { name: 'Thoughts', exact: true }).click();
-  await initiative.getByLabel('Thinking prompt', { exact: true }).fill('synthetic-thought-improve: review recent experience and improve only when useful. Otherwise do nothing.');
-  await initiative.getByRole('switch', { name: 'Enable thought activation', exact: true }).click();
-  await initiative.getByRole('button', { name: 'Create thought', exact: true }).click();
-  await expect(initiative.getByText('Every 1 hour', { exact: true })).toBeVisible();
-  await initiative.getByRole('button', { name: /^View thought: synthetic-thought-improve:/ }).click();
-  const runPattern = `**/api/v2/admin/agent-instances/${id}/thoughts/*/run`;
-  const statusPattern = `**/api/v2/admin/agent-instances/${id}/thoughts`;
-  const previousStatus = await page.request.get(`/api/v2/admin/agent-instances/${id}/thoughts`, {
+  await page.getByRole('tab', { name: 'Automations', exact: true }).click();
+  await initiative.getByRole('button', { name: 'New automation', exact: true }).click();
+  await initiative.getByLabel('Automation name', { exact: true }).fill('Review recent experience');
+  await initiative.getByLabel('Automation instructions', { exact: true }).fill('synthetic-automation-improve: review recent experience and improve only when useful. Otherwise do nothing.');
+  await initiative.getByRole('button', { name: 'Create automation', exact: true }).click();
+  await initiative.getByRole('button', { name: 'View automation: Review recent experience', exact: true }).click();
+  const runPattern = `**/api/v2/admin/agent-instances/${id}/automations/*/run`;
+  const statusPattern = `**/api/v2/admin/agent-instances/${id}/automations`;
+  const previousStatus = await page.request.get(`/api/v2/admin/agent-instances/${id}/automations`, {
     headers: { 'X-AgentCore-Owner-Capability': ownerToken! }
   });
   expect(previousStatus.ok()).toBe(true);
@@ -106,43 +106,44 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   let releaseRun!: () => void;
   const runGate = new Promise<void>(resolve => { releaseRun = resolve; });
   await page.route(runPattern, async route => { runRequests++; await runGate; await route.continue(); });
-  const runButton = initiative.getByRole('button', { name: 'Run now', exact: true });
+  const runButton = initiative.getByRole('button', { name: 'Run automation now', exact: true });
   await runButton.evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
   await expect(runButton).toBeDisabled();
   await expect(runButton).toHaveAttribute('aria-busy', 'true');
   await expect.poll(() => runRequests).toBe(1);
   releaseRun();
-  await expect(initiative.getByRole('button', { name: 'Refresh thoughts', exact: true })).toBeEnabled();
+  await expect(initiative.getByRole('button', { name: 'Refresh automations', exact: true })).toBeEnabled();
   await expect(runButton).toBeDisabled();
   await expect(runButton).toHaveText('Starting…');
   await runButton.evaluate(button => (button as HTMLButtonElement).click());
   expect(runRequests).toBe(1);
   await page.unroute(statusPattern);
-  await initiative.getByRole('button', { name: 'Refresh thoughts', exact: true }).click();
+  await initiative.getByRole('button', { name: 'Refresh automations', exact: true }).click();
 
   await expect(initiative.getByText('Needs approval', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
   expect(runRequests).toBe(1);
   await page.unroute(runPattern);
-  await initiative.getByRole('button', { name: 'View run', exact: true }).click();
+  await initiative.getByRole('button', { name: 'View last run', exact: true }).click();
   const work = page.getByRole('dialog', { name: 'Run details', exact: true });
-  await expect(work.getByText('Thought', { exact: true })).toBeVisible();
-  await work.getByRole('button', { name: 'Approve Thought', exact: true }).click();
+  await expect(work.getByText('Review recent experience', { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('automation-approval-desktop.png'), fullPage: true });
+  await work.getByRole('button', { name: 'Approve Automation · Manual', exact: true }).click();
   await page.getByRole('dialog', { name: 'Approve this action?', exact: true }).getByRole('button', { name: 'Approve action', exact: true }).click();
   await expect(work.getByText(/Model:.*Action completed/)).toBeVisible({ timeout: 30_000 });
-  await page.locator('.background-work-selected').getByRole('button', { name: 'View thought', exact: true }).click();
-  await initiative.getByRole('button', { name: 'Refresh thoughts', exact: true }).click();
-  await expect(initiative.getByText('Action completed', { exact: true }).first()).toBeVisible();
-  await initiative.getByRole('button', { name: 'Run now', exact: true }).click();
-  await expect(initiative.getByText('No action', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  await page.locator('.background-work-selected').getByRole('button', { name: 'View automation', exact: true }).click();
+  await initiative.getByRole('button', { name: 'Refresh automations', exact: true }).click();
+  await expect(initiative.getByText(/Completed · Action completed/).first()).toBeVisible();
+  await initiative.getByRole('button', { name: 'Run automation now', exact: true }).click();
+  await expect(initiative.getByText(/Completed · No action/).first()).toBeVisible({ timeout: 30_000 });
   const owner = await page.evaluate(() => localStorage.getItem('agent-core.owner-capability'));
   const response = await page.request.get(`/api/v2/admin/agent-instances/${id}/work-items`, { headers: { 'X-AgentCore-Owner-Capability': owner! } });
   expect(response.ok()).toBe(true);
   const data = await response.json();
-  const thoughts = data.items.filter((item: { origin: string }) => item.origin === 'Thought activation');
-  expect(thoughts).toHaveLength(2); expect(thoughts.every((item: { attentionRequired: boolean }) => !item.attentionRequired)).toBe(true);
+  const manualRuns = data.items.filter((item: { origin: string; automationId?: string }) => item.origin === 'Automation · Manual' && item.automationId);
+  expect(manualRuns).toHaveLength(2); expect(manualRuns.every((item: { attentionRequired: boolean }) => !item.attentionRequired)).toBe(true);
   await page.setViewportSize({ width: 390, height: 844 });
-  await initiative.getByRole('button', { name: 'Disable thought', exact: true }).click();
-  await expect(initiative.getByRole('button', { name: 'Run now', exact: true })).toBeDisabled();
+  await initiative.getByRole('button', { name: 'Disable automation', exact: true }).click();
+  await expect(initiative.getByRole('button', { name: 'Run automation now', exact: true })).toBeDisabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   await page.getByRole('tab', { name: 'Continuity', exact: true }).click();
   await page.getByRole('tab', { name: 'Experience', exact: true }).click();
@@ -153,9 +154,9 @@ test('Experience informs an approved thought; next activation stays quiet; owner
   await page.getByRole('dialog').getByRole('button', { name: 'Reset experience', exact: true }).click();
   await expect(experience.getByText('No experience yet. Enable experience and retrospect a completed task.')).toBeVisible();
   await page.getByRole('tab', { name: 'Automation', exact: true }).click();
-  await page.getByRole('tab', { name: 'Thoughts', exact: true }).click();
-  await initiative.getByRole('button', { name: 'Delete thought', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Delete thought', exact: true }).click();
-  await expect(initiative.getByText('No thoughts configured. Add one when you want this agent to periodically review whether action is useful.')).toBeVisible();
+  await page.getByRole('tab', { name: 'Automations', exact: true }).click();
+  await initiative.getByRole('button', { name: 'Delete automation', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete automation', exact: true }).click();
+  await expect(initiative.getByText('No automations yet. Create one here or ask the agent in Chat to do something later.')).toBeVisible();
   expect(errors).toEqual([]);
 });

@@ -117,10 +117,10 @@ public abstract class AdminP7eHistoryMutatorTests
         AdminAutomationHistoryService AutomationHistory,
         StructuredMemoryService MemoryService,
         AgentInstanceService InstanceService,
-        TriggerRegistrationService Triggers,
+        AutomationService Triggers,
         Guid InstanceId,
         Guid IdentityMemoryId,
-        Guid RegistrationId,
+        Guid AutomationId,
         long RegistrationRevision,
         bool SqliteProfile,
         IDbContextFactory<AgentCoreDbContext>? DbFactory);
@@ -198,11 +198,11 @@ public abstract class AdminP7eHistoryMutatorTests
     {
         await ForEachFailingAppendProfileAsync(async fixture =>
         {
-            var append = AdminEventFactory.TriggerRegistrationRevoked(
+            var append = AdminEventFactory.AutomationRevoked(
                 Guid.Parse("019944af-00f4-7000-8000-000000000003"),
                 Now,
                 fixture.InstanceId,
-                fixture.RegistrationId,
+                fixture.AutomationId,
                 fixture.RegistrationRevision);
             if (fixture.SqliteProfile)
             {
@@ -210,9 +210,9 @@ public abstract class AdminP7eHistoryMutatorTests
             }
 
             await Assert.ThrowsAnyAsync<Exception>(() =>
-                fixture.Mutator.CancelTriggerRegistrationWithHistoryAsync(
+                fixture.Mutator.CancelAutomationWithHistoryAsync(
                     fixture.InstanceId,
-                    fixture.RegistrationId,
+                    fixture.AutomationId,
                     fixture.RegistrationRevision,
                     append,
                     (_, _) => { },
@@ -220,9 +220,9 @@ public abstract class AdminP7eHistoryMutatorTests
 
             var registration = await fixture.Triggers.GetAsync(
                 new TriggerOwner(fixture.InstanceId, ProfileId),
-                fixture.RegistrationId);
+                fixture.AutomationId);
             Assert.NotNull(registration);
-            Assert.Equal(TriggerRegistrationStatus.Active, registration!.Status);
+            Assert.Equal(AutomationStatus.Active, registration!.Status);
         });
     }
 
@@ -298,7 +298,7 @@ public abstract class AdminP7eHistoryMutatorTests
             var operationId = Guid.Parse("019944af-00f5-7000-8000-000000000004");
             await fixture.AutomationHistory.CancelRegistrationWithHistoryAsync(
                 fixture.InstanceId,
-                fixture.RegistrationId,
+                fixture.AutomationId,
                 fixture.RegistrationRevision,
                 operationId,
                 Now);
@@ -306,7 +306,7 @@ public abstract class AdminP7eHistoryMutatorTests
             var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
                 fixture.AutomationHistory.CancelRegistrationWithHistoryAsync(
                     fixture.InstanceId,
-                    fixture.RegistrationId,
+                    fixture.AutomationId,
                     fixture.RegistrationRevision + 99,
                     operationId,
                     Now).AsTask());
@@ -342,7 +342,7 @@ public abstract class AdminP7eHistoryMutatorTests
         var profile = new FixedProfile(ProfileId, clock);
         var adminMemory = new AdminMemoryService(instances, definitions, sessions, structured, memoryService, profile);
         var durable = new InMemoryDurableState();
-        var triggers = new TriggerRegistrationService(new InMemoryTriggerStore(durable), ids, clock);
+        var triggers = new AutomationService(new InMemoryTriggerStore(durable), ids, clock);
         var automation = new AdminAutomationService(instances, triggers, profile);
         var mutator = new InMemoryAdminP7eHistoryMutator(adminMemory, events, structured, automation, durable);
         var automationHistory = new AdminAutomationHistoryService(mutator, automation, ids, clock);
@@ -375,7 +375,7 @@ public abstract class AdminP7eHistoryMutatorTests
         var memoryService = new StructuredMemoryService(structured, ids, clock);
         var profile = new FixedProfile(ProfileId, clock);
         var adminMemory = new AdminMemoryService(instances, definitions, sessions, structured, memoryService, profile);
-        var triggers = new TriggerRegistrationService(new SqliteTriggerStore(factory), ids, clock);
+        var triggers = new AutomationService(new SqliteTriggerStore(factory), ids, clock);
         var automation = new AdminAutomationService(instances, triggers, profile);
         var mutator = new SqliteAdminP7eHistoryMutator(
             adminMemory,
@@ -401,7 +401,7 @@ public abstract class AdminP7eHistoryMutatorTests
         AdminAutomationHistoryService automationHistory,
         StructuredMemoryService memoryService,
         AgentInstanceService instanceService,
-        TriggerRegistrationService triggers,
+        AutomationService triggers,
         AdminAutomationService automation,
         bool sqliteProfile,
         IDbContextFactory<AgentCoreDbContext>? dbFactory)
@@ -427,7 +427,7 @@ public abstract class AdminP7eHistoryMutatorTests
 
         var due = Now.AddHours(2);
         var registration = await triggers.CreateAsync(
-            new TriggerRegistrationDraft(
+            new AutomationDraft(
                 new TriggerOwner(instance.InstanceId, ProfileId),
                 "Check in",
                 new OneShotSchedule(due, "UTC", null, null),
@@ -437,7 +437,7 @@ public abstract class AdminP7eHistoryMutatorTests
                 sessionId,
                 null));
 
-        _ = await automation.GetRegistrationAsync(instance.InstanceId, registration.RegistrationId);
+        _ = await automation.GetRegistrationAsync(instance.InstanceId, registration.AutomationId);
 
         return new P7eMutatorFixture(
             mutator,
@@ -447,7 +447,7 @@ public abstract class AdminP7eHistoryMutatorTests
             triggers,
             instance.InstanceId,
             identity!.MemoryId,
-            registration.RegistrationId,
+            registration.AutomationId,
             registration.Revision,
             sqliteProfile,
             dbFactory);

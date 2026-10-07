@@ -226,20 +226,19 @@ request(f"http://127.0.0.1:{port}/api/v2/sessions/{home_source}", method="DELETE
 with open("/tmp/agent-core-home-survival.json", "w") as target:
     json.dump({"instanceId": instance["instanceId"], "item": home_item, "text": home_bytes.decode()}, target)
 
-status, cadence_body = request(
-    f"http://127.0.0.1:{port}/api/v2/admin/agent-instances/{instance['instanceId']}/continuity-maintenance",
-    headers=owner_headers,
-)
-cadence = json.loads(cadence_body)
-assert cadence["effectiveIntervalSeconds"] == 300 and cadence["usesDefault"], cadence
-status, cadence_body = request(
-    f"http://127.0.0.1:{port}/api/v2/admin/agent-instances/{instance['instanceId']}/continuity-maintenance",
-    method="PUT",
-    data=json.dumps({"expectedRevision": cadence["revision"], "intervalSeconds": 900}).encode(),
-    headers=owner_headers,
-)
-cadence = json.loads(cadence_body)
-assert cadence["configuredIntervalSeconds"] == 900 and cadence["revision"] == 1, cadence
+# Ordinary Automation survives recreation; obsolete cadence resources are absent.
+status, profile_body = request(f"http://127.0.0.1:{port}/api/v2/profile", headers=owner_headers)
+profile = json.loads(profile_body)
+request(f"http://127.0.0.1:{port}/api/v2/profile", method="PATCH", headers=owner_headers,
+    data=json.dumps({"expectedRevision": profile["revision"], "values": {"timeZone": "UTC"}}).encode())
+from datetime import datetime, timedelta, timezone
+status, automation_body = request(f"http://127.0.0.1:{port}/api/v2/admin/agent-instances/{v2_owner}/automations",
+    method="POST", headers=owner_headers, data=json.dumps({"expectedRevision": 0, "enabled": True,
+        "name": "Review completed work", "instructions": "Review observable completed work; do nothing when no change is useful.",
+        "trigger": {"kind": "schedule", "schedule": {"kind": "fixedInterval", "interval": 3600,
+            "anchorAtUtc": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()}}}).encode())
+assert status == 200, status
+json.dump({"instanceId": v2_owner, "automation": json.loads(automation_body)}, open("/tmp/agent-core-unified-automation.json", "w"))
 
 # Reusable credentials and resource grants survive the same volume recreation.
 _, credential_body = request(f"http://127.0.0.1:{port}/api/v2/admin/credentials", method="POST",
@@ -263,7 +262,6 @@ admin_state = {
     "resourcePath": resource_path,
     "contentSha256": content_sha256,
     "resourceText": resource_bytes.decode("utf-8"),
-    "cadenceRevision": cadence["revision"],
 }
 json.dump(admin_state, open("/tmp/agent-core-admin.json", "w"))
 print("admin", instance["instanceId"], managed["sessionId"], pub_version)
@@ -459,14 +457,15 @@ status, publications = get(f"http://127.0.0.1:{port}/api/v2/admin/definitions/ex
 assert status == 200, publications
 assert f'"version":{pub_version}' in publications.replace(" ", "") or f'"version": {pub_version}' in publications, publications
 
-status, cadence_body = get(
-    f"http://127.0.0.1:{port}/api/v2/admin/agent-instances/{instance_id}/continuity-maintenance"
-)
-cadence = json.loads(cadence_body)
-assert status == 200 and cadence["configuredIntervalSeconds"] == 900, cadence
-assert cadence["effectiveIntervalSeconds"] == 900 and not cadence["usesDefault"], cadence
-assert cadence["revision"] == admin["cadenceRevision"], cadence
-print("continuity cadence survived", instance_id, cadence["effectiveIntervalSeconds"], cadence["revision"])
+automation_seed = json.load(open("/tmp/agent-core-unified-automation.json"))
+status, automations_json = get(f"http://127.0.0.1:{port}/api/v2/admin/agent-instances/{automation_seed['instanceId']}/automations")
+rows = json.loads(automations_json)["items"]
+saved = automation_seed["automation"]
+reopened = next(row for row in rows if row["automationId"] == saved["automationId"])
+for key in ("revision", "name", "instructions", "enabled", "status", "trigger", "authorizationOrigin", "sourceSessionId", "sourceEventId", "createdAt", "nextRunAt", "modelKey", "reasoningEffort"):
+    assert reopened[key] == saved[key], (key, reopened[key], saved[key])
+assert reopened["effectiveModelKey"] == "scripted-alpha", reopened
+print("automation survived", reopened["automationId"])
 
 resource_path = admin["resourcePath"]
 content_sha256 = admin["contentSha256"]

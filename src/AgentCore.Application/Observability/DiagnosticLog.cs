@@ -11,7 +11,7 @@ public readonly record struct DiagnosticContext(
     Guid? SessionId = null,
     Guid? ResponseId = null,
     Guid? AgentInstanceId = null,
-    Guid? TriggerRegistrationId = null,
+    Guid? AutomationId = null,
     Guid? TriggerOccurrenceId = null,
     Guid? WorkItemId = null,
     string? ErrorCategory = null,
@@ -31,7 +31,7 @@ public readonly record struct DiagnosticContext(
         AddGuid(items, "SessionId", SessionId);
         AddGuid(items, "ResponseId", ResponseId);
         AddGuid(items, "AgentInstanceId", AgentInstanceId);
-        AddGuid(items, "TriggerRegistrationId", TriggerRegistrationId);
+        AddGuid(items, "AutomationId", AutomationId);
         AddGuid(items, "TriggerOccurrenceId", TriggerOccurrenceId);
         AddGuid(items, "WorkItemId", WorkItemId);
         AddToken(items, "ErrorCategory", ErrorCategory);

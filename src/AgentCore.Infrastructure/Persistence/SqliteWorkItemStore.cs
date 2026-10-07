@@ -80,14 +80,14 @@ public sealed class SqliteWorkItemStore(
     }
 
     public async ValueTask<WorkItem?> GetLatestForRegistrationAsync(
-        WorkOwner owner, Guid registrationId, CancellationToken cancellationToken = default)
+        WorkOwner owner, Guid automationId, CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var instanceId = owner.AgentInstanceId.ToString("D");
         var profileId = owner.ProfileId.ToString("D");
-        var registration = registrationId.ToString("D");
+        var registration = automationId.ToString("D");
         var row = await db.WorkItems.AsNoTracking()
-            .Where(item => item.AgentInstanceId == instanceId && item.ProfileId == profileId && item.RegistrationId == registration)
+            .Where(item => item.AgentInstanceId == instanceId && item.ProfileId == profileId && item.AutomationId == registration)
             .OrderByDescending(item => item.CreatedAtUtc).ThenByDescending(item => item.WorkItemId)
             .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         if (row is null) return null;

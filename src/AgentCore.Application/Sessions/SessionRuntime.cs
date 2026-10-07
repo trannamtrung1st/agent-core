@@ -5851,8 +5851,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 // still owns secondary admission; disposal releases Applied and waits for this worker.
                 await CompletePersistJobAsync(job, saved, error, superseded: false,
                     stableLifecycleCommit ? CancellationToken.None : cancellationToken).ConfigureAwait(false);
-                if (stableLifecycleCommit && saved?.AgentInstanceId is Guid instanceId)
-                    await _tools.ExperienceBoundaryAsync(instanceId, saved.SessionId, CancellationToken.None).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)

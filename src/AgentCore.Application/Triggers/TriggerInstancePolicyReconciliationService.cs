@@ -33,12 +33,12 @@ public sealed class TriggerInstancePolicyReconciliationService(
             var decision = await guard
                 .EvaluateAsync(registration.Owner, TriggerSourceKind.Schedule, cancellationToken)
                 .ConfigureAwait(false);
-            if (registration.Status == TriggerRegistrationStatus.Active
+            if (registration.Status == AutomationStatus.Active
                 && decision.Kind == TriggerAdmissionDecisionKind.Suspend)
             {
                 var updated = await store.SuspendPolicyAsync(
                         registration.Owner,
-                        registration.RegistrationId,
+                        registration.AutomationId,
                         registration.Revision,
                         decision.Reason ?? "Scheduling is disabled for this agent.",
                         asOfUtc,
@@ -49,12 +49,12 @@ public sealed class TriggerInstancePolicyReconciliationService(
                     suspended++;
                 }
             }
-            else if (registration.Status == TriggerRegistrationStatus.SuspendedPolicy
+            else if (registration.Status == AutomationStatus.SuspendedPolicy
                      && decision.Kind == TriggerAdmissionDecisionKind.Allow)
             {
                 var updated = await store.TryReactivatePolicySuspensionAsync(
                         registration.Owner,
-                        registration.RegistrationId,
+                        registration.AutomationId,
                         registration.Revision,
                         asOfUtc,
                         cancellationToken)

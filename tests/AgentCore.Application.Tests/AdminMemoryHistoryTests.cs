@@ -132,7 +132,7 @@ public sealed class AdminMemoryHistoryTests
             memoryService,
             new FixedLocalProfile(ProfileId, clock));
         var durable = new InMemoryDurableState();
-        var triggerRegistrations = new TriggerRegistrationService(new InMemoryTriggerStore(durable), ids, clock);
+        var triggerRegistrations = new AutomationService(new InMemoryTriggerStore(durable), ids, clock);
         var mutator = new InMemoryAdminP7eHistoryMutator(
             adminMemory,
             events,

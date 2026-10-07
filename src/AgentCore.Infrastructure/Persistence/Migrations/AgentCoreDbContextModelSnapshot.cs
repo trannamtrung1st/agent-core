@@ -567,23 +567,107 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("Attachments", (string)null);
                 });
 
-            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ContinuityMaintenanceSettingsRecord", b =>
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AutomationRecord", b =>
                 {
-                    b.Property<string>("AgentInstanceId")
+                    b.Property<string>("AutomationId")
+                        .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
-                    b.Property<int?>("IntervalSeconds")
+                    b.Property<string>("AgentInstanceId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("AuthorizationOrigin")
                         .HasColumnType("INTEGER");
 
-                    b.Property<long?>("LastMaintenanceAtUtc")
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("EventSourceId")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EventType")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("ExpiresAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Instructions")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModelOverrideCatalogKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModelOverrideReasoningEffort")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("NextOccurrenceAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("OccurrenceCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ProfileId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("RequiresVision")
                         .HasColumnType("INTEGER");
 
                     b.Property<long>("Revision")
+                        .IsConcurrencyToken()
                         .HasColumnType("INTEGER");
 
-                    b.HasKey("AgentInstanceId");
+                    b.Property<string>("ScheduleJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
 
-                    b.ToTable("ContinuityMaintenanceSettings");
+                    b.Property<long>("ScheduleRevision")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SourceEventId")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SourceSessionId")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SuspensionReason")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TriggerKind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("UpdatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("AutomationId");
+
+                    b.HasIndex("AgentInstanceId", "ProfileId", "Status");
+
+                    b.HasIndex("EventSourceId", "EventType", "Status");
+
+                    b.HasIndex("Status", "NextOccurrenceAtUtc", "AutomationId");
+
+                    b.ToTable("Automations", (string)null);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ConversationTurnExecutionRecord", b =>
@@ -916,7 +1000,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("RegistrationId")
+                    b.Property<string>("AutomationId")
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
@@ -933,9 +1017,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
-                    b.HasKey("EventId", "RegistrationId");
+                    b.HasKey("EventId", "AutomationId");
 
-                    b.HasIndex("Status", "EventId", "RegistrationId");
+                    b.HasIndex("Status", "EventId", "AutomationId");
 
                     b.ToTable("ExternalEventDeliveries", (string)null);
                 });
@@ -1406,6 +1490,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("AutomationId")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ClaimId")
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
@@ -1461,10 +1549,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("RegistrationId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
                     b.Property<long>("RoutingRevision")
                         .HasColumnType("INTEGER");
 
@@ -1494,104 +1578,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.HasIndex("AgentInstanceId", "ProfileId", "Disposition");
 
                     b.ToTable("TriggerOccurrences", (string)null);
-                });
-
-            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.TriggerRegistrationRecord", b =>
-                {
-                    b.Property<string>("RegistrationId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("AgentInstanceId")
-                        .IsRequired()
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("AuthorizationOrigin")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<long>("CreatedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("EventSourceId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("EventType")
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long?>("ExpiresAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Intent")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ModelOverrideCatalogKey")
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ModelOverrideReasoningEffort")
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long?>("NextOccurrenceAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("OccurrenceCount")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("ProfileId")
-                        .IsRequired()
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("RequiresVision")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<long>("Revision")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("ScheduleJson")
-                        .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("ScheduleKind")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<long>("ScheduleRevision")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("SourceEventId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("SourceSessionId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("SuspensionReason")
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("UpdatedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("RegistrationId");
-
-                    b.HasIndex("AgentInstanceId", "ProfileId", "Status");
-
-                    b.HasIndex("EventSourceId", "EventType", "Status");
-
-                    b.HasIndex("Status", "NextOccurrenceAtUtc", "RegistrationId");
-
-                    b.ToTable("TriggerRegistrations", (string)null);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkApprovalRecord", b =>
@@ -1747,6 +1733,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<int>("AttemptCount")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("AutomationId")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("CancellationRequested")
                         .HasColumnType("INTEGER");
 
@@ -1798,7 +1788,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("EvidenceJson")
                         .IsRequired()
-                        .HasMaxLength(4096)
+                        .HasMaxLength(8192)
                         .HasColumnType("TEXT");
 
                     b.Property<long?>("FailureAtUtc")
@@ -1867,10 +1857,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.Property<long?>("ProgressUpdatedAtUtc")
                         .HasColumnType("INTEGER");
-
-                    b.Property<string>("RegistrationId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
 
                     b.Property<bool>("ResultAttentionRequired")
                         .ValueGeneratedOnAdd()

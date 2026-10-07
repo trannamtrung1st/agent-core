@@ -131,7 +131,7 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
 
         var rows = await query
             .OrderBy(item => item.EventId)
-            .ThenBy(item => item.RegistrationId)
+            .ThenBy(item => item.AutomationId)
             .Take(Math.Clamp(limit, 1, 64))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -140,16 +140,16 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
 
     public async ValueTask MarkDeliveryAsync(
         Guid eventId,
-        Guid registrationId,
+        Guid automationId,
         ExternalEventDeliveryStatus status,
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var eventKey = eventId.ToString("D");
-        var registrationKey = registrationId.ToString("D");
+        var registrationKey = automationId.ToString("D");
         var row = await db.ExternalEventDeliveries
             .FirstOrDefaultAsync(
-                item => item.EventId == eventKey && item.RegistrationId == registrationKey,
+                item => item.EventId == eventKey && item.AutomationId == registrationKey,
                 cancellationToken)
             .ConfigureAwait(false);
         if (row is null || row.Status != (int)ExternalEventDeliveryStatus.Pending)
@@ -231,7 +231,7 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
     private static ExternalEventDeliveryRecord ToDelivery(Guid eventId, ExternalEventTarget target) => new()
     {
         EventId = eventId.ToString("D"),
-        RegistrationId = target.RegistrationId.ToString("D"),
+        AutomationId = target.AutomationId.ToString("D"),
         AgentInstanceId = target.AgentInstanceId.ToString("D"),
         ProfileId = target.ProfileId.ToString("D"),
         Status = (int)ExternalEventDeliveryStatus.Pending
@@ -239,7 +239,7 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
 
     private static ExternalEventDelivery ToDelivery(ExternalEventDeliveryRecord row) => new(
         Guid.Parse(row.EventId),
-        Guid.Parse(row.RegistrationId),
+        Guid.Parse(row.AutomationId),
         Guid.Parse(row.AgentInstanceId),
         Guid.Parse(row.ProfileId),
         (ExternalEventDeliveryStatus)row.Status);

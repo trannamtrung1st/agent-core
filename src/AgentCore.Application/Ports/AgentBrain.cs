@@ -11,7 +11,7 @@ public enum TriggerKind
     UnfinishedInteraction,
     ScheduledOccurrence,
     ApplicationEvent,
-    ThoughtActivation
+    ManualInvocation
 }
 
 public sealed record AgentTrigger(Guid EventId, TriggerKind Kind, string? Text, string? EnvironmentKind = null);

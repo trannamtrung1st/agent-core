@@ -6,81 +6,81 @@ using AgentCore.Domain.Triggers;
 
 namespace AgentCore.Application.Triggers;
 
-public sealed class TriggerRegistrationService(
+public sealed class AutomationService(
     ITriggerStore store,
     IIdGenerator ids,
-    TimeProvider time) : ITriggerRegistrationService
+    TimeProvider time) : IAutomationService
 {
-    public ValueTask<TriggerRegistration> CreateAsync(
-        TriggerRegistrationDraft draft,
+    public ValueTask<Automation> CreateAsync(
+        AutomationDraft draft,
         CancellationToken cancellationToken = default) =>
         ObserveAsync("create", () => CreateCoreAsync(draft, cancellationToken));
 
-    public ValueTask<TriggerRegistration?> GetAsync(
+    public ValueTask<Automation?> GetAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         CancellationToken cancellationToken = default) =>
-        store.GetAsync(owner, registrationId, cancellationToken);
+        store.GetAsync(owner, automationId, cancellationToken);
 
-    public ValueTask<IReadOnlyList<TriggerRegistration>> ListAsync(
+    public ValueTask<IReadOnlyList<Automation>> ListAsync(
         TriggerOwner owner,
-        TriggerRegistrationStatus? status,
+        AutomationStatus? status,
         CancellationToken cancellationToken = default) =>
         store.ListAsync(owner, status, cancellationToken);
 
-    public ValueTask<IReadOnlyList<TriggerRegistration>> ListSchedulesPageAsync(
+    public ValueTask<IReadOnlyList<Automation>> ListAutomationsPageAsync(
         TriggerOwner owner, int limit, Guid? before, CancellationToken cancellationToken = default) =>
-        store.ListSchedulesPageAsync(owner, limit, before, cancellationToken);
+        store.ListAutomationsPageAsync(owner, limit, before, cancellationToken);
 
     public ValueTask<int> CountActiveAsync(TriggerOwner owner, CancellationToken cancellationToken = default) =>
         store.CountActiveAsync(owner, cancellationToken);
 
-    public ValueTask<TriggerRegistration> UpdateAsync(
+    public ValueTask<Automation> UpdateAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
-        TriggerRegistrationChange change,
+        AutomationChange change,
         CancellationToken cancellationToken = default) =>
-        ObserveAsync("update", () => UpdateCoreAsync(owner, registrationId, expectedRevision, change, cancellationToken));
+        ObserveAsync("update", () => UpdateCoreAsync(owner, automationId, expectedRevision, change, cancellationToken));
 
-    public ValueTask<TriggerRegistration> SetModelOverrideAsync(
+    public ValueTask<Automation> SetModelOverrideAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         string? catalogKey,
         string? reasoningEffort,
         CancellationToken cancellationToken = default) =>
         store.SetModelOverrideAsync(
             owner,
-            registrationId,
+            automationId,
             expectedRevision,
             catalogKey,
             reasoningEffort,
             UtcNow(),
             cancellationToken);
 
-    public ValueTask<TriggerRegistration> CancelAsync(
+    public ValueTask<Automation> CancelAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         CancellationToken cancellationToken = default) =>
         ObserveAsync(
             "cancel",
-            () => store.CancelAsync(owner, registrationId, expectedRevision, UtcNow(), cancellationToken));
+            () => store.CancelAsync(owner, automationId, expectedRevision, UtcNow(), cancellationToken));
 
-    private async ValueTask<TriggerRegistration> CreateCoreAsync(
-        TriggerRegistrationDraft draft,
+    private async ValueTask<Automation> CreateCoreAsync(
+        AutomationDraft draft,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(draft);
         var now = UtcNow();
         var schedule = draft.Schedule ?? throw AgentCoreErrors.Validation("Schedule is required.");
         var next = draft.NextOccurrenceAtUtc ?? (schedule is OneShotSchedule oneShot ? oneShot.AtUtc : null);
-        var registration = Guard(() => new TriggerRegistration(
+        var registration = Guard(() => new Automation(
             ids.NewId(),
             draft.Owner,
-            TriggerRegistrationStatus.Active,
-            draft.Intent,
+            AutomationStatus.Active,
+            draft.Instructions,
             schedule,
             AsUtc(next, "Next occurrence"),
             AsUtc(draft.ExpiresAtUtc, "Expiry"),
@@ -93,44 +93,44 @@ public sealed class TriggerRegistrationService(
                 draft.SourceEventId,
                 now,
                 now),
-            suspensionReason: null));
+            suspensionReason: null, name: draft.Name));
         return await store.CreateAsync(registration, cancellationToken).ConfigureAwait(false);
     }
 
-    private async ValueTask<TriggerRegistration> UpdateCoreAsync(
+    private async ValueTask<Automation> UpdateCoreAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
-        TriggerRegistrationChange change,
+        AutomationChange change,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(change);
-        var current = await store.GetAsync(owner, registrationId, cancellationToken).ConfigureAwait(false)
+        var current = await store.GetAsync(owner, automationId, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound("Trigger registration was not found.");
         if (current.Revision != expectedRevision)
         {
             throw AgentCoreErrors.Conflict("Registration revision is stale.");
         }
 
-        if (current.Status != TriggerRegistrationStatus.Active)
+        if (current.Status != AutomationStatus.Active)
         {
             throw AgentCoreErrors.Validation("Only an active registration can be updated.");
         }
 
-        var intent = change.HasIntent ? change.Intent ?? "" : current.Intent;
+        var intent = change.HasInstructions ? change.Instructions ?? "" : current.Instructions;
         var schedule = change.HasSchedule
             ? change.Schedule ?? throw AgentCoreErrors.Validation("Schedule is required.")
             : current.Schedule;
         var next = change.HasNextOccurrence ? change.NextOccurrenceAtUtc : current.NextOccurrenceAtUtc;
         var expires = change.HasExpiresAt ? change.ExpiresAtUtc : current.ExpiresAtUtc;
-        if (!change.HasIntent && !change.HasSchedule && !change.HasNextOccurrence && !change.HasExpiresAt)
+        if (!change.HasInstructions && !change.HasSchedule && !change.HasNextOccurrence && !change.HasExpiresAt)
         {
             return current;
         }
 
         return await store.UpdateAsync(
             owner,
-            registrationId,
+            automationId,
             expectedRevision,
             intent,
             schedule,
@@ -151,7 +151,7 @@ public sealed class TriggerRegistrationService(
         var occurrence = Guard(() => new TriggerOccurrence(
             ids.NewId(),
             draft.DedupeKey,
-            draft.RegistrationId,
+            draft.AutomationId,
             draft.Owner,
             draft.SourceKind,
             AsUtc(draft.ScheduledAtUtc, "Scheduled"),
@@ -215,7 +215,7 @@ public sealed class TriggerRegistrationService(
         try
         {
             var result = await action().ConfigureAwait(false);
-            RuntimeTelemetry.RecordTriggerRegistration(operation, "succeeded");
+            RuntimeTelemetry.RecordAutomation(operation, "succeeded");
             return result;
         }
         catch (OperationCanceledException)
@@ -224,12 +224,12 @@ public sealed class TriggerRegistrationService(
         }
         catch (AgentCoreException exception)
         {
-            RuntimeTelemetry.RecordTriggerRegistration(operation, exception.Code);
+            RuntimeTelemetry.RecordAutomation(operation, exception.Code);
             throw;
         }
         catch (Exception)
         {
-            RuntimeTelemetry.RecordTriggerRegistration(operation, "failed");
+            RuntimeTelemetry.RecordAutomation(operation, "failed");
             throw;
         }
     }

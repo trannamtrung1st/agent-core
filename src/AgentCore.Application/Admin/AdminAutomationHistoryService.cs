@@ -10,12 +10,12 @@ public sealed class AdminAutomationHistoryService(
 {
     public ValueTask<AdminAutomationRegistration> CancelRegistrationAsync(
         Guid instanceId,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         CancellationToken cancellationToken = default) =>
         CancelRegistrationWithHistoryAsync(
             instanceId,
-            registrationId,
+            automationId,
             expectedRevision,
             ids.NewId(),
             time.GetUtcNow(),
@@ -23,32 +23,32 @@ public sealed class AdminAutomationHistoryService(
 
     public async ValueTask<AdminAutomationRegistration> CancelRegistrationWithHistoryAsync(
         Guid instanceId,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         Guid operationId,
         DateTimeOffset occurredAt,
         CancellationToken cancellationToken = default)
     {
-        var append = AdminEventFactory.TriggerRegistrationRevoked(
+        var append = AdminEventFactory.AutomationRevoked(
             operationId,
             occurredAt,
             instanceId,
-            registrationId,
+            automationId,
             expectedRevision);
-        await mutator.CancelTriggerRegistrationWithHistoryAsync(
+        await mutator.CancelAutomationWithHistoryAsync(
                 instanceId,
-                registrationId,
+                automationId,
                 expectedRevision,
                 append,
-                (existing, incoming) => AdminEventReplayPolicy.EnsureTriggerRegistrationRevokedReplayMatches(
+                (existing, incoming) => AdminEventReplayPolicy.EnsureAutomationRevokedReplayMatches(
                     existing,
                     incoming,
                     instanceId,
-                    registrationId,
+                    automationId,
                     expectedRevision),
                 cancellationToken)
             .ConfigureAwait(false);
-        return await automation.GetRegistrationAsync(instanceId, registrationId, cancellationToken)
+        return await automation.GetRegistrationAsync(instanceId, automationId, cancellationToken)
             .ConfigureAwait(false);
     }
 }

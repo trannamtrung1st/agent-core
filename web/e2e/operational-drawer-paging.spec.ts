@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { WorkItem, SessionTrigger } from "../src/services/api";
+import type { WorkItem, SessionAutomation } from "../src/services/api";
 
 // Controlled owner-scoped lists exercise paging independently of reminder wall clocks.
 test("operational drawers scroll pages, retry, and persist background read status", async ({ page }) => {
@@ -13,9 +13,9 @@ test("operational drawers scroll pages, retry, and persist background read statu
     cancellationAvailable: false, failureCode: null, failureSummary: null, knownEffect: null,
     createdAt: "2026-10-05T09:00:00Z", updatedAt: "2026-10-05T10:00:00Z", attentionRequired: [0, 25, 44].includes(index)
   }));
-  const schedules: SessionTrigger[] = work.map((row, index) => ({
-    registrationId: row.workItemId, intent: `Reminder ${index}`, status: "completed", scheduleKind: "oneShot",
-    timeZone: "Asia/Ho_Chi_Minh", schedule: "Once on October 5, 2026 at 17:00", nextOccurrenceAt: null, revision: 2
+  const schedules: SessionAutomation[] = work.map((row, index) => ({
+    automationId: row.workItemId, instructions: `Reminder ${index}`, status: "completed", triggerKind: "oneShot",
+    timeZone: "Asia/Ho_Chi_Minh", when: "Once on October 5, 2026 at 17:00", nextOccurrenceAt: null, revision: 2
   }));
   let failNext = true;
   let listRefreshes = 0;
@@ -45,10 +45,10 @@ test("operational drawers scroll pages, retry, and persist background read statu
     const start = before ? source.findIndex(item => item.workItemId === before) + 1 : 0;
     await route.fulfill({ json: { items: source.slice(start, start + Number(url.searchParams.get("limit") ?? 50)) } });
   });
-  await page.route("**/triggers?**", async route => {
+  await page.route("**/automations?**", async route => {
     const url = new URL(route.request().url());
     const before = url.searchParams.get("before");
-    const start = before ? schedules.findIndex(item => item.registrationId === before) + 1 : 0;
+    const start = before ? schedules.findIndex(item => item.automationId === before) + 1 : 0;
     await route.fulfill({ json: { items: schedules.slice(start, start + Number(url.searchParams.get("limit") ?? 50)) } });
   });
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -95,8 +95,8 @@ test("operational drawers scroll pages, retry, and persist background read statu
   await drawer.getByRole("button", { name: "Close", exact: true }).click();
   work[0] = { ...work[0], revision: 4, updatedAt: "2026-10-05T10:01:00Z" };
   await expect(page.getByRole("button", { name: "Background work, 1 need attention", exact: true })).toBeVisible({ timeout: 10_000 });
-  await page.getByRole("button", { name: "Schedules", exact: true }).click();
-  const scheduleDrawer = page.getByRole("dialog", { name: "Schedules", exact: true });
+  await page.getByRole("button", { name: "Automations", exact: true }).click();
+  const scheduleDrawer = page.getByRole("dialog", { name: "Automations", exact: true });
   await expect(scheduleDrawer.locator(".schedule-item")).toHaveCount(20);
   await scheduleDrawer.locator(".ant-drawer-body").evaluate(body => { body.scrollTop = body.scrollHeight; });
   await expect(scheduleDrawer.locator(".schedule-item")).toHaveCount(40);

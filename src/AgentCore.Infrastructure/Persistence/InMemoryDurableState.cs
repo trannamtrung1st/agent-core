@@ -8,7 +8,7 @@ internal sealed class InMemoryDurableState
 {
     public object Gate { get; } = new();
 
-    public Dictionary<Guid, TriggerRegistration> Registrations { get; } = [];
+    public Dictionary<Guid, Automation> Registrations { get; } = [];
 
     public Dictionary<Guid, TriggerOccurrence> Occurrences { get; } = [];
 

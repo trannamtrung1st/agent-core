@@ -303,11 +303,11 @@ public static class AdminEventFactory
         return append;
     }
 
-    public static AdminEventAppend TriggerRegistrationRevoked(
+    public static AdminEventAppend AutomationRevoked(
         Guid operationId,
         DateTimeOffset occurredAt,
         Guid instanceId,
-        Guid registrationId,
+        Guid automationId,
         long revision,
         AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner)
     {
@@ -315,15 +315,15 @@ public static class AdminEventFactory
             operationId,
             occurredAt,
             actorKind,
-            AdminEventOperationKind.TriggerRegistrationRevoked,
+            AdminEventOperationKind.AutomationRevoked,
             "trigger.registration",
-            registrationId.ToString("D"),
+            automationId.ToString("D"),
             revision,
             null,
             JsonSerializer.Serialize(new
             {
                 instanceId = instanceId.ToString("D"),
-                registrationId = registrationId.ToString("D"),
+                automationId = automationId.ToString("D"),
                 revision
             }));
         AdminEventSummaryPolicy.ValidateAppend(append);

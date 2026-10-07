@@ -8,7 +8,7 @@ const pollDeadlineMs = 150_000;
 
 type DurableProbe = {
   registration: {
-    registrationId: string;
+    automationId: string;
     status: number;
     nextOccurrenceAtUtc: string | null;
     intent: string;
@@ -60,10 +60,10 @@ con.row_factory = sqlite3.Row
 con.execute("PRAGMA busy_timeout=8000")
 
 reg_row = con.execute(
-    """SELECT RegistrationId, Status, NextOccurrenceAtUtc, Intent
-       FROM TriggerRegistrations
-       WHERE SourceSessionId = ? AND Intent = ?
-       ORDER BY RegistrationId
+    """SELECT AutomationId, Status, NextOccurrenceAtUtc, Instructions
+       FROM Automations
+       WHERE SourceSessionId = ? AND Instructions = ?
+       ORDER BY AutomationId
        LIMIT 2""",
     (session_id, intent),
 ).fetchall()
@@ -75,16 +75,16 @@ work_items = []
 if len(reg_row) == 1:
     row = reg_row[0]
     registration = {
-        "registrationId": row["RegistrationId"],
+        "automationId": row["AutomationId"],
         "status": row["Status"],
         "nextOccurrenceAtUtc": row["NextOccurrenceAtUtc"],
-        "intent": row["Intent"],
+        "intent": row["Instructions"],
     }
-    reg_id = row["RegistrationId"]
+    reg_id = row["AutomationId"]
     occ_rows = con.execute(
         """SELECT OccurrenceId, Disposition, ScheduledAtUtc, DurableWorkItemId
            FROM TriggerOccurrences
-           WHERE RegistrationId = ?
+           WHERE AutomationId = ?
            ORDER BY OccurrenceId""",
         (reg_id,),
     ).fetchall()
@@ -108,7 +108,7 @@ if len(reg_row) == 1:
         {
             "workItemId": w["WorkItemId"],
             "status": w["Status"],
-            "resultText": w["ResultText"],
+            "resultText": json.loads(w["ResultText"])["summary"] if w["ResultText"] else None,
             "sourceOccurrenceId": w["SourceOccurrenceId"],
         }
         for w in work_rows

@@ -45,7 +45,7 @@ test("background work shows a seeded terminal diagnostic", async ({ page }) => {
             workItemId: "019944af-00c5-7000-8000-0000000000aa",
             status: "failed",
             revision: 4,
-            origin: "Scheduled reminder",
+            origin: "Automation · Schedule",
             progress: null,
             needsApproval: false,
             approvalId: null,

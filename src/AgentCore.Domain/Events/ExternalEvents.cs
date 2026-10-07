@@ -118,11 +118,11 @@ public enum ExternalEventDeliveryStatus
     Skipped = 2
 }
 
-public sealed record ExternalEventTarget(Guid RegistrationId, Guid AgentInstanceId, Guid ProfileId);
+public sealed record ExternalEventTarget(Guid AutomationId, Guid AgentInstanceId, Guid ProfileId);
 
 public sealed record ExternalEventDelivery(
     Guid EventId,
-    Guid RegistrationId,
+    Guid AutomationId,
     Guid AgentInstanceId,
     Guid ProfileId,
     ExternalEventDeliveryStatus Status);

@@ -35,7 +35,7 @@ for (const scope of ["scratch", "home"]) test(`native ${scope} filesystem batche
   const nodes = await (await page.request.get(`/api/v2/sessions/${session}/workspace?prefix=${root}/backup/empty`, { headers })).json();
   expect(nodes).toContainEqual(expect.objectContaining({ logicalPath: `${root}/backup/empty/deep`, directory: true }));
   if (scope === "home") {
-    await page.goto(`/admin/instances/${owner}/workspace`);
+    await page.goto(`/admin/instances/${owner}/identity`); await page.getByRole("tab", { name: "Workspace", exact: true }).click();
     await expect(page.getByRole("button", { name: `Download ${root}/backup/empty/deep`, exact: true })).toBeDisabled();
     await expect(page.getByText(`${root}/backup/empty/deep`, { exact: true })).toBeVisible();
     await page.goto(`/c/${session}`); await expect(page.getByTestId("connection")).toHaveText("Ready");

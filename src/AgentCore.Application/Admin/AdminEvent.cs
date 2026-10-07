@@ -18,7 +18,7 @@ public enum AdminEventOperationKind
     PersonaChanged,
     MemoryItemDeleted,
     MemoryScopeReset,
-    TriggerRegistrationRevoked,
+    AutomationRevoked,
     InstanceArchived,
     InstanceUnarchived,
     InstanceDeleted,
@@ -26,8 +26,7 @@ public enum AdminEventOperationKind
     HarnessPolicyChanged,
     HarnessPreparationChanged,
     ExperienceChanged,
-    ThoughtRegistrationChanged,
-    ScheduleRegistrationChanged
+    AutomationChanged
 }
 
 public sealed record AdminEvent(

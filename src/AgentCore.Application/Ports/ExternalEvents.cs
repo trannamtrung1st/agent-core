@@ -44,7 +44,7 @@ public interface IExternalEventStore
 
     ValueTask MarkDeliveryAsync(
         Guid eventId,
-        Guid registrationId,
+        Guid automationId,
         ExternalEventDeliveryStatus status,
         CancellationToken cancellationToken = default);
 

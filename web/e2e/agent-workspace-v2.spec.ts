@@ -52,7 +52,7 @@ test("managed workspace uses durable cwd, explicit scratch, and downloads across
   await page.goto(`/c/${second}`); await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 20_000 });
   await send("restore"); await expect(page.locator(".chat-message-assistant").last()).toContainText('"cwd":"/home"');
   await expect(page.locator(".chat-message-assistant").last()).toContainText("Durable result caf");
-  await page.goto(`/admin/instances/${owner}/workspace`);
+  await page.goto(`/admin/instances/${owner}/identity`); await page.getByRole("tab", { name: "Workspace", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Agent Workspace", exact: true })).toBeVisible();
   await expect(page.getByText("/home · Durable across sessions.", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Download /home/projects/customer-a", exact: true })).toBeDisabled();

@@ -50,7 +50,7 @@ public sealed class TriggerDurablePolicyTests
 
         var store = new InMemoryTriggerStore();
         var time = new FakeTimeProvider(Now);
-        var registrations = new TriggerRegistrationService(store, Ids(4), time);
+        var registrations = new AutomationService(store, Ids(4), time);
         var owner = new TriggerOwner(instanceId, ProfileId);
         var context = new TriggerCommandContext(
             owner,
@@ -65,7 +65,7 @@ public sealed class TriggerDurablePolicyTests
             Guid.Parse("019944af-00d1-7000-8000-0000000000d1"),
             Now);
 
-        using var args = JsonDocument.Parse("""{"intent":"Hello","relativeDayOffset":1,"localTime":"09:00"}""");
+        using var args = JsonDocument.Parse("""{"instructions":"Hello","relativeDayOffset":1,"localTime":"09:00"}""");
         var denied = await TriggerScheduleCommands.ExecuteAsync(
             v9,
             registrations,
@@ -109,7 +109,7 @@ public sealed class TriggerDurablePolicyTests
         Assert.Equal(9, resolved.ActiveVersion);
 
         var store = new InMemoryTriggerStore();
-        var registrations = new TriggerRegistrationService(store, Ids(4, "019944af-00d2-7000-8000-"), clock);
+        var registrations = new AutomationService(store, Ids(4, "019944af-00d2-7000-8000-"), clock);
         var owner = new TriggerOwner(resolved.InstanceId, ProfileId);
         var due = Now.AddMinutes(1);
         var tools = new SessionToolExecutor(
@@ -148,14 +148,14 @@ public sealed class TriggerDurablePolicyTests
         Assert.True(await runtime.SubmitUserTextAsync("say hello to me in 1 minute"));
         await runtime.WaitUntilIdleAsync();
         var created = Assert.Single(await store.ListAsync(owner, null));
-        Assert.Equal(TriggerRegistrationStatus.Active, created.Status);
+        Assert.Equal(AutomationStatus.Active, created.Status);
 
         clock.Advance(TimeSpan.FromMinutes(1));
         var guard = new TriggerAdmissionGuard(instances, definitions, memory);
         var scheduler = new TriggerScheduler(store, NullLogger<TriggerScheduler>.Instance, guard);
         var pass = await scheduler.RunOnceAsync(clock.GetUtcNow());
         Assert.Equal(1, pass.Admitted);
-        Assert.Equal(TriggerRegistrationStatus.Completed, (await store.GetAsync(owner, created.RegistrationId))!.Status);
+        Assert.Equal(AutomationStatus.Completed, (await store.GetAsync(owner, created.AutomationId))!.Status);
     }
 
     [Fact]
@@ -176,13 +176,13 @@ public sealed class TriggerDurablePolicyTests
             0);
 
         var store = new InMemoryTriggerStore();
-        var registrations = new TriggerRegistrationService(store, Ids(4, "019944af-00d2-7000-8000-"), clock);
+        var registrations = new AutomationService(store, Ids(4, "019944af-00d2-7000-8000-"), clock);
         var owner = new TriggerOwner(managed.InstanceId, ProfileId);
         var due = Now.AddMinutes(1);
-        await store.CreateAsync(new TriggerRegistration(
+        await store.CreateAsync(new Automation(
             Guid.Parse("019944af-00d2-7000-8000-000000000001"),
             owner,
-            TriggerRegistrationStatus.Active,
+            AutomationStatus.Active,
             "Hello",
             new OneShotSchedule(due, "UTC", null, null),
             due,
@@ -211,7 +211,7 @@ public sealed class TriggerDurablePolicyTests
             null,
             Guid.NewGuid(),
             Now);
-        using var args = JsonDocument.Parse("""{"intent":"Hello","relativeDayOffset":1,"localTime":"09:00"}""");
+        using var args = JsonDocument.Parse("""{"instructions":"Hello","relativeDayOffset":1,"localTime":"09:00"}""");
         var denied = await TriggerScheduleCommands.ExecuteAsync(
             v9,
             registrations,
@@ -235,7 +235,7 @@ public sealed class TriggerDurablePolicyTests
         var pass = await scheduler.RunOnceAsync(clock.GetUtcNow());
         Assert.Equal(0, pass.Admitted);
         var afterDue = (await store.ListAsync(owner, null))[0];
-        Assert.Equal(TriggerRegistrationStatus.SuspendedPolicy, afterDue.Status);
+        Assert.Equal(AutomationStatus.SuspendedPolicy, afterDue.Status);
         Assert.Contains("not active", afterDue.SuspensionReason, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -255,7 +255,7 @@ public sealed class TriggerDurablePolicyTests
             0);
 
         var store = new InMemoryTriggerStore();
-        var registrations = new TriggerRegistrationService(store, Ids(4), new FakeTimeProvider(Now));
+        var registrations = new AutomationService(store, Ids(4), new FakeTimeProvider(Now));
         var owner = new TriggerOwner(instanceId, ProfileId);
         var context = new TriggerCommandContext(
             owner,
@@ -270,7 +270,7 @@ public sealed class TriggerDurablePolicyTests
             Guid.NewGuid(),
             Now);
 
-        using var args = JsonDocument.Parse("""{"intent":"Hello","relativeDayOffset":1,"localTime":"09:00"}""");
+        using var args = JsonDocument.Parse("""{"instructions":"Hello","relativeDayOffset":1,"localTime":"09:00"}""");
         var denied = await TriggerScheduleCommands.ExecuteAsync(
             v9,
             registrations,
@@ -312,10 +312,10 @@ public sealed class TriggerDurablePolicyTests
         var store = new InMemoryTriggerStore();
         var owner = new TriggerOwner(instanceId, ProfileId);
         var due = Now.AddMinutes(5);
-        var registration = new TriggerRegistration(
+        var registration = new Automation(
             Guid.Parse("019944af-00d2-7000-8000-000000000002"),
             owner,
-            TriggerRegistrationStatus.SuspendedPolicy,
+            AutomationStatus.SuspendedPolicy,
             "Hello",
             new OneShotSchedule(due, "UTC", null, null),
             due,
@@ -330,8 +330,8 @@ public sealed class TriggerDurablePolicyTests
         var guard = new TriggerAdmissionGuard(instances, definitions, memory);
         var recovery = new TriggerPolicyRecoveryService(store, guard);
         Assert.Equal(1, await recovery.ReactivateSuspendedForOwnerAsync(owner, Now));
-        var reactivated = (await store.GetAsync(owner, registration.RegistrationId))!;
-        Assert.Equal(TriggerRegistrationStatus.Active, reactivated.Status);
+        var reactivated = (await store.GetAsync(owner, registration.AutomationId))!;
+        Assert.Equal(AutomationStatus.Active, reactivated.Status);
         Assert.Null(reactivated.SuspensionReason);
         Assert.Equal(due, reactivated.NextOccurrenceAtUtc);
     }

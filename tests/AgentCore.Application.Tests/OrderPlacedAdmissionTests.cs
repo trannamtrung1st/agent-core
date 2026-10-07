@@ -30,7 +30,7 @@ public sealed class OrderPlacedAdmissionTests
         Assert.Equal("evt-1", eventId);
         Assert.Equal(ExternalEventTypes.OrderPlaced, eventType);
         using var document = JsonDocument.Parse(evidence);
-        Assert.Equal(["sourceEventId", "orderReference"], document.RootElement.EnumerateObject().Select(item => item.Name).ToArray());
+        Assert.Equal(["sourceEventId", "orderReference", "triggerDepth"], document.RootElement.EnumerateObject().Select(item => item.Name).ToArray());
 
         Assert.False(ExternalEventEnvelope.TryNormalize("{}"u8, out _, out _, out _, out _, out _));
         Assert.False(ExternalEventEnvelope.TryNormalize("{"u8, out _, out _, out _, out _, out _));
@@ -64,8 +64,8 @@ public sealed class OrderPlacedAdmissionTests
             instances: secretary.Instances,
             triggers: secretary.Triggers);
         var issued = await secretary.Sources.CreateAsync("Demo Store");
-        await secretary.Sources.SubscribeAsync(secretary.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
-        await secretary.Sources.SubscribeAsync(monitor.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
+        await secretary.SubscribeAsync(secretary.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
+        await secretary.SubscribeAsync(monitor.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
         var body = Encoding.UTF8.GetBytes(ExternalEventEnvelope.Build("order-105-created", "105"));
         var first = await secretary.Ingress.AdmitAsync(issued.SourceKey, issued.Token, body);
         Assert.Equal(ExternalEventIngressKind.Admitted, first.Kind);
@@ -79,7 +79,7 @@ public sealed class OrderPlacedAdmissionTests
         Assert.All(
             pending,
             item => Assert.Equal(
-                ExternalEventIngress.OccurrenceDedupeKey(issued.SourceId, "order-105-created"),
+                ExternalEventIngress.OccurrenceDedupeKey(issued.SourceId, "order-105-created") + ":" + item.AutomationId,
                 item.DedupeKey));
         Assert.All(pending, item => Assert.Null(item.DurableWorkItemId));
         var saved = await secretary.Events.GetEventAsync(issued.SourceId, "order-105-created");
@@ -103,7 +103,7 @@ public sealed class OrderPlacedAdmissionTests
     {
         var secretary = await FixtureAsync("secretary", 2);
         var issued = await secretary.Sources.CreateAsync("Demo Store");
-        await secretary.Sources.SubscribeAsync(secretary.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
+        await secretary.SubscribeAsync(secretary.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
         var valid = Encoding.UTF8.GetBytes(ExternalEventEnvelope.Build("evt-1", "1001"));
         Assert.Equal(ExternalEventIngressKind.Unauthorized, (await secretary.Ingress.AdmitAsync(issued.SourceKey, "wrong-token", valid)).Kind);
         Assert.Equal(ExternalEventIngressKind.Unauthorized, (await secretary.Ingress.AdmitAsync(Guid.NewGuid(), issued.Token, valid)).Kind);
@@ -125,7 +125,7 @@ public sealed class OrderPlacedAdmissionTests
 
         var v1 = await FixtureAsync("secretary", 1, secretary.Events, secretary.Logs);
         await Assert.ThrowsAsync<AgentCoreException>(() =>
-            v1.Sources.SubscribeAsync(v1.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced).AsTask());
+            v1.SubscribeAsync(v1.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced).AsTask());
         Assert.Empty(await v1.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
     }
 
@@ -141,8 +141,8 @@ public sealed class OrderPlacedAdmissionTests
             instances: blocked.Instances,
             triggers: blocked.Triggers);
         var issued = await blocked.Sources.CreateAsync("Demo Store");
-        await blocked.Sources.SubscribeAsync(blocked.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
-        await blocked.Sources.SubscribeAsync(ready.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
+        await blocked.SubscribeAsync(blocked.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
+        await blocked.SubscribeAsync(ready.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
         var body = Encoding.UTF8.GetBytes(ExternalEventEnvelope.Build("evt-9", "1009"));
         var result = await blocked.Ingress.AdmitAsync(issued.SourceKey, issued.Token, body);
         Assert.Equal(ExternalEventIngressKind.Admitted, result.Kind);
@@ -169,11 +169,11 @@ public sealed class OrderPlacedAdmissionTests
         Assert.Empty(await secretary.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
 
         var otherSource = await secretary.Sources.CreateAsync("Other Store");
-        await other.Sources.SubscribeAsync(other.InstanceId, otherSource.SourceId, ExternalEventTypes.OrderPlaced);
-        var subscribed = await secretary.Sources.SubscribeAsync(secretary.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
+        await other.SubscribeAsync(other.InstanceId, otherSource.SourceId, ExternalEventTypes.OrderPlaced);
+        var subscribed = await secretary.SubscribeAsync(secretary.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
         await secretary.Triggers.CancelAsync(
             subscribed.Owner,
-            subscribed.RegistrationId,
+            subscribed.AutomationId,
             subscribed.Revision,
             DateTimeOffset.UtcNow);
         var unmatched = Encoding.UTF8.GetBytes(ExternalEventEnvelope.Build("evt-unmatched", "1003"));
@@ -189,8 +189,8 @@ public sealed class OrderPlacedAdmissionTests
         var secretary = await FixtureAsync("secretary", 2);
         var first = await secretary.Sources.CreateAsync("Store A");
         var second = await secretary.Sources.CreateAsync("Store B");
-        await secretary.Sources.SubscribeAsync(secretary.InstanceId, first.SourceId, ExternalEventTypes.OrderPlaced);
-        await secretary.Sources.SubscribeAsync(secretary.InstanceId, second.SourceId, ExternalEventTypes.OrderPlaced);
+        await secretary.SubscribeAsync(secretary.InstanceId, first.SourceId, ExternalEventTypes.OrderPlaced);
+        await secretary.SubscribeAsync(secretary.InstanceId, second.SourceId, ExternalEventTypes.OrderPlaced);
         var body = Encoding.UTF8.GetBytes(ExternalEventEnvelope.Build("order-123-placed", "123"));
         Assert.Equal(ExternalEventIngressKind.Admitted, (await secretary.Ingress.AdmitAsync(first.SourceKey, first.Token, body)).Kind);
         Assert.Equal(ExternalEventIngressKind.Admitted, (await secretary.Ingress.AdmitAsync(second.SourceKey, second.Token, body)).Kind);
@@ -202,13 +202,13 @@ public sealed class OrderPlacedAdmissionTests
                 ExternalEventIngress.OccurrenceDedupeKey(first.SourceId, "order-123-placed"),
                 ExternalEventIngress.OccurrenceDedupeKey(second.SourceId, "order-123-placed")
             }.Order(),
-            pending.Select(item => item.DedupeKey).Order());
+            pending.Select(item => item.DedupeKey[..item.DedupeKey.LastIndexOf(':')]).Order());
     }
 
     [Fact]
     public async Task A_duplicate_delivery_finishes_fan_out_that_stopped_early()
     {
-        var ids = new FailOnceIdGenerator(7);
+        var ids = new FailOnceIdGenerator(5);
         var secretary = await FixtureAsync("secretary", 2, ids: ids);
         var monitor = await FixtureAsync(
             "secretary",
@@ -219,8 +219,8 @@ public sealed class OrderPlacedAdmissionTests
             triggers: secretary.Triggers,
             ids: ids);
         var issued = await secretary.Sources.CreateAsync("Demo Store");
-        await secretary.Sources.SubscribeAsync(secretary.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
-        await monitor.Sources.SubscribeAsync(monitor.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
+        await secretary.SubscribeAsync(secretary.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
+        await monitor.SubscribeAsync(monitor.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
         var body = Encoding.UTF8.GetBytes(ExternalEventEnvelope.Build("order-106-created", "106"));
         await Assert.ThrowsAsync<InvalidOperationException>(() => secretary.Ingress.AdmitAsync(issued.SourceKey, issued.Token, body).AsTask());
         Assert.NotNull(await secretary.Events.GetEventAsync(issued.SourceId, "order-106-created"));
@@ -234,7 +234,7 @@ public sealed class OrderPlacedAdmissionTests
             instances: secretary.Instances,
             triggers: secretary.Triggers,
             ids: ids);
-        await late.Sources.SubscribeAsync(late.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
+        await late.SubscribeAsync(late.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced);
         Assert.Equal(1, await secretary.Ingress.ResumePendingAsync());
         var pending = await secretary.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10);
         Assert.Equal(2, pending.Count);
@@ -251,7 +251,7 @@ public sealed class OrderPlacedAdmissionTests
         var issued = await secretary.Sources.CreateAsync("Demo Store");
         await secretary.Sources.RevokeAsync(issued.SourceId);
         var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
-            secretary.Sources.SubscribeAsync(secretary.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced).AsTask());
+            secretary.SubscribeAsync(secretary.InstanceId, issued.SourceId, ExternalEventTypes.OrderPlaced).AsTask());
         Assert.Contains("active", error.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(await secretary.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
     }
@@ -299,15 +299,8 @@ public sealed class OrderPlacedAdmissionTests
             catalog ?? ModelCatalogFactory.Synthetic(),
             logs);
         var sources = new ExternalEventSourceService(
-            events,
-            triggers,
-            guard,
-            ids,
-            TimeProvider.System,
-            profiles,
-            instances,
-            logs);
-        return new Fixture(instanceId, instances, triggers, events, ingress, sources, logs);
+            events, ids, TimeProvider.System, logs);
+        return new Fixture(instanceId, instances, triggers, events, ingress, sources, logs, guard);
     }
 
     private static string FindAgents()
@@ -352,7 +345,20 @@ public sealed class OrderPlacedAdmissionTests
         InMemoryExternalEventStore Events,
         ExternalEventIngress Ingress,
         ExternalEventSourceService Sources,
-        ListLogger Logs);
+        ListLogger Logs, ITriggerAdmissionGuard Guard)
+    {
+        public async ValueTask<Automation> SubscribeAsync(Guid instanceId, Guid sourceId, string eventType)
+        {
+            var source = await Events.GetAsync(sourceId) ?? throw AgentCoreErrors.NotFound("Event Source not found.");
+            if (source.Status != ExternalEventSourceStatus.Active) throw AgentCoreErrors.Validation("Event Source is not active.");
+            var owner = new TriggerOwner(instanceId, LocalUserProfile.Id);
+            if ((await Guard.EvaluateAsync(owner, TriggerSourceKind.ApplicationEvent)).Kind != TriggerAdmissionDecisionKind.Allow)
+                throw AgentCoreErrors.Validation("Event admission is disabled.");
+            var now = DateTimeOffset.UtcNow;
+            return await Triggers.CreateAsync(new(Guid.NewGuid(), owner, AutomationStatus.Active, "Review the order and report what needs attention.",
+                new EventTrigger(sourceId, eventType), null, null, 0, 1, 1, new(TriggerAuthorizationOrigin.AdminOwner, null, null, now, now), null));
+        }
+    }
 
     private sealed class ListLogger : ILogger<ExternalEventIngress>, ILogger<ExternalEventSourceService>
     {

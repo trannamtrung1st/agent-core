@@ -448,45 +448,6 @@ internal static class AdminEndpoints
             }
         });
 
-        group.MapGet("/agent-instances/{instanceId:guid}/event-subscriptions", async (
-            Guid instanceId,
-            ExternalEventSourceService sources,
-            CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                var rows = await sources.ListSubscriptionsAsync(instanceId, cancellationToken).ConfigureAwait(false);
-                return Results.Json(new AdminEventSubscriptionListResponse(rows.Select(AdminHttpMapping.ToEventSubscription).ToArray()));
-            }
-            catch (AgentCoreException ex)
-            {
-                return ProblemResults.From(ex);
-            }
-        });
-
-        group.MapPost("/agent-instances/{instanceId:guid}/event-subscriptions", async (
-            Guid instanceId,
-            AdminCreateEventSubscriptionRequest? request,
-            ExternalEventSourceService sources,
-            CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                if (request is null || !Guid.TryParse(request.SourceId, out var sourceId))
-                {
-                    throw AgentCoreErrors.Validation("Event source id is required.");
-                }
-
-                var registration = await sources.SubscribeAsync(instanceId, sourceId, request.EventType, cancellationToken)
-                    .ConfigureAwait(false);
-                return Results.Json(AdminHttpMapping.ToEventSubscription(registration));
-            }
-            catch (AgentCoreException ex)
-            {
-                return ProblemResults.From(ex);
-            }
-        });
-
         group.MapGet("/agent-instances/{instanceId:guid}/learned-memory", async (
             Guid instanceId,
             string scope,
@@ -539,57 +500,6 @@ internal static class AdminEndpoints
             }
         });
 
-        group.MapGet("/agent-instances/{instanceId:guid}/automation/registrations", async (
-            Guid instanceId,
-            AdminAutomationService automation,
-            CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                var items = await automation.ListRegistrationsAsync(instanceId, cancellationToken).ConfigureAwait(false);
-                return Results.Json(AdminHttpMapping.ToAutomationRegistrations(items));
-            }
-            catch (AgentCoreException ex)
-            {
-                return ProblemResults.From(ex);
-            }
-        });
-
-        group.MapPost("/agent-instances/{instanceId:guid}/automation/registrations/{registrationId:guid}/cancel", async (
-            Guid instanceId,
-            Guid registrationId,
-            AdminCancelAutomationRegistrationRequest? request,
-            AdminAutomationHistoryService automation,
-            CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                if (request is null)
-                {
-                    throw AgentCoreErrors.Validation("request body is required.");
-                }
-
-                if (!request.Confirm)
-                {
-                    throw AgentCoreErrors.Validation("confirm must be true for destructive automation operations.");
-                }
-
-                if (request.ExpectedRevision < 1)
-                {
-                    throw AgentCoreErrors.Validation("expectedRevision must be positive.");
-                }
-
-                var cancelled = await automation
-                    .CancelRegistrationAsync(instanceId, registrationId, request.ExpectedRevision, cancellationToken)
-                    .ConfigureAwait(false);
-                return Results.Json(AdminHttpMapping.ToAutomationRegistration(cancelled));
-            }
-            catch (AgentCoreException ex)
-            {
-                return ProblemResults.From(ex);
-            }
-        });
-
         group.MapPost("/agent-instances/{instanceId:guid}/unattended-model", async (
             Guid instanceId,
             AdminSetUnattendedModelRequest? request,
@@ -610,35 +520,6 @@ internal static class AdminEndpoints
                     request.ReasoningEffort,
                     cancellationToken).ConfigureAwait(false);
                 return Results.Json(AdminHttpMapping.ToAgentInstance(updated));
-            }
-            catch (AgentCoreException ex)
-            {
-                return ProblemResults.From(ex);
-            }
-        });
-
-        group.MapPost("/agent-instances/{instanceId:guid}/automation/registrations/{registrationId:guid}/model", async (
-            Guid instanceId,
-            Guid registrationId,
-            AdminSetRegistrationModelRequest? request,
-            AdminAutomationService automation,
-            CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                if (request is null || request.ExpectedRevision < 1)
-                {
-                    throw AgentCoreErrors.Validation("expectedRevision must be positive.");
-                }
-
-                var updated = await automation.SetModelOverrideAsync(
-                    instanceId,
-                    registrationId,
-                    request.ExpectedRevision,
-                    request.CatalogKey,
-                    request.ReasoningEffort,
-                    cancellationToken).ConfigureAwait(false);
-                return Results.Json(AdminHttpMapping.ToAutomationRegistration(updated));
             }
             catch (AgentCoreException ex)
             {

@@ -4,7 +4,7 @@
  */
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import {
-  seedActiveTriggerRegistration,
+  seedActiveAutomation,
   seedCompletedHistoricalWorkItem,
   seedIdentityLearnedMemory
 } from "./admin-lifecycle-sqlite";
@@ -104,7 +104,7 @@ async function fetchSessionView(
   return (await response.json()) as SessionView;
 }
 
-type AdminEventRow = { operation: string };
+type AdminEventRow = { operation: string; summary: { recordId?: string } };
 
 async function listAdminEvents(
   request: APIRequestContext,
@@ -179,7 +179,7 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
 
   const memoryContent = `seed-${Date.now()}`;
   seedIdentityLearnedMemory(instance.instanceId, firstSession.sessionId, "P7G identity fact", memoryContent);
-  const registrationId = seedActiveTriggerRegistration(
+  const automationId = seedActiveAutomation(
     instance.instanceId,
     firstSession.sessionId,
     scheduleIntent
@@ -199,14 +199,12 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
   });
 
   await page.getByRole("tab", { name: "Automation", exact: true }).click();
-  await page.getByRole("tab", { name: "Policies & models", exact: true }).click();
-  await memoryAutomation.getByRole("button", { name: "Review advanced registrations" }).click();
-  await expect(page.getByRole("tabpanel", { name: "Policies & models", exact: true }).getByText(scheduleIntent)).toBeVisible({ timeout: 15_000 });
-  await memoryAutomation.getByRole("button", { name: "Revoke" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Cancel registration" }).click();
-  await expect(memoryAutomation.getByText("No active or suspended registrations.")).toBeVisible({
-    timeout: 15_000
-  });
+  await page.getByRole("tab", { name: "Automations", exact: true }).click();
+  const automations = page.getByRole("region", { name: "Automations", exact: true });
+  await automations.getByRole("button", { name: `View automation: ${scheduleIntent}`, exact: true }).click();
+  await automations.getByRole("button", { name: "Delete automation", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Delete automation", exact: true }).click();
+  await expect(automations.getByText(/No automations yet/)).toBeVisible({ timeout: 15_000 });
 
   await page.getByRole("button", { name: /Chat$/ }).click();
   await page.getByRole("button", { name: "Start a new chat" }).click();
@@ -305,9 +303,9 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
   const registrationEvents = await listAdminEvents(
     request,
     page,
-    `targetType=trigger.registration&targetId=${registrationId}`
+    `targetType=agentInstance&targetId=${instance.instanceId}`
   );
-  expect(registrationEvents.some((item) => item.operation === "TriggerRegistrationRevoked")).toBe(true);
+  expect(registrationEvents.some((item) => item.operation === "AutomationChanged" && item.summary.recordId === automationId)).toBe(true);
 
   expect(failedRequests.filter((item) => !item.includes("favicon"))).toEqual([]);
   expect(

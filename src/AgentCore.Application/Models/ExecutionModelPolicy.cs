@@ -51,7 +51,7 @@ public static class ExecutionModelPolicy
         IModelCatalog catalog,
         AgentDefinition definition,
         AgentInstance instance,
-        TriggerRegistration? registration)
+        Automation? registration)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(definition);
@@ -103,7 +103,7 @@ public static class ExecutionModelPolicy
         IModelCatalog catalog,
         ExecutionModelPin pin,
         AgentDefinition definition,
-        TriggerRegistration? registration)
+        Automation? registration)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(pin);
@@ -141,7 +141,7 @@ public static class ExecutionModelPolicy
         string? effort,
         ExecutionModelSource source,
         AgentDefinition definition,
-        TriggerRegistration? registration)
+        Automation? registration)
     {
         var descriptor = catalog.Get(catalogKey);
         if (descriptor is null)
@@ -175,7 +175,7 @@ public static class ExecutionModelPolicy
         IModelCatalog catalog,
         ExecutionModelPin pin,
         AgentDefinition definition,
-        TriggerRegistration? registration)
+        Automation? registration)
     {
         var descriptor = catalog.Get(pin.CatalogKey);
         if (descriptor is null)
@@ -188,7 +188,7 @@ public static class ExecutionModelPolicy
             return new ExecutionModelDecision(pin, CapabilityCode);
         }
 
-        if ((RequiresBrowserTools(definition) || registration?.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought) && !descriptor.Tools)
+        if (!descriptor.Tools)
         {
             return new ExecutionModelDecision(pin, CapabilityCode);
         }
@@ -208,7 +208,7 @@ public static class ExecutionModelAdmission
         IAgentDefinitionStore? definitions,
         ITriggerStore store,
         TriggerOwner owner,
-        Guid? registrationId,
+        Guid? automationId,
         CancellationToken cancellationToken)
     {
         if (catalog is null || instances is null || definitions is null)
@@ -229,8 +229,8 @@ public static class ExecutionModelAdmission
             return new ExecutionModelDecision(null, ExecutionModelPolicy.UnavailableCode);
         }
 
-        TriggerRegistration? registration = null;
-        if (registrationId is Guid id)
+        Automation? registration = null;
+        if (automationId is Guid id)
         {
             registration = await store.GetAsync(owner, id, cancellationToken).ConfigureAwait(false);
         }
@@ -260,12 +260,12 @@ public static class ExecutionModelAdmission
             return new ExecutionModelDecision(occurrence.ModelPin, ExecutionModelPolicy.UnavailableCode);
         }
 
-        TriggerRegistration? registration = null;
-        if (occurrence.RegistrationId is Guid registrationId)
+        Automation? registration = null;
+        if (occurrence.AutomationId is Guid automationId)
         {
-            registration = await store.GetAsync(occurrence.Owner, registrationId, cancellationToken).ConfigureAwait(false);
+            registration = await store.GetAsync(occurrence.Owner, automationId, cancellationToken).ConfigureAwait(false);
         }
 
-        return ExecutionModelPolicy.Validate(catalog, occurrence.ModelPin, definition, occurrence.SourceKind == TriggerSourceKind.ThoughtActivation ? null : registration);
+        return ExecutionModelPolicy.Validate(catalog, occurrence.ModelPin, definition, registration);
     }
 }

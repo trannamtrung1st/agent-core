@@ -18,22 +18,15 @@ public static class DurableToolCallCheckpoint
     // Checkpoints are data, never HTML. Relaxed encoding keeps the compact terminal base64 alphabet unescaped.
     private static readonly JsonSerializerOptions CheckpointJson = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
-    private static readonly Lazy<int> ThoughtReserve = new(() => ComputeCompletionReserve(TriggerKind.ThoughtActivation));
-    private static readonly Lazy<int> OccurrenceReserve = new(() => ComputeCompletionReserve(TriggerKind.ScheduledOccurrence));
+    private static readonly Lazy<int> TerminalReserve = new(ComputeCompletionReserve);
     private static readonly Lazy<int> CapacityResponseReserve = new(ComputeFinishRequiredReserve);
-    public static int CompletionReserve(TriggerKind kind) => kind == TriggerKind.ThoughtActivation ? ThoughtReserve.Value : OccurrenceReserve.Value;
+    public static int CompletionReserve(TriggerKind kind) => TerminalReserve.Value;
     public static int FinishRequiredReserve() => CapacityResponseReserve.Value;
-
-    private static int ComputeCompletionReserve(TriggerKind kind)
+    private static int ComputeCompletionReserve()
     {
-        var contract = kind == TriggerKind.ThoughtActivation ? ThoughtCompletion.Contract
-            : ToolRegistry.All.Single(t => t.Name == ToolCatalog.WorkComplete).ModelDefinition;
-        using var schema = JsonDocument.Parse(contract.ParametersJson);
+        using var schema = JsonDocument.Parse(WorkCompletionRequest.Contract.ParametersJson);
         var max = schema.RootElement.GetProperty("properties").GetProperty("summary").GetProperty("maxLength").GetInt32();
-        var args = kind == TriggerKind.ThoughtActivation
-            ? JsonSerializer.Serialize(new { summary = new string('x', max), attentionRequired = true, outcome = "AttentionRequested" })
-            : JsonSerializer.Serialize(new { summary = new string('x', max), attentionRequired = false });
-        // Appending to a nonempty message array also adds one comma.
+        var args = JsonSerializer.Serialize(new { summary = new string('x', max), attentionRequired = true, outcome = "AttentionRequested" });
         return Encoding.UTF8.GetByteCount(Write([new(ModelRole.Assistant, "", ToolCalls:
             [new(CompletionCallId, ToolCatalog.WorkComplete, args)])])) - Encoding.UTF8.GetByteCount(Write([])) + 1;
     }
@@ -329,13 +322,11 @@ public static class DurableToolCallCheckpoint
                     var args = json.RootElement;
                     if (args.ValueKind != JsonValueKind.Object) return new(call.Id, call.Name, call.ArgumentsJson);
                     string summary; bool attention;
-                    var thought = args.TryGetProperty("outcome", out var outcome);
-                    if (thought ? ThoughtCompletion.TryParse(args, [], out var result, out attention, out _)
-                        : WorkCompletionRequest.TryParse(args, out result, out attention, out _))
+                    if (WorkCompletionRequest.TryParse(args, [], out var result, out attention, out _))
                     {
-                        summary = thought ? ThoughtCompletion.Summary(result) : result;
+                        summary = WorkCompletionRequest.Summary(result);
                         return new(call.Id, call.Name, null, new(Convert.ToBase64String(Encoding.Unicode.GetBytes(summary)), attention,
-                            thought ? outcome.GetString() : null));
+                            args.GetProperty("outcome").GetString()));
                     }
                 }
                 catch (JsonException) { }

@@ -9,7 +9,7 @@ public static class WorkLimits
     public const int MaxDefinitionIdCharacters = 128;
     public const int MaxModelFieldCharacters = 128;
     public const int MaxReasoningEffortCharacters = 64;
-    public const int MaxEvidenceBytes = 4096;
+    public const int MaxEvidenceBytes = 8192;
     public const int MaxDedupeKeyCharacters = 200;
     public const int MaxProgressCharacters = 500;
     public const int MaxFailureSummaryCharacters = 500;
@@ -42,8 +42,7 @@ public enum WorkSourceKind
 {
     Schedule = 0,
     ApplicationEvent = 1,
-    Retrospection = 2,
-    ThoughtActivation = 3
+    ManualInvocation = 2
 }
 
 public enum WorkSideEffectDisposition
@@ -115,7 +114,7 @@ public sealed class WorkProvenance
     public WorkProvenance(
         Guid sourceOccurrenceId,
         WorkSourceKind sourceKind,
-        Guid? registrationId,
+        Guid? automationId,
         Guid? sourceSessionId,
         Guid? sourceEventId,
         string dedupeKey,
@@ -137,7 +136,7 @@ public sealed class WorkProvenance
             throw new ArgumentException("Source kind is not valid.", nameof(sourceKind));
         }
 
-        WorkText.RequireOptionalId(registrationId, "Registration");
+        WorkText.RequireOptionalId(automationId, "Registration");
         WorkText.RequireOptionalId(sourceSessionId, "Source session");
         WorkText.RequireOptionalId(sourceEventId, "Source event");
         WorkTime.RequireUtc(observedAtUtc, "Observed");
@@ -149,7 +148,7 @@ public sealed class WorkProvenance
 
         SourceOccurrenceId = sourceOccurrenceId;
         SourceKind = sourceKind;
-        RegistrationId = registrationId;
+        AutomationId = automationId;
         SourceSessionId = sourceSessionId;
         SourceEventId = sourceEventId;
         DedupeKey = WorkText.RequireDedupeKey(dedupeKey);
@@ -172,7 +171,7 @@ public sealed class WorkProvenance
 
     public WorkSourceKind SourceKind { get; }
 
-    public Guid? RegistrationId { get; }
+    public Guid? AutomationId { get; }
 
     public Guid? SourceSessionId { get; }
 

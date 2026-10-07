@@ -224,7 +224,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                     cancellationToken).ConfigureAwait(false);
             }
 
-            if (await TableExistsAsync(connection, "TriggerRegistrations", cancellationToken).ConfigureAwait(false)
+            if (await TableExistsAsync(connection, "Automations", cancellationToken).ConfigureAwait(false)
                 && await TableExistsAsync(connection, "TriggerOccurrences", cancellationToken).ConfigureAwait(false))
             {
                 await db.Database.ExecuteSqlRawAsync(
@@ -392,6 +392,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                     """, cancellationToken).ConfigureAwait(false);
             }
 
+            if (await ColumnExistsAsync(connection, "Automations", "TriggerKind", cancellationToken).ConfigureAwait(false))
+                await db.Database.ExecuteSqlRawAsync("INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ('20261007072939_UnifiedAutomation', '10.0.12');", cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -1407,7 +1409,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 cancellationToken).ConfigureAwait(false);
         }
 
-        if (await ColumnExistsAsync(connection, "TriggerRegistrations", "ModelOverrideCatalogKey", cancellationToken)
+        if (await ColumnExistsAsync(connection, "Automations", "ModelOverrideCatalogKey", cancellationToken)
             .ConfigureAwait(false))
         {
             await db.Database.ExecuteSqlRawAsync(

@@ -19,7 +19,7 @@ public sealed class OwnerAttentionTests
         var store = new InMemoryWorkItemStore();
         var outcome = await RunAsync(
             store,
-            ToolRound(Call(ToolCatalog.WorkComplete, """{"summary":"Nothing needs attention.","attentionRequired":false}""")));
+            ToolRound(Call(ToolCatalog.WorkComplete, """{"summary":"Nothing needs attention.","attentionRequired":false,"outcome":"ActionCompleted"}""")));
         var completed = Assert.IsType<DurableOccurrenceCompleted>(outcome);
         Assert.False(completed.AttentionRequired);
         var saved = await store.CompleteAsync(
@@ -41,10 +41,10 @@ public sealed class OwnerAttentionTests
             store,
             ToolRound(Call(
                 ToolCatalog.WorkComplete,
-                """{"summary":"Two orders need review.","attentionRequired":true}""")));
+                """{"summary":"Two orders need review.","attentionRequired":true,"outcome":"AttentionRequested"}""")));
         var completed = Assert.IsType<DurableOccurrenceCompleted>(outcome);
         Assert.True(completed.AttentionRequired);
-        Assert.Equal("Two orders need review.", completed.Text);
+        Assert.Equal("Two orders need review.", WorkCompletionRequest.Summary(completed.Text));
         var saved = await store.CompleteAsync(
             completed.Running.WorkItemId,
             completed.Running.Revision,
@@ -77,7 +77,7 @@ public sealed class OwnerAttentionTests
                 """{"summary":"Tell Sam.","attentionRequired":true,"recipient":"sam@example.com"}""")));
         var failed = Assert.IsType<DurableOccurrenceFailed>(rejected);
         Assert.Equal("invalid-completion", failed.Code);
-        Assert.Contains("recipient", failed.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("completion", failed.Summary, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(await store.ListAttentionAlertKeysAsync(WorkId));
         Assert.Null((await store.GetAsync(new WorkOwner(OwnerId, ProfileId), WorkId))!.Result);
 
@@ -145,10 +145,10 @@ public sealed class OwnerAttentionTests
             store,
             ToolRound(Call(
                 ToolCatalog.WorkComplete,
-                """{"summary":"A payment failed.","attentionRequired":true}""")));
+                """{"summary":"A payment failed.","attentionRequired":true,"outcome":"AttentionRequested"}""")));
         var completed = Assert.IsType<DurableOccurrenceCompleted>(outcome);
         Assert.True(completed.AttentionRequired);
-        Assert.Equal("A payment failed.", completed.Text);
+        Assert.Equal("A payment failed.", WorkCompletionRequest.Summary(completed.Text));
     }
 
     private static async Task<DurableOccurrenceOutcome> RunAsync(

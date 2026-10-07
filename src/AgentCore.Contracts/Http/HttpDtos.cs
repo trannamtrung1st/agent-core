@@ -256,18 +256,19 @@ public sealed record KnowledgeDocumentResponse(
 
 public sealed record WorkspaceNodeResponse(string LogicalPath, bool Directory, long ByteSize, bool Writable);
 
-public sealed record TriggerScheduleResponse(
-    string RegistrationId,
-    string Intent,
+public sealed record SessionAutomationResponse(
+    string AutomationId,
+    string Instructions,
     string Status,
-    string ScheduleKind,
-    string TimeZone,
-    string Schedule,
+    string TriggerKind,
+    string? TimeZone,
+    string When,
     string? NextOccurrenceAt,
     long Revision,
-    string? SuspensionReason = null);
+    string? SuspensionReason = null,
+    string Name = "");
 
-public sealed record TriggerScheduleListResponse(IReadOnlyList<TriggerScheduleResponse> Items);
+public sealed record SessionAutomationListResponse(IReadOnlyList<SessionAutomationResponse> Items);
 
 public sealed record CancelTriggerRequest(long ExpectedRevision);
 
@@ -292,7 +293,7 @@ public sealed record WorkItemResponse(
     bool AttentionRequired = false,
     int? AttemptCount = null,
     int? MaxAttempts = null,
-    string? SourceId = null, string? RegistrationId = null, string? ModelKey = null, string? ThoughtOutcome = null, string? Intent = null);
+    string? SourceId = null, string? AutomationId = null, string? ModelKey = null, string? Outcome = null, string? Instructions = null, string? AutomationName = null, string? TriggerSummary = null);
 
 public sealed record WorkItemListResponse(IReadOnlyList<WorkItemResponse> Items);
 

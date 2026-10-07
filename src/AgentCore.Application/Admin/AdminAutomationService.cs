@@ -13,9 +13,9 @@ public sealed record AdminAutomationProvenance(
     DateTimeOffset UpdatedAt);
 
 public sealed record AdminAutomationRegistration(
-    Guid RegistrationId,
+    Guid AutomationId,
     string Intent,
-    TriggerRegistrationStatus Status,
+    AutomationStatus Status,
     string ScheduleKind,
     string TimeZoneId,
     string ScheduleSummary,
@@ -29,7 +29,7 @@ public sealed record AdminAutomationRegistration(
 
 public sealed class AdminAutomationService(
     IAgentInstanceStore instances,
-    ITriggerRegistrationService triggers,
+    IAutomationService triggers,
     ILocalUserProfileService localProfiles,
     IModelCatalog? modelCatalog = null)
 {
@@ -45,9 +45,9 @@ public sealed class AdminAutomationService(
         var rows = await triggers.ListAsync(owner, status: null, cancellationToken).ConfigureAwait(false);
         return rows
             .Where(row => row.EventSourceId is null)
-            .Where(row => row.Status is TriggerRegistrationStatus.Active or TriggerRegistrationStatus.SuspendedPolicy)
+            .Where(row => row.Status is AutomationStatus.Active or AutomationStatus.SuspendedPolicy)
             .OrderByDescending(row => row.Provenance.CreatedAt)
-            .ThenByDescending(row => row.RegistrationId)
+            .ThenByDescending(row => row.AutomationId)
             .Take(MaxRegistrations)
             .Select(row => Map(instance, row))
             .ToArray();
@@ -55,7 +55,7 @@ public sealed class AdminAutomationService(
 
     public async ValueTask<AdminAutomationRegistration> SetModelOverrideAsync(
         Guid instanceId,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         string? catalogKey,
         string? reasoningEffort,
@@ -72,7 +72,7 @@ public sealed class AdminAutomationService(
         var owner = new TriggerOwner(instanceId, profile.ProfileId);
         var updated = await triggers.SetModelOverrideAsync(
             owner,
-            registrationId,
+            automationId,
             expectedRevision,
             catalogKey,
             reasoningEffort,
@@ -82,35 +82,35 @@ public sealed class AdminAutomationService(
 
     public async ValueTask<AdminAutomationRegistration> GetRegistrationAsync(
         Guid instanceId,
-        Guid registrationId,
+        Guid automationId,
         CancellationToken cancellationToken = default)
     {
         var instance = await RequireManagedInstanceAsync(instanceId, cancellationToken).ConfigureAwait(false);
         var profile = await localProfiles.GetLocalProfileAsync(cancellationToken).ConfigureAwait(false);
         var owner = new TriggerOwner(instanceId, profile.ProfileId);
-        var existing = await triggers.GetAsync(owner, registrationId, cancellationToken).ConfigureAwait(false)
+        var existing = await triggers.GetAsync(owner, automationId, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound("Trigger registration was not found.");
         return Map(instance, existing);
     }
 
     public async ValueTask<AdminAutomationRegistration> CancelRegistrationAsync(
         Guid instanceId,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         CancellationToken cancellationToken = default)
     {
         var instance = await RequireManagedInstanceAsync(instanceId, cancellationToken).ConfigureAwait(false);
         var profile = await localProfiles.GetLocalProfileAsync(cancellationToken).ConfigureAwait(false);
         var owner = new TriggerOwner(instanceId, profile.ProfileId);
-        var existing = await triggers.GetAsync(owner, registrationId, cancellationToken).ConfigureAwait(false)
+        var existing = await triggers.GetAsync(owner, automationId, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound("Trigger registration was not found.");
-        if (existing.Status is TriggerRegistrationStatus.Completed or TriggerRegistrationStatus.Cancelled)
+        if (existing.Status is AutomationStatus.Completed or AutomationStatus.Cancelled)
         {
             throw AgentCoreErrors.Conflict("Trigger registration is no longer cancellable.");
         }
 
         var cancelled = await triggers
-            .CancelAsync(owner, registrationId, expectedRevision, cancellationToken)
+            .CancelAsync(owner, automationId, expectedRevision, cancellationToken)
             .ConfigureAwait(false);
         return Map(instance, cancelled);
     }
@@ -122,7 +122,7 @@ public sealed class AdminAutomationService(
         return instance;
     }
 
-    private static AdminAutomationRegistration Map(AgentInstance instance, TriggerRegistration registration)
+    private static AdminAutomationRegistration Map(AgentInstance instance, Automation registration)
     {
         var (kind, zone, summary) = DescribeSchedule(registration.Schedule);
         var source = !string.IsNullOrWhiteSpace(registration.ModelOverrideCatalogKey)
@@ -131,8 +131,8 @@ public sealed class AdminAutomationService(
                 ? "Unattended default"
                 : "Conversation default";
         return new AdminAutomationRegistration(
-            registration.RegistrationId,
-            registration.Intent,
+            registration.AutomationId,
+            registration.Instructions,
             registration.Status,
             kind,
             zone,

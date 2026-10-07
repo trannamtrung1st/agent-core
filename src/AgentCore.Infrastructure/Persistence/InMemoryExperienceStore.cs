@@ -83,7 +83,7 @@ public sealed partial class InMemoryExperienceStore(InMemoryAdminEventStore? eve
         records[r.ExperienceId] = r with { Visibility = ExperienceVisibility.Deleted, Content = null, Revision = r.Revision + 1 }; }
         return ValueTask.CompletedTask; }
     internal void Purge(Guid id)
-    { lock (gate) { settings.Remove(id); maintenanceSettings.Remove(id); continuitySettings.Remove(id); foreach (var r in records.Values.Where(r => r.AgentInstanceId == id).ToArray()) records.Remove(r.ExperienceId); } }
+    { lock (gate) { settings.Remove(id); maintenanceSettings.Remove(id); foreach (var r in records.Values.Where(r => r.AgentInstanceId == id).ToArray()) records.Remove(r.ExperienceId); } }
     private AgentExperience Required(Guid id, Guid recordId) => records.GetValueOrDefault(recordId) is { } r && r.AgentInstanceId == id
         ? r : throw AgentCoreErrors.NotFound("Experience was not found.");
 }

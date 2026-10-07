@@ -77,7 +77,7 @@ public static class OccurrenceCompatibility
     public const string ApplicationEvent = "applicationEvent";
 
     public static string SourceName(TriggerSourceKind sourceKind) =>
-        sourceKind is TriggerSourceKind.Schedule or TriggerSourceKind.ThoughtActivation ? Schedule : ApplicationEvent;
+        sourceKind is TriggerSourceKind.Schedule or TriggerSourceKind.ManualInvocation ? Schedule : ApplicationEvent;
 
     public static bool Allows(AgentDefinition definition, TriggerSourceKind sourceKind)
     {
@@ -172,7 +172,7 @@ public sealed class TriggerOccurrenceRouter(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var decision = await guard.EvaluateAsync(occurrence.Owner, occurrence.SourceKind, cancellationToken)
+        var decision = await guard.EvaluateAsync(occurrence.Owner, AutomationRules.AdmissionSource(occurrence), cancellationToken)
             .ConfigureAwait(false);
         if (decision.Kind == TriggerAdmissionDecisionKind.Suspend)
         {
@@ -181,12 +181,12 @@ public sealed class TriggerOccurrenceRouter(
             return;
         }
 
-        if (occurrence.RegistrationId is Guid registrationId)
+        if (occurrence.AutomationId is Guid automationId)
         {
-            var registration = await store.GetAsync(occurrence.Owner, registrationId, cancellationToken).ConfigureAwait(false);
-            if (registration is null || registration.Status is TriggerRegistrationStatus.Cancelled
-                or TriggerRegistrationStatus.Expired
-                or TriggerRegistrationStatus.SuspendedPolicy)
+            var registration = await store.GetAsync(occurrence.Owner, automationId, cancellationToken).ConfigureAwait(false);
+            if (registration is null || registration.Status is AutomationStatus.Cancelled
+                or AutomationStatus.Expired
+                or AutomationStatus.SuspendedPolicy or AutomationStatus.Disabled)
             {
                 await store.TryRejectPendingAsync(occurrence.OccurrenceId, "Registration is no longer active.", now, cancellationToken)
                     .ConfigureAwait(false);
@@ -194,13 +194,7 @@ public sealed class TriggerOccurrenceRouter(
                 return;
             }
 
-            if (!ScheduleRegistrationRules.IsManual(occurrence) && occurrence.SourceKind != TriggerSourceKind.ThoughtActivation && occurrence.ScheduleRevision != registration.ScheduleRevision)
-            {
-                await store.TryRejectPendingAsync(occurrence.OccurrenceId, "Schedule was superseded.", now, cancellationToken)
-                    .ConfigureAwait(false);
-                RuntimeTelemetry.RecordTriggerScheduler("rejected");
-                return;
-            }
+
         }
 
         var pinned = await EnsureModelAsync(occurrence, now, cancellationToken).ConfigureAwait(false);
@@ -210,7 +204,7 @@ public sealed class TriggerOccurrenceRouter(
         }
 
         occurrence = pinned;
-        var targets = occurrence.SourceKind == TriggerSourceKind.ThoughtActivation || ScheduleRegistrationRules.IsManual(occurrence)
+        var targets = occurrence.AutomationId is not null || AutomationRules.IsManual(occurrence)
             ? (IReadOnlyList<LiveOccurrenceTarget>)[] : directory.ListCompatible(occurrence.Owner, occurrence.SourceKind);
         var claimId = ids.NewId();
         var claimed = await store.TryClaimOccurrenceAsync(
@@ -253,7 +247,7 @@ public sealed class TriggerOccurrenceRouter(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var targets = occurrence.SourceKind == TriggerSourceKind.ThoughtActivation || ScheduleRegistrationRules.IsManual(occurrence)
+        var targets = occurrence.AutomationId is not null || AutomationRules.IsManual(occurrence)
             ? (IReadOnlyList<LiveOccurrenceTarget>)[] : directory.ListCompatible(occurrence.Owner, occurrence.SourceKind);
         var leaseExpired = occurrence.ClaimLeaseExpiresAtUtc is DateTimeOffset lease && lease <= now;
         if (!leaseExpired)
@@ -415,7 +409,7 @@ public sealed class TriggerOccurrenceRouter(
                 definitions,
                 store,
                 occurrence.Owner,
-                occurrence.RegistrationId,
+                occurrence.AutomationId,
                 cancellationToken).ConfigureAwait(false);
             if (resolved is null || resolved.Pin is null)
             {
@@ -465,14 +459,14 @@ public sealed class TriggerOccurrenceRouter(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        if (occurrence.RegistrationId is Guid registrationId)
+        if (occurrence.AutomationId is Guid automationId)
         {
-            var registration = await store.GetAsync(occurrence.Owner, registrationId, cancellationToken).ConfigureAwait(false);
-            if (registration is { Status: TriggerRegistrationStatus.Active })
+            var registration = await store.GetAsync(occurrence.Owner, automationId, cancellationToken).ConfigureAwait(false);
+            if (registration is { Status: AutomationStatus.Active })
             {
                 await store.SuspendPolicyAsync(
                     occurrence.Owner,
-                    registrationId,
+                    automationId,
                     registration.Revision,
                     reason,
                     now,
@@ -527,7 +521,7 @@ public sealed class DurableOrderEventIngress(
             definitions,
             store,
             owner,
-            registrationId: null,
+            automationId: null,
             cancellationToken).ConfigureAwait(false);
         if (pin is { FailureCode: not null, Pin: null })
         {

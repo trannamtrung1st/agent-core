@@ -5,16 +5,15 @@ namespace AgentCore.Application.Tools;
 public static class ToolResources
 {
     public static bool IsOccurrence(TriggerKind kind) =>
-        kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent or TriggerKind.ThoughtActivation;
+        kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent or TriggerKind.ManualInvocation;
 
     public static bool IsSessionTool(string toolName) =>
         ToolRegistry.TryGet(toolName, out var descriptor) && descriptor.Scope == ToolResourceScope.Session;
 
     public static bool IsTriggerWrite(string toolName) =>
         toolName is ToolCatalog.TriggerScheduleOnce
-            or ToolCatalog.TriggerScheduleRecurring
             or ToolCatalog.TriggerUpdate
-            or ToolCatalog.TriggerCancel;
+            or ToolCatalog.TriggerCancel or ToolCatalog.AutomationRun or ToolCatalog.AutomationDisable;
 }
 
 public enum ToolResourceScope
@@ -47,9 +46,9 @@ public sealed record ToolDescriptor(
     ToolReplaySafety ReplaySafety = ToolReplaySafety.ReplaySafe)
 {
     public string Name => ModelDefinition.Name;
-    public string Category => Name.StartsWith("trigger.", StringComparison.Ordinal) ? "scheduling" : Name.Split('.')[0];
+    public string Category => Name.Split('.')[0];
     public string Summary => ModelDefinition.Description.Length <= 240 ? ModelDefinition.Description : ModelDefinition.Description[..240];
-    public IReadOnlyList<string> Tags => Category switch { "browser" => ["website", "navigate", "interact"], "email" => ["mail", "messages", "draft", "send"], "scheduling" => ["schedule", "reminder"], _ => [Category] };
+    public IReadOnlyList<string> Tags => Category switch { "browser" => ["website", "navigate", "interact"], "email" => ["mail", "messages", "draft", "send"], "automation" => ["schedule", "event", "reminder"], _ => [Category] };
     public bool DefinitionAuthorizable => OfferRule is ToolOfferRule.RoleAllowlist
         or ToolOfferRule.ConfigurationWhenRoleAllows or ToolOfferRule.SessionAttachmentsWhenRoleAllows;
     public bool Discoverable => OfferRule is ToolOfferRule.RoleAllowlist or ToolOfferRule.ConfigurationWhenRoleAllows;

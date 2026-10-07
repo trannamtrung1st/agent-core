@@ -142,10 +142,10 @@ public static class AdminEventSummaryPolicy
         "sessionId"
     };
 
-    private static readonly HashSet<string> TriggerRegistrationRevokedSummaryPropertyNames = new(StringComparer.Ordinal)
+    private static readonly HashSet<string> AutomationRevokedSummaryPropertyNames = new(StringComparer.Ordinal)
     {
         "instanceId",
-        "registrationId",
+        "automationId",
         "revision"
     };
 
@@ -200,9 +200,9 @@ public static class AdminEventSummaryPolicy
                 throw AgentCoreErrors.Validation("Admin event summary metadata must be a JSON object.");
             }
 
-            if (append.Operation is AdminEventOperationKind.ExperienceChanged or AdminEventOperationKind.ThoughtRegistrationChanged or AdminEventOperationKind.ScheduleRegistrationChanged)
+            if (append.Operation is AdminEventOperationKind.ExperienceChanged or AdminEventOperationKind.AutomationChanged)
             {
-                var allowed = new HashSet<string>(StringComparer.Ordinal) { "instanceId", "recordId", "operation", "revision", "enabled", "intervalSeconds", "promptHash", "modelKey" };
+                var allowed = new HashSet<string>(StringComparer.Ordinal) { "instanceId", "recordId", "operation", "revision", "enabled", "instructionsHash", "modelKey" };
                 foreach (var property in document.RootElement.EnumerateObject())
                     if (!allowed.Contains(property.Name)) throw AgentCoreErrors.Validation("Unsupported continuity history metadata.");
                 RequireString(document.RootElement, "instanceId");
@@ -289,9 +289,9 @@ public static class AdminEventSummaryPolicy
                 return;
             }
 
-            if (append.Operation == AdminEventOperationKind.TriggerRegistrationRevoked)
+            if (append.Operation == AdminEventOperationKind.AutomationRevoked)
             {
-                ValidateTriggerRegistrationRevokedSummary(document.RootElement);
+                ValidateAutomationRevokedSummary(document.RootElement);
                 return;
             }
 
@@ -409,11 +409,11 @@ public static class AdminEventSummaryPolicy
         RequireNullableGuidString(root, "sessionId");
     }
 
-    private static void ValidateTriggerRegistrationRevokedSummary(JsonElement root)
+    private static void ValidateAutomationRevokedSummary(JsonElement root)
     {
-        EnsureExactProperties(root, TriggerRegistrationRevokedSummaryPropertyNames);
+        EnsureExactProperties(root, AutomationRevokedSummaryPropertyNames);
         RequireString(root, "instanceId");
-        RequireString(root, "registrationId");
+        RequireString(root, "automationId");
         if (!root.TryGetProperty("revision", out var revision) || revision.ValueKind != JsonValueKind.Number)
         {
             throw AgentCoreErrors.Validation("Trigger registration revoked event summary must include revision.");

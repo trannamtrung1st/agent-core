@@ -26,7 +26,7 @@ public static class ToolPolicy
         if (descriptor.OfferRule == ToolOfferRule.IdentityMaintenanceAuthority)
             return admission is { AgentInstanceId: not null, SupportsTools: true }
                 && (admission is { Detached: false, TriggerKind: TriggerKind.UserTurn }
-                    || admission is { Detached: true, TriggerKind: TriggerKind.ThoughtActivation })
+                    || admission.Detached && ToolResources.IsOccurrence(admission.TriggerKind))
                 ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
 
         if (descriptor.OfferRule == ToolOfferRule.ContinuityAuthority)
@@ -37,9 +37,9 @@ public static class ToolPolicy
         {
             if (admission is not { AgentInstanceId: not null, SupportsTools: true }
                 || !((!admission.Detached && admission.TriggerKind == TriggerKind.UserTurn)
-                    || (admission.Detached && admission.TriggerKind == TriggerKind.ThoughtActivation))
+                    || (admission.Detached && ToolResources.IsOccurrence(admission.TriggerKind)))
                 || !HarnessChatTools.Allows(toolName, admission.Harness)) return ToolPolicyDecision.Deny;
-            if (admission.TriggerKind == TriggerKind.ThoughtActivation && toolName is "harness.tool.select" or "harness.tool.configure")
+            if (ToolResources.IsOccurrence(admission.TriggerKind) && toolName is "harness.tool.select" or "harness.tool.configure")
                 return ToolPolicyDecision.Deny;
             return HarnessChatTools.NeedsApproval(toolName, admission.Harness!) && grant is null
                 ? ToolPolicyDecision.RequireApproval : ToolPolicyDecision.Allow;
@@ -107,7 +107,7 @@ public static class ToolPolicy
         if (admission?.Detached == true
             && descriptor.Scope == ToolResourceScope.Session
             && !(ToolCatalog.IsBrowserTool(toolName) && UnattendedBrowser(admission))
-            && !(HarnessChatTools.IsHarness(toolName) && admission.TriggerKind == TriggerKind.ThoughtActivation))
+            && !(HarnessChatTools.IsHarness(toolName) && ToolResources.IsOccurrence(admission.TriggerKind)))
         {
             return ToolPolicyDecision.Deny;
         }
@@ -153,7 +153,7 @@ public static class ToolPolicy
         if (context?.DetachedExecution == true
             && descriptor.Scope == ToolResourceScope.Session
             && !(ToolCatalog.IsBrowserTool(descriptor.Name) && UnattendedBrowser(context))
-            && !(HarnessChatTools.IsHarness(descriptor.Name) && context.Trigger.Kind == TriggerKind.ThoughtActivation))
+            && !(HarnessChatTools.IsHarness(descriptor.Name) && ToolResources.IsOccurrence(context.Trigger.Kind)))
         {
             return false;
         }
@@ -170,18 +170,18 @@ public static class ToolPolicy
         if (descriptor.OfferRule == ToolOfferRule.IdentityMaintenanceAuthority)
             return context is { ModelSupportsTools: true } && !string.IsNullOrEmpty(context.ContinuityContext)
                 && (context is { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn }
-                    || context is { DetachedExecution: true, Trigger.Kind: TriggerKind.ThoughtActivation, AllowAgentConsolidation: true }
+                    || context is { DetachedExecution: true, AllowAgentConsolidation: true } && ToolResources.IsOccurrence(context.Trigger.Kind)
                         && descriptor.Name != ToolCatalog.MemoryForget);
 
         if (descriptor.OfferRule == ToolOfferRule.ContinuityAuthority)
             return context is { ModelSupportsTools: true } && !string.IsNullOrEmpty(context.ContinuityContext);
         if (descriptor.OfferRule == ToolOfferRule.ExperienceAuthority)
-            return context is { ModelSupportsTools: true } && !string.IsNullOrEmpty(context.ExperienceContext);
+            return context is { AgentInstanceId: not null, ModelSupportsTools: true };
         if (descriptor.OfferRule == ToolOfferRule.HarnessAuthority)
             return context is { ModelSupportsTools: true }
                 && ((!context.DetachedExecution && context.Trigger.Kind == TriggerKind.UserTurn)
-                    || (context.DetachedExecution && context.Trigger.Kind == TriggerKind.ThoughtActivation))
-                && !(context.Trigger.Kind == TriggerKind.ThoughtActivation && descriptor.Name is "harness.tool.select" or "harness.tool.configure")
+                    || (context.DetachedExecution && ToolResources.IsOccurrence(context.Trigger.Kind)))
+                && !(ToolResources.IsOccurrence(context.Trigger.Kind) && descriptor.Name is "harness.tool.select" or "harness.tool.configure")
                 && HarnessChatTools.Allows(descriptor.Name, context.Harness);
 
         if (descriptor.Name == ToolCatalog.CapabilitiesLoad)

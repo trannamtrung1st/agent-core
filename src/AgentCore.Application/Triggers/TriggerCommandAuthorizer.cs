@@ -62,7 +62,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex RecurringIntervalImperative = new(
-        @"\bevery\s+(\d+\s+)?(second|seconds|sec|secs|minute|minutes|min|mins|hour|hours|hr|hrs|day|days|week|weeks)\b\s*(,)?\s*\b(update|check|run|write|overwrite|refresh|sync|set|save|send|post|fetch|ping|execute|perform|create|modify|edit|append|replace|delete|remove)\b",
+        @"\bevery\s+(\d+\s+)?(second|seconds|sec|secs|minute|minutes|min|mins|hour|hours|hr|hrs|day|days|week|weeks)\b\s*(,)?\s*\b(review|capture|consolidate|update|check|run|write|overwrite|refresh|sync|set|save|send|post|fetch|ping|execute|perform|create|modify|edit|append|replace|delete|remove)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex AgentDirectedCreateVi = new(
@@ -70,7 +70,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex ListIntent = new(
-        @"\b(show|list|display)\b.{0,30}\b(my\s+)?(reminder|reminders|schedule|schedules)\b|\bwhat\b.{0,30}\b(reminder|reminders|scheduled)\b|\bwhat do i have scheduled\b|\bwhat'?s on my schedule\b",
+        @"\b(show|list|display)\b.{0,30}\b(my\s+)?(automation|automations|reminder|reminders|schedule|schedules)\b|\bwhat\b.{0,30}\b(reminder|reminders|scheduled)\b|\bwhat do i have scheduled\b|\bwhat'?s on my schedule\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex ListIntentVi = new(
@@ -78,11 +78,11 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex UpdateIntent = new(
-        @"\b(move|reschedule|change|shift|push|delay|postpone|bump)\b.{0,30}\b(that|the|this|it|reminder|schedule)\b|\b(move|reschedule)\b.{0,20}\bto\b|\bmove it to\b",
+        @"\b(update|edit|move|reschedule|change|shift|push|delay|postpone|bump)\b.{0,30}\b(that|the|this|it|reminder|schedule|automation)\b|\b(move|reschedule)\b.{0,20}\bto\b|\bmove it to\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex CancelIntent = new(
-        @"\b(cancel|delete|remove|drop|clear|stop)\b.{0,30}\b(that|the|this|it|reminder|schedule)\b|\bdelete that reminder\b|\bcancel that reminder\b",
+        @"\b(cancel|delete|remove|drop|clear|stop)\b.{0,30}\b(that|the|this|it|reminder|schedule|automation)\b|\bdelete that reminder\b|\bcancel that reminder\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex NegatedCreate = new(
@@ -108,6 +108,9 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
         {
             return ValueTask.FromResult(TriggerCommandAuthorizationDecision.Deny);
         }
+
+        if (Regex.IsMatch(text, @"\b(don'?t|do not|never)\b.{0,30}\b(create|set|configure|update|edit|change|cancel|delete|remove|stop)\b", RegexOptions.IgnoreCase))
+            return ValueTask.FromResult(TriggerCommandAuthorizationDecision.Deny);
 
         var allowed = requestedAction switch
         {
@@ -197,7 +200,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
             return true;
         }
 
-        return AgentDirectedCreate.IsMatch(text);
+        return AgentDirectedCreate.IsMatch(text) || Regex.IsMatch(text, @"\b(create|set up|configure)\b.{0,50}\bautomation\b|\bwhen\b.{0,40}\border\b.{0,40}\b(placed|created|arrives)\b.{0,80}\b(review|check|notify|run)\b", RegexOptions.IgnoreCase);
     }
 
     internal static bool MatchesList(string text, string? conversationLanguage) =>

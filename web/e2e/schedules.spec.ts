@@ -47,22 +47,22 @@ test("create a schedule in chat, refresh the list, and cancel it", async ({ page
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Scheduled Call John.")).toBeVisible({ timeout: 15_000 });
 
-  await page.getByRole("button", { name: "Schedules" }).click();
-  const drawer = page.getByRole("dialog", { name: "Schedules" });
+  await page.getByRole("button", { name: "Automations" }).click();
+  const drawer = page.getByRole("dialog", { name: "Automations" });
   await expect(drawer.getByText("Call John").first()).toBeVisible();
   await expect(drawer.getByText("Active").first()).toBeVisible();
   await page.keyboard.press("Escape");
 
   await page.reload();
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
-  await page.getByRole("button", { name: "Schedules" }).click();
+  await page.getByRole("button", { name: "Automations" }).click();
   await expect(drawer.getByText("Call John").first()).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 800 });
   await expect(page.getByRole("navigation", { name: "Chats" })).toBeHidden();
   await expect(drawer.getByText("Call John").first()).toBeVisible();
 
-  await page.route("**/triggers/*/cancel", async (route) => {
+  await page.route("**/automations/*/cancel", async (route) => {
     await route.fulfill({
       status: 409,
       contentType: "application/problem+json",
@@ -70,12 +70,12 @@ test("create a schedule in chat, refresh the list, and cancel it", async ({ page
     });
   });
   await drawer.getByRole("button", { name: "Cancel Call John" }).first().click();
-  await page.getByRole("button", { name: "Cancel schedule" }).click();
+  await page.getByRole("button", { name: "Delete automation" }).click();
   await expect(drawer.getByText("Registration revision is stale.")).toBeVisible();
-  await page.unroute("**/triggers/*/cancel");
+  await page.unroute("**/automations/*/cancel");
 
   await drawer.getByRole("button", { name: "Cancel Call John" }).first().click();
-  await page.getByRole("button", { name: "Cancel schedule" }).click();
+  await page.getByRole("button", { name: "Delete automation" }).click();
   await expect(drawer.getByText("Cancelled").first()).toBeVisible({ timeout: 15_000 });
   await expect(page.locator(".conversation-scroll")).toBeVisible();
   const unexpectedConsole = consoleErrors.filter(

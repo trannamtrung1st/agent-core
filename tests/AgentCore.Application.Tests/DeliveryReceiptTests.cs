@@ -51,6 +51,7 @@ public sealed class DeliveryReceiptTests
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("Hello");
         await output.WaitForAsync(item => item.Payload is TextDeltaOutput);
+        await runtime.WaitUntilMailboxDrainedAsync();
         var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
         Assert.Equal("T1", assistant.Text);
         Assert.Equal(0, assistant.ReceivedTextEndExclusive);

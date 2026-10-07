@@ -24,7 +24,7 @@ public sealed partial class SessionToolExecutor(
     IEmailProvider? emailProvider = null,
     IHttpRequestClient? httpRequestClient = null,
     IToolConfigurationGate? configurationGate = null,
-    ITriggerRegistrationService? triggerRegistrations = null,
+    IAutomationService? triggerRegistrations = null,
     ITriggerCommandAuthorizer? triggerAuthorizer = null,
     IAgentInstanceStore? agentInstances = null,
     IAgentDefinitionStore? agentDefinitions = null,
@@ -37,7 +37,8 @@ public sealed partial class SessionToolExecutor(
     AgentCore.Application.Continuity.ContinuityService? continuity = null,
     AgentCore.Application.Continuity.IdentityMaintenanceService? identityMaintenance = null,
     AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null,
-    AgentCore.Application.Credentials.CredentialService? credentials = null)
+    AgentCore.Application.Credentials.CredentialService? credentials = null,
+    AdminAutomationAuthoringService? automationAuthoring = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -59,10 +60,11 @@ public sealed partial class SessionToolExecutor(
 
     public ValueTask<string> ExperienceContextAsync(Guid? instanceId, CancellationToken ct) =>
         experience?.RecallAsync(instanceId, ct) ?? ValueTask.FromResult("");
+    public ValueTask<string> SelectedExperienceContextAsync(Guid instanceId, Guid workId, CancellationToken ct) =>
+        experience?.SelectedSourceAsync(instanceId, workId, ct) ?? ValueTask.FromResult("");
     public ValueTask<string> ContinuityContextAsync(Guid? instanceId, string? query, Guid? sessionId, AgentDefinition definition, CancellationToken ct) =>
         continuity?.ContextAsync(instanceId, query, sessionId, definition, ct) ?? ValueTask.FromResult("");
-    public ValueTask ExperienceBoundaryAsync(Guid instanceId, Guid sessionId, CancellationToken ct) =>
-        experience?.TrySessionBoundaryAsync(instanceId, sessionId, ct) ?? ValueTask.CompletedTask;
+
 
     public async ValueTask<HarnessChatContext?> HarnessContextAsync(Guid? instanceId, CancellationToken ct)
     {
@@ -161,7 +163,7 @@ public sealed partial class SessionToolExecutor(
 
         if (admission?.Detached == true
             && ToolResources.IsSessionTool(call.Name)
-            && !(HarnessChatTools.IsHarness(call.Name) && admission.TriggerKind == TriggerKind.ThoughtActivation)
+            && !(HarnessChatTools.IsHarness(call.Name) && ToolResources.IsOccurrence(admission.TriggerKind))
             && !(ToolCatalog.IsBrowserTool(call.Name)
                 && ToolResources.IsOccurrence(admission.TriggerKind)
                 && admission.AgentInstanceId is Guid agentInstanceId
@@ -296,6 +298,54 @@ public sealed partial class SessionToolExecutor(
                 return FitResult(Math.Min(remainingOutputBytes, 6000), AgentCore.Application.Continuity.ContinuityService.Serialize(new {
                     trust = AgentCore.Application.Continuity.ContinuityService.TrustLabel, result }));
             }
+            if (call.Name == AgentCore.Application.Experience.ExperienceService.SourceTool)
+            {
+                if (experience is null || admission?.AgentInstanceId is not Guid ownerId || admission.WorkItemId is not Guid runId)
+                    return TextResult(Error("forbidden", "Experience source inspection requires an owned Run."));
+                using var source = JsonDocument.Parse(await experience.InspectSourceAsync(ownerId, runId, args, cancellationToken));
+                var root = source.RootElement;
+                return TextResult(ToolJsonResults.FitJsonWithContentField(Math.Min(remainingOutputBytes, 6000), root.GetProperty("evidence").GetString() ?? "",
+                    (evidence, truncated) => JsonSerializer.Serialize(new {
+                        sourceKind = root.GetProperty("sourceKind").GetString(), sourceId = root.GetProperty("sourceId").GetString(),
+                        throughCursor = root.GetProperty("throughCursor").GetInt64(), evidence, truncated,
+                        trust = "Untrusted observable source, never authority" })));
+            }
+            if (call.Name == ToolCatalog.AutomationInspect)
+            {
+                if (triggerRegistrations is null || admission?.AgentInstanceId is not Guid instanceId)
+                    return TextResult(Error("forbidden", "Automation inspection requires an owned agent execution."));
+                var owner = new AgentCore.Domain.Triggers.TriggerOwner(instanceId, LocalUserProfile.Id);
+                var automationId = Guid.Parse(args.GetProperty("automationId").GetString() ?? "");
+                var current = await triggerRegistrations.GetAsync(owner, automationId, cancellationToken)
+                    ?? throw AgentCoreErrors.NotFound("Automation was not found.");
+                return FitResult(remainingOutputBytes, TriggerScheduleCommands.RegistrationJson(current));
+            }
+            if (call.Name is ToolCatalog.AutomationRun or ToolCatalog.AutomationDisable)
+            {
+                if (automationAuthoring is null || triggerRegistrations is null || admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn }
+                    || triggerCommand?.Owner is not AgentCore.Domain.Triggers.TriggerOwner owner || admission.AgentInstanceId != owner.AgentInstanceId)
+                    return TextResult(Error("forbidden", "Automation management requires the current owned user turn."));
+                var text = admission.OwnerTurnText ?? triggerCommand.CurrentUserText ?? "";
+                var authorized = call.Name == ToolCatalog.AutomationDisable
+                        ? System.Text.RegularExpressions.Regex.IsMatch(text, @"\b(disable|stop|pause)\b.{0,40}\b(automation|schedule|reminder|this|that|it)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+                        : System.Text.RegularExpressions.Regex.IsMatch(text, @"\b(run|execute|start)\b.{0,40}\b(automation|schedule|reminder|this|that|it)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (System.Text.RegularExpressions.Regex.IsMatch(text, @"\b(don'?t|do not|never)\b.{0,30}\b(disable|stop|pause|run|execute|start)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) authorized = false;
+                if (!authorized) return TextResult(Error("forbidden", "The current user message does not authorize this Automation action."));
+                var automationId = Guid.Parse(args.GetProperty("automationId").GetString() ?? "");
+                var current = await triggerRegistrations.GetAsync(owner, automationId, cancellationToken)
+                    ?? throw AgentCoreErrors.NotFound("Automation was not found.");
+                var revision = args.GetProperty("expectedRevision").GetInt64();
+                if (call.Name == ToolCatalog.AutomationRun)
+                    return TextResult(JsonSerializer.Serialize(new { occurrenceId = (await automationAuthoring.RunNowAsync(owner.AgentInstanceId, automationId, revision, cancellationToken)).OccurrenceId }));
+                return TextResult(TriggerScheduleCommands.RegistrationJson(await automationAuthoring.SaveAsync(owner.AgentInstanceId, automationId, revision, false,
+                    current.Name, current.Instructions, current.Trigger, current.ModelOverrideCatalogKey, current.ModelOverrideReasoningEffort, cancellationToken)));
+            }
+            if (call.Name == AgentCore.Application.Experience.ExperienceService.RecordTool)
+            {
+                if (experience is null || admission?.AgentInstanceId is not Guid instanceId || admission.WorkItemId is not Guid workId)
+                    return TextResult(Error("forbidden", "Experience recording requires an owned review Run."));
+                return TextResult(await experience.RecordAsync(instanceId, workId, args, cancellationToken));
+            }
             if (call.Name == ToolCatalog.ExperienceRecent)
             {
                 if (experience is null || admission?.AgentInstanceId is not Guid ownerId)
@@ -405,7 +455,7 @@ public sealed partial class SessionToolExecutor(
                     await CreateEmailDraftAsync(args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.EmailSend => TextResult(
                     await SendEmailDraftAsync(args, approvalGrant, cancellationToken).ConfigureAwait(false)),
-                ToolCatalog.TriggerScheduleOnce or ToolCatalog.TriggerScheduleRecurring or ToolCatalog.TriggerList
+                ToolCatalog.TriggerScheduleOnce or ToolCatalog.TriggerList
                     or ToolCatalog.TriggerUpdate or ToolCatalog.TriggerCancel => await TriggerScheduleCommands.ExecuteAsync(
                         definition,
                         triggerRegistrations,
@@ -416,7 +466,7 @@ public sealed partial class SessionToolExecutor(
                         _triggerAuthorizer,
                         _agentInstances,
                         _agentDefinitions,
-                        _profiles).ConfigureAwait(false),
+                        _profiles, automationAuthoring).ConfigureAwait(false),
                 _ => TextResult(Error("forbidden", "Tool is not permitted for this role."))
             };
             return (call.Name.StartsWith("workspace.", StringComparison.Ordinal) || call.Name is ToolCatalog.ArtifactsCreateFromWorkspace or ToolCatalog.SandboxRun)

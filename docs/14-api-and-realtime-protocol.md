@@ -93,13 +93,8 @@ REST handles creation, discovery, history, state and terminal ending. Live user 
 | POST /api/v2/admin/event-sources | Owner capability; trusted local caller; `{ displayName }`. Creates an active Webhook source. The raw token is in this response only | 200 `{ sourceId, sourceKey, token, status }` | 400 validation; 401 capability; 403 non-local |
 | POST /api/v2/admin/event-sources/{sourceId}/rotate | Owner capability; trusted local caller. Replaces the hash immediately and returns the new raw token once. The public source key stays | 200 `{ sourceId, sourceKey, token, status }` | 401 capability; 403 non-local; 404 source |
 | POST /api/v2/admin/event-sources/{sourceId}/revoke | Owner capability; trusted local caller. Clears the hash and sets `Revoked`. Historical events stay | 200 source summary | 401 capability; 403 non-local; 404 source |
-| GET /api/v2/admin/agent-instances/{instanceId}/event-subscriptions | Owner capability; trusted local caller | 200 `{ items }` of registration id, source id, event type, status, and revision | 401 capability; 403 non-local; 404 instance |
-| POST /api/v2/admin/agent-instances/{instanceId}/event-subscriptions | Owner capability; trusted local caller; `{ sourceId, eventType }` with `eventType` `order.placed`. Repeating the same pair returns the existing registration | 200 subscription summary | 400 the agent cannot subscribe or the event type is not allowed; 401 capability; 403 non-local; 404 instance or source |
-| POST /api/v1/hooks/{sourceKey} | Bearer token for that Event Source. JSON body at most 8 KiB: `eventId`, `type` (`order.placed`), optional `occurredAt`, and `data.orderReference` only. Does not run the agent, browser, or router. The body does not list subscribers | 202 `{ eventId }` after the External Event commits; 200 `{ eventId }` when that source event was already admitted, including when no agent is subscribed | 400 malformed, unknown, unsupported, or oversized payload; 401 missing, wrong, or revoked bearer |
-| GET /api/v2/admin/agent-instances/{instanceId}/automation/registrations | Owner capability; trusted local caller | 200 owned active/suspended registrations with safe schedule/provenance fields | 401 capability; 403 non-local; 404 instance |
-| POST /api/v2/admin/agent-instances/{instanceId}/automation/registrations/{registrationId}/cancel | Owner capability; trusted local caller; `{ expectedRevision, confirm: true }` | 200 cancelled registration (`Active` or `SuspendedPolicy`) | 400 validation (body, `confirm`, revision, or terminal/non-cancellable status); 401 capability; 403 non-local; 404 instance or registration (including other owner); 409 stale `expectedRevision` or registration already completed/cancelled |
+| POST /api/v1/hooks/{sourceKey} | Bearer token for that Event Source. JSON body at most 8 KiB: `eventId`, `type` (`order.placed`), optional `occurredAt`, and `data.orderReference`, with optional paired rootWorkItemId/triggerDepth (maximum four). Does not run the agent, browser, or router. The body does not list matching Automations | 202 `{ eventId }` after the External Event commits; 200 `{ eventId }` when that source event was already admitted, including when no agent is configured | 400 malformed, unknown, unsupported, or oversized payload; 401 missing, wrong, or revoked bearer |
 | POST /api/v2/admin/agent-instances/{instanceId}/unattended-model | Owner capability; trusted local caller; `{ expectedRevision, catalogKey, reasoningEffort }`. A blank catalog key clears the instance unattended default | 200 instance summary including `unattendedModelCatalogKey` and `unattendedReasoningEffort` | 400 unknown model or effort; 401 capability; 403 non-local; 404 instance; 409 stale revision |
-| POST /api/v2/admin/agent-instances/{instanceId}/automation/registrations/{registrationId}/model | Owner capability; trusted local caller; `{ expectedRevision, catalogKey, reasoningEffort }`. A blank catalog key uses the unattended or conversation default. The registration JSON includes `modelSource`: `Trigger override`, `Unattended default`, or `Conversation default` | 200 registration summary | 400 unknown model, effort, or inactive registration; 401 capability; 403 non-local; 404 instance or registration; 409 stale revision |
 | GET /api/v2/agent-instances | Owner capability | 200 active managed instances for User new-chat (`instanceId`, `definitionId`, `activeVersion`, persona `name`/`role`, exact-version `voiceAvailable`/`language`) | 401 capability; 403 non-local |
 | GET /api/v2/admin/definition-drafts/{draftId}/resources | Owner capability; trusted local caller | 200 draft resource bindings (metadata only) | 401 capability; 403 non-local; 404 |
 | POST /api/v2/admin/definition-drafts/{draftId}/resources/content | Owner capability; trusted local caller; raw body with `Content-Type` and bounded size | 201 stored content hash and byte length | 400 oversize/empty; 401 capability; 403 non-local |
@@ -108,8 +103,8 @@ REST handles creation, discovery, history, state and terminal ending. Live user 
 | DELETE /api/v2/admin/definition-drafts/{draftId}/resources/{resourceId}?expectedRevision={n} | Owner capability; trusted local caller; `expectedRevision` query parameter | 200 removed draft resource row | 401 capability; 403 non-local; 404; 409 stale revision |
 | GET /api/v2/admin/definition-drafts/{draftId}/resources/{resourceId}/content | Owner capability; trusted local caller | 200 resource bytes | 401 capability; 403 non-local; 404 |
 | GET /api/v2/admin/definitions/{definitionId}/publications/{version}/resources | Owner capability; trusted local caller | 200 immutable publication bindings | 401 capability; 403 non-local; 404 |
-| GET /api/v2/sessions/{sessionId}/triggers | Owner capability; optional `limit` (minimum 1, clamped to 100) and `before` (registration ID) | 200 newest-first safe schedule page for the session's Agent Instance and trusted profile; omitted pagination preserves the full-list contract | 400 invalid query; 401 capability; 404 session or foreign/unknown cursor |
-| POST /api/v2/sessions/{sessionId}/triggers/{triggerId}/cancel | `{ "expectedRevision": n }` | 200 updated safe schedule | 400 invalid revision; 401 capability; 404 session, guessed id, or other instance; 409 stale revision |
+| GET /api/v2/sessions/{sessionId}/automations | Owner capability; optional `limit` (minimum 1, clamped to 100) and `before` (Automation ID) | 200 newest-first safe Automation page for the session's Agent Instance and trusted profile; omitted pagination preserves the full-list contract | 400 invalid query; 401 capability; 404 session or foreign/unknown cursor |
+| POST /api/v2/sessions/{sessionId}/automations/{triggerId}/cancel | `{ "expectedRevision": n }` | 200 updated safe Automation | 400 invalid revision; 401 capability; 404 session, guessed id, or other instance; 409 stale revision |
 | GET /api/v2/sessions/{sessionId}/work-items | Optional `limit` (default 50, minimum 1, clamped to 100), `before` (work-item ID), and `attentionOnly` | 200 newest-first safe page for the session's Agent Instance and trusted profile. `attentionOnly=true` selects completed attention results. Each item includes `attentionRequired`, `attemptCount`, and `maxAttempts` | 400 invalid query; 401 capability; 404 session or foreign/unknown cursor |
 | GET /api/v2/sessions/{sessionId}/work-items/{workItemId} | No body | 200 safe detail, including `attentionRequired`, `attemptCount`, and `maxAttempts` | 401 capability; 404 session, other owner, or unknown id |
 | GET /api/v2/sessions/{sessionId}/work-items/{workItemId}/result | No body | 200 semantic result, including `attentionRequired` | 401 capability; 404 when no result exists, including not-yet-complete and other owner |
@@ -119,7 +114,7 @@ REST handles creation, discovery, history, state and terminal ending. Live user 
 
 Operational list pages retain the `{ items }` envelope. Ordering is descending immutable creation time, then descending ID; `before` is exclusive and owner scoped. Clients request 21 rows for a 20-row UI page, use the extra row only to detect more data, and send the last displayed ID as the next cursor. Read acknowledgements are browser-local UI state and do not mutate work records.
 
-Work-item JSON uses status tokens `queued`, `running`, `needsApproval`, `retrying`, `completed`, `failed`, and `cancelled`. List and detail include origin, optional recorded Schedule/Thought `intent`, progress, failure summary, `attemptCount`, `maxAttempts`, and, while approval is pending, `approvalId`, `approvalRevision`, `actionHash`, and `approvalPreview`. A terminal failed item may include optional `diagnosticId`. They omit evidence JSON, checkpoint payload, prepared action JSON, and result text. The result route returns only `workItemId`, `text`, `completedAt`, and `attentionRequired`. No new SignalR message carries durable work. A paused or ended session can still list and decide its owner's work.
+Work-item JSON uses status tokens `queued`, `running`, `needsApproval`, `retrying`, `completed`, `failed`, and `cancelled`. List and detail include origin, optional recorded `automationId`, `name`, `instructions`, and `triggerSummary`, progress, failure summary, `attemptCount`, `maxAttempts`, and, while approval is pending, `approvalId`, `approvalRevision`, `actionHash`, and `approvalPreview`. A terminal failed item may include optional `diagnosticId`. They omit evidence JSON, checkpoint payload, prepared action JSON, and result text. The result route returns only `workItemId`, `text`, `completedAt`, and `attentionRequired`. No new SignalR message carries durable work. A paused or ended session can still list and decide its owner's work.
 
 Agent list (GET detail returns one item with the same fields):
 
@@ -388,49 +383,37 @@ All governance/advanced owner routes retain the local trusted-owner filter under
 
 Typed owner review uses string modes/statuses and evidence actor, draft revision, check, status, expected/observed/limitation. Verified, PartiallyVerified, CannotVerify, RequiresExternalEvidence and Failed remain distinct. Published evidence retains tested publishedDraftRevision. Invalid requests use 400; stale revisions/grants use 409; unexpected failures use server diagnostics. No private credential or host-path projection enters model context.
 
-## P9.8-P9.9 owner HTTP surface
+## Unified Automation and Experience HTTP contracts
 
-Experience review items expose `sourceCreatedAt` and nullable `checkpointAt`. `sourceAt` remains a compatibility alias for source creation. Session checkpoint time records when Core captured the stable cursor; WorkItem checkpoint time is the persisted terminal update. Legacy records omit checkpoint time rather than inventing it.
+Owner capability and active managed ownership protect `/api/v2/admin/agent-instances/{instanceId}`. Existing safe ProblemDetails return 400 validation, 403 policy, 404 missing/foreign, and 409 stale revision/busy admission. No new hub method/event or public chat endpoint is added.
 
-All routes below are under `/api/v2/admin/agent-instances/{instanceId}` and require the existing owner capability. Core derives the local profile and validates active managed instance ownership. No model/client origin, arbitrary profile or authority field is accepted as authorization. Successful responses are JSON; validation/conflict/not-found/forbidden use existing safe ProblemDetails.
-
-| Method / suffix | Request / result |
+| Method / suffix | Contract |
 | --- | --- |
-| GET `/experience` | enabled, settingsRevision, contextBudgetCharacters, bounded structured items with source/cursor/date/Definition/model/work/status/visibility/revision/eligibility and safe failure metadata |
-| PUT `/experience/configuration` | `{expectedRevision, enabled}` → review |
-| POST `/experience/checkpoints` | `{sessionId}` → review; Core chooses the stable cursor, same checkpoint deduplicates |
-| PUT `/experience/{experienceId}` | `{expectedRevision, visibility}` (`Eligible`, `Suppressed`, `Deleted`) → review |
-| POST `/experience/reset` | empty body → review; tombstones existing checkpoints without deleting source work |
-| GET `/thoughts` | minIntervalSeconds (15) and owned registrations: revision, enabled/status, intervalSeconds, thinkingPrompt, optional model/effort, next/last run, outcome/work status and effective model |
-| POST `/thoughts` | `{expectedRevision:0, enabled, intervalSeconds, thinkingPrompt, modelKey?, reasoningEffort?}` → registration |
-| PUT `/thoughts/{registrationId}` | same shape with current expectedRevision → registration |
-| POST `/thoughts/{registrationId}/delete` | `{expectedRevision}` → `{deleted:true}` |
-| POST `/thoughts/{registrationId}/run` | `{expectedRevision}` → `{occurrenceId}`; conflict while a prior activation is nonterminal |
-| GET `/work-items` | normal WorkItem page for this trusted owner; optional `limit` (default 100), `before`, and `attentionOnly` match session work reads |
-| GET `/work-items/{workItemId}` | safe WorkItem DTO for this instance and trusted owner; 401 without capability, 404 for unknown/foreign work; supports exact run navigation outside the current list page |
-| GET `/work-items/{workItemId}/result` | normal result DTO; thought text is the safe summary |
-| POST `/work-items/{workItemId}/cancel` | existing `{expectedRevision}` contract |
-| POST `/work-items/{workItemId}/approvals/{approvalId}/approve` or `/reject` | existing `{expectedRevision, expectedApprovalRevision, actionHash}` contract |
+| GET `/automations` | items plus current Schedule policy |
+| POST `/automations` | AutomationRequest, expectedRevision 0 |
+| PUT `/automations/{automationId}` | AutomationRequest with current expectedRevision |
+| DELETE `/automations/{automationId}` | JSON `{expectedRevision}`; content-free deleted result |
+| POST `/automations/{automationId}/run` | `{expectedRevision}`; occurrenceId, eventual normal Run |
+| GET `/experience` | settings and bounded observations with source/cursor/date/model/work/visibility/revision |
+| PUT `/experience/configuration` | `{expectedRevision, enabled}` |
+| POST `/experience/checkpoints` | `{sessionId}`; Core selects stable cursor and deduplicates manual review |
+| PUT `/experience/{experienceId}` | `{expectedRevision, visibility}` |
+| POST `/experience/reset` | empty body; tombstones observations |
+| GET `/work-items`, `/{workItemId}`, `/{workItemId}/result` | existing owner-scoped Run/result reads |
+| POST `/work-items/{workItemId}/cancel` | `{expectedRevision}` |
+| POST `/work-items/{workItemId}/approvals/{approvalId}/approve` or `/reject` | existing revision/exact actionHash contract |
 
-`WorkItemResponse` adds optional `sourceId`, `registrationId`, `modelKey`, `thoughtOutcome`, and `intent`. `intent` is only the owner-authored Schedule task or Thought thinking prompt pinned in that execution’s occurrence evidence; later registration edits do not change it. Missing/invalid historical intent and other run types return null. Raw occurrence evidence is not returned. `origin` is Core-projected `Thought activation` or `Retrospection`; work lifecycle status names and approval semantics remain unchanged. Thought outcomes are `NoAction`, `ActionCompleted`, `AttentionRequested`; approval pending/retry/failure/cancel remain normal work states. There is no new hub event or public chat endpoint. NoAction/ordinary success creates no proactive alert; attention reuses the existing owner delivery contract.
+AutomationRequest has expectedRevision, enabled, name (1–120), instructions (1–2000), trigger, modelKey?, reasoningEffort?. Trigger is exactly `{kind:"schedule", schedule:{...}}` or `{kind:"event", eventSourceId, eventType:"order.placed"}`. Mixed variants are rejected. Schedule kinds oneShot/daily/weekly/fixedInterval use existing IANA/DST, horizon, recurrence and finite bounds. Fields are timeZone, atUtc, interval, localTime, weekdays, anchorAtUtc, endAtUtc, startDate, endDate, maxOccurrences. Model selection must exist and support tools; no fallback model substitution occurs.
 
-## Admin Scheduled Work HTTP contract
+AutomationResponse exposes automationId, revision, name, instructions, enabled/status, structured trigger, immutable authorizationOrigin/sourceSessionId/sourceEventId/createdAt, nextRunAt, model selection/effective model, lastWorkItemId/executionStatus/outcome. Admin lifecycle uses Domain casing. WorkItemResponse exposes bounded automationId, sourceId, instructions, automationName, triggerSummary, modelKey and outcome; instructions and name describe admitted provenance, not later edits. Raw event/occurrence payload is not projected.
 
-The existing owner-capability filter protects `/api/v2/admin/agent-instances/{instanceId}/schedules`. Active managed instance ownership is checked on every operation. These are the same registrations visible to owned Chat schedule queries; thoughts and application-event subscriptions are excluded from this schedule management surface.
+Owned Chat reads GET `/api/v2/sessions/{sessionId}/automations` (limit/before) for all Automation variants; POST `/{automationId}/cancel` uses expectedRevision. The compact Session projection includes automationId, name, instructions, status, triggerKind, timeZone?, when, nextOccurrenceAt?, revision and suspensionReason?. Cancellation is terminal deletion from active authoring, while history remains inspectable.
 
-| Method | Suffix | Request / result |
-| --- | --- | --- |
-| GET | empty | `{ items: AdminScheduleResponse[] }` |
-| POST | empty | `AdminScheduleRequest`; new registration (expectedRevision 0) |
-| PUT | `/{registrationId}` | `AdminScheduleRequest`; revisioned edit |
-| POST | `/{registrationId}/cancel` | `{ expectedRevision }`; `{ cancelled: true }` |
-| POST | `/{registrationId}/run` | `{ expectedRevision }`; `{ occurrenceId }` |
+Model-facing management tools are automation.create/list/inspect/update/disable/delete/run. Create accepts bounded name/instructions and either existing flat Schedule timing fields or eventSourceId/eventType. Update/disable/delete/run use exact current resource revision and current owned user-turn authorization. Historical text, Automation instructions and event payload cannot authorize another future behavior.
 
-`AdminScheduleRequest` contains `expectedRevision`, `enabled`, `intent`, `schedule`, optional `modelKey` and `reasoningEffort`. `schedule.kind` is `oneShot`, `daily`, `weekly` or `fixedInterval`; timing fields are `timeZone` (default UTC), `atUtc`, `interval` (days/weeks/seconds), `localTime` (HH:mm), `weekdays` (0 Sunday through 6 Saturday), `anchorAtUtc`, `endAtUtc`, `startDate`/`endDate` (yyyy-MM-dd), and `maxOccurrences`. Irrelevant fields are ignored. Omitted/null timing is rejected. Existing timezone/DST/bounds validation applies. Shared Definition timing policy enforces permitted kinds, one-shot horizon, minimum cadence and finite recurrence. Admin bypasses only AllowUserScheduling; Definition MaxActiveRegistrations is checked atomically on create/enable, with the same non-event-registration count used by Chat. Existing unchanged schedules can be disabled even when TriggerPolicy has been removed; enabling or changing timing remains forbidden.
+Every generic Run calls work.complete with outcome NoAction|ActionCompleted|AttentionRequested, summary <=2000 and attentionRequired true exactly for AttentionRequested. A contradictory NoAction with an accepted mutation is rejected. NoAction/ordinary success stays quiet. Manual review is a generic run without an Automation source.
 
-Response includes `registrationId`, `revision`, `intent`, `enabled`, lifecycle `status`, the structured `schedule`, `authorizationOrigin`, nullable `sourceSessionId`/`sourceEventId`, `createdAt`, nullable `nextRunAt`, model override/effort/effective model, and nullable latest `lastWorkItemId`/`executionStatus`. Lifecycle names use Domain casing on Admin responses; Chat schedule status remains lower camel case including `disabled`. Registration provenance preserves numeric compatibility: CurrentUserTurn=0, AdminThought=1, AdminOwner=2, ApplicationEvent=3. AuthorizationOrigin and source Session describe original creation: a Chat-authored registration retains CurrentUserTurn and its source Session through Admin edits, whose current owner authorization is audited separately. List responses additionally include `policy` with allowOneShot/allowDaily/allowWeekly/allowFixedInterval, allowIndefiniteRecurrence, oneShotHorizonDays, minRecurrenceDays, minFixedIntervalSeconds and maxActiveRegistrations. Source kind and event source identify application-event subscriptions separately from who authorized them.
-
-Validation returns 400, policy/owner refusal 403, missing owned resource 404, stale revision or busy/duplicate Run now 409 through existing safe ProblemDetails. Run now is admission acceptance, not model completion. Ordinary Background Work endpoints provide eventual execution/approval/results. No new hub method or event is added.
+`experience.source` accepts sourceKind Session|WorkItem and UUID sourceId. It returns owned stable bounded evidence/cursor. `experience.record` accepts bounded structured goal/attempts/decisions/outcomes/corrections/unresolved/difficulties/lessons and optional explicit sourceKind/sourceId/throughCursor; explicit source selection requires throughCursor and rejects stale/foreign/ineligible sources. Both use trusted execution context and existing settings/policy. Recurring review is ordinary Automation configuration; `/thoughts`, `/schedules`, event-subscription behavior and `/continuity-maintenance` routes are removed.
 
 ### Model-facing Continuity contracts
 
@@ -460,16 +443,9 @@ Additional properties are rejected. Arguments cannot supply owner, scope, origin
 
 Owner-protected learned-memory provenance adds optional `maintenanceAgentInstanceId`, `maintenanceSessionId` and `maintenanceWorkItemId` strings. Older items return null; these identify initiation independently of semantic owner and promotion lineage. Existing live approval details and durable `approvalPreview` now include Core-resolved Memory scope/kind/source subjects and User-wide effects. No model-supplied scope or approval-authority field is added. The durable approval preview is bounded to 12,000 characters.
 
-### Admin automatic continuity review cadence
+### Recurring continuity review
 
-Trusted-local owner routes for an active managed instance, relative to `/api/v2/admin/agent-instances/{id}`:
-
-| Method/path | Contract |
-| --- | --- |
-| `GET /continuity-maintenance` | `{ configuredIntervalSeconds: number|null, effectiveIntervalSeconds, minimumIntervalSeconds, maximumIntervalSeconds, defaultIntervalSeconds, usesDefault, configuredIntervalAllowed, revision, lastMaintenanceAtUtc: string|null }` |
-| `PUT /continuity-maintenance` | `{ expectedRevision, intervalSeconds: integer|null }`; null restores inheritance; returns saved/effective state |
-
-Both PUT fields are required; only an explicit `intervalSeconds: null` restores inheritance. Absent rows report null configured interval, inherited default and revision 0. Invalid or malformed intervals return 400 without mutation; stale revisions return 409. Startup operator bounds are authoritative. If a formerly valid saved interval is outside new bounds, `configuredIntervalAllowed=false` and the effective interval explicitly uses the default while retaining the configured value. The timestamp records an eligible evaluation claim, not Retrospection completion. Updates preserve it and atomically append `ExperienceChanged` owner audit metadata with operation `configureContinuityCadence`. No model tool, Thought registration, SignalR contract or consolidation permission changes.
+Use the Automation contract for recurring instructions that inspect completed work and record useful observations. Enable Experience and consolidation independently under Continuity. No cadence configuration endpoint remains.
 
 ## Agent Instance workspace HTTP
 

@@ -19,13 +19,14 @@ public sealed class TriggerContractTests
     }
 
     [Fact]
-    public void Intent_is_bounded_and_rejects_control_characters()
+    public void Instructions_are_bounded_and_allow_multiline_tasks()
     {
-        Assert.Equal("Call John", TriggerText.RequireIntent("  Call John  "));
-        Assert.Equal(500, TriggerText.RequireIntent(new string('a', 500)).Length);
-        Assert.Throws<ArgumentException>(() => TriggerText.RequireIntent(" "));
-        Assert.Throws<ArgumentException>(() => TriggerText.RequireIntent(new string('a', 501)));
-        Assert.Throws<ArgumentException>(() => TriggerText.RequireIntent("line\nbreak"));
+        Assert.Equal("Call John", TriggerText.RequireInstructions("  Call John  "));
+        Assert.Equal(2000, TriggerText.RequireInstructions(new string('a', 2000)).Length);
+        Assert.Throws<ArgumentException>(() => TriggerText.RequireInstructions(" "));
+        Assert.Throws<ArgumentException>(() => TriggerText.RequireInstructions(new string('a', 2001)));
+        Assert.Equal("line\nbreak", TriggerText.RequireInstructions("line\nbreak"));
+        Assert.Throws<ArgumentException>(() => TriggerText.RequireInstructions("null\0character"));
     }
 
     [Fact]
@@ -93,10 +94,10 @@ public sealed class TriggerContractTests
             null,
             null,
             null));
-        Assert.Throws<ArgumentException>(() => new TriggerRegistration(
+        Assert.Throws<ArgumentException>(() => new Automation(
             Guid.NewGuid(),
             owner,
-            TriggerRegistrationStatus.Active,
+            AutomationStatus.Active,
             "Call John",
             new OneShotSchedule(Now, "UTC"),
             Now,
@@ -133,7 +134,7 @@ public sealed class TriggerContractTests
     public void Durable_schedule_kinds_do_not_include_runtime_timers()
     {
         Assert.Equal(["OneShot", "Daily", "Weekly", "FixedInterval"], Enum.GetNames<TriggerScheduleKind>());
-        Assert.Equal(["Schedule", "ApplicationEvent", "ThoughtActivation"], Enum.GetNames<TriggerSourceKind>());
+        Assert.Equal(["Schedule", "ApplicationEvent", "ManualInvocation"], Enum.GetNames<TriggerSourceKind>());
         Assert.Equal(
             ["Pending", "Claimed", "AcceptedLive", "AwaitingDurableWork", "Rejected", "LivePrepared", "AcceptedDurable"],
             Enum.GetNames<OccurrenceRoutingDisposition>());

@@ -83,7 +83,7 @@ public static class WorkItemEndpoints
 
                 return Results.Json(new WorkItemResultResponse(
                     item.WorkItemId.ToString(),
-                    item.Provenance.SourceKind == WorkSourceKind.ThoughtActivation ? AgentCore.Application.Work.ThoughtCompletion.Summary(result.Text) : result.Text,
+                    AgentCore.Application.Work.WorkCompletionRequest.Summary(result.Text),
                     HttpMapping.Format(result.CompletedAtUtc),
                     result.AttentionRequired));
             }
@@ -263,25 +263,21 @@ public static class WorkItemEndpoints
             item.Result?.AttentionRequired ?? false,
             item.AttemptCount,
             item.MaxAttempts,
-            item.Provenance.SourceOccurrenceId.ToString("D"), item.Provenance.RegistrationId?.ToString("D"), item.Model.CatalogKey,
-            item.Provenance.SourceKind == WorkSourceKind.ThoughtActivation && item.Result is { } thought ? AgentCore.Application.Work.ThoughtCompletion.Outcome(thought.Text) : null,
-            SourceIntent(item));
+            item.Provenance.SourceOccurrenceId.ToString("D"), item.Provenance.AutomationId?.ToString("D"), item.Model.CatalogKey,
+            item.Result is { } result ? AgentCore.Application.Work.WorkCompletionRequest.Outcome(result.Text) : null,
+            SourceText(item, "instructions", TriggerLimits.MaxInstructionsCharacters),
+            SourceText(item, "name", AutomationText.MaxNameCharacters), SourceText(item, "triggerSummary", 512));
     }
 
-    // Only the owner-authored task/prompt is public; occurrence evidence stays internal.
-    private static string? SourceIntent(WorkItem item)
+    // Only bounded authored metadata is public; payload and occurrence evidence stay internal.
+    private static string? SourceText(WorkItem item, string property, int maximum)
     {
-        if (item.Provenance.SourceKind is not (WorkSourceKind.Schedule or WorkSourceKind.ThoughtActivation))
-            return null;
         try
         {
             using var evidence = JsonDocument.Parse(item.Provenance.EvidenceJson);
             if (evidence.RootElement.ValueKind != JsonValueKind.Object
-                || !evidence.RootElement.TryGetProperty("intent", out var intent)
-                || intent.ValueKind != JsonValueKind.String)
-                return null;
-            var text = intent.GetString();
-            var maximum = item.Provenance.SourceKind == WorkSourceKind.ThoughtActivation ? ThoughtIntent.MaxPromptCharacters : TriggerLimits.MaxIntentCharacters;
+                || !evidence.RootElement.TryGetProperty(property, out var field) || field.ValueKind != JsonValueKind.String) return null;
+            var text = field.GetString();
             return !string.IsNullOrWhiteSpace(text) && text.Length <= maximum ? text : null;
         }
         catch (JsonException) { return null; }

@@ -130,7 +130,7 @@ public sealed class TriggerScheduler
                     {
                         await _store.SuspendPolicyAsync(
                             registration.Owner,
-                            registration.RegistrationId,
+                            registration.AutomationId,
                             registration.Revision,
                             decision.Reason ?? "Scheduling is disabled for this agent.",
                             asOf,
@@ -141,11 +141,9 @@ public sealed class TriggerScheduler
                     }
                 }
 
-                var result = registration.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought
-                    ? await AdmitThoughtAsync(registration, asOf, cancellationToken)
-                    : await _store.TryAdmitScheduledAsync(
+                var result = await _store.TryAdmitScheduledAsync(
                     registration.Owner,
-                    registration.RegistrationId,
+                    registration.AutomationId,
                     registration.ScheduleRevision,
                     dueAt,
                     asOf,
@@ -207,7 +205,7 @@ public sealed class TriggerScheduler
                     exception,
                     _diagnostics.NewId(),
                     "Trigger scan failed for registration.",
-                    new DiagnosticContext(TriggerRegistrationId: registration.RegistrationId));
+                    new DiagnosticContext(AutomationId: registration.AutomationId));
             }
         }
 
@@ -248,15 +246,6 @@ public sealed class TriggerScheduler
             occurrenceIds);
     }
 
-    private async ValueTask<ScheduledAdmitResult> AdmitThoughtAsync(TriggerRegistration registration, DateTimeOffset asOf, CancellationToken ct)
-    {
-        var instance = _instances is null ? null : await _instances.FindAsync(registration.Owner.AgentInstanceId, ct);
-        var definition = instance is null || _definitions is null ? null : await _definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct);
-        var selected = definition is null || instance is null || _catalog is null ? null : ExecutionModelPolicy.Resolve(_catalog, definition, instance, registration);
-        if (selected?.Accepted != true || selected.Pin is null) return new(ScheduledAdmitOutcome.Rejected, registration, null, 0);
-        return await _store.TryAdmitThoughtAsync(registration, selected.Pin, asOf, ct);
-    }
-
     private async Task PinAdmittedAsync(
         TriggerOccurrence occurrence,
         DateTimeOffset asOf,
@@ -273,7 +262,7 @@ public sealed class TriggerScheduler
             _definitions,
             _store,
             occurrence.Owner,
-            occurrence.RegistrationId,
+            occurrence.AutomationId,
             cancellationToken).ConfigureAwait(false);
         if (decision is null)
         {

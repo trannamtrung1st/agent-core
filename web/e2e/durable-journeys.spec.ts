@@ -15,7 +15,7 @@ function sqlite(script: string, args: string[] = []): string {
 type RegistrationProbe = {
   count: number;
   registration: {
-    registrationId: string;
+    automationId: string;
     status: number;
     nextOccurrenceAtUtc: string | null;
     intent: string;
@@ -31,10 +31,10 @@ con = sqlite3.connect(db, timeout=30)
 con.row_factory = sqlite3.Row
 con.execute("PRAGMA busy_timeout=8000")
 rows = con.execute(
-    """SELECT RegistrationId, Status, NextOccurrenceAtUtc, Intent
-       FROM TriggerRegistrations
-       WHERE SourceSessionId = ? AND Intent = ?
-       ORDER BY RegistrationId""",
+    """SELECT AutomationId, Status, NextOccurrenceAtUtc, Instructions
+       FROM Automations
+       WHERE SourceSessionId = ? AND Instructions = ?
+       ORDER BY AutomationId""",
     (session_id, intent),
 ).fetchall()
 con.close()
@@ -42,10 +42,10 @@ registration = None
 if len(rows) == 1:
     row = rows[0]
     registration = {
-        "registrationId": row["RegistrationId"],
+        "automationId": row["AutomationId"],
         "status": row["Status"],
         "nextOccurrenceAtUtc": row["NextOccurrenceAtUtc"],
-        "intent": row["Intent"],
+        "intent": row["Instructions"],
     }
 print(json.dumps({"count": len(rows), "registration": registration}))
 `,
@@ -79,7 +79,7 @@ con = sqlite3.connect(db, timeout=30)
 con.execute("PRAGMA busy_timeout=8000")
 due = int(time.time() * 1000) - 60_000
 updated = con.execute(
-    "UPDATE TriggerRegistrations SET NextOccurrenceAtUtc=? WHERE SourceSessionId=? AND Status=0",
+    "UPDATE Automations SET NextOccurrenceAtUtc=? WHERE SourceSessionId=? AND Status=0",
     (due, session_id),
 ).rowcount
 con.commit()
@@ -207,7 +207,6 @@ test("a detached reminder completes in Background work and cancel survives reloa
   // Catalog cleanup before a new chat: the /c/<id> path appears only after the first send.
   await releaseOtherLiveRuntimes(page, noActiveSession);
   await page.getByRole("button", { name: "Start a new chat" }).click();
-  await expect(page.getByRole("combobox", { name: "Identity" })).toBeEnabled({ timeout: 15_000 });
   await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.generalAssistant);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
 
@@ -281,7 +280,7 @@ test("a detached reminder completes in Background work and cancel survives reloa
   await drawer
     .locator(".background-work-item", { hasText: "Retrying" })
     .first()
-    .getByRole("button", { name: "Cancel Schedule" })
+    .getByRole("button", { name: "Cancel Automation · Schedule" })
     .click();
   await page.getByRole("button", { name: "Cancel work" }).click();
   await expect(drawer.getByText("Cancelled").first()).toBeVisible({ timeout: 15_000 });

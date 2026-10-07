@@ -133,7 +133,7 @@ public sealed class RuntimeMetricProbe : IDisposable
         "ResponseId",
         "WorkItemId",
         "TriggerOccurrenceId",
-        "TriggerRegistrationId",
+        "AutomationId",
         "AgentInstanceId"
     ];
 

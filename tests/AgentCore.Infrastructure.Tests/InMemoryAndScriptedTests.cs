@@ -150,7 +150,7 @@ public sealed class InMemoryAndScriptedTests
         ScriptedLanguageModel model,
         IReadOnlyList<ModelToolDefinition> tools,
         string threadMarker,
-        Guid registrationId,
+        Guid automationId,
         string intent)
     {
         var userText = $"{threadMarker} remind me tomorrow";
@@ -159,7 +159,7 @@ public sealed class InMemoryAndScriptedTests
             new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, userText)], Tools: tools),
             ToolCatalog.TriggerScheduleOnce);
         var toolResult =
-            $$"""{"registrationId":"{{registrationId:D}}","revision":1,"intent":"{{intent}}","timeZone":"UTC","status":"Active","scheduleKind":"OneShot"}""";
+            $$"""{"automationId":"{{automationId:D}}","revision":1,"instructions":"{{intent}}","timeZone":"UTC","status":"Active","scheduleKind":"OneShot"}""";
         var messages = new List<ModelMessage>
         {
             new(ModelRole.User, userText),
@@ -177,17 +177,17 @@ public sealed class InMemoryAndScriptedTests
 
     private static ModelRequest CancelRequest(
         IReadOnlyList<ModelToolDefinition> tools,
-        Guid registrationId,
+        Guid automationId,
         string intent)
     {
         var referent = new ScheduleConversationContext(
-            registrationId,
+            automationId,
             1,
             TriggerCommandAction.Create,
             intent,
             "UTC",
             TriggerScheduleKind.OneShot,
-            TriggerRegistrationStatus.Active,
+            AutomationStatus.Active,
             null);
         var system = string.Join('\n', referent.ToPromptLines());
         return new ModelRequest(

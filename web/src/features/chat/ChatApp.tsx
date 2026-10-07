@@ -46,15 +46,15 @@ import { terminalSessionNote } from "./sessionLifecycle";
 import { ChatHeader } from "./ChatHeader";
 import {
   approveWorkItem,
-  cancelSessionTrigger,
+  cancelSessionAutomation,
   cancelWorkItem,
   getWorkItemResult,
-  listSessionTriggers,
+  listSessionAutomations,
   listWorkItems,
   rejectWorkItem
 } from "../../services/api";
 import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
-import { ScheduleDrawer } from "./ScheduleDrawer";
+import { AutomationDrawer } from "./AutomationDrawer";
 import { Composer } from "./Composer";
 import { Conversation } from "./Conversation";
 import { ApprovalModal } from "./ApprovalModal";
@@ -545,14 +545,14 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
           />
         ) : null}
         {state.sessionId ? (
-          <ScheduleDrawer
+          <AutomationDrawer
             sessionId={state.sessionId}
             open={schedulesOpen}
             wide={!isNarrow}
             refreshKey={scheduleEpoch}
             onClose={() => setSchedulesOpen(false)}
-            load={listSessionTriggers}
-            cancel={cancelSessionTrigger}
+            load={listSessionAutomations}
+            cancel={cancelSessionAutomation}
           />
         ) : null}
         {isNarrow ? (

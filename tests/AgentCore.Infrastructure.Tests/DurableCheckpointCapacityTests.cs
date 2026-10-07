@@ -17,7 +17,7 @@ public sealed class DurableCheckpointCapacityTests
 {
     [Theory]
     [InlineData(1, 80_000, true)]
-    [InlineData(20, 8_000, false)]
+    [InlineData(40, 8_000, false)]
     public async Task Large_and_cumulative_reads_fit_or_terminate_with_a_stable_capacity_failure(int reads, int size, bool completes)
     {
         await using var fixture = await Fixture.CreateAsync();
@@ -28,7 +28,7 @@ public sealed class DurableCheckpointCapacityTests
         {
             var completed = Assert.IsType<DurableOccurrenceCompleted>(outcome);
             Assert.Equal(reads, fetch.Calls);
-            Assert.Equal("Read the document.", completed.Text);
+            Assert.Equal("Read the document.", WorkCompletionRequest.Summary(completed.Text));
         }
         else
         {
@@ -53,17 +53,17 @@ public sealed class DurableCheckpointCapacityTests
 
     [Theory]
     [InlineData(TriggerKind.ScheduledOccurrence)]
-    [InlineData(TriggerKind.ThoughtActivation)]
+    [InlineData(TriggerKind.ManualInvocation)]
     public async Task Escaped_multibyte_result_survives_sqlite_restart_without_repeating_the_read(TriggerKind triggerKind)
     {
-        await using var fixture = await Fixture.CreateAsync(triggerKind == TriggerKind.ThoughtActivation
-            ? WorkSourceKind.ThoughtActivation : WorkSourceKind.Schedule);
+        await using var fixture = await Fixture.CreateAsync(triggerKind == TriggerKind.ManualInvocation
+            ? WorkSourceKind.ManualInvocation : WorkSourceKind.Schedule);
         var fetch = new Fetcher(string.Concat(Enumerable.Repeat("資料\n\"\\\u0001", 20_000)));
         var tools = new SessionToolExecutor(publicWebFetcher: fetch);
-        await Assert.ThrowsAsync<SimulatedCrash>(() => fixture.RunAsync(tools, new ReadModel(1, thought: triggerKind == TriggerKind.ThoughtActivation), crashAfterResult: true, triggerKind: triggerKind));
+        await Assert.ThrowsAsync<SimulatedCrash>(() => fixture.RunAsync(tools, new ReadModel(1, thought: triggerKind == TriggerKind.ManualInvocation), crashAfterResult: true, triggerKind: triggerKind));
         Assert.Equal(1, fetch.Calls);
         await fixture.RecoverAsync();
-        var outcome = await fixture.RunAsync(tools, new ReadModel(1, thought: triggerKind == TriggerKind.ThoughtActivation), triggerKind: triggerKind);
+        var outcome = await fixture.RunAsync(tools, new ReadModel(1, thought: triggerKind == TriggerKind.ManualInvocation), triggerKind: triggerKind);
         var completed = Assert.IsType<DurableOccurrenceCompleted>(outcome);
         Assert.False(completed.AttentionRequired);
         Assert.Equal(1, fetch.Calls);
@@ -119,17 +119,17 @@ public sealed class DurableCheckpointCapacityTests
     }
 
     [Theory]
-    [InlineData(TriggerKind.ThoughtActivation, "NoAction", false)]
-    [InlineData(TriggerKind.ThoughtActivation, "ActionCompleted", false)]
-    [InlineData(TriggerKind.ThoughtActivation, "NoAction", true)]
+    [InlineData(TriggerKind.ManualInvocation, "NoAction", false)]
+    [InlineData(TriggerKind.ManualInvocation, "ActionCompleted", false)]
+    [InlineData(TriggerKind.ManualInvocation, "NoAction", true)]
     [InlineData(TriggerKind.ScheduledOccurrence, null, false)]
     public async Task Capacity_notice_retains_maximum_completion_across_SQLite_restart(TriggerKind kind, string? outcome, bool write)
     {
-        await using var fixture = await Fixture.CreateAsync(kind == TriggerKind.ThoughtActivation ? WorkSourceKind.ThoughtActivation : WorkSourceKind.Schedule);
+        await using var fixture = await Fixture.CreateAsync(kind == TriggerKind.ManualInvocation ? WorkSourceKind.ManualInvocation : WorkSourceKind.Schedule);
         var fetch = new Fetcher("read must not execute"); var writer = new Writer();
         var tools = new SessionToolExecutor(publicWebFetcher: fetch, httpRequestClient: writer, configurationGate: ToolConfigurationGates.AllowAll);
         var messages = NearCapacity(kind);
-        var summary = new string('\u0800', kind == TriggerKind.ThoughtActivation ? 2000 : WorkLimits.MaxResultCharacters);
+        var summary = new string('\u0800', 2000);
         var model = new CapacityModel(summary, outcome, write);
         await Assert.ThrowsAsync<SimulatedCrash>(() => fixture.RunAsync(tools, model, crashAfterCapacityResult: true,
             request: new(Guid.NewGuid(), messages), triggerKind: kind));
@@ -145,7 +145,7 @@ public sealed class DurableCheckpointCapacityTests
         var finalModel = new CapacityModel(summary, outcome, write);
         var completed = Assert.IsType<DurableOccurrenceCompleted>(await fixture.RunAsync(tools, finalModel, triggerKind: kind));
         Assert.Empty(finalModel.Requests); // Pending completion is resumed directly.
-        Assert.Equal(summary, kind == TriggerKind.ThoughtActivation ? ThoughtCompletion.Summary(completed.Text) : completed.Text);
+        Assert.Equal(summary, WorkCompletionRequest.Summary(completed.Text));
         Assert.Equal(0, fetch.Calls); Assert.Equal(0, writer.Calls);
         Assert.All(fixture.Checkpoints, c => Assert.InRange(Encoding.UTF8.GetByteCount(c.PayloadJson), 1, WorkLimits.MaxCheckpointBytes));
     }
@@ -153,10 +153,10 @@ public sealed class DurableCheckpointCapacityTests
     [Fact]
     public async Task Ignoring_finish_required_fails_stably_without_dispatch()
     {
-        await using var fixture = await Fixture.CreateAsync(WorkSourceKind.ThoughtActivation);
+        await using var fixture = await Fixture.CreateAsync(WorkSourceKind.ManualInvocation);
         var fetch = new Fetcher("must not execute");
         var failed = Assert.IsType<DurableOccurrenceFailed>(await fixture.RunAsync(new(publicWebFetcher: fetch),
-            new ReadModel(99, thought: true), request: new(Guid.NewGuid(), NearCapacity(TriggerKind.ThoughtActivation)), triggerKind: TriggerKind.ThoughtActivation));
+            new ReadModel(99, thought: true), request: new(Guid.NewGuid(), NearCapacity(TriggerKind.ManualInvocation)), triggerKind: TriggerKind.ManualInvocation));
         Assert.Equal("checkpoint-capacity", failed.Code); Assert.Equal(0, fetch.Calls);
         Assert.Contains(fixture.Checkpoints, c => c.PayloadJson.Contains("finish_required"));
     }
@@ -177,12 +177,12 @@ public sealed class DurableCheckpointCapacityTests
         var resumed = Assert.Single(Assert.Single(messages!).ToolCalls!);
         Assert.Equal(call.Id, resumed.Id);
         using var parsed = JsonDocument.Parse(resumed.ArgumentsJson);
-        Assert.True(ThoughtCompletion.TryParse(parsed.RootElement, [], out var result, out _, out _));
-        Assert.Equal(summary, ThoughtCompletion.Summary(result));
+        Assert.True(WorkCompletionRequest.TryParse(parsed.RootElement, [], out var result, out _, out _));
+        Assert.Equal(summary, WorkCompletionRequest.Summary(result));
     }
 
     [Theory]
-    [InlineData(TriggerKind.ThoughtActivation)]
+    [InlineData(TriggerKind.ManualInvocation)]
     [InlineData(TriggerKind.ScheduledOccurrence)]
     public void Maximum_completion_fits_at_the_exact_reserved_boundary(TriggerKind kind)
     {
@@ -191,9 +191,7 @@ public sealed class DurableCheckpointCapacityTests
         var overhead = Encoding.UTF8.GetByteCount(DurableToolCallCheckpoint.Write(Seed(0)));
         var seed = Seed(WorkLimits.MaxCheckpointBytes - reserve - 64 - overhead);
         Assert.True(DurableToolCallCheckpoint.TryWriteWithReserve(seed, false, null, reserve, out _));
-        var args = kind == TriggerKind.ThoughtActivation
-            ? JsonSerializer.Serialize(new { summary = new string('\u0800', 2000), attentionRequired = true, outcome = "AttentionRequested" })
-            : JsonSerializer.Serialize(new { summary = new string('\u0800', WorkLimits.MaxResultCharacters), attentionRequired = false });
+        var args = JsonSerializer.Serialize(new { summary = new string('\u0800', 2000), attentionRequired = true, outcome = "AttentionRequested" });
         var terminal = new ModelMessage(ModelRole.Assistant, "", ToolCalls:
             [new(DurableToolCallCheckpoint.CompletionCallId, ToolCatalog.WorkComplete, args)]);
         Assert.True(DurableToolCallCheckpoint.TryWrite(seed.Append(terminal).ToArray(), false, null, out var payload));
@@ -219,7 +217,7 @@ public sealed class DurableCheckpointCapacityTests
             Requests.Add(request);
             var finish = request.Messages.Any(m => m.Role == ModelRole.Tool && m.Text.Contains("finish_required"));
             var call = finish ? new ModelToolCall("finish", ToolCatalog.WorkComplete, outcome is null
-                ? JsonSerializer.Serialize(new { summary, attentionRequired = false })
+                ? JsonSerializer.Serialize(new { summary, attentionRequired = false, outcome = "ActionCompleted" })
                 : JsonSerializer.Serialize(new { summary, attentionRequired = false, outcome }))
                 : write ? new ModelToolCall("write", ToolCatalog.HttpRequest, """{"method":"POST","url":"https://example.test/note","body":"note"}""")
                 : new ModelToolCall("read", ToolCatalog.WebFetch, """{"url":"https://example.test/doc"}""");
@@ -261,7 +259,7 @@ public sealed class DurableCheckpointCapacityTests
             var call = count >= reads
                 ? new ModelToolCall("finish", ToolCatalog.WorkComplete, thought
                     ? """{"summary":"Read the document.","attentionRequired":false,"outcome":"NoAction"}"""
-                    : """{"summary":"Read the document.","attentionRequired":false}""")
+                    : """{"summary":"Read the document.","attentionRequired":false,"outcome":"ActionCompleted"}""")
                 : write ? new ModelToolCall("write", ToolCatalog.HttpRequest, """{"method":"POST","url":"https://example.test/note","body":"note"}""")
                 : new ModelToolCall($"read-{count}", ToolCatalog.WebFetch,
                     JsonSerializer.Serialize(new { url = "https://example.test/doc", extra = oversizedArguments ? new string('x', 70_000) : "" }));

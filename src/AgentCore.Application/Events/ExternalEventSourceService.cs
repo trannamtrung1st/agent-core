@@ -11,12 +11,8 @@ public sealed record ExternalEventCredential(Guid SourceId, Guid SourceKey, stri
 
 public sealed class ExternalEventSourceService(
     IExternalEventStore store,
-    ITriggerStore triggers,
-    ITriggerAdmissionGuard guard,
     IIdGenerator ids,
     TimeProvider time,
-    ILocalUserProfileService profiles,
-    IAgentInstanceStore instances,
     ILogger<ExternalEventSourceService>? logger = null)
 {
     public ValueTask<IReadOnlyList<ExternalEventSource>> ListAsync(CancellationToken cancellationToken = default) =>
@@ -100,85 +96,10 @@ public sealed class ExternalEventSourceService(
         return saved;
     }
 
-    public async ValueTask<TriggerRegistration> SubscribeAsync(
-        Guid agentInstanceId,
-        Guid sourceId,
-        string eventType,
-        CancellationToken cancellationToken = default)
-    {
-        if (!ExternalEventTypes.IsAllowed(eventType))
-        {
-            throw AgentCoreErrors.Validation("Event type is not allowed.");
-        }
-
-        await RequireInstanceAsync(agentInstanceId, cancellationToken).ConfigureAwait(false);
-        var source = await RequireAsync(sourceId, cancellationToken).ConfigureAwait(false);
-        if (source.Status != ExternalEventSourceStatus.Active)
-        {
-            throw AgentCoreErrors.Validation("Only an active event source can accept a subscription.");
-        }
-        var profile = await profiles.GetLocalProfileAsync(cancellationToken).ConfigureAwait(false);
-        var owner = new TriggerOwner(agentInstanceId, profile.ProfileId);
-        var decision = await guard.EvaluateAsync(owner, TriggerSourceKind.ApplicationEvent, cancellationToken)
-            .ConfigureAwait(false);
-        if (decision.Kind == TriggerAdmissionDecisionKind.Suspend)
-        {
-            throw AgentCoreErrors.Validation("This agent cannot subscribe to application events.");
-        }
-
-        var existing = await triggers.ListAsync(owner, TriggerRegistrationStatus.Active, cancellationToken)
-            .ConfigureAwait(false);
-        var match = existing.FirstOrDefault(item =>
-            item.EventSourceId == sourceId && item.EventType == eventType);
-        if (match is not null)
-        {
-            return match;
-        }
-
-        var now = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
-        var registration = new TriggerRegistration(
-            ids.NewId(),
-            owner,
-            TriggerRegistrationStatus.Active,
-            eventType,
-            new OneShotSchedule(DateTimeOffset.UnixEpoch, "UTC"),
-            null,
-            null,
-            0,
-            1,
-            1,
-            new TriggerProvenance(TriggerAuthorizationOrigin.CurrentUserTurn, null, null, now, now),
-            null,
-            eventSourceId: sourceId,
-            eventType: eventType);
-        return await triggers.CreateAsync(registration, cancellationToken).ConfigureAwait(false);
-    }
-
-    public async ValueTask<IReadOnlyList<TriggerRegistration>> ListSubscriptionsAsync(
-        Guid agentInstanceId,
-        CancellationToken cancellationToken = default)
-    {
-        await RequireInstanceAsync(agentInstanceId, cancellationToken).ConfigureAwait(false);
-        var profile = await profiles.GetLocalProfileAsync(cancellationToken).ConfigureAwait(false);
-        var rows = await triggers.ListAsync(
-            new TriggerOwner(agentInstanceId, profile.ProfileId),
-            status: null,
-            cancellationToken).ConfigureAwait(false);
-        return rows.Where(item => item.EventSourceId is not null).ToArray();
-    }
-
     private async ValueTask<ExternalEventSource> RequireAsync(Guid sourceId, CancellationToken cancellationToken)
     {
         var source = await store.GetAsync(sourceId, cancellationToken).ConfigureAwait(false);
         return source ?? throw AgentCoreErrors.NotFound("Event source was not found.");
     }
 
-    private async ValueTask RequireInstanceAsync(Guid agentInstanceId, CancellationToken cancellationToken)
-    {
-        var instance = await instances.FindAsync(agentInstanceId, cancellationToken).ConfigureAwait(false);
-        if (instance is null)
-        {
-            throw AgentCoreErrors.NotFound("Agent instance was not found.");
-        }
-    }
 }

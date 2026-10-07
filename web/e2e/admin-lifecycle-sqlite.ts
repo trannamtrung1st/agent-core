@@ -51,7 +51,7 @@ print(memory_id)
   );
 }
 
-export function seedActiveTriggerRegistration(
+export function seedActiveAutomation(
   instanceId: string,
   sessionId: string,
   intent: string
@@ -73,14 +73,14 @@ now = int(time.time() * 1000)
 registration_id = str(uuid.uuid4())
 schedule_json = json.dumps({"kind": "oneShot", "atUtc": now + 86_400_000, "timeZoneId": "UTC"})
 con.execute(
-    """INSERT INTO TriggerRegistrations (
-        RegistrationId, AgentInstanceId, ProfileId, Status, Intent, ScheduleKind, ScheduleJson,
+    """INSERT INTO Automations (
+        AutomationId, AgentInstanceId, ProfileId, Status, Name, Instructions, TriggerKind, ScheduleJson,
         ScheduleRevision, NextOccurrenceAtUtc, OccurrenceCount, Revision, AuthorizationOrigin,
-        SourceSessionId, CreatedAtUtc, UpdatedAtUtc
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        SourceSessionId, CreatedAtUtc, UpdatedAtUtc, RequiresVision
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
     (
-        registration_id, instance_id, profile_id, 0, intent, 0, schedule_json,
-        1, now + 86_400_000, 0, 1, 0, session_id, now, now,
+        registration_id, instance_id, profile_id, 0, intent, intent, 0, schedule_json,
+        1, now + 86_400_000, 0, 1, 0, session_id, now, now, 0,
     ),
 )
 con.commit()

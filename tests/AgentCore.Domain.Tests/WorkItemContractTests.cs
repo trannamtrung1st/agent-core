@@ -38,7 +38,7 @@ public sealed class WorkItemContractTests
         Assert.Equal(WorkItemStatus.Queued, item.Status);
         Assert.Equal(1, item.Revision);
         Assert.Equal(WorkSourceKind.Schedule, item.Provenance.SourceKind);
-        Assert.Equal("Scheduled reminder", item.OriginLabel);
+        Assert.Equal("Automation · Schedule", item.OriginLabel);
         Assert.Equal("synthetic", item.Model.ProviderAlias);
         Assert.Throws<ArgumentException>(() => NewItem(maxAttempts: 0));
         Assert.Throws<ArgumentException>(() => NewItem(evidence: new string('a', WorkLimits.MaxEvidenceBytes + 1)));
@@ -49,9 +49,9 @@ public sealed class WorkItemContractTests
     {
         var item = NewItem(kind: WorkSourceKind.ApplicationEvent);
         Assert.Equal(WorkSourceKind.ApplicationEvent, item.Provenance.SourceKind);
-        Assert.Equal("Application event", item.OriginLabel);
+        Assert.Equal("Automation · Event", item.OriginLabel);
         var placed = NewItem(kind: WorkSourceKind.ApplicationEvent, dedupeKey: "order.placed:evt-1");
-        Assert.Equal("Order placed", placed.OriginLabel);
+        Assert.Equal("Automation · Event", placed.OriginLabel);
         Assert.DoesNotContain("evt-1", placed.ToPublicSummary().OriginLabel, StringComparison.Ordinal);
     }
 
@@ -563,7 +563,7 @@ public sealed class WorkItemContractTests
         Assert.Equal("Send the weekly note", summary.ApprovalPreview);
         Assert.True(summary.NeedsApproval);
         Assert.Equal("Delivering reminder", summary.ProgressSummary);
-        Assert.Equal("Scheduled reminder", summary.OriginLabel);
+        Assert.Equal("Automation · Schedule", summary.OriginLabel);
         Assert.DoesNotContain("lease", rendered, StringComparison.OrdinalIgnoreCase);
     }
 

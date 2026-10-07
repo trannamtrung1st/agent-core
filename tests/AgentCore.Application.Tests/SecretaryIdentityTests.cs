@@ -328,7 +328,7 @@ public sealed class SecretaryIdentityTests
         var tools = new SessionToolExecutor(
             knowledge,
             artifacts: artifacts,
-            triggerRegistrations: new TriggerRegistrationService(triggers, triggerIds, time));
+            triggerRegistrations: new AutomationService(triggers, triggerIds, time));
         var sessionIds = new DeterministicIdGenerator(
             Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-00c4-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf22")]);
@@ -387,8 +387,8 @@ public sealed class SecretaryIdentityTests
         Assert.Equal(EntryStatus.Completed, scheduleAnswer.Status);
         Assert.Contains("Scheduled Call John.", scheduleAnswer.Text, StringComparison.Ordinal);
         var saved = Assert.Single(await triggers.ListAsync(new TriggerOwner(InstanceId, ProfileId), null));
-        Assert.Equal("Call John", saved.Intent);
-        Assert.Equal(TriggerRegistrationStatus.Active, saved.Status);
+        Assert.Equal("Call John", saved.Instructions);
+        Assert.Equal(AutomationStatus.Active, saved.Status);
     }
 
     private sealed class CompletingLanguageModel : ILanguageModel

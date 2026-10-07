@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cancelSessionTrigger, listSessionTriggers } from "./api";
+import { cancelSessionAutomation, listSessionAutomations } from "./api";
 
 describe("schedule owner fetch", () => {
   afterEach(() => {
@@ -10,12 +10,12 @@ describe("schedule owner fetch", () => {
   it("loads and cancels a session schedule", async () => {
     window.localStorage.setItem("agent-core.owner-capability", "owner-token");
     const schedule = {
-      registrationId: "reg-1",
-      intent: "Call John",
+      automationId: "reg-1",
+      instructions: "Call John",
       status: "cancelled",
-      scheduleKind: "oneShot",
+      triggerKind: "oneShot",
       timeZone: "UTC",
-      schedule: "Once on 2026-09-24 at 09:00",
+      when: "Once on 2026-09-24 at 09:00",
       nextOccurrenceAt: null,
       revision: 2
     };
@@ -32,10 +32,10 @@ describe("schedule owner fetch", () => {
       });
     vi.stubGlobal("fetch", fetchMock);
 
-    const listed = await listSessionTriggers("session-1");
-    expect(listed[0]?.intent).toBe("Call John");
-    await expect(cancelSessionTrigger("session-1", "reg-1", 1)).rejects.toThrow("Registration revision is stale.");
-    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/v2/sessions/session-1/triggers/reg-1/cancel");
+    const listed = await listSessionAutomations("session-1");
+    expect(listed[0]?.instructions).toBe("Call John");
+    await expect(cancelSessionAutomation("session-1", "reg-1", 1)).rejects.toThrow("Registration revision is stale.");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/v2/sessions/session-1/automations/reg-1/cancel");
     const headers = fetchMock.mock.calls[0]?.[1].headers as Headers;
     expect(headers.get("X-AgentCore-Owner-Capability")).toBe("owner-token");
   });

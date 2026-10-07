@@ -5,19 +5,19 @@ using AgentCore.Domain.Triggers;
 namespace AgentCore.Application.Triggers;
 
 public sealed record ScheduleConversationContext(
-    Guid RegistrationId,
+    Guid AutomationId,
     long Revision,
     TriggerCommandAction LastAction,
-    string Intent,
+    string Instructions,
     string TimeZoneId,
     TriggerScheduleKind ScheduleKind,
-    TriggerRegistrationStatus Status,
+    AutomationStatus Status,
     DateTimeOffset? NextOccurrenceAtUtc)
 {
     public bool IsReferentAvailable =>
-        RegistrationId != Guid.Empty
-        && !string.IsNullOrWhiteSpace(Intent)
-        && Status == TriggerRegistrationStatus.Active;
+        AutomationId != Guid.Empty
+        && !string.IsNullOrWhiteSpace(Instructions)
+        && Status == AutomationStatus.Active;
 
     public static ScheduleConversationContext? TryFromRegistrationJson(
         string json,
@@ -32,9 +32,9 @@ public sealed record ScheduleConversationContext(
         {
             using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
-            if (!root.TryGetProperty("registrationId", out var idElement)
-                || !Guid.TryParse(idElement.GetString(), out var registrationId)
-                || registrationId == Guid.Empty)
+            if (!root.TryGetProperty("automationId", out var idElement)
+                || !Guid.TryParse(idElement.GetString(), out var automationId)
+                || automationId == Guid.Empty)
             {
                 return null;
             }
@@ -42,7 +42,7 @@ public sealed record ScheduleConversationContext(
             var revision = root.TryGetProperty("revision", out var revisionElement) && revisionElement.TryGetInt64(out var parsedRevision)
                 ? parsedRevision
                 : 0;
-            var intent = root.TryGetProperty("intent", out var intentElement)
+            var intent = root.TryGetProperty("instructions", out var intentElement)
                 ? intentElement.GetString() ?? string.Empty
                 : string.Empty;
             var timeZone = root.TryGetProperty("timeZone", out var zoneElement)
@@ -57,9 +57,9 @@ public sealed record ScheduleConversationContext(
             var statusText = root.TryGetProperty("status", out var statusElement)
                 ? statusElement.GetString()
                 : null;
-            var status = Enum.TryParse<TriggerRegistrationStatus>(statusText, ignoreCase: true, out var parsedStatus)
+            var status = Enum.TryParse<AutomationStatus>(statusText, ignoreCase: true, out var parsedStatus)
                 ? parsedStatus
-                : TriggerRegistrationStatus.Active;
+                : AutomationStatus.Active;
             DateTimeOffset? next = null;
             if (root.TryGetProperty("nextOccurrenceAtUtc", out var nextElement)
                 && nextElement.ValueKind == JsonValueKind.String
@@ -69,7 +69,7 @@ public sealed record ScheduleConversationContext(
             }
 
             return new ScheduleConversationContext(
-                registrationId,
+                automationId,
                 revision,
                 action,
                 intent,
@@ -85,25 +85,25 @@ public sealed record ScheduleConversationContext(
     }
 
     public static ScheduleConversationContext FromRegistration(
-        TriggerRegistration registration,
+        Automation registration,
         TriggerCommandAction lastAction) =>
         new(
-            registration.RegistrationId,
+            registration.AutomationId,
             registration.Revision,
             lastAction,
-            registration.Intent,
+            registration.Instructions,
             TimeZoneOf(registration.Schedule),
             ScheduleKindOf(registration.Schedule),
             registration.Status,
             registration.NextOccurrenceAtUtc);
 
     public static async ValueTask<ScheduleConversationContext?> TryReconstructLatestReferentAsync(
-        ITriggerRegistrationService registrations,
+        IAutomationService registrations,
         TriggerOwner owner,
         CancellationToken cancellationToken = default)
     {
         var rows = await registrations.ListAsync(owner, null, cancellationToken).ConfigureAwait(false);
-        var latest = rows.FirstOrDefault(row => row.Status == TriggerRegistrationStatus.Active);
+        var latest = rows.FirstOrDefault(row => row.Status == AutomationStatus.Active);
         return latest is null ? null : FromRegistration(latest, TriggerCommandAction.Create);
     }
 
@@ -135,8 +135,8 @@ public sealed record ScheduleConversationContext(
         [
             "Trusted schedule referent (resolve “another”, “that”, “it”, or “same”; does not authorize by itself):",
             $"lastAction={LastAction}",
-            $"registrationId={RegistrationId:D}",
-            $"intent=\"{Intent}\"",
+            $"automationId={AutomationId:D}",
+            $"instructions=\"{Instructions}\"",
             $"timeZone={TimeZoneId}",
             $"scheduleKind={ScheduleKind}",
             $"status={Status}",

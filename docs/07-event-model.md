@@ -140,9 +140,9 @@ Observed: catalog lifecycle; pending/bound attachment bind; off-mailbox extracti
 
 ## P9.8-P9.9 continuity events
 
-`ThoughtActivation` extends server-owned `TriggerKind`, durable `TriggerSourceKind` and `WorkSourceKind`; `Retrospection` is an independent derived WorkItem source. Browser/client/model event payloads cannot assign these origins. Session pause/end completion remains acknowledged before retrospective admission and no audio or model stream is inserted into the domain mailbox for retrospection.
+Core owns TriggerKind/TriggerSourceKind/WorkSourceKind: Schedule, ApplicationEvent and ManualInvocation. Models/clients cannot assign authority from these origins. Authored activations become ordinary durable runs; manual Experience review uses ManualInvocation with no Automation source. Session state commits remain independently acknowledged.
 
-`ExperienceChanged` and `ThoughtRegistrationChanged` Admin events contain metadata only (instance/record identity, operation, revision, enabled state, interval, prompt hash and model key). They contain no Experience body, thinking prompt, conversation, tool payload, provider error body or reasoning. Thought approval and owner-attention events reuse existing durable work contracts.
+`ExperienceChanged` and `AutomationChanged` Admin events contain bounded metadata, revision and hashes only. They exclude instructions, Experience bodies, event payloads, credentials, provider error bodies and hidden reasoning. Attention and exact approval reuse existing durable contracts.
 
 ## Credential authority separation
 

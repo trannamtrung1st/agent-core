@@ -344,10 +344,10 @@ public abstract class AdminLifecycleDeletionTests
                 MemoryScope.IdentityUser,
                 instanceId,
                 profileId), CancellationToken.None);
-            await fixture.Triggers.CreateAsync(new TriggerRegistration(
+            await fixture.Triggers.CreateAsync(new Automation(
                 Guid.Parse("019944af-00d1-7000-8000-00000000009a"),
                 new TriggerOwner(instanceId, profileId),
-                TriggerRegistrationStatus.Active,
+                AutomationStatus.Active,
                 "Remind",
                 new OneShotSchedule(now.AddDays(1), "Asia/Ho_Chi_Minh", new DateOnly(2026, 9, 30), new TimeOnly(9, 0)),
                 now.AddDays(1),
@@ -417,15 +417,15 @@ public abstract class AdminLifecycleDeletionTests
         await ForEachProfileAsync(async fixture =>
         {
             var now = DateTimeOffset.UtcNow;
-            var id = Guid.NewGuid(); var registrationId = Guid.NewGuid();
+            var id = Guid.NewGuid(); var automationId = Guid.NewGuid();
             var owner = new TriggerOwner(id, Guid.NewGuid());
             await fixture.Instances.InsertAsync(Instance(id, AgentInstanceLifecycle.Archived, now));
-            await fixture.Triggers.CreateAsync(new TriggerRegistration(registrationId, owner,
-                TriggerRegistrationStatus.Cancelled, "Review experience",
+            await fixture.Triggers.CreateAsync(new Automation(automationId, owner,
+                AutomationStatus.Cancelled, "Review experience",
                 new OneShotSchedule(now.AddDays(1), "UTC", DateOnly.FromDateTime(now.UtcDateTime), new TimeOnly(9, 0)),
-                null, null, 0, 1, 1, new(TriggerAuthorizationOrigin.AdminThought, null, null, now, now), null));
-            var occurrence = new TriggerOccurrence(Guid.NewGuid(), $"thought:{Guid.NewGuid()}", registrationId, owner,
-                TriggerSourceKind.ThoughtActivation, now, now, now, "{}", null, 1, OccurrenceRoutingDisposition.Pending, null, 0, null, null, null);
+                null, null, 0, 1, 1, new(TriggerAuthorizationOrigin.AdminOwner, null, null, now, now), null));
+            var occurrence = new TriggerOccurrence(Guid.NewGuid(), $"thought:{Guid.NewGuid()}", automationId, owner,
+                TriggerSourceKind.ManualInvocation, now, now, now, "{}", null, 1, OccurrenceRoutingDisposition.Pending, null, 0, null, null, null);
             await fixture.Triggers.AdmitOccurrenceAsync(occurrence);
             if (disposition == OccurrenceRoutingDisposition.Rejected)
                 Assert.NotNull(await fixture.Triggers.TryRejectPendingAsync(occurrence.OccurrenceId, "Thought deleted", now));
@@ -440,7 +440,7 @@ public abstract class AdminLifecycleDeletionTests
             {
                 await fixture.Deletion.DeleteInstanceAsync(command);
                 Assert.Null(await fixture.Instances.FindAsync(id));
-                Assert.Null(await fixture.Triggers.GetAsync(owner, registrationId));
+                Assert.Null(await fixture.Triggers.GetAsync(owner, automationId));
                 Assert.Null(await fixture.Triggers.GetOccurrenceAsync(owner, occurrence.OccurrenceId));
                 Assert.Contains(await fixture.Events.ListAsync(new AdminEventListQuery()), e => e.Operation == AdminEventOperationKind.InstanceDeleted);
             }

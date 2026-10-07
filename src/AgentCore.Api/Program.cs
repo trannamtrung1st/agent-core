@@ -43,12 +43,7 @@ builder.Services.AddAgentCoreInfrastructure(
         BackchannelMaxMs: builder.Configuration.GetValue("Interaction:BackchannelMaxMs", 700),
         MaxUtteranceSeconds: Math.Clamp(builder.Configuration.GetValue("Voice:MaxUtteranceSeconds", 120), 1, 180)),
     browser: builder.Configuration.GetSection(BrowserOptions.SectionName).Get<BrowserOptions>() ?? new BrowserOptions());
-builder.Services.AddOptions<ContinuityMaintenanceOptions>()
-    .Bind(builder.Configuration.GetSection(ContinuityMaintenanceOptions.SectionName))
-    .Validate(options => options.ToPolicy().Valid,
-        "ContinuityMaintenance intervals must be positive, minimum <= default <= maximum, and poll interval between 1 and 3600 seconds.")
-    .ValidateOnStart();
-builder.Services.AddSingleton(provider => provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ContinuityMaintenanceOptions>>().Value.ToPolicy());
+
 builder.Services.Configure<AgentCoreOptions>(builder.Configuration.GetSection("AgentCore"));
 builder.Services.AddOptions<ObservabilityOptions>()
     .Bind(builder.Configuration.GetSection("Observability"))
@@ -85,7 +80,6 @@ builder.Services.AddHostedService<SessionShutdownHostedService>();
 builder.Services.AddHostedService<AttachmentTtlHostedService>();
 builder.Services.AddHostedService<WorkspaceCleanupHostedService>();
 builder.Services.AddHostedService<TriggerSchedulerHostedService>();
-builder.Services.AddHostedService<ContinuityMaintenanceHostedService>();
 builder.Services.AddHostedService<DurableWorkIntakeHostedService>();
 builder.Services.AddHostedService<DurableWorkHostedService>();
 builder.Services.AddSingleton<IConversationTurnRunner, ConversationTurnRunner>();
@@ -131,7 +125,7 @@ app.MapHub<SessionHub>("/hubs/session");
 AdminEndpoints.Map(app);
 HookEndpoints.Map(app);
 SessionCatalogEndpoints.Map(app);
-TriggerScheduleEndpoints.Map(app);
+SessionAutomationEndpoints.Map(app);
 WorkItemEndpoints.Map(app);
 ProfileEndpoints.Map(app);
 HostSessionEndpoints.Map(app);

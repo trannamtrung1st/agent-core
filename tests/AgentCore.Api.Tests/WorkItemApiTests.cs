@@ -21,11 +21,11 @@ public sealed class WorkItemApiTests
 
     [Theory]
     [InlineData(WorkSourceKind.Schedule, "Recorded task", "Recorded task")]
-    [InlineData(WorkSourceKind.ThoughtActivation, "Recorded thought", "Recorded thought")]
-    [InlineData(WorkSourceKind.ApplicationEvent, "Private event field", null)]
+    [InlineData(WorkSourceKind.ManualInvocation, "Recorded thought", "Recorded thought")]
+    [InlineData(WorkSourceKind.ApplicationEvent, "Review the configured order", "Review the configured order")]
     [InlineData(WorkSourceKind.Schedule, "overlong", null)]
-    [InlineData(WorkSourceKind.ThoughtActivation, "malformed", null)]
-    [InlineData(WorkSourceKind.ThoughtActivation, "nonstring", null)]
+    [InlineData(WorkSourceKind.ManualInvocation, "malformed", null)]
+    [InlineData(WorkSourceKind.ManualInvocation, "nonstring", null)]
     public async Task Intent_projection_exposes_only_bounded_authored_tasks_and_never_occurrence_evidence(
         WorkSourceKind kind, string value, string? expected)
     {
@@ -39,15 +39,15 @@ public sealed class WorkItemApiTests
             var evidence = value switch
             {
                 "malformed" => "{",
-                "nonstring" => "{\"intent\": {\"secret\": \"SECRET_EVIDENCE\"}}",
-                _ => JsonSerializer.Serialize(new { intent = value == "overlong" ? new string('x', 501) : value, secret = "SECRET_EVIDENCE" })
+                "nonstring" => "{\"instructions\": {\"secret\": \"SECRET_EVIDENCE\"}}",
+                _ => JsonSerializer.Serialize(new { instructions = value == "overlong" ? new string('x', 2001) : value, secret = "SECRET_EVIDENCE" })
             };
             var item = await SeedAsync(host.Services.GetRequiredService<IWorkItemStore>(),
                 await OwnerAsync(host.Services, sessionId), sessionId, host.Services.GetRequiredService<TimeProvider>().GetUtcNow(), kind, evidence);
             var response = await client.GetAsync($"/api/v2/sessions/{sessionId}/work-items/{item.WorkItemId}");
             response.EnsureSuccessStatusCode();
             var result = (await response.Content.ReadFromJsonAsync<WorkItemResponse>())!;
-            Assert.Equal(expected, result.Intent);
+            Assert.Equal(expected, result.Instructions);
             Assert.DoesNotContain("SECRET_EVIDENCE", await response.Content.ReadAsStringAsync());
         }
         finally { SqliteConnection.ClearAllPools(); File.Delete(db); }
@@ -99,7 +99,7 @@ public sealed class WorkItemApiTests
         Assert.Equal(5, items.Length);
         Assert.Equal(completed.WorkItemId.ToString(), items[0].GetProperty("workItemId").GetString());
         Assert.Equal("completed", items[0].GetProperty("status").GetString());
-        Assert.Equal("Scheduled reminder", items[0].GetProperty("origin").GetString());
+        Assert.Equal("Automation · Schedule", items[0].GetProperty("origin").GetString());
         Assert.Equal("Checking the oven", items[0].GetProperty("progress").GetString());
         Assert.DoesNotContain(items, item => item.GetProperty("workItemId").GetString() == foreign.WorkItemId.ToString());
 
@@ -311,7 +311,7 @@ public sealed class WorkItemApiTests
             new WorkProvenance(
                 Guid.NewGuid(),
                 kind,
-                registrationId: null,
+                automationId: null,
                 sessionId,
                 sourceEventId: null,
                 $"work-{Guid.NewGuid():N}",

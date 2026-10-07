@@ -8,11 +8,11 @@ using AgentCore.Domain.Triggers;
 
 namespace AgentCore.Api;
 
-public static class TriggerScheduleEndpoints
+public static class SessionAutomationEndpoints
 {
     public static void Map(WebApplication app)
     {
-        var group = app.MapGroup("/api/v2/sessions/{sessionId:guid}/triggers")
+        var group = app.MapGroup("/api/v2/sessions/{sessionId:guid}/automations")
             .AddEndpointFilter<OwnerCapabilityFilter>();
 
         group.MapGet("", async (
@@ -21,7 +21,7 @@ public static class TriggerScheduleEndpoints
             Guid? before,
             SessionManager sessions,
             ILocalUserProfileService profiles,
-            ITriggerRegistrationService triggers,
+            IAutomationService triggers,
             CancellationToken cancellationToken) =>
         {
             try
@@ -30,9 +30,9 @@ public static class TriggerScheduleEndpoints
                 var owner = await RequireOwnerAsync(sessions, profiles, sessionId, cancellationToken).ConfigureAwait(false);
                 var rows = limit is null && before is null
                     ? await triggers.ListAsync(owner, status: null, cancellationToken).ConfigureAwait(false)
-                    : await triggers.ListSchedulesPageAsync(owner, limit ?? 50, before, cancellationToken).ConfigureAwait(false);
-                return Results.Json(new TriggerScheduleListResponse(
-                    rows.Where(item => item.EventSourceId is null && item.Provenance.AuthorizationOrigin != TriggerAuthorizationOrigin.AdminThought).Select(ToResponse).ToArray()));
+                    : await triggers.ListAutomationsPageAsync(owner, limit ?? 50, before, cancellationToken).ConfigureAwait(false);
+                return Results.Json(new SessionAutomationListResponse(
+                    rows.Select(ToResponse).ToArray()));
             }
             catch (AgentCoreException ex)
             {
@@ -46,7 +46,7 @@ public static class TriggerScheduleEndpoints
             CancelTriggerRequest? body,
             SessionManager sessions,
             ILocalUserProfileService profiles,
-            ITriggerRegistrationService triggers,
+            IAutomationService triggers,
             CancellationToken cancellationToken) =>
         {
             try
@@ -84,29 +84,31 @@ public static class TriggerScheduleEndpoints
         return new TriggerOwner(snapshot.AgentInstanceId, local.ProfileId);
     }
 
-    internal static TriggerScheduleResponse ToResponse(TriggerRegistration registration)
+    internal static SessionAutomationResponse ToResponse(Automation registration)
     {
-        var (kind, zone, summary) = Describe(registration.Schedule);
-        return new TriggerScheduleResponse(
-            registration.RegistrationId.ToString(),
-            registration.Intent,
+        var (kind, zone, summary) = registration.Trigger is ScheduleTrigger scheduled
+            ? Describe(scheduled.Schedule)
+            : ("event", (string?)null, $"{registration.EventType} · Event Source {registration.EventSourceId}");
+        return new SessionAutomationResponse(
+            registration.AutomationId.ToString(),
+            registration.Instructions,
             ToStatus(registration.Status),
             kind,
             zone,
             summary,
             registration.NextOccurrenceAtUtc is DateTimeOffset next ? HttpMapping.Format(next) : null,
             registration.Revision,
-            registration.SuspensionReason);
+            registration.SuspensionReason, registration.Name);
     }
 
-    private static string ToStatus(TriggerRegistrationStatus status) => status switch
+    private static string ToStatus(AutomationStatus status) => status switch
     {
-        TriggerRegistrationStatus.Active => "active",
-        TriggerRegistrationStatus.Completed => "completed",
-        TriggerRegistrationStatus.Cancelled => "cancelled",
-        TriggerRegistrationStatus.Expired => "expired",
-        TriggerRegistrationStatus.SuspendedPolicy => "suspendedPolicy",
-        TriggerRegistrationStatus.Disabled => "disabled",
+        AutomationStatus.Active => "active",
+        AutomationStatus.Completed => "completed",
+        AutomationStatus.Cancelled => "cancelled",
+        AutomationStatus.Expired => "expired",
+        AutomationStatus.SuspendedPolicy => "suspendedPolicy",
+        AutomationStatus.Disabled => "disabled",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
     };
 

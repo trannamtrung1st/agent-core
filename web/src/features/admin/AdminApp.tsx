@@ -46,7 +46,6 @@ import { DefinitionCandidateEditor, type DefinitionEditorView } from "./definiti
 import { HarnessManagementSection, HarnessPolicyModeScopes } from "./HarnessManagementSection";
 import { CredentialsSection, InstanceCredentialsSection } from "./CredentialsSection";
 import { EventSourcesSection } from "./EventSourcesSection";
-import { EventSubscriptionsSection } from "./EventSubscriptionsSection";
 import { DefinitionDraftPublishGatePanel } from "./definitionDraftPublishGatePanel";
 import { ResourceImportPanel } from "./resourceImportPanel";
 import {
@@ -112,8 +111,8 @@ import { AdminRetryAction, showAdminFailure } from "./adminFailure";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 import { startManagedPublicationChat } from "./adminManagedChat";
 import { InstanceWorkspaceSection } from "./InstanceWorkspaceSection";
-import { IdentityMaintenanceSection, ExperienceSection, ThoughtSection, InstanceRunsSection, type ExperienceSelection } from "./InstanceContinuitySection";
-import { InstanceSchedulesSection } from "./InstanceSchedulesSection";
+import { IdentityMaintenanceSection, ExperienceSection, InstanceRunsSection, type ExperienceSelection } from "./InstanceContinuitySection";
+import { InstanceAutomationsSection } from "./InstanceAutomationsSection";
 import type { AutomationSelection, RunSource } from "../chat/runPresentation";
 import { InstanceMemoryAutomationPanel } from "./instanceMemoryAutomation";
 
@@ -288,8 +287,6 @@ export function groupDefinitionInventory(
 export function AdminApp({ route }: { route: AdminRoute }) {
   const [collection, setCollection] = useState<AdminCollection>(route.view === "home" ? route.collection ?? "definitions" : "definitions");
   useEffect(() => {
-    if (route.view === "instance" && /\/connections\/?$/.test(window.location.pathname))
-      navigateToAppPath(adminInstancePath(route.instanceId, "credentials"), true);
     if (route.view === "home") setCollection(route.collection ?? "definitions");
   }, [route]);
   const [definitions, setDefinitions] = useState<LoadState<AdminDefinitionInventoryItem[]>>({ kind: "loading" });
@@ -409,7 +406,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
                 <Typography.Paragraph type="secondary" className="admin-home-subtitle">
                   {collection === "definitions" ? "Inspect published definitions and drafts, then open a version or continue editing."
                     : collection === "instances" ? "Manage agent identities, continuity, automation, and their pinned definition versions."
-                    : collection === "credentials" ? "Manage reusable protected credentials and their explicit agent bindings." : "Manage event sources, then subscribe instances from Automation → Events."}
+                    : collection === "credentials" ? "Manage reusable protected credentials and their explicit agent bindings." : "Manage Event Sources. Configure agent reactions under Automation."}
                 </Typography.Paragraph>
               </div>
               <Flex gap={8} wrap="wrap">
@@ -2336,10 +2333,11 @@ export function InstanceDetail({
   const { token } = theme.useToken();
   const [activeTab, updateActiveTab] = useState<AdminInstanceTab>(tab ?? "identity");
   const [continuityTab, setContinuityTab] = useState("memory");
-  const [automationTab, setAutomationTab] = useState("schedules");
+  const [automationTab, setAutomationTab] = useState("automations");
+  const [identityTab, setIdentityTab] = useState("profile");
+  const [connectionsTab, setConnectionsTab] = useState("credentials");
   const [sourceSelection, setSourceSelection] = useState<AutomationSelection>();
   const [experienceSelection, setExperienceSelection] = useState<ExperienceSelection>();
-  const [eventSelection, setEventSelection] = useState<{ registrationId: string; request: number }>();
   const [selectedWorkItemId, setSelectedWorkItemId] = useState<string>();
   const [runDetailsOpen, setRunDetailsOpen] = useState(false);
   const runOpener = useRef<HTMLElement | null>(null);
@@ -2347,14 +2345,18 @@ export function InstanceDetail({
   useEffect(() => {
     updateActiveTab(tab ?? "identity");
     if (tab === "continuity") setContinuityTab(section ?? "memory");
-    if (tab === "automation") setAutomationTab(section ?? "schedules");
+    if (tab === "automation") setAutomationTab(section ?? "automations");
+    if (tab === "identity") setIdentityTab(section ?? "profile");
+    if (tab === "connections") setConnectionsTab(section ?? "credentials");
   }, [instanceId, tab, section]);
-  useEffect(() => { setSourceSelection(undefined); setExperienceSelection(undefined); setEventSelection(undefined); setSelectedWorkItemId(undefined); setRunDetailsOpen(false); }, [instanceId]);
+  useEffect(() => { setSourceSelection(undefined); setExperienceSelection(undefined); setSelectedWorkItemId(undefined); setRunDetailsOpen(false); }, [instanceId]);
   const setActiveTab = (next: AdminInstanceTab, selectedSection?: AdminInstanceSection) => {
-    const nextSection = selectedSection ?? (next === "continuity" ? continuityTab : next === "automation" ? automationTab : undefined);
+    const nextSection = selectedSection ?? (next === "continuity" ? continuityTab : next === "automation" ? automationTab : next === "identity" ? identityTab === "profile" ? undefined : identityTab : next === "connections" ? connectionsTab : undefined);
     updateActiveTab(next);
     if (next === "continuity" && nextSection) setContinuityTab(nextSection);
     if (next === "automation" && nextSection) setAutomationTab(nextSection);
+    if (next === "identity") setIdentityTab(nextSection ?? "profile");
+    if (next === "connections" && nextSection) setConnectionsTab(nextSection);
     navigateToAppPath(adminInstancePath(instanceId, next, nextSection as AdminInstanceSection | undefined));
   };
   const viewRun = (workId?: string) => {
@@ -2367,14 +2369,11 @@ export function InstanceDetail({
   const viewSource = (source: RunSource) => {
     restoreRunFocus.current = false;
     setRunDetailsOpen(false);
-    if (source.kind === "event") {
-      setEventSelection({ registrationId: source.registrationId, request: Date.now() }); setActiveTab("automation", "events"); return;
-    }
-    if (source.kind === "retrospection") {
+    if (source.kind === "experience") {
       setExperienceSelection({ workItemId: source.workItemId, request: Date.now() }); setActiveTab("continuity", "experience"); return;
     }
     setSourceSelection({ ...source, request: Date.now() });
-    setActiveTab("automation", source.kind === "schedule" ? "schedules" : "thoughts");
+    setActiveTab("automation", "automations");
   };
   const row = instances.kind === "ready"
     ? instances.data.find((item) => item.instanceId.toLowerCase() === instanceId.toLowerCase())
@@ -2441,7 +2440,10 @@ export function InstanceDetail({
               ...([{
                 key: "identity",
                 label: "Identity & version",
-                children: <InstanceManagedControls config={resolved} onUpdated={onInstanceChanged} onDeleted={onInstanceDeleted} />
+                children: <Tabs activeKey={identityTab} onChange={key => setActiveTab("identity", key as AdminInstanceSection)} aria-label="Identity sections" items={[
+                  { key: "profile", label: "Profile & version", children: <InstanceManagedControls config={resolved} onUpdated={onInstanceChanged} onDeleted={onInstanceDeleted} /> },
+                  { key: "workspace", label: "Workspace", children: <InstanceWorkspaceSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} /> }
+                ]} />
               }]),
               ...([{
                 key: "continuity", label: "Continuity",
@@ -2453,11 +2455,9 @@ export function InstanceDetail({
               ...(resolved.instanceLifecycle === "Active" ? [{
                 key: "automation", label: "Automation",
                 children: <Flex vertical gap={16}>
-                  <Typography.Text type="secondary">A Schedule or Thought produces a Run when it fires. Core decides how that run is executed.</Typography.Text>
+                  <Typography.Text type="secondary">An Automation produces a Run when its trigger fires or you choose Run now.</Typography.Text>
                   <Tabs activeKey={automationTab} onChange={key => setActiveTab("automation", key as AdminInstanceSection)} aria-label="Automation sections" items={[
-                    { key: "schedules", label: "Schedules", children: <InstanceSchedulesSection instanceId={instanceId} active={activeTab === "automation" && automationTab === "schedules"} onWork={viewRun} selection={activeTab === "automation" ? sourceSelection : undefined} /> },
-                    { key: "thoughts", label: "Thoughts", children: <ThoughtSection instanceId={instanceId} active={activeTab === "automation" && automationTab === "thoughts"} onWork={viewRun} selection={activeTab === "automation" ? sourceSelection : undefined} /> },
-                    { key: "events", label: "Events", children: <EventSubscriptionsSection instanceId={instanceId} selection={activeTab === "automation" && automationTab === "events" ? eventSelection : undefined} /> },
+                    { key: "automations", label: "Automations", children: <InstanceAutomationsSection instanceId={instanceId} active={activeTab === "automation" && automationTab === "automations"} onWork={viewRun} selection={activeTab === "automation" ? sourceSelection : undefined} /> },
                     { key: "controls", label: "Policies & models", children: <Flex vertical gap={16}>
                       <HarnessManagementSection instanceId={instanceId} eligibleTools={resolved.effectiveToolAllowlist} onUpdated={onInstanceChanged} />
                       <InstanceMemoryAutomationPanel config={resolved} section="automation" />
@@ -2465,16 +2465,16 @@ export function InstanceDetail({
                   ]} />
                 </Flex>
               }] : []),
-              ...([{ key: "workspace", label: "Workspace", children:
-                <InstanceWorkspaceSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} />
-              }]),
               ...([{ key: "runs", label: "Runs", children:
                 resolved.instanceLifecycle === "Active" ? <InstanceRunsSection instanceId={instanceId} open={activeTab === "runs"} inline onRun={viewRun} onClose={() => setActiveTab("automation")} /> : <Alert type="info" showIcon title="Runs are available when this instance is active" description="Unarchive the instance from Identity & version to inspect execution history." />
               }]),
               {
-                key: "credentials",
-                label: "Credentials",
-                children: <InstanceCredentialsSection instanceId={instanceId} revision={resolved.instanceRevision} archived={resolved.instanceLifecycle !== "Active"} />
+                key: "connections",
+                label: "Connections",
+                children: <Tabs activeKey={connectionsTab} onChange={key => setActiveTab("connections", key as AdminInstanceSection)} aria-label="Connection sections" items={[
+                  { key: "credentials", label: "Credentials", children: <InstanceCredentialsSection instanceId={instanceId} revision={resolved.instanceRevision} archived={resolved.instanceLifecycle !== "Active"} /> },
+                  { key: "event-sources", label: "Event sources", children: <EventSourcesSection onAutomations={() => setActiveTab("automation", "automations")} /> }
+                ]} />
               },
             {
               key: "effective",

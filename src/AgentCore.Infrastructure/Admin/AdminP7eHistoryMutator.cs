@@ -119,9 +119,9 @@ internal sealed class InMemoryAdminP7eHistoryMutator(
         }
     }
 
-    public ValueTask CancelTriggerRegistrationWithHistoryAsync(
+    public ValueTask CancelAutomationWithHistoryAsync(
         Guid instanceId,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         AdminEventAppend append,
         Action<AdminEvent, AdminEventAppend> ensureReplay,
@@ -134,7 +134,7 @@ internal sealed class InMemoryAdminP7eHistoryMutator(
                 .AsTask().GetAwaiter().GetResult();
             if (existing is not null)
             {
-                if (existing.Operation != AdminEventOperationKind.TriggerRegistrationRevoked)
+                if (existing.Operation != AdminEventOperationKind.AutomationRevoked)
                 {
                     throw AgentCoreErrors.Conflict("Operation id is already used for a different admin event.");
                 }
@@ -143,10 +143,10 @@ internal sealed class InMemoryAdminP7eHistoryMutator(
                 return ValueTask.CompletedTask;
             }
 
-            TriggerRegistration? prior = null;
+            Automation? prior = null;
             lock (triggerState.Gate)
             {
-                if (triggerState.Registrations.TryGetValue(registrationId, out var current))
+                if (triggerState.Registrations.TryGetValue(automationId, out var current))
                 {
                     prior = current;
                 }
@@ -155,7 +155,7 @@ internal sealed class InMemoryAdminP7eHistoryMutator(
             try
             {
                 _ = automation
-                    .CancelRegistrationAsync(instanceId, registrationId, expectedRevision, cancellationToken)
+                    .CancelRegistrationAsync(instanceId, automationId, expectedRevision, cancellationToken)
                     .AsTask().GetAwaiter().GetResult();
                 events.AppendWithinLock(append);
             }
@@ -165,7 +165,7 @@ internal sealed class InMemoryAdminP7eHistoryMutator(
                 {
                     lock (triggerState.Gate)
                     {
-                        triggerState.Registrations[registrationId] = prior;
+                        triggerState.Registrations[automationId] = prior;
                     }
                 }
 
@@ -282,9 +282,9 @@ internal sealed class SqliteAdminP7eHistoryMutator(
             cancellationToken).ConfigureAwait(false);
     }
 
-    public async ValueTask CancelTriggerRegistrationWithHistoryAsync(
+    public async ValueTask CancelAutomationWithHistoryAsync(
         Guid instanceId,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         AdminEventAppend append,
         Action<AdminEvent, AdminEventAppend> ensureReplay,
@@ -292,7 +292,7 @@ internal sealed class SqliteAdminP7eHistoryMutator(
     {
         var profile = await localProfiles.GetLocalProfileAsync(cancellationToken).ConfigureAwait(false);
         var owner = new TriggerOwner(instanceId, profile.ProfileId);
-        _ = await automation.GetRegistrationAsync(instanceId, registrationId, cancellationToken).ConfigureAwait(false);
+        _ = await automation.GetRegistrationAsync(instanceId, automationId, cancellationToken).ConfigureAwait(false);
         await RunAppendHistoryAsync(
             append,
             ensureReplay,
@@ -301,7 +301,7 @@ internal sealed class SqliteAdminP7eHistoryMutator(
                 _ = await SqliteAdminP7eHistoryPersistence.CancelRegistrationAsync(
                         db,
                         owner,
-                        registrationId,
+                        automationId,
                         expectedRevision,
                         time.GetUtcNow(),
                         ct)

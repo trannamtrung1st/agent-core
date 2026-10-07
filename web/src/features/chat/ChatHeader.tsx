@@ -70,12 +70,12 @@ export function ChatHeader({
             </Badge>
           ) : null}
           {inSession && onSchedules ? (
-            <Tooltip title="Schedules">
+            <Tooltip title="Automations">
               <Button
                 type="text"
                 size="small"
                 className="chat-header-icon-action"
-                aria-label="Schedules"
+                aria-label="Automations"
                 icon={<CalendarOutlined />}
                 onClick={onSchedules}
               />

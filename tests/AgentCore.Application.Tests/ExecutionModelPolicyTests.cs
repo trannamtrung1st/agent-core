@@ -180,14 +180,14 @@ public sealed class ExecutionModelPolicyTests
             UnattendedModelCatalogKey: catalogKey,
             UnattendedReasoningEffort: effort);
 
-    private static TriggerRegistration Registration(
+    private static Automation Registration(
         string? catalogKey,
         string? effort,
         bool requiresVision) =>
         new(
             Guid.Parse("019944af-00e1-7000-8000-000000000002"),
             new TriggerOwner(Guid.Parse("019944af-00e1-7000-8000-000000000001"), Guid.Parse("019944af-00e1-7000-8000-000000000003")),
-            TriggerRegistrationStatus.Active,
+            AutomationStatus.Active,
             "Review the order",
             new OneShotSchedule(Now, "UTC", null, null),
             Now,

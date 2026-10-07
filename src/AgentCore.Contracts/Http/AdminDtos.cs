@@ -351,7 +351,7 @@ public sealed record AdminAutomationProvenanceResponse(
     string UpdatedAt);
 
 public sealed record AdminAutomationRegistrationResponse(
-    string RegistrationId,
+    string AutomationId,
     string Intent,
     string Status,
     string ScheduleKind,
@@ -393,7 +393,7 @@ public sealed record AdminEventSourceCredentialResponse(
     string Status);
 
 public sealed record AdminEventSubscriptionResponse(
-    string RegistrationId,
+    string AutomationId,
     string SourceId,
     string EventType,
     string Status,

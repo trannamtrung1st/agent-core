@@ -4,11 +4,11 @@ namespace AgentCore.Domain.Triggers;
 
 public static class TriggerLimits
 {
-    public const int MaxIntentCharacters = 500;
+    public const int MaxInstructionsCharacters = 2000;
     public const int MaxTimeZoneCharacters = 64;
     public const int MaxSuspensionReasonCharacters = 200;
     public const int MaxDedupeKeyCharacters = 200;
-    public const int MaxEvidenceBytes = 4096;
+    public const int MaxEvidenceBytes = 8192;
     public const int MinDailyInterval = 1;
     public const int MaxDailyInterval = 365;
     public const int MinWeeklyInterval = 1;
@@ -20,7 +20,7 @@ public static class TriggerLimits
     public const int MaxFixedIntervalSeconds = 604_800;
 }
 
-public enum TriggerRegistrationStatus
+public enum AutomationStatus
 {
     Active = 0,
     Completed = 1,
@@ -42,13 +42,12 @@ public enum TriggerSourceKind
 {
     Schedule = 0,
     ApplicationEvent = 1,
-    ThoughtActivation = 2
+    ManualInvocation = 2
 }
 
 public enum TriggerAuthorizationOrigin
 {
     CurrentUserTurn = 0,
-    AdminThought = 1,
     AdminOwner = 2,
     ApplicationEvent = 3
 }
@@ -144,21 +143,7 @@ public static class TriggerTimeZone
 
 public static class TriggerText
 {
-    public static string RequireIntent(string? intent)
-    {
-        if (string.IsNullOrWhiteSpace(intent))
-        {
-            throw new ArgumentException("Intent is required.");
-        }
-
-        var trimmed = intent.Trim();
-        if (trimmed.Length > TriggerLimits.MaxIntentCharacters || HasControlCharacter(trimmed))
-        {
-            throw new ArgumentException("Intent must be 1-500 characters without control characters.");
-        }
-
-        return trimmed;
-    }
+    public static string RequireInstructions(string value) => AutomationText.RequireInstructions(value);
 
     public static string? OptionalReason(string? reason)
     {
@@ -356,7 +341,7 @@ public sealed class FixedIntervalSchedule : TriggerSchedule
         DateTimeOffset? endAtUtc = null,
         int? maxOccurrences = null)
     {
-        if (intervalSeconds is < ThoughtIntent.MinIntervalSeconds or > TriggerLimits.MaxFixedIntervalSeconds)
+        if (intervalSeconds is < TriggerLimits.MinFixedIntervalSeconds or > TriggerLimits.MaxFixedIntervalSeconds)
         {
             throw new ArgumentException("Fixed interval must be between 15 seconds and 7 days.");
         }
@@ -534,14 +519,14 @@ public sealed class TriggerProvenance
     }
 }
 
-public sealed class TriggerRegistration
+public sealed class Automation
 {
-    public TriggerRegistration(
-        Guid registrationId,
+    public Automation(
+        Guid automationId,
         TriggerOwner owner,
-        TriggerRegistrationStatus status,
-        string intent,
-        TriggerSchedule schedule,
+        AutomationStatus status,
+        string instructions,
+        AutomationTrigger trigger,
         DateTimeOffset? nextOccurrenceAtUtc,
         DateTimeOffset? expiresAtUtc,
         int occurrenceCount,
@@ -552,12 +537,11 @@ public sealed class TriggerRegistration
         string? modelOverrideCatalogKey = null,
         string? modelOverrideReasoningEffort = null,
         bool requiresVision = false,
-        Guid? eventSourceId = null,
-        string? eventType = null)
+        string? name = null)
     {
-        if (registrationId == Guid.Empty)
+        if (automationId == Guid.Empty)
         {
-            throw new ArgumentException("Registration identifier is required.", nameof(registrationId));
+            throw new ArgumentException("Registration identifier is required.", nameof(automationId));
         }
 
         if (!Enum.IsDefined(status))
@@ -565,10 +549,7 @@ public sealed class TriggerRegistration
             throw new ArgumentException("Registration status is not valid.", nameof(status));
         }
 
-        if (schedule is null)
-        {
-            throw new ArgumentException("Schedule is required.", nameof(schedule));
-        }
+        ArgumentNullException.ThrowIfNull(trigger);
 
         if (occurrenceCount < 0)
         {
@@ -582,12 +563,14 @@ public sealed class TriggerRegistration
 
         RequireUtc(nextOccurrenceAtUtc, "Next occurrence");
         RequireUtc(expiresAtUtc, "Expiry");
-        RegistrationId = registrationId;
+        AutomationId = automationId;
         Owner = new TriggerOwner(owner.AgentInstanceId, owner.ProfileId);
         Status = status;
-        Intent = provenance?.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought
-            ? ThoughtIntent.Require(intent) : TriggerText.RequireIntent(intent);
-        Schedule = schedule;
+        Instructions = AutomationText.RequireInstructions(instructions);
+        Name = AutomationText.RequireName(name ?? Instructions[..Math.Min(Instructions.Length, 80)]);
+        Trigger = trigger;
+        if (trigger is EventTrigger && nextOccurrenceAtUtc is not null)
+            throw new ArgumentException("Event Automations cannot have a scheduled occurrence.");
         NextOccurrenceAtUtc = nextOccurrenceAtUtc;
         ExpiresAtUtc = expiresAtUtc;
         OccurrenceCount = occurrenceCount;
@@ -601,34 +584,24 @@ public sealed class TriggerRegistration
             WorkLimits.MaxReasoningEffortCharacters,
             "Model override reasoning effort");
         RequiresVision = requiresVision;
-        if (eventSourceId == Guid.Empty)
-        {
-            throw new ArgumentException("Event source identifier is not valid.", nameof(eventSourceId));
-        }
 
-        if ((eventSourceId is null) != string.IsNullOrWhiteSpace(eventType))
-        {
-            throw new ArgumentException("An event subscription requires both a source and an event type.");
-        }
-
-        if (eventType is not null && !string.Equals(eventType, "order.placed", StringComparison.Ordinal))
-        {
-            throw new ArgumentException("Event type is not allowed.", nameof(eventType));
-        }
-
-        EventSourceId = eventSourceId;
-        EventType = eventType;
     }
 
-    public Guid RegistrationId { get; }
+    public Guid AutomationId { get; }
 
     public TriggerOwner Owner { get; }
 
-    public TriggerRegistrationStatus Status { get; }
+    public AutomationStatus Status { get; }
 
-    public string Intent { get; }
+    public string Name { get; }
 
-    public TriggerSchedule Schedule { get; }
+    public string Instructions { get; }
+
+    public AutomationTrigger Trigger { get; }
+
+    // Timing is accessed only by the internal schedule machinery.
+    public TriggerSchedule Schedule => Trigger is ScheduleTrigger scheduled
+        ? scheduled.Schedule : throw new InvalidOperationException("Event triggers have no schedule.");
 
     public DateTimeOffset? NextOccurrenceAtUtc { get; }
 
@@ -650,24 +623,24 @@ public sealed class TriggerRegistration
 
     public bool RequiresVision { get; }
 
-    public Guid? EventSourceId { get; }
+    public Guid? EventSourceId => (Trigger as EventTrigger)?.EventSourceId;
 
-    public string? EventType { get; }
+    public string? EventType => (Trigger as EventTrigger)?.EventType;
 
-    public TriggerRegistration WithUpdate(
-        string intent,
-        TriggerSchedule schedule,
+    public Automation WithUpdate(
+        string instructions,
+        AutomationTrigger trigger,
         DateTimeOffset? nextOccurrenceAtUtc,
         DateTimeOffset? expiresAtUtc,
         long revision,
         long scheduleRevision,
         DateTimeOffset updatedAt) =>
         new(
-            RegistrationId,
+            AutomationId,
             Owner,
             Status,
-            intent,
-            schedule,
+            instructions,
+            trigger,
             nextOccurrenceAtUtc,
             expiresAtUtc,
             OccurrenceCount,
@@ -678,22 +651,21 @@ public sealed class TriggerRegistration
             ModelOverrideCatalogKey,
             ModelOverrideReasoningEffort,
             RequiresVision,
-            EventSourceId,
-            EventType);
+            Name);
 
-    public TriggerRegistration WithScheduleAdvance(
-        TriggerRegistrationStatus status,
+    public Automation WithScheduleAdvance(
+        AutomationStatus status,
         DateTimeOffset? nextOccurrenceAtUtc,
         int occurrenceCount,
         long revision,
         DateTimeOffset updatedAt,
         string? suspensionReason) =>
         new(
-            RegistrationId,
+            AutomationId,
             Owner,
             status,
-            Intent,
-            Schedule,
+            Instructions,
+            Trigger,
             nextOccurrenceAtUtc,
             ExpiresAtUtc,
             occurrenceCount,
@@ -704,16 +676,15 @@ public sealed class TriggerRegistration
             ModelOverrideCatalogKey,
             ModelOverrideReasoningEffort,
             RequiresVision,
-            EventSourceId,
-            EventType);
+            Name);
 
-    public TriggerRegistration WithCancellation(long revision, DateTimeOffset cancelledAt) =>
+    public Automation WithCancellation(long revision, DateTimeOffset cancelledAt) =>
         new(
-            RegistrationId,
+            AutomationId,
             Owner,
-            TriggerRegistrationStatus.Cancelled,
-            Intent,
-            Schedule,
+            AutomationStatus.Cancelled,
+            Instructions,
+            Trigger,
             NextOccurrenceAtUtc,
             ExpiresAtUtc,
             OccurrenceCount,
@@ -724,20 +695,19 @@ public sealed class TriggerRegistration
             ModelOverrideCatalogKey,
             ModelOverrideReasoningEffort,
             RequiresVision,
-            EventSourceId,
-            EventType);
+            Name);
 
-    public TriggerRegistration WithModelOverride(
+    public Automation WithModelOverride(
         string? catalogKey,
         string? reasoningEffort,
         long revision,
         DateTimeOffset updatedAt) =>
         new(
-            RegistrationId,
+            AutomationId,
             Owner,
             Status,
-            Intent,
-            Schedule,
+            Instructions,
+            Trigger,
             NextOccurrenceAtUtc,
             ExpiresAtUtc,
             OccurrenceCount,
@@ -748,8 +718,7 @@ public sealed class TriggerRegistration
             catalogKey,
             reasoningEffort,
             RequiresVision,
-            EventSourceId,
-            EventType);
+            Name);
 
     private static string? OptionalModelToken(string? value, int max, string name)
     {
@@ -775,7 +744,7 @@ public sealed class TriggerOccurrence
     public TriggerOccurrence(
         Guid occurrenceId,
         string dedupeKey,
-        Guid? registrationId,
+        Guid? automationId,
         TriggerOwner owner,
         TriggerSourceKind sourceKind,
         DateTimeOffset? scheduledAtUtc,
@@ -818,7 +787,7 @@ public sealed class TriggerOccurrence
             throw new ArgumentException("Routing revision cannot be negative.", nameof(routingRevision));
         }
 
-        RequireOptionalId(registrationId, "Registration");
+        RequireOptionalId(automationId, "Registration");
         RequireOptionalId(sourceEventId, "Source event");
         RequireOptionalId(claimId, "Claim");
         RequireOptionalId(durableWorkItemId, "Durable work item");
@@ -846,7 +815,7 @@ public sealed class TriggerOccurrence
         RequireUtc(claimLeaseExpiresAtUtc, "Claim lease");
         OccurrenceId = occurrenceId;
         DedupeKey = TriggerText.RequireDedupeKey(dedupeKey);
-        RegistrationId = registrationId;
+        AutomationId = automationId;
         Owner = new TriggerOwner(owner.AgentInstanceId, owner.ProfileId);
         SourceKind = sourceKind;
         ScheduledAtUtc = scheduledAtUtc;
@@ -869,7 +838,7 @@ public sealed class TriggerOccurrence
 
     public string DedupeKey { get; }
 
-    public Guid? RegistrationId { get; }
+    public Guid? AutomationId { get; }
 
     public TriggerOwner Owner { get; }
 
@@ -908,7 +877,7 @@ public sealed class TriggerOccurrence
             ? new TriggerOccurrence(
                 OccurrenceId,
                 DedupeKey,
-                RegistrationId,
+                AutomationId,
                 Owner,
                 SourceKind,
                 ScheduledAtUtc,
@@ -942,7 +911,7 @@ public sealed class TriggerOccurrence
         return new TriggerOccurrence(
             OccurrenceId,
             DedupeKey,
-            RegistrationId,
+            AutomationId,
             Owner,
             SourceKind,
             ScheduledAtUtc,
@@ -971,7 +940,7 @@ public sealed class TriggerOccurrence
         new(
             OccurrenceId,
             DedupeKey,
-            RegistrationId,
+            AutomationId,
             Owner,
             SourceKind,
             ScheduledAtUtc,

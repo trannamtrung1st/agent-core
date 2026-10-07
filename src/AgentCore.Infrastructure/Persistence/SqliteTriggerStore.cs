@@ -9,25 +9,17 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> contexts) : ITriggerStore
 {
-    public ValueTask<TriggerRegistration> SaveThoughtAsync(TriggerRegistration proposed, long expectedRevision,
-        AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default) => SaveOwnerAsync(proposed, expectedRevision, history, true, ct);
-    public ValueTask<TriggerRegistration> SaveScheduleAsync(TriggerRegistration proposed, long expectedRevision,
-        AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default, int maxActiveRegistrations = 32) => SaveOwnerAsync(proposed, expectedRevision, history, false, ct, maxActiveRegistrations);
-    private async ValueTask<TriggerRegistration> SaveOwnerAsync(TriggerRegistration proposed, long expectedRevision,
-        AgentCore.Application.Admin.AdminEventAppend history, bool thought, CancellationToken ct, int maxActiveRegistrations = 32)
+    public async ValueTask<Automation> SaveAutomationAsync(Automation proposed, long expectedRevision,
+        AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default, int maxActiveRegistrations = 32)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
-        var row = await TrackRowAsync(db, proposed.Owner, proposed.RegistrationId, ct);
+        var row = await TrackRowAsync(db, proposed.Owner, proposed.AutomationId, ct);
         var current = row is null ? null : TriggerStoreMapping.ToRegistration(row);
-        if (thought) ThoughtRegistrationRules.ValidateSave(current, proposed, expectedRevision);
-        else ScheduleRegistrationRules.ValidateSave(current, proposed, expectedRevision);
-        if (thought && current is null && await db.TriggerRegistrations.CountAsync(r => r.AgentInstanceId == proposed.Owner.AgentInstanceId.ToString("D")
-            && r.AuthorizationOrigin == (int)TriggerAuthorizationOrigin.AdminThought && r.Status != (int)TriggerRegistrationStatus.Cancelled, ct) >= ThoughtIntent.MaxRegistrationsPerInstance)
-            throw AgentCoreErrors.Validation("At most eight thought registrations are supported.");
-        if (!thought && proposed.Status == TriggerRegistrationStatus.Active && current?.Status != TriggerRegistrationStatus.Active && await ActiveSchedules(db, proposed.Owner).CountAsync(ct) >= maxActiveRegistrations)
+        AutomationRules.ValidateSave(current, proposed, expectedRevision);
+        if (proposed.Status == AutomationStatus.Active && current?.Status != AutomationStatus.Active && await ActiveSchedules(db, proposed.Owner).CountAsync(ct) >= maxActiveRegistrations)
             throw AgentCoreErrors.Validation("Active schedule limit has been reached.");
-        if (row is null) db.TriggerRegistrations.Add(TriggerStoreMapping.ToRecord(proposed));
+        if (row is null) db.Automations.Add(TriggerStoreMapping.ToRecord(proposed));
         else db.Entry(row).CurrentValues.SetValues(TriggerStoreMapping.ToRecord(proposed));
         AdminEventPersistence.StageAppend(db, history, history.OperationId);
         try { await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); }
@@ -35,50 +27,39 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         catch (DbUpdateException ex) when (IsConstraint(ex)) { throw AgentCoreErrors.Conflict("Registration already exists."); }
         return proposed;
     }
-    public ValueTask<ScheduledAdmitResult> AdmitThoughtNowAsync(TriggerRegistration registration, ExecutionModelPin pin,
-        DateTimeOffset asOf, CancellationToken ct = default) => AdmitOwnerNowAsync(registration, pin, asOf, true, ct);
-    public ValueTask<ScheduledAdmitResult> AdmitScheduleNowAsync(TriggerRegistration registration, ExecutionModelPin pin,
-        DateTimeOffset asOf, CancellationToken ct = default) => AdmitOwnerNowAsync(registration, pin, asOf, false, ct);
-    private async ValueTask<ScheduledAdmitResult> AdmitOwnerNowAsync(TriggerRegistration registration, ExecutionModelPin pin,
-        DateTimeOffset asOf, bool thought, CancellationToken ct)
+    public async ValueTask<ScheduledAdmitResult> AdmitAutomationNowAsync(Automation registration, ExecutionModelPin pin,
+        DateTimeOffset asOf, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
-        var row = await TrackRowAsync(db, registration.Owner, registration.RegistrationId, ct);
-        if (row?.Revision != registration.Revision || row.Status != (int)TriggerRegistrationStatus.Active)
+        var row = await TrackRowAsync(db, registration.Owner, registration.AutomationId, ct);
+        if (row?.Revision != registration.Revision || row.Status != (int)AutomationStatus.Active)
             return new(ScheduledAdmitOutcome.Stale, row is null ? null : TriggerStoreMapping.ToRegistration(row), null, 0);
-        if (thought != (registration.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought) || registration.EventSourceId is not null)
-            throw AgentCoreErrors.Forbidden("Manual registration source is invalid.");
-        if (await RegistrationBusyAsync(db, registration.RegistrationId, ct))
+        if (await RegistrationBusyAsync(db, registration.AutomationId, ct))
             return new(ScheduledAdmitOutcome.NotDue, registration, null, 0);
-        var decision = ThoughtRegistrationRules.ManualAdmission(registration, asOf);
-        var occurrence = TriggerScheduleAdmission.CreateOccurrence(registration, decision, asOf).WithModelPin(pin);
-        if (!thought) occurrence = ScheduleRegistrationRules.ManualOccurrence(occurrence);
+        var occurrence = AutomationRules.ManualOccurrence(TriggerStoreMapping.ToRegistration(row), pin, asOf);
+
         var existing = await FindByDedupeAsync(db, registration.Owner, occurrence.DedupeKey, ct);
         if (existing is not null) return new(ScheduledAdmitOutcome.Duplicate, registration, TriggerStoreMapping.ToOccurrence(existing), 0);
         db.TriggerOccurrences.Add(TriggerStoreMapping.ToRecord(occurrence));
         await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
         return new(ScheduledAdmitOutcome.Admitted, registration, occurrence, 0);
     }
-    public ValueTask<ScheduledAdmitResult> TryAdmitThoughtAsync(TriggerRegistration registration, ExecutionModelPin pin,
-        DateTimeOffset asOf, CancellationToken ct = default) => TryAdmitScheduledCoreAsync(registration.Owner,
-            registration.RegistrationId, registration.ScheduleRevision, registration.NextOccurrenceAtUtc!.Value,
-            asOf, ct, pin, registration.Revision);
-    private static Task<bool> RegistrationBusyAsync(AgentCoreDbContext db, Guid registrationId, CancellationToken ct)
+    private static Task<bool> RegistrationBusyAsync(AgentCoreDbContext db, Guid automationId, CancellationToken ct)
     {
-        var id = registrationId.ToString("D");
-        return db.TriggerOccurrences.AnyAsync(o => o.RegistrationId == id && (o.Disposition == (int)OccurrenceRoutingDisposition.Pending || o.Disposition == (int)OccurrenceRoutingDisposition.Claimed
+        var id = automationId.ToString("D");
+        return db.TriggerOccurrences.AnyAsync(o => o.AutomationId == id && (o.Disposition == (int)OccurrenceRoutingDisposition.Pending || o.Disposition == (int)OccurrenceRoutingDisposition.Claimed
                 || o.Disposition == (int)OccurrenceRoutingDisposition.AwaitingDurableWork
                 || db.WorkItems.Any(w => w.WorkItemId == o.DurableWorkItemId && w.Status < (int)AgentCore.Domain.Work.WorkItemStatus.Completed)), ct);
     }
 
-    public async ValueTask<TriggerRegistration> CreateAsync(
-        TriggerRegistration registration,
+    public async ValueTask<Automation> CreateAsync(
+        Automation registration,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(registration);
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        db.TriggerRegistrations.Add(TriggerStoreMapping.ToRecord(registration));
+        db.Automations.Add(TriggerStoreMapping.ToRecord(registration));
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -91,25 +72,25 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         return registration;
     }
 
-    public async ValueTask<TriggerRegistration?> GetAsync(
+    public async ValueTask<Automation?> GetAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var row = await FindRowAsync(db, owner, registrationId, cancellationToken).ConfigureAwait(false);
+        var row = await FindRowAsync(db, owner, automationId, cancellationToken).ConfigureAwait(false);
         return row is null ? null : TriggerStoreMapping.ToRegistration(row);
     }
 
-    public async ValueTask<IReadOnlyList<TriggerRegistration>> ListAsync(
+    public async ValueTask<IReadOnlyList<Automation>> ListAsync(
         TriggerOwner owner,
-        TriggerRegistrationStatus? status,
+        AutomationStatus? status,
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var instanceId = owner.AgentInstanceId.ToString("D");
         var profileId = owner.ProfileId.ToString("D");
-        var query = db.TriggerRegistrations.AsNoTracking()
+        var query = db.Automations.AsNoTracking()
             .Where(row => row.AgentInstanceId == instanceId && row.ProfileId == profileId);
         if (status is not null)
         {
@@ -119,76 +100,76 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
 
         var rows = await query
             .OrderByDescending(row => row.CreatedAtUtc)
-            .ThenByDescending(row => row.RegistrationId)
+            .ThenByDescending(row => row.AutomationId)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         return rows.Select(TriggerStoreMapping.ToRegistration).ToArray();
     }
 
-    public async ValueTask<IReadOnlyList<TriggerRegistration>> ListSchedulesPageAsync(
+    public async ValueTask<IReadOnlyList<Automation>> ListAutomationsPageAsync(
         TriggerOwner owner, int limit, Guid? before, CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var instanceId = owner.AgentInstanceId.ToString("D");
         var profileId = owner.ProfileId.ToString("D");
-        var query = db.TriggerRegistrations.AsNoTracking()
+        var query = db.Automations.AsNoTracking()
             .Where(item => item.AgentInstanceId == instanceId && item.ProfileId == profileId && item.EventSourceId == null);
         if (before is Guid id)
         {
             var anchorId = id.ToString("D");
-            var anchor = await query.FirstOrDefaultAsync(item => item.RegistrationId == anchorId, cancellationToken).ConfigureAwait(false)
+            var anchor = await query.FirstOrDefaultAsync(item => item.AutomationId == anchorId, cancellationToken).ConfigureAwait(false)
                 ?? throw AgentCoreErrors.NotFound("Page cursor was not found.");
             query = query.Where(item => item.CreatedAtUtc < anchor.CreatedAtUtc ||
-                item.CreatedAtUtc == anchor.CreatedAtUtc && string.Compare(item.RegistrationId, anchorId) < 0);
+                item.CreatedAtUtc == anchor.CreatedAtUtc && string.Compare(item.AutomationId, anchorId) < 0);
         }
-        var rows = await query.OrderByDescending(item => item.CreatedAtUtc).ThenByDescending(item => item.RegistrationId)
+        var rows = await query.OrderByDescending(item => item.CreatedAtUtc).ThenByDescending(item => item.AutomationId)
             .Take(Math.Clamp(limit, 1, 100)).ToListAsync(cancellationToken).ConfigureAwait(false);
         return rows.Select(TriggerStoreMapping.ToRegistration).ToArray();
     }
 
-    public async ValueTask<IReadOnlyList<TriggerRegistration>> ListSuspendedPolicyForAgentInstanceAsync(
+    public async ValueTask<IReadOnlyList<Automation>> ListSuspendedPolicyForAgentInstanceAsync(
         Guid agentInstanceId,
         int limit,
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var instanceId = agentInstanceId.ToString("D");
-        var suspended = (int)TriggerRegistrationStatus.SuspendedPolicy;
-        var rows = await db.TriggerRegistrations.AsNoTracking()
+        var suspended = (int)AutomationStatus.SuspendedPolicy;
+        var rows = await db.Automations.AsNoTracking()
             .Where(row => row.AgentInstanceId == instanceId && row.Status == suspended)
             .OrderByDescending(row => row.CreatedAtUtc)
-            .ThenByDescending(row => row.RegistrationId)
+            .ThenByDescending(row => row.AutomationId)
             .Take(limit)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         return rows.Select(TriggerStoreMapping.ToRegistration).ToArray();
     }
 
-    public async ValueTask<IReadOnlyList<TriggerRegistration>> ListFutureRegistrationsForAgentInstanceAsync(
+    public async ValueTask<IReadOnlyList<Automation>> ListFutureRegistrationsForAgentInstanceAsync(
         Guid agentInstanceId,
         int limit,
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var instanceId = agentInstanceId.ToString("D");
-        var active = (int)TriggerRegistrationStatus.Active;
-        var suspended = (int)TriggerRegistrationStatus.SuspendedPolicy;
-        var rows = await db.TriggerRegistrations.AsNoTracking()
+        var active = (int)AutomationStatus.Active;
+        var suspended = (int)AutomationStatus.SuspendedPolicy;
+        var rows = await db.Automations.AsNoTracking()
             .Where(row => row.AgentInstanceId == instanceId && (row.Status == active || row.Status == suspended))
             .OrderByDescending(row => row.CreatedAtUtc)
-            .ThenByDescending(row => row.RegistrationId)
+            .ThenByDescending(row => row.AutomationId)
             .Take(limit)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         return rows.Select(TriggerStoreMapping.ToRegistration).ToArray();
     }
 
-    private static IQueryable<TriggerRegistrationRecord> ActiveSchedules(AgentCoreDbContext db, TriggerOwner owner)
+    private static IQueryable<AutomationRecord> ActiveSchedules(AgentCoreDbContext db, TriggerOwner owner)
     {
         var instanceId = owner.AgentInstanceId.ToString("D");
         var profileId = owner.ProfileId.ToString("D");
-        return db.TriggerRegistrations.Where(row => row.AgentInstanceId == instanceId && row.ProfileId == profileId
-            && row.Status == (int)TriggerRegistrationStatus.Active && row.EventSourceId == null);
+        return db.Automations.Where(row => row.AgentInstanceId == instanceId && row.ProfileId == profileId
+            && row.Status == (int)AutomationStatus.Active );
     }
 
     public async ValueTask<int> CountActiveAsync(TriggerOwner owner, CancellationToken cancellationToken = default)
@@ -197,15 +178,15 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         return await ActiveSchedules(db, owner).CountAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async ValueTask<IReadOnlyList<TriggerRegistration>> ListEventSubscriptionsAsync(
+    public async ValueTask<IReadOnlyList<Automation>> ListEventSubscriptionsAsync(
         Guid eventSourceId,
         string eventType,
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var sourceId = eventSourceId.ToString("D");
-        var rows = await db.TriggerRegistrations.AsNoTracking()
-            .Where(row => row.Status == (int)TriggerRegistrationStatus.Active
+        var rows = await db.Automations.AsNoTracking()
+            .Where(row => row.Status == (int)AutomationStatus.Active
                 && row.EventSourceId == sourceId
                 && row.EventType == eventType)
             .ToListAsync(cancellationToken)
@@ -213,9 +194,9 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         return rows.Select(TriggerStoreMapping.ToRegistration).ToArray();
     }
 
-    public async ValueTask<TriggerRegistration> UpdateAsync(
+    public async ValueTask<Automation> UpdateAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         string intent,
         TriggerSchedule schedule,
@@ -225,14 +206,14 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var currentRow = await FindRowAsync(db, owner, registrationId, cancellationToken).ConfigureAwait(false);
+        var currentRow = await FindRowAsync(db, owner, automationId, cancellationToken).ConfigureAwait(false);
         if (currentRow is null)
         {
             throw AgentCoreErrors.NotFound("Trigger registration was not found.");
         }
 
         var current = TriggerStoreMapping.ToRegistration(currentRow);
-        var updated = TriggerRegistrationMutations.Update(
+        var updated = AutomationMutations.Update(
             current,
             expectedRevision,
             intent,
@@ -245,20 +226,20 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
             return current;
         }
 
-        var id = registrationId.ToString("D");
+        var id = automationId.ToString("D");
         var instanceId = owner.AgentInstanceId.ToString("D");
         var profileId = owner.ProfileId.ToString("D");
         var scheduleJson = TriggerScheduleCodec.Serialize(updated.Schedule);
-        var rows = await db.TriggerRegistrations
-            .Where(row => row.RegistrationId == id
+        var rows = await db.Automations
+            .Where(row => row.AutomationId == id
                 && row.AgentInstanceId == instanceId
                 && row.ProfileId == profileId
                 && row.Revision == expectedRevision
-                && row.Status == (int)TriggerRegistrationStatus.Active)
+                && row.Status == (int)AutomationStatus.Active)
             .ExecuteUpdateAsync(
                 setters => setters
-                    .SetProperty(row => row.Intent, updated.Intent)
-                    .SetProperty(row => row.ScheduleKind, (int)updated.Schedule.Kind)
+                    .SetProperty(row => row.Instructions, updated.Instructions)
+                    .SetProperty(row => row.TriggerKind, (int)updated.Trigger.Kind)
                     .SetProperty(row => row.ScheduleJson, scheduleJson)
                     .SetProperty(row => row.NextOccurrenceAtUtc, ToUnix(updated.NextOccurrenceAtUtc))
                     .SetProperty(row => row.ExpiresAtUtc, ToUnix(updated.ExpiresAtUtc))
@@ -272,13 +253,13 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
             return updated;
         }
 
-        return await RejectStaleUpdateAsync(db, owner, registrationId, expectedRevision, cancellationToken)
+        return await RejectStaleUpdateAsync(db, owner, automationId, expectedRevision, cancellationToken)
             .ConfigureAwait(false);
     }
 
-    public async ValueTask<TriggerRegistration> SetModelOverrideAsync(
+    public async ValueTask<Automation> SetModelOverrideAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         string? catalogKey,
         string? reasoningEffort,
@@ -286,14 +267,14 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var currentRow = await FindRowAsync(db, owner, registrationId, cancellationToken).ConfigureAwait(false);
+        var currentRow = await FindRowAsync(db, owner, automationId, cancellationToken).ConfigureAwait(false);
         if (currentRow is null)
         {
             throw AgentCoreErrors.NotFound("Trigger registration was not found.");
         }
 
         var current = TriggerStoreMapping.ToRegistration(currentRow);
-        var updated = TriggerRegistrationMutations.SetModelOverride(
+        var updated = AutomationMutations.SetModelOverride(
             current,
             expectedRevision,
             catalogKey,
@@ -304,15 +285,15 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
             return current;
         }
 
-        var id = registrationId.ToString("D");
+        var id = automationId.ToString("D");
         var instanceId = owner.AgentInstanceId.ToString("D");
         var profileId = owner.ProfileId.ToString("D");
-        var rows = await db.TriggerRegistrations
-            .Where(row => row.RegistrationId == id
+        var rows = await db.Automations
+            .Where(row => row.AutomationId == id
                 && row.AgentInstanceId == instanceId
                 && row.ProfileId == profileId
                 && row.Revision == expectedRevision
-                && row.Status == (int)TriggerRegistrationStatus.Active)
+                && row.Status == (int)AutomationStatus.Active)
             .ExecuteUpdateAsync(
                 setters => setters
                     .SetProperty(row => row.ModelOverrideCatalogKey, updated.ModelOverrideCatalogKey)
@@ -326,44 +307,44 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
             return updated;
         }
 
-        return await RejectStaleUpdateAsync(db, owner, registrationId, expectedRevision, cancellationToken)
+        return await RejectStaleUpdateAsync(db, owner, automationId, expectedRevision, cancellationToken)
             .ConfigureAwait(false);
     }
 
-    public async ValueTask<TriggerRegistration> CancelAsync(
+    public async ValueTask<Automation> CancelAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         DateTimeOffset cancelledAt,
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var currentRow = await FindRowAsync(db, owner, registrationId, cancellationToken).ConfigureAwait(false);
+        var currentRow = await FindRowAsync(db, owner, automationId, cancellationToken).ConfigureAwait(false);
         if (currentRow is null)
         {
             throw AgentCoreErrors.NotFound("Trigger registration was not found.");
         }
 
         var current = TriggerStoreMapping.ToRegistration(currentRow);
-        var cancelled = TriggerRegistrationMutations.Cancel(current, expectedRevision, cancelledAt);
+        var cancelled = AutomationMutations.Cancel(current, expectedRevision, cancelledAt);
         if (cancelled.Revision == current.Revision)
         {
             return current;
         }
 
-        var id = registrationId.ToString("D");
+        var id = automationId.ToString("D");
         var instanceId = owner.AgentInstanceId.ToString("D");
         var profileId = owner.ProfileId.ToString("D");
-        var rows = await db.TriggerRegistrations
-            .Where(row => row.RegistrationId == id
+        var rows = await db.Automations
+            .Where(row => row.AutomationId == id
                 && row.AgentInstanceId == instanceId
                 && row.ProfileId == profileId
                 && row.Revision == expectedRevision
-                && (row.Status == (int)TriggerRegistrationStatus.Active
-                    || row.Status == (int)TriggerRegistrationStatus.SuspendedPolicy))
+                && (row.Status == (int)AutomationStatus.Active
+                    || row.Status == (int)AutomationStatus.SuspendedPolicy))
             .ExecuteUpdateAsync(
                 setters => setters
-                    .SetProperty(row => row.Status, (int)TriggerRegistrationStatus.Cancelled)
+                    .SetProperty(row => row.Status, (int)AutomationStatus.Cancelled)
                     .SetProperty(row => row.Revision, cancelled.Revision)
                     .SetProperty(row => row.UpdatedAtUtc, cancelled.Provenance.UpdatedAt.ToUnixTimeMilliseconds()),
                 cancellationToken)
@@ -373,14 +354,14 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
             return cancelled;
         }
 
-        var again = await FindRowAsync(db, owner, registrationId, cancellationToken).ConfigureAwait(false);
+        var again = await FindRowAsync(db, owner, automationId, cancellationToken).ConfigureAwait(false);
         if (again is null)
         {
             throw AgentCoreErrors.NotFound("Trigger registration was not found.");
         }
 
         var reloaded = TriggerStoreMapping.ToRegistration(again);
-        if (reloaded.Status == TriggerRegistrationStatus.Cancelled)
+        if (reloaded.Status == AutomationStatus.Cancelled)
         {
             return reloaded;
         }
@@ -420,7 +401,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         }
     }
 
-    public async ValueTask<IReadOnlyList<TriggerRegistration>> ListDueAsync(
+    public async ValueTask<IReadOnlyList<Automation>> ListDueAsync(
         DateTimeOffset asOfUtc,
         int limit,
         CancellationToken cancellationToken = default)
@@ -428,26 +409,26 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         var asOf = TriggerScheduleCalculator.Truncate(asOfUtc).ToUnixTimeMilliseconds();
         var take = Math.Clamp(limit, 1, TriggerScheduler.DefaultBatchSize);
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var rows = await db.TriggerRegistrations.AsNoTracking()
-            .Where(row => row.Status == (int)TriggerRegistrationStatus.Active
+        var rows = await db.Automations.AsNoTracking()
+            .Where(row => row.Status == (int)AutomationStatus.Active
                 && row.NextOccurrenceAtUtc != null
                 && row.NextOccurrenceAtUtc <= asOf)
             .OrderBy(row => row.NextOccurrenceAtUtc)
-            .ThenBy(row => row.RegistrationId)
+            .ThenBy(row => row.AutomationId)
             .Take(take)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         return rows.Select(TriggerStoreMapping.ToRegistration).ToArray();
     }
 
-    public ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(TriggerOwner owner, Guid registrationId,
+    public ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(TriggerOwner owner, Guid automationId,
         long expectedScheduleRevision, DateTimeOffset expectedNextOccurrenceAtUtc, DateTimeOffset asOfUtc,
-        CancellationToken cancellationToken = default) => TryAdmitScheduledCoreAsync(owner, registrationId,
+        CancellationToken cancellationToken = default) => TryAdmitScheduledCoreAsync(owner, automationId,
             expectedScheduleRevision, expectedNextOccurrenceAtUtc, asOfUtc, cancellationToken);
 
     private async ValueTask<ScheduledAdmitResult> TryAdmitScheduledCoreAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedScheduleRevision,
         DateTimeOffset expectedNextOccurrenceAtUtc,
         DateTimeOffset asOfUtc,
@@ -457,9 +438,9 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         var expectedNext = TriggerScheduleCalculator.Truncate(expectedNextOccurrenceAtUtc);
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        var row = await TrackRowAsync(db, owner, registrationId, cancellationToken).ConfigureAwait(false);
+        var row = await TrackRowAsync(db, owner, automationId, cancellationToken).ConfigureAwait(false);
         if (row is null
-            || row.Status != (int)TriggerRegistrationStatus.Active
+            || row.Status != (int)AutomationStatus.Active
             || (expectedRevision is not null && row.Revision != expectedRevision)
             || row.ScheduleRevision != expectedScheduleRevision
             || row.NextOccurrenceAtUtc != expectedNext.ToUnixTimeMilliseconds())
@@ -477,7 +458,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         catch (TriggerTimeZoneUnavailableException)
         {
             var suspended = currentRegistration.WithScheduleAdvance(
-                TriggerRegistrationStatus.SuspendedPolicy,
+                AutomationStatus.SuspendedPolicy,
                 null,
                 currentRegistration.OccurrenceCount,
                 currentRegistration.Revision + 1,
@@ -506,14 +487,13 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
             return new ScheduledAdmitResult(outcome, closed, null, 0);
         }
 
-        if (currentRegistration.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought
-            && await RegistrationBusyAsync(db, registrationId, cancellationToken))
+        if ( await RegistrationBusyAsync(db, automationId, cancellationToken))
         {
             var coalesced = TriggerScheduleAdmission.Advance(currentRegistration,
                 decision with { OccurrenceCount = currentRegistration.OccurrenceCount }, asOf);
             ApplyAdvance(row, coalesced);
             await db.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken);
-            AgentCore.Application.Observability.RuntimeTelemetry.RecordThought("coalesced");
+            AgentCore.Application.Observability.RuntimeTelemetry.RecordWork("coalesced");
             return new ScheduledAdmitResult(ScheduledAdmitOutcome.NotDue, coalesced, null, decision.SkippedCount + 1);
         }
         var occurrence = TriggerScheduleAdmission.CreateOccurrence(currentRegistration, decision, asOf);
@@ -534,7 +514,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
             return await ResolveScheduledConflictAsync(
                 db,
                 owner,
-                registrationId,
+                automationId,
                 expectedScheduleRevision,
                 expectedNext,
                 occurrence.DedupeKey,
@@ -563,32 +543,32 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         return row is null ? null : TriggerStoreMapping.ToOccurrence(row);
     }
 
-    private static async Task<TriggerRegistrationRecord?> FindRowAsync(
+    private static async Task<AutomationRecord?> FindRowAsync(
         AgentCoreDbContext db,
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         CancellationToken cancellationToken)
     {
-        var id = registrationId.ToString("D");
+        var id = automationId.ToString("D");
         var instanceId = owner.AgentInstanceId.ToString("D");
         var profileId = owner.ProfileId.ToString("D");
-        return await db.TriggerRegistrations.AsNoTracking()
+        return await db.Automations.AsNoTracking()
             .FirstOrDefaultAsync(
-                row => row.RegistrationId == id
+                row => row.AutomationId == id
                     && row.AgentInstanceId == instanceId
                     && row.ProfileId == profileId,
                 cancellationToken)
             .ConfigureAwait(false);
     }
 
-    private static async Task<TriggerRegistration> RejectStaleUpdateAsync(
+    private static async Task<Automation> RejectStaleUpdateAsync(
         AgentCoreDbContext db,
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         CancellationToken cancellationToken)
     {
-        var again = await FindRowAsync(db, owner, registrationId, cancellationToken).ConfigureAwait(false);
+        var again = await FindRowAsync(db, owner, automationId, cancellationToken).ConfigureAwait(false);
         if (again is null)
         {
             throw AgentCoreErrors.NotFound("Trigger registration was not found.");
@@ -636,25 +616,25 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
                 cancellationToken);
     }
 
-    private static async Task<TriggerRegistrationRecord?> TrackRowAsync(
+    private static async Task<AutomationRecord?> TrackRowAsync(
         AgentCoreDbContext db,
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         CancellationToken cancellationToken)
     {
-        var id = registrationId.ToString("D");
+        var id = automationId.ToString("D");
         var instanceId = owner.AgentInstanceId.ToString("D");
         var profileId = owner.ProfileId.ToString("D");
-        return await db.TriggerRegistrations
+        return await db.Automations
             .FirstOrDefaultAsync(
-                row => row.RegistrationId == id
+                row => row.AutomationId == id
                     && row.AgentInstanceId == instanceId
                     && row.ProfileId == profileId,
                 cancellationToken)
             .ConfigureAwait(false);
     }
 
-    private static void ApplyAdvance(TriggerRegistrationRecord row, TriggerRegistration advanced)
+    private static void ApplyAdvance(AutomationRecord row, Automation advanced)
     {
         row.Status = (int)advanced.Status;
         row.NextOccurrenceAtUtc = advanced.NextOccurrenceAtUtc?.ToUnixTimeMilliseconds();
@@ -667,7 +647,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
     private static async Task<ScheduledAdmitResult> ResolveScheduledConflictAsync(
         AgentCoreDbContext db,
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedScheduleRevision,
         DateTimeOffset expectedNext,
         string dedupeKey,
@@ -676,7 +656,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         CancellationToken cancellationToken)
     {
         var existing = await FindByDedupeAsync(db, owner, dedupeKey, cancellationToken).ConfigureAwait(false);
-        var registrationRow = await TrackRowAsync(db, owner, registrationId, cancellationToken).ConfigureAwait(false);
+        var registrationRow = await TrackRowAsync(db, owner, automationId, cancellationToken).ConfigureAwait(false);
         if (existing is null || registrationRow is null)
         {
             return new ScheduledAdmitResult(ScheduledAdmitOutcome.Stale, null, null, 0);
@@ -684,7 +664,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
 
         var mapped = TriggerStoreMapping.ToOccurrence(existing);
 
-        if (registrationRow.Status == (int)TriggerRegistrationStatus.Active
+        if (registrationRow.Status == (int)AutomationStatus.Active
             && registrationRow.ScheduleRevision == expectedScheduleRevision
             && registrationRow.NextOccurrenceAtUtc == expectedNext.ToUnixTimeMilliseconds())
         {
@@ -704,25 +684,25 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
 
     private static long? ToUnix(DateTimeOffset? value) => value?.ToUnixTimeMilliseconds();
 
-    public async ValueTask<TriggerRegistration?> SuspendPolicyAsync(
+    public async ValueTask<Automation?> SuspendPolicyAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         string reason,
         DateTimeOffset suspendedAt,
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var row = await TrackRowAsync(db, owner, registrationId, cancellationToken).ConfigureAwait(false);
+        var row = await TrackRowAsync(db, owner, automationId, cancellationToken).ConfigureAwait(false);
         if (row is null
-            || row.Status != (int)TriggerRegistrationStatus.Active
+            || row.Status != (int)AutomationStatus.Active
             || row.Revision != expectedRevision)
         {
             return null;
         }
 
         var suspended = TriggerStoreMapping.ToRegistration(row).WithScheduleAdvance(
-            TriggerRegistrationStatus.SuspendedPolicy,
+            AutomationStatus.SuspendedPolicy,
             row.NextOccurrenceAtUtc is long nextMs
                 ? DateTimeOffset.FromUnixTimeMilliseconds(nextMs)
                 : null,
@@ -730,7 +710,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
             row.Revision + 1,
             suspendedAt,
             reason);
-        row.Status = (int)TriggerRegistrationStatus.SuspendedPolicy;
+        row.Status = (int)AutomationStatus.SuspendedPolicy;
         row.Revision = suspended.Revision;
         row.NextOccurrenceAtUtc = ToUnix(suspended.NextOccurrenceAtUtc);
         row.UpdatedAtUtc = suspended.Provenance.UpdatedAt.ToUnixTimeMilliseconds();
@@ -739,17 +719,17 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         return suspended;
     }
 
-    public async ValueTask<TriggerRegistration?> TryReactivatePolicySuspensionAsync(
+    public async ValueTask<Automation?> TryReactivatePolicySuspensionAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         DateTimeOffset reactivatedAt,
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var row = await TrackRowAsync(db, owner, registrationId, cancellationToken).ConfigureAwait(false);
+        var row = await TrackRowAsync(db, owner, automationId, cancellationToken).ConfigureAwait(false);
         if (row is null
-            || row.Status != (int)TriggerRegistrationStatus.SuspendedPolicy
+            || row.Status != (int)AutomationStatus.SuspendedPolicy
             || row.Revision != expectedRevision)
         {
             return null;
@@ -764,13 +744,13 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
 
         next ??= TriggerScheduleCalculator.InitialNext(current.Schedule, reactivatedAt);
         var reactivated = current.WithScheduleAdvance(
-            TriggerRegistrationStatus.Active,
+            AutomationStatus.Active,
             next,
             current.OccurrenceCount,
             current.Revision + 1,
             reactivatedAt,
             null);
-        row.Status = (int)TriggerRegistrationStatus.Active;
+        row.Status = (int)AutomationStatus.Active;
         row.Revision = reactivated.Revision;
         row.NextOccurrenceAtUtc = ToUnix(reactivated.NextOccurrenceAtUtc);
         row.UpdatedAtUtc = reactivated.Provenance.UpdatedAt.ToUnixTimeMilliseconds();
@@ -1023,15 +1003,16 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
 
 internal static class TriggerStoreMapping
 {
-    public static TriggerRegistrationRecord ToRecord(TriggerRegistration registration) => new()
+    public static AutomationRecord ToRecord(Automation registration) => new()
     {
-        RegistrationId = registration.RegistrationId.ToString("D"),
+        AutomationId = registration.AutomationId.ToString("D"),
         AgentInstanceId = registration.Owner.AgentInstanceId.ToString("D"),
         ProfileId = registration.Owner.ProfileId.ToString("D"),
         Status = (int)registration.Status,
-        Intent = registration.Intent,
-        ScheduleKind = (int)registration.Schedule.Kind,
-        ScheduleJson = TriggerScheduleCodec.Serialize(registration.Schedule),
+        Instructions = registration.Instructions,
+        Name = registration.Name,
+        TriggerKind = (int)registration.Trigger.Kind,
+        ScheduleJson = registration.Trigger is ScheduleTrigger s ? TriggerScheduleCodec.Serialize(s.Schedule) : null,
         NextOccurrenceAtUtc = registration.NextOccurrenceAtUtc?.ToUnixTimeMilliseconds(),
         ExpiresAtUtc = registration.ExpiresAtUtc?.ToUnixTimeMilliseconds(),
         OccurrenceCount = registration.OccurrenceCount,
@@ -1050,12 +1031,12 @@ internal static class TriggerStoreMapping
         EventType = registration.EventType
     };
 
-    public static TriggerRegistration ToRegistration(TriggerRegistrationRecord row) => new(
-        Guid.Parse(row.RegistrationId),
+    public static Automation ToRegistration(AutomationRecord row) => new(
+        Guid.Parse(row.AutomationId),
         new TriggerOwner(Guid.Parse(row.AgentInstanceId), Guid.Parse(row.ProfileId)),
-        (TriggerRegistrationStatus)row.Status,
-        row.Intent,
-        TriggerScheduleCodec.Deserialize(row.ScheduleJson),
+        (AutomationStatus)row.Status,
+        row.Instructions,
+        row.TriggerKind == (int)AutomationTriggerKind.Schedule ? new ScheduleTrigger(TriggerScheduleCodec.Deserialize(row.ScheduleJson!)) : new EventTrigger(Guid.Parse(row.EventSourceId!), row.EventType!),
         FromUnix(row.NextOccurrenceAtUtc),
         FromUnix(row.ExpiresAtUtc),
         row.OccurrenceCount,
@@ -1071,14 +1052,13 @@ internal static class TriggerStoreMapping
         row.ModelOverrideCatalogKey,
         row.ModelOverrideReasoningEffort,
         row.RequiresVision,
-        string.IsNullOrWhiteSpace(row.EventSourceId) ? null : Guid.Parse(row.EventSourceId),
-        row.EventType);
+        row.Name);
 
     public static TriggerOccurrenceRecord ToRecord(TriggerOccurrence occurrence) => new()
     {
         OccurrenceId = occurrence.OccurrenceId.ToString("D"),
         DedupeKey = occurrence.DedupeKey,
-        RegistrationId = occurrence.RegistrationId?.ToString("D"),
+        AutomationId = occurrence.AutomationId?.ToString("D"),
         AgentInstanceId = occurrence.Owner.AgentInstanceId.ToString("D"),
         ProfileId = occurrence.Owner.ProfileId.ToString("D"),
         SourceKind = (int)occurrence.SourceKind,
@@ -1116,7 +1096,7 @@ internal static class TriggerStoreMapping
     public static TriggerOccurrence ToOccurrence(TriggerOccurrenceRecord row) => new(
         Guid.Parse(row.OccurrenceId),
         row.DedupeKey,
-        ParseOptional(row.RegistrationId),
+        ParseOptional(row.AutomationId),
         new TriggerOwner(Guid.Parse(row.AgentInstanceId), Guid.Parse(row.ProfileId)),
         (TriggerSourceKind)row.SourceKind,
         FromUnix(row.ScheduledAtUtc),

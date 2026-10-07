@@ -32,11 +32,13 @@ public static class ToolCatalog
     public const string EmailCreateDraft = "email.create_draft";
     public const string EmailSend = "email.send";
     public const string DemoSensitiveAction = "demo.sensitive_action";
-    public const string TriggerScheduleOnce = "trigger.schedule_once";
-    public const string TriggerScheduleRecurring = "trigger.schedule_recurring";
-    public const string TriggerList = "trigger.list";
-    public const string TriggerUpdate = "trigger.update";
-    public const string TriggerCancel = "trigger.cancel";
+    public const string TriggerScheduleOnce = "automation.create";
+    public const string TriggerList = "automation.list";
+    public const string AutomationInspect = "automation.inspect";
+    public const string AutomationRun = "automation.run";
+    public const string AutomationDisable = "automation.disable";
+    public const string TriggerUpdate = "automation.update";
+    public const string TriggerCancel = "automation.delete";
     public const string CapabilitiesLoad = "capabilities.load";
     public const string SkillsLoad = "skills.load";
     public const string AppMessageSend = "app.message.send";
@@ -141,7 +143,7 @@ public static class ToolCatalog
             if (authority.OfferRule is ToolOfferRule.CurrentExecutionCapability or ToolOfferRule.HarnessAuthority
                 && ToolPolicy.IsOffered(authority, definition, context, configurationGate) && seen.Add(authority.Name))
                 offered.Add(authority.ModelDefinition);
-        foreach (var name in new[] { CredentialsList, CapabilitiesLoad, ContinuitySearch, ContinuityGet, MemoryConsolidate, MemoryForget, ExperienceConsolidate })
+        foreach (var name in new[] { CredentialsList, CapabilitiesLoad, ContinuitySearch, ContinuityGet, MemoryConsolidate, MemoryForget, ExperienceConsolidate, AgentCore.Application.Experience.ExperienceService.SourceTool, AgentCore.Application.Experience.ExperienceService.RecordTool })
             if (ToolRegistry.TryGet(name, out var continuityDescriptor)
                 && ToolPolicy.IsOffered(continuityDescriptor, definition, context, configurationGate) && seen.Add(name))
                 offered.Add(continuityDescriptor.ModelDefinition);
@@ -152,8 +154,7 @@ public static class ToolCatalog
             && ToolPolicy.IsOffered(descriptor, definition, context, configurationGate)
             && seen.Add(WorkComplete))
         {
-            offered.Add(context?.Trigger.Kind == TriggerKind.ThoughtActivation
-                ? AgentCore.Application.Work.ThoughtCompletion.Contract : descriptor.ModelDefinition);
+            offered.Add(AgentCore.Application.Work.WorkCompletionRequest.Contract);
         }
     }
 

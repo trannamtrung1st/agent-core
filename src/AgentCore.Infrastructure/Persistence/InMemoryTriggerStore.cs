@@ -10,67 +10,40 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     private readonly InMemoryDurableState _state;
     private readonly AgentCore.Infrastructure.Admin.InMemoryAdminEventStore? _admin;
 
-    public ValueTask<TriggerRegistration> SaveThoughtAsync(TriggerRegistration proposed, long expectedRevision,
-        AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default) => SaveOwnerAsync(proposed, expectedRevision, history, true, ct);
-    public ValueTask<TriggerRegistration> SaveScheduleAsync(TriggerRegistration proposed, long expectedRevision,
-        AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default, int maxActiveRegistrations = 32) => SaveOwnerAsync(proposed, expectedRevision, history, false, ct, maxActiveRegistrations);
-    private ValueTask<TriggerRegistration> SaveOwnerAsync(TriggerRegistration proposed, long expectedRevision,
-        AgentCore.Application.Admin.AdminEventAppend history, bool thought, CancellationToken ct, int maxActiveRegistrations = 32)
+    public ValueTask<Automation> SaveAutomationAsync(Automation proposed, long expectedRevision,
+        AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default, int maxActiveRegistrations = 32)
     {
         ct.ThrowIfCancellationRequested();
         lock (_state.Gate)
         {
-            var current = Find(proposed.Owner, proposed.RegistrationId);
-            if (thought) ThoughtRegistrationRules.ValidateSave(current, proposed, expectedRevision);
-            else ScheduleRegistrationRules.ValidateSave(current, proposed, expectedRevision);
-            if (thought && current is null && _state.Registrations.Values.Count(r => r.Owner.AgentInstanceId == proposed.Owner.AgentInstanceId
-                && r.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought && r.Status != TriggerRegistrationStatus.Cancelled) >= ThoughtIntent.MaxRegistrationsPerInstance)
-                throw AgentCoreErrors.Validation("At most eight thought registrations are supported.");
-            if (!thought && proposed.Status == TriggerRegistrationStatus.Active && current?.Status != TriggerRegistrationStatus.Active && CountActiveSchedules(proposed.Owner) >= maxActiveRegistrations)
+            var current = Find(proposed.Owner, proposed.AutomationId);
+            AutomationRules.ValidateSave(current, proposed, expectedRevision);
+            if (proposed.Status == AutomationStatus.Active && current?.Status != AutomationStatus.Active && CountActiveSchedules(proposed.Owner) >= maxActiveRegistrations)
                 throw AgentCoreErrors.Validation("Active schedule limit has been reached.");
             AgentCore.Application.Admin.AdminEventSummaryPolicy.ValidateAppend(history);
             _admin?.AppendWithinLock(history);
-            _state.Registrations[proposed.RegistrationId] = proposed;
+            _state.Registrations[proposed.AutomationId] = proposed;
             return ValueTask.FromResult(proposed);
         }
     }
-    public ValueTask<ScheduledAdmitResult> AdmitThoughtNowAsync(TriggerRegistration registration, ExecutionModelPin pin,
-        DateTimeOffset asOf, CancellationToken ct = default) => AdmitOwnerNowAsync(registration, pin, asOf, true, ct);
-    public ValueTask<ScheduledAdmitResult> AdmitScheduleNowAsync(TriggerRegistration registration, ExecutionModelPin pin,
-        DateTimeOffset asOf, CancellationToken ct = default) => AdmitOwnerNowAsync(registration, pin, asOf, false, ct);
-    private ValueTask<ScheduledAdmitResult> AdmitOwnerNowAsync(TriggerRegistration registration, ExecutionModelPin pin,
-        DateTimeOffset asOf, bool thought, CancellationToken ct)
+    public ValueTask<ScheduledAdmitResult> AdmitAutomationNowAsync(Automation registration, ExecutionModelPin pin,
+        DateTimeOffset asOf, CancellationToken ct = default)
     {
         lock (_state.Gate)
         {
-            var current = Find(registration.Owner, registration.RegistrationId);
-            if (current?.Revision != registration.Revision || current.Status != TriggerRegistrationStatus.Active)
+            var current = Find(registration.Owner, registration.AutomationId);
+            if (current?.Revision != registration.Revision || current.Status != AutomationStatus.Active)
                 return ValueTask.FromResult(new ScheduledAdmitResult(ScheduledAdmitOutcome.Stale, current, null, 0));
-            if (thought != (registration.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought) || registration.EventSourceId is not null)
-                throw AgentCoreErrors.Forbidden("Manual registration source is invalid.");
-            if (RegistrationBusy(registration.RegistrationId))
+            if (RegistrationBusy(registration.AutomationId))
                 return ValueTask.FromResult(new ScheduledAdmitResult(ScheduledAdmitOutcome.NotDue, current, null, 0));
-            var decision = ThoughtRegistrationRules.ManualAdmission(current, asOf);
-            var occurrence = TriggerScheduleAdmission.CreateOccurrence(current, decision, asOf).WithModelPin(pin);
-            if (!thought) occurrence = ScheduleRegistrationRules.ManualOccurrence(occurrence);
+            var occurrence = AutomationRules.ManualOccurrence(current!, pin, asOf);
+
             var result = AdmitOccurrenceAsync(occurrence, ct).Result;
             return ValueTask.FromResult(new ScheduledAdmitResult(result.Kind == TriggerOccurrenceAdmitKind.Admitted
                 ? ScheduledAdmitOutcome.Admitted : ScheduledAdmitOutcome.Duplicate, current, result.Occurrence, 0));
         }
     }
-    public ValueTask<ScheduledAdmitResult> TryAdmitThoughtAsync(TriggerRegistration registration, ExecutionModelPin pin,
-        DateTimeOffset asOf, CancellationToken ct = default)
-    {
-        lock (_state.Gate)
-        {
-            var current = Find(registration.Owner, registration.RegistrationId);
-            if (current?.Revision != registration.Revision)
-                return ValueTask.FromResult(new ScheduledAdmitResult(ScheduledAdmitOutcome.Stale, current, null, 0));
-            return TryAdmitScheduledCore(registration.Owner, registration.RegistrationId, registration.ScheduleRevision,
-                registration.NextOccurrenceAtUtc!.Value, asOf, ct, pin);
-        }
-    }
-    private bool RegistrationBusy(Guid registrationId) => _state.Occurrences.Values.Any(o => o.RegistrationId == registrationId
+    private bool RegistrationBusy(Guid automationId) => _state.Occurrences.Values.Any(o => o.AutomationId == automationId
         && (o.Disposition is OccurrenceRoutingDisposition.Pending or OccurrenceRoutingDisposition.Claimed or OccurrenceRoutingDisposition.AwaitingDurableWork
             || o.DurableWorkItemId is Guid id && _state.WorkItems.TryGetValue(id, out var item) && !item.IsTerminal));
 
@@ -83,26 +56,26 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     {
         lock (_state.Gate)
         {
-            var deletedThoughts = DeletedThoughtIds(agentInstanceId);
-            var registrations = _state.Registrations.Values.Count(item => item.Owner.AgentInstanceId == agentInstanceId && !deletedThoughts.Contains(item.RegistrationId));
+            var deletedAutomations = DeletedAutomationIds(agentInstanceId);
+            var registrations = _state.Registrations.Values.Count(item => item.Owner.AgentInstanceId == agentInstanceId && !deletedAutomations.Contains(item.AutomationId));
             var occurrences = _state.Occurrences.Values.Count(item => item.Owner.AgentInstanceId == agentInstanceId
-                && !(item.RegistrationId is Guid id && deletedThoughts.Contains(id) && item.SourceKind == TriggerSourceKind.ThoughtActivation
+                && !(item.AutomationId is Guid id && deletedAutomations.Contains(id)
                     && item.Disposition == OccurrenceRoutingDisposition.Rejected && item.DurableWorkItemId is null));
             return (registrations, occurrences);
         }
     }
 
-    private HashSet<Guid> DeletedThoughtIds(Guid instanceId) => _state.Registrations.Values.Where(r => r.Owner.AgentInstanceId == instanceId
-        && r.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought && r.Status == TriggerRegistrationStatus.Cancelled)
-        .Select(r => r.RegistrationId).ToHashSet();
+    private HashSet<Guid> DeletedAutomationIds(Guid instanceId) => _state.Registrations.Values.Where(r => r.Owner.AgentInstanceId == instanceId
+        && r.Status == AutomationStatus.Cancelled)
+        .Select(r => r.AutomationId).ToHashSet();
 
-    internal void PurgeDeletedThoughts(Guid instanceId)
+    internal void PurgeDeletedAutomations(Guid instanceId)
     {
         lock (_state.Gate)
         {
-            var ids = DeletedThoughtIds(instanceId);
-            foreach (var occurrence in _state.Occurrences.Values.Where(o => o.Owner.AgentInstanceId == instanceId && o.RegistrationId is Guid id && ids.Contains(id)
-                && o.SourceKind == TriggerSourceKind.ThoughtActivation && o.Disposition == OccurrenceRoutingDisposition.Rejected
+            var ids = DeletedAutomationIds(instanceId);
+            foreach (var occurrence in _state.Occurrences.Values.Where(o => o.Owner.AgentInstanceId == instanceId && o.AutomationId is Guid id && ids.Contains(id)
+ && o.Disposition == OccurrenceRoutingDisposition.Rejected
                 && o.DurableWorkItemId is null).ToArray())
                 _state.Occurrences.Remove(occurrence.OccurrenceId);
             foreach (var id in ids) _state.Registrations.Remove(id);
@@ -116,37 +89,37 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         _admin = admin;
     }
 
-    public ValueTask<TriggerRegistration> CreateAsync(
-        TriggerRegistration registration,
+    public ValueTask<Automation> CreateAsync(
+        Automation registration,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(registration);
         lock (_state.Gate)
         {
-            if (_state.Registrations.ContainsKey(registration.RegistrationId))
+            if (_state.Registrations.ContainsKey(registration.AutomationId))
             {
                 throw AgentCoreErrors.Conflict("Trigger registration already exists.");
             }
 
-            _state.Registrations[registration.RegistrationId] = registration;
+            _state.Registrations[registration.AutomationId] = registration;
             return ValueTask.FromResult(registration);
         }
     }
 
-    public ValueTask<TriggerRegistration?> GetAsync(
+    public ValueTask<Automation?> GetAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         CancellationToken cancellationToken = default)
     {
         lock (_state.Gate)
         {
-            return ValueTask.FromResult(Find(owner, registrationId));
+            return ValueTask.FromResult(Find(owner, automationId));
         }
     }
 
-    public ValueTask<IReadOnlyList<TriggerRegistration>> ListAsync(
+    public ValueTask<IReadOnlyList<Automation>> ListAsync(
         TriggerOwner owner,
-        TriggerRegistrationStatus? status,
+        AutomationStatus? status,
         CancellationToken cancellationToken = default)
     {
         lock (_state.Gate)
@@ -154,29 +127,29 @@ public sealed class InMemoryTriggerStore : ITriggerStore
             var items = _state.Registrations.Values
                 .Where(item => item.Owner.Equals(owner) && (status is null || item.Status == status))
                 .OrderByDescending(item => item.Provenance.CreatedAt)
-                .ThenByDescending(item => item.RegistrationId)
+                .ThenByDescending(item => item.AutomationId)
                 .ToArray();
-            return ValueTask.FromResult<IReadOnlyList<TriggerRegistration>>(items);
+            return ValueTask.FromResult<IReadOnlyList<Automation>>(items);
         }
     }
 
-    public ValueTask<IReadOnlyList<TriggerRegistration>> ListSchedulesPageAsync(
+    public ValueTask<IReadOnlyList<Automation>> ListAutomationsPageAsync(
         TriggerOwner owner, int limit, Guid? before, CancellationToken cancellationToken = default)
     {
         lock (_state.Gate)
         {
-            var owned = _state.Registrations.Values.Where(item => item.Owner.Equals(owner) && item.EventSourceId is null).ToArray();
-            var anchor = before is Guid id ? owned.FirstOrDefault(item => item.RegistrationId == id)
+            var owned = _state.Registrations.Values.Where(item => item.Owner.Equals(owner)).ToArray();
+            var anchor = before is Guid id ? owned.FirstOrDefault(item => item.AutomationId == id)
                 ?? throw AgentCoreErrors.NotFound("Page cursor was not found.") : null;
             var page = owned.Where(item => anchor is null || item.Provenance.CreatedAt < anchor.Provenance.CreatedAt ||
-                item.Provenance.CreatedAt == anchor.Provenance.CreatedAt && item.RegistrationId.CompareTo(anchor.RegistrationId) < 0)
-                .OrderByDescending(item => item.Provenance.CreatedAt).ThenByDescending(item => item.RegistrationId)
+                item.Provenance.CreatedAt == anchor.Provenance.CreatedAt && item.AutomationId.CompareTo(anchor.AutomationId) < 0)
+                .OrderByDescending(item => item.Provenance.CreatedAt).ThenByDescending(item => item.AutomationId)
                 .Take(Math.Clamp(limit, 1, 100)).ToArray();
-            return ValueTask.FromResult<IReadOnlyList<TriggerRegistration>>(page);
+            return ValueTask.FromResult<IReadOnlyList<Automation>>(page);
         }
     }
 
-    public ValueTask<IReadOnlyList<TriggerRegistration>> ListSuspendedPolicyForAgentInstanceAsync(
+    public ValueTask<IReadOnlyList<Automation>> ListSuspendedPolicyForAgentInstanceAsync(
         Guid agentInstanceId,
         int limit,
         CancellationToken cancellationToken = default)
@@ -186,16 +159,16 @@ public sealed class InMemoryTriggerStore : ITriggerStore
             var items = _state.Registrations.Values
                 .Where(item =>
                     item.Owner.AgentInstanceId == agentInstanceId
-                    && item.Status == TriggerRegistrationStatus.SuspendedPolicy)
+                    && item.Status == AutomationStatus.SuspendedPolicy)
                 .OrderByDescending(item => item.Provenance.CreatedAt)
-                .ThenByDescending(item => item.RegistrationId)
+                .ThenByDescending(item => item.AutomationId)
                 .Take(limit)
                 .ToArray();
-            return ValueTask.FromResult<IReadOnlyList<TriggerRegistration>>(items);
+            return ValueTask.FromResult<IReadOnlyList<Automation>>(items);
         }
     }
 
-    public ValueTask<IReadOnlyList<TriggerRegistration>> ListFutureRegistrationsForAgentInstanceAsync(
+    public ValueTask<IReadOnlyList<Automation>> ListFutureRegistrationsForAgentInstanceAsync(
         Guid agentInstanceId,
         int limit,
         CancellationToken cancellationToken = default)
@@ -205,17 +178,17 @@ public sealed class InMemoryTriggerStore : ITriggerStore
             var items = _state.Registrations.Values
                 .Where(item =>
                     item.Owner.AgentInstanceId == agentInstanceId
-                    && item.Status is TriggerRegistrationStatus.Active or TriggerRegistrationStatus.SuspendedPolicy)
+                    && item.Status is AutomationStatus.Active or AutomationStatus.SuspendedPolicy)
                 .OrderByDescending(item => item.Provenance.CreatedAt)
-                .ThenByDescending(item => item.RegistrationId)
+                .ThenByDescending(item => item.AutomationId)
                 .Take(limit)
                 .ToArray();
-            return ValueTask.FromResult<IReadOnlyList<TriggerRegistration>>(items);
+            return ValueTask.FromResult<IReadOnlyList<Automation>>(items);
         }
     }
 
     private int CountActiveSchedules(TriggerOwner owner) => _state.Registrations.Values.Count(item =>
-        item.Owner.Equals(owner) && item.Status == TriggerRegistrationStatus.Active && item.EventSourceId is null);
+        item.Owner.Equals(owner) && item.Status == AutomationStatus.Active);
 
     public ValueTask<int> CountActiveAsync(TriggerOwner owner, CancellationToken cancellationToken = default)
     {
@@ -226,7 +199,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         }
     }
 
-    public ValueTask<IReadOnlyList<TriggerRegistration>> ListEventSubscriptionsAsync(
+    public ValueTask<IReadOnlyList<Automation>> ListEventSubscriptionsAsync(
         Guid eventSourceId,
         string eventType,
         CancellationToken cancellationToken = default)
@@ -235,17 +208,17 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         {
             var items = _state.Registrations.Values
                 .Where(item =>
-                    item.Status == TriggerRegistrationStatus.Active
+                    item.Status == AutomationStatus.Active
                     && item.EventSourceId == eventSourceId
                     && string.Equals(item.EventType, eventType, StringComparison.Ordinal))
                 .ToArray();
-            return ValueTask.FromResult<IReadOnlyList<TriggerRegistration>>(items);
+            return ValueTask.FromResult<IReadOnlyList<Automation>>(items);
         }
     }
 
-    public ValueTask<TriggerRegistration> UpdateAsync(
+    public ValueTask<Automation> UpdateAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         string intent,
         TriggerSchedule schedule,
@@ -256,8 +229,8 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     {
         lock (_state.Gate)
         {
-            var current = Find(owner, registrationId) ?? throw AgentCoreErrors.NotFound("Trigger registration was not found.");
-            var updated = TriggerRegistrationMutations.Update(
+            var current = Find(owner, automationId) ?? throw AgentCoreErrors.NotFound("Trigger registration was not found.");
+            var updated = AutomationMutations.Update(
                 current,
                 expectedRevision,
                 intent,
@@ -265,14 +238,14 @@ public sealed class InMemoryTriggerStore : ITriggerStore
                 nextOccurrenceAtUtc,
                 expiresAtUtc,
                 updatedAt);
-            _state.Registrations[registrationId] = updated;
+            _state.Registrations[automationId] = updated;
             return ValueTask.FromResult(updated);
         }
     }
 
-    public ValueTask<TriggerRegistration> SetModelOverrideAsync(
+    public ValueTask<Automation> SetModelOverrideAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         string? catalogKey,
         string? reasoningEffort,
@@ -281,30 +254,30 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     {
         lock (_state.Gate)
         {
-            var current = Find(owner, registrationId) ?? throw AgentCoreErrors.NotFound("Trigger registration was not found.");
-            var updated = TriggerRegistrationMutations.SetModelOverride(
+            var current = Find(owner, automationId) ?? throw AgentCoreErrors.NotFound("Trigger registration was not found.");
+            var updated = AutomationMutations.SetModelOverride(
                 current,
                 expectedRevision,
                 catalogKey,
                 reasoningEffort,
                 updatedAt);
-            _state.Registrations[registrationId] = updated;
+            _state.Registrations[automationId] = updated;
             return ValueTask.FromResult(updated);
         }
     }
 
-    public ValueTask<TriggerRegistration> CancelAsync(
+    public ValueTask<Automation> CancelAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         DateTimeOffset cancelledAt,
         CancellationToken cancellationToken = default)
     {
         lock (_state.Gate)
         {
-            var current = Find(owner, registrationId) ?? throw AgentCoreErrors.NotFound("Trigger registration was not found.");
-            var cancelled = TriggerRegistrationMutations.Cancel(current, expectedRevision, cancelledAt);
-            _state.Registrations[registrationId] = cancelled;
+            var current = Find(owner, automationId) ?? throw AgentCoreErrors.NotFound("Trigger registration was not found.");
+            var cancelled = AutomationMutations.Cancel(current, expectedRevision, cancelledAt);
+            _state.Registrations[automationId] = cancelled;
             return ValueTask.FromResult(cancelled);
         }
     }
@@ -353,7 +326,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         }
     }
 
-    public ValueTask<IReadOnlyList<TriggerRegistration>> ListDueAsync(
+    public ValueTask<IReadOnlyList<Automation>> ListDueAsync(
         DateTimeOffset asOfUtc,
         int limit,
         CancellationToken cancellationToken = default)
@@ -363,25 +336,25 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         lock (_state.Gate)
         {
             var due = _state.Registrations.Values
-                .Where(item => item.Status == TriggerRegistrationStatus.Active
+                .Where(item => item.Status == AutomationStatus.Active
                     && item.NextOccurrenceAtUtc is DateTimeOffset next
                     && next <= asOf)
                 .OrderBy(item => item.NextOccurrenceAtUtc)
-                .ThenBy(item => item.RegistrationId)
+                .ThenBy(item => item.AutomationId)
                 .Take(take)
                 .ToArray();
-            return ValueTask.FromResult<IReadOnlyList<TriggerRegistration>>(due);
+            return ValueTask.FromResult<IReadOnlyList<Automation>>(due);
         }
     }
 
-    public ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(TriggerOwner owner, Guid registrationId,
+    public ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(TriggerOwner owner, Guid automationId,
         long expectedScheduleRevision, DateTimeOffset expectedNextOccurrenceAtUtc, DateTimeOffset asOfUtc,
-        CancellationToken cancellationToken = default) => TryAdmitScheduledCore(owner, registrationId,
+        CancellationToken cancellationToken = default) => TryAdmitScheduledCore(owner, automationId,
             expectedScheduleRevision, expectedNextOccurrenceAtUtc, asOfUtc, cancellationToken);
 
     private ValueTask<ScheduledAdmitResult> TryAdmitScheduledCore(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedScheduleRevision,
         DateTimeOffset expectedNextOccurrenceAtUtc,
         DateTimeOffset asOfUtc,
@@ -391,7 +364,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         var expectedNext = TriggerScheduleCalculator.Truncate(expectedNextOccurrenceAtUtc);
         lock (_state.Gate)
         {
-            var current = Find(owner, registrationId);
+            var current = Find(owner, automationId);
             if (!IsCurrent(current, expectedScheduleRevision, expectedNext))
             {
                 return ValueTask.FromResult(new ScheduledAdmitResult(ScheduledAdmitOutcome.Stale, current, null, 0));
@@ -405,13 +378,13 @@ public sealed class InMemoryTriggerStore : ITriggerStore
             catch (TriggerTimeZoneUnavailableException)
             {
                 var suspended = current!.WithScheduleAdvance(
-                    TriggerRegistrationStatus.SuspendedPolicy,
+                    AutomationStatus.SuspendedPolicy,
                     null,
                     current.OccurrenceCount,
                     current.Revision + 1,
                     asOf,
                     "Timezone is unavailable.");
-                _state.Registrations[registrationId] = suspended;
+                _state.Registrations[automationId] = suspended;
                 return ValueTask.FromResult(new ScheduledAdmitResult(ScheduledAdmitOutcome.Rejected, suspended, null, 0));
             }
 
@@ -423,18 +396,18 @@ public sealed class InMemoryTriggerStore : ITriggerStore
             if (decision.Kind is not ScheduleAdmissionKind.Admit)
             {
                 var closed = TriggerScheduleAdmission.Advance(current!, decision, asOf);
-                _state.Registrations[registrationId] = closed;
+                _state.Registrations[automationId] = closed;
                 var outcome = decision.Kind == ScheduleAdmissionKind.Expire
                     ? ScheduledAdmitOutcome.Expired
                     : ScheduledAdmitOutcome.Completed;
                 return ValueTask.FromResult(new ScheduledAdmitResult(outcome, closed, null, 0));
             }
 
-            if (current!.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought && RegistrationBusy(registrationId))
+            if (RegistrationBusy(automationId))
             {
-                var coalesced = TriggerScheduleAdmission.Advance(current, decision with { OccurrenceCount = current.OccurrenceCount }, asOf);
-                _state.Registrations[registrationId] = coalesced;
-                AgentCore.Application.Observability.RuntimeTelemetry.RecordThought("coalesced");
+                var coalesced = TriggerScheduleAdmission.Advance(current!, decision with { OccurrenceCount = current!.OccurrenceCount }, asOf);
+                _state.Registrations[automationId] = coalesced;
+                AgentCore.Application.Observability.RuntimeTelemetry.RecordWork("coalesced");
                 return ValueTask.FromResult(new ScheduledAdmitResult(ScheduledAdmitOutcome.NotDue, coalesced, null, decision.SkippedCount + 1));
             }
             var occurrence = TriggerScheduleAdmission.CreateOccurrence(current!, decision, asOf);
@@ -443,7 +416,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
             {
                 var existing = _state.Occurrences[existingId];
                 var advanced = TriggerScheduleAdmission.Advance(current!, decision, asOf);
-                _state.Registrations[registrationId] = advanced;
+                _state.Registrations[automationId] = advanced;
                 return ValueTask.FromResult(new ScheduledAdmitResult(
                     ScheduledAdmitOutcome.Duplicate,
                     advanced,
@@ -454,7 +427,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
             var updated = TriggerScheduleAdmission.Advance(current!, decision, asOf);
             _state.Occurrences[occurrence.OccurrenceId] = occurrence;
             _state.DedupeKeys[Dedupe(occurrence.Owner, occurrence.DedupeKey)] = occurrence.OccurrenceId;
-            _state.Registrations[registrationId] = updated;
+            _state.Registrations[automationId] = updated;
             return ValueTask.FromResult(new ScheduledAdmitResult(
                 ScheduledAdmitOutcome.Admitted,
                 updated,
@@ -463,9 +436,9 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         }
     }
 
-    public ValueTask<TriggerRegistration?> SuspendPolicyAsync(
+    public ValueTask<Automation?> SuspendPolicyAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         string reason,
         DateTimeOffset suspendedAt,
@@ -473,41 +446,41 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     {
         lock (_state.Gate)
         {
-            var current = Find(owner, registrationId);
+            var current = Find(owner, automationId);
             if (current is null
-                || current.Status != TriggerRegistrationStatus.Active
+                || current.Status != AutomationStatus.Active
                 || current.Revision != expectedRevision)
             {
-                return ValueTask.FromResult<TriggerRegistration?>(null);
+                return ValueTask.FromResult<Automation?>(null);
             }
 
             var suspended = current.WithScheduleAdvance(
-                TriggerRegistrationStatus.SuspendedPolicy,
+                AutomationStatus.SuspendedPolicy,
                 current.NextOccurrenceAtUtc,
                 current.OccurrenceCount,
                 current.Revision + 1,
                 suspendedAt,
                 reason);
-            _state.Registrations[registrationId] = suspended;
-            return ValueTask.FromResult<TriggerRegistration?>(suspended);
+            _state.Registrations[automationId] = suspended;
+            return ValueTask.FromResult<Automation?>(suspended);
         }
     }
 
-    public ValueTask<TriggerRegistration?> TryReactivatePolicySuspensionAsync(
+    public ValueTask<Automation?> TryReactivatePolicySuspensionAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         DateTimeOffset reactivatedAt,
         CancellationToken cancellationToken = default)
     {
         lock (_state.Gate)
         {
-            var current = Find(owner, registrationId);
+            var current = Find(owner, automationId);
             if (current is null
-                || current.Status != TriggerRegistrationStatus.SuspendedPolicy
+                || current.Status != AutomationStatus.SuspendedPolicy
                 || current.Revision != expectedRevision)
             {
-                return ValueTask.FromResult<TriggerRegistration?>(null);
+                return ValueTask.FromResult<Automation?>(null);
             }
 
             DateTimeOffset? next = current.NextOccurrenceAtUtc;
@@ -518,14 +491,14 @@ public sealed class InMemoryTriggerStore : ITriggerStore
 
             next ??= TriggerScheduleCalculator.InitialNext(current.Schedule, reactivatedAt);
             var reactivated = current.WithScheduleAdvance(
-                TriggerRegistrationStatus.Active,
+                AutomationStatus.Active,
                 next,
                 current.OccurrenceCount,
                 current.Revision + 1,
                 reactivatedAt,
                 null);
-            _state.Registrations[registrationId] = reactivated;
-            return ValueTask.FromResult<TriggerRegistration?>(reactivated);
+            _state.Registrations[automationId] = reactivated;
+            return ValueTask.FromResult<Automation?>(reactivated);
         }
     }
 
@@ -781,16 +754,16 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         new(owner.AgentInstanceId, owner.ProfileId, dedupeKey);
 
     private static bool IsCurrent(
-        TriggerRegistration? current,
+        Automation? current,
         long expectedScheduleRevision,
         DateTimeOffset expectedNext) =>
         current is not null
-        && current.Status == TriggerRegistrationStatus.Active
+        && current.Status == AutomationStatus.Active
         && current.ScheduleRevision == expectedScheduleRevision
         && current.NextOccurrenceAtUtc == expectedNext;
 
-    private TriggerRegistration? Find(TriggerOwner owner, Guid registrationId) =>
-        _state.Registrations.TryGetValue(registrationId, out var registration) && registration.Owner.Equals(owner)
+    private Automation? Find(TriggerOwner owner, Guid automationId) =>
+        _state.Registrations.TryGetValue(automationId, out var registration) && registration.Owner.Equals(owner)
             ? registration
             : null;
 

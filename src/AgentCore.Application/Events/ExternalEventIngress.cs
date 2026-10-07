@@ -78,7 +78,7 @@ public sealed class ExternalEventIngress(
         var subscribers = await triggers.ListEventSubscriptionsAsync(source.SourceId, eventType, cancellationToken)
             .ConfigureAwait(false);
         var targets = subscribers
-            .Select(item => new ExternalEventTarget(item.RegistrationId, item.Owner.AgentInstanceId, item.Owner.ProfileId))
+            .Select(item => new ExternalEventTarget(item.AutomationId, item.Owner.AgentInstanceId, item.Owner.ProfileId))
             .ToArray();
         var admitted = await events.AdmitAsync(candidate, targets, cancellationToken).ConfigureAwait(false);
         var created = await ResumeEventAsync(admitted.Event, now, cancellationToken).ConfigureAwait(false);
@@ -136,10 +136,12 @@ public sealed class ExternalEventIngress(
         CancellationToken cancellationToken)
     {
         var owner = new TriggerOwner(delivery.AgentInstanceId, delivery.ProfileId);
-        var registration = await triggers.GetAsync(owner, delivery.RegistrationId, cancellationToken).ConfigureAwait(false);
-        if (registration is null)
+        var registration = await triggers.GetAsync(owner, delivery.AutomationId, cancellationToken).ConfigureAwait(false);
+        var source = await events.GetAsync(stored.SourceId, cancellationToken).ConfigureAwait(false);
+        if (source?.Status != ExternalEventSourceStatus.Active || registration is null || registration.Status != AutomationStatus.Active
+            || registration.EventSourceId != stored.SourceId || registration.EventType != stored.EventType)
         {
-            await events.MarkDeliveryAsync(stored.EventId, delivery.RegistrationId, ExternalEventDeliveryStatus.Skipped, cancellationToken)
+            await events.MarkDeliveryAsync(stored.EventId, delivery.AutomationId, ExternalEventDeliveryStatus.Skipped, cancellationToken)
                 .ConfigureAwait(false);
             return false;
         }
@@ -149,9 +151,10 @@ public sealed class ExternalEventIngress(
             stored.SourceId,
             stored.SourceEventId,
             stored.EvidenceJson,
+            stored.EventId,
             now,
             cancellationToken).ConfigureAwait(false);
-        await events.MarkDeliveryAsync(stored.EventId, delivery.RegistrationId, outcome.Status, cancellationToken)
+        await events.MarkDeliveryAsync(stored.EventId, delivery.AutomationId, outcome.Status, cancellationToken)
             .ConfigureAwait(false);
         return outcome.Created;
     }
@@ -159,10 +162,11 @@ public sealed class ExternalEventIngress(
     private readonly record struct DeliveryOutcome(ExternalEventDeliveryStatus Status, bool Created);
 
     private async ValueTask<DeliveryOutcome> TryCreateOccurrenceAsync(
-        TriggerRegistration registration,
+        Automation registration,
         Guid sourceId,
         string sourceEventId,
         string evidence,
+        Guid eventId,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -179,7 +183,7 @@ public sealed class ExternalEventIngress(
             definitions,
             triggers,
             registration.Owner,
-            registration.RegistrationId,
+            registration.AutomationId,
             cancellationToken).ConfigureAwait(false);
         if (pin is { FailureCode: not null })
         {
@@ -188,15 +192,15 @@ public sealed class ExternalEventIngress(
 
         var occurrence = new TriggerOccurrence(
             ids.NewId(),
-            OccurrenceDedupeKey(sourceId, sourceEventId),
-            registration.RegistrationId,
+            OccurrenceDedupeKey(sourceId, sourceEventId) + ":" + registration.AutomationId.ToString("D"),
+            registration.AutomationId,
             registration.Owner,
             TriggerSourceKind.ApplicationEvent,
             null,
             now,
             now,
-            evidence,
-            null,
+            AutomationRules.Evidence(registration, new { sourceEventId, eventId, sourceId, payload = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(evidence) }),
+            eventId,
             registration.ScheduleRevision,
             OccurrenceRoutingDisposition.Pending,
             null,

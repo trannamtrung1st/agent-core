@@ -23,7 +23,7 @@ public sealed class DurableWorkContextFactory(
     public async ValueTask<AgentContext> CreateAsync(WorkItem item, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(item);
-        if (item.Provenance.SourceKind is not (WorkSourceKind.Schedule or WorkSourceKind.ApplicationEvent or WorkSourceKind.ThoughtActivation))
+        if (item.Provenance.SourceKind is not (WorkSourceKind.Schedule or WorkSourceKind.ApplicationEvent or WorkSourceKind.ManualInvocation))
         {
             throw AgentCoreErrors.Validation("Only scheduled reminders and application events can use this context.");
         }
@@ -87,20 +87,21 @@ public sealed class DurableWorkContextFactory(
             LanguageModel: models.Resolve(selection, ModelPurpose.Conversation),
             ReasoningEffort: item.Model.ReasoningEffort,
             LearnedMemories: learned,
+            ExperienceContext: tools is not null ? await tools.ExperienceContextAsync(instance.InstanceId, cancellationToken) + "\n" + await tools.SelectedExperienceContextAsync(instance.InstanceId, item.WorkItemId, cancellationToken) : null,
             Persona: item.Provenance.ResolvePersona(definition),
             ModelSupportsTools: descriptor.Tools,
             ModelSupportsVision: descriptor.Vision,
             DetachedExecution: true,
             AgentInstanceId: instance.InstanceId,
             CredentialMetadataAvailable: tools is not null && await tools.CredentialMetadataAvailableAsync(instance.InstanceId, cancellationToken),
-            Harness: item.Provenance.SourceKind == WorkSourceKind.ThoughtActivation && tools is not null
+            Harness: tools is not null
                 ? await tools.HarnessContextAsync(instance.InstanceId, cancellationToken) : null,
             AllowAgentConsolidation: tools is not null && await tools.AllowsAgentConsolidationAsync(instance.InstanceId, cancellationToken),
             ContinuityContext: tools is not null ? await tools.ContinuityContextAsync(instance.InstanceId, item.Provenance.EvidenceJson, null, definition, cancellationToken) : null);
     }
 
     private static TriggerKind SourceTrigger(WorkItem item) =>
-        item.Provenance.SourceKind == WorkSourceKind.ThoughtActivation ? TriggerKind.ThoughtActivation :
+        item.Provenance.SourceKind == WorkSourceKind.ManualInvocation ? TriggerKind.ManualInvocation :
         item.Provenance.SourceKind == WorkSourceKind.ApplicationEvent
             ? TriggerKind.ApplicationEvent
             : TriggerKind.ScheduledOccurrence;

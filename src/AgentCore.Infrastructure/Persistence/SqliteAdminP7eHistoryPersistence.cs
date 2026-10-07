@@ -96,18 +96,18 @@ internal static class SqliteAdminP7eHistoryPersistence
             updatedAtUtc,
             cancellationToken).ConfigureAwait(false);
 
-    internal static async Task<TriggerRegistration> CancelRegistrationAsync(
+    internal static async Task<Automation> CancelRegistrationAsync(
         AgentCoreDbContext db,
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         DateTimeOffset cancelledAt,
         CancellationToken cancellationToken)
     {
-        var currentRow = await db.TriggerRegistrations
+        var currentRow = await db.Automations
             .AsNoTracking()
             .FirstOrDefaultAsync(
-                row => row.RegistrationId == registrationId.ToString("D")
+                row => row.AutomationId == automationId.ToString("D")
                     && row.AgentInstanceId == owner.AgentInstanceId.ToString("D")
                     && row.ProfileId == owner.ProfileId.ToString("D"),
                 cancellationToken)
@@ -118,22 +118,22 @@ internal static class SqliteAdminP7eHistoryPersistence
         }
 
         var current = TriggerStoreMapping.ToRegistration(currentRow);
-        var cancelled = TriggerRegistrationMutations.Cancel(current, expectedRevision, cancelledAt);
+        var cancelled = AutomationMutations.Cancel(current, expectedRevision, cancelledAt);
         if (cancelled.Revision == current.Revision)
         {
             return current;
         }
 
-        var rows = await db.TriggerRegistrations
-            .Where(row => row.RegistrationId == registrationId.ToString("D")
+        var rows = await db.Automations
+            .Where(row => row.AutomationId == automationId.ToString("D")
                 && row.AgentInstanceId == owner.AgentInstanceId.ToString("D")
                 && row.ProfileId == owner.ProfileId.ToString("D")
                 && row.Revision == expectedRevision
-                && (row.Status == (int)TriggerRegistrationStatus.Active
-                    || row.Status == (int)TriggerRegistrationStatus.SuspendedPolicy))
+                && (row.Status == (int)AutomationStatus.Active
+                    || row.Status == (int)AutomationStatus.SuspendedPolicy))
             .ExecuteUpdateAsync(
                 setters => setters
-                    .SetProperty(row => row.Status, (int)TriggerRegistrationStatus.Cancelled)
+                    .SetProperty(row => row.Status, (int)AutomationStatus.Cancelled)
                     .SetProperty(row => row.Revision, cancelled.Revision)
                     .SetProperty(row => row.UpdatedAtUtc, cancelled.Provenance.UpdatedAt.ToUnixTimeMilliseconds()),
                 cancellationToken)

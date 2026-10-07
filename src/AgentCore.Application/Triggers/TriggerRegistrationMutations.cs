@@ -3,10 +3,10 @@ using AgentCore.Domain.Triggers;
 
 namespace AgentCore.Application.Triggers;
 
-public static class TriggerRegistrationMutations
+public static class AutomationMutations
 {
-    public static TriggerRegistration Update(
-        TriggerRegistration current,
+    public static Automation Update(
+        Automation current,
         long expectedRevision,
         string intent,
         TriggerSchedule schedule,
@@ -15,15 +15,13 @@ public static class TriggerRegistrationMutations
         DateTimeOffset updatedAt)
     {
         ArgumentNullException.ThrowIfNull(current);
-        if (current.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought)
-            throw AgentCoreErrors.Forbidden("Thought configuration can only be changed in owner Initiative controls.");
         ArgumentNullException.ThrowIfNull(schedule);
         if (current.Revision != expectedRevision)
         {
             throw AgentCoreErrors.Conflict("Registration revision is stale.");
         }
 
-        if (current.Status != TriggerRegistrationStatus.Active)
+        if (current.Status != AutomationStatus.Active)
         {
             throw AgentCoreErrors.Validation("Only an active registration can be updated.");
         }
@@ -31,7 +29,7 @@ public static class TriggerRegistrationMutations
         string normalized;
         try
         {
-            normalized = TriggerText.RequireIntent(intent);
+            normalized = TriggerText.RequireInstructions(intent);
         }
         catch (ArgumentException exception)
         {
@@ -40,7 +38,7 @@ public static class TriggerRegistrationMutations
 
         var scheduleChanged = !current.Schedule.SemanticEquals(schedule);
         var changed = scheduleChanged
-            || !string.Equals(current.Intent, normalized, StringComparison.Ordinal)
+            || !string.Equals(current.Instructions, normalized, StringComparison.Ordinal)
             || current.NextOccurrenceAtUtc != nextOccurrenceAtUtc
             || current.ExpiresAtUtc != expiresAtUtc;
         if (!changed)
@@ -65,27 +63,25 @@ public static class TriggerRegistrationMutations
         }
     }
 
-    public static TriggerRegistration SetModelOverride(
-        TriggerRegistration current,
+    public static Automation SetModelOverride(
+        Automation current,
         long expectedRevision,
         string? catalogKey,
         string? reasoningEffort,
         DateTimeOffset updatedAt)
     {
         ArgumentNullException.ThrowIfNull(current);
-        if (current.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought)
-            throw AgentCoreErrors.Forbidden("Thought configuration can only be changed in owner Initiative controls.");
         if (current.Revision != expectedRevision)
         {
             throw AgentCoreErrors.Conflict("Registration revision is stale.");
         }
 
-        if (current.Status != TriggerRegistrationStatus.Active)
+        if (current.Status != AutomationStatus.Active)
         {
             throw AgentCoreErrors.Validation("Only an active registration can change its model.");
         }
 
-        TriggerRegistration updated;
+        Automation updated;
         try
         {
             updated = current.WithModelOverride(catalogKey, reasoningEffort, current.Revision, updatedAt);
@@ -104,15 +100,13 @@ public static class TriggerRegistrationMutations
         return current.WithModelOverride(catalogKey, reasoningEffort, current.Revision + 1, updatedAt);
     }
 
-    public static TriggerRegistration Cancel(
-        TriggerRegistration current,
+    public static Automation Cancel(
+        Automation current,
         long expectedRevision,
         DateTimeOffset cancelledAt)
     {
         ArgumentNullException.ThrowIfNull(current);
-        if (current.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought)
-            throw AgentCoreErrors.Forbidden("Thought configuration can only be changed in owner Initiative controls.");
-        if (current.Status == TriggerRegistrationStatus.Cancelled)
+        if (current.Status == AutomationStatus.Cancelled)
         {
             return current;
         }
@@ -122,7 +116,7 @@ public static class TriggerRegistrationMutations
             throw AgentCoreErrors.Conflict("Registration revision is stale.");
         }
 
-        if (current.Status is not TriggerRegistrationStatus.Active and not TriggerRegistrationStatus.SuspendedPolicy)
+        if (current.Status is not AutomationStatus.Active and not AutomationStatus.SuspendedPolicy)
         {
             throw AgentCoreErrors.Validation("Only an active or policy-suspended registration can be cancelled.");
         }

@@ -68,7 +68,7 @@ public sealed class TriggerSchedulerTests
             var daily = await CreateAsync(store, owner, new DailySchedule(1, new TimeOnly(9, 0), "UTC"), Due, "secret-intent-sentinel");
             var before = await scheduler.RunOnceAsync(Due.AddMilliseconds(-1));
             Assert.Equal(0, before.Scanned);
-            Assert.Equal(1, (await store.GetAsync(owner, daily.RegistrationId))!.Revision);
+            Assert.Equal(1, (await store.GetAsync(owner, daily.AutomationId))!.Revision);
 
             using var listener = new MeterListener();
             var admitted = 0;
@@ -84,7 +84,7 @@ public sealed class TriggerSchedulerTests
                 var matchedAdmitted = false;
                 foreach (var tag in tags)
                 {
-                    Assert.NotEqual("intent", tag.Key);
+                    Assert.NotEqual("instructions", tag.Key);
                     matchedAdmitted |= string.Equals(
                         tag.Value?.ToString(),
                         ScheduledAdmitOutcome.Admitted.ToString(),
@@ -100,12 +100,12 @@ public sealed class TriggerSchedulerTests
 
             var exact = await scheduler.RunOnceAsync(Due);
             Assert.Equal(1, exact.Admitted);
-            var advanced = await store.GetAsync(owner, daily.RegistrationId);
+            var advanced = await store.GetAsync(owner, daily.AutomationId);
             Assert.Equal(2, advanced!.Revision);
             Assert.Equal(1, advanced.ScheduleRevision);
             Assert.Equal(1, advanced.OccurrenceCount);
             Assert.Equal(Due.AddDays(1), advanced.NextOccurrenceAtUtc);
-            Assert.Equal(TriggerRegistrationStatus.Active, advanced.Status);
+            Assert.Equal(AutomationStatus.Active, advanced.Status);
             var occurrence = await store.GetOccurrenceAsync(owner, exact.OccurrenceIds[0]);
             Assert.Equal(Due, occurrence!.ScheduledAtUtc);
             Assert.Equal(OccurrenceRoutingDisposition.Pending, occurrence.Disposition);
@@ -113,11 +113,11 @@ public sealed class TriggerSchedulerTests
 
             var again = await scheduler.RunOnceAsync(Due);
             Assert.Equal(0, again.Admitted);
-            Assert.Equal(1, (await store.GetAsync(owner, daily.RegistrationId))!.OccurrenceCount);
+            Assert.Equal(1, (await store.GetAsync(owner, daily.AutomationId))!.OccurrenceCount);
             Assert.True(admitted >= 1);
             Assert.DoesNotContain(logs.Messages, message => message.Contains("secret-intent-sentinel", StringComparison.Ordinal));
-            await new TriggerRegistrationService(store, new SystemIdGenerator(TimeProvider.System), Clock())
-                .CancelAsync(owner, daily.RegistrationId, advanced.Revision);
+            await new AutomationService(store, new SystemIdGenerator(TimeProvider.System), Clock())
+                .CancelAsync(owner, daily.AutomationId, advanced.Revision);
 
             var shot = await CreateAsync(
                 store,
@@ -127,13 +127,13 @@ public sealed class TriggerSchedulerTests
                 "Call once");
             var recovered = await scheduler.RunOnceAsync(Due.AddDays(2));
             Assert.Equal(1, recovered.Admitted);
-            var completed = await store.GetAsync(owner, shot.RegistrationId);
-            Assert.Equal(TriggerRegistrationStatus.Completed, completed!.Status);
+            var completed = await store.GetAsync(owner, shot.AutomationId);
+            Assert.Equal(AutomationStatus.Completed, completed!.Status);
             Assert.Null(completed.NextOccurrenceAtUtc);
             Assert.Equal(1, completed.ScheduleRevision);
             var second = await scheduler.RunOnceAsync(Due.AddDays(3));
             Assert.Equal(0, second.Admitted);
-            Assert.Equal(1, (await store.GetAsync(owner, shot.RegistrationId))!.OccurrenceCount);
+            Assert.Equal(1, (await store.GetAsync(owner, shot.AutomationId))!.OccurrenceCount);
         });
     }
 
@@ -147,13 +147,13 @@ public sealed class TriggerSchedulerTests
             var daily = await CreateAsync(store, owner, new DailySchedule(1, new TimeOnly(9, 0), "UTC"), Due, "Call John");
             var coalesced = await scheduler.RunOnceAsync(new DateTimeOffset(2026, 9, 5, 10, 0, 0, TimeSpan.Zero));
             Assert.Equal(1, coalesced.Admitted);
-            var loaded = await store.GetAsync(owner, daily.RegistrationId);
+            var loaded = await store.GetAsync(owner, daily.AutomationId);
             Assert.Equal(1, loaded!.OccurrenceCount);
             Assert.Equal(new DateTimeOffset(2026, 9, 6, 9, 0, 0, TimeSpan.Zero), loaded.NextOccurrenceAtUtc);
             var evidence = (await store.GetOccurrenceAsync(owner, coalesced.OccurrenceIds[0]))!.EvidenceJson;
             Assert.Contains("\"skippedCount\":4", evidence, StringComparison.Ordinal);
-            await new TriggerRegistrationService(store, new SystemIdGenerator(TimeProvider.System), Clock())
-                .CancelAsync(owner, daily.RegistrationId, loaded.Revision);
+            await new AutomationService(store, new SystemIdGenerator(TimeProvider.System), Clock())
+                .CancelAsync(owner, daily.AutomationId, loaded.Revision);
 
             var monday = new DateTimeOffset(2026, 9, 7, 9, 0, 0, TimeSpan.Zero);
             Assert.Equal(DayOfWeek.Monday, monday.DayOfWeek);
@@ -165,7 +165,7 @@ public sealed class TriggerSchedulerTests
                 "Every Monday");
             var progressed = await scheduler.RunOnceAsync(monday);
             Assert.Equal(1, progressed.Admitted);
-            var nextWeek = await store.GetAsync(owner, weekly.RegistrationId);
+            var nextWeek = await store.GetAsync(owner, weekly.AutomationId);
             Assert.Equal(monday.AddDays(7), nextWeek!.NextOccurrenceAtUtc);
             Assert.Equal(1, nextWeek.ScheduleRevision);
         });
@@ -188,7 +188,7 @@ public sealed class TriggerSchedulerTests
                 createdAt: first.AddMinutes(-30));
             var pass = await Scheduler(store).RunOnceAsync(first);
             Assert.Equal(1, pass.Admitted);
-            var loaded = await store.GetAsync(owner, created.RegistrationId);
+            var loaded = await store.GetAsync(owner, created.AutomationId);
             var zone = TimeZoneInfo.FindSystemTimeZoneById("Europe/London");
             var local = TimeZoneInfo.ConvertTime(loaded!.NextOccurrenceAtUtc!.Value, zone);
             Assert.Equal(DayOfWeek.Monday, local.DayOfWeek);
@@ -214,7 +214,7 @@ public sealed class TriggerSchedulerTests
                 Due.AddHours(1));
             var expiry = await scheduler.RunOnceAsync(Due.AddDays(1));
             Assert.Equal(1, expiry.Expired);
-            Assert.Equal(TriggerRegistrationStatus.Expired, (await store.GetAsync(owner, expired.RegistrationId))!.Status);
+            Assert.Equal(AutomationStatus.Expired, (await store.GetAsync(owner, expired.AutomationId))!.Status);
             Assert.Empty(expiry.OccurrenceIds);
 
             var capped = await CreateAsync(
@@ -225,38 +225,38 @@ public sealed class TriggerSchedulerTests
                 "Once");
             var once = await scheduler.RunOnceAsync(Due.AddDays(10));
             Assert.Equal(1, once.Admitted);
-            Assert.Equal(TriggerRegistrationStatus.Completed, (await store.GetAsync(owner, capped.RegistrationId))!.Status);
+            Assert.Equal(AutomationStatus.Completed, (await store.GetAsync(owner, capped.AutomationId))!.Status);
 
             var cancelled = await CreateAsync(store, owner, new DailySchedule(1, new TimeOnly(9, 0), "UTC"), Due.AddDays(20), "Cancel me");
-            await new TriggerRegistrationService(store, new SystemIdGenerator(TimeProvider.System), Clock())
-                .CancelAsync(owner, cancelled.RegistrationId, cancelled.Revision);
+            await new AutomationService(store, new SystemIdGenerator(TimeProvider.System), Clock())
+                .CancelAsync(owner, cancelled.AutomationId, cancelled.Revision);
             var cancelPass = await scheduler.RunOnceAsync(Due.AddDays(20));
             Assert.Equal(0, cancelPass.Admitted);
             var staleCancel = await store.TryAdmitScheduledAsync(
                 owner,
-                cancelled.RegistrationId,
+                cancelled.AutomationId,
                 cancelled.ScheduleRevision,
                 Due.AddDays(20),
                 Due.AddDays(20));
             Assert.Equal(ScheduledAdmitOutcome.Stale, staleCancel.Outcome);
             Assert.Null(await store.GetOccurrenceAsync(owner, TriggerScheduleAdmission.OccurrenceId(
-                TriggerScheduleAdmission.DedupeKey(cancelled.RegistrationId, cancelled.ScheduleRevision, Due.AddDays(20)))));
+                TriggerScheduleAdmission.DedupeKey(cancelled.AutomationId, cancelled.ScheduleRevision, Due.AddDays(20)))));
 
             var moving = await CreateAsync(store, owner, new DailySchedule(1, new TimeOnly(9, 0), "UTC"), Due.AddDays(30), "Move me");
             var later = Due.AddDays(40);
-            await new TriggerRegistrationService(store, new SystemIdGenerator(TimeProvider.System), Clock()).UpdateAsync(
+            await new AutomationService(store, new SystemIdGenerator(TimeProvider.System), Clock()).UpdateAsync(
                 owner,
-                moving.RegistrationId,
+                moving.AutomationId,
                 moving.Revision,
-                TriggerRegistrationChange.ScheduleOnly(new DailySchedule(1, new TimeOnly(11, 0), "UTC"), later, null));
+                AutomationChange.ScheduleOnly(new DailySchedule(1, new TimeOnly(11, 0), "UTC"), later, null));
             var stale = await store.TryAdmitScheduledAsync(
                 owner,
-                moving.RegistrationId,
+                moving.AutomationId,
                 moving.ScheduleRevision,
                 Due.AddDays(30),
                 Due.AddDays(30));
             Assert.Equal(ScheduledAdmitOutcome.Stale, stale.Outcome);
-            Assert.Equal(later, (await store.GetAsync(owner, moving.RegistrationId))!.NextOccurrenceAtUtc);
+            Assert.Equal(later, (await store.GetAsync(owner, moving.AutomationId))!.NextOccurrenceAtUtc);
         });
     }
 
@@ -285,11 +285,11 @@ public sealed class TriggerSchedulerTests
             var flaky = new FlakyStore(store);
             var flakyPass = await new TriggerScheduler(flaky, logs).RunOnceAsync(Due.AddDays(3));
             Assert.Equal(1, flakyPass.Failed);
-            Assert.Equal(1, (await store.GetAsync(owner, flakyRegistration.RegistrationId))!.Revision);
-            Assert.Equal(TriggerRegistrationStatus.Active, (await store.GetAsync(owner, flakyRegistration.RegistrationId))!.Status);
+            Assert.Equal(1, (await store.GetAsync(owner, flakyRegistration.AutomationId))!.Revision);
+            Assert.Equal(AutomationStatus.Active, (await store.GetAsync(owner, flakyRegistration.AutomationId))!.Status);
             var retried = await new TriggerScheduler(flaky, logs).RunOnceAsync(Due.AddDays(3));
             Assert.Equal(1, retried.Admitted);
-            Assert.Equal(TriggerRegistrationStatus.Completed, (await store.GetAsync(owner, flakyRegistration.RegistrationId))!.Status);
+            Assert.Equal(AutomationStatus.Completed, (await store.GetAsync(owner, flakyRegistration.AutomationId))!.Status);
             Assert.DoesNotContain(logs.Messages, message => message.Contains("secret-intent-sentinel", StringComparison.Ordinal));
         });
     }
@@ -326,10 +326,10 @@ public sealed class TriggerSchedulerTests
             Assert.Equal("transient", failure.Message);
             Assert.Same(failure, entry.Exception);
             Assert.Equal(diagnosticId, entry.Properties["DiagnosticId"]);
-            Assert.Equal(registration.RegistrationId, entry.Properties["TriggerRegistrationId"]);
+            Assert.Equal(registration.AutomationId, entry.Properties["AutomationId"]);
             Assert.Equal(activity.TraceId.ToHexString(), entry.Properties["TraceId"]);
             Assert.Contains(diagnosticId.ToString(), entry.Message, StringComparison.Ordinal);
-            Assert.Contains(registration.RegistrationId.ToString(), entry.Message, StringComparison.Ordinal);
+            Assert.Contains(registration.AutomationId.ToString(), entry.Message, StringComparison.Ordinal);
             Assert.Contains(activity.TraceId.ToHexString(), entry.Message, StringComparison.Ordinal);
             Assert.Contains("Trigger scan failed for registration.", entry.Message, StringComparison.Ordinal);
             Assert.DoesNotContain("secret-intent-sentinel", entry.Message, StringComparison.Ordinal);
@@ -384,7 +384,7 @@ public sealed class TriggerSchedulerTests
         Assert.Contains("Trigger scan failed for registration.", printed, StringComparison.Ordinal);
         Assert.Contains(diagnosticId.ToString(), printed, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(traceId, printed, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(registration.RegistrationId.ToString(), printed, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(registration.AutomationId.ToString(), printed, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("IOException", printed, StringComparison.Ordinal);
         Assert.Contains("transient", printed, StringComparison.Ordinal);
         Assert.DoesNotContain("secret-intent-sentinel", printed, StringComparison.Ordinal);
@@ -403,10 +403,10 @@ public sealed class TriggerSchedulerTests
                 scheduler.RunOnceAsync(Due.AddDays(4)));
             Assert.Equal(1, passes.Sum(pass => pass.Admitted));
             Assert.Equal(0, passes.Sum(pass => pass.Failed));
-            var loaded = await store.GetAsync(owner, created.RegistrationId);
+            var loaded = await store.GetAsync(owner, created.AutomationId);
             Assert.Equal(1, loaded!.OccurrenceCount);
             await scheduler.RunOnceAsync(Due.AddDays(4));
-            Assert.Equal(1, (await store.GetAsync(owner, created.RegistrationId))!.OccurrenceCount);
+            Assert.Equal(1, (await store.GetAsync(owner, created.AutomationId))!.OccurrenceCount);
 
             var batchStore = store;
             await CreateAsync(batchStore, owner, new OneShotSchedule(Due.AddDays(5), "UTC"), Due.AddDays(5), "Batch 1");
@@ -435,8 +435,8 @@ public sealed class TriggerSchedulerTests
             var pass = await Scheduler(store).RunOnceAsync(Due);
             Assert.Equal(1, pass.Rejected);
             Assert.Empty(pass.OccurrenceIds);
-            var loaded = await store.GetAsync(owner, created.RegistrationId);
-            Assert.Equal(TriggerRegistrationStatus.SuspendedPolicy, loaded!.Status);
+            var loaded = await store.GetAsync(owner, created.AutomationId);
+            Assert.Equal(AutomationStatus.SuspendedPolicy, loaded!.Status);
             Assert.Equal("Timezone is unavailable.", loaded.SuspensionReason);
             Assert.Equal(0, (await Scheduler(store).RunOnceAsync(Due.AddDays(1))).Scanned);
         });
@@ -457,8 +457,8 @@ public sealed class TriggerSchedulerTests
             var reopened = new SqliteTriggerStore(factory);
             var second = await Scheduler(reopened).RunOnceAsync(Due.AddHours(4));
             Assert.Equal(0, second.Admitted);
-            var loaded = await reopened.GetAsync(owner, created.RegistrationId);
-            Assert.Equal(TriggerRegistrationStatus.Completed, loaded!.Status);
+            var loaded = await reopened.GetAsync(owner, created.AutomationId);
+            Assert.Equal(AutomationStatus.Completed, loaded!.Status);
             Assert.Equal(1, loaded.OccurrenceCount);
             Assert.NotNull(await reopened.GetOccurrenceAsync(owner, first.OccurrenceIds[0]));
         }
@@ -470,9 +470,9 @@ public sealed class TriggerSchedulerTests
         }
     }
 
-    private static Guid OccurrenceFor(TriggerSchedulerPass pass, TriggerRegistration registration)
+    private static Guid OccurrenceFor(TriggerSchedulerPass pass, Automation registration)
     {
-        var key = TriggerScheduleAdmission.DedupeKey(registration.RegistrationId, registration.ScheduleRevision, registration.NextOccurrenceAtUtc!.Value);
+        var key = TriggerScheduleAdmission.DedupeKey(registration.AutomationId, registration.ScheduleRevision, registration.NextOccurrenceAtUtc!.Value);
         var id = TriggerScheduleAdmission.OccurrenceId(key);
         Assert.Contains(id, pass.OccurrenceIds);
         return id;
@@ -501,7 +501,7 @@ public sealed class TriggerSchedulerTests
 
     private static TriggerScheduler Scheduler(ITriggerStore store) => new(store, new CaptureLogger());
 
-    private static async Task<TriggerRegistration> CreateAsync(
+    private static async Task<Automation> CreateAsync(
         ITriggerStore store,
         TriggerOwner owner,
         TriggerSchedule schedule,
@@ -510,10 +510,10 @@ public sealed class TriggerSchedulerTests
         DateTimeOffset? expires = null,
         DateTimeOffset? createdAt = null)
     {
-        var created = await new TriggerRegistrationService(
+        var created = await new AutomationService(
             store,
             new SystemIdGenerator(TimeProvider.System),
-            new FakeTimeProvider(createdAt ?? Created)).CreateAsync(new TriggerRegistrationDraft(
+            new FakeTimeProvider(createdAt ?? Created)).CreateAsync(new AutomationDraft(
             owner,
             intent,
             schedule,
@@ -562,45 +562,45 @@ public sealed class TriggerSchedulerTests
     {
         private int _failures = 1;
 
-        public ValueTask<TriggerRegistration> CreateAsync(TriggerRegistration registration, CancellationToken cancellationToken = default) =>
+        public ValueTask<Automation> CreateAsync(Automation registration, CancellationToken cancellationToken = default) =>
             inner.CreateAsync(registration, cancellationToken);
 
-        public ValueTask<TriggerRegistration?> GetAsync(TriggerOwner owner, Guid registrationId, CancellationToken cancellationToken = default) =>
-            inner.GetAsync(owner, registrationId, cancellationToken);
+        public ValueTask<Automation?> GetAsync(TriggerOwner owner, Guid automationId, CancellationToken cancellationToken = default) =>
+            inner.GetAsync(owner, automationId, cancellationToken);
 
-        public ValueTask<IReadOnlyList<TriggerRegistration>> ListAsync(TriggerOwner owner, TriggerRegistrationStatus? status, CancellationToken cancellationToken = default) =>
+        public ValueTask<IReadOnlyList<Automation>> ListAsync(TriggerOwner owner, AutomationStatus? status, CancellationToken cancellationToken = default) =>
             inner.ListAsync(owner, status, cancellationToken);
 
-        public ValueTask<IReadOnlyList<TriggerRegistration>> ListSuspendedPolicyForAgentInstanceAsync(
+        public ValueTask<IReadOnlyList<Automation>> ListSuspendedPolicyForAgentInstanceAsync(
             Guid agentInstanceId,
             int limit,
             CancellationToken cancellationToken = default) =>
             inner.ListSuspendedPolicyForAgentInstanceAsync(agentInstanceId, limit, cancellationToken);
 
-        public ValueTask<IReadOnlyList<TriggerRegistration>> ListFutureRegistrationsForAgentInstanceAsync(
+        public ValueTask<IReadOnlyList<Automation>> ListFutureRegistrationsForAgentInstanceAsync(
             Guid agentInstanceId,
             int limit,
             CancellationToken cancellationToken = default) =>
             inner.ListFutureRegistrationsForAgentInstanceAsync(agentInstanceId, limit, cancellationToken);
 
-        public ValueTask<IReadOnlyList<TriggerRegistration>> ListSchedulesPageAsync(
+        public ValueTask<IReadOnlyList<Automation>> ListAutomationsPageAsync(
             TriggerOwner owner, int limit, Guid? before, CancellationToken cancellationToken = default) =>
-            inner.ListSchedulesPageAsync(owner, limit, before, cancellationToken);
+            inner.ListAutomationsPageAsync(owner, limit, before, cancellationToken);
 
         public ValueTask<int> CountActiveAsync(TriggerOwner owner, CancellationToken cancellationToken = default) =>
             inner.CountActiveAsync(owner, cancellationToken);
 
-        public ValueTask<IReadOnlyList<TriggerRegistration>> ListEventSubscriptionsAsync(
+        public ValueTask<IReadOnlyList<Automation>> ListEventSubscriptionsAsync(
             Guid eventSourceId,
             string eventType,
             CancellationToken cancellationToken = default) =>
             inner.ListEventSubscriptionsAsync(eventSourceId, eventType, cancellationToken);
 
-        public ValueTask<TriggerRegistration> UpdateAsync(TriggerOwner owner, Guid registrationId, long expectedRevision, string intent, TriggerSchedule schedule, DateTimeOffset? nextOccurrenceAtUtc, DateTimeOffset? expiresAtUtc, DateTimeOffset updatedAt, CancellationToken cancellationToken = default) =>
-            inner.UpdateAsync(owner, registrationId, expectedRevision, intent, schedule, nextOccurrenceAtUtc, expiresAtUtc, updatedAt, cancellationToken);
+        public ValueTask<Automation> UpdateAsync(TriggerOwner owner, Guid automationId, long expectedRevision, string intent, TriggerSchedule schedule, DateTimeOffset? nextOccurrenceAtUtc, DateTimeOffset? expiresAtUtc, DateTimeOffset updatedAt, CancellationToken cancellationToken = default) =>
+            inner.UpdateAsync(owner, automationId, expectedRevision, intent, schedule, nextOccurrenceAtUtc, expiresAtUtc, updatedAt, cancellationToken);
 
-        public ValueTask<TriggerRegistration> CancelAsync(TriggerOwner owner, Guid registrationId, long expectedRevision, DateTimeOffset cancelledAt, CancellationToken cancellationToken = default) =>
-            inner.CancelAsync(owner, registrationId, expectedRevision, cancelledAt, cancellationToken);
+        public ValueTask<Automation> CancelAsync(TriggerOwner owner, Guid automationId, long expectedRevision, DateTimeOffset cancelledAt, CancellationToken cancellationToken = default) =>
+            inner.CancelAsync(owner, automationId, expectedRevision, cancelledAt, cancellationToken);
 
         public ValueTask<TriggerOccurrenceAdmitResult> AdmitOccurrenceAsync(TriggerOccurrence occurrence, CancellationToken cancellationToken = default) =>
             inner.AdmitOccurrenceAsync(occurrence, cancellationToken);
@@ -608,24 +608,24 @@ public sealed class TriggerSchedulerTests
         public ValueTask<TriggerOccurrence?> GetOccurrenceAsync(TriggerOwner owner, Guid occurrenceId, CancellationToken cancellationToken = default) =>
             inner.GetOccurrenceAsync(owner, occurrenceId, cancellationToken);
 
-        public ValueTask<IReadOnlyList<TriggerRegistration>> ListDueAsync(DateTimeOffset asOfUtc, int limit, CancellationToken cancellationToken = default) =>
+        public ValueTask<IReadOnlyList<Automation>> ListDueAsync(DateTimeOffset asOfUtc, int limit, CancellationToken cancellationToken = default) =>
             inner.ListDueAsync(asOfUtc, limit, cancellationToken);
 
-        public ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(TriggerOwner owner, Guid registrationId, long expectedScheduleRevision, DateTimeOffset expectedNextOccurrenceAtUtc, DateTimeOffset asOfUtc, CancellationToken cancellationToken = default)
+        public ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(TriggerOwner owner, Guid automationId, long expectedScheduleRevision, DateTimeOffset expectedNextOccurrenceAtUtc, DateTimeOffset asOfUtc, CancellationToken cancellationToken = default)
         {
             if (Interlocked.Decrement(ref _failures) >= 0)
             {
                 throw new IOException("transient");
             }
 
-            return inner.TryAdmitScheduledAsync(owner, registrationId, expectedScheduleRevision, expectedNextOccurrenceAtUtc, asOfUtc, cancellationToken);
+            return inner.TryAdmitScheduledAsync(owner, automationId, expectedScheduleRevision, expectedNextOccurrenceAtUtc, asOfUtc, cancellationToken);
         }
 
-        public ValueTask<TriggerRegistration?> SuspendPolicyAsync(TriggerOwner owner, Guid registrationId, long expectedRevision, string reason, DateTimeOffset suspendedAt, CancellationToken cancellationToken = default) =>
-            inner.SuspendPolicyAsync(owner, registrationId, expectedRevision, reason, suspendedAt, cancellationToken);
+        public ValueTask<Automation?> SuspendPolicyAsync(TriggerOwner owner, Guid automationId, long expectedRevision, string reason, DateTimeOffset suspendedAt, CancellationToken cancellationToken = default) =>
+            inner.SuspendPolicyAsync(owner, automationId, expectedRevision, reason, suspendedAt, cancellationToken);
 
-        public ValueTask<TriggerRegistration?> TryReactivatePolicySuspensionAsync(TriggerOwner owner, Guid registrationId, long expectedRevision, DateTimeOffset reactivatedAt, CancellationToken cancellationToken = default) =>
-            inner.TryReactivatePolicySuspensionAsync(owner, registrationId, expectedRevision, reactivatedAt, cancellationToken);
+        public ValueTask<Automation?> TryReactivatePolicySuspensionAsync(TriggerOwner owner, Guid automationId, long expectedRevision, DateTimeOffset reactivatedAt, CancellationToken cancellationToken = default) =>
+            inner.TryReactivatePolicySuspensionAsync(owner, automationId, expectedRevision, reactivatedAt, cancellationToken);
 
         public ValueTask<TriggerOccurrence?> TryClaimOccurrenceAsync(Guid occurrenceId, Guid claimId, DateTimeOffset leaseExpiresAtUtc, DateTimeOffset claimedAt, CancellationToken cancellationToken = default) =>
             inner.TryClaimOccurrenceAsync(occurrenceId, claimId, leaseExpiresAtUtc, claimedAt, cancellationToken);

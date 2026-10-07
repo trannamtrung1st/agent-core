@@ -72,11 +72,11 @@ public sealed class LiveIdentityMaintenanceTests(ITestOutputHelper output)
         }
         async Task<WorkItem> Thought(Guid owner, string prompt)
         {
-            var thoughts = s.GetRequiredService<ThoughtRegistrationService>();
+            var thoughts = s.GetRequiredService<AdminAutomationAuthoringService>();
             var r = await thoughts.SaveAsync(owner, null, 0, true, 3600, prompt + " Finish via work.complete with a summary under 300 characters, valid outcome and attentionRequired=false.", null, null);
-            await thoughts.RunNowAsync(owner, r.RegistrationId, r.Revision); await ThoughtJourneyTests.Intake(s);
+            await thoughts.RunNowAsync(owner, r.AutomationId, r.Revision); await ThoughtJourneyTests.Intake(s);
             await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
-            var result = (await s.GetRequiredService<IWorkItemStore>().ListAsync(new(owner, LocalUserProfile.Id), 100)).Single(w => w.Provenance.RegistrationId == r.RegistrationId);
+            var result = (await s.GetRequiredService<IWorkItemStore>().ListAsync(new(owner, LocalUserProfile.Id), 100)).Single(w => w.Provenance.AutomationId == r.AutomationId);
             output.WriteLine($"Thought status={result.Status}; outcome={result.Result?.Text}; failure={result.Failure?.Summary}");
             Assert.Equal(WorkItemStatus.Completed, result.Status);
             return result;
@@ -111,7 +111,7 @@ public sealed class LiveIdentityMaintenanceTests(ITestOutputHelper output)
         await s.GetRequiredService<IExperienceStore>().ConfigureMaintenanceAsync(other.InstanceId, 0, true);
         await SeedMemories(other.InstanceId, [("Frontend language A", "Prefer TypeScript for all frontend examples."), ("Frontend language B", "Prefer Python for all frontend examples.")]);
         var noOp = await Thought(other.InstanceId, "Inspect learned frontend preferences for contradictions. With insufficient evidence to choose one, do not consolidate or forget either. Complete with NoAction and explain that current user clarification is needed.");
-        Assert.Equal("NoAction", ThoughtCompletion.Outcome(noOp.Result!.Text));
+        Assert.Equal("NoAction", WorkCompletionRequest.Outcome(noOp.Result!.Text));
         Assert.Equal(2, await memories.CountActiveIdentityUserAsync(other.InstanceId, LocalUserProfile.Id));
 
         // The final case uses the real attached UserTurn and UI approval contract over SignalR.

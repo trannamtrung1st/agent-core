@@ -111,7 +111,7 @@ public static class TriggerAuthorization
         ToolCatalog.TriggerList => TriggerCommandAction.List,
         ToolCatalog.TriggerUpdate => TriggerCommandAction.Update,
         ToolCatalog.TriggerCancel => TriggerCommandAction.Cancel,
-        ToolCatalog.TriggerScheduleOnce or ToolCatalog.TriggerScheduleRecurring => TriggerCommandAction.Create,
+        ToolCatalog.TriggerScheduleOnce => TriggerCommandAction.Create,
         _ => TriggerCommandAction.None
     };
 
@@ -123,7 +123,7 @@ public static class TriggerScheduleCommands
 
     public static async Task<ToolExecutionResult> ExecuteAsync(
         AgentDefinition definition,
-        ITriggerRegistrationService? registrations,
+        IAutomationService? registrations,
         string toolName,
         JsonElement arguments,
         TriggerCommandContext? command,
@@ -131,7 +131,8 @@ public static class TriggerScheduleCommands
         ITriggerCommandAuthorizer? authorizer = null,
         IAgentInstanceStore? instances = null,
         IAgentDefinitionStore? definitions = null,
-        IMemoryStore? profiles = null)
+        IMemoryStore? profiles = null,
+        AdminAutomationAuthoringService? automationAuthoring = null)
     {
         authorizer ??= DefaultAuthorizer;
         if (registrations is null)
@@ -181,7 +182,7 @@ public static class TriggerScheduleCommands
                 && !context.ExecutePendingProposal
                 && SchedulingEnabled(definition.TriggerPolicy))
             {
-                RuntimeTelemetry.RecordTriggerRegistration(operation, "confirmation_required");
+                RuntimeTelemetry.RecordAutomation(operation, "confirmation_required");
                 return Confirmation(toolName, arguments);
             }
 
@@ -189,7 +190,7 @@ public static class TriggerScheduleCommands
                 && context.Classification is TriggerAuthorizationClassification.CurrentUserTurn
                     or TriggerAuthorizationClassification.UnrelatedUserTurn)
             {
-                RuntimeTelemetry.RecordTriggerRegistration(operation, "authorization_ambiguous");
+                RuntimeTelemetry.RecordAutomation(operation, "authorization_ambiguous");
                 return Result(
                     "authorization_ambiguous",
                     "The current message does not clearly authorize this schedule action. Ask what the user wants; do not retry different time argument shapes.",
@@ -200,7 +201,7 @@ public static class TriggerScheduleCommands
                 && context.Classification is TriggerAuthorizationClassification.CurrentUserTurn
                     or TriggerAuthorizationClassification.UnrelatedUserTurn)
             {
-                RuntimeTelemetry.RecordTriggerRegistration(operation, "authorization_classifier_unavailable");
+                RuntimeTelemetry.RecordAutomation(operation, "authorization_classifier_unavailable");
                 return Result(
                     "authorization_classifier_unavailable",
                     "Schedule authorization is temporarily unavailable. Ask the user to restate the request or try again shortly.",
@@ -210,14 +211,14 @@ public static class TriggerScheduleCommands
             if (context.Classification is TriggerAuthorizationClassification.CurrentUserTurn
                 or TriggerAuthorizationClassification.UnrelatedUserTurn)
             {
-                RuntimeTelemetry.RecordTriggerRegistration(operation, "authorization_denied");
+                RuntimeTelemetry.RecordAutomation(operation, "authorization_denied");
                 return Result(
                     "authorization_denied",
                     "The current user message does not authorize this schedule action. Clarify the request or use the correct schedule command.",
                     clearProposal: false);
             }
 
-            RuntimeTelemetry.RecordTriggerRegistration(operation, "forbidden");
+            RuntimeTelemetry.RecordAutomation(operation, "forbidden");
             return Result(
                 "forbidden",
                 "This schedule action is not permitted for the current trigger.",
@@ -230,6 +231,14 @@ public static class TriggerScheduleCommands
         }
 
         var policyDefinition = definition;
+        var existing = required == TriggerCommandAction.Update
+            ? await registrations.GetAsync(owner, RequireId(effectiveArguments), cancellationToken) : null;
+        var eventTrigger = effectiveArguments.TryGetProperty("eventSourceId", out _) || existing?.Trigger is EventTrigger && !HasScheduleFields(effectiveArguments);
+        var sourceKind = eventTrigger ? TriggerSourceKind.ApplicationEvent : TriggerSourceKind.Schedule;
+        if (effectiveName == ToolCatalog.TriggerScheduleOnce && effectiveArguments.TryGetProperty("eventType", out _) && !effectiveArguments.TryGetProperty("eventSourceId", out _))
+            return Result("validation", "An Event Source is required for an Event trigger.", clearProposal: false);
+        if (effectiveArguments.TryGetProperty("eventSourceId", out _) && HasScheduleFields(effectiveArguments))
+            return Result("validation", "Choose exactly one Schedule or Event trigger.", clearProposal: false);
         var durablePolicyConfigured = instances is not null && definitions is not null && profiles is not null;
         if (durablePolicyConfigured)
         {
@@ -240,11 +249,11 @@ public static class TriggerScheduleCommands
                         instances!,
                         definitions!,
                         profiles!,
-                        cancellationToken)
+                        cancellationToken, sourceKind)
                     .ConfigureAwait(false);
                 if (!admission.Allowed)
                 {
-                    RuntimeTelemetry.RecordTriggerRegistration(operation, "policy");
+                    RuntimeTelemetry.RecordAutomation(operation, "policy");
                     return Result(
                         "policy",
                         TriggerDurableSchedulingPolicy.PolicyMessage(admission.DenialReason!.Value),
@@ -255,9 +264,9 @@ public static class TriggerScheduleCommands
             }
         }
         else if (required is TriggerCommandAction.Create or TriggerCommandAction.Update
-                 && !TriggerDurableSchedulingPolicy.AllowsUserScheduling(definition))
+                 && !(OccurrenceCompatibility.Allows(definition, sourceKind) && definition.TriggerPolicy is { Enabled: true, AllowUserScheduling: true }))
         {
-            RuntimeTelemetry.RecordTriggerRegistration(operation, "policy");
+            RuntimeTelemetry.RecordAutomation(operation, "policy");
             return Result(
                 "policy",
                 "Scheduling is disabled for this agent.",
@@ -268,16 +277,26 @@ public static class TriggerScheduleCommands
         {
             var json = effectiveName switch
             {
-                ToolCatalog.TriggerScheduleOnce => await CreateOnceAsync(
-                    policyDefinition, registrations, owner, context, effectiveArguments, cancellationToken).ConfigureAwait(false),
-                ToolCatalog.TriggerScheduleRecurring => await CreateRecurringAsync(
-                    policyDefinition, registrations, owner, context, effectiveArguments, cancellationToken).ConfigureAwait(false),
+                ToolCatalog.TriggerScheduleOnce when effectiveArguments.TryGetProperty("eventSourceId", out _) => automationAuthoring is null
+                    ? Error("unavailable", "Automation authoring is unavailable.")
+                    : RegistrationJson(await automationAuthoring.SaveAsync(owner.AgentInstanceId, null, 0, true,
+                        TryString(effectiveArguments, "name", out var eventName) ? eventName : RequireInstructions(effectiveArguments)[..Math.Min(80, RequireInstructions(effectiveArguments).Length)],
+                        RequireInstructions(effectiveArguments), new EventTrigger(Guid.Parse(effectiveArguments.GetProperty("eventSourceId").GetString() ?? ""),
+                            effectiveArguments.GetProperty("eventType").GetString() ?? ""),
+                        TryString(effectiveArguments, "modelKey", out var eventModel) ? eventModel : null,
+                        TryString(effectiveArguments, "reasoningEffort", out var eventEffort) ? eventEffort : null, cancellationToken,
+                        new(TriggerAuthorizationOrigin.CurrentUserTurn, context.SessionId, context.SourceEventId, context.UtcNow, context.UtcNow))),
+                ToolCatalog.TriggerScheduleOnce when automationAuthoring is not null => await CreateScheduleAutomationAsync(
+                    policyDefinition, automationAuthoring, owner, context, effectiveArguments, cancellationToken),
+                ToolCatalog.TriggerScheduleOnce => effectiveArguments.TryGetProperty("kind", out var recurrence) && recurrence.GetString() is "daily" or "weekly" or "fixed_interval"
+                    ? await CreateRecurringAsync(policyDefinition, registrations, owner, context, effectiveArguments, cancellationToken).ConfigureAwait(false)
+                    : await CreateOnceAsync(policyDefinition, registrations, owner, context, effectiveArguments, cancellationToken).ConfigureAwait(false),
                 ToolCatalog.TriggerList => await ListAsync(
                     policyDefinition, registrations, owner, effectiveArguments, cancellationToken).ConfigureAwait(false),
                 ToolCatalog.TriggerUpdate => await UpdateAsync(
-                    policyDefinition, registrations, owner, context, effectiveArguments, cancellationToken).ConfigureAwait(false),
+                    policyDefinition, registrations, owner, context, effectiveArguments, cancellationToken, automationAuthoring).ConfigureAwait(false),
                 ToolCatalog.TriggerCancel => await CancelAsync(
-                    policyDefinition, registrations, owner, context, effectiveArguments, cancellationToken).ConfigureAwait(false),
+                    policyDefinition, registrations, owner, context, effectiveArguments, cancellationToken, automationAuthoring).ConfigureAwait(false),
                 _ => Error("forbidden", "Tool is not permitted for this role.")
             };
             return new ToolExecutionResult(json, ReplaceTriggerProposal: true, TriggerProposal: null);
@@ -288,6 +307,7 @@ public static class TriggerScheduleCommands
             {
                 404 => "not_found",
                 409 => "conflict",
+                403 => "forbidden",
                 _ => "validation"
             };
             return Result(code, exception.Message, clearProposal: false);
@@ -310,9 +330,26 @@ public static class TriggerScheduleCommands
         }
     }
 
+    private static async Task<string> CreateScheduleAutomationAsync(AgentDefinition definition,
+        AdminAutomationAuthoringService authoring, TriggerOwner owner, TriggerCommandContext context,
+        JsonElement arguments, CancellationToken ct)
+    {
+        var policy = RequirePolicy(definition, "create", requireUserScheduling: true);
+        var merged = MergeDraftArguments(arguments, context);
+        var instructions = RequireInstructions(merged);
+        TriggerSchedule schedule = merged.TryGetProperty("kind", out var kind) && kind.GetString() is "daily" or "weekly" or "fixed_interval"
+            ? ResolveRecurring(merged, context, policy) : ResolveOneShot(merged, context, policy).Schedule;
+        return RegistrationJson(await authoring.SaveAsync(owner.AgentInstanceId, null, 0, true,
+            TryString(arguments, "name", out var name) ? name : instructions[..Math.Min(80, instructions.Length)],
+            instructions, new ScheduleTrigger(schedule),
+            TryString(arguments, "modelKey", out var model) ? model : null,
+            TryString(arguments, "reasoningEffort", out var effort) ? effort : null, ct,
+            new(TriggerAuthorizationOrigin.CurrentUserTurn, context.SessionId, context.SourceEventId, context.UtcNow, context.UtcNow)));
+    }
+
     private static async Task<string> CreateOnceAsync(
         AgentDefinition definition,
-        ITriggerRegistrationService registrations,
+        IAutomationService registrations,
         TriggerOwner owner,
         TriggerCommandContext context,
         JsonElement arguments,
@@ -320,10 +357,10 @@ public static class TriggerScheduleCommands
     {
         var policy = RequirePolicy(definition, "create", requireUserScheduling: true);
         await RequireCapacityAsync(registrations, owner, policy, cancellationToken).ConfigureAwait(false);
-        var intent = RequireIntent(arguments);
+        var intent = RequireInstructions(arguments);
         var (schedule, next) = ResolveOneShot(arguments, context, policy);
         var created = await registrations.CreateAsync(
-            new TriggerRegistrationDraft(
+            new AutomationDraft(
                 owner,
                 intent,
                 schedule,
@@ -331,14 +368,15 @@ public static class TriggerScheduleCommands
                 null,
                 TriggerAuthorizationOrigin.CurrentUserTurn,
                 context.SessionId,
-                context.SourceEventId),
+                context.SourceEventId,
+                TryString(arguments, "name", out var name) ? name : null),
             cancellationToken).ConfigureAwait(false);
         return RegistrationJson(created);
     }
 
     private static async Task<string> CreateRecurringAsync(
         AgentDefinition definition,
-        ITriggerRegistrationService registrations,
+        IAutomationService registrations,
         TriggerOwner owner,
         TriggerCommandContext context,
         JsonElement arguments,
@@ -347,12 +385,12 @@ public static class TriggerScheduleCommands
         var policy = RequirePolicy(definition, "create", requireUserScheduling: true);
         await RequireCapacityAsync(registrations, owner, policy, cancellationToken).ConfigureAwait(false);
         var merged = MergeDraftArguments(arguments, context);
-        var intent = RequireIntent(merged);
+        var intent = RequireInstructions(merged);
         var schedule = ResolveRecurring(merged, context, policy);
         var next = TriggerScheduleCalculator.InitialNext(schedule, context.UtcNow)
             ?? throw new ArgumentException("No future occurrence matches this schedule.");
         var created = await registrations.CreateAsync(
-            new TriggerRegistrationDraft(
+            new AutomationDraft(
                 owner,
                 intent,
                 schedule,
@@ -360,23 +398,24 @@ public static class TriggerScheduleCommands
                 null,
                 TriggerAuthorizationOrigin.CurrentUserTurn,
                 context.SessionId,
-                context.SourceEventId),
+                context.SourceEventId,
+                TryString(arguments, "name", out var name) ? name : null),
             cancellationToken).ConfigureAwait(false);
         return RegistrationJson(created);
     }
 
     private static async Task<string> ListAsync(
         AgentDefinition definition,
-        ITriggerRegistrationService registrations,
+        IAutomationService registrations,
         TriggerOwner owner,
         JsonElement arguments,
         CancellationToken cancellationToken)
     {
         RequirePolicy(definition, "list", requireUserScheduling: false);
-        TriggerRegistrationStatus? status = null;
+        AutomationStatus? status = null;
         if (TryString(arguments, "status", out var statusText) && !string.IsNullOrWhiteSpace(statusText))
         {
-            if (!Enum.TryParse<TriggerRegistrationStatus>(statusText, ignoreCase: true, out var parsed))
+            if (!Enum.TryParse<AutomationStatus>(statusText, ignoreCase: true, out var parsed))
             {
                 throw new ArgumentException("Schedule status is invalid.");
             }
@@ -387,26 +426,49 @@ public static class TriggerScheduleCommands
         var rows = await registrations.ListAsync(owner, status, cancellationToken).ConfigureAwait(false);
         return JsonSerializer.Serialize(new
         {
-            registrations = rows.Select(Projection).ToArray()
+            automations = rows.Select(Projection).ToArray()
         });
     }
 
     private static async Task<string> UpdateAsync(
         AgentDefinition definition,
-        ITriggerRegistrationService registrations,
+        IAutomationService registrations,
         TriggerOwner owner,
         TriggerCommandContext context,
         JsonElement arguments,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        AdminAutomationAuthoringService? authoring)
     {
-        var policy = RequirePolicy(definition, "update", requireUserScheduling: true);
+        var policy = definition.TriggerPolicy ?? throw new ArgumentException("Automation is disabled.");
         var id = RequireId(arguments);
         var current = await registrations.GetAsync(owner, id, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound("Trigger registration was not found.");
         var expected = ResolveExpectedRevision(arguments, context, current);
-        var hasIntent = arguments.TryGetProperty("intent", out _);
+        var hasIntent = arguments.TryGetProperty("instructions", out _);
         var hasSchedule = HasScheduleFields(arguments);
-        TriggerRegistrationChange change;
+        if (authoring is not null)
+        {
+            var trigger = current.Trigger;
+            if (arguments.TryGetProperty("eventSourceId", out var eventId))
+                trigger = new EventTrigger(Guid.Parse(eventId.GetString() ?? ""), arguments.GetProperty("eventType").GetString() ?? "");
+            else if (hasSchedule)
+            {
+                TriggerSchedule schedule;
+                if (current.Trigger is ScheduleTrigger { Schedule: FixedIntervalSchedule fixedCurrent } && !IsExplicitCalendarKindChange(arguments))
+                    (schedule, _) = ApplyFixedIntervalUpdate(fixedCurrent, arguments, context, policy);
+                else if (current.Trigger is ScheduleTrigger { Schedule: OneShotSchedule } || HasOneShotFields(arguments))
+                    (schedule, _) = ResolveOneShot(arguments, context, policy);
+                else schedule = ResolveRecurring(arguments, context, policy);
+                trigger = new ScheduleTrigger(schedule);
+            }
+            var name = arguments.TryGetProperty("name", out var n) ? n.GetString() ?? "" : current.Name;
+            var instructions = hasIntent ? RequireInstructions(arguments) : current.Instructions;
+            var model = arguments.TryGetProperty("modelKey", out var m) ? m.GetString() : current.ModelOverrideCatalogKey;
+            var effort = arguments.TryGetProperty("reasoningEffort", out var e) ? e.GetString() : current.ModelOverrideReasoningEffort;
+            return RegistrationJson(await authoring.SaveAsync(owner.AgentInstanceId, id, expected,
+                current.Status == AutomationStatus.Active, name, instructions, trigger, model, effort, cancellationToken));
+        }
+        AutomationChange change;
         if (!hasIntent && !hasSchedule)
         {
             throw new ArgumentException("Update requires an intent or a schedule change.");
@@ -437,15 +499,15 @@ public static class TriggerScheduleCommands
                     ?? throw new ArgumentException("No future occurrence matches this schedule.");
             }
 
-            change = TriggerRegistrationChange.ScheduleOnly(schedule, next, null);
+            change = AutomationChange.ScheduleOnly(schedule, next, null);
             if (hasIntent)
             {
-                change = TriggerRegistrationChange.Full(RequireIntent(arguments), schedule, next, null);
+                change = AutomationChange.Full(RequireInstructions(arguments), schedule, next, null);
             }
         }
         else
         {
-            change = TriggerRegistrationChange.IntentOnly(RequireIntent(arguments));
+            change = AutomationChange.InstructionsOnly(RequireInstructions(arguments));
         }
 
         var updated = await registrations.UpdateAsync(owner, id, expected, change, cancellationToken).ConfigureAwait(false);
@@ -454,16 +516,22 @@ public static class TriggerScheduleCommands
 
     private static async Task<string> CancelAsync(
         AgentDefinition definition,
-        ITriggerRegistrationService registrations,
+        IAutomationService registrations,
         TriggerOwner owner,
         TriggerCommandContext context,
         JsonElement arguments,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        AdminAutomationAuthoringService? automationAuthoring = null)
     {
         RequirePolicy(definition, "cancel", requireUserScheduling: false);
         var id = RequireId(arguments);
         var current = await registrations.GetAsync(owner, id, cancellationToken).ConfigureAwait(false)
-            ?? throw AgentCoreErrors.NotFound("Trigger registration was not found.");
+            ?? throw AgentCoreErrors.NotFound("Automation was not found.");
+        if (automationAuthoring is not null)
+        {
+            await automationAuthoring.DeleteAsync(owner.AgentInstanceId, id, ResolveExpectedRevision(arguments, context, current), cancellationToken);
+            return RegistrationJson((await registrations.GetAsync(owner, id, cancellationToken))!);
+        }
         var cancelled = await registrations.CancelAsync(
             owner,
             id,
@@ -618,7 +686,7 @@ public static class TriggerScheduleCommands
                     "Fixed-interval schedules require intervalSeconds.");
             }
 
-            var intent = TryString(arguments, "intent", out var intentText) ? intentText : string.Empty;
+            var intent = TryString(arguments, "instructions", out var intentText) ? intentText : string.Empty;
             ScheduleDefinitionPolicy.RequireInterval(policy, intervalSeconds, context.UtcNow, intent);
 
             if (intervalSeconds > TriggerLimits.MaxFixedIntervalSeconds)
@@ -681,11 +749,11 @@ public static class TriggerScheduleCommands
                 property.WriteTo(writer);
             }
 
-            if (!root.TryGetProperty("intent", out var intentElement)
+            if (!root.TryGetProperty("instructions", out var intentElement)
                 || intentElement.ValueKind != JsonValueKind.String
                 || string.IsNullOrWhiteSpace(intentElement.GetString()))
             {
-                writer.WriteString("intent", draft.Intent);
+                writer.WriteString("instructions", draft.Instructions);
             }
 
             if (draft.RecurrenceKind.Equals("fixed_interval", StringComparison.OrdinalIgnoreCase))
@@ -714,7 +782,7 @@ public static class TriggerScheduleCommands
     }
 
     private static async Task RequireCapacityAsync(
-        ITriggerRegistrationService registrations,
+        IAutomationService registrations,
         TriggerOwner owner,
         TriggerPolicy policy,
         CancellationToken cancellationToken)
@@ -731,13 +799,13 @@ public static class TriggerScheduleCommands
         var policy = definition.TriggerPolicy;
         if (policy is not { Enabled: true })
         {
-            RuntimeTelemetry.RecordTriggerRegistration(operation, "policy");
+            RuntimeTelemetry.RecordAutomation(operation, "policy");
             throw new ArgumentException("Scheduling is disabled for this agent.");
         }
 
         if (requireUserScheduling && !policy.AllowUserScheduling)
         {
-            RuntimeTelemetry.RecordTriggerRegistration(operation, "policy");
+            RuntimeTelemetry.RecordAutomation(operation, "policy");
             throw new ArgumentException("Scheduling is disabled for this agent.");
         }
 
@@ -750,10 +818,10 @@ public static class TriggerScheduleCommands
     private static long ResolveExpectedRevision(
         JsonElement arguments,
         TriggerCommandContext context,
-        TriggerRegistration current)
+        Automation current)
     {
         var id = RequireId(arguments);
-        if (context.ScheduleContext is { RegistrationId: var referentId } && referentId == id)
+        if (context.ScheduleContext is { AutomationId: var referentId } && referentId == id)
         {
             return current.Revision;
         }
@@ -792,14 +860,14 @@ public static class TriggerScheduleCommands
         return "UTC";
     }
 
-    private static string RequireIntent(JsonElement arguments) => TriggerText.RequireIntent(RequireString(arguments, "intent"));
+    private static string RequireInstructions(JsonElement arguments) => TriggerText.RequireInstructions(RequireString(arguments, "instructions"));
 
     private static Guid RequireId(JsonElement arguments)
     {
-        var text = RequireString(arguments, "registrationId");
+        var text = RequireString(arguments, "automationId");
         return Guid.TryParse(text, out var id)
             ? id
-            : throw new ArgumentException("registrationId is invalid.");
+            : throw new ArgumentException("automationId is invalid.");
     }
 
     private static long RequireRevision(JsonElement arguments)
@@ -1025,21 +1093,42 @@ public static class TriggerScheduleCommands
         return true;
     }
 
-    private static string RegistrationJson(TriggerRegistration registration) =>
+    internal static string RegistrationJson(Automation registration) =>
         JsonSerializer.Serialize(Projection(registration));
 
-    private static object Projection(TriggerRegistration registration) => new
+    private static object Projection(Automation registration) => new
     {
-        registrationId = registration.RegistrationId,
+        automationId = registration.AutomationId,
         revision = registration.Revision,
         scheduleRevision = registration.ScheduleRevision,
         status = registration.Status.ToString(),
-        intent = registration.Intent,
-        scheduleKind = registration.Schedule.Kind.ToString(),
-        timeZone = TimeZoneOf(registration.Schedule),
+        name = registration.Name,
+        instructions = registration.Instructions,
+        modelKey = registration.ModelOverrideCatalogKey,
+        reasoningEffort = registration.ModelOverrideReasoningEffort,
+        provenance = new { authorizationOrigin = registration.Provenance.AuthorizationOrigin.ToString(),
+            sourceSessionId = registration.Provenance.SourceSessionId, sourceEventId = registration.Provenance.SourceEventId,
+            createdAt = registration.Provenance.CreatedAt, updatedAt = registration.Provenance.UpdatedAt },
+        trigger = registration.Trigger is EventTrigger eventTrigger
+            ? (object)new { kind = "event", eventSourceId = eventTrigger.EventSourceId, eventType = eventTrigger.EventType }
+            : new { kind = "schedule", schedule = InspectSchedule(((ScheduleTrigger)registration.Trigger).Schedule) },
+        triggerKind = registration.Trigger.Kind.ToString(),
+        eventSourceId = registration.EventSourceId,
+        eventType = registration.EventType,
+        scheduleKind = registration.Trigger is ScheduleTrigger scheduled ? scheduled.Schedule.Kind.ToString() : null,
+        timeZone = registration.Trigger is ScheduleTrigger timing ? TimeZoneOf(timing.Schedule) : null,
         nextOccurrenceAtUtc = registration.NextOccurrenceAtUtc,
         occurrenceCount = registration.OccurrenceCount,
         suspensionReason = registration.SuspensionReason
+    };
+
+    private static object InspectSchedule(TriggerSchedule schedule) => schedule switch
+    {
+        OneShotSchedule t => new { kind = "oneShot", timeZone = t.TimeZoneId, atUtc = t.AtUtc },
+        FixedIntervalSchedule t => new { kind = "fixedInterval", interval = t.IntervalSeconds, anchorAtUtc = t.AnchorAtUtc, endAtUtc = t.EndAtUtc, maxOccurrences = t.MaxOccurrences },
+        DailySchedule t => new { kind = "daily", timeZone = t.TimeZoneId, interval = t.IntervalDays, localTime = t.LocalTime.ToString("HH:mm"), startDate = t.StartDate, endDate = t.EndDate, maxOccurrences = t.MaxOccurrences },
+        WeeklySchedule t => new { kind = "weekly", timeZone = t.TimeZoneId, interval = t.IntervalWeeks, localTime = t.LocalTime.ToString("HH:mm"), weekdays = t.Weekdays.Select(d => (int)d).ToArray(), startDate = t.StartDate, endDate = t.EndDate, maxOccurrences = t.MaxOccurrences },
+        _ => throw AgentCoreErrors.Validation("Schedule timing is invalid.")
     };
 
     private static string TimeZoneOf(TriggerSchedule schedule) => schedule switch

@@ -277,11 +277,11 @@ public sealed class AdminMemoryServiceTests
         await sessions.SaveAsync(snapshotWithTranscript, beforeSnapshot.Revision);
 
         var owner = new TriggerOwner(instance.InstanceId, ProfileId);
-        var registrationId = Guid.Parse("019944af-00da-7000-8000-000000000001");
-        await triggers.CreateAsync(new TriggerRegistration(
-            registrationId,
+        var automationId = Guid.Parse("019944af-00da-7000-8000-000000000001");
+        await triggers.CreateAsync(new Automation(
+            automationId,
             owner,
-            TriggerRegistrationStatus.Active,
+            AutomationStatus.Active,
             "Future reminder",
             new OneShotSchedule(Now.AddHours(1), "UTC", null, null),
             Now.AddHours(1),
@@ -304,7 +304,7 @@ public sealed class AdminMemoryServiceTests
         Assert.NotNull(instanceBeforeReset);
         var profileBeforeReset = await sessions.LoadProfileAsync(ProfileId);
         Assert.NotNull(profileBeforeReset);
-        var triggerBeforeReset = (await triggers.GetAsync(owner, registrationId))!;
+        var triggerBeforeReset = (await triggers.GetAsync(owner, automationId))!;
 
         var reset = await admin.ResetScopeAsync(instance.InstanceId, AdminLearnedMemoryScope.Session, session.SessionId);
         Assert.Equal(1, reset.ItemsRemoved);
@@ -323,7 +323,7 @@ public sealed class AdminMemoryServiceTests
         Assert.Equal(instanceBeforeReset.Lifecycle, instanceAfterReset.Lifecycle);
         var profileAfterReset = await sessions.LoadProfileAsync(ProfileId);
         Assert.Equal(profileBeforeReset, profileAfterReset);
-        Assert.Equal(triggerBeforeReset, await triggers.GetAsync(owner, registrationId));
+        Assert.Equal(triggerBeforeReset, await triggers.GetAsync(owner, automationId));
         Assert.Empty((await admin.ListAsync(instance.InstanceId, AdminLearnedMemoryScope.Session, session.SessionId)).Items);
     }
 

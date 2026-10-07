@@ -39,14 +39,14 @@ public sealed class ContinuityBudgetTests
                 "Scrum decision", "Use fictional Scrum checklists for Aurora.", "scrum decision", new("user", [], null, now), now, now,
                 scope, scope == MemoryScope.User ? null : id, LocalUserProfile.Id));
         await s.GetRequiredService<IExperienceStore>().ConfigureMaintenanceAsync(id, 0, true);
-        var thoughts = s.GetRequiredService<ThoughtRegistrationService>();
+        var thoughts = s.GetRequiredService<AdminAutomationAuthoringService>();
         var r = await thoughts.SaveAsync(id, null, 0, true, 3600, "try to consolidate your memory and experience", null, null);
-        await thoughts.RunNowAsync(id, r.RegistrationId, r.Revision);
+        await thoughts.RunNowAsync(id, r.AutomationId, r.Revision);
         await ThoughtJourneyTests.Intake(s);
         await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
         var work = Assert.Single(await s.GetRequiredService<IWorkItemStore>().ListAsync(new(id, LocalUserProfile.Id), 100));
         Assert.Equal(WorkItemStatus.Completed, work.Status);
-        Assert.Equal("NoAction", ThoughtCompletion.Outcome(work.Result!.Text));
+        Assert.Equal("NoAction", WorkCompletionRequest.Outcome(work.Result!.Text));
         Assert.False(work.Result.AttentionRequired); Assert.Null(work.Approval);
         Assert.Single(await memory.ListActiveUserAsync(LocalUserProfile.Id));
         Assert.Single(await memory.ListActiveIdentityUserAsync(id, LocalUserProfile.Id));
@@ -107,7 +107,7 @@ public sealed class ContinuityBudgetTests
                 scope == MemoryScope.User ? null : id, LocalUserProfile.Id));
         var tools = s.GetRequiredService<SessionToolExecutor>();
         var call = new ModelToolCall("search", ToolCatalog.ContinuitySearch, """{"query":"Scrum decision"}""");
-        var admission = new ToolExecutionAdmission(true, TriggerKind.ThoughtActivation, AgentInstanceId: id);
+        var admission = new ToolExecutionAdmission(true, TriggerKind.ManualInvocation, AgentInstanceId: id);
         async Task<string> Search(int budget) => (await tools.ExecuteAsync(definition, Guid.Empty, call, budget, admission: admission)).Text;
         var full = await Search(6000);
         using var all = JsonDocument.Parse(full);

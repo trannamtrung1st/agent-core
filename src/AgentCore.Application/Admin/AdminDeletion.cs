@@ -5,7 +5,7 @@ namespace AgentCore.Application.Admin;
 public sealed record AdminDeletionReferenceCounts(
     int Sessions,
     int LearnedMemoryItems,
-    int TriggerRegistrations,
+    int Automations,
     int TriggerOccurrences,
     int WorkItems,
     int Approvals,
@@ -15,7 +15,7 @@ public sealed record AdminDeletionReferenceCounts(
     public bool HasReferences =>
         Sessions > 0
         || LearnedMemoryItems > 0
-        || TriggerRegistrations > 0
+        || Automations > 0
         || TriggerOccurrences > 0
         || WorkItems > 0
         || Approvals > 0
@@ -60,7 +60,7 @@ public static class AdminDeletionMessages
         };
         Append(lines, counts.Sessions, "session", "sessions");
         Append(lines, counts.LearnedMemoryItems, "learned memory item", "learned memory items");
-        Append(lines, counts.TriggerRegistrations, "trigger registration", "trigger registrations");
+        Append(lines, counts.Automations, "trigger registration", "trigger registrations");
         Append(lines, counts.TriggerOccurrences, "trigger occurrence", "trigger occurrences");
         Append(lines, counts.WorkItems, "background work item", "background work items");
         Append(lines, counts.Approvals, "approval", "approvals");

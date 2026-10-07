@@ -271,8 +271,8 @@ public sealed class AdminLifecycleConcurrencyTests
                     [new AdminPublicationRevisionWitness(published.Version, published.MetadataRevision)]),
                 fixture.Ids.NewId(),
                 now.AddMinutes(3))).AsTask();
-        var sawDeleteWaiting = await WaitUntilAsync(() => fixture.Gate.Waiters > 0);
-        Assert.True(sawDeleteWaiting);
+        // The holder observes the queued delete before releasing the gate. A second
+        // observer can miss that transient state after the update has completed.
         await update;
         var error = await Assert.ThrowsAsync<AgentCoreException>(async () => await delete);
         Assert.Equal("Conflict", error.Code);

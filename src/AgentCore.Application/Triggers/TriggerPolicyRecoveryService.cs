@@ -31,7 +31,7 @@ public sealed class TriggerPolicyRecoveryService(
             return 0;
         }
 
-        var suspended = await store.ListAsync(owner, TriggerRegistrationStatus.SuspendedPolicy, cancellationToken)
+        var suspended = await store.ListAsync(owner, AutomationStatus.SuspendedPolicy, cancellationToken)
             .ConfigureAwait(false);
         var reactivated = 0;
         foreach (var registration in suspended)
@@ -39,7 +39,7 @@ public sealed class TriggerPolicyRecoveryService(
             cancellationToken.ThrowIfCancellationRequested();
             var updated = await store.TryReactivatePolicySuspensionAsync(
                 owner,
-                registration.RegistrationId,
+                registration.AutomationId,
                 registration.Revision,
                 asOfUtc,
                 cancellationToken).ConfigureAwait(false);
@@ -72,7 +72,7 @@ public sealed class TriggerPolicyRecoveryService(
 
             var updated = await store.TryReactivatePolicySuspensionAsync(
                 registration.Owner,
-                registration.RegistrationId,
+                registration.AutomationId,
                 registration.Revision,
                 asOfUtc,
                 cancellationToken).ConfigureAwait(false);

@@ -20,7 +20,7 @@ public sealed record ScheduleAdmission(
     int SkippedCount,
     DateTimeOffset? SkippedFromUtc,
     DateTimeOffset? SkippedToUtc,
-    TriggerRegistrationStatus Status,
+    AutomationStatus Status,
     int OccurrenceCount);
 
 public sealed class TriggerTimeZoneUnavailableException : Exception
@@ -239,19 +239,19 @@ public static class TriggerScheduleAdmission
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    public static ScheduleAdmission Decide(TriggerRegistration registration, DateTimeOffset asOf)
+    public static ScheduleAdmission Decide(Automation registration, DateTimeOffset asOf)
     {
         ArgumentNullException.ThrowIfNull(registration);
         asOf = TriggerScheduleCalculator.Truncate(asOf);
         if (registration.NextOccurrenceAtUtc is not DateTimeOffset storedNext)
         {
-            return Finish(ScheduleAdmissionKind.Complete, registration, TriggerRegistrationStatus.Completed);
+            return Finish(ScheduleAdmissionKind.Complete, registration, AutomationStatus.Completed);
         }
 
         storedNext = TriggerScheduleCalculator.Truncate(storedNext);
         if (registration.ExpiresAtUtc is DateTimeOffset expiry && TriggerScheduleCalculator.Truncate(expiry) <= asOf)
         {
-            return Finish(ScheduleAdmissionKind.Expire, registration, TriggerRegistrationStatus.Expired);
+            return Finish(ScheduleAdmissionKind.Expire, registration, AutomationStatus.Expired);
         }
 
         if (storedNext > asOf)
@@ -276,18 +276,18 @@ public static class TriggerScheduleAdmission
                 0,
                 null,
                 null,
-                TriggerRegistrationStatus.Completed,
+                AutomationStatus.Completed,
                 registration.OccurrenceCount + 1);
         }
 
         if (OccurrenceCap(registration.Schedule) is int cap && registration.OccurrenceCount >= cap)
         {
-            return Finish(ScheduleAdmissionKind.Complete, registration, TriggerRegistrationStatus.Completed);
+            return Finish(ScheduleAdmissionKind.Complete, registration, AutomationStatus.Completed);
         }
 
         if (IsAfterEnd(registration.Schedule, storedNext))
         {
-            return Finish(ScheduleAdmissionKind.Complete, registration, TriggerRegistrationStatus.Completed);
+            return Finish(ScheduleAdmissionKind.Complete, registration, AutomationStatus.Completed);
         }
 
         if (registration.Schedule is FixedIntervalSchedule fixedInterval)
@@ -321,11 +321,11 @@ public static class TriggerScheduleAdmission
         }
 
         var occurrenceCount = registration.OccurrenceCount + 1;
-        var status = TriggerRegistrationStatus.Active;
+        var status = AutomationStatus.Active;
         if (nextFuture is null || (OccurrenceCap(registration.Schedule) is int limit && occurrenceCount >= limit))
         {
             nextFuture = null;
-            status = TriggerRegistrationStatus.Completed;
+            status = AutomationStatus.Completed;
         }
 
         return new ScheduleAdmission(
@@ -340,7 +340,7 @@ public static class TriggerScheduleAdmission
     }
 
     public static TriggerOccurrence CreateOccurrence(
-        TriggerRegistration registration,
+        Automation registration,
         ScheduleAdmission admission,
         DateTimeOffset asOf)
     {
@@ -351,14 +351,13 @@ public static class TriggerScheduleAdmission
 
         asOf = TriggerScheduleCalculator.Truncate(asOf);
         scheduled = TriggerScheduleCalculator.Truncate(scheduled);
-        var dedupeKey = DedupeKey(registration.RegistrationId, registration.ScheduleRevision, scheduled);
+        var dedupeKey = DedupeKey(registration.AutomationId, registration.ScheduleRevision, scheduled);
         return new TriggerOccurrence(
             OccurrenceId(dedupeKey),
             dedupeKey,
-            registration.RegistrationId,
+            registration.AutomationId,
             registration.Owner,
-            registration.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought
-                ? TriggerSourceKind.ThoughtActivation : TriggerSourceKind.Schedule,
+            TriggerSourceKind.Schedule,
             scheduled,
             asOf,
             asOf,
@@ -373,8 +372,8 @@ public static class TriggerScheduleAdmission
             null);
     }
 
-    public static TriggerRegistration Advance(
-        TriggerRegistration registration,
+    public static Automation Advance(
+        Automation registration,
         ScheduleAdmission admission,
         DateTimeOffset asOf,
         string? suspensionReason = null)
@@ -389,8 +388,8 @@ public static class TriggerScheduleAdmission
             suspensionReason ?? registration.SuspensionReason);
     }
 
-    public static string DedupeKey(Guid registrationId, long scheduleRevision, DateTimeOffset scheduledAtUtc) =>
-        $"schedule:{registrationId:D}:{scheduleRevision}:{TriggerScheduleCalculator.Truncate(scheduledAtUtc).ToUnixTimeMilliseconds()}";
+    public static string DedupeKey(Guid automationId, long scheduleRevision, DateTimeOffset scheduledAtUtc) =>
+        $"schedule:{automationId:D}:{scheduleRevision}:{TriggerScheduleCalculator.Truncate(scheduledAtUtc).ToUnixTimeMilliseconds()}";
 
     public static Guid OccurrenceId(string dedupeKey)
     {
@@ -403,7 +402,7 @@ public static class TriggerScheduleAdmission
     }
 
     private static ScheduleAdmission DecideFixedInterval(
-        TriggerRegistration registration,
+        Automation registration,
         FixedIntervalSchedule schedule,
         DateTimeOffset storedNext,
         DateTimeOffset asOf)
@@ -415,7 +414,7 @@ public static class TriggerScheduleAdmission
             var end = TriggerScheduleCalculator.Truncate(endBound);
             if (storedNext > end)
             {
-                return Finish(ScheduleAdmissionKind.Complete, registration, TriggerRegistrationStatus.Completed);
+                return Finish(ScheduleAdmissionKind.Complete, registration, AutomationStatus.Completed);
             }
 
             if (asOf > end)
@@ -455,12 +454,12 @@ public static class TriggerScheduleAdmission
         }
 
         var occurrenceCount = registration.OccurrenceCount + 1;
-        var status = TriggerRegistrationStatus.Active;
+        var status = AutomationStatus.Active;
         DateTimeOffset? next = nextFuture;
         if (next is null || (OccurrenceCap(schedule) is int limit && occurrenceCount >= limit))
         {
             next = null;
-            status = TriggerRegistrationStatus.Completed;
+            status = AutomationStatus.Completed;
         }
 
         return new ScheduleAdmission(
@@ -476,8 +475,8 @@ public static class TriggerScheduleAdmission
 
     private static ScheduleAdmission Finish(
         ScheduleAdmissionKind kind,
-        TriggerRegistration registration,
-        TriggerRegistrationStatus status) =>
+        Automation registration,
+        AutomationStatus status) =>
         new(kind, null, null, 0, null, null, status, registration.OccurrenceCount);
 
     private static int? OccurrenceCap(TriggerSchedule schedule) => schedule switch
@@ -488,7 +487,7 @@ public static class TriggerScheduleAdmission
         _ => null
     };
 
-    private static int AnchorWeek(TriggerRegistration registration, DateTimeOffset storedNext)
+    private static int AnchorWeek(Automation registration, DateTimeOffset storedNext)
     {
         if (registration.Schedule is not WeeklySchedule weekly)
         {
@@ -608,19 +607,15 @@ public static class TriggerScheduleAdmission
         return (date.DayNumber - mondayOffset) / 7;
     }
 
-    private static string Evidence(TriggerRegistration registration, ScheduleAdmission admission, DateTimeOffset scheduled)
+    private static string Evidence(Automation registration, ScheduleAdmission admission, DateTimeOffset scheduled)
     {
-        var payload = JsonSerializer.Serialize(new Dictionary<string, object?>
+        return AutomationRules.Evidence(registration, new
         {
-            ["registrationId"] = registration.RegistrationId,
-            ["intent"] = registration.Intent,
-            ["scheduleKind"] = registration.Schedule.Kind.ToString(),
-            ["registrationRevision"] = registration.Revision,
-            ["scheduledAtUtc"] = scheduled.ToUnixTimeMilliseconds(),
-            ["skippedCount"] = admission.SkippedCount,
-            ["skippedFromUtc"] = admission.SkippedFromUtc?.ToUnixTimeMilliseconds(),
-            ["skippedToUtc"] = admission.SkippedToUtc?.ToUnixTimeMilliseconds()
-        }, Json);
-        return TriggerText.RequireEvidence(payload);
+            scheduleKind = registration.Schedule.Kind.ToString(),
+            scheduledAtUtc = scheduled.ToUnixTimeMilliseconds(),
+            skippedCount = admission.SkippedCount,
+            skippedFromUtc = admission.SkippedFromUtc?.ToUnixTimeMilliseconds(),
+            skippedToUtc = admission.SkippedToUtc?.ToUnixTimeMilliseconds()
+        });
     }
 }

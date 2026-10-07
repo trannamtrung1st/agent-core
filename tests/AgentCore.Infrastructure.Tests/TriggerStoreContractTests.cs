@@ -29,29 +29,28 @@ public sealed class TriggerStoreContractTests
         await ForEachStore(async store =>
         {
             var owner = new TriggerOwner(InstanceA, ProfileA);
-            TriggerRegistration Row(Guid id, TriggerRegistrationStatus status, long revision = 1, Guid? source = null) =>
-                new(id, owner, status, "Known task", OneShot(), status == TriggerRegistrationStatus.Active ? Now.AddDays(1) : null,
-                    null, 0, revision, revision, new(TriggerAuthorizationOrigin.AdminOwner, null, null, Now, Now), null,
-                    eventSourceId: source, eventType: source is null ? null : "order.placed");
+            Automation Row(Guid id, AutomationStatus status, long revision = 1, Guid? source = null) =>
+                new(id, owner, status, "Known task", source is Guid sourceId ? new EventTrigger(sourceId, "order.placed") : new ScheduleTrigger(OneShot()), source is null && status == AutomationStatus.Active ? Now.AddDays(1) : null,
+                    null, 0, revision, revision, new(TriggerAuthorizationOrigin.AdminOwner, null, null, Now, Now), null);
             AgentCore.Application.Admin.AdminEventAppend Audit() => new(Guid.NewGuid(), Now,
-                AgentCore.Application.Admin.AdminEventActorKind.LocalOwner, AgentCore.Application.Admin.AdminEventOperationKind.ScheduleRegistrationChanged,
+                AgentCore.Application.Admin.AdminEventActorKind.LocalOwner, AgentCore.Application.Admin.AdminEventOperationKind.AutomationChanged,
                 "agentInstance", InstanceA.ToString("D"), null, null,
                 System.Text.Json.JsonSerializer.Serialize(new { instanceId = InstanceA.ToString("D"), operation = "update" }));
-            for (var i = 0; i < 3; i++) await store.CreateAsync(Row(Guid.NewGuid(), TriggerRegistrationStatus.Active, source: Guid.NewGuid()));
-            Assert.Equal(0, await store.CountActiveAsync(owner));
+            for (var i = 0; i < 3; i++) await store.CreateAsync(Row(Guid.NewGuid(), AutomationStatus.Active, source: Guid.NewGuid()));
+            Assert.Equal(3, await store.CountActiveAsync(owner));
             var firstId = Guid.NewGuid(); var secondId = Guid.NewGuid();
-            await store.SaveScheduleAsync(Row(firstId, TriggerRegistrationStatus.Active), 0, Audit(), maxActiveRegistrations: 1);
-            Assert.Equal(1, await store.CountActiveAsync(owner));
-            await Assert.ThrowsAsync<AgentCoreException>(() => store.SaveScheduleAsync(Row(secondId, TriggerRegistrationStatus.Active), 0,
-                Audit(), maxActiveRegistrations: 1).AsTask());
+            await store.SaveAutomationAsync(Row(firstId, AutomationStatus.Active), 0, Audit(), maxActiveRegistrations: 4);
+            Assert.Equal(4, await store.CountActiveAsync(owner));
+            await Assert.ThrowsAsync<AgentCoreException>(() => store.SaveAutomationAsync(Row(secondId, AutomationStatus.Active), 0,
+                Audit(), maxActiveRegistrations: 4).AsTask());
             Assert.Null(await store.GetAsync(owner, secondId));
-            await store.SaveScheduleAsync(Row(firstId, TriggerRegistrationStatus.Disabled, 2), 1, Audit(), maxActiveRegistrations: 1);
-            Assert.Equal(0, await store.CountActiveAsync(owner));
-            await store.SaveScheduleAsync(Row(secondId, TriggerRegistrationStatus.Active), 0, Audit(), maxActiveRegistrations: 1);
-            await Assert.ThrowsAsync<AgentCoreException>(() => store.SaveScheduleAsync(Row(firstId, TriggerRegistrationStatus.Active, 3), 2,
-                Audit(), maxActiveRegistrations: 1).AsTask());
-            Assert.Equal(TriggerRegistrationStatus.Disabled, (await store.GetAsync(owner, firstId))!.Status);
-            Assert.Equal(1, await store.CountActiveAsync(owner));
+            await store.SaveAutomationAsync(Row(firstId, AutomationStatus.Disabled, 2), 1, Audit(), maxActiveRegistrations: 4);
+            Assert.Equal(3, await store.CountActiveAsync(owner));
+            await store.SaveAutomationAsync(Row(secondId, AutomationStatus.Active), 0, Audit(), maxActiveRegistrations: 4);
+            await Assert.ThrowsAsync<AgentCoreException>(() => store.SaveAutomationAsync(Row(firstId, AutomationStatus.Active, 3), 2,
+                Audit(), maxActiveRegistrations: 4).AsTask());
+            Assert.Equal(AutomationStatus.Disabled, (await store.GetAsync(owner, firstId))!.Status);
+            Assert.Equal(4, await store.CountActiveAsync(owner));
         });
     }
 
@@ -69,17 +68,17 @@ public sealed class TriggerStoreContractTests
             Guid? before = null;
             while (true)
             {
-                var page = await service.ListSchedulesPageAsync(owner, 20, before);
+                var page = await service.ListAutomationsPageAsync(owner, 20, before);
                 if (page.Count == 0) break;
-                seen.AddRange(page.Select(item => item.RegistrationId));
-                before = page[^1].RegistrationId;
+                seen.AddRange(page.Select(item => item.AutomationId));
+                before = page[^1].AutomationId;
             }
             Assert.Equal(45, seen.Count);
             Assert.Equal(45, seen.Distinct().Count());
             var all = await store.ListAsync(owner, null);
-            Assert.Equal(all.Select(item => item.RegistrationId), seen);
+            Assert.Equal(all.Select(item => item.AutomationId), seen);
             var foreign = new TriggerOwner(InstanceB, ProfileB);
-            var error = await Assert.ThrowsAsync<AgentCoreException>(() => service.ListSchedulesPageAsync(foreign, 20, before).AsTask());
+            var error = await Assert.ThrowsAsync<AgentCoreException>(() => service.ListAutomationsPageAsync(foreign, 20, before).AsTask());
             Assert.Equal("NotFound", error.Code);
         });
     }
@@ -96,7 +95,7 @@ public sealed class TriggerStoreContractTests
             var created = await service.CreateAsync(Draft(owner, "Call John", OneShot()));
             Assert.Equal(1, created.Revision);
             Assert.Equal(1, created.ScheduleRevision);
-            Assert.Equal(TriggerRegistrationStatus.Active, created.Status);
+            Assert.Equal(AutomationStatus.Active, created.Status);
             Assert.Equal(TriggerAuthorizationOrigin.CurrentUserTurn, created.Provenance.AuthorizationOrigin);
             Assert.Equal(SourceSessionId, created.Provenance.SourceSessionId);
             Assert.Equal(Now, created.Provenance.CreatedAt);
@@ -105,45 +104,45 @@ public sealed class TriggerStoreContractTests
             Assert.Equal(0, await service.CountActiveAsync(other));
 
             time.Advance(TimeSpan.FromSeconds(1));
-            var listed = await service.ListAsync(owner, TriggerRegistrationStatus.Active);
+            var listed = await service.ListAsync(owner, AutomationStatus.Active);
             var visible = Assert.Single(listed);
-            Assert.Equal(created.RegistrationId, visible.RegistrationId);
+            Assert.Equal(created.AutomationId, visible.AutomationId);
             Assert.Empty(await service.ListAsync(other, null));
-            Assert.Null(await service.GetAsync(other, created.RegistrationId));
+            Assert.Null(await service.GetAsync(other, created.AutomationId));
 
             var same = await service.UpdateAsync(
                 owner,
-                created.RegistrationId,
+                created.AutomationId,
                 1,
-                TriggerRegistrationChange.IntentOnly("  Call John  "));
+                AutomationChange.InstructionsOnly("  Call John  "));
             Assert.Equal(1, same.Revision);
-            Assert.Equal("Call John", same.Intent);
+            Assert.Equal("Call John", same.Instructions);
 
             time.Advance(TimeSpan.FromSeconds(1));
             var renamed = await service.UpdateAsync(
                 owner,
-                created.RegistrationId,
+                created.AutomationId,
                 1,
-                TriggerRegistrationChange.IntentOnly("Call later"));
+                AutomationChange.InstructionsOnly("Call later"));
             Assert.Equal(2, renamed.Revision);
             Assert.Equal(1, renamed.ScheduleRevision);
-            Assert.Equal("Call later", renamed.Intent);
+            Assert.Equal("Call later", renamed.Instructions);
 
             var stale = await Assert.ThrowsAsync<AgentCoreException>(() => service.UpdateAsync(
                 owner,
-                created.RegistrationId,
+                created.AutomationId,
                 1,
-                TriggerRegistrationChange.IntentOnly("nope")).AsTask());
+                AutomationChange.InstructionsOnly("nope")).AsTask());
             Assert.Equal("Conflict", stale.Code);
-            Assert.Equal("Call later", (await service.GetAsync(owner, created.RegistrationId))!.Intent);
+            Assert.Equal("Call later", (await service.GetAsync(owner, created.AutomationId))!.Instructions);
 
             time.Advance(TimeSpan.FromSeconds(1));
             var weekly = Weekly();
             var rescheduled = await service.UpdateAsync(
                 owner,
-                created.RegistrationId,
+                created.AutomationId,
                 2,
-                TriggerRegistrationChange.ScheduleOnly(weekly, Now.AddDays(5), null));
+                AutomationChange.ScheduleOnly(weekly, Now.AddDays(5), null));
             Assert.Equal(3, rescheduled.Revision);
             Assert.Equal(2, rescheduled.ScheduleRevision);
             Assert.True(weekly.SemanticEquals(rescheduled.Schedule));
@@ -151,34 +150,34 @@ public sealed class TriggerStoreContractTests
 
             var denied = await Assert.ThrowsAsync<AgentCoreException>(() => service.CancelAsync(
                 other,
-                created.RegistrationId,
+                created.AutomationId,
                 3).AsTask());
             Assert.Equal("NotFound", denied.Code);
             Assert.DoesNotContain("Call later", denied.Message, StringComparison.Ordinal);
 
             var staleCancel = await Assert.ThrowsAsync<AgentCoreException>(() => service.CancelAsync(
                 owner,
-                created.RegistrationId,
+                created.AutomationId,
                 2).AsTask());
             Assert.Equal("Conflict", staleCancel.Code);
-            Assert.Equal(TriggerRegistrationStatus.Active, (await service.GetAsync(owner, created.RegistrationId))!.Status);
+            Assert.Equal(AutomationStatus.Active, (await service.GetAsync(owner, created.AutomationId))!.Status);
 
             time.Advance(TimeSpan.FromSeconds(1));
-            var cancelled = await service.CancelAsync(owner, created.RegistrationId, 3);
-            Assert.Equal(TriggerRegistrationStatus.Cancelled, cancelled.Status);
+            var cancelled = await service.CancelAsync(owner, created.AutomationId, 3);
+            Assert.Equal(AutomationStatus.Cancelled, cancelled.Status);
             Assert.Equal(4, cancelled.Revision);
             Assert.Equal(2, cancelled.ScheduleRevision);
-            var repeated = await service.CancelAsync(owner, created.RegistrationId, 3);
+            var repeated = await service.CancelAsync(owner, created.AutomationId, 3);
             Assert.Equal(cancelled.Revision, repeated.Revision);
             Assert.Equal(0, await service.CountActiveAsync(owner));
-            Assert.Empty(await service.ListAsync(owner, TriggerRegistrationStatus.Active));
-            Assert.Equal(created.RegistrationId, Assert.Single(await service.ListAsync(owner, TriggerRegistrationStatus.Cancelled)).RegistrationId);
+            Assert.Empty(await service.ListAsync(owner, AutomationStatus.Active));
+            Assert.Equal(created.AutomationId, Assert.Single(await service.ListAsync(owner, AutomationStatus.Cancelled)).AutomationId);
 
             var updateCancelled = await Assert.ThrowsAsync<AgentCoreException>(() => service.UpdateAsync(
                 owner,
-                created.RegistrationId,
+                created.AutomationId,
                 4,
-                TriggerRegistrationChange.IntentOnly("again")).AsTask());
+                AutomationChange.InstructionsOnly("again")).AsTask());
             Assert.Equal("ValidationError", updateCancelled.Code);
         });
     }
@@ -192,12 +191,12 @@ public sealed class TriggerStoreContractTests
             var service = Service(store, time);
             var owner = new TriggerOwner(InstanceA, ProfileA);
             var other = new TriggerOwner(InstanceB, ProfileB);
-            var registrationId = Guid.Parse("019944af-0007-7000-8000-000000000001");
+            var automationId = Guid.Parse("019944af-0007-7000-8000-000000000001");
             const string suspensionReason = "Trigger policy ineligible";
-            await store.CreateAsync(new TriggerRegistration(
-                registrationId,
+            await store.CreateAsync(new Automation(
+                automationId,
                 owner,
-                TriggerRegistrationStatus.SuspendedPolicy,
+                AutomationStatus.SuspendedPolicy,
                 "Held reminder",
                 OneShot(),
                 Now.AddDays(1),
@@ -208,35 +207,35 @@ public sealed class TriggerStoreContractTests
                 new TriggerProvenance(TriggerAuthorizationOrigin.CurrentUserTurn, SourceSessionId, null, Now, Now),
                 suspensionReason));
 
-            var suspended = Assert.Single(await service.ListAsync(owner, TriggerRegistrationStatus.SuspendedPolicy));
-            Assert.Equal(registrationId, suspended.RegistrationId);
+            var suspended = Assert.Single(await service.ListAsync(owner, AutomationStatus.SuspendedPolicy));
+            Assert.Equal(automationId, suspended.AutomationId);
             Assert.Equal(suspensionReason, suspended.SuspensionReason);
-            Assert.Null(await service.GetAsync(other, registrationId));
+            Assert.Null(await service.GetAsync(other, automationId));
 
             var stale = await Assert.ThrowsAsync<AgentCoreException>(() =>
-                service.CancelAsync(owner, registrationId, 1).AsTask());
+                service.CancelAsync(owner, automationId, 1).AsTask());
             Assert.Equal("Conflict", stale.Code);
-            Assert.Equal(TriggerRegistrationStatus.SuspendedPolicy, (await service.GetAsync(owner, registrationId))!.Status);
+            Assert.Equal(AutomationStatus.SuspendedPolicy, (await service.GetAsync(owner, automationId))!.Status);
 
             var denied = await Assert.ThrowsAsync<AgentCoreException>(() =>
-                service.CancelAsync(other, registrationId, 2).AsTask());
+                service.CancelAsync(other, automationId, 2).AsTask());
             Assert.Equal("NotFound", denied.Code);
 
             time.Advance(TimeSpan.FromSeconds(1));
-            var cancelled = await service.CancelAsync(owner, registrationId, 2);
-            Assert.Equal(TriggerRegistrationStatus.Cancelled, cancelled.Status);
+            var cancelled = await service.CancelAsync(owner, automationId, 2);
+            Assert.Equal(AutomationStatus.Cancelled, cancelled.Status);
             Assert.Equal(3, cancelled.Revision);
 
-            var persisted = await service.GetAsync(owner, registrationId);
+            var persisted = await service.GetAsync(owner, automationId);
             Assert.NotNull(persisted);
-            Assert.Equal(TriggerRegistrationStatus.Cancelled, persisted!.Status);
+            Assert.Equal(AutomationStatus.Cancelled, persisted!.Status);
             Assert.Equal(3, persisted.Revision);
 
-            var repeated = await service.CancelAsync(owner, registrationId, 2);
+            var repeated = await service.CancelAsync(owner, automationId, 2);
             Assert.Equal(cancelled.Revision, repeated.Revision);
             Assert.Equal(
-                registrationId,
-                Assert.Single(await service.ListAsync(owner, TriggerRegistrationStatus.Cancelled)).RegistrationId);
+                automationId,
+                Assert.Single(await service.ListAsync(owner, AutomationStatus.Cancelled)).AutomationId);
         });
     }
 
@@ -255,7 +254,7 @@ public sealed class TriggerStoreContractTests
             var c = await service.CreateAsync(Draft(owner, "C", OneShot()));
 
             var listed = await service.ListAsync(owner, null);
-            Assert.Equal([c.RegistrationId, b.RegistrationId, a.RegistrationId], listed.Select(row => row.RegistrationId).ToArray());
+            Assert.Equal([c.AutomationId, b.AutomationId, a.AutomationId], listed.Select(row => row.AutomationId).ToArray());
         });
     }
 
@@ -322,7 +321,7 @@ public sealed class TriggerStoreContractTests
             var admitted = await service.AdmitOccurrenceAsync(new TriggerOccurrenceDraft(
                 owner,
                 "registration|1|1758607200000",
-                created.RegistrationId,
+                created.AutomationId,
                 TriggerSourceKind.Schedule,
                 created.NextOccurrenceAtUtc,
                 Now,
@@ -331,16 +330,16 @@ public sealed class TriggerStoreContractTests
                 created.ScheduleRevision));
 
             var reopened = Service(new SqliteTriggerStore(factory), time);
-            var loaded = await reopened.GetAsync(owner, created.RegistrationId);
+            var loaded = await reopened.GetAsync(owner, created.AutomationId);
             Assert.NotNull(loaded);
-            Assert.Equal("Call John", loaded!.Intent);
+            Assert.Equal("Call John", loaded!.Instructions);
             Assert.True(OneShot().SemanticEquals(loaded.Schedule));
             Assert.Equal("Asia/Ho_Chi_Minh", ((OneShotSchedule)loaded.Schedule).TimeZoneId);
             Assert.Equal(new DateOnly(2026, 9, 24), ((OneShotSchedule)loaded.Schedule).LocalDate);
             Assert.Equal(new TimeOnly(9, 0), ((OneShotSchedule)loaded.Schedule).LocalTime);
             var occurrence = await reopened.GetOccurrenceAsync(owner, admitted.Occurrence.OccurrenceId);
             Assert.Equal(admitted.Occurrence.DedupeKey, occurrence!.DedupeKey);
-            Assert.Equal(created.RegistrationId, occurrence.RegistrationId);
+            Assert.Equal(created.AutomationId, occurrence.AutomationId);
         }
         finally
         {
@@ -366,10 +365,10 @@ public sealed class TriggerStoreContractTests
             await using (var db = await factory.CreateDbContextAsync())
             {
                 var tables = await TableNamesAsync(db);
-                Assert.Contains("TriggerRegistrations", tables);
+                Assert.Contains("Automations", tables);
                 Assert.Contains("TriggerOccurrences", tables);
                 Assert.DoesNotContain(tables, name => name.Contains("Timer", StringComparison.OrdinalIgnoreCase));
-                Assert.Equal(0, await ForeignKeyCountAsync(db, "TriggerRegistrations"));
+                Assert.Equal(0, await ForeignKeyCountAsync(db, "Automations"));
                 Assert.Equal(0, await ForeignKeyCountAsync(db, "TriggerOccurrences"));
             }
 
@@ -397,11 +396,11 @@ public sealed class TriggerStoreContractTests
                 Assert.Equal(0, await db.Sessions.CountAsync());
             }
 
-            var loaded = await Service(new SqliteTriggerStore(factory), time).GetAsync(owner, created.RegistrationId);
-            Assert.Equal("Call John", loaded!.Intent);
+            var loaded = await Service(new SqliteTriggerStore(factory), time).GetAsync(owner, created.AutomationId);
+            Assert.Equal("Call John", loaded!.Instructions);
             Assert.Equal(SourceSessionId, loaded.Provenance.SourceSessionId);
             Assert.Equal(owner, loaded.Owner);
-            Assert.Equal(TriggerRegistrationStatus.Active, loaded.Status);
+            Assert.Equal(AutomationStatus.Active, loaded.Status);
         }
         finally
         {
@@ -409,7 +408,7 @@ public sealed class TriggerStoreContractTests
         }
     }
 
-    private static TriggerRegistrationDraft Draft(TriggerOwner owner, string intent, TriggerSchedule schedule) =>
+    private static AutomationDraft Draft(TriggerOwner owner, string intent, TriggerSchedule schedule) =>
         new(
             owner,
             intent,
@@ -426,7 +425,7 @@ public sealed class TriggerStoreContractTests
     private static WeeklySchedule Weekly() =>
         new(1, [DayOfWeek.Monday], new TimeOnly(9, 0), "Europe/London");
 
-    private static TriggerRegistrationService Service(ITriggerStore store, TimeProvider time) =>
+    private static AutomationService Service(ITriggerStore store, TimeProvider time) =>
         new(
             store,
             new DeterministicIdGenerator(

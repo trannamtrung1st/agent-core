@@ -32,11 +32,11 @@ public sealed class WorkItemStoreContractTests
         {
             var owner = new WorkOwner(InstanceA, ProfileA);
             var registration = Id(8000);
-            await store.CreateAsync(NewItem(owner, Id(1), Id(501), Now, registrationId: registration));
-            await store.CreateAsync(NewItem(owner, Id(2), Id(502), Now, registrationId: registration));
+            await store.CreateAsync(NewItem(owner, Id(1), Id(501), Now, automationId: registration));
+            await store.CreateAsync(NewItem(owner, Id(2), Id(502), Now, automationId: registration));
             for (var index = 3; index <= 105; index++)
                 await store.CreateAsync(NewItem(owner, Id(index), Id(index + 500), Now.AddMinutes(index)));
-            Assert.DoesNotContain(await store.ListAsync(owner, 100), item => item.Provenance.RegistrationId == registration);
+            Assert.DoesNotContain(await store.ListAsync(owner, 100), item => item.Provenance.AutomationId == registration);
             Assert.Equal(Id(2), (await store.GetLatestForRegistrationAsync(owner, registration))!.WorkItemId);
             Assert.Null(await store.GetLatestForRegistrationAsync(new(InstanceB, ProfileA), registration));
             Assert.Null(await store.GetLatestForRegistrationAsync(new(InstanceA, ProfileB), registration));
@@ -972,14 +972,14 @@ public sealed class WorkItemStoreContractTests
         int maxAttempts = 3,
         WorkSourceKind kind = WorkSourceKind.ApplicationEvent,
         AgentIdentity? pinnedPersona = null,
-        Guid? registrationId = null) =>
+        Guid? automationId = null) =>
         WorkItem.Create(
             workItemId,
             owner,
             new WorkProvenance(
                 sourceId,
                 kind,
-                registrationId,
+                automationId,
                 Guid.Parse("019944af-0009-7000-8000-000000000092"),
                 null,
                 $"source|{sourceId:N}",

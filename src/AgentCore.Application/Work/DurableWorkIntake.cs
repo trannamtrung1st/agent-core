@@ -75,7 +75,7 @@ public sealed class DurableWorkIntake(
                     "Durable intake skipped an occurrence.",
                     new DiagnosticContext(
                         AgentInstanceId: occurrence.Owner.AgentInstanceId,
-                        TriggerRegistrationId: occurrence.RegistrationId,
+                        AutomationId: occurrence.AutomationId,
                         TriggerOccurrenceId: occurrence.OccurrenceId));
             }
         }
@@ -92,7 +92,7 @@ public sealed class DurableWorkIntake(
         {
             TriggerSourceKind.Schedule => WorkSourceKind.Schedule,
             TriggerSourceKind.ApplicationEvent => WorkSourceKind.ApplicationEvent,
-            TriggerSourceKind.ThoughtActivation => WorkSourceKind.ThoughtActivation,
+            TriggerSourceKind.ManualInvocation => WorkSourceKind.ManualInvocation,
             _ => (WorkSourceKind?)null
         };
         if (sourceKind is not WorkSourceKind kind)
@@ -114,12 +114,12 @@ public sealed class DurableWorkIntake(
         }
 
         Guid? sourceSessionId = null;
-        TriggerRegistration? registration = null;
-        if (occurrence.RegistrationId is Guid registrationId)
+        Automation? registration = null;
+        if (occurrence.AutomationId is Guid automationId)
         {
             registration = await triggers.GetAsync(
                 occurrence.Owner,
-                registrationId,
+                automationId,
                 cancellationToken).ConfigureAwait(false);
             sourceSessionId = registration?.Provenance.SourceSessionId;
         }
@@ -140,7 +140,7 @@ public sealed class DurableWorkIntake(
         }
         else
         {
-            var validated = ExecutionModelPolicy.Validate(catalog, pin, definition, kind == WorkSourceKind.ThoughtActivation ? null : registration);
+            var validated = ExecutionModelPolicy.Validate(catalog, pin, definition, registration);
             if (!validated.Accepted)
             {
                 return null;
@@ -153,7 +153,7 @@ public sealed class DurableWorkIntake(
             new WorkProvenance(
                 occurrence.OccurrenceId,
                 kind,
-                occurrence.RegistrationId,
+                occurrence.AutomationId,
                 sourceSessionId,
                 occurrence.SourceEventId,
                 occurrence.DedupeKey,

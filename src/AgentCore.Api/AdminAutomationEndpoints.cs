@@ -12,37 +12,53 @@ using AgentCore.Domain.Triggers;
 
 namespace AgentCore.Api;
 
-internal static class AdminScheduleEndpoints
+internal static class AdminAutomationEndpoints
 {
     public static void Map(RouteGroupBuilder admin)
     {
-        var group = admin.MapGroup("/agent-instances/{instanceId:guid}/schedules");
+        var group = admin.MapGroup("/agent-instances/{instanceId:guid}/automations");
         group.MapGet("", (Guid instanceId, ExperienceService instances, ITriggerStore store, IWorkItemStore work,
             IAgentDefinitionStore definitions, IModelCatalog catalog, CancellationToken ct) => Respond(async () =>
         {
             var instance = await instances.RequireInstanceAsync(instanceId, ct);
             var definition = await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct);
             var rows = await store.ListAsync(new(instanceId, LocalUserProfile.Id), null, ct);
-            var items = new List<AdminScheduleResponse>();
-            foreach (var registration in rows.Where(r => r.EventSourceId is null && r.Provenance.AuthorizationOrigin != TriggerAuthorizationOrigin.AdminThought))
+            var items = new List<AutomationResponse>();
+            foreach (var registration in rows.Where(r => r.Status != AutomationStatus.Cancelled))
             {
-                var last = await work.GetLatestForRegistrationAsync(new(instanceId, LocalUserProfile.Id), registration.RegistrationId, ct);
+                var last = await work.GetLatestForRegistrationAsync(new(instanceId, LocalUserProfile.Id), registration.AutomationId, ct);
                 items.Add(Project(registration, definition is null ? null : ExecutionModelPolicy.Resolve(catalog, definition, instance, registration).Pin?.CatalogKey, last));
             }
-            return new AdminScheduleReview(items,
-                definition?.TriggerPolicy is { } p ? new AdminSchedulePolicy(p.AllowOneShot, p.AllowDaily, p.AllowWeekly, p.AllowFixedInterval,
+            return new AutomationReview(items,
+                definition?.TriggerPolicy is { } p ? new AutomationPolicy(p.AllowOneShot, p.AllowDaily, p.AllowWeekly, p.AllowFixedInterval,
                     p.AllowIndefiniteRecurrence, p.OneShotHorizonDays, p.MinRecurrenceDays, p.MinFixedIntervalSeconds, p.MaxActiveRegistrations) : null);
         }));
-        group.MapPost("", (Guid instanceId, AdminScheduleRequest request, AdminScheduleService service, CancellationToken ct) => Respond(async () =>
-            Project(await service.SaveAsync(instanceId, null, request.ExpectedRevision, request.Enabled, request.Intent, Parse(request.Schedule), request.ModelKey, request.ReasoningEffort, ct))));
-        group.MapPut("/{registrationId:guid}", (Guid instanceId, Guid registrationId, AdminScheduleRequest request, AdminScheduleService service, CancellationToken ct) => Respond(async () =>
-            Project(await service.SaveAsync(instanceId, registrationId, request.ExpectedRevision, request.Enabled, request.Intent, Parse(request.Schedule), request.ModelKey, request.ReasoningEffort, ct))));
-        group.MapPost("/{registrationId:guid}/cancel", (Guid instanceId, Guid registrationId, ContinuityRevisionRequest request, AdminScheduleService service, CancellationToken ct) => Respond(async () =>
-        { await service.DeleteAsync(instanceId, registrationId, request.ExpectedRevision, ct); return new { cancelled = true }; }));
-        group.MapPost("/{registrationId:guid}/run", (Guid instanceId, Guid registrationId, ContinuityRevisionRequest request, AdminScheduleService service, CancellationToken ct) => Respond(async () =>
-        { var occurrence = await service.RunNowAsync(instanceId, registrationId, request.ExpectedRevision, ct); return new { occurrenceId = occurrence.OccurrenceId }; }));
+        group.MapPost("", (Guid instanceId, AutomationRequest request, AdminAutomationAuthoringService service, CancellationToken ct) => Respond(async () =>
+            Project(await service.SaveAsync(instanceId, null, request.ExpectedRevision, request.Enabled, request.Name, request.Instructions, ParseTrigger(request.Trigger), request.ModelKey, request.ReasoningEffort, ct))));
+        group.MapPut("/{automationId:guid}", (Guid instanceId, Guid automationId, AutomationRequest request, AdminAutomationAuthoringService service, CancellationToken ct) => Respond(async () =>
+            Project(await service.SaveAsync(instanceId, automationId, request.ExpectedRevision, request.Enabled, request.Name, request.Instructions, ParseTrigger(request.Trigger), request.ModelKey, request.ReasoningEffort, ct))));
+        group.MapDelete("/{automationId:guid}", (Guid instanceId, Guid automationId, [Microsoft.AspNetCore.Mvc.FromBody] ContinuityRevisionRequest request, AdminAutomationAuthoringService service, CancellationToken ct) => Respond(async () =>
+        { await service.DeleteAsync(instanceId, automationId, request.ExpectedRevision, ct); return new { cancelled = true }; }));
+        group.MapPost("/{automationId:guid}/run", (Guid instanceId, Guid automationId, ContinuityRevisionRequest request, AdminAutomationAuthoringService service, CancellationToken ct) => Respond(async () =>
+        { var occurrence = await service.RunNowAsync(instanceId, automationId, request.ExpectedRevision, ct); return new { occurrenceId = occurrence.OccurrenceId }; }));
     }
-    private static TriggerSchedule Parse(AdminScheduleTiming? t)
+    private static AutomationTrigger ParseTrigger(AutomationTriggerDto? trigger)
+    {
+        if (trigger is null) throw AgentCoreErrors.Validation("Trigger is required.");
+        return trigger.Kind switch
+        {
+            "schedule" when trigger.EventSourceId is null && trigger.EventType is null => new ScheduleTrigger(Parse(trigger.Schedule)),
+            "event" when trigger.Schedule is null && Guid.TryParse(trigger.EventSourceId, out var source) => new EventTrigger(source, trigger.EventType ?? ""),
+            _ => throw AgentCoreErrors.Validation("Trigger must contain either Schedule timing or Event Source and type.")
+        };
+    }
+    private static AutomationTriggerDto Trigger(AutomationTrigger trigger) => trigger switch
+    {
+        ScheduleTrigger s => new("schedule", Timing(s.Schedule)),
+        EventTrigger e => new("event", EventSourceId: e.EventSourceId.ToString("D"), EventType: e.EventType),
+        _ => throw AgentCoreErrors.Validation("Trigger is unavailable.")
+    };
+    private static TriggerSchedule Parse(AutomationTiming? t)
     {
         if (t is null) throw AgentCoreErrors.Validation("Schedule timing is required.");
         DateTimeOffset Utc(string? value) => DateTimeOffset.Parse(value ?? "", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).ToUniversalTime();
@@ -57,12 +73,12 @@ internal static class AdminScheduleEndpoints
             _ => throw AgentCoreErrors.Validation("Schedule kind is invalid.")
         };
     }
-    private static AdminScheduleResponse Project(TriggerRegistration r, string? effective = null, AgentCore.Domain.Work.WorkItem? work = null) =>
-        new(r.RegistrationId.ToString("D"), r.Revision, r.Intent, r.Status == TriggerRegistrationStatus.Active, r.Status.ToString(), Timing(r.Schedule),
+    private static AutomationResponse Project(Automation r, string? effective = null, AgentCore.Domain.Work.WorkItem? work = null) =>
+        new(r.AutomationId.ToString("D"), r.Revision, r.Name, r.Instructions, r.Status == AutomationStatus.Active, r.Status.ToString(), Trigger(r.Trigger),
             r.Provenance.AuthorizationOrigin.ToString(), r.Provenance.SourceSessionId?.ToString("D"), r.Provenance.SourceEventId?.ToString("D"),
             HttpMapping.Format(r.Provenance.CreatedAt), r.NextOccurrenceAtUtc is { } next ? HttpMapping.Format(next) : null,
-            r.ModelOverrideCatalogKey, r.ModelOverrideReasoningEffort, effective, work?.WorkItemId.ToString("D"), work?.Status.ToString());
-    private static AdminScheduleTiming Timing(TriggerSchedule s) => s switch
+            r.ModelOverrideCatalogKey, r.ModelOverrideReasoningEffort, effective, work?.WorkItemId.ToString("D"), work?.Status.ToString(), work?.Result is { } result ? AgentCore.Application.Work.WorkCompletionRequest.Outcome(result.Text) : null);
+    private static AutomationTiming Timing(TriggerSchedule s) => s switch
     {
         OneShotSchedule t => new("oneShot", t.TimeZoneId, HttpMapping.Format(t.AtUtc)),
         FixedIntervalSchedule t => new("fixedInterval", Interval: t.IntervalSeconds, AnchorAtUtc: HttpMapping.Format(t.AnchorAtUtc), EndAtUtc: t.EndAtUtc is { } e ? HttpMapping.Format(e) : null, MaxOccurrences: t.MaxOccurrences),

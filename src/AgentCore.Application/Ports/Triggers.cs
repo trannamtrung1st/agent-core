@@ -2,19 +2,20 @@ using AgentCore.Domain.Triggers;
 
 namespace AgentCore.Application.Ports;
 
-public sealed record TriggerRegistrationDraft(
+public sealed record AutomationDraft(
     TriggerOwner Owner,
-    string Intent,
+    string Instructions,
     TriggerSchedule Schedule,
     DateTimeOffset? NextOccurrenceAtUtc,
     DateTimeOffset? ExpiresAtUtc,
     TriggerAuthorizationOrigin AuthorizationOrigin,
     Guid? SourceSessionId,
-    Guid? SourceEventId);
+    Guid? SourceEventId,
+    string? Name = null);
 
-public sealed record TriggerRegistrationChange
+public sealed record AutomationChange
 {
-    private TriggerRegistrationChange(
+    private AutomationChange(
         string? intent,
         TriggerSchedule? schedule,
         DateTimeOffset? nextOccurrenceAtUtc,
@@ -24,17 +25,17 @@ public sealed record TriggerRegistrationChange
         bool hasNextOccurrence,
         bool hasExpiresAt)
     {
-        Intent = intent;
+        Instructions = intent;
         Schedule = schedule;
         NextOccurrenceAtUtc = nextOccurrenceAtUtc;
         ExpiresAtUtc = expiresAtUtc;
-        HasIntent = hasIntent;
+        HasInstructions = hasIntent;
         HasSchedule = hasSchedule;
         HasNextOccurrence = hasNextOccurrence;
         HasExpiresAt = hasExpiresAt;
     }
 
-    public string? Intent { get; }
+    public string? Instructions { get; }
 
     public TriggerSchedule? Schedule { get; }
 
@@ -42,7 +43,7 @@ public sealed record TriggerRegistrationChange
 
     public DateTimeOffset? ExpiresAtUtc { get; }
 
-    public bool HasIntent { get; }
+    public bool HasInstructions { get; }
 
     public bool HasSchedule { get; }
 
@@ -50,16 +51,16 @@ public sealed record TriggerRegistrationChange
 
     public bool HasExpiresAt { get; }
 
-    public static TriggerRegistrationChange IntentOnly(string intent) =>
+    public static AutomationChange InstructionsOnly(string intent) =>
         new(intent, null, null, null, hasIntent: true, hasSchedule: false, hasNextOccurrence: false, hasExpiresAt: false);
 
-    public static TriggerRegistrationChange ScheduleOnly(
+    public static AutomationChange ScheduleOnly(
         TriggerSchedule schedule,
         DateTimeOffset? nextOccurrenceAtUtc,
         DateTimeOffset? expiresAtUtc) =>
         new(null, schedule, nextOccurrenceAtUtc, expiresAtUtc, hasIntent: false, hasSchedule: true, hasNextOccurrence: true, hasExpiresAt: true);
 
-    public static TriggerRegistrationChange Full(
+    public static AutomationChange Full(
         string intent,
         TriggerSchedule schedule,
         DateTimeOffset? nextOccurrenceAtUtc,
@@ -90,14 +91,14 @@ public enum ScheduledAdmitOutcome
 
 public sealed record ScheduledAdmitResult(
     ScheduledAdmitOutcome Outcome,
-    TriggerRegistration? Registration,
+    Automation? Registration,
     TriggerOccurrence? Occurrence,
     int SkippedCount);
 
 public sealed record TriggerOccurrenceDraft(
     TriggerOwner Owner,
     string DedupeKey,
-    Guid? RegistrationId,
+    Guid? AutomationId,
     TriggerSourceKind SourceKind,
     DateTimeOffset? ScheduledAtUtc,
     DateTimeOffset ObservedAtUtc,
@@ -107,56 +108,50 @@ public sealed record TriggerOccurrenceDraft(
 
 public interface ITriggerStore
 {
-    ValueTask<TriggerRegistration> SaveScheduleAsync(TriggerRegistration proposed, long expectedRevision,
+    ValueTask<Automation> SaveAutomationAsync(Automation proposed, long expectedRevision,
         Admin.AdminEventAppend history, CancellationToken ct = default, int maxActiveRegistrations = 32) => throw new NotSupportedException();
-    ValueTask<ScheduledAdmitResult> AdmitScheduleNowAsync(TriggerRegistration registration, ExecutionModelPin pin,
-        DateTimeOffset asOf, CancellationToken ct = default) => throw new NotSupportedException();
-    ValueTask<TriggerRegistration> SaveThoughtAsync(TriggerRegistration proposed, long expectedRevision,
-        Admin.AdminEventAppend history, CancellationToken ct = default) => throw new NotSupportedException();
-    ValueTask<ScheduledAdmitResult> AdmitThoughtNowAsync(TriggerRegistration registration, ExecutionModelPin pin,
-        DateTimeOffset asOf, CancellationToken ct = default) => throw new NotSupportedException();
-    ValueTask<ScheduledAdmitResult> TryAdmitThoughtAsync(TriggerRegistration registration, ExecutionModelPin pin,
+    ValueTask<ScheduledAdmitResult> AdmitAutomationNowAsync(Automation automation, ExecutionModelPin pin,
         DateTimeOffset asOf, CancellationToken ct = default) => throw new NotSupportedException();
 
-    ValueTask<TriggerRegistration> CreateAsync(
-        TriggerRegistration registration,
+    ValueTask<Automation> CreateAsync(
+        Automation registration,
         CancellationToken cancellationToken = default);
 
-    ValueTask<TriggerRegistration?> GetAsync(
+    ValueTask<Automation?> GetAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         CancellationToken cancellationToken = default);
 
-    ValueTask<IReadOnlyList<TriggerRegistration>> ListAsync(
+    ValueTask<IReadOnlyList<Automation>> ListAsync(
         TriggerOwner owner,
-        TriggerRegistrationStatus? status,
+        AutomationStatus? status,
         CancellationToken cancellationToken = default);
 
-    ValueTask<IReadOnlyList<TriggerRegistration>> ListSuspendedPolicyForAgentInstanceAsync(
+    ValueTask<IReadOnlyList<Automation>> ListSuspendedPolicyForAgentInstanceAsync(
         Guid agentInstanceId,
         int limit,
         CancellationToken cancellationToken = default);
 
-    ValueTask<IReadOnlyList<TriggerRegistration>> ListFutureRegistrationsForAgentInstanceAsync(
+    ValueTask<IReadOnlyList<Automation>> ListFutureRegistrationsForAgentInstanceAsync(
         Guid agentInstanceId,
         int limit,
         CancellationToken cancellationToken = default);
 
-    ValueTask<IReadOnlyList<TriggerRegistration>> ListSchedulesPageAsync(
+    ValueTask<IReadOnlyList<Automation>> ListAutomationsPageAsync(
         TriggerOwner owner, int limit, Guid? before, CancellationToken cancellationToken = default);
 
     ValueTask<int> CountActiveAsync(
         TriggerOwner owner,
         CancellationToken cancellationToken = default);
 
-    ValueTask<IReadOnlyList<TriggerRegistration>> ListEventSubscriptionsAsync(
+    ValueTask<IReadOnlyList<Automation>> ListEventSubscriptionsAsync(
         Guid eventSourceId,
         string eventType,
         CancellationToken cancellationToken = default);
 
-    ValueTask<TriggerRegistration> UpdateAsync(
+    ValueTask<Automation> UpdateAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         string intent,
         TriggerSchedule schedule,
@@ -165,16 +160,16 @@ public interface ITriggerStore
         DateTimeOffset updatedAt,
         CancellationToken cancellationToken = default);
 
-    ValueTask<TriggerRegistration> CancelAsync(
+    ValueTask<Automation> CancelAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         DateTimeOffset cancelledAt,
         CancellationToken cancellationToken = default);
 
-    ValueTask<TriggerRegistration> SetModelOverrideAsync(
+    ValueTask<Automation> SetModelOverrideAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         string? catalogKey,
         string? reasoningEffort,
@@ -191,30 +186,30 @@ public interface ITriggerStore
         Guid occurrenceId,
         CancellationToken cancellationToken = default);
 
-    ValueTask<IReadOnlyList<TriggerRegistration>> ListDueAsync(
+    ValueTask<IReadOnlyList<Automation>> ListDueAsync(
         DateTimeOffset asOfUtc,
         int limit,
         CancellationToken cancellationToken = default);
 
     ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedScheduleRevision,
         DateTimeOffset expectedNextOccurrenceAtUtc,
         DateTimeOffset asOfUtc,
         CancellationToken cancellationToken = default);
 
-    ValueTask<TriggerRegistration?> SuspendPolicyAsync(
+    ValueTask<Automation?> SuspendPolicyAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         string reason,
         DateTimeOffset suspendedAt,
         CancellationToken cancellationToken = default);
 
-    ValueTask<TriggerRegistration?> TryReactivatePolicySuspensionAsync(
+    ValueTask<Automation?> TryReactivatePolicySuspensionAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         DateTimeOffset reactivatedAt,
         CancellationToken cancellationToken = default);
@@ -291,45 +286,45 @@ public interface ITriggerStore
         ValueTask.FromResult<TriggerOccurrence?>(null);
 }
 
-public interface ITriggerRegistrationService
+public interface IAutomationService
 {
-    ValueTask<TriggerRegistration> CreateAsync(
-        TriggerRegistrationDraft draft,
+    ValueTask<Automation> CreateAsync(
+        AutomationDraft draft,
         CancellationToken cancellationToken = default);
 
-    ValueTask<TriggerRegistration?> GetAsync(
+    ValueTask<Automation?> GetAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         CancellationToken cancellationToken = default);
 
-    ValueTask<IReadOnlyList<TriggerRegistration>> ListAsync(
+    ValueTask<IReadOnlyList<Automation>> ListAsync(
         TriggerOwner owner,
-        TriggerRegistrationStatus? status,
+        AutomationStatus? status,
         CancellationToken cancellationToken = default);
 
-    ValueTask<IReadOnlyList<TriggerRegistration>> ListSchedulesPageAsync(
+    ValueTask<IReadOnlyList<Automation>> ListAutomationsPageAsync(
         TriggerOwner owner, int limit, Guid? before, CancellationToken cancellationToken = default);
 
     ValueTask<int> CountActiveAsync(
         TriggerOwner owner,
         CancellationToken cancellationToken = default);
 
-    ValueTask<TriggerRegistration> UpdateAsync(
+    ValueTask<Automation> UpdateAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
-        TriggerRegistrationChange change,
+        AutomationChange change,
         CancellationToken cancellationToken = default);
 
-    ValueTask<TriggerRegistration> CancelAsync(
+    ValueTask<Automation> CancelAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         CancellationToken cancellationToken = default);
 
-    ValueTask<TriggerRegistration> SetModelOverrideAsync(
+    ValueTask<Automation> SetModelOverrideAsync(
         TriggerOwner owner,
-        Guid registrationId,
+        Guid automationId,
         long expectedRevision,
         string? catalogKey,
         string? reasoningEffort,

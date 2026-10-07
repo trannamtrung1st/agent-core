@@ -113,7 +113,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     expect(names).not.toContain('continuity.search');
     expect(names).not.toContain('experience.recent');
     await editor.getByRole('tab', { name: 'Capabilities', exact: true }).click();
-    for (const tool of ['knowledge.retrieve', 'trigger.schedule_once', 'trigger.schedule_recurring', 'trigger.list', 'trigger.update', 'trigger.cancel',
+    for (const tool of ['knowledge.retrieve', 'automation.create', 'automation.inspect', 'automation.disable', 'automation.run', 'automation.list', 'automation.update', 'automation.delete',
       'browser.navigate', 'browser.observe', 'browser.act']) {
       const select = editor.getByRole('combobox', { name: 'Tool allowlist', exact: true });
       await select.click(); await select.fill(tool);
@@ -162,7 +162,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await endChat(page);
     await openInstance(page);
     const experience = page.getByRole('region', { name: 'Experience', exact: true });
-    await expect(experience.getByRole('button', { name: 'View experience: Review observable completed work', exact: true })).toHaveCount(1, { timeout: 30_000 });
+    await expect(experience.getByText(/No experience yet/)).toBeVisible();
     await experience.getByRole("button", { name: "Enter Session ID", exact: true }).click();
     await experience.getByLabel('Session ID', { exact: true }).fill(sourceSessionId);
     const retrospect = () => Promise.all([
@@ -196,117 +196,57 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await endChat(page);
   });
 
-  test('Admin and Chat schedule parity, pinned durable runs, quiet/attention Thought, and mobile controls', async ({ page }) => {
-    test.setTimeout(180_000);
+  test('Admin and Chat share Automations, provenance, quiet/attention outcomes and mobile controls', async ({ page }) => {
+    test.setTimeout(150_000);
     await openInstance(page, true);
-    const schedules = page.getByRole('region', { name: 'Schedules', exact: true });
-    const task = 'Review Atlas follow-up obligations and prepare a concise status summary.';
-    await schedules.getByRole('button', { name: 'New schedule', exact: true }).click();
-    await schedules.getByLabel('Schedule task', { exact: true }).fill(task);
-    await schedules.getByLabel('Schedule time zone', { exact: true }).fill('Asia/Ho_Chi_Minh');
-    await schedules.getByLabel('Schedule maximum occurrences', { exact: true }).fill('0');
-    await expect(schedules.getByRole('button', { name: 'Create schedule', exact: true })).toBeDisabled();
-    await schedules.getByLabel('Schedule maximum occurrences', { exact: true }).fill('5');
-    await schedules.getByRole('button', { name: 'Create schedule', exact: true }).click();
-    await expect(schedules.getByLabel('Schedule task', { exact: true })).toBeHidden();
-    await schedules.getByRole('button', { name: `View schedule: ${task}`, exact: true }).click();
-    await expect(schedules.getByRole('region', { name: 'Schedule details', exact: true }).getByText('Admin owner', { exact: true })).toBeVisible();
-    const path = `/api/v2/admin/agent-instances/${instanceId}/schedules`;
-    const before = (await (await page.request.get(path, { headers: await headers(page) })).json()).items[0];
-    let runCalls = 0;
-    // Return stale status after acceptance to exercise the actual admission race.
-    const oldStatus = await (await page.request.get(path, { headers: await headers(page) })).text();
-    const statusPattern = `**/agent-instances/${instanceId}/schedules`;
-    await page.route(statusPattern, route => route.request().method() === 'GET'
-      ? route.fulfill({ status: 200, contentType: 'application/json', body: oldStatus }) : route.continue());
-    const runPattern = `**/agent-instances/${instanceId}/schedules/*/run`;
-    await page.route(runPattern, async route => { runCalls++; await route.continue(); });
-    const run = schedules.getByRole('button', { name: 'Run schedule now', exact: true });
-    await run.evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
-    await expect(run).toBeDisabled();
-    await expect(run).toHaveText('Starting…');
-    await expect.poll(() => runCalls).toBe(1);
-    await expect(schedules.getByRole('button', { name: 'Refresh schedules', exact: true })).toBeEnabled();
-    await run.evaluate(button => (button as HTMLButtonElement).click());
-    expect(runCalls).toBe(1);
-    await page.unroute(statusPattern);
-    await schedules.getByRole('button', { name: 'Refresh schedules', exact: true }).click();
-    await expect(schedules.getByRole('region', { name: 'Schedule details', exact: true }).getByText('Completed', { exact: true })).toBeVisible({ timeout: 30_000 });
-    await schedules.getByRole('button', { name: 'View last run', exact: true }).click();
+    const automations = page.getByRole('region', { name: 'Automations', exact: true });
+    await automations.getByRole('button', { name: 'New automation', exact: true }).click();
+    await automations.getByLabel('Automation name', { exact: true }).fill('Atlas follow-up review');
+    await automations.getByLabel('Automation instructions', { exact: true }).fill('Review Atlas follow-up obligations; do nothing when nothing needs action.');
+    await automations.getByLabel('Schedule maximum occurrences', { exact: true }).fill('5');
+    await automations.getByRole('button', { name: 'Create automation', exact: true }).click();
+    await automations.getByRole('button', { name: 'View automation: Atlas follow-up review', exact: true }).click();
+    await expect(automations.getByRole('region', { name: 'Automation details', exact: true }).getByText('Admin owner', { exact: true })).toBeVisible();
+    await automations.getByRole('button', { name: 'Run automation now', exact: true }).click();
+    await expect(automations.getByText(/Completed · No action/).first()).toBeVisible({ timeout: 30_000 });
+    await automations.getByRole('button', { name: 'View last run', exact: true }).click();
     const work = page.getByRole('dialog', { name: 'Run details', exact: true });
-    await expect(work.getByText('Schedule', { exact: true })).toBeVisible();
-    await expect(work.getByRole('button', { name: /Create/ })).toHaveCount(0);
-    await page.locator('.background-work-selected').getByRole('button', { name: /View (schedule|thought)/ }).click();
-    await schedules.getByRole('button', { name: 'Disable schedule', exact: true }).click();
-    await expect(schedules.getByRole('button', { name: 'Enable schedule', exact: true })).toBeVisible();
-    await expect(run).toBeDisabled();
-    // A supported host prerequisite has no first-party timezone editing surface.
+    await expect(work.getByText('Atlas follow-up review', { exact: true })).toBeVisible();
+    await work.getByRole('button', { name: 'View automation', exact: true }).click();
+    await automations.getByRole('button', { name: 'Disable automation', exact: true }).click();
     const ownerHeaders = await headers(page);
     const profile = await (await page.request.get('/api/v2/profile', { headers: ownerHeaders })).json();
-    const setZone = await page.request.patch('/api/v2/profile', { headers: ownerHeaders, data: { expectedRevision: profile.revision, values: { timeZone: 'Asia/Ho_Chi_Minh' } } });
-    expect(setZone.ok()).toBe(true);
+    expect((await page.request.patch('/api/v2/profile', { headers: ownerHeaders, data: {
+      expectedRevision: profile.revision, values: { timeZone: 'Asia/Ho_Chi_Minh' }
+    } })).ok()).toBe(true);
     await newChat(page);
     await send(page, 'remind me tomorrow', 'Scheduled Call John.');
     const chatId = page.url().split('/').at(-1)!;
-    await page.getByRole('button', { name: 'Schedules', exact: true }).click();
-    const drawer = page.getByRole('dialog', { name: 'Schedules', exact: true });
+    await page.getByRole('button', { name: 'Automations', exact: true }).click();
+    const drawer = page.getByRole('dialog', { name: 'Automations', exact: true });
     await expect(drawer.getByText('Call John', { exact: true })).toBeVisible();
     await expect(drawer.getByText('Disabled', { exact: true })).toBeVisible();
     await drawer.getByRole('button', { name: 'Close', exact: true }).click();
     await endChat(page);
     await openInstance(page, true);
-    await schedules.getByText('Call John', { exact: true }).click();
-    await expect(schedules.getByText(new RegExp(`Chat user request.*${chatId}`))).toBeVisible();
-    await schedules.getByRole('button', { name: 'Edit schedule', exact: true }).click();
-    const futureTask = 'Review unresolved Atlas decisions before agenda confirmation and prepare a concise blocker-first status summary.';
+    await automations.getByRole('button', { name: 'View automation: Call John', exact: true }).click();
+    await expect(automations.getByText(new RegExp(`Chat user request.*${chatId}`))).toBeVisible();
+    await automations.getByRole('button', { name: 'Edit automation', exact: true }).click();
     await page.setViewportSize({ width: 390, height: 844 });
-    await schedules.getByLabel('Schedule task', { exact: true }).fill(futureTask);
-    await schedules.getByRole('button', { name: 'Save schedule', exact: true }).click();
-    await expect(schedules.getByLabel('Schedule task', { exact: true })).toBeHidden();
-    await expect(schedules.getByText(new RegExp(`Chat user request.*${chatId}`))).toBeVisible();
-    await schedules.getByRole('button', { name: 'Cancel schedule', exact: true }).click();
-    await page.getByRole('dialog', { name: 'Cancel this schedule?', exact: true }).getByRole('button', { name: 'Cancel', exact: true }).click();
-    await expect(page.getByRole('dialog')).toBeHidden();
-    await expect(schedules.getByRole('button', { name: 'Cancel schedule', exact: true })).toBeFocused();
-    await schedules.getByRole('button', { name: 'Cancel schedule', exact: true }).click();
-    await page.getByRole('dialog', { name: 'Cancel this schedule?', exact: true }).getByRole('button', { name: 'Cancel schedule', exact: true }).click();
-    await expect(schedules.getByText('Cancelled', { exact: true })).toBeVisible();
-    await expect(schedules.getByText('Not scheduled', { exact: true })).toHaveCount(2);
+    await automations.getByLabel('Automation instructions', { exact: true }).fill('synthetic-automation-attention: review unresolved Atlas decisions.');
+    await automations.getByRole('button', { name: 'Save automation', exact: true }).click();
+    await automations.getByRole('button', { name: 'Run automation now', exact: true }).click();
+    await expect(automations.getByText(/Completed · Needs attention/).first()).toBeVisible({ timeout: 30_000 });
+    await automations.getByRole('button', { name: 'View last run', exact: true }).click();
+    await expect(work.getByText(/Model:.*Needs attention/)).toBeVisible();
+    await work.getByRole('button', { name: 'View automation', exact: true }).click();
+    await automations.getByRole('button', { name: 'Delete automation', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete automation', exact: true }).click();
+    await expect(automations.getByRole('button', { name: 'View automation: Call John', exact: true })).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-
-    await expect(page.getByRole('dialog')).toBeHidden();
-    const thoughtTab = page.getByRole('tab', { name: 'Thoughts', exact: true });
-    await thoughtTab.click();
-    await expect(thoughtTab).toHaveAttribute('aria-selected', 'true');
-    const initiative = page.getByRole('region', { name: 'Thoughts', exact: true });
-    const prompt = 'Review current secretary responsibilities and relevant Memory and Experience. Do nothing when there is no meaningful action.';
-    await initiative.getByLabel('Thinking prompt', { exact: true }).fill(prompt);
-    await initiative.getByRole('switch', { name: 'Enable thought activation', exact: true }).click();
-    await initiative.getByRole('button', { name: 'Create thought', exact: true }).click();
-    await expect(initiative.getByText('Every 1 hour', { exact: true })).toBeVisible();
-    await initiative.getByRole('button', { name: `View thought: ${prompt}`, exact: true }).click();
-    await initiative.getByRole('button', { name: 'Run now', exact: true }).click();
-    await expect(initiative.getByText('No action', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
-    await initiative.getByRole('button', { name: 'Edit thought', exact: true }).click();
-    await initiative.getByLabel('Thinking prompt', { exact: true }).fill('synthetic-thought-attention: review an unresolved Atlas checkpoint.');
-    await initiative.getByRole('button', { name: 'Save thought', exact: true }).click();
-    await expect(initiative.getByRole('button', { name: 'Save thought', exact: true })).toBeHidden();
-    await initiative.getByRole('button', { name: 'Run now', exact: true }).click();
-    await expect(initiative.getByText('Needs attention', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
-    await initiative.getByRole('button', { name: 'View run', exact: true }).click();
-    await expect(work.getByText('Thought', { exact: true })).toHaveCount(1);
-    await expect(work.getByText('Needs attention', { exact: true }).first()).toBeVisible();
-    await page.locator('.background-work-selected').getByRole('button', { name: /View (schedule|thought)/ }).click();
-    await page.reload();
-    await page.getByRole('tab', { name: 'Automation', exact: true }).click();
-    await page.getByRole('tab', { name: 'Thoughts', exact: true }).click();
-    await expect(initiative.getByText('Needs attention', { exact: true }).first()).toBeVisible();
-    const after = (await (await page.request.get(path, { headers: await headers(page) })).json()).items;
-    const adminRow = after.find((row: { registrationId: string }) => row.registrationId === before.registrationId);
-    expect(adminRow.authorizationOrigin).toBe('AdminOwner'); expect(adminRow.status).toBe('Disabled');
-    expect(adminRow.schedule.maxOccurrences).toBe(5); expect(adminRow.lastWorkItemId).toBeTruthy();
-    const chatRow = after.find((row: { sourceSessionId: string }) => row.sourceSessionId === chatId);
-    expect(chatRow.authorizationOrigin).toBe('CurrentUserTurn'); expect(chatRow.status).toBe('Cancelled'); expect(chatRow.intent).toBe(futureTask);
+    const rows = (await (await page.request.get(`/api/v2/admin/agent-instances/${instanceId}/automations`, { headers: ownerHeaders })).json()).items;
+    expect(rows[0].authorizationOrigin).toBe('AdminOwner'); expect(rows[0].status).toBe('Disabled');
+    expect(rows[0].trigger.schedule.maxOccurrences).toBe(5); expect(rows[0].lastWorkItemId).toBeTruthy();
   });
 
   test('uses the configured browser for observed record lookup and keeps progress separate from the answer', async ({ page }) => {

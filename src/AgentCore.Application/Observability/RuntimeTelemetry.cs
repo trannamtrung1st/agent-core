@@ -18,7 +18,7 @@ public static class RuntimeTelemetry
     private static readonly Counter<long> Dropped = Meter.CreateCounter<long>("dropped_items");
     private static readonly Counter<long> MemoryRetrieval = Meter.CreateCounter<long>("memory_retrieval");
     private static readonly Counter<long> TriggerSchedulerEvents = Meter.CreateCounter<long>("trigger_scheduler_events");
-    private static readonly Counter<long> TriggerRegistrationEvents = Meter.CreateCounter<long>("trigger_registration_events");
+    private static readonly Counter<long> AutomationEvents = Meter.CreateCounter<long>("trigger_registration_events");
     private static readonly Histogram<double> TriggerDueLagMs = Meter.CreateHistogram<double>("trigger_due_lag_ms");
     private static readonly Counter<long> GenerationRetries = Meter.CreateCounter<long>("llm.generation.retry");
     private static readonly Counter<long> ResponseRepairs = Meter.CreateCounter<long>("llm.response.repair");
@@ -132,9 +132,9 @@ public static class RuntimeTelemetry
         TriggerSchedulerEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
     }
 
-    public static void RecordTriggerRegistration(string operation, string outcome)
+    public static void RecordAutomation(string operation, string outcome)
     {
-        TriggerRegistrationEvents.Add(
+        AutomationEvents.Add(
             1,
             new KeyValuePair<string, object?>("operation", operation),
             new KeyValuePair<string, object?>("outcome", outcome));
@@ -146,11 +146,9 @@ public static class RuntimeTelemetry
     }
 
     private static readonly Counter<long> ExperienceEvents = Meter.CreateCounter<long>("experience_events");
-    private static readonly Counter<long> ThoughtEvents = Meter.CreateCounter<long>("thought_events");
     private static readonly Counter<long> IdentityMaintenanceEvents = Meter.CreateCounter<long>("identity_maintenance_events");
     public static void RecordIdentityMaintenance(string outcome) => IdentityMaintenanceEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
     public static void RecordExperience(string outcome) => ExperienceEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
-    public static void RecordThought(string outcome) => ThoughtEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
     private static readonly Counter<long> WorkEvents = Meter.CreateCounter<long>("work_events");
     private static readonly Counter<long> AgentSteps = Meter.CreateCounter<long>("agent_steps");
     private static readonly Counter<long> ActiveSkills = Meter.CreateCounter<long>("active_skills");

@@ -197,7 +197,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<WorkCaptureRow> WorkCaptures => Set<WorkCaptureRow>();
     public DbSet<StructuredMemoryRecord> StructuredMemories => Set<StructuredMemoryRecord>();
     public DbSet<AgentInstanceRecord> AgentInstances => Set<AgentInstanceRecord>();
-    public DbSet<TriggerRegistrationRecord> TriggerRegistrations => Set<TriggerRegistrationRecord>();
+    public DbSet<AutomationRecord> Automations => Set<AutomationRecord>();
     public DbSet<ExternalEventSourceRecord> ExternalEventSources => Set<ExternalEventSourceRecord>();
     public DbSet<ExternalEventRecord> ExternalEvents => Set<ExternalEventRecord>();
     public DbSet<ExternalEventDeliveryRecord> ExternalEventDeliveries => Set<ExternalEventDeliveryRecord>();
@@ -224,13 +224,11 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
 
     public DbSet<ExperienceRecord> Experiences => Set<ExperienceRecord>();
     public DbSet<IdentityMaintenanceSettingsRecord> IdentityMaintenanceSettings => Set<IdentityMaintenanceSettingsRecord>();
-    public DbSet<ContinuityMaintenanceSettingsRecord> ContinuityMaintenanceSettings => Set<ContinuityMaintenanceSettingsRecord>();
     public DbSet<ExperienceSettingsRecord> ExperienceSettings => Set<ExperienceSettingsRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<IdentityMaintenanceSettingsRecord>().HasKey(r => r.AgentInstanceId);
-        modelBuilder.Entity<ContinuityMaintenanceSettingsRecord>().HasKey(r => r.AgentInstanceId);
         modelBuilder.Entity<ExperienceSettingsRecord>().HasKey(r => r.AgentInstanceId);
         var experience = modelBuilder.Entity<ExperienceRecord>();
         experience.HasKey(r => r.ExperienceId);
@@ -381,15 +379,17 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.Revision).IsConcurrencyToken();
             entity.HasIndex(row => row.DefinitionId);
         });
-        modelBuilder.Entity<TriggerRegistrationRecord>(entity =>
+        modelBuilder.Entity<AutomationRecord>(entity =>
         {
-            entity.ToTable("TriggerRegistrations");
-            entity.HasKey(row => row.RegistrationId);
-            entity.Property(row => row.RegistrationId).HasMaxLength(36);
+            entity.ToTable("Automations");
+            entity.HasKey(row => row.AutomationId);
+            entity.Property(row => row.AutomationId).HasMaxLength(36);
             entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();
             entity.Property(row => row.ProfileId).HasMaxLength(36).IsRequired();
-            entity.Property(row => row.Intent).HasMaxLength(TriggerLimitsIntent).IsRequired();
-            entity.Property(row => row.ScheduleJson).HasMaxLength(4000).IsRequired();
+            entity.Property(row => row.Name).HasMaxLength(120).IsRequired();
+            entity.Property(row => row.Instructions).HasMaxLength(2000).IsRequired();
+            entity.Property(row => row.Revision).IsConcurrencyToken();
+            entity.Property(row => row.ScheduleJson).HasMaxLength(4000);
             entity.Property(row => row.SourceSessionId).HasMaxLength(36);
             entity.Property(row => row.SourceEventId).HasMaxLength(36);
             entity.Property(row => row.SuspensionReason).HasMaxLength(200);
@@ -399,7 +399,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.EventType).HasMaxLength(64);
             entity.HasIndex(row => new { row.EventSourceId, row.EventType, row.Status });
             entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.Status });
-            entity.HasIndex(row => new { row.Status, row.NextOccurrenceAtUtc, row.RegistrationId });
+            entity.HasIndex(row => new { row.Status, row.NextOccurrenceAtUtc, row.AutomationId });
         });
         modelBuilder.Entity<ExternalEventSourceRecord>(entity =>
         {
@@ -426,12 +426,12 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         modelBuilder.Entity<ExternalEventDeliveryRecord>(entity =>
         {
             entity.ToTable("ExternalEventDeliveries");
-            entity.HasKey(row => new { row.EventId, row.RegistrationId });
+            entity.HasKey(row => new { row.EventId, row.AutomationId });
             entity.Property(row => row.EventId).HasMaxLength(36);
-            entity.Property(row => row.RegistrationId).HasMaxLength(36);
+            entity.Property(row => row.AutomationId).HasMaxLength(36);
             entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();
             entity.Property(row => row.ProfileId).HasMaxLength(36).IsRequired();
-            entity.HasIndex(row => new { row.Status, row.EventId, row.RegistrationId });
+            entity.HasIndex(row => new { row.Status, row.EventId, row.AutomationId });
         });
         modelBuilder.Entity<TriggerOccurrenceRecord>(entity =>
         {
@@ -439,7 +439,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.HasKey(row => row.OccurrenceId);
             entity.Property(row => row.OccurrenceId).HasMaxLength(36);
             entity.Property(row => row.DedupeKey).HasMaxLength(200).IsRequired();
-            entity.Property(row => row.RegistrationId).HasMaxLength(36);
+            entity.Property(row => row.AutomationId).HasMaxLength(36);
             entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();
             entity.Property(row => row.ProfileId).HasMaxLength(36).IsRequired();
             entity.Property(row => row.EvidenceJson).HasMaxLength(4096).IsRequired();
@@ -500,7 +500,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.ModelReasoningEffort).HasMaxLength(WorkLimits.MaxReasoningEffortCharacters);
             entity.Property(row => row.ClaimGeneration).HasMaxLength(36);
             entity.Property(row => row.CurrentApprovalId).HasMaxLength(36);
-            entity.Property(row => row.RegistrationId).HasMaxLength(36);
+            entity.Property(row => row.AutomationId).HasMaxLength(36);
             entity.Property(row => row.SourceSessionId).HasMaxLength(36);
             entity.Property(row => row.SourceEventId).HasMaxLength(36);
             entity.Property(row => row.ProgressSummary).HasMaxLength(WorkLimits.MaxProgressCharacters);

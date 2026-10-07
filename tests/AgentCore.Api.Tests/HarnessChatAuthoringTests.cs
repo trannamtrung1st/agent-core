@@ -492,7 +492,7 @@ public sealed class HarnessChatAuthoringTests
     }
 
     [Fact]
-    public async Task Disabled_frozen_background_absent_scope_and_unread_source_cannot_author()
+    public async Task Disabled_frozen_absent_scope_and_unread_source_cannot_author()
     {
         await using var factory = new AgentCoreApiFactory();
         var services = factory.Services;
@@ -505,7 +505,7 @@ public sealed class HarnessChatAuthoringTests
         var ctx = await tools.HarnessContextAsync(instance.InstanceId, default);
         Assert.Equal(ToolPolicyDecision.Deny, tools.EvaluateExecutionPolicy(pinned, "harness.knowledge.upsert", admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId, Harness: ctx, SupportsTools: false)));
         Assert.Equal(ToolPolicyDecision.Deny, tools.EvaluateExecutionPolicy(pinned, "harness.skill.upsert", admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId, Harness: ctx)));
-        Assert.Equal(ToolPolicyDecision.Deny, tools.EvaluateExecutionPolicy(pinned, "harness.knowledge.upsert", admission: new(true, TriggerKind.ScheduledOccurrence, AgentInstanceId: instance.InstanceId, Harness: ctx)));
+        Assert.Equal(ToolPolicyDecision.Allow, tools.EvaluateExecutionPolicy(pinned, "harness.knowledge.upsert", admission: new(true, TriggerKind.ScheduledOccurrence, AgentInstanceId: instance.InstanceId, Harness: ctx)));
         var args = JsonSerializer.Serialize(new { expectedVersion = 16, policyRevision = ctx!.PolicyRevision, id = "unread", source = "https://unread.example", content = "Unproven content", expected = "Read it", observed = "Claimed success" });
         var call = new ModelToolCall("unread", "harness.knowledge.upsert", args);
         Assert.Contains("Read the source", (await tools.ExecuteAsync(pinned, Guid.NewGuid(), call, 100000, admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId))).Text);

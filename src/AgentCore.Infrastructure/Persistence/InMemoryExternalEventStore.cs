@@ -9,7 +9,7 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
     private readonly Lock _gate = new();
     private readonly Dictionary<Guid, ExternalEventSource> _sources = [];
     private readonly Dictionary<(Guid SourceId, string SourceEventId), ExternalEvent> _events = [];
-    private readonly Dictionary<(Guid EventId, Guid RegistrationId), ExternalEventDelivery> _deliveries = [];
+    private readonly Dictionary<(Guid EventId, Guid AutomationId), ExternalEventDelivery> _deliveries = [];
 
     public ValueTask<ExternalEventSource> CreateAsync(
         ExternalEventSource source,
@@ -85,10 +85,10 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
             _events[key] = candidate;
             foreach (var target in targets)
             {
-                var deliveryKey = (candidate.EventId, target.RegistrationId);
+                var deliveryKey = (candidate.EventId, target.AutomationId);
                 _deliveries[deliveryKey] = new ExternalEventDelivery(
                     candidate.EventId,
-                    target.RegistrationId,
+                    target.AutomationId,
                     target.AgentInstanceId,
                     target.ProfileId,
                     ExternalEventDeliveryStatus.Pending);
@@ -109,7 +109,7 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
                 .Where(item => item.Status == ExternalEventDeliveryStatus.Pending
                     && (eventId is null || item.EventId == eventId))
                 .OrderBy(item => item.EventId)
-                .ThenBy(item => item.RegistrationId)
+                .ThenBy(item => item.AutomationId)
                 .Take(Math.Max(1, limit))
                 .ToArray();
             return ValueTask.FromResult<IReadOnlyList<ExternalEventDelivery>>(rows);
@@ -118,16 +118,16 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
 
     public ValueTask MarkDeliveryAsync(
         Guid eventId,
-        Guid registrationId,
+        Guid automationId,
         ExternalEventDeliveryStatus status,
         CancellationToken cancellationToken = default)
     {
         lock (_gate)
         {
-            if (_deliveries.TryGetValue((eventId, registrationId), out var current)
+            if (_deliveries.TryGetValue((eventId, automationId), out var current)
                 && current.Status == ExternalEventDeliveryStatus.Pending)
             {
-                _deliveries[(eventId, registrationId)] = current with { Status = status };
+                _deliveries[(eventId, automationId)] = current with { Status = status };
             }
 
             return ValueTask.CompletedTask;

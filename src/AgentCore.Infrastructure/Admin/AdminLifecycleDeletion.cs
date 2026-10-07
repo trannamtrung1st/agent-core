@@ -72,7 +72,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
             throw;
         }
         experience?.Purge(command.InstanceId);
-        triggers.PurgeDeletedThoughts(command.InstanceId);
+        triggers.PurgeDeletedAutomations(command.InstanceId);
         if (credentialBindings is not null) await credentialBindings.DeleteBindingsAsync(command.InstanceId, cancellationToken);
         if (browser is not null) await browser.ResetPersistentProfileAsync(command.InstanceId, cancellationToken);
         if (workspace is not null) await workspace.DeleteInstanceAsync(command.InstanceId, cancellationToken);
@@ -134,7 +134,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
         return new AdminDeletionReferenceCounts(
             sessions.CountLiveByDefinition(definitionId),
             LearnedMemoryItems: 0,
-            TriggerRegistrations: 0,
+            Automations: 0,
             TriggerOccurrences: 0,
             work.Items,
             work.Approvals,
@@ -203,13 +203,12 @@ public sealed class SqliteAdminLifecycleDeletion(
         await db.AgentWorkspaceItems.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
         await db.Experiences.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
         await db.IdentityMaintenanceSettings.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
-        await db.ContinuityMaintenanceSettings.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
         await db.ExperienceSettings.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
-        var deletedThoughts = DeletedThoughts(db, key).Select(r => r.RegistrationId);
-        await db.TriggerOccurrences.Where(o => o.AgentInstanceId == key && deletedThoughts.Contains(o.RegistrationId!)
-            && o.SourceKind == (int)TriggerSourceKind.ThoughtActivation && o.Disposition == (int)OccurrenceRoutingDisposition.Rejected
+        var deletedAutomations = DeletedAutomations(db, key).Select(r => r.AutomationId);
+        await db.TriggerOccurrences.Where(o => o.AgentInstanceId == key && deletedAutomations.Contains(o.AutomationId!)
+            && o.Disposition == (int)OccurrenceRoutingDisposition.Rejected
             && o.DurableWorkItemId == null).ExecuteDeleteAsync(cancellationToken);
-        await DeletedThoughts(db, key).ExecuteDeleteAsync(cancellationToken);
+        await DeletedAutomations(db, key).ExecuteDeleteAsync(cancellationToken);
         db.AgentInstances.Remove(row);
         AdminEventPersistence.StageAppend(
             db,
@@ -314,7 +313,7 @@ public sealed class SqliteAdminLifecycleDeletion(
         CancellationToken cancellationToken)
     {
         var workItemIds = db.WorkItems.Where(item => item.AgentInstanceId == instanceId).Select(item => item.WorkItemId);
-        var deletedThoughts = DeletedThoughts(db, instanceId).Select(r => r.RegistrationId);
+        var deletedAutomations = DeletedAutomations(db, instanceId).Select(r => r.AutomationId);
         return new AdminDeletionReferenceCounts(
             await db.Sessions.CountAsync(
                 item => item.AgentInstanceId == instanceId && item.DurablyDeletedAtUtc == null,
@@ -322,12 +321,12 @@ public sealed class SqliteAdminLifecycleDeletion(
             await db.StructuredMemories.CountAsync(
                 item => item.OwnerInstanceId == instanceId && item.Scope == 1 && item.Status == 0,
                 cancellationToken).ConfigureAwait(false),
-            await db.TriggerRegistrations.CountAsync(
-                item => item.AgentInstanceId == instanceId && !deletedThoughts.Contains(item.RegistrationId),
+            await db.Automations.CountAsync(
+                item => item.AgentInstanceId == instanceId && !deletedAutomations.Contains(item.AutomationId),
                 cancellationToken).ConfigureAwait(false),
             await db.TriggerOccurrences.CountAsync(
-                item => item.AgentInstanceId == instanceId && !(deletedThoughts.Contains(item.RegistrationId!)
-                    && item.SourceKind == (int)TriggerSourceKind.ThoughtActivation
+                item => item.AgentInstanceId == instanceId && !(deletedAutomations.Contains(item.AutomationId!)
+
                     && item.Disposition == (int)OccurrenceRoutingDisposition.Rejected && item.DurableWorkItemId == null),
                 cancellationToken).ConfigureAwait(false),
             await db.WorkItems.CountAsync(item => item.AgentInstanceId == instanceId, cancellationToken)
@@ -340,9 +339,9 @@ public sealed class SqliteAdminLifecycleDeletion(
             Instances: 0);
     }
 
-    private static IQueryable<TriggerRegistrationRecord> DeletedThoughts(AgentCoreDbContext db, string instanceId) =>
-        db.TriggerRegistrations.Where(r => r.AgentInstanceId == instanceId && r.AuthorizationOrigin == (int)TriggerAuthorizationOrigin.AdminThought
-            && r.Status == (int)TriggerRegistrationStatus.Cancelled);
+    private static IQueryable<AutomationRecord> DeletedAutomations(AgentCoreDbContext db, string instanceId) =>
+        db.Automations.Where(r => r.AgentInstanceId == instanceId
+            && r.Status == (int)AutomationStatus.Cancelled);
 
     private static async Task<AdminDeletionReferenceCounts> CountDefinitionAsync(
         AgentCoreDbContext db,
@@ -355,7 +354,7 @@ public sealed class SqliteAdminLifecycleDeletion(
                 item => item.AgentId == definitionId && item.DurablyDeletedAtUtc == null,
                 cancellationToken).ConfigureAwait(false),
             LearnedMemoryItems: 0,
-            TriggerRegistrations: 0,
+            Automations: 0,
             TriggerOccurrences: 0,
             await db.WorkItems.CountAsync(item => item.DefinitionId == definitionId, cancellationToken)
                 .ConfigureAwait(false),

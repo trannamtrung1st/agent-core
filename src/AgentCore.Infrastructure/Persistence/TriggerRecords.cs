@@ -1,14 +1,15 @@
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class TriggerRegistrationRecord
+public sealed class AutomationRecord
 {
-    public string RegistrationId { get; set; } = "";
+    public string AutomationId { get; set; } = "";
     public string AgentInstanceId { get; set; } = "";
     public string ProfileId { get; set; } = "";
     public int Status { get; set; }
-    public string Intent { get; set; } = "";
-    public int ScheduleKind { get; set; }
-    public string ScheduleJson { get; set; } = "";
+    public string Instructions { get; set; } = "";
+    public string Name { get; set; } = "";
+    public int TriggerKind { get; set; }
+    public string? ScheduleJson { get; set; }
     public long? NextOccurrenceAtUtc { get; set; }
     public long? ExpiresAtUtc { get; set; }
     public int OccurrenceCount { get; set; }
@@ -31,7 +32,7 @@ public sealed class TriggerOccurrenceRecord
 {
     public string OccurrenceId { get; set; } = "";
     public string DedupeKey { get; set; } = "";
-    public string? RegistrationId { get; set; }
+    public string? AutomationId { get; set; }
     public string AgentInstanceId { get; set; } = "";
     public string ProfileId { get; set; } = "";
     public int SourceKind { get; set; }

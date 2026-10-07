@@ -5,24 +5,19 @@ import { confirmAction } from "../../app/confirmAction";
 import type { ColumnsType } from "antd/es/table";
 import { listModels, type ModelDescriptor } from "../../services/api";
 import {
-  type AdminAutomationRegistration,
   type AdminEffectiveConfiguration,
   type AdminLearnedMemoryItem,
   type AdminLearnedMemoryScope,
-  cancelAdminAutomationRegistration,
   deleteAdminLearnedMemory,
   getAdminLearnedMemory,
-  listAdminAutomationRegistrations,
   listAdminLearnedMemory,
   resetAdminLearnedMemoryScope,
-  setAdminRegistrationModel,
   setAdminUnattendedModel
 } from "../../services/adminApi";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 import { AdminErrorNotice, showAdminFailure } from "./adminFailure";
 import { adminCollectionPagination } from "./AdminCollectionToolbar";
 import {
-  formatAutomationNextRun,
   isMemoryScopePermitted,
   isMemorySelectionReady,
   memoryResetConfirmTitle
@@ -66,13 +61,6 @@ export function MemoryLineageDetails({ instanceId, row, scope, sessionId }: { in
 }
 
 const MEMORY_SCOPES: AdminLearnedMemoryScope[] = ["Session", "IdentityUser", "User"];
-
-function modelOptions(models: ModelDescriptor[]) {
-  return [
-    { value: "", label: "Use conversation or unattended default" },
-    ...models.map((model) => ({ value: model.key, label: model.displayName }))
-  ];
-}
 
 function UnattendedModelForm({
   config,
@@ -123,7 +111,7 @@ function UnattendedModelForm({
       <Typography.Text>{source}</Typography.Text>
       <Typography.Text type="secondary">
         Conversation default is {config.effectiveModel.displayName}. An unattended default applies to scheduled and
-        reactive work unless a registration sets its own model.
+        reactive work unless an Automation sets its own model.
       </Typography.Text>
       {error ? <Alert type="error" showIcon title={error} /> : null}
       <ExecutionModelFields models={models} modelKey={catalogKey} reasoningEffort={effort} disabled={busy} showLabels
@@ -134,56 +122,6 @@ function UnattendedModelForm({
           Save unattended model
         </Button>
       </Flex>
-    </Flex>
-  );
-}
-
-function RegistrationModelControl({
-  instanceId,
-  row,
-  models,
-  onSaved
-}: {
-  instanceId: string;
-  row: AdminAutomationRegistration;
-  models: ModelDescriptor[];
-  onSaved: (updated: AdminAutomationRegistration) => void;
-}) {
-  const [catalogKey, setCatalogKey] = useState(row.modelOverrideCatalogKey ?? "");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function save() {
-    setBusy(true);
-    setError(null);
-    try {
-      onSaved(await setAdminRegistrationModel(instanceId, row.registrationId, row.revision, catalogKey || null, null));
-    } catch (reason: unknown) {
-      setError(describeAdminError(reason, "The registration model could not be saved.").message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Flex vertical gap={8}>
-      <Flex align="center" gap={8}>
-        <Select
-          aria-label={`Model for ${row.intent}`}
-          value={catalogKey}
-          disabled={busy || row.status !== "active"}
-          style={{ width: 180 }}
-          options={modelOptions(models)}
-          optionRender={(option) => option.label}
-          onChange={setCatalogKey}
-        />
-        {row.status === "active" ? (
-          <Button size="small" disabled={busy} aria-label={`Save model for ${row.intent}`} onClick={() => void save()}>
-            Save model
-          </Button>
-        ) : null}
-      </Flex>
-      {error ? <Alert type="error" showIcon title={error} /> : null}
     </Flex>
   );
 }
@@ -216,9 +154,6 @@ export function InstanceMemoryAutomationPanel({ config, section }: { config: Adm
   const [memoryError, setMemoryError] = useState<AdminFailureNotice | null>(null);
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryMutating, setMemoryMutating] = useState(false);
-  const [automationItems, setAutomationItems] = useState<AdminAutomationRegistration[] | null>(null);
-  const [automationError, setAutomationError] = useState<AdminFailureNotice | null>(null);
-  const [automationBusy, setAutomationBusy] = useState(false);
   const [models, setModels] = useState<ModelDescriptor[]>([]);
   const memoryLoadGenRef = useRef(0);
 
@@ -301,20 +236,6 @@ export function InstanceMemoryAutomationPanel({ config, section }: { config: Adm
     }
   }, [fetchMemoryItems, memoryScope, scopePermitted, selectionReady, sessionId]);
 
-  const loadAutomation = useCallback(async () => {
-    setAutomationBusy(true);
-    setAutomationError(null);
-    try {
-      const items = await listAdminAutomationRegistrations(config.instanceId);
-      setAutomationItems(items);
-    } catch (error) {
-      setAutomationItems([]);
-      setAutomationError(describeAdminError(error, "Unable to load automation."));
-    } finally {
-      setAutomationBusy(false);
-    }
-  }, [config.instanceId]);
-
   const deleteMemoryItem = async (memoryId: string) => {
     if (!memoryActionsEnabled) {
       return;
@@ -378,19 +299,6 @@ export function InstanceMemoryAutomationPanel({ config, section }: { config: Adm
     }
   };
 
-  const cancelRegistration = async (row: AdminAutomationRegistration) => {
-    setAutomationBusy(true);
-    try {
-      await cancelAdminAutomationRegistration(config.instanceId, row.registrationId, row.revision);
-      message.success("Registration cancelled.");
-      await loadAutomation();
-    } catch (error) {
-      showAdminFailure(message, error, "Cancel failed.");
-    } finally {
-      setAutomationBusy(false);
-    }
-  };
-
   const memoryColumns: ColumnsType<AdminLearnedMemoryItem> = [
     { title: "Kind", dataIndex: "kind", key: "kind", width: 100 },
     { title: "Subject", dataIndex: "subject", key: "subject", width: 220, ellipsis: true },
@@ -423,74 +331,6 @@ export function InstanceMemoryAutomationPanel({ config, section }: { config: Adm
           Delete
         </Button>
       )
-    }
-  ];
-
-  const automationColumns: ColumnsType<AdminAutomationRegistration> = [
-    { title: "Intent", dataIndex: "intent", key: "intent", width: 220, ellipsis: true },
-    { title: "Status", dataIndex: "status", key: "status", width: 120 },
-    { title: "Schedule", dataIndex: "scheduleSummary", key: "scheduleSummary", width: 240, ellipsis: true },
-    {
-      title: "Next run",
-      key: "nextRun",
-      width: 260,
-      ellipsis: true,
-      render: (_, row) => formatAutomationNextRun(row.timeZoneId, row.nextOccurrenceAtUtc)
-    },
-    {
-      title: "Suspended",
-      key: "suspension",
-      width: 180,
-      ellipsis: true,
-      render: (_, row) => row.suspensionReason ?? "—"
-    },
-    {
-      title: "Provenance",
-      key: "prov",
-      width: 180,
-      render: (_, row) => row.provenance.authorizationOrigin
-    },
-    { title: "Model source", key: "modelSource", width: 160, ellipsis: true,
-      render: (_, row) => row.modelSource ?? "Conversation default" },
-    {
-      title: "Model",
-      key: "model",
-      width: 290,
-      render: (_, row) => (
-        <RegistrationModelControl
-          instanceId={config.instanceId}
-          row={row}
-          models={models}
-          onSaved={(updated) =>
-            setAutomationItems((current) =>
-              current?.map((item) => (item.registrationId === updated.registrationId ? updated : item)) ?? null
-            )
-          }
-        />
-      )
-    },
-    {
-      title: "Actions",
-      key: "actions",
-      width: 100,
-      render: (_, row) =>
-        row.status === "cancelled" || row.status === "completed" ? null : (
-          <Button
-            size="small"
-            danger
-            disabled={automationBusy}
-            onClick={() =>
-              confirmAction(modal, {
-                title: "Cancel this registration?",
-                okText: "Cancel registration",
-                danger: true,
-                onOk: () => void cancelRegistration(row)
-              })
-            }
-          >
-            Revoke
-          </Button>
-        )
     }
   ];
 
@@ -602,38 +442,7 @@ export function InstanceMemoryAutomationPanel({ config, section }: { config: Adm
                   <UnattendedModelForm config={config} models={models} />
                 </Flex>
               </section>
-              <section className="admin-definition-panel" aria-label="Advanced registrations">
-                <Flex wrap align="center" justify="space-between" gap={token.paddingSM} className="admin-definition-panel-heading">
-                  <Typography.Title level={4}>Advanced registrations</Typography.Title>
-                  <Button onClick={() => void loadAutomation()} loading={automationBusy}>
-                    Review advanced registrations
-                  </Button>
-                </Flex>
-                <div className="admin-definition-panel-body">
-                  {!automationItems && !automationError ? (
-                    <Typography.Text type="secondary">Load registrations to inspect their status, model and provenance.</Typography.Text>
-                  ) : null}
-                  {automationError ? (
-                    <AdminErrorNotice
-                      message={automationError.message}
-                      diagnosticId={automationError.diagnosticId}
-                      tone="danger"
-                    />
-                  ) : null}
-                  {automationItems ? (
-                    <Table
-                      className="admin-collection-table"
-                      scroll={{ x: 1850 }}
-                      size="small"
-                      rowKey="registrationId"
-                      dataSource={automationItems}
-                      columns={automationColumns}
-                      pagination={adminCollectionPagination}
-                      locale={{ emptyText: "No active or suspended registrations." }}
-                    />
-                  ) : null}
-                </div>
-              </section>
+
             </Flex>
           )
         }

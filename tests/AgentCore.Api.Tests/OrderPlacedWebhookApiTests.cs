@@ -46,9 +46,9 @@ public sealed class OrderPlacedWebhookApiTests
                 await SubscribeAsync(owner, secondId, sourceId);
                 var ineligible = await InsertInstanceAsync(host, "examiner", 1);
                 var blockedSubscribe = await owner.PostAsJsonAsync(
-                    $"/api/v2/admin/agent-instances/{ineligible}/event-subscriptions",
-                    new AdminCreateEventSubscriptionRequest(sourceId.ToString("D"), "order.placed"));
-                Assert.Equal(HttpStatusCode.BadRequest, blockedSubscribe.StatusCode);
+                    $"/api/v2/admin/agent-instances/{ineligible}/automations",
+                    new AutomationRequest(0, true, "Review new orders", "Review this order and report unusual details.", new("event", EventSourceId: sourceId.ToString("D"), EventType: "order.placed")));
+                Assert.Equal(HttpStatusCode.Forbidden, blockedSubscribe.StatusCode);
 
                 var anonymous = host.CreateClient();
                 var denied = await PostAsync(anonymous, sourceKey, token + "-no", ExternalEventEnvelope.Build("evt-1", "1001"));
@@ -138,7 +138,7 @@ public sealed class OrderPlacedWebhookApiTests
                 var external = new ExternalEvent(eventId, sourceId, sourceEventId, eventType, occurred, now, evidence);
                 var admitted = await events.AdmitAsync(
                     external,
-                    subscriptions.Select(item => new ExternalEventTarget(item.RegistrationId, item.Owner.AgentInstanceId, item.Owner.ProfileId)).ToArray());
+                    subscriptions.Select(item => new ExternalEventTarget(item.AutomationId, item.Owner.AgentInstanceId, item.Owner.ProfileId)).ToArray());
                 Assert.Equal(ExternalEventAdmitKind.Admitted, admitted.Kind);
                 Assert.Equal(2, (await events.ListPendingDeliveriesAsync(eventId, 10)).Count);
 
@@ -146,7 +146,7 @@ public sealed class OrderPlacedWebhookApiTests
                 await triggers.AdmitOccurrenceAsync(new TriggerOccurrence(
                     Guid.NewGuid(),
                     ExternalEventIngress.OccurrenceDedupeKey(sourceId, sourceEventId),
-                    first.RegistrationId,
+                    first.AutomationId,
                     first.Owner,
                     TriggerSourceKind.ApplicationEvent,
                     null,
@@ -163,7 +163,7 @@ public sealed class OrderPlacedWebhookApiTests
                     null,
                     null,
                     null));
-                await events.MarkDeliveryAsync(eventId, first.RegistrationId, ExternalEventDeliveryStatus.Admitted);
+                await events.MarkDeliveryAsync(eventId, first.AutomationId, ExternalEventDeliveryStatus.Admitted);
                 var stillPending = Assert.Single(await events.ListPendingDeliveriesAsync(eventId, 10));
                 Assert.Equal(secondId, stillPending.AgentInstanceId);
             }
@@ -226,8 +226,8 @@ public sealed class OrderPlacedWebhookApiTests
     private static async Task SubscribeAsync(HttpClient client, Guid instanceId, Guid sourceId)
     {
         var response = await client.PostAsJsonAsync(
-            $"/api/v2/admin/agent-instances/{instanceId}/event-subscriptions",
-            new AdminCreateEventSubscriptionRequest(sourceId.ToString("D"), "order.placed"));
+            $"/api/v2/admin/agent-instances/{instanceId}/automations",
+            new AutomationRequest(0, true, "Review new orders", "Review this order and report unusual details.", new("event", EventSourceId: sourceId.ToString("D"), EventType: "order.placed")));
         response.EnsureSuccessStatusCode();
     }
 

@@ -2,7 +2,7 @@ vi.mock("./ContinuityMaintenanceSection", () => ({ ContinuityMaintenanceSection:
 import { App, ConfigProvider } from 'antd';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ExperienceSection, ThoughtSection } from './InstanceContinuitySection';
+import { ExperienceSection } from './InstanceContinuitySection';
 import { instanceContinuityRequest, type ExperienceItem } from '../../services/adminApi';
 import { listModels } from '../../services/api';
 
@@ -13,9 +13,7 @@ const request = vi.mocked(instanceContinuityRequest);
 let enabled = false;
 const experience = () => ({ enabled, settingsRevision: 3, contextBudgetCharacters: 6000, items: [] });
 const thoughts = { minIntervalSeconds: 15, items: [] };
-function view(id = 'owner-instance', section: 'experience' | 'thought' | 'both' = 'experience') {
-  return <ConfigProvider><App>{section !== 'thought' ? <ExperienceSection instanceId={id} onWork={vi.fn()} /> : null}{section !== 'experience' ? <ThoughtSection instanceId={id} onWork={vi.fn()} /> : null}</App></ConfigProvider>;
-}
+function view(id = 'owner-instance') { return <ConfigProvider><App><ExperienceSection instanceId={id} onWork={vi.fn()} /></App></ConfigProvider>; }
 const record = (index: number): ExperienceItem => ({
   experienceId: `experience-${index}`, sourceKind: 'Session', sourceId: `source-${index}`, throughCursor: index,
   sourceAt: '2026-01-01T00:00:00Z', sourceCreatedAt: '2026-01-01T00:00:00Z',
@@ -33,34 +31,6 @@ beforeEach(() => {
 });
 
 describe('Instance continuity owner controls', () => {
-  it('refreshes a Thought source created after the cached review when returning from Runs', async () => {
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
-    request.mockResolvedValue(thoughts);
-    const ui = (selection?: { kind: 'thought'; registrationId: string; request: number }) => <ConfigProvider><App>
-      <ThoughtSection instanceId="owner-instance" onWork={vi.fn()} selection={selection} /></App></ConfigProvider>;
-    const mounted = render(ui());
-    await screen.findByText(/No thoughts configured/);
-    request.mockResolvedValue({ minIntervalSeconds: 15, items: [{ registrationId: 'new-thought', revision: 1,
-      enabled: true, status: 'Active', intervalSeconds: 3600, thinkingPrompt: 'Review new obligations',
-      modelKey: null, reasoningEffort: null, effectiveModelKey: null, nextRunAt: null, lastRunAt: null,
-      lastOutcome: 'NoAction', lastWorkItemId: 'run-new', executionStatus: 'Completed' }] });
-    mounted.rerender(ui({ kind: 'thought', registrationId: 'new-thought', request: 1 }));
-    const source = await screen.findByRole('button', { name: 'View thought: Review new obligations' });
-    await waitFor(() => expect(source).toHaveFocus());
-    expect(source).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.queryByText('This source configuration is no longer available')).not.toBeInTheDocument();
-  });
-  it('shows a retrying Thought instead of an older completed outcome and keeps Run now locked', async () => {
-    request.mockResolvedValue({ minIntervalSeconds: 15, items: [{ registrationId: 'retrying-thought', revision: 1,
-      enabled: true, status: 'Active', intervalSeconds: 3600, thinkingPrompt: 'Review obligations',
-      modelKey: null, reasoningEffort: null, effectiveModelKey: null, nextRunAt: null, lastRunAt: null,
-      lastOutcome: 'NoAction', lastWorkItemId: 'retrying-run', executionStatus: 'WaitingToRetry' }] });
-    render(view('owner-instance', 'thought'));
-    fireEvent.click(await screen.findByRole('button', { name: 'View thought: Review obligations' }));
-    expect(screen.getByRole('region', { name: 'Thought details' })).toHaveTextContent('Retrying');
-    expect(screen.queryByText('WaitingToRetry')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Run now' })).toBeDisabled();
-  });
   it('does not claim a checkpoint disappeared when its source read fails and recovers on Reload', async () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
     const ui = (selection?: { workItemId: string; request: number }) => <ConfigProvider><App>
@@ -172,44 +142,6 @@ describe('Instance continuity owner controls', () => {
     expect(screen.getByRole('switch', { name: 'Enable experience' })).toBeChecked();
   });
 
-  it('does not let an older initiative poll erase a newly created registration', async () => {
-    let poll!: () => void;
-    vi.spyOn(window, 'setInterval').mockImplementation((handler, interval) => {
-      if (interval === 5000) poll = handler as () => void;
-      return 123 as unknown as ReturnType<typeof window.setInterval>;
-    });
-    let finishPoll!: (value: typeof thoughts) => void;
-    let reads = 0;
-    const created = { registrationId: 'new-thought', revision: 1, enabled: true, intervalSeconds: 3600,
-      thinkingPrompt: 'Review experience', modelKey: null, reasoningEffort: null, nextRunAt: null,
-      lastRunAt: null, lastStatus: null, lastOutcome: null, lastModelKey: null };
-    request.mockImplementation(async (_id, path, method) => {
-      if (path !== 'thoughts') return experience();
-      if (method === 'POST') return created;
-      if (++reads === 2) return new Promise(resolve => { finishPoll = resolve; });
-      return reads > 2 ? { ...thoughts, items: [created] } : thoughts;
-    });
-    render(view('owner-instance', 'thought'));
-    await screen.findByText(/No thoughts configured/);
-    act(() => poll());
-    fireEvent.change(screen.getByLabelText('Thinking prompt'), { target: { value: 'Review experience' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create thought' }));
-    await screen.findByText('Review experience');
-    await act(async () => { finishPoll(thoughts); });
-    expect(screen.getByText('Review experience')).toBeVisible();
-    expect(screen.queryByText(/No thoughts configured/)).not.toBeInTheDocument();
-  });
-
-  it('keeps disabled and empty states clear and prevents checkpoint requests until enabled', async () => {
-    render(view('owner-instance', 'both'));
-    expect(await screen.findByText('No experience yet. Enable experience and retrospect a completed task.')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Retrospect now' })).toBeDisabled();
-    expect(screen.getByLabelText('Source conversation')).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Create thought' })).toBeDisabled();
-    expect(screen.getByText(/No thoughts configured/)).toBeVisible();
-    expect(request.mock.calls.every(call => call[0] === 'owner-instance')).toBe(true);
-  });
-
   it('reports a revision conflict and reloads without automatically replaying the mutation', async () => {
     request.mockImplementation(async (_id, path, method) => {
       if (path === 'experience/configuration' && method === 'PUT') throw new Error('Experience settings revision is stale.');
@@ -224,119 +156,6 @@ describe('Instance continuity owner controls', () => {
     expect(request.mock.calls.filter(call => call[1] === 'experience/configuration')).toHaveLength(1);
   });
 
-  it('acknowledges a run immediately, admits one rapid-click request, and releases controls after failure', async () => {
-    const item = { registrationId: 'run-thought', revision: 1, enabled: true, intervalSeconds: 3600,
-      thinkingPrompt: 'Review current work', modelKey: null, reasoningEffort: null, nextRunAt: null,
-      lastRunAt: null, lastOutcome: null, lastWorkItemId: null, executionStatus: null, effectiveModelKey: null, status: 'Active' };
-    let rejectRun!: (reason: Error) => void;
-    request.mockImplementation(async (_id, path) => {
-      if (path === 'thoughts/run-thought/run') return new Promise((_resolve, reject) => { rejectRun = reject; });
-      return path === 'thoughts' ? { ...thoughts, items: [item] } : experience();
-    });
-    render(view('owner-instance', 'thought'));
-    fireEvent.click(await screen.findByText('Review current work'));
-    const run = screen.getByRole('button', { name: 'Run now' });
-    act(() => { run.click(); run.click(); run.click(); });
-    expect(run).toBeDisabled();
-    expect(run).toHaveAttribute('aria-busy', 'true');
-    expect(request.mock.calls.filter(call => call[1] === 'thoughts/run-thought/run')).toHaveLength(1);
-    await act(async () => { rejectRun(new Error('Run admission unavailable')); });
-    expect(await screen.findByRole('alert')).toHaveTextContent('Run admission unavailable');
-    expect(run).not.toBeDisabled();
-    expect(run).toHaveAttribute('aria-busy', 'false');
-    request.mockImplementation(async (_id, path) => path === 'thoughts' ? {
-      ...thoughts, items: [{ ...item, lastWorkItemId: 'new-work', executionStatus: 'Queued' }]
-    } : path.endsWith('/run') ? { occurrenceId: 'accepted-run' } : experience());
-    fireEvent.click(run);
-    await waitFor(() => expect(run).toHaveAttribute('aria-busy', 'false'));
-    expect(run).toBeDisabled();
-    expect(request.mock.calls.filter(call => call[1] === 'thoughts/run-thought/run')).toHaveLength(2);
-  });
-
-  it('keeps an accepted run locked across stale status and refresh failure until its new execution appears', async () => {
-    let poll!: () => void;
-    vi.spyOn(window, 'setInterval').mockImplementation((handler, interval) => {
-      if (interval === 5000) poll = handler as () => void;
-      return 123 as unknown as ReturnType<typeof window.setInterval>;
-    });
-    let item = { registrationId: 'run-thought', revision: 1, enabled: true, intervalSeconds: 3600,
-      thinkingPrompt: 'Review current work', modelKey: null, reasoningEffort: null, nextRunAt: null,
-      lastRunAt: null, lastOutcome: 'NoAction', lastWorkItemId: 'previous-work', executionStatus: 'Completed', effectiveModelKey: null, status: 'Active' };
-    let failRefresh = false;
-    request.mockImplementation(async (_id, path) => {
-      if (path.endsWith('/run')) return { occurrenceId: 'accepted-run' };
-      if (path !== 'thoughts') return experience();
-      if (failRefresh) throw new Error('Status temporarily unavailable');
-      return { ...thoughts, items: [item] };
-    });
-    render(view('owner-instance', 'thought'));
-    fireEvent.click(await screen.findByText('Review current work'));
-    const run = screen.getByRole('button', { name: 'Run now' });
-    fireEvent.click(run);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh thoughts' })).not.toBeDisabled());
-    expect(run).toBeDisabled();
-    expect(run).toHaveTextContent('Starting…');
-    await act(async () => poll());
-    expect(run).toBeDisabled();
-    failRefresh = true;
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh thoughts' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Status temporarily unavailable');
-    expect(run).toBeDisabled();
-    fireEvent.click(run);
-    expect(request.mock.calls.filter(call => call[1].endsWith('/run'))).toHaveLength(1);
-    failRefresh = false;
-    item = { ...item, lastWorkItemId: 'new-work', executionStatus: 'Queued', lastOutcome: 'NoAction' };
-    fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Reload' }));
-    await waitFor(() => expect(run).toHaveAttribute('aria-busy', 'false'));
-    expect(within(screen.getByRole('table', { name: 'Thoughts table' })).getAllByText('Queued', { exact: true })[0]).toBeVisible();
-    expect(run).toBeDisabled();
-    item = { ...item, executionStatus: 'Completed', lastOutcome: 'NoAction' };
-    await act(async () => poll());
-    await waitFor(() => expect(run).not.toBeDisabled());
-    fireEvent.click(run);
-    await waitFor(() => expect(request.mock.calls.filter(call => call[1].endsWith('/run'))).toHaveLength(2));
-    expect(run).toBeDisabled();
-    // A fast execution may complete between polls: its new identity still acknowledges this run.
-    item = { ...item, lastWorkItemId: 'fast-work' };
-    await act(async () => poll());
-    await waitFor(() => expect(run).not.toBeDisabled());
-  });
-
-  it('authors seconds, minutes and hours with the minimum interval enforced', async () => {
-    render(view('owner-instance', 'thought'));
-    fireEvent.change(await screen.findByLabelText('Thinking prompt'), { target: { value: 'Demo review' } });
-    const chooseUnit = async (label: string) => {
-      fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Thought interval unit' }));
-      fireEvent.click(await screen.findByText(label, { selector: '.ant-select-item-option-content' }));
-    };
-    await chooseUnit('Seconds');
-    expect(screen.getByRole('button', { name: 'Create thought' })).toBeDisabled();
-    const interval = screen.getByRole('spinbutton', { name: 'Thought interval' });
-    fireEvent.change(interval, { target: { value: '15' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create thought' }));
-    await waitFor(() => expect(request).toHaveBeenCalledWith('owner-instance', 'thoughts', 'POST',
-      expect.objectContaining({ intervalSeconds: 15 })));
-    await waitFor(() => expect(screen.getByLabelText('Thinking prompt')).toHaveValue(''));
-    fireEvent.change(screen.getByLabelText('Thinking prompt'), { target: { value: 'Minute review' } });
-    await chooseUnit('Minutes');
-    fireEvent.change(interval, { target: { value: '2' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create thought' }));
-    await waitFor(() => expect(request).toHaveBeenCalledWith('owner-instance', 'thoughts', 'POST',
-      expect.objectContaining({ intervalSeconds: 120 })));
-  });
-
-  it('uses revisioned owner configuration and bounded defaults for a new thought', async () => {
-    render(view('owner-instance', 'thought'));
-    const prompt = await screen.findByLabelText('Thinking prompt');
-    fireEvent.change(prompt, { target: { value: 'Review experience. Do nothing when no useful action exists.' } });
-    fireEvent.click(screen.getByRole('switch', { name: 'Enable thought activation' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Create thought' }));
-    await waitFor(() => expect(request).toHaveBeenCalledWith('owner-instance', 'thoughts', 'POST', {
-      expectedRevision: 0, enabled: true, intervalSeconds: 3600,
-      thinkingPrompt: 'Review experience. Do nothing when no useful action exists.', modelKey: null, reasoningEffort: null
-    }));
-    await waitFor(() => expect(prompt).toHaveValue(''));
-  });
   it('opens a retrospection checkpoint beyond pagination and keeps an unsaved source draft', async () => {
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
     enabled = true;

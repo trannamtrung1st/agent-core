@@ -16,7 +16,7 @@ export function webhookUrl(sourceKey: string): string {
   return `${window.location.origin}/api/v1/hooks/${sourceKey}`;
 }
 
-export function EventSourcesSection() {
+export function EventSourcesSection({ onAutomations }: { onAutomations?: () => void } = {}) {
   const { token } = theme.useToken();
   const { message, modal } = App.useApp();
   const [sources, setSources] = useState<AdminEventSource[]>([]);
@@ -139,6 +139,7 @@ export function EventSourcesSection() {
       </div>
       <div className="admin-definition-panel-body">
         <Flex vertical gap={token.paddingSM}>
+          {onAutomations ? <Flex gap={token.paddingSM} wrap align="center"><Typography.Text type="secondary">Choose how this agent reacts to an event in Automation.</Typography.Text><Button onClick={onAutomations}>Open automations</Button></Flex> : null}
           {loading ? <Spin aria-label="Loading event sources" /> : null}
           {error ? <Alert type="error" showIcon title={error.message}
             action={<AdminRetryAction onRetry={() => setReadRequest(value => value + 1)} diagnosticId={error.diagnosticId} />} /> : null}

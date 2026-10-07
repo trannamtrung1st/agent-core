@@ -324,7 +324,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     {
         var client = _factory.CreateClient();
         var response = await client.GetAsync(
-            $"/api/v2/admin/agent-instances/{Guid.NewGuid():D}/automation/registrations");
+            $"/api/v2/admin/agent-instances/{Guid.NewGuid():D}/automations");
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 

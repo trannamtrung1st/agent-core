@@ -57,9 +57,9 @@ test("managed home survives deleted source, guards a revision and delivers a fre
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`home-${width}.png`), fullPage: true });
   }
-  await page.goto(`/admin/instances/${b}/workspace`); await expect(page.getByText("No workspace items yet")).toBeVisible();
+  await page.goto(`/admin/instances/${b}/identity`); await page.getByRole("tab", { name: "Workspace", exact: true }).click(); await expect(page.getByText("No workspace items yet")).toBeVisible();
   expect((await request.get(`/api/v2/agent-instances/${b}/workspace/${second.itemId}/content`, { headers })).status()).toBe(404);
-  await page.goto(`/admin/instances/${a}/workspace`); await expect(page.getByText(home, { exact: true })).toBeVisible();
+  await page.goto(`/admin/instances/${a}/identity`); await page.getByRole("tab", { name: "Workspace", exact: true }).click(); await expect(page.getByText(home, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: `Delete ${home}`, exact: true }).click();
   await page.getByRole("button", { name: "Cancel", exact: true }).click(); await expect(page.getByText(home, { exact: true })).toBeVisible();
   // The separate SQLite reopen/Compose gate proves restart survival; keep this UI journey fast and deterministic.

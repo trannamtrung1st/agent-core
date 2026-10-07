@@ -63,11 +63,13 @@ export type SessionResponse = {
 };
 
 export type WorkItem = {
-  intent?: string | null;
+  instructions?: string | null;
+  automationName?: string | null;
+  triggerSummary?: string | null;
   sourceId?: string | null;
-  registrationId?: string | null;
+  automationId?: string | null;
   modelKey?: string | null;
-  thoughtOutcome?: string | null;
+  outcome?: string | null;
   workItemId: string;
   status: string;
   revision: number;
@@ -83,8 +85,6 @@ export type WorkItem = {
   failureSummary: string | null;
   knownEffect: string | null;
   diagnosticId?: string | null;
-  sourceOccurrenceId?: string | null;
-  triggerRegistrationId?: string | null;
   createdAt: string;
   updatedAt: string;
   attentionRequired?: boolean;
@@ -99,13 +99,13 @@ export type WorkItemResult = {
   attentionRequired?: boolean;
 };
 
-export type SessionTrigger = {
-  registrationId: string;
-  intent: string;
+export type SessionAutomation = {
+  automationId: string;
+  instructions: string;
   status: string;
-  scheduleKind: string;
-  timeZone: string;
-  schedule: string;
+  triggerKind: string;
+  timeZone: string | null;
+  when: string;
   nextOccurrenceAt: string | null;
   revision: number;
   suspensionReason?: string | null;
@@ -509,22 +509,22 @@ export function drawerPageSearch(query?: DrawerPageQuery): string {
   return params.size ? `?${params}` : "";
 }
 
-export async function listSessionTriggers(sessionId: string, query?: DrawerPageQuery): Promise<SessionTrigger[]> {
-  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/triggers${drawerPageSearch(query)}`);
+export async function listSessionAutomations(sessionId: string, query?: DrawerPageQuery): Promise<SessionAutomation[]> {
+  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/automations${drawerPageSearch(query)}`);
   if (!response.ok) {
     throw new Error(await problemMessage(response, "Unable to load schedules."));
   }
 
-  const body = (await response.json()) as { items: SessionTrigger[] };
+  const body = (await response.json()) as { items: SessionAutomation[] };
   return body.items;
 }
 
-export async function cancelSessionTrigger(
+export async function cancelSessionAutomation(
   sessionId: string,
-  registrationId: string,
+  automationId: string,
   expectedRevision: number
-): Promise<SessionTrigger> {
-  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/triggers/${registrationId}/cancel`, {
+): Promise<SessionAutomation> {
+  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/automations/${automationId}/cancel`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ expectedRevision })
@@ -533,7 +533,7 @@ export async function cancelSessionTrigger(
     throw new Error(await problemMessage(response, "Unable to cancel the schedule."));
   }
 
-  return (await response.json()) as SessionTrigger;
+  return (await response.json()) as SessionAutomation;
 }
 
 export async function listWorkItems(sessionId: string, query?: DrawerPageQuery): Promise<WorkItem[]> {

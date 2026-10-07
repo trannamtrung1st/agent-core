@@ -19,7 +19,7 @@ public sealed class ThoughtJourneyTests
 {
     [Theory]
     [InlineData(14, false)]
-    [InlineData(15, true)]
+    [InlineData(15, false)]
     [InlineData(60, true)]
     [InlineData(3600, true)]
     [InlineData(604800, true)]
@@ -30,16 +30,16 @@ public sealed class ThoughtJourneyTests
         await using var host = new ExperienceHost(db);
         var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         var client = TestOwnerCapability.CreateOwnerClient(host);
-        var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/thoughts";
+        var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/automations";
         var response = await client.PostAsJsonAsync(path, Draft(0, seconds) with { Enabled = false });
         Assert.Equal(accepted ? HttpStatusCode.OK : HttpStatusCode.BadRequest, response.StatusCode);
         if (accepted)
         {
-            var stored = (await response.Content.ReadFromJsonAsync<ThoughtRegistrationResponse>())!;
-            Assert.Equal(seconds, stored.IntervalSeconds);
+            var stored = (await response.Content.ReadFromJsonAsync<AutomationResponse>())!;
+            Assert.Equal(seconds, stored.Trigger.Schedule!.Interval);
             var review = await client.GetFromJsonAsync<JsonElement>(path);
-            Assert.Equal(15, review.GetProperty("minIntervalSeconds").GetInt32());
-            Assert.Equal(seconds, review.GetProperty("items")[0].GetProperty("intervalSeconds").GetInt32());
+            Assert.Equal(60, review.GetProperty("policy").GetProperty("minFixedIntervalSeconds").GetInt32());
+            Assert.Equal(seconds, review.GetProperty("items")[0].GetProperty("trigger").GetProperty("schedule").GetProperty("interval").GetInt32());
         }
     }
 
@@ -47,7 +47,7 @@ public sealed class ThoughtJourneyTests
     public async Task Experience_to_thought_to_approved_skill_survives_restart_then_finishes_quietly_without_more_work()
     {
         var db = Path.Combine(Path.GetTempPath(), $"thought-{Guid.NewGuid():N}.db");
-        Guid instanceId, registrationId, workId; int originalVersion;
+        Guid instanceId, automationId, workId; int originalVersion;
         await using (var host = new ExperienceHost(db))
         {
             var s = host.Services;
@@ -63,52 +63,52 @@ public sealed class ThoughtJourneyTests
             instance = await s.GetRequiredService<HarnessManagementService>().ConfigureAsync(instanceId, instance.Revision,
                 new(HarnessManagementMode.Assisted, [HarnessManagementScope.Skills, HarnessManagementScope.ToolSelection], [], [ToolCatalog.WebFetch]));
             var client = TestOwnerCapability.CreateOwnerClient(host);
-            var path = $"/api/v2/admin/agent-instances/{instanceId}/thoughts";
+            var path = $"/api/v2/admin/agent-instances/{instanceId}/automations";
             Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path, Draft(0, 10))).StatusCode);
             var created = await client.PostAsJsonAsync(path, Draft(0)); created.EnsureSuccessStatusCode();
-            var r = (await created.Content.ReadFromJsonAsync<ThoughtRegistrationResponse>())!;
-            registrationId = Guid.Parse(r.RegistrationId);
-            Assert.Equal(HttpStatusCode.Conflict, (await client.PutAsJsonAsync(path + "/" + registrationId, Draft(0))).StatusCode);
-            var run = await client.PostAsJsonAsync(path + "/" + registrationId + "/run", new ContinuityRevisionRequest(r.Revision)); run.EnsureSuccessStatusCode();
-            Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(path + "/" + registrationId + "/run", new ContinuityRevisionRequest(r.Revision))).StatusCode);
+            var r = (await created.Content.ReadFromJsonAsync<AutomationResponse>())!;
+            automationId = Guid.Parse(r.AutomationId);
+            Assert.Equal(HttpStatusCode.Conflict, (await client.PutAsJsonAsync(path + "/" + automationId, Draft(0))).StatusCode);
+            var run = await client.PostAsJsonAsync(path + "/" + automationId + "/run", new ContinuityRevisionRequest(r.Revision)); run.EnsureSuccessStatusCode();
+            Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(path + "/" + automationId + "/run", new ContinuityRevisionRequest(r.Revision))).StatusCode);
             await Intake(s);
             var work = s.GetRequiredService<IWorkItemStore>();
             var owner = new WorkOwner(instanceId, AgentCore.Domain.Conversation.LocalUserProfile.Id);
-            var item = (await work.ListAsync(owner, 100)).Single(w => w.Provenance.SourceKind == WorkSourceKind.ThoughtActivation);
+            var item = (await work.ListAsync(owner, 100)).Single(w => w.Provenance.AutomationId == automationId);
             workId = item.WorkItemId;
-            Assert.Equal("Thought activation", item.OriginLabel);
+            Assert.Equal("Automation · Manual", item.OriginLabel);
             var detailPath = $"/api/v2/admin/agent-instances/{instanceId}/work-items/{workId}";
             var detail = (await client.GetFromJsonAsync<WorkItemResponse>(detailPath))!;
             Assert.Equal(workId.ToString("D"), detail.WorkItemId);
-            Assert.Equal(registrationId.ToString("D"), detail.RegistrationId);
-            Assert.Equal("Thought activation", detail.Origin);
-            Assert.Equal("synthetic-thought-improve", detail.Intent);
+            Assert.Equal(automationId.ToString("D"), detail.AutomationId);
+            Assert.Equal("Automation · Manual", detail.Origin);
+            Assert.Equal("synthetic-automation-improve", detail.Instructions);
             var listPath = $"/api/v2/admin/agent-instances/{instanceId}/work-items";
             var listed = (await client.GetFromJsonAsync<WorkItemListResponse>(listPath))!;
-            Assert.Equal(detail.Intent, Assert.Single(listed.Items, row => row.WorkItemId == detail.WorkItemId).Intent);
+            Assert.Equal(detail.Instructions, Assert.Single(listed.Items, row => row.WorkItemId == detail.WorkItemId).Instructions);
             Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/admin/agent-instances/{instanceId}/work-items/{Guid.NewGuid()}")).StatusCode);
             var other = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
             Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/admin/agent-instances/{other.InstanceId}/work-items/{workId}")).StatusCode);
             using var anonymous = host.CreateClient();
             Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(detailPath)).StatusCode);
 
-            Assert.Contains("synthetic-thought-improve", item.Provenance.EvidenceJson);
+            Assert.Contains("synthetic-automation-improve", item.Provenance.EvidenceJson);
             Assert.Equal(1, await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100));
             item = (await work.GetAsync(owner, workId))!;
             Assert.Equal(WorkItemStatus.WaitingForApproval, item.Status);
             Assert.Equal("harness.skill.upsert", item.Approval!.ToolName);
             Assert.Equal(originalVersion, (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(instanceId))!.ActiveVersion);
-            var edited = await client.PutAsJsonAsync(path + "/" + registrationId, Draft(r.Revision) with { ThinkingPrompt = "synthetic-thought-attention future prompt" }); edited.EnsureSuccessStatusCode();
+            var edited = await client.PutAsJsonAsync(path + "/" + automationId, Draft(r.Revision) with { Instructions = "synthetic-automation-attention future prompt" }); edited.EnsureSuccessStatusCode();
             var historical = (await client.GetFromJsonAsync<WorkItemResponse>(detailPath))!;
-            Assert.Equal("synthetic-thought-improve", historical.Intent);
+            Assert.Equal("synthetic-automation-improve", historical.Instructions);
             var scheduler = await s.GetRequiredService<TriggerScheduler>().RunOnceAsync(DateTimeOffset.UtcNow.AddHours(10));
             Assert.Equal(0, scheduler.Admitted);
-            Assert.Single(await work.ListAsync(owner, 100), w => w.Provenance.SourceKind == WorkSourceKind.ThoughtActivation);
-            Assert.Contains("synthetic-thought-improve", (await work.GetAsync(owner, workId))!.Provenance.EvidenceJson);
+            Assert.Single(await work.ListAsync(owner, 100), w => w.Provenance.AutomationId == automationId);
+            Assert.Contains("synthetic-automation-improve", (await work.GetAsync(owner, workId))!.Provenance.EvidenceJson);
             var toolExecutor = s.GetRequiredService<SessionToolExecutor>();
             var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", originalVersion))!;
             var harness = await toolExecutor.HarnessContextAsync(instanceId, default);
-            var thought = new ToolExecutionAdmission(true, TriggerKind.ThoughtActivation, AgentInstanceId: instanceId, Harness: harness);
+            var thought = new ToolExecutionAdmission(true, TriggerKind.ManualInvocation, AgentInstanceId: instanceId, Harness: harness);
             var user = thought with { Detached = false, TriggerKind = TriggerKind.UserTurn };
             Assert.Equal(ToolPolicyDecision.Deny, toolExecutor.EvaluateExecutionPolicy(definition, "harness.tool.select", admission: thought));
             Assert.Equal(ToolPolicyDecision.RequireApproval, toolExecutor.EvaluateExecutionPolicy(definition, "harness.tool.select", admission: user));
@@ -130,33 +130,33 @@ public sealed class ThoughtJourneyTests
             Assert.Equal(1, await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100));
             item = (await work.GetAsync(owner, workId))!;
             Assert.Equal(WorkItemStatus.Completed, item.Status);
-            Assert.Equal("ActionCompleted", ThoughtCompletion.Outcome(item.Result!.Text));
+            Assert.Equal("ActionCompleted", WorkCompletionRequest.Outcome(item.Result!.Text));
             Assert.False(item.Result.AttentionRequired);
             var instance = (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(instanceId))!;
             Assert.True(instance.ActiveVersion > originalVersion);
             var future = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync(instance.DefinitionId, instance.ActiveVersion))!;
             Assert.Single(future.SkillList, skill => skill.Name == "Experience review");
             Assert.Empty(await Alerts(work, owner));
-            var r = (await s.GetRequiredService<ITriggerStore>().GetAsync(new(instanceId, owner.ProfileId), registrationId))!;
-            r = await s.GetRequiredService<ThoughtRegistrationService>().SaveAsync(instanceId, registrationId, r.Revision, true, 3600, "synthetic-thought-improve", null, null);
-            await s.GetRequiredService<ThoughtRegistrationService>().RunNowAsync(instanceId, registrationId, r.Revision);
+            var r = (await s.GetRequiredService<ITriggerStore>().GetAsync(new(instanceId, owner.ProfileId), automationId))!;
+            r = await s.GetRequiredService<AdminAutomationAuthoringService>().SaveAsync(instanceId, automationId, r.Revision, true, 3600, "synthetic-automation-improve", null, null);
+            await s.GetRequiredService<AdminAutomationAuthoringService>().RunNowAsync(instanceId, automationId, r.Revision);
             await Intake(s);
             await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
-            var second = (await work.ListAsync(owner, 100)).First(w => w.WorkItemId != workId && w.Provenance.SourceKind == WorkSourceKind.ThoughtActivation);
+            var second = (await work.ListAsync(owner, 100)).First(w => w.WorkItemId != workId && w.Provenance.AutomationId == automationId);
             Assert.Equal(WorkItemStatus.Completed, second.Status);
-            Assert.Equal("NoAction", ThoughtCompletion.Outcome(second.Result!.Text));
+            Assert.Equal("NoAction", WorkCompletionRequest.Outcome(second.Result!.Text));
             Assert.Empty(await Alerts(work, owner));
-            Assert.Single(await s.GetRequiredService<IExperienceStore>().ListAsync(instanceId, 100), e => e.SourceId == workId);
+            Assert.DoesNotContain(await s.GetRequiredService<IExperienceStore>().ListAsync(instanceId, 100), e => e.SourceId == workId);
             Assert.DoesNotContain(await s.GetRequiredService<IExperienceStore>().ListAsync(instanceId, 100), e => e.SourceId == second.WorkItemId);
-            r = await s.GetRequiredService<ThoughtRegistrationService>().SaveAsync(instanceId, registrationId, r.Revision, true, 3600, "synthetic-thought-attention", null, null);
-            await s.GetRequiredService<ThoughtRegistrationService>().RunNowAsync(instanceId, registrationId, r.Revision); await Intake(s);
+            r = await s.GetRequiredService<AdminAutomationAuthoringService>().SaveAsync(instanceId, automationId, r.Revision, true, 3600, "synthetic-automation-attention", null, null);
+            await s.GetRequiredService<AdminAutomationAuthoringService>().RunNowAsync(instanceId, automationId, r.Revision); await Intake(s);
             await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
             Assert.Single(await Alerts(work, owner));
-            r = await s.GetRequiredService<ThoughtRegistrationService>().SaveAsync(instanceId, registrationId, r.Revision, false, 3600, "Review", null, null);
-            Assert.Equal(TriggerRegistrationStatus.Disabled, r.Status);
-            await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(() => s.GetRequiredService<ThoughtRegistrationService>().RunNowAsync(instanceId, registrationId, r.Revision).AsTask());
-            await s.GetRequiredService<ThoughtRegistrationService>().DeleteAsync(instanceId, registrationId, r.Revision);
-            Assert.Equal(TriggerRegistrationStatus.Cancelled, (await s.GetRequiredService<ITriggerStore>().GetAsync(new(instanceId, owner.ProfileId), registrationId))!.Status);
+            r = await s.GetRequiredService<AdminAutomationAuthoringService>().SaveAsync(instanceId, automationId, r.Revision, false, 3600, "Review", null, null);
+            Assert.Equal(AutomationStatus.Disabled, r.Status);
+            await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(() => s.GetRequiredService<AdminAutomationAuthoringService>().RunNowAsync(instanceId, automationId, r.Revision).AsTask());
+            await s.GetRequiredService<AdminAutomationAuthoringService>().DeleteAsync(instanceId, automationId, r.Revision);
+            Assert.Equal(AutomationStatus.Cancelled, (await s.GetRequiredService<ITriggerStore>().GetAsync(new(instanceId, owner.ProfileId), automationId))!.Status);
         }
     }
     [Fact(Timeout = 60000)]
@@ -170,24 +170,24 @@ public sealed class ThoughtJourneyTests
             var services = host.Services;
             var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
             instanceId = instance.InstanceId;
-            var thoughts = services.GetRequiredService<ThoughtRegistrationService>();
+            var thoughts = services.GetRequiredService<AdminAutomationAuthoringService>();
             var registration = await thoughts.SaveAsync(instanceId, null, 0, true, 3600, "Review; do nothing if no useful action is available.", null, null);
             clock.Advance(TimeSpan.FromHours(10));
             var scheduler = services.GetRequiredService<TriggerScheduler>();
             Assert.Equal(1, (await scheduler.RunOnceAsync(clock.GetUtcNow())).Admitted);
             Assert.Equal(0, (await scheduler.RunOnceAsync(clock.GetUtcNow())).Admitted);
-            registration = (await services.GetRequiredService<ITriggerStore>().GetAsync(registration.Owner, registration.RegistrationId))!;
+            registration = (await services.GetRequiredService<ITriggerStore>().GetAsync(registration.Owner, registration.AutomationId))!;
             Assert.True(registration.NextOccurrenceAtUtc > clock.GetUtcNow());
             // An edit after atomic admission changes only future activations and their models.
-            await thoughts.SaveAsync(instanceId, registration.RegistrationId, registration.Revision, true, 3600,
-                "synthetic-thought-attention future activation", "scripted-beta", null);
+            await thoughts.SaveAsync(instanceId, registration.AutomationId, registration.Revision, true, 3600,
+                "synthetic-automation-attention future activation", "scripted-beta", null);
             await Intake(services);
             var work = Assert.Single(await services.GetRequiredService<IWorkItemStore>().ListAsync(new(instanceId, registration.Owner.ProfileId), 100));
             workId = work.WorkItemId;
-            Assert.Equal(WorkSourceKind.ThoughtActivation, work.Provenance.SourceKind);
+            Assert.Equal(WorkSourceKind.Schedule, work.Provenance.SourceKind);
             Assert.Equal("scripted-alpha", work.Model.CatalogKey);
             Assert.Contains("Review; do nothing", work.Provenance.EvidenceJson);
-            Assert.DoesNotContain("synthetic-thought-attention", work.Provenance.EvidenceJson);
+            Assert.DoesNotContain("synthetic-automation-attention", work.Provenance.EvidenceJson);
             Assert.Null(work.Provenance.SourceSessionId);
             Assert.Equal(0, (await scheduler.RunOnceAsync(clock.GetUtcNow().AddHours(10))).Admitted);
         }
@@ -197,7 +197,7 @@ public sealed class ThoughtJourneyTests
         await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(clock.GetUtcNow(), 100);
         var recovered = (await s.GetRequiredService<IWorkItemStore>().GetAsync(owner, workId))!;
         Assert.Equal(WorkItemStatus.Completed, recovered.Status);
-        Assert.Equal("NoAction", ThoughtCompletion.Outcome(recovered.Result!.Text));
+        Assert.Equal("NoAction", WorkCompletionRequest.Outcome(recovered.Result!.Text));
         Assert.False(recovered.Result.AttentionRequired);
         Assert.Single(await s.GetRequiredService<IWorkItemStore>().ListAsync(owner, 100));
         Assert.Empty(await s.GetRequiredService<IExperienceStore>().ListAsync(instanceId, 100));
@@ -215,7 +215,7 @@ public sealed class ThoughtJourneyTests
         foreach (var item in await work.ListAsync(owner, 100)) all.AddRange(await work.ListAttentionAlertKeysAsync(item.WorkItemId));
         return all;
     }
-    internal static ThoughtRegistrationRequest Draft(long revision, int interval = 3600) => new(revision, true, interval, "synthetic-thought-improve", null, null);
+    internal static IntervalAutomationDraft Draft(long revision, int interval = 3600) => new(revision, true, interval, "synthetic-automation-improve", null, null);
     internal static async Task Intake(IServiceProvider services)
     {
         await services.GetRequiredService<TriggerOccurrenceRouter>().RouteOnceAsync();

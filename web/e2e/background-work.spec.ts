@@ -23,7 +23,6 @@ test("background work stays out of the transcript at wide and narrow widths", as
   await page.goto("/");
   await page.waitForFunction(() => window.localStorage.getItem("agent-core.owner-capability"));
   await page.getByRole("button", { name: "Start a new chat" }).click();
-  await expect(page.getByRole("combobox", { name: "Identity" })).toBeEnabled({ timeout: 15_000 });
   await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.generalAssistant);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByLabel("Message").fill("hello");
@@ -35,7 +34,7 @@ test("background work stays out of the transcript at wide and narrow widths", as
   await expect(opener).toBeFocused();
   await page.keyboard.press("Enter");
   const drawer = page.getByRole("dialog", { name: "Background work" });
-  await expect(drawer.getByText("No runs yet. Runs appear when schedules, thoughts, events, or retrospection execute.")).toBeVisible();
+  await expect(drawer.getByText("No runs yet. Runs appear when Automations or manual reviews execute.")).toBeVisible();
   await drawer.getByRole("button", { name: "Close" }).click();
   await expect(drawer).toBeHidden();
   await expect(opener).toBeVisible();
@@ -62,7 +61,7 @@ test("background work stays out of the transcript at wide and narrow widths", as
           workItemId: "019944af-00c5-7000-8000-000000000011",
           status: "queued",
           revision: 5,
-          origin: "Application event",
+          origin: "Automation · Event",
           progress: null,
           needsApproval: false,
           approvalId: null,
@@ -84,7 +83,7 @@ test("background work stays out of the transcript at wide and narrow widths", as
       workItemId: "019944af-00c5-7000-8000-000000000010",
       status: "completed",
       revision: 4,
-      origin: "Scheduled reminder",
+      origin: "Automation · Schedule",
       progress: "Checking the oven",
       needsApproval: false,
       approvalId: null,
@@ -102,7 +101,7 @@ test("background work stays out of the transcript at wide and narrow widths", as
       workItemId: "019944af-00c5-7000-8000-000000000011",
       status: approved ? "queued" : "needsApproval",
       revision: approved ? 5 : 4,
-      origin: "Application event",
+      origin: "Automation · Event",
       progress: null,
       needsApproval: !approved,
       approvalId: approved ? null : "019944af-00c5-7000-8000-000000000012",
@@ -136,7 +135,7 @@ test("background work stays out of the transcript at wide and narrow widths", as
   await page.setViewportSize({ width: 390, height: 800 });
   await expect(page.getByRole("navigation", { name: "Chats" })).toBeHidden();
   await expect(drawer.getByText(resultText)).toBeVisible();
-  const approve = drawer.getByRole("button", { name: "Approve Event" });
+  const approve = drawer.getByRole("button", { name: "Approve Automation · Event" });
   await approve.focus();
   await expect(approve).toBeFocused();
   await approve.click();

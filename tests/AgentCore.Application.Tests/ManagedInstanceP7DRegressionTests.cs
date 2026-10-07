@@ -38,10 +38,10 @@ public sealed class ManagedInstanceP7DRegressionTests
         var ownerFirst = new TriggerOwner(first.InstanceId, ProfileId);
         var ownerSecond = new TriggerOwner(second.InstanceId, ProfileId);
         var due = Now.AddHours(1);
-        await store.CreateAsync(new TriggerRegistration(
+        await store.CreateAsync(new Automation(
             Guid.Parse("019944af-00f1-7000-8000-000000000001"),
             ownerFirst,
-            TriggerRegistrationStatus.Completed,
+            AutomationStatus.Completed,
             "First instance reminder",
             new OneShotSchedule(due, "UTC", null, null),
             due,
@@ -190,12 +190,12 @@ public sealed class ManagedInstanceP7DRegressionTests
                 admission);
 
             var owner = new TriggerOwner(managed.InstanceId, ProfileId);
-            var registrationId = Guid.Parse("019944af-00f3-7000-8000-000000000002");
+            var automationId = Guid.Parse("019944af-00f3-7000-8000-000000000002");
             var due = Now.AddHours(2);
-            await triggers.CreateAsync(new TriggerRegistration(
-                registrationId,
+            await triggers.CreateAsync(new Automation(
+                automationId,
                 owner,
-                TriggerRegistrationStatus.Completed,
+                AutomationStatus.Completed,
                 "Completed schedule",
                 new OneShotSchedule(due, "UTC", null, null),
                 due,
@@ -226,10 +226,10 @@ public sealed class ManagedInstanceP7DRegressionTests
                 retrievalAllowed: true,
                 admission);
             Assert.Contains(identityAfterArchive, item => item.Content == FirstInstanceIdentityMemory);
-            var trigger = await triggers.GetAsync(owner, registrationId);
+            var trigger = await triggers.GetAsync(owner, automationId);
             Assert.NotNull(trigger);
-            Assert.Equal(TriggerRegistrationStatus.Completed, trigger.Status);
-            Assert.Equal("Completed schedule", trigger.Intent);
+            Assert.Equal(AutomationStatus.Completed, trigger.Status);
+            Assert.Equal("Completed schedule", trigger.Instructions);
         });
     }
 

@@ -6,16 +6,16 @@ export function useAutomationSelection(selection: AutomationSelection | undefine
   const [tableVersion, setTableVersion] = useState(0);
   const applied = useRef<AutomationSelection | undefined>(undefined);
   useEffect(() => {
-    if (!selection || selection.kind !== kind || !ids.includes(selection.registrationId) || applied.current === selection) return;
+    if (!selection || selection.kind !== kind || !ids.includes(selection.automationId) || applied.current === selection) return;
     applied.current = selection;
     setSearch("");
-    setExpanded([selection.registrationId]);
+    setExpanded([selection.automationId]);
     setTableVersion(value => value + 1);
   }, [selection, kind, ids, setSearch, setExpanded]);
   useEffect(() => {
     if (!selection || selection.kind !== kind) return;
     const frame = requestAnimationFrame(() => {
-      const button = document.querySelector<HTMLButtonElement>(`[data-automation-id="${selection.registrationId}"]`);
+      const button = document.querySelector<HTMLButtonElement>(`[data-automation-id="${selection.automationId}"]`);
       button?.scrollIntoView({ block: "nearest" });
       const table = button?.closest(".ant-table-content");
       if (table) table.scrollLeft = 0;

@@ -21,30 +21,8 @@ internal static class ContinuityEndpoints
 {
     internal static void Map(RouteGroupBuilder admin)
     {
-        AdminScheduleEndpoints.Map(admin);
+        AdminAutomationEndpoints.Map(admin);
         var group = admin.MapGroup("/agent-instances/{instanceId:guid}");
-        group.MapGet("/continuity-maintenance", (Guid instanceId, ExperienceService service, IContinuityMaintenanceStore store,
-            ContinuityMaintenancePolicy policy, CancellationToken ct) => Respond(async () =>
-            {
-                await service.RequireInstanceAsync(instanceId, ct);
-                return Cadence(await store.ReadAsync(instanceId, ct), policy);
-            }));
-        group.MapPut("/continuity-maintenance", (Guid instanceId, HttpRequest http,
-            ExperienceService service, IContinuityMaintenanceStore store, ContinuityMaintenancePolicy policy,
-            IIdGenerator ids, TimeProvider time, CancellationToken ct) => Respond(async () =>
-            {
-                await service.RequireInstanceAsync(instanceId, ct);
-                if (!http.HasJsonContentType()) throw AgentCoreErrors.Validation("Continuity maintenance settings must be JSON.");
-                ContinuityMaintenanceConfigurationRequest request;
-                try { request = await http.ReadFromJsonAsync<ContinuityMaintenanceConfigurationRequest>(ct)
-                    ?? throw AgentCoreErrors.Validation("Continuity maintenance settings are required."); }
-                catch (Exception ex) when (ex is JsonException or BadHttpRequestException)
-                { throw AgentCoreErrors.Validation("Continuity maintenance settings require expectedRevision and intervalSeconds (whole seconds or null)."); }
-                policy.ValidateInterval(request.IntervalSeconds);
-                return Cadence(await store.ConfigureAsync(instanceId, request.ExpectedRevision, request.IntervalSeconds, ct,
-                    Audit(ids, time, instanceId, "configureContinuityCadence") with
-                    { Revision = request.ExpectedRevision + 1, SummaryJson = JsonSerializer.Serialize(new { instanceId, operation = "configureContinuityCadence", intervalSeconds = request.IntervalSeconds }) }), policy);
-            }));
         group.MapGet("/maintenance", (Guid instanceId, ExperienceService service, IExperienceStore store, CancellationToken ct) =>
             Respond(async () => { await service.RequireInstanceAsync(instanceId, ct); return await store.MaintenanceSettingsAsync(instanceId, ct); }));
         group.MapPut("/maintenance", (Guid instanceId, IdentityMaintenanceConfigurationRequest request,
@@ -88,30 +66,8 @@ internal static class ContinuityEndpoints
                 await service.RequireInstanceAsync(instanceId, ct); await store.ResetAsync(instanceId, ct, Audit(ids, time, instanceId, "reset"));
                 return await ExperienceReview(instanceId, service, store, work, ct);
             }));
-        group.MapGet("/thoughts", (Guid instanceId, ExperienceService service, ITriggerStore triggers, IWorkItemStore work,
-            IAgentDefinitionStore definitions, IModelCatalog catalog, CancellationToken ct) =>
-            Respond(async () => await ThoughtReview(instanceId, service, triggers, work, definitions, catalog, ct)));
-        group.MapPost("/thoughts", (Guid instanceId, ThoughtRegistrationRequest request, ThoughtRegistrationService service, CancellationToken ct) =>
-            Respond(async () => Thought(await service.SaveAsync(instanceId, null, request.ExpectedRevision, request.Enabled,
-                request.IntervalSeconds, request.ThinkingPrompt, request.ModelKey, request.ReasoningEffort, ct), null, null)));
-        group.MapPut("/thoughts/{registrationId:guid}", (Guid instanceId, Guid registrationId, ThoughtRegistrationRequest request,
-            ThoughtRegistrationService service, CancellationToken ct) => Respond(async () =>
-            Thought(await service.SaveAsync(instanceId, registrationId, request.ExpectedRevision, request.Enabled,
-                request.IntervalSeconds, request.ThinkingPrompt, request.ModelKey, request.ReasoningEffort, ct), null, null)));
-        group.MapPost("/thoughts/{registrationId:guid}/delete", (Guid instanceId, Guid registrationId, ContinuityRevisionRequest request,
-            ThoughtRegistrationService service, CancellationToken ct) => Respond(async () =>
-            { await service.DeleteAsync(instanceId, registrationId, request.ExpectedRevision, ct); return new { deleted = true }; }));
-        group.MapPost("/thoughts/{registrationId:guid}/run", (Guid instanceId, Guid registrationId, ContinuityRevisionRequest request,
-            ThoughtRegistrationService service, CancellationToken ct) => Respond(async () =>
-            { var o = await service.RunNowAsync(instanceId, registrationId, request.ExpectedRevision, ct); return new { occurrenceId = o.OccurrenceId }; }));
         MapWork(group);
     }
-
-    private static ContinuityMaintenanceResponse Cadence(ContinuityMaintenanceSettings settings, ContinuityMaintenancePolicy policy) =>
-        new(settings.IntervalSeconds, policy.Effective(settings.IntervalSeconds), policy.MinimumIntervalSeconds,
-            policy.MaximumIntervalSeconds, policy.DefaultIntervalSeconds, settings.IntervalSeconds is null,
-            policy.Allows(settings.IntervalSeconds), settings.Revision,
-            settings.LastMaintenanceAtUtc is { } last ? HttpMapping.Format(last) : null);
 
     private static void MapWork(RouteGroupBuilder group)
     {
@@ -129,7 +85,7 @@ internal static class ContinuityEndpoints
         {
             var item = await RequireWork(instanceId, workItemId, service, store, ct);
             if (item.Result is not { } result) throw AgentCoreErrors.NotFound("Work result was not found.");
-            return new WorkItemResultResponse(workItemId.ToString("D"), item.Provenance.SourceKind == WorkSourceKind.ThoughtActivation ? ThoughtCompletion.Summary(result.Text) : result.Text,
+            return new WorkItemResultResponse(workItemId.ToString("D"), WorkCompletionRequest.Summary(result.Text),
                 HttpMapping.Format(result.CompletedAtUtc), result.AttentionRequired);
         }));
         group.MapPost("/work-items/{workItemId:guid}/cancel", (Guid instanceId, Guid workItemId, CancelWorkItemRequest request,
@@ -175,27 +131,6 @@ internal static class ContinuityEndpoints
         }
         return new(settings.Enabled, settings.Revision, ExperienceService.MaxContextCharacters, rows);
     }
-    private static async Task<ThoughtReviewResponse> ThoughtReview(Guid instanceId, ExperienceService service, ITriggerStore triggers,
-        IWorkItemStore work, IAgentDefinitionStore definitions, IModelCatalog catalog, CancellationToken ct)
-    {
-        var instance = await service.RequireInstanceAsync(instanceId, ct);
-        var definition = await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct);
-        var registrations = await triggers.ListAsync(new(instanceId, LocalUserProfile.Id), null, ct);
-        var items = new List<ThoughtRegistrationResponse>();
-        foreach (var registration in registrations.Where(r => r.Provenance.AuthorizationOrigin == TriggerAuthorizationOrigin.AdminThought && r.Status != TriggerRegistrationStatus.Cancelled))
-        {
-            var last = await work.GetLatestForRegistrationAsync(new(instanceId, LocalUserProfile.Id), registration.RegistrationId, ct);
-            items.Add(Thought(registration, last, definition is null ? null : ExecutionModelPolicy.Resolve(catalog, definition, instance, registration).Pin?.CatalogKey));
-        }
-        return new(ThoughtIntent.MinIntervalSeconds, items);
-    }
-
-    private static ThoughtRegistrationResponse Thought(TriggerRegistration r, WorkItem? w, string? effectiveModel) => new(r.RegistrationId.ToString("D"), r.Revision,
-        r.Status == TriggerRegistrationStatus.Active, r.Status.ToString(), ((FixedIntervalSchedule)r.Schedule).IntervalSeconds, r.Intent, r.ModelOverrideCatalogKey,
-        r.ModelOverrideReasoningEffort, r.NextOccurrenceAtUtc is { } next ? HttpMapping.Format(next) : null,
-        w is null ? null : HttpMapping.Format(w.CreatedAtUtc), w?.Result is { } result ? ThoughtCompletion.Outcome(result.Text)
-            : w?.Status == WorkItemStatus.WaitingForApproval ? "ApprovalPending" : w?.Status == WorkItemStatus.Failed ? "Failed" : null,
-        w?.WorkItemId.ToString("D"), w?.Status.ToString(), effectiveModel);
     private static AdminEventAppend Audit(IIdGenerator ids, TimeProvider time, Guid instanceId, string operation,
         bool? enabled = null, Guid? recordId = null) => new(ids.NewId(), time.GetUtcNow(), AdminEventActorKind.LocalOwner,
             AdminEventOperationKind.ExperienceChanged, "agentInstance", instanceId.ToString("D"), null, null,

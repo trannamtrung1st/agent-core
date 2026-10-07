@@ -10,6 +10,7 @@ public static class ExternalEventEnvelope
     public const int MaxRawBytes = 8192;
 
     public const int MaxFieldLength = 64;
+    public const int MaxTriggerDepth = 4;
 
     public static string Build(string eventId, string orderReference, DateTimeOffset? occurredAt = null)
     {
@@ -75,6 +76,8 @@ public static class ExternalEventEnvelope
             string? type = null;
             string? occurredAt = null;
             string? orderReference = null;
+            Guid? rootWorkItemId = null;
+            int? triggerDepth = null;
             var sawData = false;
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var property in document.RootElement.EnumerateObject())
@@ -87,6 +90,17 @@ public static class ExternalEventEnvelope
 
                 switch (property.Name)
                 {
+                    case "rootWorkItemId":
+                        if (property.Value.ValueKind != JsonValueKind.String || !Guid.TryParse(property.Value.GetString(), out var root) || root == Guid.Empty)
+                        { error = "invalid_correlation"; return false; }
+                        rootWorkItemId = root;
+                        break;
+                    case "triggerDepth":
+                        if (!property.Value.TryGetInt32(out var depth) || depth < 1)
+                        { error = "invalid_correlation"; return false; }
+                        if (depth > MaxTriggerDepth) { error = "trigger_depth_exceeded"; return false; }
+                        triggerDepth = depth;
+                        break;
                     case "eventId":
                         if (!TryToken(property.Value, out eventId))
                         {
@@ -132,6 +146,9 @@ public static class ExternalEventEnvelope
                 return false;
             }
 
+            if (rootWorkItemId.HasValue != triggerDepth.HasValue)
+            { error = "invalid_correlation"; return false; }
+
             if (!ExternalEventTypes.IsAllowed(type))
             {
                 error = "unsupported_event";
@@ -141,7 +158,7 @@ public static class ExternalEventEnvelope
             occurredAtUtc = occurredAt is null
                 ? DateTimeOffset.UnixEpoch
                 : DateTimeOffset.Parse(occurredAt);
-            evidence = Evidence(eventId, orderReference, occurredAt is null ? null : occurredAtUtc);
+            evidence = Evidence(eventId, orderReference, occurredAt is null ? null : occurredAtUtc, rootWorkItemId, triggerDepth ?? 0);
             if (Encoding.UTF8.GetByteCount(evidence) > TriggerLimits.MaxEvidenceBytes)
             {
                 evidence = "";
@@ -155,7 +172,7 @@ public static class ExternalEventEnvelope
         }
     }
 
-    public static string Evidence(string eventId, string orderReference, DateTimeOffset? occurredAtUtc)
+    public static string Evidence(string eventId, string orderReference, DateTimeOffset? occurredAtUtc, Guid? rootWorkItemId = null, int triggerDepth = 0)
     {
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
@@ -163,6 +180,8 @@ public static class ExternalEventEnvelope
             writer.WriteStartObject();
             writer.WriteString("sourceEventId", eventId);
             writer.WriteString("orderReference", orderReference);
+            if (rootWorkItemId is Guid root) writer.WriteString("rootWorkItemId", root);
+            writer.WriteNumber("triggerDepth", triggerDepth);
             if (occurredAtUtc is DateTimeOffset at)
             {
                 writer.WriteString("occurredAtUtc", at.ToUniversalTime().ToString("o"));

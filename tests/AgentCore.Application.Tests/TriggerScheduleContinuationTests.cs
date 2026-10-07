@@ -27,12 +27,12 @@ public sealed class TriggerScheduleContinuationTests
         "Hello",
         "Asia/Ho_Chi_Minh",
         TriggerScheduleKind.OneShot,
-        TriggerRegistrationStatus.Active,
+        AutomationStatus.Active,
         new DateTimeOffset(2026, 9, 23, 1, 49, 0, TimeSpan.Zero));
 
     private static readonly ScheduleConversationContext HelloLatest = HelloVietnam with
     {
-        RegistrationId = RegistrationB,
+        AutomationId = RegistrationB,
         Revision = 1,
         NextOccurrenceAtUtc = new DateTimeOffset(2026, 9, 23, 1, 52, 0, TimeSpan.Zero)
     };
@@ -108,7 +108,7 @@ public sealed class TriggerScheduleContinuationTests
             "schedule Hello at 8:49 Vietnam time"));
         await runtime.WaitUntilIdleAsync();
         var first = Assert.Single(await harness.Store.ListAsync(owner, null));
-        Assert.Equal("Hello", first.Intent);
+        Assert.Equal("Hello", first.Instructions);
         Assert.Equal(new TimeOnly(8, 49), Assert.IsType<OneShotSchedule>(first.Schedule).LocalTime);
 
         Assert.True(await runtime.SubmitUserTextAsync("another at 8:52"));
@@ -116,20 +116,20 @@ public sealed class TriggerScheduleContinuationTests
         var rows = await harness.Store.ListAsync(owner, null);
         Assert.Equal(2, rows.Count);
         var second = rows.MaxBy(row => row.NextOccurrenceAtUtc);
-        Assert.Equal("Hello", second!.Intent);
+        Assert.Equal("Hello", second!.Instructions);
         Assert.Equal("Asia/Ho_Chi_Minh", Assert.IsType<OneShotSchedule>(second.Schedule).TimeZoneId);
         Assert.Equal(new TimeOnly(8, 52), Assert.IsType<OneShotSchedule>(second.Schedule).LocalTime);
 
         Assert.True(await runtime.SubmitUserTextAsync("move that to 8:53"));
         await runtime.WaitUntilIdleAsync();
-        var moved = (await harness.Store.GetAsync(owner, second.RegistrationId))!;
+        var moved = (await harness.Store.GetAsync(owner, second.AutomationId))!;
         Assert.Equal(new TimeOnly(8, 53), Assert.IsType<OneShotSchedule>(moved.Schedule).LocalTime);
-        Assert.Equal(TriggerRegistrationStatus.Active, (await harness.Store.GetAsync(owner, first.RegistrationId))!.Status);
+        Assert.Equal(AutomationStatus.Active, (await harness.Store.GetAsync(owner, first.AutomationId))!.Status);
 
         Assert.True(await runtime.SubmitUserTextAsync("cancel that"));
         await runtime.WaitUntilIdleAsync();
-        Assert.Equal(TriggerRegistrationStatus.Cancelled, (await harness.Store.GetAsync(owner, second.RegistrationId))!.Status);
-        Assert.Equal(TriggerRegistrationStatus.Active, (await harness.Store.GetAsync(owner, first.RegistrationId))!.Status);
+        Assert.Equal(AutomationStatus.Cancelled, (await harness.Store.GetAsync(owner, second.AutomationId))!.Status);
+        Assert.Equal(AutomationStatus.Active, (await harness.Store.GetAsync(owner, first.AutomationId))!.Status);
     }
 
     [Fact]
@@ -170,7 +170,7 @@ public sealed class TriggerScheduleContinuationTests
         var owner = new TriggerOwner(InstanceId, ProfileId);
         var created = Assert.Single(await harness.Store.ListAsync(owner, null));
         var store = harness.Store;
-        var registrations = new TriggerRegistrationService(
+        var registrations = new AutomationService(
             store,
             new DeterministicIdGenerator(
                 Enumerable.Range(1, 8).Select(index => Guid.Parse($"019944af-00b4-7000-8000-{index:D12}")),
@@ -180,17 +180,17 @@ public sealed class TriggerScheduleContinuationTests
             TriggerScheduleRuntimeTests.FindAgentsDirectory(),
             SyntheticProviderAliases.Default).GetAsync("general-assistant", 8))!;
 
-        var registration = (await store.GetAsync(owner, created.RegistrationId))!;
+        var registration = (await store.GetAsync(owner, created.AutomationId))!;
         await store.UpdateAsync(
             owner,
-            registration.RegistrationId,
+            registration.AutomationId,
             registration.Revision,
             "Hello (revised)",
             registration.Schedule,
             registration.NextOccurrenceAtUtc,
             registration.ExpiresAtUtc,
             harness.Time.GetUtcNow());
-        var advanced = (await store.GetAsync(owner, registration.RegistrationId))!;
+        var advanced = (await store.GetAsync(owner, registration.AutomationId))!;
         Assert.True(advanced.Revision > registration.Revision);
 
         var staleContext = ScheduleConversationContext.FromRegistration(registration, TriggerCommandAction.Create);
@@ -208,7 +208,7 @@ public sealed class TriggerScheduleContinuationTests
             harness.Time.GetUtcNow(),
             staleContext);
         using var args = JsonDocument.Parse(
-            $$"""{"registrationId":"{{registration.RegistrationId:D}}","expectedRevision":{{registration.Revision}},"relativeDayOffset":0,"localTime":"08:50","timeZone":"Asia/Ho_Chi_Minh"}""");
+            $$"""{"automationId":"{{registration.AutomationId:D}}","expectedRevision":{{registration.Revision}},"relativeDayOffset":0,"localTime":"08:50","timeZone":"Asia/Ho_Chi_Minh"}""");
         var result = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
@@ -218,7 +218,7 @@ public sealed class TriggerScheduleContinuationTests
             CancellationToken.None,
             new HeuristicTriggerCommandAuthorizer());
         Assert.DoesNotContain("\"error\"", result.Text, StringComparison.Ordinal);
-        var moved = (await store.GetAsync(owner, registration.RegistrationId))!;
+        var moved = (await store.GetAsync(owner, registration.AutomationId))!;
         Assert.Equal(new TimeOnly(8, 50), Assert.IsType<OneShotSchedule>(moved.Schedule).LocalTime);
     }
 }

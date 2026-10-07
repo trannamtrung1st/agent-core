@@ -853,26 +853,6 @@ export type AdminLearnedMemoryItem = {
   updatedAt: string;
 };
 
-export type AdminAutomationRegistration = {
-  registrationId: string;
-  intent: string;
-  status: string;
-  scheduleKind: string;
-  timeZoneId: string;
-  scheduleSummary: string;
-  nextOccurrenceAtUtc: string | null;
-  revision: number;
-  suspensionReason: string | null;
-  provenance: {
-    authorizationOrigin: string;
-    sourceSessionId: string | null;
-    createdAt: string;
-    updatedAt: string;
-  };
-  modelOverrideCatalogKey?: string | null;
-  modelOverrideReasoningEffort?: string | null;
-  modelSource?: string;
-};
 
 export async function listAdminLearnedMemory(
   instanceId: string,
@@ -981,13 +961,6 @@ export type AdminEventSourceCredential = {
   status: string;
 };
 
-export type AdminEventSubscription = {
-  registrationId: string;
-  sourceId: string;
-  eventType: string;
-  status: string;
-  revision: number;
-};
 
 export async function listEventSources(): Promise<AdminEventSource[]> {
   const response = await ownerFetch("/api/v2/admin/event-sources");
@@ -1026,27 +999,6 @@ export async function revokeEventSource(sourceId: string): Promise<AdminEventSou
   return (await response.json()) as AdminEventSource;
 }
 
-export async function listEventSubscriptions(instanceId: string): Promise<AdminEventSubscription[]> {
-  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/event-subscriptions`);
-  if (!response.ok) {
-    throw await adminProblemMessage(response, `Event subscriptions failed (${response.status})`);
-  }
-  const payload = (await response.json()) as { items: AdminEventSubscription[] };
-  return payload.items;
-}
-
-export async function createEventSubscription(instanceId: string, sourceId: string): Promise<AdminEventSubscription> {
-  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/event-subscriptions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sourceId, eventType: "order.placed" })
-  });
-  if (!response.ok) {
-    throw await adminProblemMessage(response, `Event subscription failed (${response.status})`);
-  }
-  return (await response.json()) as AdminEventSubscription;
-}
-
 export async function setAdminUnattendedModel(
   instanceId: string,
   expectedRevision: number,
@@ -1062,63 +1014,6 @@ export async function setAdminUnattendedModel(
     throw await adminProblemMessage(response, `Unattended model update failed (${response.status})`);
   }
   return (await response.json()) as AdminAgentInstance;
-}
-
-export async function listAdminAutomationRegistrations(
-  instanceId: string
-): Promise<AdminAutomationRegistration[]> {
-  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/automation/registrations`);
-  if (!response.ok) {
-    throw await adminProblemMessage(response, `Admin automation list failed (${response.status})`);
-  }
-  const payload = (await response.json()) as { items: AdminAutomationRegistration[] };
-  return payload.items;
-}
-
-export async function cancelAdminAutomationRegistration(
-  instanceId: string,
-  registrationId: string,
-  expectedRevision: number
-): Promise<AdminAutomationRegistration> {
-  const response = await ownerFetch(
-    `/api/v2/admin/agent-instances/${instanceId}/automation/registrations/${registrationId}/cancel`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ expectedRevision, confirm: true })
-    }
-  );
-  if (response.status === 409) {
-    throw await adminProblemMessage(
-      response,
-      "Registration revision conflict — reload registrations and try again."
-    );
-  }
-  if (!response.ok) {
-    throw await adminProblemMessage(response, `Admin automation cancel failed (${response.status})`);
-  }
-  return (await response.json()) as AdminAutomationRegistration;
-}
-
-export async function setAdminRegistrationModel(
-  instanceId: string,
-  registrationId: string,
-  expectedRevision: number,
-  catalogKey: string | null,
-  reasoningEffort: string | null
-): Promise<AdminAutomationRegistration> {
-  const response = await ownerFetch(
-    `/api/v2/admin/agent-instances/${instanceId}/automation/registrations/${registrationId}/model`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ expectedRevision, catalogKey, reasoningEffort })
-    }
-  );
-  if (!response.ok) {
-    throw await adminProblemMessage(response, `Registration model update failed (${response.status})`);
-  }
-  return (await response.json()) as AdminAutomationRegistration;
 }
 
 export type HarnessMode = "Disabled" | "Assisted" | "Managed";
@@ -1165,17 +1060,6 @@ export type ExperienceItem = {
 };
 export type IdentityMaintenanceSettings = { agentInstanceId: string; allowAgentConsolidation: boolean; revision: number };
 export type ExperienceReview = { enabled: boolean; settingsRevision: number; contextBudgetCharacters: number; items: ExperienceItem[] };
-export type ThoughtRegistration = {
-  registrationId: string; revision: number; enabled: boolean; status: string; intervalSeconds: number;
-  thinkingPrompt: string; modelKey: string | null; reasoningEffort: string | null;
-  nextRunAt: string | null; lastRunAt: string | null; lastOutcome: string | null;
-  lastWorkItemId: string | null; executionStatus: string | null; effectiveModelKey: string | null;
-};
-export type ThoughtReview = { minIntervalSeconds: number; items: ThoughtRegistration[] };
-export type ThoughtDraft = {
-  expectedRevision: number; enabled: boolean; intervalSeconds: number; thinkingPrompt: string;
-  modelKey?: string | null; reasoningEffort?: string | null;
-};
 export async function instanceContinuityRequest<T>(instanceId: string, path: string, method = "GET", body?: unknown): Promise<T> {
   const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/${path}`, {
     method, ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
@@ -1189,18 +1073,13 @@ export type ScheduleTiming = {
   interval: number; localTime?: string | null; weekdays?: number[] | null; anchorAtUtc?: string | null;
   endAtUtc?: string | null; startDate?: string | null; endDate?: string | null; maxOccurrences?: number | null;
 };
-export type OwnerScheduleDraft = { expectedRevision: number; enabled: boolean; intent: string; schedule: ScheduleTiming;
+export type AutomationTrigger = { kind: "schedule"; schedule: ScheduleTiming } | { kind: "event"; eventSourceId: string; eventType: "order.placed" };
+export type AutomationDraft = { expectedRevision: number; enabled: boolean; name: string; instructions: string; trigger: AutomationTrigger;
   modelKey: string | null; reasoningEffort: string | null };
-export type OwnerSchedule = { registrationId: string; revision: number; intent: string; enabled: boolean; status: string;
-  schedule: ScheduleTiming; authorizationOrigin: string; sourceSessionId: string | null; sourceEventId: string | null;
+export type Automation = { automationId: string; revision: number; name: string; instructions: string; enabled: boolean; status: string;
+  trigger: AutomationTrigger; authorizationOrigin: string; sourceSessionId: string | null; sourceEventId: string | null;
   createdAt: string; nextRunAt: string | null; modelKey: string | null; reasoningEffort: string | null;
-  effectiveModelKey: string | null; lastWorkItemId: string | null; executionStatus: string | null };
-export type OwnerSchedulePolicy = { allowOneShot: boolean; allowDaily: boolean; allowWeekly: boolean; allowFixedInterval: boolean;
+  effectiveModelKey: string | null; lastWorkItemId: string | null; executionStatus: string | null; outcome: string | null };
+export type AutomationPolicy = { allowOneShot: boolean; allowDaily: boolean; allowWeekly: boolean; allowFixedInterval: boolean;
   allowIndefiniteRecurrence: boolean; oneShotHorizonDays: number; minRecurrenceDays: number; minFixedIntervalSeconds: number; maxActiveRegistrations: number };
-export type OwnerScheduleReview = { items: OwnerSchedule[]; policy?: OwnerSchedulePolicy | null };
-
-export type ContinuityMaintenanceSettings = {
-  configuredIntervalSeconds: number | null; effectiveIntervalSeconds: number;
-  minimumIntervalSeconds: number; maximumIntervalSeconds: number; defaultIntervalSeconds: number;
-  usesDefault: boolean; configuredIntervalAllowed: boolean; revision: number; lastMaintenanceAtUtc: string | null;
-};
+export type AutomationReview = { items: Automation[]; policy?: AutomationPolicy | null };

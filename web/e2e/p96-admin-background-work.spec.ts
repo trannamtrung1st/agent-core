@@ -153,7 +153,7 @@ test("background work lists scheduled and order-placed sources", async ({ page }
             workItemId: "019944af-00c5-7000-8000-0000000000b1",
             status: "completed",
             revision: 2,
-            origin: "Scheduled reminder",
+            origin: "Automation · Schedule",
             progress: null,
             needsApproval: false,
             approvalId: null,
@@ -172,7 +172,7 @@ test("background work lists scheduled and order-placed sources", async ({ page }
             workItemId: "019944af-00c5-7000-8000-0000000000b2",
             status: "needsApproval",
             revision: 3,
-            origin: "Order placed",
+            origin: "Automation · Event",
             progress: null,
             needsApproval: true,
             approvalId: "019944af-00c5-7000-8000-0000000000b3",
@@ -195,8 +195,8 @@ test("background work lists scheduled and order-placed sources", async ({ page }
   await opener.focus();
   await page.keyboard.press("Enter");
   const drawer = page.getByRole("dialog", { name: "Background work" });
-  await expect(drawer.getByText("Schedule", { exact: true })).toBeVisible();
-  await expect(drawer.getByText("Event", { exact: true })).toBeVisible();
+  await expect(drawer.getByText("Automation · Schedule", { exact: true })).toBeVisible();
+  await expect(drawer.getByText("Automation · Event", { exact: true })).toBeVisible();
   await expect(drawer.getByText("Approval required")).toBeVisible();
   await expect(drawer.getByText(/sourceEventId|orderReference/)).toHaveCount(0);
   await page.keyboard.press("Escape");
@@ -204,7 +204,7 @@ test("background work lists scheduled and order-placed sources", async ({ page }
 
   await page.setViewportSize({ width: 390, height: 800 });
   await opener.click();
-  await expect(drawer.getByText("Event", { exact: true })).toBeVisible();
+  await expect(drawer.getByText("Automation · Event", { exact: true })).toBeVisible();
   await drawer.getByRole("button", { name: "Close" }).click();
   await expect(drawer).toBeHidden();
 });

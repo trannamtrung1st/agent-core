@@ -56,7 +56,8 @@ public static class TriggerDurableSchedulingPolicy
         IAgentInstanceStore instances,
         IAgentDefinitionStore definitions,
         IMemoryStore profiles,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        TriggerSourceKind sourceKind = TriggerSourceKind.Schedule)
     {
         var occurrence = await EvaluateScheduledOccurrenceEligibilityAsync(
                 owner,
@@ -70,12 +71,12 @@ public static class TriggerDurableSchedulingPolicy
             return UserSchedulingAdmission.Deny(occurrence.DenialReason!.Value);
         }
 
-        if (!OccurrenceCompatibility.Allows(occurrence.Definition!, TriggerSourceKind.Schedule))
+        if (!OccurrenceCompatibility.Allows(occurrence.Definition!, sourceKind))
         {
             return UserSchedulingAdmission.Deny(UserSchedulingAdmissionDenialReason.SchedulingDisabled);
         }
 
-        if (!AllowsUserScheduling(occurrence.Definition))
+        if (occurrence.Definition!.TriggerPolicy is not { Enabled: true, AllowUserScheduling: true })
         {
             return UserSchedulingAdmission.Deny(UserSchedulingAdmissionDenialReason.UserSchedulingDisabled);
         }

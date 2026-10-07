@@ -1,19 +1,16 @@
 import { AdminErrorNotice } from "./adminFailure";
 import { useCallback, useEffect, useRef, useState, type Key } from "react";
-import { Alert, App, Button, Descriptions, Empty, Flex, Form, Input, InputNumber, Select, Spin, Switch, Table, Tag, Typography, theme } from "antd";
+import { Alert, App, Button, Descriptions, Empty, Flex, Form, Spin, Switch, Table, Tag, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
-import { drawerPageSearch, listModels, type DrawerPageQuery, type ModelDescriptor, type WorkItem, type WorkItemResult } from "../../services/api";
-import { instanceContinuityRequest as request, type IdentityMaintenanceSettings, type ExperienceItem, type ExperienceReview, type ThoughtDraft, type ThoughtRegistration, type ThoughtReview } from "../../services/adminApi";
+import { drawerPageSearch, type DrawerPageQuery, type WorkItem, type WorkItemResult } from "../../services/api";
+import { instanceContinuityRequest as request, type IdentityMaintenanceSettings, type ExperienceItem, type ExperienceReview } from "../../services/adminApi";
 import { BackgroundWorkDrawer } from "../chat/BackgroundWorkDrawer";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 
-import { ExecutionModelFields } from "./ExecutionModelFields";
 import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 
-import { thoughtOutcomeLabel, runStatusLabel, type AutomationSelection, type RunSource } from "../chat/runPresentation";
-import { useAutomationSelection } from "./useAutomationSelection";
-import { ContinuityMaintenanceSection } from "./ContinuityMaintenanceSection";
+import { type RunSource } from "../chat/runPresentation";
 import { AdminSessionPicker } from "./AdminSessionPicker";
 
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : "Not yet";
@@ -87,7 +84,7 @@ export function IdentityMaintenanceSection({ instanceId }: { instanceId: string 
           onChange={value => void configure(value)} />
         <Typography.Text>Allow agent consolidation</Typography.Text>
       </Flex>
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>Permits safe consolidation of repeated Experience and inferred identity memory through normal Thought runs. It does not schedule runs, change memory scope, or permit silent forgetting. Protected changes require exact approval.</Typography.Paragraph>
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>Permits safe consolidation of repeated Experience and inferred identity memory through normal Automation Runs. It does not schedule runs, change memory scope, or permit silent forgetting. Protected changes require exact approval.</Typography.Paragraph>
       <Failure error={error} reload={() => void reload()} />
     </Flex></div>
   </section>;
@@ -168,7 +165,7 @@ export function ExperienceSection({ instanceId, onWork, selection, active = true
           onChange={enabled => void mutate("experience/configuration", "PUT", { expectedRevision: review.settingsRevision, enabled })} />
           <Typography.Text>{review.enabled ? "Enabled · completed work may be retrospected" : "Disabled · experience is not supplied to the agent"}</Typography.Text>
           <Button onClick={() => void reload()} disabled={busy}>Refresh experience</Button></Flex>
-        <ContinuityMaintenanceSection instanceId={instanceId} />
+        <Typography.Paragraph type="secondary">Configure recurring review under Automation. Review now starts an ordinary Run for the selected source.</Typography.Paragraph>
         <Form layout="vertical" className="admin-config-form" onFinish={() => void mutate("experience/checkpoints", "POST", { sessionId: session.trim() })}>
           <Form.Item label="Source conversation" extra="Only completed observable work in this instance is eligible. A repeated checkpoint creates no duplicate.">
             <AdminSessionPicker instanceId={instanceId} value={session} onChange={setSession} disabled={busy || !review.enabled} />
@@ -262,194 +259,4 @@ function ExperienceDetails({ item }: { item: ExperienceItem }) {
         { key: "captured", label: "Checkpoint captured", children: item.checkpointAt ? date(item.checkpointAt) : "Not recorded (legacy checkpoint)" }
       ]} />
   </Flex>;
-}
-
-const thoughtIntervalUnits = [
-  { value: 1, label: "Seconds" }, { value: 60, label: "Minutes" }, { value: 3600, label: "Hours" }
-];
-const intervalUnitFor = (seconds: number) => seconds % 3600 === 0 ? 3600 : seconds % 60 === 0 ? 60 : 1;
-function thoughtIntervalLabel(seconds: number) {
-  const unit = intervalUnitFor(seconds);
-  const value = seconds / unit;
-  const label = unit === 3600 ? "hour" : unit === 60 ? "minute" : "second";
-  return `Every ${value} ${label}${value === 1 ? "" : "s"}`;
-}
-const blank: ThoughtDraft = { expectedRevision: 0, enabled: false, intervalSeconds: 3600, thinkingPrompt: "", modelKey: null, reasoningEffort: null };
-const thoughtOutcome = (item: ThoughtRegistration) => ["Queued", "Running", "WaitingForApproval", "WaitingToRetry"].includes(item.executionStatus ?? "") ? runStatusLabel(item.executionStatus)
-  : thoughtOutcomeLabel(item.lastOutcome ?? item.executionStatus);
-export function ThoughtSection({ instanceId, onWork, selection, active = true }: { instanceId: string; active?: boolean; onWork: (workId?: string) => void; selection?: AutomationSelection }) {
-  const { search, setSearch, pagination } = useAdminCollectionSearch();
-  const [expanded, setExpanded] = useState<Key[]>([]);
-  const detailLayout = useAdminDetailLayout();
-  const { token } = theme.useToken();
-  const { modal } = App.useApp();
-  const [review, setReview] = useState<ThoughtReview | null>(null);
-  const [models, setModels] = useState<ModelDescriptor[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [pendingAction, setPendingAction] = useState<string | null>(null);
-  const [error, setError] = useState<AdminFailureNotice | null>(null);
-  const [editing, setEditing] = useState<string | null>(null);
-  const [draft, setDraft] = useState<ThoughtDraft>(blank);
-  const [intervalUnit, setIntervalUnit] = useState(3600);
-  // Admission precedes the execution projection. Keep the click acknowledged across that gap.
-  const startingRunsRef = useRef<Record<string, string | null>>({});
-  const [startingRuns, setStartingRuns] = useState<Record<string, string | null>>({});
-  const applyReview = useCallback((next: ThoughtReview) => {
-    const remaining = Object.fromEntries(Object.entries(startingRunsRef.current).filter(([id, previousWorkId]) => {
-      const item = next.items.find(row => row.registrationId === id);
-      return item && (!item.lastWorkItemId || item.lastWorkItemId === previousWorkId);
-    }));
-    startingRunsRef.current = remaining;
-    setStartingRuns(remaining);
-    setReview(next);
-  }, []);
-  const minimumInterval = review?.minIntervalSeconds ?? 15;
-  const invalidInterval = draft.intervalSeconds < minimumInterval || draft.intervalSeconds > 604800;
-  const order = useResponseOrder();
-  const reload = useCallback(async () => {
-    if (order.current.mutating) return;
-    const generation = ++order.current.generation;
-    setLoading(true); setError(null);
-    try { const [thoughts, available] = await Promise.all([request<ThoughtReview>(instanceId, "thoughts"), listModels()]); if (generation === order.current.generation) { applyReview(thoughts); setModels(available.models.filter(model => model.tools)); } }
-    catch (reason) { if (generation === order.current.generation) setError(describeAdminError(reason, "Thoughts could not be loaded.")); }
-    finally { if (generation === order.current.generation) setLoading(false); }
-  }, [instanceId, order, applyReview]);
-  useEffect(() => { void reload(); }, [reload]);
-  useEffect(() => {
-    if (selection?.kind === "thought") void reload();
-  }, [selection, reload]);
-  const previousActive = useRef(active);
-  useEffect(() => {
-    if (active && !previousActive.current) void reload();
-    previousActive.current = active;
-  }, [active, reload]);
-  useEffect(() => {
-    if (loading || !active) return;
-    const timer = window.setInterval(() => {
-      if (order.current.mutating) return;
-      const generation = ++order.current.generation;
-      void request<ThoughtReview>(instanceId, "thoughts").then(next => { if (generation === order.current.generation) applyReview(next); })
-        .catch(reason => { if (generation === order.current.generation) setError(describeAdminError(reason, "Thought status could not be refreshed.")); });
-    }, 5000);
-    return () => window.clearInterval(timer);
-  }, [instanceId, order, loading, applyReview, active]);
-  async function action(path: string, body: unknown, method = "POST") {
-    const runId = /^thoughts\/([^/]+)\/run$/.exec(path)?.[1];
-    if (order.current.mutating || (runId && runId in startingRunsRef.current)) return;
-    if (runId) {
-      startingRunsRef.current = { ...startingRunsRef.current, [runId]: review?.items.find(item => item.registrationId === runId)?.lastWorkItemId ?? null };
-      setStartingRuns(startingRunsRef.current);
-    }
-    let accepted = false;
-    order.current.mutating = true; ++order.current.generation;
-    setLoading(false);
-    setBusy(true); setPendingAction(path); setError(null);
-    try {
-      await request(instanceId, path, method, body);
-      accepted = true;
-      applyReview(await request<ThoughtReview>(instanceId, "thoughts"));
-      if (path === "thoughts" || method === "PUT") { setEditing(null); setDraft(blank); setIntervalUnit(3600); }
-    } catch (reason) {
-      if (runId && !accepted) {
-        const remaining = { ...startingRunsRef.current }; delete remaining[runId];
-        startingRunsRef.current = remaining; setStartingRuns(remaining);
-      }
-      setError(describeAdminError(reason, "Thought update failed. Reload for the current revision."));
-    }
-    finally { order.current.mutating = false; setBusy(false); setPendingAction(null); }
-  }
-  function edit(item: ThoughtRegistration) {
-    setIntervalUnit(intervalUnitFor(item.intervalSeconds));
-    setEditing(item.registrationId); setDraft({ expectedRevision: item.revision, enabled: item.enabled,
-      intervalSeconds: item.intervalSeconds, thinkingPrompt: item.thinkingPrompt, modelKey: item.modelKey, reasoningEffort: item.reasoningEffort });
-  }
-  const tableVersion = useAutomationSelection(selection, "thought", review?.items.map(item => item.registrationId) ?? [], setSearch, setExpanded);
-  return <section className="admin-definition-panel" aria-label="Thoughts">
-    <div className="admin-definition-panel-heading"><Typography.Title level={4}>Thoughts</Typography.Title>
-      <Typography.Text type="secondary">Periodically review current context and decide whether useful action exists. Doing nothing is a valid outcome.</Typography.Text></div>
-    <div className="admin-definition-panel-body"><Flex vertical gap={token.padding}>
-      {loading ? <Spin aria-label="Loading thoughts" /> : null}
-      {selection?.kind === "thought" && !loading && !error && review && !review.items.some(item => item.registrationId === selection.registrationId) ? <Alert type="info" showIcon title="This source configuration is no longer available" description="It may have been deleted or retired. Its run remains available in Runs." /> : null}
-      <Failure error={error} reload={() => void reload()} />
-      {review ? <>
-        <Form layout="vertical" className="admin-config-form" onFinish={() => void action(editing ? `thoughts/${editing}` : "thoughts", draft, editing ? "PUT" : "POST")}>
-          <Form.Item label="Thinking prompt" extra={<Flex vertical gap={token.paddingXS}><Typography.Text type="secondary">{draft.thinkingPrompt.length} / 2000 characters</Typography.Text>
-            <span>For example: Review recent experience for repeated problems. Improve only when meaningful; otherwise do nothing. Tools and approvals still follow current policy.</span></Flex>}>
-            <Input.TextArea aria-label="Thinking prompt" rows={4} maxLength={2000} value={draft.thinkingPrompt} disabled={busy}
-              onChange={e => setDraft({ ...draft, thinkingPrompt: e.target.value })} />
-          </Form.Item>
-          <Flex wrap gap={token.padding} className="admin-form-row">
-            <Form.Item label="Interval" validateStatus={invalidInterval ? "error" : undefined}
-              help={invalidInterval ? `Choose an interval from ${minimumInterval} seconds to 7 days.` : undefined}
-              extra={`Minimum ${minimumInterval} seconds. Short intervals are useful for demos; frequent runs use more model and tool resources.`}>
-              <Flex gap={token.paddingXS}>
-                <InputNumber aria-label="Thought interval" min={Math.ceil(minimumInterval / intervalUnit)} max={Math.floor(604800 / intervalUnit)}
-                  precision={0} value={draft.intervalSeconds / intervalUnit} disabled={busy}
-                  onChange={value => setDraft({ ...draft, intervalSeconds: (value ?? 0) * intervalUnit })} />
-                <Select aria-label="Thought interval unit" style={{ width: "8rem", flex: "none" }} value={intervalUnit} options={thoughtIntervalUnits} disabled={busy}
-                  onChange={unit => { setDraft({ ...draft, intervalSeconds: Math.round(draft.intervalSeconds / intervalUnit) * unit }); setIntervalUnit(unit); }} />
-              </Flex>
-            </Form.Item>
-            <Form.Item label="Enable thought activation"><Switch aria-label="Enable thought activation" checked={draft.enabled} disabled={busy} onChange={enabled => setDraft({ ...draft, enabled })} /></Form.Item>
-          </Flex>
-          <Form.Item label="Execution model" extra="Uses this instance's unattended default unless you choose a model. More frequent runs use more model and tool resources.">
-            <ExecutionModelFields models={models} modelKey={draft.modelKey ?? ""} reasoningEffort={draft.reasoningEffort ?? ""} disabled={busy}
-              modelLabel="Thought execution model" effortLabel="Thought reasoning effort" defaultLabel="Unattended default"
-              onChange={(modelKey, reasoningEffort) => setDraft({ ...draft, modelKey: modelKey || null, reasoningEffort: reasoningEffort || null })} />
-          </Form.Item>
-          <Flex wrap gap={token.paddingXS}><Button type="primary" htmlType="submit" aria-label={editing ? "Save thought" : "Create thought"}
-            aria-busy={pendingAction === (editing ? `thoughts/${editing}` : "thoughts")}
-            loading={pendingAction === (editing ? `thoughts/${editing}` : "thoughts")} disabled={!draft.thinkingPrompt.trim() || invalidInterval}>{editing ? "Save thought" : "Create thought"}</Button>
-            {editing ? <Button disabled={busy} onClick={() => { setEditing(null); setDraft(blank); setIntervalUnit(3600); }}>Cancel edit</Button> : null}
-            <Button onClick={() => void reload()} disabled={busy}>Refresh thoughts</Button><Button onClick={() => onWork()}>View runs</Button></Flex>
-        </Form>
-        {review.items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No thoughts configured. Add one when you want this agent to periodically review whether action is useful." /> :
-          <>
-          <AdminCollectionToolbar label="thoughts" value={search} onChange={setSearch} />
-          <Table<ThoughtRegistration> key={tableVersion} aria-label="Thoughts table" className="admin-collection-table" size="small" rowKey="registrationId"
-            dataSource={review.items.filter(item => [item.thinkingPrompt, item.enabled ? "Enabled" : "Disabled", thoughtIntervalLabel(item.intervalSeconds),
-              thoughtOutcome(item), item.executionStatus ?? "", item.effectiveModelKey ?? item.modelKey ?? "Unattended default"]
-              .some(value => value.toLowerCase().includes(search.trim().toLowerCase()))).sort((a, b) => Number(b.registrationId === selection?.registrationId) - Number(a.registrationId === selection?.registrationId))}
-            scroll={{ x: 1270 }} pagination={pagination}
-            locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No matches. Clear search or filters to see all results." /> }}
-            columns={[
-              { title: "Thinking prompt", key: "prompt", width: 350, ellipsis: true,
-                render: (_, item) => <Button type="link" size="small" className="admin-collection-name" title={item.thinkingPrompt}
-                  data-automation-id={item.registrationId} aria-label={`View thought: ${item.thinkingPrompt}`} aria-expanded={expanded.includes(item.registrationId)}
-                  onClick={() => setExpanded(expanded.includes(item.registrationId) ? [] : [item.registrationId])}>{item.thinkingPrompt}</Button> },
-              { title: "Cadence", key: "cadence", width: 170,
-                filters: [{ text: "Enabled", value: true }, { text: "Disabled", value: false }], onFilter: (value, item) => item.enabled === value,
-                render: (_, item) => <Tag>{item.enabled ? thoughtIntervalLabel(item.intervalSeconds) : "Disabled"}</Tag> },
-              { title: "Last run", key: "run", width: 220, render: (_, item) => item.lastWorkItemId ? <Button type="link" size="small" aria-label={`View run: ${item.thinkingPrompt}`} onClick={() => onWork(item.lastWorkItemId!)}>{date(item.lastRunAt)}</Button> : "Not yet" },
-              { title: "Last outcome", key: "outcome", width: 180,
-                filters: [...new Set(review.items.map(thoughtOutcome))].map(value => ({ text: value, value })),
-                onFilter: (value, item) => thoughtOutcome(item) === value,
-                render: (_, item) => <Tag color={item.executionStatus === "WaitingForApproval" ? "warning" : item.executionStatus === "Running" ? "processing" : undefined}>
-                  {thoughtOutcome(item)}</Tag> },
-              { title: "Next review", key: "next", width: 220,
-                sorter: (a, b) => (a.enabled ? a.nextRunAt ?? "" : "").localeCompare(b.enabled ? b.nextRunAt ?? "" : ""),
-                render: (_, item) => item.enabled ? date(item.nextRunAt) : "Disabled" },
-              { title: "Model", key: "model", width: 180, ellipsis: true, render: (_, item) => item.effectiveModelKey ?? item.modelKey ?? "Unattended default" }
-            ]}
-            expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, item) => setExpanded(open ? [item.registrationId] : []),
-              expandedRowRender: item => <Flex vertical gap={token.padding} style={{ whiteSpace: "normal" }} role="region" aria-label="Thought details">
-                <Descriptions bordered size="small" column={1} {...detailLayout}>
-                  <Descriptions.Item label="Thinking prompt"><span style={{ whiteSpace: "pre-wrap" }}>{item.thinkingPrompt}</span></Descriptions.Item>
-                  <Descriptions.Item label="Model">{item.effectiveModelKey ?? item.modelKey ?? "Unattended default"}</Descriptions.Item>
-                  <Descriptions.Item label="Last run">{date(item.lastRunAt)}</Descriptions.Item>
-                  <Descriptions.Item label="Last outcome">{thoughtOutcome(item)}</Descriptions.Item>
-                </Descriptions>
-              <Flex wrap gap={token.paddingXS}><Button aria-label="Run now" loading={item.registrationId in startingRuns} aria-busy={item.registrationId in startingRuns} disabled={busy || item.registrationId in startingRuns || !item.enabled || ["Queued", "Running", "WaitingForApproval", "WaitingToRetry"].includes(item.executionStatus ?? "")} onClick={() => void action(`thoughts/${item.registrationId}/run`, { expectedRevision: item.revision })}>{item.registrationId in startingRuns ? "Starting…" : "Run now"}</Button>
-                <Button disabled={busy} onClick={() => edit(item)}>Edit thought</Button>
-                <Button disabled={busy} onClick={() => void action(`thoughts/${item.registrationId}`, { ...item, expectedRevision: item.revision, enabled: !item.enabled }, "PUT")}>{item.enabled ? "Disable thought" : "Enable thought"}</Button>
-                <Button danger disabled={busy} onClick={() => confirmAction(modal, { title: "Delete this thought registration?", content: "Stops future activations. Existing runs remain inspectable and can be cancelled in Runs.", okText: "Delete thought", danger: true,
-                  onOk: () => action(`thoughts/${item.registrationId}/delete`, { expectedRevision: item.revision }) })}>Delete thought</Button>
-                {item.lastWorkItemId ? <Button onClick={() => onWork(item.lastWorkItemId!)}>View run</Button> : null}</Flex>
-              </Flex>
-            }} />
-          </>}
-      </> : null}
-    </Flex></div>
-  </section>;
 }

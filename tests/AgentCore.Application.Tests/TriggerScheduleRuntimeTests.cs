@@ -37,7 +37,7 @@ public sealed class TriggerScheduleRuntimeTests
         await runtime.WaitUntilIdleAsync();
 
         var saved = Assert.Single(await harness.Store.ListAsync(new TriggerOwner(InstanceId, ProfileId), null));
-        Assert.Equal(TriggerRegistrationStatus.Cancelled, saved.Status);
+        Assert.Equal(AutomationStatus.Cancelled, saved.Status);
         Assert.Equal(3, saved.Revision);
         Assert.Equal(2, saved.ScheduleRevision);
         var schedule = Assert.IsType<OneShotSchedule>(saved.Schedule);
@@ -63,12 +63,12 @@ public sealed class TriggerScheduleRuntimeTests
         Assert.True(await runtime.SubmitUserTextAsync("What reminders do I have?"));
         await runtime.WaitUntilIdleAsync();
         Assert.Contains("You have a reminder: Call John.", runtime.Snapshot.Entries[^1].Text, StringComparison.Ordinal);
-        Assert.Equal(TriggerRegistrationStatus.Active, (await harness.Store.GetAsync(owner, created.RegistrationId))!.Status);
-        Assert.Equal(1, (await harness.Store.GetAsync(owner, created.RegistrationId))!.ScheduleRevision);
+        Assert.Equal(AutomationStatus.Active, (await harness.Store.GetAsync(owner, created.AutomationId))!.Status);
+        Assert.Equal(1, (await harness.Store.GetAsync(owner, created.AutomationId))!.ScheduleRevision);
 
         Assert.True(await runtime.SubmitUserTextAsync("Move that reminder to 10."));
         await runtime.WaitUntilIdleAsync();
-        var moved = (await harness.Store.GetAsync(owner, created.RegistrationId))!;
+        var moved = (await harness.Store.GetAsync(owner, created.AutomationId))!;
         var movedSchedule = Assert.IsType<OneShotSchedule>(moved.Schedule);
         Assert.Equal(new TimeOnly(10, 0), movedSchedule.LocalTime);
         Assert.Equal(2, moved.ScheduleRevision);
@@ -76,7 +76,7 @@ public sealed class TriggerScheduleRuntimeTests
 
         Assert.True(await runtime.SubmitUserTextAsync("Cancel that reminder."));
         await runtime.WaitUntilIdleAsync();
-        Assert.Equal(TriggerRegistrationStatus.Cancelled, (await harness.Store.GetAsync(owner, created.RegistrationId))!.Status);
+        Assert.Equal(AutomationStatus.Cancelled, (await harness.Store.GetAsync(owner, created.AutomationId))!.Status);
         Assert.Contains("The schedule was cancelled.", runtime.Snapshot.Entries[^1].Text, StringComparison.Ordinal);
     }
 
@@ -88,14 +88,14 @@ public sealed class TriggerScheduleRuntimeTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 4).Select(index => Guid.Parse($"019944af-00b6-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf16")]);
-        var service = new TriggerRegistrationService(store, ids, time);
+        var service = new AutomationService(store, ids, time);
         var tools = new SessionToolExecutor(triggerRegistrations: service);
         var enabled = await LoadAsync(8);
         var owner = new TriggerOwner(InstanceId, ProfileId);
         var created = await tools.ExecuteAsync(
             enabled,
             Guid.Parse("019944af-00b1-7000-8000-0000000000c1"),
-            new ModelToolCall("create", ToolCatalog.TriggerScheduleOnce, """{"intent":"Call John","relativeDayOffset":1,"localTime":"09:00"}"""),
+            new ModelToolCall("create", ToolCatalog.TriggerScheduleOnce, """{"instructions":"Call John","relativeDayOffset":1,"localTime":"09:00"}"""),
             ToolLimits.MaxOutputBytes,
             triggerCommand: Context(owner, TriggerAuthorizationClassification.CurrentUserTurn, false, null, TriggerCommandAction.Create));
         Assert.Contains("\"status\":\"Active\"", created.Text, StringComparison.Ordinal);
@@ -112,7 +112,7 @@ public sealed class TriggerScheduleRuntimeTests
             var rejected = await tools.ExecuteAsync(
                 enabled,
                 list.SessionId,
-                new ModelToolCall("mistaken", name, """{"intent":"Nope","relativeDayOffset":1,"localTime":"09:00","registrationId":"019944af-00b6-7000-8000-000000000001","expectedRevision":1}"""),
+                new ModelToolCall("mistaken", name, """{"instructions":"Nope","relativeDayOffset":1,"localTime":"09:00","automationId":"019944af-00b6-7000-8000-000000000001","expectedRevision":1}"""),
                 ToolLimits.MaxOutputBytes,
                 triggerCommand: list);
             Assert.Contains("authorization_denied", rejected.Text, StringComparison.Ordinal);
@@ -157,7 +157,7 @@ public sealed class TriggerScheduleRuntimeTests
         await runtime.WaitUntilIdleAsync();
 
         var saved = Assert.Single(await harness.Store.ListAsync(new TriggerOwner(InstanceId, ProfileId), null));
-        Assert.Equal(TriggerRegistrationStatus.Active, saved.Status);
+        Assert.Equal(AutomationStatus.Active, saved.Status);
         var declined = runtime.Snapshot.Entries[^1].Text;
         Assert.True(
             declined.Contains("I did not save a schedule.", StringComparison.Ordinal)
@@ -172,7 +172,7 @@ public sealed class TriggerScheduleRuntimeTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 8).Select(index => Guid.Parse($"019944af-00b2-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf11")]);
-        var service = new TriggerRegistrationService(store, ids, time);
+        var service = new AutomationService(store, ids, time);
         var tools = new SessionToolExecutor(triggerRegistrations: service);
         var enabled = await LoadAsync(8);
         var owner = new TriggerOwner(InstanceId, ProfileId);
@@ -185,7 +185,7 @@ public sealed class TriggerScheduleRuntimeTests
         var created = await tools.ExecuteAsync(
             enabled,
             context.SessionId,
-            new ModelToolCall("create", ToolCatalog.TriggerScheduleOnce, """{"intent":"Call John","relativeDayOffset":1,"localTime":"09:00"}"""),
+            new ModelToolCall("create", ToolCatalog.TriggerScheduleOnce, """{"instructions":"Call John","relativeDayOffset":1,"localTime":"09:00"}"""),
             ToolLimits.MaxOutputBytes,
             triggerCommand: context);
         Assert.Contains("\"status\":\"Active\"", created.Text, StringComparison.Ordinal);
@@ -193,7 +193,7 @@ public sealed class TriggerScheduleRuntimeTests
         var initiative = await tools.ExecuteAsync(
             enabled,
             context.SessionId,
-            new ModelToolCall("initiative", ToolCatalog.TriggerScheduleOnce, """{"intent":"Sneaky","relativeDayOffset":1,"localTime":"09:00"}"""),
+            new ModelToolCall("initiative", ToolCatalog.TriggerScheduleOnce, """{"instructions":"Sneaky","relativeDayOffset":1,"localTime":"09:00"}"""),
             ToolLimits.MaxOutputBytes,
             triggerCommand: Context(owner, TriggerAuthorizationClassification.Initiative, false, null));
         Assert.Contains("confirmation_required", initiative.Text, StringComparison.Ordinal);
@@ -202,7 +202,7 @@ public sealed class TriggerScheduleRuntimeTests
         var environment = await tools.ExecuteAsync(
             enabled,
             context.SessionId,
-            new ModelToolCall("environment", ToolCatalog.TriggerScheduleOnce, """{"intent":"Environment","relativeDayOffset":1,"localTime":"09:00"}"""),
+            new ModelToolCall("environment", ToolCatalog.TriggerScheduleOnce, """{"instructions":"Environment","relativeDayOffset":1,"localTime":"09:00"}"""),
             ToolLimits.MaxOutputBytes,
             triggerCommand: Context(owner, TriggerAuthorizationClassification.Environment, false, null));
         Assert.Contains("confirmation_required", environment.Text, StringComparison.Ordinal);
@@ -211,7 +211,7 @@ public sealed class TriggerScheduleRuntimeTests
         var confirmed = await tools.ExecuteAsync(
             enabled,
             context.SessionId,
-            new ModelToolCall("confirm", ToolCatalog.TriggerScheduleOnce, """{"intent":"Different","relativeDayOffset":2,"localTime":"15:00"}"""),
+            new ModelToolCall("confirm", ToolCatalog.TriggerScheduleOnce, """{"instructions":"Different","relativeDayOffset":2,"localTime":"15:00"}"""),
             ToolLimits.MaxOutputBytes,
             triggerCommand: Context(
                 owner,
@@ -233,7 +233,7 @@ public sealed class TriggerScheduleRuntimeTests
             var rejected = await tools.ExecuteAsync(
                 enabled,
                 context.SessionId,
-                new ModelToolCall("reject", ToolCatalog.TriggerScheduleOnce, """{"intent":"Nope","relativeDayOffset":1,"localTime":"09:00"}"""),
+                new ModelToolCall("reject", ToolCatalog.TriggerScheduleOnce, """{"instructions":"Nope","relativeDayOffset":1,"localTime":"09:00"}"""),
                 ToolLimits.MaxOutputBytes,
                 triggerCommand: Context(owner, classification, false, null, currentUserText: "thanks"));
             Assert.Contains(
@@ -248,7 +248,7 @@ public sealed class TriggerScheduleRuntimeTests
         var disabled = await tools.ExecuteAsync(
             enabled with { TriggerPolicy = null },
             context.SessionId,
-            new ModelToolCall("disabled", ToolCatalog.TriggerScheduleOnce, """{"intent":"Nope","relativeDayOffset":1,"localTime":"09:00"}"""),
+            new ModelToolCall("disabled", ToolCatalog.TriggerScheduleOnce, """{"instructions":"Nope","relativeDayOffset":1,"localTime":"09:00"}"""),
             ToolLimits.MaxOutputBytes,
             triggerCommand: context);
         Assert.Contains("Scheduling is disabled", disabled.Text, StringComparison.Ordinal);
@@ -256,7 +256,7 @@ public sealed class TriggerScheduleRuntimeTests
         var stale = await tools.ExecuteAsync(
             enabled,
             context.SessionId,
-            new ModelToolCall("stale", ToolCatalog.TriggerUpdate, """{"registrationId":"019944af-00b2-7000-8000-000000000001","expectedRevision":9,"intent":"Changed"}"""),
+            new ModelToolCall("stale", ToolCatalog.TriggerUpdate, """{"automationId":"019944af-00b2-7000-8000-000000000001","expectedRevision":9,"instructions":"Changed"}"""),
             ToolLimits.MaxOutputBytes,
             triggerCommand: Context(
                 owner,
@@ -270,7 +270,7 @@ public sealed class TriggerScheduleRuntimeTests
         var otherOwner = await tools.ExecuteAsync(
             enabled,
             context.SessionId,
-            new ModelToolCall("other", ToolCatalog.TriggerCancel, """{"registrationId":"019944af-00b2-7000-8000-000000000001","expectedRevision":1}"""),
+            new ModelToolCall("other", ToolCatalog.TriggerCancel, """{"automationId":"019944af-00b2-7000-8000-000000000001","expectedRevision":1}"""),
             ToolLimits.MaxOutputBytes,
             triggerCommand: Context(
                 new TriggerOwner(OtherInstanceId, OtherProfileId),
@@ -281,7 +281,7 @@ public sealed class TriggerScheduleRuntimeTests
                 currentUserText: "Cancel that reminder."));
         Assert.Contains("not_found", otherOwner.Text, StringComparison.Ordinal);
         Assert.Equal(2, await store.CountActiveAsync(owner));
-        Assert.Equal("Call John", (await store.GetAsync(owner, Guid.Parse("019944af-00b2-7000-8000-000000000001")))!.Intent);
+        Assert.Equal("Call John", (await store.GetAsync(owner, Guid.Parse("019944af-00b2-7000-8000-000000000001")))!.Instructions);
     }
 
     [Fact]
@@ -342,8 +342,8 @@ public sealed class TriggerScheduleRuntimeTests
         await runtime.WaitUntilIdleAsync();
 
         var saved = Assert.Single(await harness.Store.ListAsync(owner, null));
-        Assert.Equal(TriggerRegistrationStatus.Active, saved.Status);
-        Assert.Equal("Sneaky", saved.Intent);
+        Assert.Equal(AutomationStatus.Active, saved.Status);
+        Assert.Equal("Sneaky", saved.Instructions);
         var schedule = Assert.IsType<OneShotSchedule>(saved.Schedule);
         Assert.Equal(new DateTimeOffset(2026, 9, 24, 9, 0, 0, TimeSpan.Zero), schedule.AtUtc);
     }
@@ -476,8 +476,8 @@ public sealed class TriggerScheduleRuntimeTests
         await runtime.WaitUntilIdleAsync();
 
         var saved = Assert.Single(await harness.Store.ListAsync(owner, null));
-        Assert.Equal(TriggerRegistrationStatus.Active, saved.Status);
-        Assert.Contains("Hello", saved.Intent, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(AutomationStatus.Active, saved.Status);
+        Assert.Contains("Hello", saved.Instructions, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(runtime.Snapshot.Entries, entry =>
             entry.Role == ConversationRole.Assistant
             && entry.Text.Contains("confirm", StringComparison.OrdinalIgnoreCase));
@@ -550,7 +550,7 @@ public sealed class TriggerScheduleRuntimeTests
         await runtime.WaitUntilIdleAsync();
 
         var saved = Assert.Single(await harness.Store.ListAsync(owner, null));
-        Assert.Equal("Sneaky", saved.Intent);
+        Assert.Equal("Sneaky", saved.Instructions);
     }
 
     private static readonly ITriggerCommandAuthorizer Authorizer = new HeuristicTriggerCommandAuthorizer();
@@ -601,7 +601,7 @@ public sealed class TriggerScheduleRuntimeTests
         var triggerIds = new DeterministicIdGenerator(
             Enumerable.Range(1, 8).Select(index => Guid.Parse($"019944af-00b4-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf13")]);
-        var registrations = new TriggerRegistrationService(store, triggerIds, time);
+        var registrations = new AutomationService(store, triggerIds, time);
         var tools = new SessionToolExecutor(triggerRegistrations: registrations);
         var snapshot = new SessionSnapshot(
             1,

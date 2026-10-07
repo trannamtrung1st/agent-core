@@ -41,7 +41,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
     private sealed class ScheduleScratch
     {
-        public string? RegistrationId { get; set; }
+        public string? AutomationId { get; set; }
 
         public long Revision { get; set; }
 
@@ -112,9 +112,9 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             foreach (var item in maintenanceEvents) yield return item;
             yield break;
         }
-        if (ThoughtActivationScript.Generate(request) is { } thoughtEvents)
+        if (AutomationRunScript.Generate(request) is { } automationEvents)
         {
-            foreach (var item in thoughtEvents) yield return item;
+            foreach (var item in automationEvents) yield return item;
             yield break;
         }
         if (request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text == "Use my recent experience before acting."
@@ -122,14 +122,6 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         {
             yield return new ModelTextDelta("I will observe current page state before acting, based on earlier experience. Current policy still controls every action.");
             yield return new ModelCompleted(ModelStopReason.Completed);
-            yield break;
-        }
-        if (Offers(request, ToolCatalog.WorkComplete)
-            && IsScheduledReminderDelivery(request, request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text ?? "", out var reminder))
-        {
-            yield return new ModelToolCallEvent(new("reminder-complete", ToolCatalog.WorkComplete,
-                JsonSerializer.Serialize(new { summary = reminder, attentionRequired = false })));
-            yield return new ModelCompleted(ModelStopReason.ToolCalls);
             yield break;
         }
         if (WorkspaceStructureScript.Generate(request) is { } structureEvents)
@@ -427,7 +419,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                 yield return new ModelToolCallEvent(new ModelToolCall(
                     "call-sensitive-complete",
                     ToolCatalog.WorkComplete,
-                    """{"summary":"Sensitive action completed after approval.","attentionRequired":false}"""));
+                    """{"summary":"Sensitive action completed after approval.","attentionRequired":false,"outcome":"ActionCompleted"}"""));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls);
                 yield break;
             }
@@ -582,7 +574,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         toolEvent = null;
         if (!Offers(request, ToolCatalog.TriggerScheduleOnce)
             && !Offers(request, ToolCatalog.TriggerList)
-            && !Offers(request, ToolCatalog.TriggerScheduleRecurring))
+            && !Offers(request, ToolCatalog.TriggerScheduleOnce))
         {
             return false;
         }
@@ -626,21 +618,21 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         {
             toolEvent = ScheduleCall(
                 toolRounds,
-                ToolCatalog.TriggerScheduleRecurring,
-                """{"intent":"Weekly call","kind":"weekly","interval":1,"weekdays":["monday"],"localTime":"09:00"}""");
+                ToolCatalog.TriggerScheduleOnce,
+                """{"instructions":"Weekly call","kind":"weekly","interval":1,"weekdays":["monday"],"localTime":"09:00"}""");
             return true;
         }
 
         if (lastUser.Contains(ScheduleForceMarker, StringComparison.OrdinalIgnoreCase))
         {
-            toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerScheduleOnce, """{"intent":"Sneaky","relativeDayOffset":1,"localTime":"09:00"}""");
+            toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerScheduleOnce, """{"instructions":"Sneaky","relativeDayOffset":1,"localTime":"09:00"}""");
             return true;
         }
 
         if (lastUser.Contains("remind me", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("set a reminder", StringComparison.OrdinalIgnoreCase))
         {
-            toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerScheduleOnce, """{"intent":"Call John","relativeDayOffset":1,"localTime":"09:00"}""");
+            toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerScheduleOnce, """{"instructions":"Call John","relativeDayOffset":1,"localTime":"09:00"}""");
             return true;
         }
 
@@ -650,7 +642,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             toolEvent = ScheduleCall(
                 toolRounds,
                 ToolCatalog.TriggerScheduleOnce,
-                """{"intent":"check the oven","relativeDelaySeconds":60}""");
+                """{"instructions":"check the oven","relativeDelaySeconds":60}""");
             return true;
         }
 
@@ -659,8 +651,8 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         {
             toolEvent = ScheduleCall(
                 toolRounds,
-                ToolCatalog.TriggerScheduleRecurring,
-                """{"intent":"Say hello to me","kind":"fixed_interval","intervalSeconds":30}""");
+                ToolCatalog.TriggerScheduleOnce,
+                """{"instructions":"Say hello to me","kind":"fixed_interval","intervalSeconds":30}""");
             return true;
         }
 
@@ -668,7 +660,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         {
             toolEvent = ScheduleCall(
                 toolRounds,
-                ToolCatalog.TriggerScheduleRecurring,
+                ToolCatalog.TriggerScheduleOnce,
                 """{"kind":"fixed_interval","intervalSeconds":60}""");
             return true;
         }
@@ -679,7 +671,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             toolEvent = ScheduleCall(
                 toolRounds,
                 ToolCatalog.TriggerScheduleOnce,
-                """{"intent":"Hello","relativeDelaySeconds":60}""");
+                """{"instructions":"Hello","relativeDelaySeconds":60}""");
             return true;
         }
 
@@ -689,7 +681,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             toolEvent = ScheduleCall(
                 toolRounds,
                 ToolCatalog.TriggerScheduleOnce,
-                """{"intent":"Hello","localDate":"2026-09-24","localTime":"00:19","timeZone":"viet nam time"}""");
+                """{"instructions":"Hello","localDate":"2026-09-24","localTime":"00:19","timeZone":"viet nam time"}""");
             return true;
         }
 
@@ -700,7 +692,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             toolEvent = ScheduleCall(
                 toolRounds,
                 ToolCatalog.TriggerScheduleOnce,
-                """{"intent":"Hello","localDate":"2026-09-24","localTime":"08:49","timeZone":"viet nam time"}""");
+                """{"instructions":"Hello","localDate":"2026-09-24","localTime":"08:49","timeZone":"viet nam time"}""");
             return true;
         }
 
@@ -710,13 +702,13 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             toolEvent = ScheduleCall(
                 toolRounds,
                 ToolCatalog.TriggerScheduleOnce,
-                """{"intent":"Hello","localDate":"2026-09-24","localTime":"08:52","timeZone":"viet nam time"}""");
+                """{"instructions":"Hello","localDate":"2026-09-24","localTime":"08:52","timeZone":"viet nam time"}""");
             return true;
         }
 
         if (ScheduleAuthorizer.IsScheduleConfirmation(lastUser, null))
         {
-            toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerScheduleOnce, """{"intent":"Different","relativeDayOffset":2,"localTime":"15:00"}""");
+            toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerScheduleOnce, """{"instructions":"Different","relativeDayOffset":2,"localTime":"15:00"}""");
             return true;
         }
 
@@ -770,20 +762,20 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     private ScheduleConversationContext? SyntheticScheduleContext(ModelRequest request)
     {
         if (!TryGetScheduleScratch(request, out var scratch)
-            || scratch.RegistrationId is null
-            || !Guid.TryParse(scratch.RegistrationId, out var registrationId))
+            || scratch.AutomationId is null
+            || !Guid.TryParse(scratch.AutomationId, out var automationId))
         {
             return null;
         }
 
         return new ScheduleConversationContext(
-            registrationId,
+            automationId,
             scratch.Revision,
             TriggerCommandAction.Create,
             scratch.Intent ?? "Call John",
             scratch.TimeZone ?? "UTC",
             TriggerScheduleKind.OneShot,
-            TriggerRegistrationStatus.Active,
+            AutomationStatus.Active,
             null);
     }
 
@@ -797,7 +789,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         }
 
         scratch = stored;
-        return !string.IsNullOrWhiteSpace(scratch.RegistrationId);
+        return !string.IsNullOrWhiteSpace(scratch.AutomationId);
     }
 
     private void RememberSchedule(ModelRequest request, string lastTool)
@@ -810,14 +802,14 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
         var scratch = new ScheduleScratch
         {
-            RegistrationId = remembered.RegistrationId.ToString("D"),
+            AutomationId = remembered.AutomationId.ToString("D"),
             Revision = remembered.Revision,
-            Intent = remembered.Intent,
+            Intent = remembered.Instructions,
             TimeZone = remembered.TimeZoneId
         };
-        _scheduleScratchByKey[remembered.RegistrationId] = scratch;
+        _scheduleScratchByKey[remembered.AutomationId] = scratch;
         if (TryResolveScheduleKey(request.Messages, out var conversationKey)
-            && conversationKey != remembered.RegistrationId)
+            && conversationKey != remembered.AutomationId)
         {
             _scheduleScratchByKey[conversationKey] = scratch;
         }
@@ -825,7 +817,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
     private static bool TryResolveScheduleKey(IReadOnlyList<ModelMessage> messages, out Guid key)
     {
-        if (TryParseReferentRegistrationId(messages, out key))
+        if (TryParseReferentAutomationId(messages, out key))
         {
             return true;
         }
@@ -841,9 +833,9 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             var remembered = ScheduleConversationContext.TryFromRegistrationJson(
                 message.Text,
                 TriggerCommandAction.Create);
-            if (remembered is not null && remembered.RegistrationId != Guid.Empty)
+            if (remembered is not null && remembered.AutomationId != Guid.Empty)
             {
-                key = remembered.RegistrationId;
+                key = remembered.AutomationId;
                 return true;
             }
         }
@@ -852,9 +844,9 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         return key != Guid.Empty;
     }
 
-    private static bool TryParseReferentRegistrationId(IReadOnlyList<ModelMessage> messages, out Guid registrationId)
+    private static bool TryParseReferentAutomationId(IReadOnlyList<ModelMessage> messages, out Guid automationId)
     {
-        registrationId = Guid.Empty;
+        automationId = Guid.Empty;
         foreach (var message in messages)
         {
             if (message.Role != ModelRole.System)
@@ -864,13 +856,13 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
             foreach (var line in message.Text.Split('\n'))
             {
-                const string prefix = "registrationId=";
+                const string prefix = "automationId=";
                 if (!line.StartsWith(prefix, StringComparison.Ordinal))
                 {
                     continue;
                 }
 
-                if (Guid.TryParse(line[prefix.Length..], out registrationId) && registrationId != Guid.Empty)
+                if (Guid.TryParse(line[prefix.Length..], out automationId) && automationId != Guid.Empty)
                 {
                     return true;
                 }
@@ -901,16 +893,16 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         var intent = scratch.Intent ?? "Call John";
         if (!includeTime)
         {
-            return $$"""{"registrationId":"{{scratch.RegistrationId}}","expectedRevision":{{scratch.Revision}}}""";
+            return $$"""{"automationId":"{{scratch.AutomationId}}","expectedRevision":{{scratch.Revision}}}""";
         }
 
         if (string.Equals(intent, "Call John", StringComparison.Ordinal))
         {
-            return $$"""{"registrationId":"{{scratch.RegistrationId}}","expectedRevision":{{scratch.Revision}},"intent":"Call John","relativeDayOffset":1,"localTime":"{{localTime}}"}""";
+            return $$"""{"automationId":"{{scratch.AutomationId}}","expectedRevision":{{scratch.Revision}},"instructions":"Call John","relativeDayOffset":1,"localTime":"{{localTime}}"}""";
         }
 
         var zone = string.IsNullOrWhiteSpace(scratch.TimeZone) ? "viet nam time" : scratch.TimeZone;
-        return $$"""{"registrationId":"{{scratch.RegistrationId}}","expectedRevision":{{scratch.Revision}},"intent":"{{intent}}","localDate":"2026-09-24","localTime":"{{localTime}}","timeZone":"{{zone}}"}""";
+        return $$"""{"automationId":"{{scratch.AutomationId}}","expectedRevision":{{scratch.Revision}},"instructions":"{{intent}}","localDate":"2026-09-24","localTime":"{{localTime}}","timeZone":"{{zone}}"}""";
     }
 
     private static string ClockFromMove(string text)
@@ -935,16 +927,16 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     {
         using var document = JsonDocument.Parse(lastTool);
         var root = document.RootElement;
-        if (root.TryGetProperty("registrations", out var rows))
+        if (root.TryGetProperty("automations", out var rows))
         {
             root = rows[0];
         }
 
-        var id = root.GetProperty("registrationId").GetString();
+        var id = root.GetProperty("automationId").GetString();
         var revision = root.GetProperty("revision").GetInt64();
         return includeTime
-            ? $$"""{"registrationId":"{{id}}","expectedRevision":{{revision}},"intent":"Call John","relativeDayOffset":1,"localTime":"{{localTime}}"}"""
-            : $$"""{"registrationId":"{{id}}","expectedRevision":{{revision}}}""";
+            ? $$"""{"automationId":"{{id}}","expectedRevision":{{revision}},"instructions":"Call John","relativeDayOffset":1,"localTime":"{{localTime}}"}"""
+            : $$"""{"automationId":"{{id}}","expectedRevision":{{revision}}}""";
     }
 
     private static string ScheduleFinalText(string lastUser, string lastTool)
@@ -998,6 +990,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     private bool ShouldScriptTools(ModelRequest request)
     {
         var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        if (_chunks.Any(c => c.Contains("[[speech:", StringComparison.Ordinal))) return false;
         return lastUser.Contains("support case", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("order 91", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("retention", StringComparison.OrdinalIgnoreCase)
@@ -1005,7 +998,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             || lastUser.Contains(HistoricalImageRereadMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(SensitiveApprovalMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(EmailHarnessMarker, StringComparison.OrdinalIgnoreCase)
-            || IsScheduleTurn(request, lastUser)
+            || (request.Tools?.Any(t => t.Name == ToolCatalog.TriggerList || t.Name == ToolCatalog.TriggerScheduleOnce) == true && IsScheduleTurn(request, lastUser))
             || request.Messages.Any(message => message.Role == ModelRole.Tool)
             || request.Messages.Any(message =>
                 message.Role == ModelRole.System
@@ -1935,11 +1928,6 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             return _chunks;
         }
 
-        if (IsScheduledReminderDelivery(request, lastUser, out var reminderText))
-        {
-            return [reminderText];
-        }
-
         if (lastUser.Contains("remembered code word", StringComparison.OrdinalIgnoreCase))
         {
             var summary = request.Messages.FirstOrDefault(message =>
@@ -1981,43 +1969,6 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         }
 
         return DefaultChunks;
-    }
-
-    private static bool IsScheduledReminderDelivery(ModelRequest request, string lastUser, out string reminderText)
-    {
-        reminderText = string.Empty;
-        if (!request.Messages.Any(message =>
-                message.Role == ModelRole.System
-                && message.Text.Contains("Scheduled reminder delivery mode.", StringComparison.Ordinal))
-            || !lastUser.Contains("Scheduled reminder fired.", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        const string intentPrefix = "Intent: \"";
-        var start = lastUser.IndexOf(intentPrefix, StringComparison.Ordinal);
-        if (start < 0)
-        {
-            return false;
-        }
-
-        start += intentPrefix.Length;
-        var end = lastUser.IndexOf('"', start);
-        if (end <= start)
-        {
-            return false;
-        }
-
-        var intent = lastUser[start..end].Trim();
-        if (intent.Length == 0)
-        {
-            return false;
-        }
-
-        reminderText = intent.Contains("check the oven", StringComparison.OrdinalIgnoreCase)
-            ? "Oven is ready."
-            : $"Reminder: {intent}.";
-        return true;
     }
 
     private static bool IsCompactionRequest(ModelRequest request) =>

@@ -32,13 +32,13 @@ public sealed class AdminAutomationServiceTests
             0);
 
         var store = new InMemoryTriggerStore();
-        var triggers = new TriggerRegistrationService(store, Ids(4, "019944af-00f4-7000-8000-"), clock);
+        var triggers = new AutomationService(store, Ids(4, "019944af-00f4-7000-8000-"), clock);
         var owner = new TriggerOwner(managed.InstanceId, ProfileId);
         var due = Now.AddHours(2);
-        await store.CreateAsync(new TriggerRegistration(
+        await store.CreateAsync(new Automation(
             Guid.Parse("019944af-00f4-7000-8000-000000000001"),
             owner,
-            TriggerRegistrationStatus.Active,
+            AutomationStatus.Active,
             "Check in",
             new OneShotSchedule(due, "UTC", null, null),
             due,
@@ -61,52 +61,52 @@ public sealed class AdminAutomationServiceTests
     [Fact]
     public async Task Active_registration_can_store_and_clear_a_model_override()
     {
-        var (admin, instanceId, registrationId, revision) = await CreateListedRegistrationAsync(
-            TriggerRegistrationStatus.Active,
+        var (admin, instanceId, automationId, revision) = await CreateListedRegistrationAsync(
+            AutomationStatus.Active,
             suspensionReason: null,
             catalog: new SingleModelCatalog("synthetic-default"));
-        var overridden = await admin.SetModelOverrideAsync(instanceId, registrationId, revision, "synthetic-default", null);
+        var overridden = await admin.SetModelOverrideAsync(instanceId, automationId, revision, "synthetic-default", null);
         Assert.Equal("Trigger override", overridden.ModelSource);
         Assert.Equal("synthetic-default", overridden.ModelOverrideCatalogKey);
         Assert.Equal(revision + 1, overridden.Revision);
 
-        var cleared = await admin.SetModelOverrideAsync(instanceId, registrationId, overridden.Revision, null, null);
+        var cleared = await admin.SetModelOverrideAsync(instanceId, automationId, overridden.Revision, null, null);
         Assert.Equal("Conversation default", cleared.ModelSource);
         Assert.Null(cleared.ModelOverrideCatalogKey);
         await Assert.ThrowsAsync<AgentCoreException>(() =>
-            admin.SetModelOverrideAsync(instanceId, registrationId, cleared.Revision, "missing-model", null).AsTask());
+            admin.SetModelOverrideAsync(instanceId, automationId, cleared.Revision, "missing-model", null).AsTask());
     }
 
     [Fact]
     public async Task Cancel_active_registration_succeeds()
     {
-        var (admin, instanceId, registrationId, revision) = await CreateListedRegistrationAsync(
-            TriggerRegistrationStatus.Active,
+        var (admin, instanceId, automationId, revision) = await CreateListedRegistrationAsync(
+            AutomationStatus.Active,
             suspensionReason: null);
-        var cancelled = await admin.CancelRegistrationAsync(instanceId, registrationId, revision);
-        Assert.Equal(TriggerRegistrationStatus.Cancelled, cancelled.Status);
+        var cancelled = await admin.CancelRegistrationAsync(instanceId, automationId, revision);
+        Assert.Equal(AutomationStatus.Cancelled, cancelled.Status);
         Assert.Equal(revision + 1, cancelled.Revision);
     }
 
     [Fact]
     public async Task Cancel_suspended_policy_registration_succeeds()
     {
-        var (admin, instanceId, registrationId, revision) = await CreateListedRegistrationAsync(
-            TriggerRegistrationStatus.SuspendedPolicy,
+        var (admin, instanceId, automationId, revision) = await CreateListedRegistrationAsync(
+            AutomationStatus.SuspendedPolicy,
             suspensionReason: "Trigger policy ineligible");
-        var cancelled = await admin.CancelRegistrationAsync(instanceId, registrationId, revision);
-        Assert.Equal(TriggerRegistrationStatus.Cancelled, cancelled.Status);
+        var cancelled = await admin.CancelRegistrationAsync(instanceId, automationId, revision);
+        Assert.Equal(AutomationStatus.Cancelled, cancelled.Status);
         Assert.Equal(revision + 1, cancelled.Revision);
     }
 
     [Fact]
     public async Task Cancel_stale_revision_returns_conflict()
     {
-        var (admin, instanceId, registrationId, revision) = await CreateListedRegistrationAsync(
-            TriggerRegistrationStatus.Active,
+        var (admin, instanceId, automationId, revision) = await CreateListedRegistrationAsync(
+            AutomationStatus.Active,
             suspensionReason: null);
         var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
-            admin.CancelRegistrationAsync(instanceId, registrationId, revision - 1).AsTask());
+            admin.CancelRegistrationAsync(instanceId, automationId, revision - 1).AsTask());
         Assert.Equal(409, error.StatusCode);
     }
 
@@ -124,15 +124,15 @@ public sealed class AdminAutomationServiceTests
             new UserProfile(ProfileId, 1, new Dictionary<string, UserProfileValue>(StringComparer.Ordinal), Now),
             0);
 
-        var registrationId = Guid.Parse("019944af-00f4-7000-8000-000000000003");
+        var automationId = Guid.Parse("019944af-00f4-7000-8000-000000000003");
         var store = new InMemoryTriggerStore();
-        var triggers = new TriggerRegistrationService(store, Ids(4, "019944af-00f4-7000-8000-"), clock);
+        var triggers = new AutomationService(store, Ids(4, "019944af-00f4-7000-8000-"), clock);
         var owner = new TriggerOwner(owned.InstanceId, ProfileId);
         var due = Now.AddHours(2);
-        await store.CreateAsync(new TriggerRegistration(
-            registrationId,
+        await store.CreateAsync(new Automation(
+            automationId,
             owner,
-            TriggerRegistrationStatus.Active,
+            AutomationStatus.Active,
             "Owned",
             new OneShotSchedule(due, "UTC", null, null),
             due,
@@ -145,12 +145,12 @@ public sealed class AdminAutomationServiceTests
 
         var admin = new AdminAutomationService(instances, triggers, new FixedLocalProfile(ProfileId, clock));
         var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
-            admin.CancelRegistrationAsync(other.InstanceId, registrationId, 1).AsTask());
+            admin.CancelRegistrationAsync(other.InstanceId, automationId, 1).AsTask());
         Assert.Equal(404, error.StatusCode);
     }
 
-    private static async Task<(AdminAutomationService Admin, Guid InstanceId, Guid RegistrationId, long Revision)>
-        CreateListedRegistrationAsync(TriggerRegistrationStatus status, string? suspensionReason, IModelCatalog? catalog = null)
+    private static async Task<(AdminAutomationService Admin, Guid InstanceId, Guid AutomationId, long Revision)>
+        CreateListedRegistrationAsync(AutomationStatus status, string? suspensionReason, IModelCatalog? catalog = null)
     {
         var clock = new FakeTimeProvider(Now);
         var instances = new InMemoryAgentInstanceStore();
@@ -162,13 +162,13 @@ public sealed class AdminAutomationServiceTests
             new UserProfile(ProfileId, 1, new Dictionary<string, UserProfileValue>(StringComparer.Ordinal), Now),
             0);
 
-        var registrationId = Guid.Parse("019944af-00f4-7000-8000-000000000002");
+        var automationId = Guid.Parse("019944af-00f4-7000-8000-000000000002");
         var store = new InMemoryTriggerStore();
-        var triggers = new TriggerRegistrationService(store, Ids(4, "019944af-00f4-7000-8000-"), clock);
+        var triggers = new AutomationService(store, Ids(4, "019944af-00f4-7000-8000-"), clock);
         var owner = new TriggerOwner(managed.InstanceId, ProfileId);
         var due = Now.AddHours(2);
-        await store.CreateAsync(new TriggerRegistration(
-            registrationId,
+        await store.CreateAsync(new Automation(
+            automationId,
             owner,
             status,
             "Check in",
@@ -182,7 +182,7 @@ public sealed class AdminAutomationServiceTests
             suspensionReason));
 
         var admin = new AdminAutomationService(instances, triggers, new FixedLocalProfile(ProfileId, clock), catalog);
-        return (admin, managed.InstanceId, registrationId, 1);
+        return (admin, managed.InstanceId, automationId, 1);
     }
 
     private sealed class SingleModelCatalog(string key) : IModelCatalog

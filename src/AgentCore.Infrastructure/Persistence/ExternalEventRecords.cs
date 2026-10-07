@@ -27,7 +27,7 @@ public sealed class ExternalEventRecord
 public sealed class ExternalEventDeliveryRecord
 {
     public string EventId { get; set; } = "";
-    public string RegistrationId { get; set; } = "";
+    public string AutomationId { get; set; } = "";
     public string AgentInstanceId { get; set; } = "";
     public string ProfileId { get; set; } = "";
     public int Status { get; set; }

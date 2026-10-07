@@ -229,7 +229,7 @@ describe("diagnosed work and admin errors", () => {
     createdAt: "2026-09-24T09:00:00.000Z",
     updatedAt: "2026-09-24T09:01:00.000Z",
     diagnosticId: "diag-work",
-    sourceOccurrenceId: "occurrence-1"
+    sourceId: "occurrence-1"
   };
 
   it("shows work diagnostic copy without a trigger id the item does not have", async () => {

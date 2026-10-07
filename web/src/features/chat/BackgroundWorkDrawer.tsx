@@ -20,7 +20,7 @@ import { useDrawerPages } from "./useDrawerPages";
 import { DrawerListFooter } from "./DrawerListFooter";
 import { useWorkReadState } from "./workReadState";
 
-import { runOriginLabel, runStatusLabel, thoughtOutcomeLabel, runSource, type RunSource } from "./runPresentation";
+import { runOriginLabel, runStatusLabel, runOutcomeLabel, runSource, type RunSource } from "./runPresentation";
 
 const noRuns = async () => [];
 
@@ -336,7 +336,7 @@ export function BackgroundWorkDrawer({
           <Flex align="flex-start" justify="space-between" gap={token.paddingSM}>
             <Flex vertical>
               <Typography.Text strong className="background-work-origin" aria-label={`Source: ${runOriginLabel(item.origin)}`}>
-                {runOriginLabel(item.origin)}
+                {item.automationName ?? runOriginLabel(item.origin)}
               </Typography.Text>
             </Flex>
             <Tag
@@ -354,13 +354,14 @@ export function BackgroundWorkDrawer({
           {results[item.workItemId]?.completedAt ? <Typography.Text type="secondary">Completed <time dateTime={results[item.workItemId].completedAt}>{formatChatTime(results[item.workItemId].completedAt) ?? results[item.workItemId].completedAt}</time></Typography.Text> : null}
           <Typography.Text type="secondary">Updated <time dateTime={item.updatedAt}>{formatChatTime(item.updatedAt) ?? item.updatedAt}</time></Typography.Text>
           </Flex>
-          {item.intent ? <div className="background-work-detail">
-            <Typography.Text type="secondary" className="background-work-detail-label">{item.origin === "Thought activation" ? "Thinking prompt" : "Task"}</Typography.Text>
-            <Typography.Paragraph className="background-work-detail-body">{item.intent}</Typography.Paragraph>
+          {item.triggerSummary ? <Typography.Text type="secondary">{item.triggerSummary}</Typography.Text> : null}
+          {item.instructions ? <div className="background-work-detail">
+            <Typography.Text type="secondary" className="background-work-detail-label">{"Instructions"}</Typography.Text>
+            <Typography.Paragraph className="background-work-detail-body">{item.instructions}</Typography.Paragraph>
           </div> : null}
-          {item.modelKey ? <Typography.Text type="secondary">Model: {item.modelKey}{item.thoughtOutcome ? ` · ${thoughtOutcomeLabel(item.thoughtOutcome)}` : ""}</Typography.Text> : null}
+          {item.modelKey ? <Typography.Text type="secondary">Model: {item.modelKey}{item.outcome ? ` · ${runOutcomeLabel(item.outcome)}` : ""}</Typography.Text> : null}
           <Typography.Text type="secondary" style={{ overflowWrap: "anywhere" }}>Run {item.workItemId}</Typography.Text>
-          {item.sourceId && item.origin === "Retrospection" ? <Typography.Text type="secondary" style={{ overflowWrap: "anywhere" }}>Checkpoint: {item.sourceId}</Typography.Text> : null}
+          {item.sourceId && item.origin === "Automation · Manual" && !item.automationId ? <Typography.Text type="secondary" style={{ overflowWrap: "anywhere" }}>Checkpoint: {item.sourceId}</Typography.Text> : null}
           {item.progress ? (
             <Typography.Text type="secondary" className="background-work-progress">
               {item.progress}
@@ -392,8 +393,8 @@ export function BackgroundWorkDrawer({
                     sessionId,
                     workItemId: item.workItemId,
                     code: item.failureCode,
-                    triggerRegistrationId: item.triggerRegistrationId,
-                    triggerOccurrenceId: item.sourceOccurrenceId
+                    triggerRegistrationId: item.automationId,
+                    triggerOccurrenceId: item.sourceId
                   }}
                 />
               ) : undefined}
@@ -441,7 +442,7 @@ export function BackgroundWorkDrawer({
             <Flex component="section" vertical gap={token.paddingXS} aria-label="Run actions">
               <Typography.Text strong>Actions</Typography.Text>
               <Flex gap={token.paddingSM} wrap="wrap" justify="space-between" align="center">
-                {source ? <Button className="admin-run-source" onClick={() => onSource?.(source)}>View {item.origin === "Retrospection" ? "experience" : runOriginLabel(item.origin).toLowerCase()}</Button> : null}
+                {source ? <Button className="admin-run-source" onClick={() => onSource?.(source)}>View {source.kind === "experience" ? "experience" : "automation"}</Button> : null}
                 {item.needsApproval || item.cancellationAvailable ? <Flex gap={token.paddingXS} wrap="wrap" justify="flex-end" className="background-work-actions" style={{ marginInlineStart: "auto" }}>
                   {item.needsApproval && item.approvalId && item.actionHash ? (
                     <>
@@ -522,7 +523,7 @@ export function BackgroundWorkDrawer({
         ) : (
           onRun ? <Table<WorkItem> aria-label="Runs table" className="admin-collection-table" size="small"
             rowKey="workItemId" dataSource={displayedItems} pagination={false} scroll={{ x: 1090 }}
-            locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No runs yet. Runs appear when schedules, thoughts, events, or retrospection execute." /> }}
+            locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No runs yet. Runs appear when Automations or manual reviews execute." /> }}
             onRow={item => ({ "data-run-id": item.workItemId, tabIndex: -1, className: "admin-run-row",
               onClick: event => {
                 if (event.target instanceof Element && event.target.closest("button")) return;
@@ -530,8 +531,8 @@ export function BackgroundWorkDrawer({
               }
             })}
             columns={[
-              { title: "Type", key: "type", width: 130, render: (_, item) => runOriginLabel(item.origin) },
-              { title: "Task / prompt", dataIndex: "intent", key: "intent", width: 380, ellipsis: true,
+              { title: "Automation", key: "name", width: 180, render: (_, item) => item.automationName ?? runOriginLabel(item.origin) },
+              { title: "Instructions", dataIndex: "instructions", key: "instructions", width: 380, ellipsis: true,
                 render: (intent: string | null | undefined) => intent ? <span title={intent}>{intent}</span> : <Typography.Text type="secondary">—</Typography.Text> },
               { title: "Run ID", key: "id", width: 290, ellipsis: true, render: (_, item) =>
                 <Button type="link" size="small" className="admin-collection-name" title={item.workItemId}
@@ -546,7 +547,7 @@ export function BackgroundWorkDrawer({
               } },
               { title: "Updated", key: "updated", width: 140, render: (_, item) => <time dateTime={item.updatedAt}>{formatChatTime(item.updatedAt) ?? item.updatedAt}</time> }
             ]} /> : displayedItems.length ? <ul className="background-work-list">{(detailsOnly ? (target ? [target] : []) : displayedItems).map(renderItem)}</ul> :
-            detailsOnly ? null : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No runs yet. Runs appear when schedules, thoughts, events, or retrospection execute." className="background-work-empty" />
+            detailsOnly ? null : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No runs yet. Runs appear when Automations or manual reviews execute." className="background-work-empty" />
         )}
         {!loading && !detailsOnly ? <DrawerListFooter loadingMore={loadingMore} hasMore={hasMore} error={error} count={items.length}
           onLoadMore={() => void loadMore()} onRetry={retry} /> : null}
@@ -554,9 +555,9 @@ export function BackgroundWorkDrawer({
   );
   if (inline) return <section aria-label="Runs" className="admin-definition-panel">
     <div className="admin-definition-panel-heading"><Typography.Title level={4}>Runs</Typography.Title>
-      <Typography.Text type="secondary">Execution history from schedules, thoughts, events, and retrospection.</Typography.Text></div>
+      <Typography.Text type="secondary">Execution history from Automations and manual review.</Typography.Text></div>
     <div className="admin-definition-panel-body">{content}</div>
   </section>;
-  return <Drawer title={<Flex vertical gap={0}><Typography.Text strong id="background-work-drawer-title">{detailsOnly ? "Run details" : "Background work"}</Typography.Text>{!detailsOnly ? <Typography.Text type="secondary" className="background-work-subtitle">Runs from schedules, thoughts, events, and retrospection</Typography.Text> : null}</Flex>} aria-labelledby="background-work-drawer-title" placement="right" size={detailsOnly ? "min(640px, 100vw)" : wide ? 400 : 320} afterOpenChange={visible => { if (!visible) afterClose?.(); }} open={open} onClose={onClose}
+  return <Drawer title={<Flex vertical gap={0}><Typography.Text strong id="background-work-drawer-title">{detailsOnly ? "Run details" : "Background work"}</Typography.Text>{!detailsOnly ? <Typography.Text type="secondary" className="background-work-subtitle">Runs from Automations and manual review</Typography.Text> : null}</Flex>} aria-labelledby="background-work-drawer-title" placement="right" size={detailsOnly ? "min(640px, 100vw)" : wide ? 400 : 320} afterOpenChange={visible => { if (!visible) afterClose?.(); }} open={open} onClose={onClose}
     onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } }} className={`background-work-drawer${detailsOnly ? " run-details-drawer" : ""}`}>{content}</Drawer>;
 }

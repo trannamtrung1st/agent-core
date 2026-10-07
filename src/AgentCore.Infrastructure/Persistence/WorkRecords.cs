@@ -70,7 +70,7 @@ public sealed class WorkItemRecord
 
     public int SourceKind { get; set; }
 
-    public string? RegistrationId { get; set; }
+    public string? AutomationId { get; set; }
 
     public string? SourceSessionId { get; set; }
 

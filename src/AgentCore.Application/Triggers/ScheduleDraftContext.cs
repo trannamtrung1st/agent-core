@@ -4,7 +4,7 @@ using AgentCore.Domain.Triggers;
 namespace AgentCore.Application.Triggers;
 
 public sealed record ScheduleDraftContext(
-    string Intent,
+    string Instructions,
     TriggerCommandAction Action,
     string RecurrenceKind,
     int? IntervalSeconds,
@@ -13,7 +13,7 @@ public sealed record ScheduleDraftContext(
 {
     public bool IsActive =>
         Action is TriggerCommandAction.Create
-        && !string.IsNullOrWhiteSpace(Intent)
+        && !string.IsNullOrWhiteSpace(Instructions)
         && !string.IsNullOrWhiteSpace(RecurrenceKind);
 
     public static ScheduleDraftContext? TryFromToolError(string json)
@@ -31,7 +31,7 @@ public sealed record ScheduleDraftContext(
                 return null;
             }
 
-            var intent = draft.TryGetProperty("intent", out var intentElement)
+            var intent = draft.TryGetProperty("instructions", out var intentElement)
                 ? intentElement.GetString() ?? string.Empty
                 : string.Empty;
             var recurrenceKind = draft.TryGetProperty("recurrenceKind", out var kindElement)
@@ -78,7 +78,7 @@ public sealed record ScheduleDraftContext(
 
     public object ToJsonObject() => new
     {
-        intent = Intent,
+        intent = Instructions,
         action = Action.ToString(),
         recurrenceKind = RecurrenceKind,
         intervalSeconds = IntervalSeconds,
@@ -89,7 +89,7 @@ public sealed record ScheduleDraftContext(
     public IReadOnlyList<string> ToPromptLines() =>
     [
         "Schedule draft (clarification only; does not authorize by itself):",
-        $"intent=\"{Intent}\"",
+        $"intent=\"{Instructions}\"",
         $"recurrenceKind={RecurrenceKind}",
         IntervalSeconds is int seconds ? $"intervalSeconds={seconds}" : "intervalSeconds=(none)",
         $"lastFailure={FailureCode}"

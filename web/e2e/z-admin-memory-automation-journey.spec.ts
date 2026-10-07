@@ -41,15 +41,6 @@ test("p7e admin memory and automation tabs exercise owner-protected APIs", async
 
   await page.getByRole("tab", { name: "Automation", exact: true }).click();
   await page.getByRole("tab", { name: "Policies & models", exact: true }).click();
-  const automationResponse = page.waitForResponse(
-    (response) =>
-      response.request().method() === "GET" &&
-      response.url().includes(`/api/v2/admin/agent-instances/${instance.instanceId}/automation/registrations`)
-  );
-  await memoryAutomation.getByRole("button", { name: "Review advanced registrations" }).click();
-  const automation = await automationResponse;
-  expect(automation.ok()).toBe(true);
-  const automationBody = (await automation.json()) as { items: unknown[] };
-  expect(Array.isArray(automationBody.items)).toBe(true);
-  await expect(memoryAutomation.getByText("No active or suspended registrations.")).toBeVisible();
+  await page.getByRole("tab", { name: "Automations", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Automations", exact: true }).getByText(/No automations yet/)).toBeVisible();
 });

@@ -31,21 +31,21 @@ public sealed class ContinuityReviewJourneyTests
         var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         var client = TestOwnerCapability.CreateOwnerClient(host);
         var root = $"/api/v2/admin/agent-instances/{instance.InstanceId}";
-        var path = root + (thought ? "/thoughts" : "/schedules");
-        string registrationId;
+        var path = root + (thought ? "/automations" : "/automations");
+        string automationId;
         if (thought)
         {
-            var created = await client.PostAsJsonAsync(path, new ThoughtRegistrationRequest(0, true, 3600, "Review; do nothing if no action is useful.", null, null));
+            var created = await client.PostAsJsonAsync(path, new IntervalAutomationDraft(0, true, 3600, "Review; do nothing if no action is useful.", null, null));
             created.EnsureSuccessStatusCode();
-            registrationId = (await created.Content.ReadFromJsonAsync<ThoughtRegistrationResponse>())!.RegistrationId;
+            automationId = (await created.Content.ReadFromJsonAsync<AutomationResponse>())!.AutomationId;
         }
         else
         {
-            var created = await client.PostAsJsonAsync(path, new AdminScheduleRequest(0, true, "Known future obligation", new("daily", "UTC", LocalTime: "09:00")));
+            var created = await client.PostAsJsonAsync(path, new ScheduleAutomationDraft(0, true, "Known future obligation", new("daily", "UTC", LocalTime: "09:00")));
             created.EnsureSuccessStatusCode();
-            registrationId = (await created.Content.ReadFromJsonAsync<AdminScheduleResponse>())!.RegistrationId;
+            automationId = (await created.Content.ReadFromJsonAsync<AutomationResponse>())!.AutomationId;
         }
-        var run = await client.PostAsJsonAsync(path + "/" + registrationId + "/run", new ContinuityRevisionRequest(1));
+        var run = await client.PostAsJsonAsync(path + "/" + automationId + "/run", new ContinuityRevisionRequest(1));
         run.EnsureSuccessStatusCode();
         await ThoughtJourneyTests.Intake(services);
         var store = services.GetRequiredService<IWorkItemStore>();
@@ -64,7 +64,7 @@ public sealed class ContinuityReviewJourneyTests
         var review = await client.GetFromJsonAsync<System.Text.Json.JsonElement>(path);
         Assert.Equal(original.WorkItemId.ToString("D"), review.GetProperty("items")[0].GetProperty("lastWorkItemId").GetString());
         var detail = (await client.GetFromJsonAsync<WorkItemResponse>(root + "/work-items/" + original.WorkItemId))!;
-        Assert.Equal(registrationId, detail.RegistrationId);
+        Assert.Equal(automationId, detail.AutomationId);
     }
 
     [Fact(Timeout = 90000)]
@@ -114,20 +114,20 @@ public sealed class ContinuityReviewJourneyTests
             services.AddSingleton<IAgentDefinitionStore>(sp => definitions = new(sp.GetRequiredService<IBuiltInAgentDefinitionStore>())));
         var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         var client = TestOwnerCapability.CreateOwnerClient(host);
-        var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/schedules";
-        var draft = new AdminScheduleRequest(0, true, "Known task", new("daily", "UTC", LocalTime: "09:00"));
+        var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/automations";
+        var draft = new ScheduleAutomationDraft(0, true, "Known task", new("daily", "UTC", LocalTime: "09:00"));
         var created = await client.PostAsJsonAsync(path, draft); created.EnsureSuccessStatusCode();
-        var row = (await created.Content.ReadFromJsonAsync<AdminScheduleResponse>())!;
+        var row = (await created.Content.ReadFromJsonAsync<AutomationResponse>())!;
         definitions!.RemovePolicy = true;
         var disabledDraft = draft with { ExpectedRevision = row.Revision, Enabled = false };
-        var disabled = await client.PutAsJsonAsync(path + "/" + row.RegistrationId, disabledDraft); disabled.EnsureSuccessStatusCode();
-        row = (await disabled.Content.ReadFromJsonAsync<AdminScheduleResponse>())!;
+        var disabled = await client.PutAsJsonAsync(path + "/" + row.AutomationId, disabledDraft); disabled.EnsureSuccessStatusCode();
+        row = (await disabled.Content.ReadFromJsonAsync<AutomationResponse>())!;
         Assert.Equal("Disabled", row.Status); Assert.Null(row.NextRunAt); Assert.Equal("AdminOwner", row.AuthorizationOrigin);
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync(path + "/" + row.RegistrationId,
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync(path + "/" + row.AutomationId,
             draft with { ExpectedRevision = row.Revision })).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync(path + "/" + row.RegistrationId,
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync(path + "/" + row.AutomationId,
             disabledDraft with { ExpectedRevision = row.Revision, Schedule = draft.Schedule with { Interval = 2 } })).StatusCode);
-        var retained = Assert.Single((await client.GetFromJsonAsync<AdminScheduleReview>(path))!.Items);
+        var retained = Assert.Single((await client.GetFromJsonAsync<AutomationReview>(path))!.Items, item => item.AutomationId == row.AutomationId);
         Assert.Equal("Disabled", retained.Status); Assert.Equal(row.Revision, retained.Revision);
     }
 
@@ -140,17 +140,17 @@ public sealed class ContinuityReviewJourneyTests
         var s = host.Services;
         var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         var client = TestOwnerCapability.CreateOwnerClient(host);
-        var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/schedules";
-        var policy = new TriggerPolicy(true, false, true, true, true, true, 1, 2, 1, ["schedule"], true, 300);
+        var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/automations";
+        var policy = new TriggerPolicy(true, false, true, true, true, true, 3, 2, 4, ["schedule"], true, 300);
         var now = DateTimeOffset.UtcNow;
-        AdminScheduleTiming daily = new("daily", "UTC", Interval: 1, LocalTime: "09:00");
-        AdminScheduleRequest Draft(AdminScheduleTiming timing) => new(0, true, "Known task", timing);
-        async Task Denied(TriggerPolicy p, AdminScheduleTiming timing)
+        AutomationTiming daily = new("daily", "UTC", Interval: 1, LocalTime: "09:00");
+        ScheduleAutomationDraft Draft(AutomationTiming timing) => new(0, true, "Known task", timing);
+        async Task Denied(TriggerPolicy p, AutomationTiming timing)
         {
             definitions!.Policy = p;
             var response = await client.PostAsJsonAsync(path, Draft(timing));
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-            Assert.Empty((await client.GetFromJsonAsync<AdminScheduleReview>(path))!.Items);
+            Assert.Empty((await client.GetFromJsonAsync<AutomationReview>(path))!.Items);
         }
         await Denied(policy with { AllowDaily = false }, daily);
         await Denied(policy with { AllowWeekly = false }, new("weekly", "UTC", LocalTime: "09:00", Weekdays: [1]));
@@ -164,22 +164,22 @@ public sealed class ContinuityReviewJourneyTests
         definitions!.Policy = policy with { AllowIndefiniteRecurrence = false };
         var triggers = s.GetRequiredService<ITriggerStore>();
         var owner = new TriggerOwner(instance.InstanceId, LocalUserProfile.Id);
-        for (var i = 0; i < 3; i++)
-            await triggers.CreateAsync(new(Guid.NewGuid(), owner, TriggerRegistrationStatus.Active, "Existing event subscription",
-                new OneShotSchedule(now.AddDays(1), "UTC"), now.AddDays(1), null, 0, 1, 1,
-                new(TriggerAuthorizationOrigin.ApplicationEvent, null, null, now, now), null, eventSourceId: Guid.NewGuid(), eventType: "order.placed"));
-        Assert.Equal(0, await triggers.CountActiveAsync(owner));
-        var finite = Draft(daily with { MaxOccurrences = 2 });
+        for (var i = 0; i < 2; i++)
+            await triggers.CreateAsync(new(Guid.NewGuid(), owner, AutomationStatus.Active, "Existing event subscription",
+                new EventTrigger(Guid.NewGuid(), "order.placed"), null, null, 0, 1, 1,
+                new(TriggerAuthorizationOrigin.ApplicationEvent, null, null, now, now), null));
+        Assert.Equal(2, await triggers.CountActiveAsync(owner));
+        var finite = Draft(daily with { Interval = policy.MinRecurrenceDays, MaxOccurrences = 2 });
         var created = await client.PostAsJsonAsync(path, finite); created.EnsureSuccessStatusCode();
-        var row = (await created.Content.ReadFromJsonAsync<AdminScheduleResponse>())!;
+        var row = (await created.Content.ReadFromJsonAsync<AutomationResponse>())!;
         Assert.Equal("AdminOwner", row.AuthorizationOrigin);
-        Assert.False((await client.GetFromJsonAsync<AdminScheduleReview>(path))!.Policy!.AllowIndefiniteRecurrence);
+        Assert.False((await client.GetFromJsonAsync<AutomationReview>(path))!.Policy!.AllowIndefiniteRecurrence);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path, finite)).StatusCode);
-        var disabled = await client.PutAsJsonAsync(path + "/" + row.RegistrationId, finite with { ExpectedRevision = row.Revision, Enabled = false });
-        disabled.EnsureSuccessStatusCode(); row = (await disabled.Content.ReadFromJsonAsync<AdminScheduleResponse>())!;
+        var disabled = await client.PutAsJsonAsync(path + "/" + row.AutomationId, finite with { ExpectedRevision = row.Revision, Enabled = false });
+        disabled.EnsureSuccessStatusCode(); row = (await disabled.Content.ReadFromJsonAsync<AutomationResponse>())!;
         definitions.Policy = policy with { AllowDaily = false };
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync(path + "/" + row.RegistrationId, finite with { ExpectedRevision = row.Revision })).StatusCode);
-        var retained = Assert.Single((await client.GetFromJsonAsync<AdminScheduleReview>(path))!.Items);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync(path + "/" + row.AutomationId, finite with { ExpectedRevision = row.Revision })).StatusCode);
+        var retained = Assert.Single((await client.GetFromJsonAsync<AutomationReview>(path))!.Items, item => item.AutomationId == row.AutomationId);
         Assert.Equal("Disabled", retained.Status); Assert.Equal(row.Revision, retained.Revision);
     }
 
@@ -240,8 +240,8 @@ public sealed class ContinuityReviewJourneyTests
             await history.SaveAsync(template with { SessionId = Key(i), Revision = 1, Status = SessionStatus.Attached,
                 Entries = i == 101 ? [entry] : [], LastEntrySequence = i == 101 ? 1 : 0 }, 0);
         }
-        await s.GetRequiredService<ContinuityMaintenance>().RunOnceAsync();
-        await s.GetRequiredService<ContinuityMaintenance>().RunOnceAsync();
+        await s.GetRequiredService<ExperienceService>().RequestSessionAsync(target, Key(101));
+        await s.GetRequiredService<ExperienceService>().RequestSessionAsync(target, Key(101));
         var record = Assert.Single(await s.GetRequiredService<IExperienceStore>().ListAsync(target, 100));
         Assert.Equal(Key(101), record.SourceId);
         Assert.Single(await s.GetRequiredService<IWorkItemStore>().ListAsync(new(target, LocalUserProfile.Id), 100));

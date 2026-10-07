@@ -11,7 +11,7 @@ import {
 } from "@ant-design/icons";
 import { Alert, App, Button, Drawer, Empty, Flex, List, Spin, Tag, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
-import type { DrawerPageQuery, SessionTrigger } from "../../services/api";
+import type { DrawerPageQuery, SessionAutomation } from "../../services/api";
 
 import { useDrawerPages } from "./useDrawerPages";
 import { DrawerListFooter } from "./DrawerListFooter";
@@ -42,7 +42,7 @@ function formatOccurrence(value: string, timeZone: string) {
   }
 }
 
-export function ScheduleDrawer({
+export function AutomationDrawer({
   sessionId,
   open,
   wide,
@@ -56,46 +56,46 @@ export function ScheduleDrawer({
   wide: boolean;
   refreshKey: number;
   onClose: () => void;
-  load: (sessionId: string, query?: DrawerPageQuery) => Promise<SessionTrigger[]>;
-  cancel: (sessionId: string, registrationId: string, expectedRevision: number) => Promise<SessionTrigger>;
+  load: (sessionId: string, query?: DrawerPageQuery) => Promise<SessionAutomation[]>;
+  cancel: (sessionId: string, automationId: string, expectedRevision: number) => Promise<SessionAutomation>;
 }) {
   const { token } = theme.useToken();
   const { modal } = App.useApp();
   const { items, updateItems, loading, loadingMore, hasMore, error, setError, loadMore, retry, captureScope } = useDrawerPages({
-    scope: sessionId, open, refreshKey, load, id: item => item.registrationId
+    scope: sessionId, open, refreshKey, load, id: item => item.automationId
   });
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   useEffect(() => { setCancellingId(null); }, [sessionId, open]);
 
-  async function confirmCancel(item: SessionTrigger) {
+  async function confirmCancel(item: SessionAutomation) {
     const isCurrent = captureScope();
     if (!isCurrent()) return;
-    setCancellingId(item.registrationId);
+    setCancellingId(item.automationId);
     setError(null);
     try {
-      const updated = await cancel(sessionId, item.registrationId, item.revision);
-      if (isCurrent()) updateItems((current) => current.map((row) => (row.registrationId === updated.registrationId && updated.revision >= row.revision ? updated : row)));
+      const updated = await cancel(sessionId, item.automationId, item.revision);
+      if (isCurrent()) updateItems((current) => current.map((row) => (row.automationId === updated.automationId && updated.revision >= row.revision ? updated : row)));
     } catch (reason: unknown) {
-      if (isCurrent()) setError(reason instanceof Error ? reason.message : "Unable to cancel the schedule.");
+      if (isCurrent()) setError(reason instanceof Error ? reason.message : "Unable to cancel the automation.");
     } finally {
       if (isCurrent()) setCancellingId(null);
     }
   }
 
-  function renderItem(item: SessionTrigger) {
+  function renderItem(item: SessionAutomation) {
     const status = statusPresentation[item.status] ?? {
       label: item.status,
       icon: <CalendarOutlined />
     };
-    const busy = cancellingId === item.registrationId;
+    const busy = cancellingId === item.automationId;
 
     return (
       <List.Item className="schedule-item">
         <Flex vertical gap={token.paddingSM} className="schedule-item-content">
           <Flex align="flex-start" justify="space-between" gap={token.paddingSM}>
             <Typography.Text strong className="schedule-intent">
-              {item.intent}
+              {item.instructions}
             </Typography.Text>
             <Tag variant="filled" color={status.color} icon={status.icon} className="schedule-status">
               {status.label}
@@ -106,21 +106,21 @@ export function ScheduleDrawer({
             <Flex align="center" gap={token.paddingXS} className="schedule-detail-heading">
               <CalendarOutlined aria-hidden />
               <Typography.Text type="secondary" className="schedule-detail-label">
-                Schedule
+                When
               </Typography.Text>
             </Flex>
-            <Typography.Paragraph className="schedule-detail-body">{item.schedule}</Typography.Paragraph>
+            <Typography.Paragraph className="schedule-detail-body">{item.when}</Typography.Paragraph>
           </div>
 
           <Flex gap={token.paddingXS} align="center" wrap="wrap" className="schedule-meta">
-            <Tag icon={<GlobalOutlined />} className="schedule-timezone">
+            {item.timeZone ? <Tag icon={<GlobalOutlined />} className="schedule-timezone">
               {item.timeZone}
-            </Tag>
+            </Tag> : null}
             {item.nextOccurrenceAt ? (
               <Typography.Text type="secondary" className="schedule-next">
                 Next run{" "}
                 <time dateTime={item.nextOccurrenceAt}>
-                  {formatOccurrence(item.nextOccurrenceAt, item.timeZone)}
+                  {formatOccurrence(item.nextOccurrenceAt, item.timeZone ?? "UTC")}
                 </time>
               </Typography.Text>
             ) : null}
@@ -130,7 +130,7 @@ export function ScheduleDrawer({
             <Alert
               type="warning"
               showIcon
-              title="Schedule suspended"
+              title="Automation suspended"
               description={item.suspensionReason}
               className="schedule-alert"
             />
@@ -141,19 +141,19 @@ export function ScheduleDrawer({
               <Button
                 danger
                 disabled={busy}
-                aria-label={`Cancel ${item.intent}`}
+                aria-label={`Cancel ${item.instructions}`}
                 onClick={() =>
                   confirmAction(modal, {
-                    title: "Cancel this schedule?",
+                    title: "Cancel this automation?",
                     content: "Future occurrences will not run.",
-                    okText: "Cancel schedule",
+                    okText: "Delete automation",
                     cancelText: "Keep",
                     danger: true,
                     onOk: () => confirmCancel(item)
                   })
                 }
               >
-                Cancel schedule
+                Delete automation
               </Button>
             </Flex>
           ) : null}
@@ -167,10 +167,10 @@ export function ScheduleDrawer({
       title={
         <Flex vertical gap={0}>
           <Typography.Text strong id="schedule-drawer-title">
-            Schedules
+            Automations
           </Typography.Text>
           <Typography.Text type="secondary" className="schedule-subtitle">
-            Upcoming and past reminders
+            Automations owned by this agent
           </Typography.Text>
         </Flex>
       }
@@ -192,7 +192,7 @@ export function ScheduleDrawer({
         {error ? <Alert type="error" showIcon title={error} /> : null}
         {loading ? (
           <Flex justify="center" className="schedule-loading">
-            <Spin aria-label="Loading schedules" />
+            <Spin aria-label="Loading automations" />
           </Flex>
         ) : (
           <List
@@ -201,7 +201,7 @@ export function ScheduleDrawer({
               emptyText: (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="No schedules yet"
+                  description="No automations yet"
                   className="schedule-empty"
                 />
               )

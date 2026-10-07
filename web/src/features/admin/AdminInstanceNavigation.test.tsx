@@ -6,16 +6,14 @@ import { InstanceDetail } from "./AdminApp";
 vi.mock("./InstanceContinuitySection", () => ({
   IdentityMaintenanceSection: () => <div>Identity maintenance permission</div>,
   ExperienceSection: ({ selection }: { selection?: { workItemId: string } }) => <div>Experience controls {selection?.workItemId}</div>,
-  ThoughtSection: ({ onWork, selection }: { onWork: (id: string) => void; selection?: { registrationId: string } }) => <div>Thought controls {selection?.registrationId}<button onClick={() => onWork("thought-run")}>Inspect thought fixture</button></div>,
   InstanceRunsSection: ({ open, detailsOnly, selectedWorkItemId, onSource, onRun }: {
     open: boolean; detailsOnly?: boolean; selectedWorkItemId?: string;
-    onSource?: (source: { kind: string; registrationId: string }) => void;
+    onSource?: (source: { kind: string; automationId: string }) => void;
     onRun?: (id: string) => void;
-  }) => !open ? null : detailsOnly ? <div role="dialog" aria-label="Run details">Run history {selectedWorkItemId}<button onClick={() => onSource?.({ kind: "thought", registrationId: "original-thought" })}>Back to thought fixture</button><button onClick={() => onSource?.({ kind: "event", registrationId: "event-source" })}>Back to event fixture</button></div> : <div>Run history<button onClick={() => onRun?.("event-run")}>Inspect run fixture</button></div>
+  }) => !open ? null : detailsOnly ? <div role="dialog" aria-label="Run details">Run history {selectedWorkItemId}<button onClick={() => onSource?.({ kind: "automation", automationId: "original-thought" })}>Back to thought fixture</button><button onClick={() => onSource?.({ kind: "automation", automationId: "event-source" })}>Back to event fixture</button></div> : <div>Run history<button onClick={() => onRun?.("event-run")}>Inspect run fixture</button></div>
 }));
-vi.mock("./EventSubscriptionsSection", () => ({ EventSubscriptionsSection: ({ selection }: { selection?: { registrationId: string } }) => <div>Event controls {selection?.registrationId}</div> }));
 vi.mock("./CredentialsSection", () => ({ CredentialsSection: () => null, InstanceCredentialsSection: () => <div>Credential bindings</div> }));
-vi.mock("./InstanceSchedulesSection", () => ({ InstanceSchedulesSection: () => <div>Schedule controls</div> }));
+vi.mock("./InstanceAutomationsSection", () => ({ InstanceAutomationsSection: ({ onWork, selection }: { onWork: (id: string) => void; selection?: { automationId: string } }) => <div>Automation controls {selection?.automationId}<button onClick={() => onWork("automation-run")}>Inspect automation fixture</button></div> }));
 vi.mock("./instanceMemoryAutomation", () => ({ InstanceMemoryAutomationPanel: ({ section }: { section: string }) => <div>{section === "memory" ? "Memory controls" : "Model controls"}</div> }));
 const config: AdminEffectiveConfiguration = {
   definitionSource: "builtIn",
@@ -78,29 +76,29 @@ describe("Managed instance information architecture", () => {
   it("groups retained context, automation and runs and retains exact selection in both directions", () => {
     render(<App><InstanceDetail instanceId={config.instanceId} instances={{ kind: "ready", data: [] }}
       effective={{ kind: "ready", data: config }} onBack={vi.fn()} onRetryEffective={vi.fn()} onInstanceChanged={vi.fn()} onInstanceDeleted={vi.fn()} /></App>);
-    for (const name of ["Identity & version", "Continuity", "Automation", "Runs", "Credentials", "Effective configuration"]) expect(screen.getByRole("tab", { name })).toBeVisible();
+    for (const name of ["Identity & version", "Continuity", "Automation", "Runs", "Connections", "Effective configuration"]) expect(screen.getByRole("tab", { name })).toBeVisible();
     expect(screen.queryByRole("tab", { name: "Behavior & continuity" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Continuity" }));
     expect(screen.getByText("Memory controls")).toBeVisible();
     fireEvent.click(screen.getByRole("tab", { name: "Experience" }));
     expect(screen.getByText("Experience controls")).toBeVisible();
     fireEvent.click(screen.getByRole("tab", { name: "Automation" }));
-    expect(screen.getByText("Schedule controls")).toBeVisible();
-    fireEvent.click(screen.getByRole("tab", { name: "Thoughts" }));
-    fireEvent.click(screen.getByRole("button", { name: "Inspect thought fixture" }));
+    expect(screen.getByText("Automation controls")).toBeVisible();
+    fireEvent.click(screen.getByRole("tab", { name: "Automations" }));
+    fireEvent.click(screen.getByRole("button", { name: "Inspect automation fixture" }));
     // Current Runs baseline opens shared details without switching the source tab.
     expect(screen.getByRole("tab", { name: "Automation" })).toHaveAttribute("aria-selected", "true");
-    expect(within(screen.getByRole("dialog", { name: "Run details" })).getByText(/Run history thought-run/)).toBeVisible();
+    expect(within(screen.getByRole("dialog", { name: "Run details" })).getByText(/Run history automation-run/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Back to thought fixture" }));
     expect(screen.getByRole("tab", { name: "Automation" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: "Thoughts" })).toHaveAttribute("aria-selected", "true");
-    expect(within(screen.getByRole("tabpanel", { name: "Thoughts" })).getByText(/original-thought/)).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Automations" })).toHaveAttribute("aria-selected", "true");
+    expect(within(screen.getByRole("tabpanel", { name: "Automations" })).getByText(/original-thought/)).toBeVisible();
     fireEvent.click(screen.getByRole("tab", { name: "Runs" }));
     fireEvent.click(screen.getByRole("button", { name: "Inspect run fixture" }));
     expect(within(screen.getByRole("dialog", { name: "Run details" })).getByText(/Run history event-run/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Back to event fixture" }));
-    expect(screen.getByRole("tab", { name: "Events" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText(/Event controls event-source/)).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Automations" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText(/Automation controls event-source/)).toBeVisible();
   });
   it("keeps inactive instances inside the existing active-instance API boundary", () => {
     render(<App><InstanceDetail instanceId={config.instanceId} instances={{ kind: "ready", data: [] }}

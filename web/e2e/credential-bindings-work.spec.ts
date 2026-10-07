@@ -22,7 +22,6 @@ test("credential bindings and quiet background work stay labeled", async ({ page
   await page.goto("/");
   await page.waitForFunction(() => window.localStorage.getItem("agent-core.owner-capability"));
   await page.getByRole("button", { name: "Start a new chat" }).click();
-  await expect(page.getByRole("combobox", { name: "Identity" })).toBeEnabled({ timeout: 15_000 });
   await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.generalAssistant);
   await page.getByLabel("Message").fill("hello");
   await page.getByRole("button", { name: "Send" }).click();
@@ -44,7 +43,7 @@ test("credential bindings and quiet background work stay labeled", async ({ page
   await page.keyboard.press("Enter");
   const drawer = page.getByRole("dialog", { name: "Background work" });
   await expect(drawer).toBeVisible({ timeout: 15_000 });
-  await expect(drawer.getByText("No runs yet. Runs appear when schedules, thoughts, events, or retrospection execute.")).toBeVisible({ timeout: 15_000 });
+  await expect(drawer.getByText("No runs yet. Runs appear when Automations or manual reviews execute.")).toBeVisible({ timeout: 15_000 });
   const close = drawer.getByRole("button", { name: "Close" });
   await close.focus();
   await expect(close).toBeFocused();
@@ -129,12 +128,13 @@ test("credential bindings and quiet background work stay labeled", async ({ page
   await expect(page.getByLabel(/Application connection:/)).toHaveCount(0);
   await page.goto(`/admin/instances/${instanceId}`);
   await expect(page).toHaveURL(/\/admin\/instances\/[0-9a-f-]{36}$/i);
+  await page.getByRole("tab", { name: "Connections", exact: true }).click();
   await page.getByRole("tab", { name: "Credentials", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Credential bindings" })).toBeVisible();
   await expect(page.getByText("No credentials bound")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Browser state" })).toBeVisible();
   await page.goto(`/admin/instances/${instanceId}/connections`);
-  await expect(page).toHaveURL(new RegExp(`/admin/instances/${instanceId}/credentials$`));
+  await expect(page).toHaveURL(new RegExp(`/admin/instances/${instanceId}/connections(?:/credentials)?$`));
   await page.setViewportSize({ width: 390, height: 800 });
   await expect(page.getByRole("heading", { name: "Credential bindings" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Bind credential", exact: true })).toBeVisible();

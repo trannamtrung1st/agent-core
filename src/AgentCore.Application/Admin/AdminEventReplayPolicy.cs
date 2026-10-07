@@ -180,15 +180,15 @@ public static class AdminEventReplayPolicy
         }
     }
 
-    public static void EnsureTriggerRegistrationRevokedReplayMatches(
+    public static void EnsureAutomationRevokedReplayMatches(
         AdminEvent existingEvent,
         AdminEventAppend historyAppend,
         Guid instanceId,
-        Guid registrationId,
+        Guid automationId,
         long revision)
     {
         if (existingEvent.Operation != historyAppend.Operation
-            || existingEvent.Operation != AdminEventOperationKind.TriggerRegistrationRevoked)
+            || existingEvent.Operation != AdminEventOperationKind.AutomationRevoked)
         {
             throw AgentCoreErrors.Conflict("Operation id is already used for a different admin event.");
         }
@@ -202,11 +202,11 @@ public static class AdminEventReplayPolicy
             throw AgentCoreErrors.Conflict("Trigger registration revoke does not match the retried command.");
         }
 
-        var existingRegistrationId = ReadStringTransition(existingEvent.SummaryJson, "registrationId");
-        var incomingRegistrationId = ReadStringTransition(historyAppend.SummaryJson, "registrationId");
-        var requestedRegistrationId = registrationId.ToString("D");
-        if (!string.Equals(existingRegistrationId, incomingRegistrationId, StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(incomingRegistrationId, requestedRegistrationId, StringComparison.OrdinalIgnoreCase))
+        var existingAutomationId = ReadStringTransition(existingEvent.SummaryJson, "automationId");
+        var incomingAutomationId = ReadStringTransition(historyAppend.SummaryJson, "automationId");
+        var requestedAutomationId = automationId.ToString("D");
+        if (!string.Equals(existingAutomationId, incomingAutomationId, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(incomingAutomationId, requestedAutomationId, StringComparison.OrdinalIgnoreCase))
         {
             throw AgentCoreErrors.Conflict("Trigger registration revoke does not match the retried command.");
         }

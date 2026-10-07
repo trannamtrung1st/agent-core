@@ -167,12 +167,12 @@ public sealed class TriggerScheduleCalculatorTests
 
         var capped = Sample(new DailySchedule(1, new TimeOnly(9, 0), "UTC", maxOccurrences: 1), first, null);
         var once = TriggerScheduleAdmission.Decide(capped, first);
-        Assert.Equal(TriggerRegistrationStatus.Completed, once.Status);
+        Assert.Equal(AutomationStatus.Completed, once.Status);
         Assert.Null(once.NextAtUtc);
 
         var ending = Sample(new DailySchedule(1, new TimeOnly(9, 0), "UTC", endDate: new DateOnly(2026, 9, 1)), first, null);
         var lastDay = TriggerScheduleAdmission.Decide(ending, first);
-        Assert.Equal(TriggerRegistrationStatus.Completed, lastDay.Status);
+        Assert.Equal(AutomationStatus.Completed, lastDay.Status);
         Assert.Null(lastDay.NextAtUtc);
     }
 
@@ -183,7 +183,7 @@ public sealed class TriggerScheduleCalculatorTests
         var shot = new OneShotSchedule(at, "Asia/Ho_Chi_Minh", new DateOnly(2026, 9, 1), new TimeOnly(16, 0));
         var missed = TriggerScheduleAdmission.Decide(Sample(shot, at, null), at.AddDays(1));
         Assert.Equal(ScheduleAdmissionKind.Admit, missed.Kind);
-        Assert.Equal(TriggerRegistrationStatus.Completed, missed.Status);
+        Assert.Equal(AutomationStatus.Completed, missed.Status);
         Assert.Equal(at, missed.ScheduledAtUtc);
 
         var expired = TriggerScheduleAdmission.Decide(
@@ -254,7 +254,7 @@ public sealed class TriggerScheduleCalculatorTests
         var admission = TriggerScheduleAdmission.Decide(registration, asOf);
         Assert.Equal(ScheduleAdmissionKind.Admit, admission.Kind);
         Assert.Equal(endAt, admission.ScheduledAtUtc);
-        Assert.Equal(TriggerRegistrationStatus.Completed, admission.Status);
+        Assert.Equal(AutomationStatus.Completed, admission.Status);
         Assert.Null(admission.NextAtUtc);
     }
 
@@ -285,7 +285,7 @@ public sealed class TriggerScheduleCalculatorTests
         return TimeOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant, zone).DateTime);
     }
 
-    private static TriggerRegistration Sample(
+    private static Automation Sample(
         TriggerSchedule schedule,
         DateTimeOffset next,
         DateTimeOffset? expires,
@@ -295,7 +295,7 @@ public sealed class TriggerScheduleCalculatorTests
         return new(
             Guid.Parse("019944af-0008-7000-8000-0000000000c1"),
             new TriggerOwner(InstanceId, ProfileId),
-            TriggerRegistrationStatus.Active,
+            AutomationStatus.Active,
             "Call John",
             schedule,
             next,
