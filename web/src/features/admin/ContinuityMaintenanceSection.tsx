@@ -1,8 +1,8 @@
+import { AdminErrorNotice } from "./adminFailure";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Button, Flex, Form, InputNumber, Spin, Switch, Typography, theme } from "antd";
 import { instanceContinuityRequest as request, type ContinuityMaintenanceSettings } from "../../services/adminApi";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
-import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 
 export function ContinuityMaintenanceSection({ instanceId }: { instanceId: string }) {
   const { token } = theme.useToken();
@@ -69,8 +69,7 @@ export function ContinuityMaintenanceSection({ instanceId }: { instanceId: strin
           </Flex>
         </Form>
       </> : null}
-      {error ? <Alert type="error" showIcon title={error.message} action={<Button disabled={busy} onClick={() => void reload()}>Reload</Button>}
-        description={error.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: error.diagnosticId }} /> : undefined} /> : null}
+      {error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button disabled={busy} onClick={() => void reload()}>Reload</Button>} /> : null}
     </Flex>
   </section>;
 }

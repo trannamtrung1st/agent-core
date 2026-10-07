@@ -1,10 +1,10 @@
+import { AdminErrorNotice } from "./adminFailure";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, App, Button, Empty, Flex, Spin, Table, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
 import { deleteAgentWorkspaceItem, downloadAgentWorkspaceItem, listAgentWorkspace,
   type AgentWorkspaceItem, type AgentWorkspacePage } from "../../services/agentWorkspace";
 import { artifactKind, artifactSize } from "../../services/artifacts";
-import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
 
@@ -60,8 +60,7 @@ export function InstanceWorkspaceSection({ instanceId, archived }: { instanceId:
         <Typography.Text type="secondary">{page ? `${artifactSize(page.usedBytes)} of ${artifactSize(page.maxInstanceBytes)} · ${page.totalItems} ${page.totalItems === 1 ? "item" : "items"}` : ""}</Typography.Text>
         <Button disabled={loading || !!busy} onClick={() => void reload()}>Reload workspace</Button>
       </Flex>
-      {error ? <Alert type="error" showIcon title={error.message} action={<Button onClick={() => void reload()}>Retry workspace</Button>}
-        description={error.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: error.diagnosticId }} /> : undefined} /> : null}
+      {error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button onClick={() => void reload()}>Retry workspace</Button>} /> : null}
       {loading && !page ? <Spin aria-label="Loading workspace" /> : null}
       {page ? <>
         <AdminCollectionToolbar value={search} onChange={setSearch} label="workspace items" />

@@ -28,7 +28,7 @@ export function DiagnosticDetails({
   return (
     <Popover
       trigger="click"
-      placement="topLeft"
+      placement="top"
       title="Error details"
       getPopupContainer={() => document.body}
       onOpenChange={(open) => {

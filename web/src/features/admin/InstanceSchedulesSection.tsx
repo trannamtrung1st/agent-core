@@ -1,3 +1,4 @@
+import { AdminErrorNotice } from "./adminFailure";
 import { useCallback, useEffect, useRef, useState, type Key } from "react";
 import { Alert, App, Button, DatePicker, Descriptions, Empty, Flex, Form, Input, InputNumber, Select, Spin, Switch, Table, Tag, Typography, theme } from "antd";
 import dayjs from "dayjs";
@@ -5,7 +6,6 @@ import { confirmAction } from "../../app/confirmAction";
 import { listModels, type ModelDescriptor } from "../../services/api";
 import { instanceContinuityRequest as request, type OwnerSchedule, type OwnerScheduleDraft, type OwnerScheduleReview, type ScheduleTiming } from "../../services/adminApi";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
-import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 import { ExecutionModelFields } from "./ExecutionModelFields";
 import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
@@ -105,8 +105,7 @@ export function InstanceSchedulesSection({ instanceId, onWork, selection, active
     <div className="admin-definition-panel-body"><Flex vertical gap={token.padding}>
       {loading ? <Spin aria-label="Loading schedules" /> : null}
       {selection?.kind === "schedule" && !loading && !error && review && !review.items.some(item => item.registrationId === selection.registrationId) ? <Alert type="info" showIcon title="This source configuration is no longer available" description="It may have been deleted or retired. Its run remains available in Runs." /> : null}
-      {error ? <Alert type="error" showIcon title={error.message} action={<Button disabled={busy} onClick={() => void reload()}>Reload schedules</Button>}
-        description={error.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: error.diagnosticId }} /> : undefined} /> : null}
+      {error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button disabled={busy} onClick={() => void reload()}>Reload schedules</Button>} /> : null}
       <Flex wrap gap={token.paddingXS}><Button disabled={busy} onClick={() => { setDraft(blank()); setEditor("new"); }}>New schedule</Button>
         <Button disabled={busy} onClick={() => void reload()}>Refresh schedules</Button><Button onClick={() => onWork()}>View runs</Button></Flex>
       {editor ? <Form layout="vertical" className="admin-config-form" onKeyDown={event => {

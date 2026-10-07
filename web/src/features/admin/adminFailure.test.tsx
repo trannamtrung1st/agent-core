@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { AdminErrorNotice, AdminRetryAction } from "./adminFailure";
 
@@ -21,5 +21,15 @@ describe("admin failure details", () => {
 
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Error details" })).not.toBeInTheDocument();
+  });
+
+  it("labels alert diagnostics and opens the existing copyable details", async () => {
+    render(<AdminErrorNotice message="Retrospective output or model is invalid."
+      diagnosticId="019944af-0008-7000-8000-0000000000e1" showDetailsLabel />);
+    const details = screen.getByRole("button", { name: "Error details" });
+    expect(details).toHaveTextContent("Error details");
+    fireEvent.click(details);
+    await waitFor(() => expect(screen.getByText("019944af-0008-7000-8000-0000000000e1")).toBeVisible());
+    expect(screen.getByRole("button", { name: "Copy details" })).toBeVisible();
   });
 });

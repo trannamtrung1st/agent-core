@@ -1,10 +1,10 @@
+import { AdminErrorNotice } from "./adminFailure";
 import { useCallback, useEffect, useRef, useState, type Key } from "react";
 import { Alert, App, Button, Descriptions, Empty, Flex, Form, Input, InputNumber, Select, Spin, Switch, Table, Tag, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
 import { drawerPageSearch, listModels, type DrawerPageQuery, type ModelDescriptor, type WorkItem, type WorkItemResult } from "../../services/api";
 import { instanceContinuityRequest as request, type IdentityMaintenanceSettings, type ExperienceItem, type ExperienceReview, type ThoughtDraft, type ThoughtRegistration, type ThoughtReview } from "../../services/adminApi";
 import { BackgroundWorkDrawer } from "../chat/BackgroundWorkDrawer";
-import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 
 import { ExecutionModelFields } from "./ExecutionModelFields";
@@ -46,8 +46,7 @@ export function InstanceRunsSection({ instanceId, open, wide = true, inline = fa
 }
 
 function Failure({ error, reload }: { error: AdminFailureNotice | null; reload: () => void }) {
-  return error ? <Alert type="error" showIcon title={error.message} action={<Button onClick={reload}>Reload</Button>}
-    description={error.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: error.diagnosticId }} /> : undefined} /> : null;
+  return error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button onClick={reload}>Reload</Button>} /> : null;
 }
 
 export function IdentityMaintenanceSection({ instanceId }: { instanceId: string }) {
@@ -240,8 +239,7 @@ function ExperienceDetails({ item }: { item: ExperienceItem }) {
   const { token } = theme.useToken();
   const detailLayout = useAdminDetailLayout();
   return <Flex vertical gap={token.padding} role="region" aria-label="Experience details">
-    {item.failureSummary ? <Alert type="error" showIcon title={item.failureSummary}
-      description={item.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: item.diagnosticId }} /> : undefined} /> : null}
+    {item.failureSummary ? <Alert type="error" showIcon title={<AdminErrorNotice message={item.failureSummary} diagnosticId={item.diagnosticId} showDetailsLabel />} /> : null}
     {item.content ? <Descriptions bordered column={1} size="small" {...detailLayout}
       items={[{ key: "goal", label: "Goal", children: item.content.goal },
         ...(["lessons", "corrections", "outcomes", "decisions", "attempts", "unresolved", "difficulties"] as const)

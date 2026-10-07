@@ -1,4 +1,5 @@
 import { Button, Flex, theme, Typography } from "antd";
+import { InfoCircleOutlined } from "@ant-design/icons";
 import { describeAdminError } from "./adminErrors";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 
@@ -18,16 +19,18 @@ export function showAdminFailure(
 export function AdminErrorNotice({
   message,
   diagnosticId,
-  tone = "plain"
+  tone = "plain",
+  showDetailsLabel = false
 }: {
   message: string;
   diagnosticId?: string | null;
   tone?: "plain" | "danger";
+  showDetailsLabel?: boolean;
 }) {
   const { token } = theme.useToken();
   const text = tone === "danger"
     ? <Typography.Text type="danger">{message}</Typography.Text>
-    : <span>{message}</span>;
+    : <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{message}</span>;
   if (!diagnosticId) {
     return text;
   }
@@ -35,7 +38,11 @@ export function AdminErrorNotice({
   return (
     <Flex gap={token.paddingXS} align="center" wrap="wrap">
       {text}
-      <DiagnosticDetails fields={{ diagnosticId }} />
+      <DiagnosticDetails fields={{ diagnosticId }} trigger={showDetailsLabel ? (
+        <Button type="text" icon={<InfoCircleOutlined aria-hidden />} aria-label="Error details" style={{ paddingInline: token.paddingXS, flexShrink: 0 }}>
+          Error details
+        </Button>
+      ) : undefined} />
     </Flex>
   );
 }

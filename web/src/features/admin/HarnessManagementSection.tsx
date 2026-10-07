@@ -1,3 +1,4 @@
+import { AdminErrorNotice } from "./adminFailure";
 import { useEffect, useId, useState } from "react";
 import { InfoCircleOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Checkbox, Collapse, Flex, Form, Select, Spin, Tag, Typography, theme } from "antd";
@@ -57,8 +58,7 @@ export function HarnessManagementSection({ instanceId, onUpdated }: {
     </div>
     <div className="admin-definition-panel-body"><Flex vertical gap={token.padding} className="harness-management-content">
       {loading ? <Spin aria-label="Loading harness management" /> : null}
-      {error ? <Alert type="error" showIcon title={error.message} action={<Button onClick={() => void reload()} disabled={busy}>Reload</Button>}
-        description={error.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: error.diagnosticId }} /> : undefined} /> : null}
+      {error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button onClick={() => void reload()} disabled={busy}>Reload</Button>} /> : null}
       {review ? <>
         <Flex wrap gap={token.paddingXS}><Typography.Text strong>Active version {review.activeVersion}</Typography.Text>
           <Tag>{review.policy.frozen ? "Frozen" : review.policy.mode === "Disabled" ? "Manual" : review.policy.mode}</Tag></Flex>
