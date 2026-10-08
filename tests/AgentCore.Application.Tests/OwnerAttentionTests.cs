@@ -88,8 +88,8 @@ public sealed class OwnerAttentionTests
             new RoleEnvironment(ToolAllowlist:
             [
                 ToolCatalog.BrowserNavigate,
-                ToolCatalog.BrowserObserve,
-                ToolCatalog.BrowserAct,
+                ToolCatalog.BrowserSnapshot,
+                ToolCatalog.BrowserClick,
                 ToolCatalog.AppMessageSend
             ]));
 

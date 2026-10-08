@@ -39,6 +39,19 @@ export type AdminInstanceInventoryItem = {
 };
 
 export type AdminEffectiveConfiguration = {
+  browser?: {
+    providerId: string;
+    displayName: string;
+    enabled: boolean;
+    ready: boolean;
+    profileMode: string;
+    policyMode: string;
+    supportedFeatures: string[];
+    engine?: string;
+    maxSnapshotChars: number;
+    maxCaptureBytes: number;
+    maxDownloadBytes: number;
+  } | null;
   definitionSource: string;
   definitionId: string;
   definitionVersion: number;

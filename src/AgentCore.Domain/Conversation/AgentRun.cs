@@ -620,9 +620,9 @@ public sealed class AgentRun
         if (SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
         {
             var flagged = IsObservationRequiredCheckpoint(Checkpoint);
-            var uncertainBrowserAct = flagged
-                || AgentRunActionHash.MatchesBrowserAct(Checkpoint?.PayloadJson, SideEffect.ActionHash);
-            if (uncertainBrowserAct && Checkpoint is not null)
+            var uncertainBrowserInteraction = flagged
+                || AgentRunActionHash.MatchesBrowserInteraction(Checkpoint?.PayloadJson, SideEffect.ActionHash);
+            if (uncertainBrowserInteraction && Checkpoint is not null)
             {
                 var generation = allocateDiagnosticId?.Invoke() ?? Guid.Empty;
                 if (generation == Guid.Empty)
@@ -907,7 +907,7 @@ public sealed class AgentRun
             updatedAtUtc);
     }
 
-    public AgentRun AcceptBrowserObservation(long expectedRevision, Guid generation, DateTimeOffset updatedAtUtc)
+    public AgentRun AcceptBrowserSnapshot(long expectedRevision, Guid generation, DateTimeOffset updatedAtUtc)
     {
         RequireOperational(expectedRevision, generation);
         if (SideEffect.Disposition is not (AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate))

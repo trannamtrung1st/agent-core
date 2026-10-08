@@ -36,7 +36,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await page.getByLabel('Message', { exact: true }).fill(text);
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.chat-message-assistant')).toHaveCount(before + 1, { timeout: 30_000 });
-    await expect(page.locator('.assistant-body').last()).toHaveText(answer, { timeout: 30_000 });
+    await expect(page.locator('.chat-message-assistant .assistant-body').last()).toHaveText(answer, { timeout: 30_000 });
     await waitForResponseSettled(page);
   }
 
@@ -114,7 +114,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     expect(names).not.toContain('experience.recent');
     await editor.getByRole('tab', { name: 'Capabilities', exact: true }).click();
     for (const tool of ['knowledge.retrieve', 'automation.create', 'automation.inspect', 'automation.disable', 'automation.run', 'automation.list', 'automation.update', 'automation.delete',
-      'browser.navigate', 'browser.observe', 'browser.act']) {
+      'browser.navigate', 'browser.snapshot', 'browser.click', 'browser.type']) {
       const select = editor.getByRole('combobox', { name: 'Tool allowlist', exact: true });
       await select.click(); await select.fill(tool);
       await page.locator('.ant-select-item-option').filter({ hasText: tool }).last().click();
@@ -259,7 +259,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await expect(page.locator('.chat-message-application')).toContainText("I found the record. I'm checking the details now.");
     await expect(page.locator('.agent-activity')).toHaveCount(0);
     await page.reload();
-    await expect(page.locator('.assistant-body').last()).toHaveText('AC-1042 is In review.');
+    await expect(page.locator('.chat-message-assistant .assistant-body').last()).toHaveText('AC-1042 is In review.');
     await expect(page.locator('.chat-message-application')).toHaveCount(1);
     await endChat(page);
   });

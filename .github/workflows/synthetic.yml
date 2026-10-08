@@ -1,6 +1,7 @@
 name: synthetic
 
 on:
+  workflow_dispatch:
   push:
     branches: [main, master]
     # Skip when the push changes only root TODO.md; still run if TODO.md changes with any other file.

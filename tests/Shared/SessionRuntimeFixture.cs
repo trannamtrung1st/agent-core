@@ -48,7 +48,7 @@ internal static class SessionRuntimeFixture
         IStructuredMemoryService? structuredMemory = null,
         IAgentRunStore? agentRuns = null,
         IDiagnosticIdSource? diagnostics = null,
-        IBrowserSessionLease? browserLease = null,
+        IBrowserLease? browserLease = null,
         IAgentRunAuthority? runAuthority = null,
         ITriggerStore? triggerOccurrences = null)
     {

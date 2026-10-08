@@ -474,7 +474,16 @@ describe("AdminApp", () => {
   });
 
   it("renders effective configuration fields", () => {
-    render(<EffectiveConfigView config={sampleEffective} />);
+    render(<EffectiveConfigView config={{ ...sampleEffective, browser: {
+      providerId: "subset", displayName: "Test browser", engine: "chromium", enabled: true, ready: false,
+      profileMode: "EphemeralSession", policyMode: "Restricted", supportedFeatures: ["Navigate", "Snapshot", "Click"],
+      maxSnapshotChars: 8000, maxCaptureBytes: 1500000, maxDownloadBytes: 5242880
+    } }} />);
+    const browser = screen.getByRole("region", { name: "Browser provider" });
+    expect(within(browser).getByText("chromium")).toBeInTheDocument();
+    expect(within(browser).getByText("Unavailable")).toBeInTheDocument();
+    expect(within(browser).getByText("Navigate, Snapshot, Click")).toBeInTheDocument();
+    expect(within(browser).queryByText(/Trace/)).not.toBeInTheDocument();
     const identity = screen.getByLabelText("Instance identity");
     expect(within(identity).queryByText("Compatibility / legacy")).not.toBeInTheDocument();
     expect(within(identity).getByText("Definition status")).toBeInTheDocument();

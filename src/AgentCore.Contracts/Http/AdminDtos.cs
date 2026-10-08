@@ -43,7 +43,8 @@ public sealed record AdminEffectiveConfigurationResponse(
     AdminTriggerPolicyResponse? TriggerPolicy,
     AdminDurableExecutionEligibilityResponse DurableExecutionEligibility,
     string? UnattendedModelCatalogKey = null,
-    string? UnattendedReasoningEffort = null);
+    string? UnattendedReasoningEffort = null,
+    AdminBrowserConfigurationResponse? Browser = null);
 
 public sealed record AdminPersonaResponse(string Name, string Role, string Description, string Tone);
 
@@ -299,7 +300,8 @@ public sealed record AdminAgentInstanceResponse(
     long PersonaRevision,
     AdminPersonaResponse Persona,
     string? UnattendedModelCatalogKey = null,
-    string? UnattendedReasoningEffort = null);
+    string? UnattendedReasoningEffort = null,
+    AdminBrowserConfigurationResponse? Browser = null);
 
 public sealed record AdminSetUnattendedModelRequest(
     long ExpectedRevision,
@@ -414,3 +416,5 @@ public sealed record AdminEventResponse(
     long? Revision,
     int? Version,
     JsonElement Summary);
+
+public sealed record AdminBrowserConfigurationResponse(string ProviderId, string DisplayName, bool Enabled, bool Ready, string ProfileMode, string PolicyMode, IReadOnlyList<string> SupportedFeatures, int MaxSnapshotChars, int MaxCaptureBytes, int MaxDownloadBytes, string Engine = "unknown");

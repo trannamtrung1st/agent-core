@@ -50,20 +50,26 @@ public sealed record BrowserElement(
     }
 }
 
-public sealed record BrowserObservation(
+public sealed record BrowserSnapshot(
     string Url,
     string Title,
     string VisibleText,
     bool TextTruncated,
     IReadOnlyList<BrowserElement> Elements,
     BrowserInterventionKind Intervention = BrowserInterventionKind.None,
-    bool? Settled = null);
+    bool? Settled = null,
+    string? SnapshotId = null,
+    string? TabRef = null,
+    string? Content = null,
+    IReadOnlyList<BrowserTargetBox>? Boxes = null);
+
+public sealed record BrowserTargetBox(string Ref, float X, float Y, float Width, float Height);
 
 /// <summary>
 /// Provider-neutral observe wait. <paramref name="WaitFor"/> is <c>stable</c>, <c>navigation</c>, or <c>role</c>.
 /// <paramref name="TimeoutMs"/> is optional and already bounded by Core.
 /// </summary>
-public sealed record BrowserObserveOptions(string WaitFor, int? TimeoutMs, string? Role = null, string? Name = null);
+public sealed record BrowserWaitOptions(string WaitFor, int? TimeoutMs, string? Role = null, string? Name = null);
 
 public enum BrowserInterventionKind
 {
@@ -85,7 +91,7 @@ public sealed record BrowserDownload(
 
 public sealed record BrowserOperationResult(
     string? ErrorCode,
-    BrowserObservation? Observation,
+    BrowserSnapshot? Observation,
     IReadOnlyList<string>? AllowedActions = null,
     IReadOnlyList<BrowserDownload>? Downloads = null);
 
@@ -93,7 +99,7 @@ public sealed record BrowserNavigateRequest(Guid SessionId, Uri? Url, string Ope
 
 public sealed record BrowserUpload(string FileName, string MediaType, ReadOnlyMemory<byte> Content);
 
-public sealed record BrowserActRequest(
+public sealed record BrowserInteractionRequest(
     Guid SessionId,
     string Operation,
     string Ref,
@@ -101,7 +107,8 @@ public sealed record BrowserActRequest(
     BrowserUpload? Upload = null,
     string? Direction = null,
     int Delta = 0,
-    string? TargetRef = null);
+    string? TargetRef = null,
+    IReadOnlyList<BrowserUpload>? Uploads = null);
 
 /// <summary>Resolves only after validating a live existing-password field and exact current origin, under the browser gate.</summary>
 public interface IBrowserPasswordSink
@@ -110,7 +117,7 @@ public interface IBrowserPasswordSink
         Func<string, CancellationToken, ValueTask<string>> resolve, CancellationToken ct = default);
 }
 
-public interface IBrowserSessionLease
+public interface IBrowserLease
 {
     ValueTask ReleaseAsync(Guid sessionId, CancellationToken cancellationToken = default);
 }
@@ -130,8 +137,12 @@ public interface IBrowserContextUse
     void AdoptUnattendedFlow(Guid agentInstanceId);
 }
 
-public interface IBrowserSession
+public interface IBrowser
 {
+    BrowserProviderDescriptor Provider { get; }
+
+    ValueTask<BrowserCommandResult> ExecuteAsync(BrowserCommand command, CancellationToken cancellationToken = default) => new(new BrowserCommandResult("unsupported_operation"));
+
     bool IsAvailable { get; }
 
     BrowserHostPolicy HostPolicy { get; }
@@ -142,18 +153,18 @@ public interface IBrowserSession
         BrowserNavigateRequest request,
         CancellationToken cancellationToken = default);
 
-    ValueTask<BrowserOperationResult> ObserveAsync(
+    ValueTask<BrowserOperationResult> SnapshotAsync(
         Guid sessionId,
         CancellationToken cancellationToken = default);
 
-    ValueTask<BrowserOperationResult> ObserveAsync(
+    ValueTask<BrowserOperationResult> SnapshotAsync(
         Guid sessionId,
-        BrowserObserveOptions options,
+        BrowserWaitOptions options,
         CancellationToken cancellationToken = default) =>
-        ObserveAsync(sessionId, cancellationToken);
+        SnapshotAsync(sessionId, cancellationToken);
 
-    ValueTask<BrowserOperationResult> ActAsync(
-        BrowserActRequest request,
+    ValueTask<BrowserOperationResult> InteractAsync(
+        BrowserInteractionRequest request,
         CancellationToken cancellationToken = default);
 
     ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
@@ -162,33 +173,45 @@ public interface IBrowserSession
     ValueTask ResetPersistentProfileAsync(Guid agentInstanceId, CancellationToken cancellationToken = default) =>
         ValueTask.CompletedTask;
 
-    ValueTask<BrowserPagesResult> PagesAsync(
-        BrowserPagesRequest request,
+    ValueTask<BrowserTabsResult> TabsAsync(
+        BrowserTabsRequest request,
         CancellationToken cancellationToken = default) =>
-        new(new BrowserPagesResult("provider_unavailable", []));
+        new(new BrowserTabsResult("provider_unavailable", []));
 
-    ValueTask<BrowserCaptureResult> CaptureViewportAsync(
-        BrowserCaptureRequest request,
+    ValueTask<BrowserScreenshotResult> CaptureViewportAsync(
+        BrowserScreenshotRequest request,
         CancellationToken cancellationToken = default) =>
-        new(new BrowserCaptureResult("provider_unavailable", null, 0));
+        new(new BrowserScreenshotResult("provider_unavailable", null, 0));
 }
 
-public sealed record BrowserPagesRequest(Guid SessionId, string Operation, string? PageId = null);
+public sealed record BrowserTabsRequest(Guid SessionId, string Operation, string? PageId = null);
 
 public sealed record BrowserPageInfo(string PageId, string Url, bool Active);
 
-public sealed record BrowserPagesResult(
+public sealed record BrowserTabsResult(
     string? ErrorCode,
     IReadOnlyList<BrowserPageInfo> Pages,
-    BrowserObservation? Observation = null);
+    BrowserSnapshot? Observation = null);
 
-public sealed record BrowserCaptureRequest(Guid SessionId);
+public sealed record BrowserScreenshotRequest(Guid SessionId, string Format = "png", bool FullPage = false, string? TargetRef = null);
 
-public sealed record BrowserCaptureResult(
+public sealed record BrowserScreenshotResult(
     string? ErrorCode,
     byte[]? Png,
     int RedactionCount,
     int Width = 0,
-    int Height = 0);
+    int Height = 0,
+    string ContentType = "image/png");
 
 public sealed record BrowserCloseResult(string Status);
+
+public enum BrowserFeature { Navigate, Snapshot, Find, Click, Hover, Drag, Drop, Type, FillForm, SelectOption, PressKey, Upload, FillCredential, Wait, Tabs, Dialog, Resize, Close, Screenshot, Console, NetworkInspect, NetworkControl, Storage, StorageState, Testing, VisionMouse, Pdf, Trace, Highlight, Media, Video, Evaluate, Configuration, Geolocation }
+
+public sealed record BrowserProviderDescriptor(string ProviderId, string DisplayName, IReadOnlySet<BrowserFeature> SupportedFeatures)
+{
+    public string Engine { get; init; } = "unknown";
+    public bool Supports(BrowserFeature feature) => SupportedFeatures.Contains(feature);
+}
+
+public sealed record BrowserCommand(Guid SessionId, string Tool, System.Text.Json.JsonElement Arguments);
+public sealed record BrowserCommandResult(string? ErrorCode, BrowserSnapshot? Snapshot = null, string? DataJson = null, byte[]? Bytes = null, string? ContentType = null, string? FileName = null, IReadOnlyList<BrowserDownload>? Downloads = null);

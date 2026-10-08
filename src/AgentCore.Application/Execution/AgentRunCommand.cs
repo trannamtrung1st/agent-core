@@ -32,7 +32,7 @@ public abstract record AgentRunCommand(long ExpectedRevision, DateTimeOffset AtU
         AgentRunSideEffectDisposition Disposition, string ToolCallId, string ActionHash) : AgentRunCommand(Revision, At);
     public sealed record ClearSideEffect(long Revision, DateTimeOffset At, Guid Generation, bool RecordExternalEffect = true)
         : AgentRunCommand(Revision, At);
-    public sealed record AcceptBrowserObservation(long Revision, DateTimeOffset At, Guid Generation)
+    public sealed record AcceptBrowserSnapshot(long Revision, DateTimeOffset At, Guid Generation)
         : AgentRunCommand(Revision, At);
     public sealed record LoadSkills(long Revision, DateTimeOffset At, Guid Generation, IReadOnlyList<string> Keys)
         : AgentRunCommand(Revision, At);
@@ -69,7 +69,7 @@ public abstract record AgentRunCommand(long ExpectedRevision, DateTimeOffset AtU
             ExpireApproval c => run.ExpireApproval(c.ExpectedRevision, c.AtUtc),
             MarkSideEffect c => run.MarkSideEffect(c.ExpectedRevision, c.Generation, c.Disposition, c.ToolCallId, c.ActionHash, c.AtUtc),
             ClearSideEffect c => run.ClearSideEffect(c.ExpectedRevision, c.Generation, c.AtUtc, c.RecordExternalEffect),
-            AcceptBrowserObservation c => run.AcceptBrowserObservation(c.ExpectedRevision, c.Generation, c.AtUtc),
+            AcceptBrowserSnapshot c => run.AcceptBrowserSnapshot(c.ExpectedRevision, c.Generation, c.AtUtc),
             LoadSkills c => run.AdmitActiveSkills(c.ExpectedRevision, c.Generation, c.Keys, c.AtUtc),
             LoadCapabilities c => run.AdmitCapabilities(c.ExpectedRevision, c.Generation, c.Names, c.AtUtc),
             _ => throw new ArgumentException("AgentRun transition is unsupported.")

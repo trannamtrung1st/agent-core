@@ -251,11 +251,19 @@ public sealed class AgentRunContractTests
         Assert.Throws<AgentRunTransitionException>(() => recovered.TakeClaim(GenerationB, Now.AddMinutes(2), Now.AddMinutes(3)));
     }
 
-    [Fact]
-    public void In_flight_browser_act_without_the_flag_resumes_for_observation()
+    [Theory]
+    [InlineData("browser.click")]
+    [InlineData("browser.type")]
+    [InlineData("browser.fill_form")]
+    [InlineData("browser.press_key")]
+    [InlineData("browser.tabs")]
+    [InlineData("browser.route")]
+    [InlineData("browser.cookies")]
+    [InlineData("browser.emulate_media")]
+    public void In_flight_browser_interaction_without_the_flag_resumes_for_snapshot(string toolName)
     {
-        const string arguments = """{"operation":"click","ref":"el_0123456789abcdefghijkl"}""";
-        var hash = AgentRunActionHash.Compute("browser.act", JsonDocument.Parse(arguments).RootElement);
+        const string arguments = """{"ref":"el_0123456789abcdefghijkl"}""";
+        var hash = AgentRunActionHash.Compute(toolName, JsonDocument.Parse(arguments).RootElement);
         var payload = JsonSerializer.Serialize(new
         {
             Phase = "model-turn",
@@ -269,7 +277,7 @@ public sealed class AgentRunContractTests
                     Name = (string?)null,
                     ToolCalls = new[]
                     {
-                        new { Id = ToolCallId, Name = "browser.act", ArgumentsJson = arguments }
+                        new { Id = ToolCallId, Name = toolName, ArgumentsJson = arguments }
                     }
                 }
             },
@@ -298,20 +306,23 @@ public sealed class AgentRunContractTests
         Assert.Equal("checkpoint-capacity", capacity.Failure!.Code);
         Assert.Equal(AgentRunSideEffectDisposition.Indeterminate, capacity.SideEffect.Disposition);
 
-        var navigation = AgentRunActionHash.Compute("browser.navigate", JsonDocument.Parse("""{"url":"http://127.0.0.1:5088/"}""").RootElement);
-        var navigatePayload = payload.Replace("browser.act", "browser.navigate", StringComparison.Ordinal);
-        var navigateClaim = NewItem().TakeClaim(GenerationA, Now, Now.AddMinutes(1));
-        var navigatePrepared = navigateClaim.MarkSideEffect(2, GenerationA, AgentRunSideEffectDisposition.Prepared, ToolCallId, navigation, Now.AddSeconds(1));
-        var navigateFlight = navigatePrepared.MarkSideEffect(3, GenerationA, AgentRunSideEffectDisposition.InFlight, ToolCallId, navigation, Now.AddSeconds(2));
-        var navigateCheckpoint = navigateFlight.SaveCheckpoint(
-            navigateFlight.Revision,
-            GenerationA,
-            Checkpoint(navigatePayload),
-            null,
-            Now.AddSeconds(3));
-        var failed = navigateCheckpoint.RecoverExpiredClaim(Now.AddMinutes(1), () => Guid.Parse("019944af-0008-7000-8000-0000000000d5"));
-        Assert.Equal(AgentRunStatus.Failed, failed.Status);
-        Assert.Equal("side-effect-indeterminate", failed.Failure!.Code);
+        foreach (var readOnlyTool in new[] { "browser.navigate", "browser.pdf" })
+        {
+            var navigation = AgentRunActionHash.Compute(readOnlyTool, JsonDocument.Parse(arguments).RootElement);
+            var navigatePayload = payload.Replace(toolName, readOnlyTool, StringComparison.Ordinal);
+            var navigateClaim = NewItem().TakeClaim(GenerationA, Now, Now.AddMinutes(1));
+            var navigatePrepared = navigateClaim.MarkSideEffect(2, GenerationA, AgentRunSideEffectDisposition.Prepared, ToolCallId, navigation, Now.AddSeconds(1));
+            var navigateFlight = navigatePrepared.MarkSideEffect(3, GenerationA, AgentRunSideEffectDisposition.InFlight, ToolCallId, navigation, Now.AddSeconds(2));
+            var navigateCheckpoint = navigateFlight.SaveCheckpoint(
+                navigateFlight.Revision,
+                GenerationA,
+                Checkpoint(navigatePayload),
+                null,
+                Now.AddSeconds(3));
+            var failed = navigateCheckpoint.RecoverExpiredClaim(Now.AddMinutes(1), () => Guid.Parse("019944af-0008-7000-8000-0000000000d5"));
+            Assert.Equal(AgentRunStatus.Failed, failed.Status);
+            Assert.Equal("side-effect-indeterminate", failed.Failure!.Code);
+        }
     }
 
     [Fact]

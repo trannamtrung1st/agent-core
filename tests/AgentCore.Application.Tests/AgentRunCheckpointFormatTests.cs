@@ -97,7 +97,7 @@ public sealed class AgentRunCheckpointFormatTests
                 """{"artifactId":"abc","byteSize":10}""",
                 Parts: [new ModelImageContent("image/png", png, "capture.png")],
                 ToolCallId: "cap",
-                Name: ToolCatalog.BrowserCapture)
+                Name: ToolCatalog.BrowserScreenshot)
         ]);
 
         Assert.Contains("artifactId", payload, StringComparison.Ordinal);

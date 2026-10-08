@@ -65,6 +65,13 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         }
 
+        if (BrowserToolCatalog.TryGet(toolName, out var browserFeature)
+            && browserFeature.Feature is BrowserFeature.FillCredential or BrowserFeature.Evaluate or BrowserFeature.Geolocation
+            && admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn })
+            return ToolPolicyDecision.Deny;
+        if (toolName == ToolCatalog.BrowserVisionMouse && admission?.SupportsVision != true)
+            return ToolPolicyDecision.Deny;
+
         if (descriptor.OfferRule == ToolOfferRule.OccurrenceCapability)
         {
             return OccurrenceCompletion(admission)
@@ -100,7 +107,7 @@ public static class ToolPolicy
         }
 
         if (descriptor.OfferRule == ToolOfferRule.ConfigurationWhenRoleAllows
-            && !configurationGate.IsConfigured(toolName))
+            && !configurationGate.IsExecutionConfigured(toolName))
         {
             return ToolPolicyDecision.Deny;
         }
@@ -210,7 +217,14 @@ public static class ToolPolicy
             return false;
         }
 
-        if (string.Equals(descriptor.Name, ToolCatalog.BrowserCapture, StringComparison.Ordinal)
+        if (BrowserToolCatalog.TryGet(descriptor.Name, out var browserFeature)
+            && browserFeature.Feature is BrowserFeature.FillCredential or BrowserFeature.Evaluate or BrowserFeature.Geolocation
+            && context is not { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn })
+        {
+            return false;
+        }
+
+        if (string.Equals(descriptor.Name, ToolCatalog.BrowserVisionMouse, StringComparison.Ordinal)
             && context?.ModelSupportsVision != true)
         {
             return false;

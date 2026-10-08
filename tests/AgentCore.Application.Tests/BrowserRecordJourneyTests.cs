@@ -220,8 +220,9 @@ public sealed class BrowserRecordJourneyTests
             new RoleEnvironment(ToolAllowlist:
             [
                 ToolCatalog.BrowserNavigate,
-                ToolCatalog.BrowserObserve,
-                ToolCatalog.BrowserAct
+                ToolCatalog.BrowserSnapshot,
+                ToolCatalog.BrowserClick,
+                ToolCatalog.BrowserType
             ]),
             Skills:
             [
@@ -305,8 +306,9 @@ public sealed class BrowserRecordJourneyTests
         }
     }
 
-    private sealed class FixtureBrowser : IBrowserSession
+    private sealed class FixtureBrowser : IBrowser
     {
+        public BrowserProviderDescriptor Provider { get; } = new("fixture", "Test browser", new HashSet<BrowserFeature> { BrowserFeature.Navigate, BrowserFeature.Snapshot, BrowserFeature.Click, BrowserFeature.Type, BrowserFeature.Hover, BrowserFeature.Drag, BrowserFeature.FillForm, BrowserFeature.SelectOption, BrowserFeature.PressKey, BrowserFeature.Upload, BrowserFeature.FillCredential, BrowserFeature.Wait, BrowserFeature.Tabs, BrowserFeature.Screenshot, BrowserFeature.Close });
         private readonly Dictionary<string, string> _refs = new(StringComparer.Ordinal);
         private string _page = "none";
         private string? _filled;
@@ -351,7 +353,7 @@ public sealed class BrowserRecordJourneyTests
             return new(Ok(Capture()));
         }
 
-        public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             ObserveCalls++;
             return new(_page == "none"
@@ -359,8 +361,8 @@ public sealed class BrowserRecordJourneyTests
                 : Ok(Capture()));
         }
 
-        public ValueTask<BrowserOperationResult> ActAsync(
-            BrowserActRequest request,
+        public ValueTask<BrowserOperationResult> InteractAsync(
+            BrowserInteractionRequest request,
             CancellationToken cancellationToken = default)
         {
             ActCalls++;
@@ -395,9 +397,9 @@ public sealed class BrowserRecordJourneyTests
             _ => new Uri(Origin + "/")
         };
 
-        private BrowserOperationResult Ok(BrowserObservation observation) => new(null, observation);
+        private BrowserOperationResult Ok(BrowserSnapshot observation) => new(null, observation);
 
-        private BrowserObservation Capture()
+        private BrowserSnapshot Capture()
         {
             _refs.Clear();
             _mint++;
@@ -434,7 +436,7 @@ public sealed class BrowserRecordJourneyTests
             };
         }
 
-        private BrowserObservation Page(
+        private BrowserSnapshot Page(
             string url,
             string title,
             string visibleText,
@@ -447,7 +449,7 @@ public sealed class BrowserRecordJourneyTests
                 _refs[reference] = element.Name;
                 return new BrowserElement(reference, element.Role, element.Name);
             }).ToArray();
-            return new BrowserObservation(url, title, visibleText, false, captured, intervention);
+            return new BrowserSnapshot(url, title, visibleText, false, captured, intervention);
         }
 
         private string Mint(string name)

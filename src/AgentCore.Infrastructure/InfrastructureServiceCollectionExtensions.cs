@@ -81,12 +81,12 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetService<IWebSearchProvider>(),
             provider.GetService<IPublicWebFetcher>(),
             provider.GetService<IEmailProvider>(),
-            provider.GetService<IBrowserSession>(),
+            provider.GetService<IBrowser>(),
             provider.GetRequiredService<BrowserOptions>().Enabled));
         services.TryAddSingleton<PromptContextBuilder>(provider =>
             new PromptContextBuilder(
                 provider.GetRequiredService<IToolConfigurationGate>(),
-                provider.GetService<IBrowserSession>()));
+                provider.GetService<IBrowser>()));
         services.TryAddSingleton<DefinitionDraftSyntheticOfflineLanguageModel>();
         services.TryAddSingleton<IDefinitionDraftSyntheticBehaviorEvaluator, SyntheticDefinitionDraftBehaviorEvaluator>();
         services.TryAddSingleton<AgentDefinitionDraftSyntheticEvaluationRunner>();
@@ -149,7 +149,7 @@ public static class InfrastructureServiceCollectionExtensions
             services.AddSingleton<IAdminLifecycleDeletion>(provider => new SqliteAdminLifecycleDeletion(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                 provider.GetRequiredService<IIdGenerator>(),
-                provider.GetRequiredService<IAgentInstanceWorkspaceStore>(), provider.GetService<IBrowserSession>()));
+                provider.GetRequiredService<IAgentInstanceWorkspaceStore>(), provider.GetService<IBrowser>()));
             services.TryAddSingleton<IAdminP7eHistoryMutator>(provider =>
                 new SqliteAdminP7eHistoryMutator(
                     provider.GetRequiredService<AdminMemoryService>(),
@@ -227,7 +227,7 @@ public static class InfrastructureServiceCollectionExtensions
                     provider.GetRequiredService<InMemoryAgentDefinitionAdminStore>(),
                     provider.GetRequiredService<InMemoryAdminEventStore>(),
                     (InMemoryExperienceStore)provider.GetRequiredService<IExperienceStore>(),
-                    provider.GetRequiredService<IAgentInstanceWorkspaceStore>(), provider.GetRequiredService<IAgentCredentialBindingStore>(), provider.GetService<IBrowserSession>());
+                    provider.GetRequiredService<IAgentInstanceWorkspaceStore>(), provider.GetRequiredService<IAgentCredentialBindingStore>(), provider.GetService<IBrowser>());
             });
             services.TryAddSingleton<IAdminP7eHistoryMutator>(provider =>
                 new InMemoryAdminP7eHistoryMutator(
@@ -364,12 +364,12 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IOwnerCapabilityService, OwnerCapabilityService>();
         WebSearchProviderRegistration.AddPublicWeb(services, profile);
         EmailProviderRegistration.AddEmail(services, profile);
-        services.TryAddSingleton(sp => new PlaywrightBrowserSession(
+        services.TryAddSingleton(sp => new PlaywrightBrowser(
             sp.GetRequiredService<BrowserOptions>(),
             sp.GetService<ILoggerFactory>()));
-        services.TryAddSingleton<IBrowserSession>(sp => sp.GetRequiredService<PlaywrightBrowserSession>());
-        services.TryAddSingleton<IBrowserSessionLease>(sp => sp.GetRequiredService<PlaywrightBrowserSession>());
-        services.AddHostedService(sp => sp.GetRequiredService<PlaywrightBrowserSession>());
+        services.TryAddSingleton<IBrowser>(sp => sp.GetRequiredService<PlaywrightBrowser>());
+        services.TryAddSingleton<IBrowserLease>(sp => sp.GetRequiredService<PlaywrightBrowser>());
+        services.AddHostedService(sp => sp.GetRequiredService<PlaywrightBrowser>());
         services.TryAddSingleton<AgentInstanceSkillService>();
         services.TryAddSingleton<SessionToolExecutor>(provider => new SessionToolExecutor(
             provider.GetService<RoleKnowledgeService>(),
@@ -388,7 +388,7 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<IAgentInstanceStore>(),
             provider.GetRequiredService<IAgentDefinitionStore>(),
             provider.GetRequiredService<IMemoryStore>(),
-            provider.GetService<IBrowserSession>(),
+            provider.GetService<IBrowser>(),
             provider.GetService<IAgentDefinitionResourceAdminStore>(),
             () => provider.GetRequiredService<HarnessManagementService>(),
             provider.GetRequiredService<AgentCore.Application.Experience.ExperienceService>(),
@@ -427,7 +427,7 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IUserTurnCapabilityValidator>(),
                 provider.GetRequiredService<IStructuredMemoryService>(),
                 provider.GetRequiredService<IDiagnosticIdSource>(),
-                provider.GetService<IBrowserSessionLease>(), provider.GetRequiredService<IAgentRunAuthority>());
+                provider.GetService<IBrowserLease>(), provider.GetRequiredService<IAgentRunAuthority>());
         });
         services.TryAddSingleton<IAgentRunAuthority, AgentCore.Application.Execution.AgentRunAuthority>();
         services.TryAddSingleton<AgentCore.Application.Execution.BackgroundOccurrenceIntake>();

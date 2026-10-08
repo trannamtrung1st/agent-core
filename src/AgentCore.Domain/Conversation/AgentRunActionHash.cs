@@ -14,7 +14,7 @@ public static class AgentRunActionHash
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
-    public static bool MatchesBrowserAct(string? payloadJson, string? actionHash)
+    public static bool MatchesBrowserInteraction(string? payloadJson, string? actionHash)
     {
         if (string.IsNullOrWhiteSpace(payloadJson) || string.IsNullOrWhiteSpace(actionHash))
         {
@@ -40,7 +40,7 @@ public static class AgentRunActionHash
                 foreach (var call in calls.EnumerateArray())
                 {
                     if (!call.TryGetProperty("Name", out var name)
-                        || !string.Equals(name.GetString(), "browser.act", StringComparison.Ordinal))
+                        || name.GetString() is not { } toolName || !IsBrowserInteraction(toolName))
                     {
                         continue;
                     }
@@ -48,7 +48,7 @@ public static class AgentRunActionHash
                     var arguments = call.TryGetProperty("ArgumentsJson", out var raw) ? raw.GetString() : null;
                     var parsed = JsonSerializer.Deserialize<JsonElement>(
                         string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments);
-                    if (string.Equals(Compute("browser.act", parsed), actionHash, StringComparison.Ordinal))
+                    if (string.Equals(Compute(name.GetString()!, parsed), actionHash, StringComparison.Ordinal))
                     {
                         return true;
                     }
@@ -62,6 +62,16 @@ public static class AgentRunActionHash
 
         return false;
     }
+
+    // Domain keeps only the recovery vocabulary; provider DTOs and tool metadata stay outside it.
+    private static bool IsBrowserInteraction(string name) => name is
+        "browser.click" or "browser.hover" or "browser.drag" or "browser.drop" or "browser.type"
+        or "browser.fill_form" or "browser.select_option" or "browser.press_key" or "browser.upload"
+        or "browser.fill_credential" or "browser.tabs" or "browser.dialog" or "browser.resize"
+        or "browser.route" or "browser.unroute" or "browser.network_state" or "browser.cookies"
+        or "browser.local_storage" or "browser.session_storage" or "browser.storage_state"
+        or "browser.mouse" or "browser.trace" or "browser.highlight"
+        or "browser.emulate_media" or "browser.video" or "browser.set_geolocation" or "browser.evaluate";
 
     public static string MarkObservationRequired(string payloadJson, string actionHash)
     {

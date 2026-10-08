@@ -29,7 +29,7 @@ public sealed class AutomationJourneyTests
     {
         var db = Path.Combine(Path.GetTempPath(), $"automation-interval-{Guid.NewGuid():N}.db");
         await using var host = new ExperienceHost(db);
-        var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
+        var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
         var client = TestOwnerCapability.CreateOwnerClient(host);
         var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/automations";
         var response = await client.PostAsJsonAsync(path, Draft(0, seconds) with { Enabled = false });
@@ -52,7 +52,7 @@ public sealed class AutomationJourneyTests
         await using (var host = new ExperienceHost(db))
         {
             var s = host.Services;
-            var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
+            var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
             instanceId = instance.InstanceId; originalVersion = instance.ActiveVersion;
             var source = await ExperienceJourneyTests.SeedAsync(s, instanceId);
             var service = s.GetRequiredService<ExperienceService>();
@@ -88,7 +88,7 @@ public sealed class AutomationJourneyTests
             var listed = (await client.GetFromJsonAsync<AgentRunPageResponse>(listPath))!;
             Assert.Equal(detail.ActivationId, Assert.Single(listed.Items, row => row.AgentRunId == detail.AgentRunId).ActivationId);
             Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/agent-instances/{instanceId}/agent-runs/{Guid.NewGuid()}")).StatusCode);
-            var other = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
+            var other = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
             Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/agent-instances/{other.InstanceId}/agent-runs/{workId}")).StatusCode);
             using var anonymous = host.CreateClient();
             Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(detailPath)).StatusCode);
@@ -164,7 +164,7 @@ public sealed class AutomationJourneyTests
         await using (var host = new ExperienceHost(db, clock: clock))
         {
             var services = host.Services;
-            var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
+            var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
             instanceId = instance.InstanceId;
             var automations = services.GetRequiredService<AdminAutomationAuthoringService>();
             var registration = await automations.SaveAsync(instanceId, null, 0, true, 3600, "Review; do nothing if no useful action is available.", null, null);

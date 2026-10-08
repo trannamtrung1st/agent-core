@@ -154,7 +154,7 @@ public sealed class ActivationAdmissionTests
             .TakeClaim(Guid.NewGuid(), Now, Now.AddMinutes(1));
         var other = Guid.NewGuid();
         Assert.Throws<AgentRunTransitionException>(() => run.ClearSideEffect(run.Revision, other, Now));
-        Assert.Throws<AgentRunTransitionException>(() => run.AcceptBrowserObservation(run.Revision, other, Now));
+        Assert.Throws<AgentRunTransitionException>(() => run.AcceptBrowserSnapshot(run.Revision, other, Now));
         run = run.MarkSideEffect(run.Revision, run.Claim!.Generation, AgentRunSideEffectDisposition.Prepared,
             "tool-1", new string('a', 64), Now);
         var failure = Assert.Throws<AgentRunTransitionException>(() => run.MarkSideEffect(run.Revision, other,

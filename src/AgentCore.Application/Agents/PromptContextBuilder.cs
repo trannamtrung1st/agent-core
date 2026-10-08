@@ -20,7 +20,7 @@ public sealed record PromptSections(
 
 public sealed class PromptContextBuilder(
     IToolConfigurationGate? configurationGate = null,
-    IBrowserSession? browser = null)
+    IBrowser? browser = null)
 {
     private readonly IToolConfigurationGate _configurationGate =
         configurationGate ?? ToolConfigurationGates.Unconfigured;

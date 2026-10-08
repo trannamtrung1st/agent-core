@@ -142,7 +142,7 @@ public sealed class AgentWorkspaceStoreTests
             var scratch = new FileSessionWorkspace(Path.Combine(root, "scratch"), Path.Combine(root, "templates"), maxWritableBytes: 8, sessions: new WorkspaceTestSessions());
             var repository = new DirectoryInfo(AppContext.BaseDirectory);
             while (repository is not null && !Directory.Exists(Path.Combine(repository.FullName, "agents"))) repository = repository.Parent;
-            var definition = (await new FileAgentDefinitionStore(Path.Combine(repository!.FullName, "agents"), SyntheticProviderAliases.Default).GetAsync("general-assistant", 16))!;
+            var definition = (await new FileAgentDefinitionStore(Path.Combine(repository!.FullName, "agents"), SyntheticProviderAliases.Default).GetAsync("general-assistant", 17))!;
             await scratch.EnsureAsync(session, definition);
             byte[] bytes = [0, 255, 128, 10, 13];
             var tree = new WorkspaceTransfer([new("", true, "inode/directory", []), new("empty", true, "inode/directory", []), new("data.bin", false, "application/octet-stream", bytes)]);

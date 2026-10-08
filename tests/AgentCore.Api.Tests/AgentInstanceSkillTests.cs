@@ -18,7 +18,7 @@ public sealed class AgentInstanceSkillTests
         await using var host = new AgentCoreApiFactory();
         using var client = host.CreateClient(); client.DefaultRequestHeaders.Add(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(host.Services));
         var admin = host.Services.GetRequiredService<AdminAgentInstanceService>();
-        var first = await admin.CreateManagedAsync("general-assistant", 16); var second = await admin.CreateManagedAsync("general-assistant", 16);
+        var first = await admin.CreateManagedAsync("general-assistant", 17); var second = await admin.CreateManagedAsync("general-assistant", 17);
         string Path(Guid id) => $"/api/v2/admin/agent-instances/{id}/skills";
         var input = new { id = "review", name = "Review", description = "Review evidence", procedure = "Check evidence", projection = "OnDemand", enabled = true, requiredCapabilities = Array.Empty<string>() };
         foreach (var owner in new[] { first, second }) (await client.PostAsJsonAsync(Path(owner.InstanceId), input)).EnsureSuccessStatusCode();
@@ -32,7 +32,7 @@ public sealed class AgentInstanceSkillTests
         Assert.Equal(HttpStatusCode.BadRequest, renamed.StatusCode);
         Assert.Equal("instance:review", (await client.GetFromJsonAsync<JsonElement>(Path(second.InstanceId) + "/instance:review")).GetProperty("key").GetString());
         var resolver = new EffectiveSkillCatalogResolver(host.Services.GetRequiredService<IAgentInstanceStore>());
-        var definition = (await host.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync(first.DefinitionId, 16))!;
+        var definition = (await host.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync(first.DefinitionId, 17))!;
         Assert.Contains(await resolver.ResolveAsync(first.InstanceId, definition), s => s.Key == "instance:review-2");
     }
 
@@ -42,7 +42,7 @@ public sealed class AgentInstanceSkillTests
         await using var host = new AgentCoreApiFactory();
         using var client = host.CreateClient();
         client.DefaultRequestHeaders.Add(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(host.Services));
-        var owner = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
+        var owner = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
         var path = $"/api/v2/admin/agent-instances/{owner.InstanceId}/skills";
         var input = new { name = "Always", description = "Always procedure", procedure = new string('a', 4000), projection = "Always", enabled = true, requiredCapabilities = Array.Empty<string>() };
         (await client.PostAsJsonAsync(path, input)).EnsureSuccessStatusCode();
@@ -62,8 +62,8 @@ public sealed class AgentInstanceSkillTests
         await using var host = new AgentCoreApiFactory();
         using var client = host.CreateClient(); client.DefaultRequestHeaders.Add(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(host.Services));
         var instances = host.Services.GetRequiredService<AdminAgentInstanceService>();
-        var owner = await instances.CreateManagedAsync("general-assistant", 16);
-        var other = await instances.CreateManagedAsync("general-assistant", 16);
+        var owner = await instances.CreateManagedAsync("general-assistant", 17);
+        var other = await instances.CreateManagedAsync("general-assistant", 17);
         var path = $"/api/v2/admin/agent-instances/{owner.InstanceId}/skills";
         var initial = await client.GetFromJsonAsync<JsonElement>(path);
         Assert.Single(initial.EnumerateArray());
@@ -87,7 +87,7 @@ public sealed class AgentInstanceSkillTests
         var localKey = local.GetProperty("key").GetString()!;
         var localUrl = path + "/" + Uri.EscapeDataString(localKey);
         var resolver = new EffectiveSkillCatalogResolver(host.Services.GetRequiredService<IAgentInstanceStore>());
-        var definition = (await host.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync(owner.DefinitionId, 16))!;
+        var definition = (await host.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync(owner.DefinitionId, 17))!;
         var pin = await resolver.ResolveAsync(owner.InstanceId, definition);
         var input = new { name = "Accounting", description = "Accounting procedure", procedure = "NEW_ACCOUNTING", projection = "OnDemand", enabled = true, requiredCapabilities = new[] { "workspace.read" }, expectedRevision = 1 };
         (await client.PatchAsJsonAsync(localUrl, input)).EnsureSuccessStatusCode();

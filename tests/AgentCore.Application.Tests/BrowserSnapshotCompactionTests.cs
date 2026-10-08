@@ -4,8 +4,20 @@ using AgentCore.Application.Tools;
 
 namespace AgentCore.Application.Tests;
 
-public sealed class BrowserObservationCompactionTests
+public sealed class BrowserSnapshotCompactionTests
 {
+    [Fact]
+    public void New_snapshot_removes_prior_find_refs()
+    {
+        var messages = new List<ModelMessage>
+        {
+            new(ModelRole.Tool, "{\"matches\":[{\"ref\":\"el_old\",\"name\":\"Asset 159\"}]}", Name: "browser.find"),
+            Observation(1, "el_latest")
+        };
+        BrowserSnapshotCompaction.Compact(messages);
+        Assert.DoesNotContain("el_old", messages[0].Text);
+        Assert.Contains("el_latest", messages[1].Text);
+    }
     [Fact]
     public void Repeated_browser_rounds_keep_only_the_latest_full_observations()
     {
@@ -15,12 +27,12 @@ public sealed class BrowserObservationCompactionTests
             messages.Add(new ModelMessage(
                 ModelRole.Assistant,
                 string.Empty,
-                ToolCalls: [new ModelToolCall($"call-{round}", "browser.observe", "{}")]));
+                ToolCalls: [new ModelToolCall($"call-{round}", "browser.snapshot", "{}")]));
             messages.Add(Observation(round, $"el_round_{round}"));
         }
 
         var before = messages.Sum(message => message.Text.Length);
-        BrowserObservationCompaction.Compact(messages);
+        BrowserSnapshotCompaction.Compact(messages);
         var after = messages.Sum(message => message.Text.Length);
 
         Assert.True(after < before / 2);
@@ -45,7 +57,7 @@ public sealed class BrowserObservationCompactionTests
         Assert.DoesNotContain("el_round_6", observations[6].Text, StringComparison.Ordinal);
         Assert.Equal("obs-7", observations[7].ToolCallId);
         Assert.Contains(messages, message => message.ToolCalls?.Any(call => call.Id == "call-7") == true);
-        Assert.Equal("browser.observe", observations[7].Name);
+        Assert.Equal("browser.snapshot", observations[7].Name);
     }
 
     [Fact]
@@ -57,7 +69,7 @@ public sealed class BrowserObservationCompactionTests
         var messages = new List<ModelMessage>
         {
             Observation(0, "el_old"),
-            new(ModelRole.Tool, error, ToolCallId: "err", Name: "browser.act"),
+            new(ModelRole.Tool, error, ToolCallId: "err", Name: "browser.click"),
             new(ModelRole.Tool, intervention, ToolCallId: "gate", Name: "browser.navigate"),
             new(ModelRole.Tool, note, ToolCallId: "note", Name: "workspace.read"),
             Observation(1, "el_mid"),
@@ -65,7 +77,7 @@ public sealed class BrowserObservationCompactionTests
             Observation(3, "el_latest")
         };
 
-        BrowserObservationCompaction.Compact(messages);
+        BrowserSnapshotCompaction.Compact(messages);
 
         Assert.DoesNotContain("el_old", messages[0].Text, StringComparison.Ordinal);
         Assert.DoesNotContain("el_mid", messages[4].Text, StringComparison.Ordinal);
@@ -89,17 +101,17 @@ public sealed class BrowserObservationCompactionTests
             Page("http://store.test/products", "PRODUCT-GRID", settled: null)
         };
 
-        BrowserObservationCompaction.Compact(messages);
+        BrowserSnapshotCompaction.Compact(messages);
 
         var early = JsonDocument.Parse(messages[0].Text).RootElement;
         var late = JsonDocument.Parse(messages[1].Text).RootElement;
         var products = JsonDocument.Parse(messages[2].Text).RootElement;
         Assert.True(early.GetProperty("compacted").GetBoolean());
         Assert.DoesNotContain("ORDER-EARLY", early.GetProperty("visibleTextExcerpt").GetString(), StringComparison.Ordinal);
-        Assert.Equal(BrowserObservationCompaction.DuplicateReceiptChars, early.GetProperty("visibleTextExcerpt").GetString()!.Length);
+        Assert.Equal(BrowserSnapshotCompaction.DuplicateReceiptChars, early.GetProperty("visibleTextExcerpt").GetString()!.Length);
         var lateExcerpt = late.GetProperty("visibleTextExcerpt").GetString();
         Assert.Contains("ORDER-LATE", lateExcerpt, StringComparison.Ordinal);
-        Assert.True(lateExcerpt!.Length <= BrowserObservationCompaction.PageEvidenceChars);
+        Assert.True(lateExcerpt!.Length <= BrowserSnapshotCompaction.PageEvidenceChars);
         Assert.Contains("HEADER", late.GetProperty("visibleTextExcerpt").GetString(), StringComparison.Ordinal);
         Assert.True(late.GetProperty("settled").GetBoolean());
         Assert.False(late.TryGetProperty("elements", out _));
@@ -128,7 +140,7 @@ public sealed class BrowserObservationCompactionTests
                 visibleText = visible,
                 elements = new[] { new { @ref = "el_aaaaaaaaaaaaaaaaaaaaaa", role = "link", name = "Row" } }
             });
-        return new ModelMessage(ModelRole.Tool, json, ToolCallId: marker, Name: "browser.observe");
+        return new ModelMessage(ModelRole.Tool, json, ToolCallId: marker, Name: "browser.snapshot");
     }
 
     private static ModelMessage Observation(int round, string reference)
@@ -147,6 +159,6 @@ public sealed class BrowserObservationCompactionTests
             textTruncated = false,
             elements
         });
-        return new ModelMessage(ModelRole.Tool, json, ToolCallId: $"obs-{round}", Name: "browser.observe");
+        return new ModelMessage(ModelRole.Tool, json, ToolCallId: $"obs-{round}", Name: "browser.snapshot");
     }
 }

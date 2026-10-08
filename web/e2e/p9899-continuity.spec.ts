@@ -26,7 +26,7 @@ test('Experience informs an authorized Instance Skill Automation; next activatio
   await page.getByRole('tab', { name: 'Instances', exact: true }).click();
   await page.getByRole('button', { name: 'New instance', exact: true }).click();
   await select(page, 'Definition', 'General Assistant · general-assistant');
-  await select(page, 'Published version', 'v16 · Built-in · Published');
+  await select(page, 'Published version', 'v17 · Built-in · Published');
   const dialog = page.getByRole('dialog', { name: 'New instance', exact: true });
   await dialog.getByText('Custom persona', { exact: true }).click();
   await dialog.getByLabel('Persona name').fill(reviewerName);

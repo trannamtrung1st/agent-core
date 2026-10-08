@@ -17,7 +17,8 @@ test("immediate child reports once, then continues as the same Session with a ne
   const { id: _id, version: _version, ...candidate } = builtIn;
   const definitionId = `background-journey-${Date.now()}`;
   candidate.definitionId = definitionId;
-  candidate.environment.toolAllowlist = ["knowledge.retrieve", "background.start"];
+  candidate.environment.capabilities = { mode: "Selected", resolvedCapabilities: ["knowledge.retrieve", "background.start"] };
+  candidate.environment.projection = { alwaysCapabilities: ["knowledge.retrieve", "background.start"] };
   candidate.environment.knowledgeSources = [];
   candidate.skills = [];
   // Report-back is autonomous. This fixture explicitly enables the parent policy

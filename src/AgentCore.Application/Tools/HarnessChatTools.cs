@@ -111,7 +111,7 @@ public static class HarnessChatTools
                 ToolCatalog.WorkspaceRead => Read("path") is { } path ? "workspace:" + path : null,
                 ToolCatalog.KnowledgeRetrieve => Read("identity") is { } id ? "knowledge:" + id : null,
                 ToolCatalog.AttachmentsRead => Read("attachmentId") is { } id ? "attachment:" + id : null,
-                ToolCatalog.BrowserNavigate or ToolCatalog.BrowserObserve or ToolCatalog.BrowserAct => output.RootElement.TryGetProperty("url", out var browserUrl) && browserUrl.ValueKind == JsonValueKind.String ? browserUrl.GetString() : null,
+                _ when ToolCatalog.IsBrowserTool(call.Name) => output.RootElement.TryGetProperty("url", out var browserUrl) && browserUrl.ValueKind == JsonValueKind.String ? browserUrl.GetString() : null,
                 ToolCatalog.HttpRequest => Read("url"),
                 _ => null
             };

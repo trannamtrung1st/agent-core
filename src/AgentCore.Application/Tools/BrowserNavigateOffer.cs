@@ -8,7 +8,7 @@ internal static class BrowserNavigateOffer
 
     public static IReadOnlyList<ModelToolDefinition> Apply(
         IReadOnlyList<ModelToolDefinition> tools,
-        IBrowserSession? browser)
+        IBrowser? browser)
     {
         var start = HomeUrl(browser);
         if (start is null)
@@ -31,7 +31,7 @@ internal static class BrowserNavigateOffer
         return updated;
     }
 
-    public static string? HomeUrl(IBrowserSession? browser)
+    public static string? HomeUrl(IBrowser? browser)
     {
         if (browser is not { IsAvailable: true }
             || browser.HostPolicy.PolicyMode == BrowserPolicyMode.OpenWeb)

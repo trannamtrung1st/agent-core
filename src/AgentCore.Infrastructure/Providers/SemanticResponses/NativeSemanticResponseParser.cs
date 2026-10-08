@@ -58,7 +58,7 @@ internal static class NativeSemanticResponseParser
                 return false;
             }
 
-            if (!TryActionKind(root, out var actionKind, out var actionSpecified, out failureReason))
+            if (!TryInteractionionKind(root, out var actionKind, out var actionSpecified, out failureReason))
             {
                 return false;
             }
@@ -195,7 +195,7 @@ internal static class NativeSemanticResponseParser
         return true;
     }
 
-    private static bool TryActionKind(
+    private static bool TryInteractionionKind(
         JsonElement root,
         out string? actionKind,
         out bool actionSpecified,

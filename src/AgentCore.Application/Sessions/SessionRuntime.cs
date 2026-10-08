@@ -57,7 +57,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly IStructuredMemoryService? _structuredMemory;
     private readonly IArtifactReferenceAuthorizer _artifacts;
     private readonly SessionToolExecutor _tools;
-    private readonly IBrowserSessionLease? _browserLease;
+    private readonly IBrowserLease? _browserLease;
     private bool _intermediateMessagingAllowed;
     private readonly ApplicationMessagePolicy _applicationMessagePolicy = ApplicationMessagePolicy.Default;
     private readonly InteractionPolicy _policy;
@@ -213,7 +213,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IUserTurnCapabilityValidator? turnCapabilities = null,
         IStructuredMemoryService? structuredMemory = null,
         IDiagnosticIdSource? diagnostics = null,
-        IBrowserSessionLease? browserLease = null,
+        IBrowserLease? browserLease = null,
         IAgentRunAuthority? runAuthority = null,
         ITriggerStore? triggerOccurrences = null)
     {
@@ -2591,7 +2591,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var checkpoint = _boundAgentRun?.ResponseId == request.ResponseId ? _boundAgentRun.Checkpoint : null;
         var restored = AgentRunToolCallCheckpoint.TryRead(checkpoint, out var restoredMessages);
         var messages = restored ? request.Messages.Concat(restoredMessages!).ToList() : request.Messages.ToList();
-        if (restored) messages = await _tools.RehydrateCapturesAsync(SessionId, messages, cancellationToken).ConfigureAwait(false);
+        if (restored) messages = await _tools.RehydrateCapturesAsync(SessionId, messages, model.Capabilities.Vision, cancellationToken).ConfigureAwait(false);
         var checkpointPrefixCount = request.Messages.Count(message => !PromptContextBuilder.IsActiveSkillSystem(message));
         ModelMessage[] CheckpointSuffix() => messages.Where(message => !PromptContextBuilder.IsActiveSkillSystem(message)).Skip(checkpointPrefixCount).ToArray();
         var resumePending = restored ? AgentRunToolCallCheckpoint.PendingCalls(messages).ToList() : [];
@@ -2620,15 +2620,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             ? WithOfferedTools(request, authorizedTools, trigger, model).Tools
             : ToolCatalog.Eligible(_snapshot.Definition,
                 await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, cancellationToken), _tools.ConfigurationGate);
+        await using var backgroundBrowser = IsInitialBackgroundRun
+            ? await _tools.OpenOccurrenceBrowserAsync(SessionId, _snapshot.AgentInstanceId, cancellationToken).ConfigureAwait(false) : null;
         var budget = ToolExecutionBudget.Resolve(new ToolBudgetSignal(
             InteractiveBrowser: trigger.Kind == TriggerKind.UserTurn
                 && ToolCatalog.AuthorizesBrowser(budgetTools),
-            PersistentBrowserLease: false));
+            PersistentBrowserLease: backgroundBrowser?.PersistentBrowserLease == true));
         var toolDeadline = request.Tools is { Count: > 0 };
         var remainingBudget = checkpoint is null ? budget.Overall
             : TimeSpan.FromMilliseconds(checkpoint.RemainingOverallBudgetMs);
-        await using var backgroundBrowser = IsInitialBackgroundRun
-            ? await _tools.OpenOccurrenceBrowserAsync(SessionId, _snapshot.AgentInstanceId, cancellationToken).ConfigureAwait(false) : null;
         using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using ITimer? overallTimer = toolDeadline ? ScheduleCancel(_time, overallCts, remainingBudget) : null;
         var overallDeadline = toolDeadline ? _time.GetUtcNow() + remainingBudget : (DateTimeOffset?)null;
@@ -2654,7 +2654,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     protocolRepairAttempted = false;
                 }
 
-                BrowserObservationCompaction.Compact(messages);
+                BrowserSnapshotCompaction.Compact(messages);
                 messages = PromptContextBuilder.WithActiveSkillSystem(messages, pinnedCatalog, pinnedSkills).ToList();
                 AgentContext? projectionContext = null;
                 if (_snapshot.Definition.Environment?.Capabilities is not null)
@@ -3074,7 +3074,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     allowedIntermediate,
                                     _snapshot.AgentInstanceId,
                                     Harness: await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, overallCts.Token),
-                                    SupportsTools: model.Capabilities.Tools, OwnedSessionId: SessionId), overallCts.Token);
+                                    SupportsTools: model.Capabilities.Tools, SupportsVision: model.Capabilities.Vision, OwnedSessionId: SessionId), overallCts.Token);
                             if (_runAuthority is not null && _boundAgentRun is { } authorizedRun)
                             {
                                 var currentDefinition = await _runAuthority.CurrentDefinitionAsync(authorizedRun, overallCts.Token).ConfigureAwait(false);
@@ -3182,6 +3182,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     actionHash = ToolActionHash.Compute(call.Name, args);
                                 }
 
+                                AgentRunToolCallCheckpoint.TryReadState(_boundAgentRun?.Checkpoint, out _, out _, out var blockedActionHash);
+                                if (!preparedFailed && blockedActionHash is not null
+                                    && string.Equals(actionHash, blockedActionHash, StringComparison.Ordinal)
+                                    && BrowserToolCatalog.IsInteraction(call.Name))
+                                {
+                                    preparedFailed = true;
+                                    executionResult = ToolExecutionResult.FromText("{\"error\":\"not_replayed\",\"message\":\"This browser change was not replayed. Use fresh page evidence before requesting a different action.\"}");
+                                }
+
                                 if (!preparedFailed
                                     && policy == ToolPolicyDecision.RequireApproval)
                                 {
@@ -3261,7 +3270,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     var skipDispatch = false;
                                     if (_boundAgentRun is { SideEffect.Disposition: AgentRunSideEffectDisposition.Indeterminate or AgentRunSideEffectDisposition.InFlight })
                                     {
-                                        if (call.Name is not (ToolCatalog.BrowserObserve or ToolCatalog.BrowserNavigate))
+                                        if (call.Name is not (ToolCatalog.BrowserSnapshot or ToolCatalog.BrowserNavigate))
                                         {
                                             executionResult = ToolExecutionResult.FromText("{\"error\":\"observation_required\",\"message\":\"Observe the page before continuing; the previous change was not repeated.\"}");
                                             effectFenced = false;
@@ -3356,8 +3365,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         await MarkRunEffectAsync(cause, request.ResponseId, call, effectHash!, RejectedEffect(executionResult.Text)
                             ? AgentRunSideEffectDisposition.DefinitelyFailed : AgentRunSideEffectDisposition.Succeeded, generateToken).ConfigureAwait(false);
                     if (_boundAgentRun?.SideEffect.Disposition is AgentRunSideEffectDisposition.Indeterminate or AgentRunSideEffectDisposition.InFlight
-                        && call.Name is ToolCatalog.BrowserObserve or ToolCatalog.BrowserNavigate && !RejectedEffect(executionResult.Text))
-                        await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.AcceptBrowserObservation(run.Revision, now, run.Claim!.Generation), generateToken).ConfigureAwait(false);
+                        && call.Name is ToolCatalog.BrowserSnapshot or ToolCatalog.BrowserNavigate && !RejectedEffect(executionResult.Text))
+                        await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.AcceptBrowserSnapshot(run.Revision, now, run.Claim!.Generation), generateToken).ConfigureAwait(false);
                     var toolOutcome = SafeExecutionTrace.NormalizeToolOutcome(executionResult.Text);
                     var toolDetail = SafeExecutionTrace.BuildToolDetail(
                         call.Name,
@@ -6378,7 +6387,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         var offered = tools
-            .Where(tool => tool.Name is not (ToolCatalog.BrowserObserve or ToolCatalog.BrowserAct))
+            .Where(tool => tool.Name is not (ToolCatalog.BrowserSnapshot or ToolCatalog.BrowserFind) && !BrowserToolCatalog.IsInteraction(tool.Name))
             .ToArray();
         if (offered.Length == tools.Count)
         {
@@ -6425,7 +6434,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         json = string.Empty;
         if (blockedOrigins.Count == 0
-            || call.Name is not (ToolCatalog.BrowserNavigate or ToolCatalog.BrowserObserve or ToolCatalog.BrowserAct))
+            || !ToolCatalog.IsBrowserTool(call.Name) || call.Name is ToolCatalog.BrowserClose or ToolCatalog.BrowserTabs)
         {
             return false;
         }
@@ -6492,7 +6501,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         if (finalOrigin is not null
             && error is null
-            && tool is ToolCatalog.BrowserNavigate or ToolCatalog.BrowserObserve or ToolCatalog.BrowserAct)
+            && ToolCatalog.IsBrowserTool(tool))
         {
             pageOrigin = finalOrigin;
         }
@@ -6505,7 +6514,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         string? json,
         string? pageOrigin,
         HashSet<string> blockedOrigins) =>
-        tool is ToolCatalog.BrowserNavigate or ToolCatalog.BrowserObserve or ToolCatalog.BrowserAct
+        ToolCatalog.IsBrowserTool(tool)
         && pageOrigin is not null
         && !blockedOrigins.Contains(pageOrigin)
         && !BrowserResultHasError(json);

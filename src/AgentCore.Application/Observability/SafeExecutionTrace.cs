@@ -12,7 +12,6 @@ public static class SafeExecutionTrace
     private const int MaxToolNameLength = 80;
     private const int MaxOutcomeLength = 80;
     private const int MaxDetailLength = 480;
-    private const int MaxAccessibleNameLength = 80;
 
     private static readonly HashSet<string> ArgumentReasons = new(StringComparer.Ordinal)
     {
@@ -71,8 +70,8 @@ public static class SafeExecutionTrace
         return toolName switch
         {
             ToolCatalog.BrowserNavigate => BuildNavigateDetail(argumentsJson, resultJson),
-            ToolCatalog.BrowserObserve => BuildObserveDetail(argumentsJson, resultJson),
-            ToolCatalog.BrowserAct => BuildActDetail(argumentsJson, resultJson),
+            ToolCatalog.BrowserSnapshot => BuildObserveDetail(argumentsJson, resultJson),
+            _ when BrowserToolCatalog.IsInteraction(toolName) => BuildActDetail(argumentsJson, resultJson),
             ToolCatalog.BrowserClose => BuildCloseDetail(resultJson),
             _ => string.Empty
         };
@@ -214,12 +213,12 @@ public static class SafeExecutionTrace
         var parts = new List<string>();
         if (TryReadStringProperty(argumentsJson, "url", out var url))
         {
-            parts.Add($"path={SafeUrlPath(url)}");
+            parts.Add($"origin={SafeUrlOrigin(url)}");
         }
 
         if (TryReadStringProperty(resultJson, "url", out var observed))
         {
-            parts.Add($"resultPath={SafeUrlPath(observed)}");
+            parts.Add($"resultOrigin={SafeUrlOrigin(observed)}");
         }
 
         AppendSettled(parts, resultJson);
@@ -248,7 +247,7 @@ public static class SafeExecutionTrace
 
         if (TryReadStringProperty(resultJson, "url", out var url))
         {
-            parts.Add($"path={SafeUrlPath(url)}");
+            parts.Add($"origin={SafeUrlOrigin(url)}");
         }
 
         if (TryReadStringProperty(resultJson, "error", out var error) && error == "user_intervention_required")
@@ -279,7 +278,8 @@ public static class SafeExecutionTrace
 
     private static string BuildActDetail(string? argumentsJson, string? resultJson)
     {
-        if (!TryReadStringProperty(argumentsJson, "operation", out var operation))
+        if (!TryReadStringProperty(argumentsJson, "operation", out var operation)
+            || !BrowserToolLimits.Operations.Contains(operation, StringComparer.Ordinal))
         {
             return string.Empty;
         }
@@ -292,35 +292,23 @@ public static class SafeExecutionTrace
         }
         if (TryReadStringProperty(resultJson, "url", out var url))
         {
-            parts.Add($"path={SafeUrlPath(url)}");
+            parts.Add($"origin={SafeUrlOrigin(url)}");
         }
 
         AppendSettled(parts, resultJson);
         if (string.Equals(operation, "upload", StringComparison.Ordinal))
         {
-            if (TryResolveActTarget(argumentsJson, resultJson, out var role, out var name))
+            if (TryResolveActTarget(argumentsJson, resultJson, out var role))
             {
                 parts.Add($"targetRole={role}");
-                if (!string.IsNullOrEmpty(name))
-                {
-                    parts.Add($"targetName={name}");
-                }
-            }
-            else
-            {
-                parts.Add("targetName=Picture");
             }
 
             return string.Join(';', parts);
         }
 
-        if (TryResolveActTarget(argumentsJson, resultJson, out var actRole, out var actName))
+        if (TryResolveActTarget(argumentsJson, resultJson, out var actRole))
         {
             parts.Add($"targetRole={actRole}");
-            if (!string.IsNullOrEmpty(actName))
-            {
-                parts.Add($"targetName={actName}");
-            }
         }
 
         return string.Join(';', parts);
@@ -336,35 +324,27 @@ public static class SafeExecutionTrace
     private static bool TryResolveActTarget(
         string? argumentsJson,
         string? resultJson,
-        out string role,
-        out string name)
+        out string role)
     {
         role = string.Empty;
-        name = string.Empty;
         if (!TryReadStringProperty(argumentsJson, "ref", out var reference)
             || string.IsNullOrWhiteSpace(reference))
         {
             return false;
         }
 
-        if (!TryFindElement(resultJson, reference, out var elementRole, out var elementName))
+        if (!TryFindElement(resultJson, reference, out var elementRole))
         {
             return false;
         }
 
         role = Clip(elementRole, MaxRoleLength);
-        if (!SensitiveAccessibleName(elementName))
-        {
-            name = Clip(elementName, MaxAccessibleNameLength);
-        }
-
-        return !string.IsNullOrEmpty(role) || !string.IsNullOrEmpty(name);
+        return !string.IsNullOrEmpty(role);
     }
 
-    private static bool TryFindElement(string? json, string reference, out string role, out string name)
+    private static bool TryFindElement(string? json, string reference, out string role)
     {
         role = string.Empty;
-        name = string.Empty;
         if (string.IsNullOrWhiteSpace(json))
         {
             return false;
@@ -391,11 +371,6 @@ public static class SafeExecutionTrace
                 if (element.TryGetProperty("role", out var roleProperty) && roleProperty.ValueKind == JsonValueKind.String)
                 {
                     role = roleProperty.GetString() ?? string.Empty;
-                }
-
-                if (element.TryGetProperty("name", out var nameProperty) && nameProperty.ValueKind == JsonValueKind.String)
-                {
-                    name = nameProperty.GetString() ?? string.Empty;
                 }
 
                 return true;
@@ -513,20 +488,21 @@ public static class SafeExecutionTrace
         return false;
     }
 
-    private static string SafeUrlPath(string? url)
+    private static string SafeUrlOrigin(string? url)
     {
         if (string.IsNullOrWhiteSpace(url))
         {
             return string.Empty;
         }
 
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || uri.Scheme is not ("http" or "https"))
         {
-            return Clip(SafeLogRedactor.Redact(url), MaxDetailLength);
+            return string.Empty;
         }
 
-        var path = uri.GetLeftPart(UriPartial.Path);
-        return Clip(SafeLogRedactor.Redact(path), MaxDetailLength);
+        var origin = uri.GetComponents(UriComponents.SchemeAndServer, UriFormat.UriEscaped);
+        return Clip(origin, MaxDetailLength);
     }
 
     private static string Clip(string? value, int max)

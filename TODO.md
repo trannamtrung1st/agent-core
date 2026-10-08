@@ -20,6 +20,10 @@
 
 This requirement does not reopen historical freezes or start P10/P11. The migration is closed/frozen on final behavior `8cec78c5d47a43e0236a5c38f2e312f4e36ce283`, with all five required jobs [green](https://github.com/trannamtrung1st/agent-core/actions/runs/37756244306). [Implementation plan](docs/18-implementation-plan.md#activation-agentrun-and-background-sessions-cutover) and [verification](docs/reports/activation-agent-run-background-sessions-verification.md) own current evidence.
 
+## Browser v2 full cutover active migration
+
+Authorized on 2026-10-08 against baseline `bd44046896df6f3e0fc2e7d15d60dd479a5349cd` (pre-migration Synthetic run `37677917533`). Implemented the browser port and focused tool surface, native accessibility snapshot/search and Locator targets, provider feature negotiation, core/lifecycle operations, supported advanced groups, capability-aware built-ins and generic SPA journeys A–K. Journey L passed with the configured DeepSeek tool-response mode after correcting its test harness. No legacy aliases or persisted-data translators. Existing Instance Skill ownership and the merged Activation/AgentRun/Automation owners and historical P9 freezes remain intact; P10/P11 remain unopened. Acceptance requires full local gates, real-model generic-fixture proof and five-job hosted green on the final behavior SHA. Full local key-free gates and all five hosted jobs pass on `162594346ebc869ff1197f2ca102c15e0c7c5a45` ([run 37722988290](https://github.com/trannamtrung1st/agent-core/actions/runs/37722988290)). The owner explicitly approved the OpenRouter destination/payload and the real-model proof passed; [the verification ledger](docs/reports/browser-v2-full-cutover-verification.md) owns exact commands, counts and candidate SHAs. All five hosted jobs for the corrected test candidate `ac1cba0b16edaf17b86ee62066fe3aa7b83410ba` pass ([run 37751900338](https://github.com/trannamtrung1st/agent-core/actions/runs/37751900338)); integration with current main passes local verification in this branch ([merge evidence](docs/reports/branch-1-main-merge-verification.md)). All five hosted Synthetic/Compose jobs also pass on combined candidate `8a9115f43d9783d8611726de5594f71a3d5b2353` ([run 37764327206](https://github.com/trannamtrung1st/agent-core/actions/runs/37764327206)); the merge evidence records the integrated runtime checks and final documentation-only publication. The migration is not behavior-frozen; baseline CI is not v2 acceptance.
+
 Living roadmap: current status, active requirements, future dependency order, and cross-phase invariants.
 
 Detailed architecture and behavior live in `/docs`. Historical implementation and freeze evidence live in `docs/reports/`. This file does not duplicate either.
@@ -79,7 +83,7 @@ Clients cannot supply trusted diagnostic, correlation, or causation identity. JS
 
 **P8 — Agent Execution Contract, Application Actions & Skills** is **frozen** on `ca3eb23` (workflow [`36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). Post-freeze bounded follow-up (provider contract **`6fda4c5`**, CI stabilization **`c9aec29`**) is **closed** on hosted Synthetic [**`36745126226`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green. See `docs/reports/p8-freeze-candidate.md` (freeze narrative + appendix).
 
-**P8.5 — Application Messaging & Dynamic Skill Activation** is **closed** on `1461567` ([closure report](docs/reports/p8.5-freeze-candidate.md); hosted Synthetic [`36770385588`](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green). `app.message.send` and `skills.load` continue the same bounded user-turn execution. They do not change the P8 freeze. Post-closure corrections through **`aedea70`** are recorded in that report's appendix (truncation **`36807383922`** on **`0d1cfdd`**, SSE/no-chat/editor **`36818061198`** on **`fff7761`**, stabilization **`36851267423`** on **`aedea70`**); they do not move the P8.5 closure SHA. **P9 — Visible browser** is **closed** on `bba1de4` ([closure report](docs/reports/p9-freeze-candidate.md); hosted Synthetic [`36890525463`](https://github.com/trannamtrung1st/agent-core/actions/runs/36890525463) green). **Post-closure browser runtime hardening** is **closed** on **`3400d64`** (hosted Synthetic [**`36981513602`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36981513602) green); that chain does not move the P9 freeze SHA. Browser navigation, interaction, and subresource origins are separate host lists. The Record Lookup site is an optional fixture. `target_denied` stays a normal tool result. **P9.5 — Proactive Secretary / Real Assistant Demo** is **closed** on `1012653`. Two post-P9.5 follow-ups stay on that closure: Chat and Admin project one application connection by display name, and browser observations use a bounded settle with `browser.observe` `waitFor` `stable`. Neither follow-up moves the P9 or P9.5 SHAs. The post-P9.5 browser and store-review enhancement is recorded on `6f6ff42` (hosted Synthetic [`37128161642`](https://github.com/trannamtrung1st/agent-core/actions/runs/37128161642) green) and does not move `1012653`. **P9.6 — Visual Browser, Reactive Triggers & Deterministic Unattended Execution** is **closed** on `d033bc61` ([closure report](docs/reports/p9.6-freeze-candidate.md); hosted Synthetic [`37187663286`](https://github.com/trannamtrung1st/agent-core/actions/runs/37187663286) green). P10 and P11 stay requirement-triggered. **P9.7 is frozen on behavior SHA `8f5afa00`** ([hosted Synthetic green](https://github.com/trannamtrung1st/agent-core/actions/runs/37224218680)); [final verification](docs/reports/p9.7-final-verification.md) records the full DeepSeek Kubernetes sequence and GPT-4o mini limitations. Historical first-gate evidence is in [its report](docs/reports/p9.7-chat-first-freeze-candidate.md).
+**P8.5 — Application Messaging & Dynamic Skill Activation** is **closed** on `1461567` ([closure report](docs/reports/p8.5-freeze-candidate.md); hosted Synthetic [`36770385588`](https://github.com/trannamtrung1st/agent-core/actions/runs/36770385588) green). `app.message.send` and `skills.load` continue the same bounded user-turn execution. They do not change the P8 freeze. Post-closure corrections through **`aedea70`** are recorded in that report's appendix (truncation **`36807383922`** on **`0d1cfdd`**, SSE/no-chat/editor **`36818061198`** on **`fff7761`**, stabilization **`36851267423`** on **`aedea70`**); they do not move the P8.5 closure SHA. **P9 — Visible browser** is **closed** on `bba1de4` ([closure report](docs/reports/p9-freeze-candidate.md); hosted Synthetic [`36890525463`](https://github.com/trannamtrung1st/agent-core/actions/runs/36890525463) green). **Post-closure browser runtime hardening** is **closed** on **`3400d64`** (hosted Synthetic [**`36981513602`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36981513602) green); that chain does not move the P9 freeze SHA. Browser navigation, interaction, and subresource origins are separate host lists. The Record Lookup site is an optional fixture. `target_denied` stays a normal tool result. **P9.5 — Proactive Secretary / Real Assistant Demo** is **closed** on `1012653`. Two post-P9.5 follow-ups stay on that closure: Chat and Admin project one application connection by display name, and browser observations use a bounded settle with `browser.wait_for` `condition` `stable`. Neither follow-up moves the P9 or P9.5 SHAs. The post-P9.5 browser and store-review enhancement is recorded on `6f6ff42` (hosted Synthetic [`37128161642`](https://github.com/trannamtrung1st/agent-core/actions/runs/37128161642) green) and does not move `1012653`. **P9.6 — Visual Browser, Reactive Triggers & Deterministic Unattended Execution** is **closed** on `d033bc61` ([closure report](docs/reports/p9.6-freeze-candidate.md); hosted Synthetic [`37187663286`](https://github.com/trannamtrung1st/agent-core/actions/runs/37187663286) green). P10 and P11 stay requirement-triggered. **P9.7 is frozen on behavior SHA `8f5afa00`** ([hosted Synthetic green](https://github.com/trannamtrung1st/agent-core/actions/runs/37224218680)); [final verification](docs/reports/p9.7-final-verification.md) records the full DeepSeek Kubernetes sequence and GPT-4o mini limitations. Historical first-gate evidence is in [its report](docs/reports/p9.7-chat-first-freeze-candidate.md).
 
 ---
 
@@ -339,7 +343,7 @@ Definition
 → Session / Task / Event
 ```
 
-P9.5 may introduce only the minimum durable application connection/binding semantics that authenticated nopCommerce participation proves necessary: application identity/type and base scope, Agent Instance ownership, reference to that instance's browser profile, safe connection status, and connect/reauthenticate/revoke/reset lifecycle. It must not rewrite the Definition, persona, identity-wide state, or expose credentials. Do not generalize that slice into a universal Integration, Plugin, Application Binding, portability, or marketplace model. The post-P9.5 projection uses Application connection, display name, and base URL. Chat projects the display name and status. Admin shows a read-only Application type of nopCommerce because establishment still opens that store's admin sign-in. One connection per Agent Instance stays the limit. A separate post-P9.5 browser settle waits for a quiet visible page and lets `browser.observe` request `waitFor` `stable`. It does not add a nopCommerce-specific wait. Broader persistence waits for another concrete application to prove ownership, mutation, versioning, authorization, and portability requirements. P8 used Chat as the first application adapter and did not build this schema.
+P9.5 may introduce only the minimum durable application connection/binding semantics that authenticated nopCommerce participation proves necessary: application identity/type and base scope, Agent Instance ownership, reference to that instance's browser profile, safe connection status, and connect/reauthenticate/revoke/reset lifecycle. It must not rewrite the Definition, persona, identity-wide state, or expose credentials. Do not generalize that slice into a universal Integration, Plugin, Application Binding, portability, or marketplace model. The post-P9.5 projection uses Application connection, display name, and base URL. Chat projects the display name and status. Admin shows a read-only Application type of nopCommerce because establishment still opens that store's admin sign-in. One connection per Agent Instance stays the limit. A separate post-P9.5 browser settle waits for a quiet visible page and lets `browser.wait_for` request `condition` `stable`. It does not add a nopCommerce-specific wait. Broader persistence waits for another concrete application to prove ownership, mutation, versioning, authorization, and portability requirements. P8 used Chat as the first application adapter and did not build this schema.
 
 ## Create, teach, and hire — future product surface
 
@@ -800,7 +804,7 @@ P8.5 closes when an agent can send a bounded intermediate message to the trusted
 
 **Status: closed** on `bba1de4`. Hosted Synthetic [`36890525463`](https://github.com/trannamtrung1st/agent-core/actions/runs/36890525463) is green. Evidence: [p9-freeze-candidate.md](docs/reports/p9-freeze-candidate.md). Post-closure browser runtime hardening is **closed** on **`3400d64`** (hosted Synthetic [**`36981513602`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36981513602) green); that chain does not move the P9 freeze SHA. Earlier hosted Synthetic on [`d310b9e`](https://github.com/trannamtrung1st/agent-core/actions/runs/36907229401) and [`8092731`](https://github.com/trannamtrung1st/agent-core/actions/runs/36910823830) remains in the P9 report appendix.
 
-`general-assistant` v11 allowlists `browser.navigate`, `browser.observe`, and `browser.act` and publishes skill `browser.record.lookup`. v12 adds `browser.close`, which shuts the live window and keeps the on-disk profile. Existing agent instances stay on their pinned version until reassociated. Application owns the provider-neutral browser port and target policy. Infrastructure owns a direct Playwright adapter and an isolated loopback fixture. Chat progress for a `browser.*` tool reuses `agent.progress` kind `runningTool` with message `Using browser…`. The scripted Synthetic journey for a user message containing `record AC-1042` sends one application message and one answer, `AC-1042 is In review.` Host configuration separates `NavigationOrigins`, `InteractionOrigins`, and `ResourceOrigins`. Local Real/demo uses `PolicyMode` `OpenWeb`; Synthetic and CI stay `Restricted`. The Record Lookup fixture is optional and is not advertised as the browser home page in OpenWeb. `target_denied` is a normal tool result. `browser.*` is offered only when Browser is enabled and Infrastructure confirms the configured launch target (Playwright Chromium when `Channel` is unset, or the configured `Channel` such as `chrome` on the Real profile). The Docker image leaves Browser disabled because it does not install Chromium. P8 and P8.5 freeze SHAs are unchanged. P10 and P11 stay requirement-triggered.
+`general-assistant` v11 allowlists `browser.navigate`, `browser.snapshot`, and `browser.click` and publishes skill `browser.record.lookup`. v12 adds `browser.close`, which shuts the live window and keeps the on-disk profile. Existing agent instances stay on their pinned version until reassociated. Application owns the provider-neutral browser port and target policy. Infrastructure owns a direct Playwright adapter and an isolated loopback fixture. Chat progress for a `browser.*` tool reuses `agent.progress` kind `runningTool` with message `Using browser…`. The scripted Synthetic journey for a user message containing `record AC-1042` sends one application message and one answer, `AC-1042 is In review.` Host configuration separates `NavigationOrigins`, `InteractionOrigins`, and `ResourceOrigins`. Local Real/demo uses `PolicyMode` `OpenWeb`; Synthetic and CI stay `Restricted`. The Record Lookup fixture is optional and is not advertised as the browser home page in OpenWeb. `target_denied` is a normal tool result. `browser.*` is offered only when Browser is enabled and Infrastructure confirms the configured launch target (Playwright Chromium when `Channel` is unset, or the configured `Channel` such as `chrome` on the Real profile). The Docker image leaves Browser disabled because it does not install Chromium. P8 and P8.5 freeze SHAs are unchanged. P10 and P11 stay requirement-triggered.
 
 P9 started after P8.5 closed. It consumed the frozen P8 Agent Step, controller/action boundary, and Chat proof, plus P8.5 bounded current-application messaging and Core-admitted dynamic Skill activation. It did not define those contracts.
 
@@ -1050,97 +1054,16 @@ Do not rebuild or describe these implemented capabilities as future work:
 - trusted-owner attention results, idempotent delivery state, inspectable completion, quiet completion, and retained failure/capture evidence;
 - deterministic execution-model policy resolved before live-versus-durable routing, with `WorkModelPin` persisted on durable WorkItems;
 - a provider-neutral Agent Core browser port implemented by Playwright, not raw Playwright exposed to the model;
-- model-facing `browser.navigate`, `browser.observe`, `browser.act`, `browser.capture`, `browser.pages`, and `browser.close`;
+- the historical Browser v1 model-facing surface, now superseded by the separately authorized Browser v2 migration;
 - bounded navigation history, multi-page lifecycle, semantic observation, explicit viewport capture, download ownership, and stale page/ref rejection;
 - ordinary typed browser actions including click, double-click, fill, select, press, check/uncheck, upload, hover, scroll, and drag;
 - deterministic Synthetic coverage for Browser v1, event admission/fan-out, model pinning, unattended parity, and the four Secretary modes.
 
 The subsections below preserve the reviewed P9.6 requirements and stop condition. Their imperative or future-tense wording is the acceptance contract recorded at closure; implemented behavior is evidenced in the closure report and hosted Synthetic gate above.
 
-## P9.6A — Browser Capability v1
+## P9.6A/B — historical browser requirements
 
-Keep the dependency direction:
-
-```text
-Agent
-  ↓
-Agent Core Browser Capability
-  ↓
-Playwright
-```
-
-> Playwright is the browser driver/implementation. Agent Core owns the capability contract, authority, observations, side-effect semantics, durability, and auditability.
-
-Do not expose raw Playwright as the model-facing protocol. Keep a small, coarse provider-neutral surface. The exact names remain an implementation decision, but the capability categories should remain equivalent to:
-
-```text
-browser.navigate
-browser.observe
-browser.act
-browser.capture
-browser.pages
-browser.close
-```
-
-Do not add one agent tool per Playwright function or build a second browser engine. Broaden ordinary browser behavior coherently:
-
-**Navigation**
-
-- navigate, back, forward, and reload;
-- preserve target policy, trusted application scope, cancellation, bounded settle, and meaningful post-navigation observation.
-
-**Semantic observation**
-
-- retain bounded visible text and role/name/action-based elements;
-- retain opaque refs as the preferred interaction mechanism;
-- retain stable-settle behavior and stale-observation rejection;
-- do not encourage model-generated CSS or XPath selectors.
-
-**Visual observation**
-
-- add bounded screenshot/current-page visual capture suitable for rendered-state verification;
-- request screenshots when useful rather than automatically after every action;
-- treat captured images as bounded artifacts/model inputs with explicit size, lifetime, ownership, and redaction rules;
-- validate model vision capability before admitting work that requires image interpretation; a text-only model must not silently be treated as able to inspect a screenshot;
-- keep semantic observation available when visual interpretation is unsupported or unnecessary.
-
-**Interaction**
-
-- support click, double-click, fill/type, press, select, check/uncheck, hover, scroll, drag/drop, and upload;
-- add other ordinary Playwright interactions only when they fit the same bounded semantic action contract;
-- preserve action-specific authorization, exact-action approval, replay classification, and side-effect fencing.
-
-**Page lifecycle**
-
-- support multiple tabs/pages and popup/new-page adoption;
-- list, switch, and close active pages without exposing provider handles;
-- bind opaque page identity to the owning browser/profile scope and reject stale page observations.
-
-**Waiting and synchronization**
-
-- provide bounded waits for navigation, semantic state, and element readiness;
-- prefer semantic readiness and observed stability over arbitrary sleeps;
-- keep waits cancellable and inside the existing execution budget.
-
-**Artifacts**
-
-- support screenshots and useful download capture through explicit bounded ownership;
-- keep PDF capture optional and requirement-triggered;
-- do not turn browser artifacts into a general Agent Instance filesystem.
-
-## P9.6B — Elevated browser capabilities stay gated
-
-The normal Browser v1 contract does not include:
-
-- arbitrary JavaScript `evaluate`;
-- arbitrary Playwright scripts;
-- CDP sessions;
-- arbitrary request interception;
-- unrestricted cookie or storage manipulation;
-- extension loading;
-- unrestricted filesystem access.
-
-If a later concrete workflow requires one of these, treat it as an explicit elevated capability with its own authority, policy, approval, limits, and audit semantics. Do not smuggle it through `browser.act`.
+The Browser v1 surface and elevated-capability exclusions at the P9.6 closure are recorded in [the immutable closure report](docs/reports/p9.6-freeze-candidate.md). Browser v2 supersedes that runtime contract through the separately authorized active migration above. Application owns `IBrowser`, focused schemas and authority; Infrastructure owns Playwright, native accessibility snapshots and Locator actions. Supported elevated groups retain exact approval, policy, redaction and effect fencing. Evaluation, raw storage export, PDF, trace and video remain unsupported by the current provider. Current behavior is specified in [Backend Interfaces](docs/04-backend-interfaces.md#browser-v2-contract).
 
 ## P9.6C — Authenticated webhook trigger ingress
 
@@ -1424,7 +1347,7 @@ Orientation for what later work can build on. Detail and gate history are in `/d
 
 **Identity and memory.** Reusable Definition versus durable Agent Instance, persona separate from learned memory, trusted owner profile, Identity and User memory scopes, and layered prompt composition. Provider reasoning stays out of assistant output.
 
-**Tools and capabilities.** Typed tools for workspace, knowledge, attachments, artifacts, sandbox, web, HTTP, email, and a provider-neutral Agent Core browser capability backed by Playwright. The current browser surface is `navigate`, `observe`, `act`, `capture`, `pages`, and `close`; ordinary actions include click, double-click, fill, select, press, check/uncheck, upload, hover, scroll, and drag. It retains opaque refs, bounded page identity, stale-observation rejection, stable-settle observations, explicit bounded viewport capture, and download ownership without exposing raw Playwright. Execution-time policy, exact-action approval, and detached-execution restrictions remain authoritative. The trusted model catalog supports per-session model and reasoning selection.
+**Tools and capabilities.** Typed tools for workspace, knowledge, attachments, artifacts, sandbox, web, HTTP, email, and a provider-neutral Agent Core browser capability backed by Playwright. The current Browser v2 surface uses focused tools for native accessibility snapshots/find, navigation, interaction, forms, keyboard, tabs/dialogs, artifacts, waits and advertised advanced groups. It retains opaque refs, bounded page identity, stale-observation rejection, stable-settle observations, explicit bounded viewport capture, and download ownership without exposing raw Playwright. Execution-time policy, exact-action approval, and detached-execution restrictions remain authoritative. The trusted model catalog supports per-session model and reasoning selection.
 
 **Voice and realtime.** SignalR with MessagePack as the default transport, optional JSON diagnostic mode with the same contract, independently replaceable STT and TTS, voice interruption, and heard versus received tracking. Synthetic speech requires no provider credentials.
 

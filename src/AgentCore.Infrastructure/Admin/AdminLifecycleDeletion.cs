@@ -19,7 +19,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
     InMemoryAdminEventStore events,
     InMemoryExperienceStore? experience = null,
     IAgentInstanceWorkspaceStore? workspace = null,
-    IAgentCredentialBindingStore? credentialBindings = null, IBrowserSession? browser = null) : IAdminLifecycleDeletion
+    IAgentCredentialBindingStore? credentialBindings = null, IBrowser? browser = null) : IAdminLifecycleDeletion
 {
     internal Func<CancellationToken, ValueTask>? BeforeCommit { get; set; }
 
@@ -161,7 +161,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
 public sealed class SqliteAdminLifecycleDeletion(
     IDbContextFactory<AgentCoreDbContext> contexts,
     IIdGenerator ids,
-    IAgentInstanceWorkspaceStore? workspace = null, IBrowserSession? browser = null) : IAdminLifecycleDeletion
+    IAgentInstanceWorkspaceStore? workspace = null, IBrowser? browser = null) : IAdminLifecycleDeletion
 {
     public async ValueTask DeleteInstanceAsync(
         AdminInstanceDeleteCommand command,

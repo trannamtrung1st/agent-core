@@ -3022,6 +3022,20 @@ export function EffectiveConfigView({
           </Descriptions.Item>
         </Descriptions>
       </section>
+      {config.browser ? (
+        <section className="admin-effective-config-section admin-effective-config-wide" aria-label="Browser provider">
+          <Typography.Title level={5}>Browser provider</Typography.Title>
+          <Descriptions {...detailLayout} bordered size="small" column={1}>
+            <Descriptions.Item label="Provider">{config.browser.displayName} ({config.browser.providerId})</Descriptions.Item>
+            <Descriptions.Item label="Engine">{config.browser.engine || "Unknown"}</Descriptions.Item>
+            <Descriptions.Item label="Readiness">{!config.browser.enabled ? "Disabled" : config.browser.ready ? "Ready" : "Unavailable"}</Descriptions.Item>
+            <Descriptions.Item label="Profile mode">{config.browser.profileMode}</Descriptions.Item>
+            <Descriptions.Item label="Policy mode">{config.browser.policyMode}</Descriptions.Item>
+            <Descriptions.Item label="Supported features">{config.browser.supportedFeatures.join(", ") || "None"}</Descriptions.Item>
+            <Descriptions.Item label="Output limits">Snapshot {config.browser.maxSnapshotChars} characters; screenshot {config.browser.maxCaptureBytes} bytes; download {config.browser.maxDownloadBytes} bytes</Descriptions.Item>
+          </Descriptions>
+        </section>
+      ) : null}
       <section className="admin-effective-config-section" aria-label="Memory policy">
         <Typography.Title level={5}>Memory policy</Typography.Title>
         <Descriptions {...detailLayout} bordered size="small" column={1}>

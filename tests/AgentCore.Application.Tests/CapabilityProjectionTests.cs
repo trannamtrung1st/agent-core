@@ -12,6 +12,22 @@ namespace AgentCore.Application.Tests;
 public sealed class CapabilityProjectionTests
 {
     [Theory]
+    [InlineData("console errors", "browser.console_messages")]
+    [InlineData("network requests", "browser.network_requests")]
+    public async Task Browser_diagnostics_are_loaded_on_demand_and_vision_is_gated(string query, string expected)
+    {
+        var definition = await Definition(ToolCatalog.CapabilitiesLoad, "browser.console_messages", "browser.network_requests", "browser.mouse");
+        var context = Context(definition) with { AgentInstanceId = Guid.NewGuid() };
+        Assert.DoesNotContain(expected, ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll).Select(t => t.Name));
+        using var args = JsonDocument.Parse(JsonSerializer.Serialize(new { query, limit = 1 }));
+        var loaded = CapabilityDiscoveryMatcher.Load(definition, context, ToolConfigurationGates.AllowAll, args.RootElement, 0);
+        Assert.Equal([expected], loaded.Loaded);
+        Assert.Contains(expected, ToolCatalog.For(definition, context with { LoadedCapabilityIds = loaded.Loaded }, ToolConfigurationGates.AllowAll).Select(t => t.Name));
+        using var mouse = JsonDocument.Parse("{\"query\":\"browser.mouse\"}");
+        Assert.Empty(CapabilityDiscoveryMatcher.Load(definition, context, ToolConfigurationGates.AllowAll, mouse.RootElement, 0).Loaded);
+        Assert.Contains("browser.mouse", CapabilityDiscoveryMatcher.Load(definition, context with { ModelSupportsVision = true }, ToolConfigurationGates.AllowAll, mouse.RootElement, 0).Loaded);
+    }
+    [Theory]
     [InlineData("workspace.write")]
     [InlineData("Please use WORKSPACE.WRITE.")]
     public async Task Runtime_load_persists_ids_and_next_continuation_executes_then_next_turn_resets(string query)
@@ -73,7 +89,7 @@ public sealed class CapabilityProjectionTests
     internal static async Task<AgentDefinition> Definition(params string[] names)
     {
         var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../agents"));
-        var baseline = (await new FileAgentDefinitionStore(path, SyntheticProviderAliases.Default).GetAsync("general-assistant", 16))!;
+        var baseline = (await new FileAgentDefinitionStore(path, SyntheticProviderAliases.Default).GetAsync("general-assistant", 17))!;
         return baseline with { Skills = [], Environment = baseline.Environment! with { ToolAllowlist = null,
             Capabilities = new("Selected", names), Projection = new([]) } };
     }
@@ -185,12 +201,12 @@ public sealed class CapabilityProjectionTests
     [Fact]
     public async Task Attachment_and_browser_context_project_only_exact_authority()
     {
-        var d = await Definition(ToolCatalog.CapabilitiesLoad, ToolCatalog.AttachmentsRead, ToolCatalog.BrowserObserve);
+        var d = await Definition(ToolCatalog.CapabilitiesLoad, ToolCatalog.AttachmentsRead, ToolCatalog.BrowserSnapshot);
         var c = Context(d) with { SessionAttachments = [new(Guid.NewGuid(), "invoice.txt", "text/plain", 1)], AgentInstanceId = Guid.NewGuid() };
         var projected = ToolCatalog.For(d, c, ToolConfigurationGates.AllowAll).Select(t => t.Name).ToArray();
         Assert.Contains(ToolCatalog.AttachmentsRead, projected);
-        Assert.DoesNotContain(ToolCatalog.BrowserObserve, projected);
-        Assert.Contains(ToolCatalog.BrowserObserve, ToolCatalog.For(d, c with { LoadedCapabilityIds = [ToolCatalog.BrowserObserve] }, ToolConfigurationGates.AllowAll).Select(t => t.Name));
+        Assert.DoesNotContain(ToolCatalog.BrowserSnapshot, projected);
+        Assert.Contains(ToolCatalog.BrowserSnapshot, ToolCatalog.For(d, c with { LoadedCapabilityIds = [ToolCatalog.BrowserSnapshot] }, ToolConfigurationGates.AllowAll).Select(t => t.Name));
         Assert.DoesNotContain(ToolCatalog.BrowserNavigate, projected);
         Assert.DoesNotContain(ToolCatalog.AttachmentsRead, ToolCatalog.For(d, Context(d), ToolConfigurationGates.AllowAll).Select(t => t.Name));
     }

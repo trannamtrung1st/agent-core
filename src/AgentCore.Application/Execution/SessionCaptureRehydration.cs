@@ -13,7 +13,7 @@ public static class SessionCaptureRehydration
         for (var index = 0; index < messages.Count; index++)
         {
             var message = messages[index];
-            if (message.Role != ModelRole.Tool || message.Name != ToolCatalog.BrowserCapture || message.Parts?.OfType<ModelImageContent>().Any() == true
+            if (message.Role != ModelRole.Tool || message.Name != ToolCatalog.BrowserScreenshot || message.Parts?.OfType<ModelImageContent>().Any() == true
                 || !ReadId(message.Text, out var id)) continue;
             var record = artifacts is null ? null : await artifacts.GetAsync(sessionId, id, ct).ConfigureAwait(false);
             if (record is null || record.SessionId != sessionId || record.ArtifactId != id || !record.ContentType.StartsWith("image/", StringComparison.Ordinal)

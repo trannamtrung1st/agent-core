@@ -4,7 +4,7 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Credentials;
 
-public sealed class AgentBrowserProfileService(IAgentInstanceStore instances, IBrowserSession browser)
+public sealed class AgentBrowserProfileService(IAgentInstanceStore instances, IBrowser browser)
 {
     public async ValueTask ResetAsync(Guid id, long expectedRevision, CancellationToken ct = default)
     {

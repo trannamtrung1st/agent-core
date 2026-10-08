@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace AgentCore.Application.Tools;
 
@@ -25,7 +26,7 @@ internal sealed class BrowserEvidenceProgress
 
     internal void Note(string tool, string? json)
     {
-        if (tool is ToolCatalog.BrowserNavigate or ToolCatalog.BrowserAct)
+        if ((tool == ToolCatalog.BrowserNavigate || BrowserToolCatalog.IsInteraction(tool)))
         {
             if (IsSuccess(json))
             {
@@ -35,7 +36,7 @@ internal sealed class BrowserEvidenceProgress
             return;
         }
 
-        if (tool != ToolCatalog.BrowserObserve || !TryFingerprint(json, out var fingerprint))
+        if (tool is not (ToolCatalog.BrowserSnapshot or ToolCatalog.BrowserWait) || !TryFingerprint(json, out var fingerprint))
         {
             return;
         }
@@ -88,7 +89,9 @@ internal sealed class BrowserEvidenceProgress
                     ? settledProperty.GetBoolean() ? "true" : "false"
                     : string.Empty;
             var visible = Read(root, "visibleText");
+            var content = Regex.Replace(Read(root, "content"), @"\s*\[ref=[^\]]+\]", "");
             var builder = new StringBuilder();
+            builder.Append(content).Append('\n');
             builder.Append(urlProperty.GetString()).Append('\n').Append(settled).Append('\n').Append(visible).Append('\n');
             if (root.TryGetProperty("elements", out var elements) && elements.ValueKind == JsonValueKind.Array)
             {

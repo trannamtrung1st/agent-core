@@ -48,10 +48,13 @@ public sealed partial class SessionRuntime
         var run = _boundAgentRun ?? throw AgentCoreErrors.Conflict("AgentRun ownership is unavailable.");
         var observationRequired = run.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate
             && run.SideEffect.ActionHash is not null;
+        AgentRunToolCallCheckpoint.TryReadState(run.Checkpoint, out _, out _, out var blockedActionHash);
+        if (observationRequired && AgentRunActionHash.MatchesBrowserInteraction(run.Checkpoint?.PayloadJson, run.SideEffect.ActionHash))
+            blockedActionHash ??= run.SideEffect.ActionHash;
         var reserve = IsInitialBackgroundRun && AgentRunToolCallCheckpoint.PendingCalls(messages).Any(call => call.Name == ToolCatalog.WorkComplete)
             ? 0 : AgentRunToolCallCheckpoint.CompletionReserve(TriggerKind.UserTurn);
         if (!AgentRunToolCallCheckpoint.TryWriteWithReserve(messages, observationRequired,
-            observationRequired ? run.SideEffect.ActionHash : null, reserve,
+            blockedActionHash, reserve,
             out var payload, run.LoadedCapabilityIds, run.CapabilityLoadCount, protocolRepairReason: protocolRepairReason))
             throw AgentCoreErrors.Validation("AgentRun checkpoint capacity reached.");
         var remaining = deadline is null ? 0 : Math.Max(0, (int)Math.Min(int.MaxValue, (deadline.Value - _time.GetUtcNow()).TotalMilliseconds));

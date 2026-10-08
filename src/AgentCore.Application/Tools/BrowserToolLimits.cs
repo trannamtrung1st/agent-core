@@ -8,7 +8,8 @@ public static class BrowserToolLimits
     public const int MaxSelectLength = 200;
     public const int MaxTitleLength = 300;
     public const int MaxVisibleTextLength = 8000;
-    public const int MaxElements = 40;
+    public const int MaxSnapshotChars = 8000;
+    public const int MaxFindMatches = 20;
     public const int MaxAccessibleNameLength = 200;
     public const int MaxRoleLength = 80;
     public const int MinObserveTimeoutMs = 100;
@@ -34,15 +35,7 @@ public static class BrowserToolLimits
 
     public static readonly string[] NavigateOperations = ["goto", "back", "forward", "reload"];
 
-    public static readonly string[] PageOperations = ["list", "adopt", "switch", "close"];
 
     public static readonly string[] ScrollDirections = ["up", "down", "left", "right"];
 
-    public static readonly string[] ObserveRoles =
-    [
-        "button", "link", "textbox", "heading", "checkbox", "radio", "combobox",
-        "option", "tab", "menuitem", "searchbox", "switch", "img", "listitem"
-    ];
-
-    public static readonly string[] PressKeys = ["Enter", "Tab", "Escape"];
 }

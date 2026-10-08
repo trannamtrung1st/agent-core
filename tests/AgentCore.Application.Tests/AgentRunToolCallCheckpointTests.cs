@@ -28,7 +28,7 @@ public sealed class AgentRunToolCallCheckpointTests
     {
         var call = Call("search-1");
         ModelMessage[] messages = [new(ModelRole.Assistant, "", ToolCalls: [call])];
-        var capabilities = new[] { ToolCatalog.ContinuitySearch, ToolCatalog.BrowserCapture };
+        var capabilities = new[] { ToolCatalog.ContinuitySearch, ToolCatalog.BrowserScreenshot };
         var budget = AgentRunToolCallCheckpoint.ToolResultBudget(messages, call, false, null, TriggerKind.ManualInvocation, capabilities, 2);
         var text = kind switch { "control" => new string('\u0001', budget), "unicode" => new string('漢', budget / 3), _ => new string('x', budget) };
         var completed = messages.Append(new ModelMessage(ModelRole.Tool, text, ToolCallId: call.Id, Name: call.Name)).ToArray();

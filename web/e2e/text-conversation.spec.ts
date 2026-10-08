@@ -1,3 +1,4 @@
+import { waitForSessionAttached } from "./support/session-attached";
 import { expect, test, type Page } from "@playwright/test";
 import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { queuedMessages } from "./support/queued-messages";
@@ -196,7 +197,7 @@ test("refresh mid-stream restores the same durable execution and continues witho
   const url = page.url();
 
   await page.reload();
-  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await waitForSessionAttached(page);
   await expect(page).toHaveURL(url);
   await expect(assistant).toHaveCount(1);
   await expect(assistant.first()).toContainText("Hello");
@@ -248,7 +249,7 @@ test("reopening past detach grace while response is still running resumes live s
 
   const reopened = await context.newPage();
   await reopened.goto(url);
-  await expect(reopened.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await waitForSessionAttached(reopened);
   await expect
     .poll(async () => reopened.evaluate(() => window.__agentCore?.conversationExecution?.()), {
       timeout: 20_000
@@ -331,7 +332,7 @@ test("Stop after refresh durably interrupts the same execution", async ({ page }
   const before = await page.evaluate(() => window.__agentCore?.conversationExecution?.());
 
   await page.reload();
-  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await waitForSessionAttached(page);
   await expect(page.locator(".chat-message-assistant").first()).toContainText("Hello", {
     timeout: 15_000
   });

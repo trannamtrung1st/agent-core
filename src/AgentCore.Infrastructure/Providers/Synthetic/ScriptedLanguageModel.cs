@@ -1373,7 +1373,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         {
             if (rounds == 0)
             {
-                events = ToolTurn("p9-challenge-again", ToolCatalog.BrowserObserve, "{}");
+                events = ToolTurn("p9-challenge-again", ToolCatalog.BrowserSnapshot, "{}");
                 return true;
             }
 
@@ -1395,7 +1395,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                     JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = challengeUrl }));
                 return true;
             case 1:
-                if (!Offers(request, ToolCatalog.BrowserObserve))
+                if (!Offers(request, ToolCatalog.BrowserSnapshot))
                 {
                     events =
                     [
@@ -1405,7 +1405,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                     return true;
                 }
 
-                events = ToolTurn("p9-challenge-observe", ToolCatalog.BrowserObserve, "{}");
+                events = ToolTurn("p9-challenge-observe", ToolCatalog.BrowserSnapshot, "{}");
                 return true;
             default:
                 events =
@@ -1509,10 +1509,10 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                     JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = origin + "/" }));
                 return true;
             case 2:
-                events = ToolTurn("product-observe", ToolCatalog.BrowserObserve, "{}");
+                events = ToolTurn("product-observe", ToolCatalog.BrowserSnapshot, "{}");
                 return true;
             case 3:
-                return TryAct("product-publish", "click", ElementRef(request.Messages, "Publish"), null, out events);
+                return TryInteraction("product-publish", "click", ElementRef(request.Messages, "Publish"), null, out events);
             case 4 when !stopAfterClick:
                 events = ToolTurn(
                     "product-storefront",
@@ -1520,7 +1520,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                     JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = origin + "/storefront" }));
                 return true;
             case 5 when !stopAfterClick:
-                events = ToolTurn("product-storefront-observe", ToolCatalog.BrowserObserve, "{}");
+                events = ToolTurn("product-storefront-observe", ToolCatalog.BrowserSnapshot, "{}");
                 return true;
             default:
                 events = ProductPublishAnswer(login: false, stopAfterClick);
@@ -1563,7 +1563,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             case 1:
             case 6:
             case 8:
-                events = ToolTurn($"p9-observe-{rounds}", ToolCatalog.BrowserObserve, "{}");
+                events = ToolTurn($"p9-observe-{rounds}", ToolCatalog.BrowserSnapshot, "{}");
                 return true;
             case 2:
                 events = ToolTurn(
@@ -1578,11 +1578,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                     JsonSerializer.Serialize(new { text = BrowserRecordMessage }));
                 return true;
             case 4:
-                return TryAct("fill", "fill", ElementRef(request.Messages, "Record"), "AC-1042", out events);
+                return TryInteraction("fill", "fill", ElementRef(request.Messages, "Record"), "AC-1042", out events);
             case 5:
-                return TryAct("search", "click", ElementRef(request.Messages, "Search"), null, out events);
+                return TryInteraction("search", "click", ElementRef(request.Messages, "Search"), null, out events);
             case 7:
-                return TryAct("open", "click", ElementRef(request.Messages, "AC-1042"), null, out events);
+                return TryInteraction("open", "click", ElementRef(request.Messages, "AC-1042"), null, out events);
             default:
                 events =
                 [
@@ -1623,7 +1623,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
     }
 
-    private static bool TryAct(
+    private static bool TryInteraction(
         string callId,
         string operation,
         string? reference,
@@ -1651,7 +1651,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             arguments["value"] = value;
         }
 
-        events = ToolTurn("p9-" + callId, ToolCatalog.BrowserAct, JsonSerializer.Serialize(arguments));
+        arguments.Remove("operation");
+        var tool = operation switch { "fill" => ToolCatalog.BrowserType, "press" => ToolCatalog.BrowserPressKey, "fill_credential" => ToolCatalog.BrowserFillCredential, _ => ToolCatalog.BrowserClick };
+        if (operation == "fill" && arguments.Remove("value", out var text)) arguments["text"] = text;
+        if (operation == "press" && arguments.Remove("value", out var key)) arguments["key"] = key;
+        events = ToolTurn("p9-" + callId, tool, JsonSerializer.Serialize(arguments));
         return true;
     }
 

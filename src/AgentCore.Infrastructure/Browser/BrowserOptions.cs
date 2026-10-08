@@ -21,6 +21,8 @@ public sealed class BrowserOptions
 
     public string? Channel { get; set; }
 
+    public BrowserEnvironmentOptions Environment { get; set; } = new();
+
     public bool FixtureEnabled { get; set; } = true;
 
     public int FixturePort { get; set; } = 5091;
@@ -64,4 +66,17 @@ public sealed class BrowserOptions
 
     public IReadOnlyList<string> ResolveInteraction(IReadOnlyList<string> navigation) =>
         InteractionOrigins ?? navigation.Where(BrowserTargetPolicy.IsLoopback).ToArray();
+}
+
+/// <summary>Host-controlled context creation settings; never replace an active context implicitly.</summary>
+public sealed class BrowserEnvironmentOptions
+{
+    public string? Device { get; set; }
+    public int? ViewportWidth { get; set; }
+    public int? ViewportHeight { get; set; }
+    public string? Locale { get; set; }
+    public string? TimezoneId { get; set; }
+    public bool? IsMobile { get; set; }
+    public bool? HasTouch { get; set; }
+    public float? DeviceScaleFactor { get; set; }
 }

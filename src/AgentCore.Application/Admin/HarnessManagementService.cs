@@ -63,7 +63,7 @@ public sealed class HarnessManagementService(
             var instance = await RequireInstanceAsync(instanceId, token);
             RequireRevision(instance, expectedRevision);
             if (!Enum.IsDefined(policy.Mode) || policy.Scopes.Any(scope => !Enum.IsDefined(scope))
-                || policy.Scopes.Count > 4 || policy.Sources.Count > 24 || policy.EligibleTools.Count > 64)
+                || policy.Scopes.Count > 4 || policy.Sources.Count > 24 || policy.EligibleTools.Count > ToolRegistry.All.Count())
                 throw AgentCoreErrors.Validation("Harness policy is invalid or exceeds its bounds.");
             foreach (var source in policy.Sources)
             {

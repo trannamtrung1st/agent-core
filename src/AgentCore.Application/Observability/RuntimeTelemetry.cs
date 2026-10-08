@@ -15,6 +15,7 @@ public static class RuntimeTelemetry
     public static Meter Meter { get; } = new(Name);
 
     private static readonly Histogram<double> StageMs = Meter.CreateHistogram<double>("stage_duration_ms");
+    private static readonly Histogram<double> BrowserOperationMs = Meter.CreateHistogram<double>("browser.operation.duration_ms");
     private static readonly Counter<long> Dropped = Meter.CreateCounter<long>("dropped_items");
     private static readonly Counter<long> MemoryRetrieval = Meter.CreateCounter<long>("memory_retrieval");
     private static readonly Counter<long> TriggerSchedulerEvents = Meter.CreateCounter<long>("trigger_scheduler_events");
@@ -73,6 +74,15 @@ public static class RuntimeTelemetry
         {
             Timeline.TryDequeue(out _);
         }
+    }
+
+    public static void RecordBrowserOperation(string provider, string feature, string operation, string outcome, double milliseconds)
+    {
+        var safeProvider = Regex.IsMatch(provider, "^[a-z0-9_-]{1,64}$", RegexOptions.CultureInvariant) ? provider : "unknown";
+        BrowserOperationMs.Record(milliseconds,
+            new("browser.provider", safeProvider), new("browser.feature", feature),
+            new("browser.operation", operation), new("browser.outcome", outcome));
+        RecordDiagnostic("browser", milliseconds, $"provider={safeProvider};feature={feature};operation={operation};outcome={outcome}");
     }
 
     public static void RecordDropped(string kind)

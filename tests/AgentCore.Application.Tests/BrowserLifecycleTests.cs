@@ -144,8 +144,8 @@ public sealed class BrowserLifecycleTests
     public async Task In_flight_browser_navigation_is_not_replayed()
     {
         Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.BrowserNavigate));
-        Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.BrowserObserve));
-        Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.BrowserAct));
+        Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.BrowserSnapshot));
+        Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.BrowserClick));
 
         var now = DateTimeOffset.Parse("2026-10-08T00:00:00Z");
         var owner = new AgentRunOwner(Guid.NewGuid(), Guid.NewGuid());
@@ -168,9 +168,140 @@ public sealed class BrowserLifecycleTests
         Assert.Empty(await store.ListRunnableAsync(now.AddMinutes(6), 10));
     }
 
+    [Fact]
+    public async Task Recovered_browser_change_stays_blocked_after_a_fresh_snapshot_and_checkpoint()
+    {
+        var now = DateTimeOffset.Parse("2026-10-08T00:00:00Z");
+        var clock = new FakeTimeProvider(now);
+        var owner = new AgentRunOwner(Guid.NewGuid(), Guid.NewGuid());
+        var memory = new InMemoryMemoryStore();
+        var runs = new InMemoryAgentRunStore(memory, new SystemDiagnosticIdSource());
+        var snapshot = AgentRunTestFixtures.Snapshot(owner, BrowserDefinition(), now);
+        var run = (await runs.AdmitAsync(snapshot, 0, AgentRunTestFixtures.Run(snapshot, now))).Run;
+        var generation = Guid.NewGuid();
+        run = await runs.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.Claim(run.Revision, now, generation, now.AddMinutes(5)));
+        var original = new ModelToolCall("original", ToolCatalog.BrowserClick, "{\"ref\":\"el_aaaaaaaaaaaaaaaaaaaaaa\"}");
+        var hash = ToolActionHash.Compute(original.Name, JsonDocument.Parse(original.ArgumentsJson).RootElement);
+        run = await runs.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.Checkpoint(run.Revision, now, generation,
+            new(AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [original])]), 1, 0, 180000), null));
+        foreach (var disposition in new[] { AgentRunSideEffectDisposition.Prepared, AgentRunSideEffectDisposition.InFlight })
+            run = await runs.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.MarkSideEffect(run.Revision, now, generation, disposition, original.Id, hash));
+        clock.Advance(TimeSpan.FromMinutes(6));
+        run = await runs.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.Recover(run.Revision, clock.GetUtcNow()));
+        var browser = new HoldingBrowser { SuccessfulSnapshot = true };
+        var model = new RecoveryModel(original);
+        await using var runtime = SessionRuntimeFixture.Create((await memory.LoadAsync(snapshot.SessionId))!, model,
+            new DefaultAgentBrain(new PromptContextBuilder(ToolConfigurationGates.AllowAll, browser)), memory,
+            new CapturingSessionOutput(), new SystemIdGenerator(clock), clock, NullLogger<SessionRuntime>.Instance,
+            agentRuns: runs, tools: new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll));
+        await runtime.AttachAsync();
+        Assert.True(await runtime.DispatchAgentRunAsync(run.AgentRunId, false));
+        await model.AfterSnapshot.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var checkpointed = (await runs.GetAsync(owner, run.AgentRunId))!;
+        Assert.Equal(AgentRunSideEffectDisposition.None, checkpointed.SideEffect.Disposition);
+        Assert.True(AgentRunToolCallCheckpoint.TryReadState(checkpointed.Checkpoint, out _, out var needsSnapshot, out var blocked));
+        Assert.False(needsSnapshot);
+        Assert.Equal(hash, blocked);
+        model.Continue.TrySetResult();
+        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, browser.SnapshotCalls);
+        Assert.Equal(1, browser.InteractCalls);
+        Assert.Equal("el_bbbbbbbbbbbbbbbbbbbbbb", browser.LastInteractionRef);
+        Assert.Contains(model.Results, text => text.Contains("not_replayed", StringComparison.Ordinal));
+        Assert.Equal(AgentRunStatus.Completed, (await runs.GetAsync(owner, run.AgentRunId))!.Status);
+    }
+
+    [Fact]
+    public async Task Background_browser_lease_retains_its_32_step_budget_through_AgentRun_dispatch()
+    {
+        var now = DateTimeOffset.Parse("2026-10-08T00:00:00Z");
+        var clock = new FakeTimeProvider(now);
+        var owner = new AgentRunOwner(Guid.NewGuid(), Guid.NewGuid());
+        var memory = new InMemoryMemoryStore();
+        var runs = new InMemoryAgentRunStore(memory, new SystemDiagnosticIdSource());
+        var snapshot = AgentRunTestFixtures.Snapshot(owner, BrowserDefinition(), now);
+        var runId = Guid.NewGuid();
+        snapshot = snapshot with { Origin = new(SessionOriginKind.ManualBackground, initialBackgroundAgentRunId: runId),
+            Surfaces = SessionSurface.BackgroundWork };
+        var input = snapshot.Entries.Single();
+        var activation = new Activation(Guid.NewGuid(), snapshot.SessionId, ActivationKind.ManualBackground, [input.EntryId],
+            input.SourceEventId, null, null, null, "manual:browser-budget", now);
+        var run = AgentRun.Create(runId, owner, new(activation, snapshot.Definition.Id, snapshot.Definition.Version,
+            snapshot.PinnedPersona!, Guid.NewGuid()), new("scripted-alpha", "primary-llm", "scripted-alpha", null), 3, now);
+        run = (await runs.AdmitAsync(snapshot, 0, run)).Run;
+        run = await runs.ApplyAsync(owner, runId, new AgentRunCommand.Claim(run.Revision, now, Guid.NewGuid(), now.AddMinutes(5)));
+        var browser = new HoldingBrowser { SuccessfulSnapshot = true };
+        await using var runtime = SessionRuntimeFixture.Create((await memory.LoadAsync(snapshot.SessionId))!, new BoundBudgetModel(),
+            new DefaultAgentBrain(new PromptContextBuilder(ToolConfigurationGates.AllowAll, browser)), memory,
+            new CapturingSessionOutput(), new SystemIdGenerator(clock), clock, NullLogger<SessionRuntime>.Instance,
+            agentRuns: runs, tools: new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll));
+        Assert.True(await runtime.DispatchAgentRunAsync(runId, true));
+        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, browser.UnattendedLeases);
+        Assert.Equal(26, browser.SnapshotCalls);
+        run = (await runs.GetAsync(owner, runId))!;
+        Assert.Equal(AgentRunStatus.Completed, run.Status);
+        Assert.Equal(27, run.Checkpoint!.StepCount);
+        Assert.Equal(240000, run.Checkpoint.RemainingOverallBudgetMs);
+    }
+
+    private sealed class BoundBudgetModel : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
+        private int calls;
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            await Task.Yield();
+            ct.ThrowIfCancellationRequested();
+            var step = calls++;
+            yield return new ModelToolCallEvent(step < 26
+                ? new("snapshot-" + step, ToolCatalog.BrowserSnapshot, "{}")
+                : new("finish", ToolCatalog.WorkComplete, "{\"summary\":\"Checked 26 changing pages.\",\"attentionRequired\":false,\"outcome\":\"NoAction\"}"));
+            yield return new ModelCompleted(ModelStopReason.ToolCalls);
+        }
+    }
+
+    private sealed class RecoveryModel(ModelToolCall original) : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
+        public TaskCompletionSource AfterSnapshot { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Continue { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public List<string> Results { get; } = [];
+        private int requests;
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            Results.AddRange(request.Messages.Where(m => m.Role == ModelRole.Tool).Select(m => m.Text));
+            var step = requests++;
+            if (step == 1)
+            {
+                AfterSnapshot.TrySetResult();
+                await Continue.Task.WaitAsync(ct);
+            }
+            var call = step switch
+            {
+                0 => new ModelToolCall("snapshot", ToolCatalog.BrowserSnapshot, "{}"),
+                1 => original with { Id = "repeat" },
+                2 => new ModelToolCall("new", ToolCatalog.BrowserClick, "{\"ref\":\"el_bbbbbbbbbbbbbbbbbbbbbb\"}"),
+                _ => null
+            };
+            if (call is not null)
+            {
+                yield return new ModelToolCallEvent(call);
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            }
+            else
+            {
+                yield return new ModelSemanticResponseReady(new("Fresh evidence checked.", new(ModelSpeechMode.Same, null), []));
+                yield return new ModelCompleted(ModelStopReason.Completed);
+            }
+        }
+    }
+
     private static SessionRuntime Runtime(
         HoldingBrowser browser,
-        IBrowserSessionLease lease,
+        IBrowserLease lease,
         ILanguageModel model,
         CapturingSessionOutput? output = null,
         InMemoryMemoryStore? store = null,
@@ -231,8 +362,8 @@ public sealed class BrowserLifecycleTests
             new RoleEnvironment(ToolAllowlist:
             [
                 ToolCatalog.BrowserNavigate,
-                ToolCatalog.BrowserObserve,
-                ToolCatalog.BrowserAct
+                ToolCatalog.BrowserSnapshot,
+                ToolCatalog.BrowserClick
             ]));
 
     private static DeterministicIdGenerator Ids(string eventPrefix, string sessionPrefix) =>
@@ -253,7 +384,7 @@ public sealed class BrowserLifecycleTests
                     : null);
     }
 
-    private sealed class CountingLease : IBrowserSessionLease
+    private sealed class CountingLease : IBrowserLease
     {
         public List<Guid> Sessions { get; } = [];
 
@@ -264,8 +395,9 @@ public sealed class BrowserLifecycleTests
         }
     }
 
-    private sealed class HoldingBrowser : IBrowserSession
+    private sealed class HoldingBrowser : IBrowser, IBrowserContextUse
     {
+        public BrowserProviderDescriptor Provider { get; } = new("fixture", "Test browser", new HashSet<BrowserFeature> { BrowserFeature.Navigate, BrowserFeature.Snapshot, BrowserFeature.Click, BrowserFeature.Type, BrowserFeature.Hover, BrowserFeature.Drag, BrowserFeature.FillForm, BrowserFeature.SelectOption, BrowserFeature.PressKey, BrowserFeature.Upload, BrowserFeature.FillCredential, BrowserFeature.Wait, BrowserFeature.Tabs, BrowserFeature.Screenshot, BrowserFeature.Close });
         public bool IsAvailable { get; set; } = true;
 
         public BrowserHostPolicy HostPolicy { get; set; } = new(
@@ -274,6 +406,21 @@ public sealed class BrowserLifecycleTests
             BrowserInteractionMode.InteractiveDemo,
             FixtureOrigin);
 
+        public int UnattendedLeases { get; private set; }
+        public ValueTask<IAsyncDisposable> EnterUnattendedAsync(Guid owner, IReadOnlyList<string> origins, CancellationToken ct = default)
+        {
+            UnattendedLeases++;
+            return ValueTask.FromResult<IAsyncDisposable>(new FixtureLease());
+        }
+        public void AdoptUnattendedFlow(Guid owner) { }
+        private sealed class FixtureLease : IAsyncDisposable
+        {
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        }
+        public bool SuccessfulSnapshot { get; init; }
+        public int SnapshotCalls { get; private set; }
+        public int InteractCalls { get; private set; }
+        public string? LastInteractionRef { get; private set; }
         public bool Hold { get; init; }
 
         public string? ErrorCode { get; init; }
@@ -287,7 +434,7 @@ public sealed class BrowserLifecycleTests
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public ValueTask<Uri?> GetCurrentUrlAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
-            new((Uri?)null);
+            new(SuccessfulSnapshot ? new Uri(FixtureOrigin[0]) : null);
 
         public async ValueTask<BrowserOperationResult> NavigateAsync(
             BrowserNavigateRequest request,
@@ -308,14 +455,22 @@ public sealed class BrowserLifecycleTests
 
             return new BrowserOperationResult(
                 null,
-                new BrowserObservation(request.Url!.AbsoluteUri, LateTitle, "Search", false, []));
+                new BrowserSnapshot(request.Url!.AbsoluteUri, LateTitle, "Search", false, []));
         }
 
-        public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
-            new(new BrowserOperationResult("provider_unavailable", null));
+        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        {
+            SnapshotCalls++;
+            return new(SuccessfulSnapshot ? new(null, new BrowserSnapshot(FixtureOrigin[0], "Fresh page", "Record " + SnapshotCalls, false,
+                [new("el_bbbbbbbbbbbbbbbbbbbbbb", "button", "Save", ["click"])])) : new BrowserOperationResult("provider_unavailable", null));
+        }
 
-        public ValueTask<BrowserOperationResult> ActAsync(BrowserActRequest request, CancellationToken cancellationToken = default) =>
-            new(new BrowserOperationResult("provider_unavailable", null));
+        public ValueTask<BrowserOperationResult> InteractAsync(BrowserInteractionRequest request, CancellationToken cancellationToken = default)
+        {
+            InteractCalls++;
+            LastInteractionRef = request.Ref;
+            return new(new BrowserOperationResult(null, new BrowserSnapshot(FixtureOrigin[0], "Saved", "Saved", false, [])));
+        }
     }
 
     private sealed class OneNavigateModel : ILanguageModel

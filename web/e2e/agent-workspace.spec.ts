@@ -10,7 +10,7 @@ test("managed home survives deleted source, guards a revision and delivers a fre
   const headers = { "X-AgentCore-Owner-Capability": token! };
   const request = page.request;
   async function instance() {
-    const response = await request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "general-assistant", version: 16 } });
+    const response = await request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "general-assistant", version: 17 } });
     expect(response.ok(), await response.text()).toBe(true); return (await response.json()).instanceId as string;
   }
   async function session(id: string) {
@@ -28,7 +28,18 @@ test("managed home survives deleted source, guards a revision and delivers a fre
   expect((await request.delete(`/api/v2/sessions/${a1}`, { headers })).ok()).toBe(true);
   expect((await request.get(`/api/v2/sessions/${a1}/workspace/content?path=${scratch}`, { headers })).status()).toBe(404);
   const a2 = await session(a);
-  await page.goto(`/c/${a2}`); await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 20_000 });
+  let releaseModels = () => {};
+  const modelsHeld = new Promise<void>((resolve) => { releaseModels = resolve; });
+  await page.route("**/api/v2/models", async (route) => { await modelsHeld; await route.continue(); });
+  await page.goto(`/c/${a2}`);
+  // A deep link must not become a sendable new chat while bootstrap metadata is pending.
+  await expect(page.getByTestId("connection")).toHaveText("Connecting", { timeout: 20_000 });
+  await expect(page.getByLabel("Message")).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+  releaseModels();
+  await expect(page.getByRole("heading", { name: "Riley", exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 20_000 });
+  await page.unroute("**/api/v2/models");
   await expect(async () => {
     await page.getByLabel("Message").fill("synthetic-agent-workspace: search");
     await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();

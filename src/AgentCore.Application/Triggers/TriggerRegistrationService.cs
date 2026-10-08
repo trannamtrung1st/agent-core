@@ -14,7 +14,7 @@ public sealed class AutomationService(
     public ValueTask<Automation> CreateAsync(
         AutomationDraft draft,
         CancellationToken cancellationToken = default) =>
-        ObserveAsync("create", () => CreateCoreAsync(draft, cancellationToken));
+        SnapshotAsync("create", () => CreateCoreAsync(draft, cancellationToken));
 
     public ValueTask<Automation?> GetAsync(
         TriggerOwner owner,
@@ -41,7 +41,7 @@ public sealed class AutomationService(
         long expectedRevision,
         AutomationChange change,
         CancellationToken cancellationToken = default) =>
-        ObserveAsync("update", () => UpdateCoreAsync(owner, automationId, expectedRevision, change, cancellationToken));
+        SnapshotAsync("update", () => UpdateCoreAsync(owner, automationId, expectedRevision, change, cancellationToken));
 
     public ValueTask<Automation> SetModelOverrideAsync(
         TriggerOwner owner,
@@ -64,7 +64,7 @@ public sealed class AutomationService(
         Guid automationId,
         long expectedRevision,
         CancellationToken cancellationToken = default) =>
-        ObserveAsync(
+        SnapshotAsync(
             "cancel",
             () => store.CancelAsync(owner, automationId, expectedRevision, UtcNow(), cancellationToken));
 
@@ -210,7 +210,7 @@ public sealed class AutomationService(
         }
     }
 
-    private static async ValueTask<T> ObserveAsync<T>(string operation, Func<ValueTask<T>> action)
+    private static async ValueTask<T> SnapshotAsync<T>(string operation, Func<ValueTask<T>> action)
     {
         try
         {

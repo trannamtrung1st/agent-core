@@ -103,12 +103,12 @@ public sealed class TerminalDisplayRepairTests
                     "nav-1",
                     ToolCatalog.BrowserNavigate,
                     """{"url":"https://zigwheels.test/"}""")),
-                new ModelToolCallEvent(new ModelToolCall("obs-1", ToolCatalog.BrowserObserve, "{}")),
+                new ModelToolCallEvent(new ModelToolCall("obs-1", ToolCatalog.BrowserSnapshot, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             [Invalid(reason)],
             Answer("Zigwheels lists the price."));
-        await using var runtime = Create(model, browser, ToolCatalog.BrowserNavigate, ToolCatalog.BrowserObserve);
+        await using var runtime = Create(model, browser, ToolCatalog.BrowserNavigate, ToolCatalog.BrowserSnapshot);
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("check zigwheels"));
@@ -502,8 +502,8 @@ public sealed class TerminalDisplayRepairTests
         Assert.DoesNotContain(
             request.Tools ?? [],
             tool => tool.Name is ToolCatalog.BrowserNavigate
-                or ToolCatalog.BrowserObserve
-                or ToolCatalog.BrowserAct
+                or ToolCatalog.BrowserSnapshot
+                or ToolCatalog.BrowserClick
                 or ToolCatalog.BrowserClose
                 or ToolCatalog.EmailSend
                 or ToolCatalog.AppMessageSend
@@ -518,7 +518,7 @@ public sealed class TerminalDisplayRepairTests
 
     private static SessionRuntime CreateCore(
         ILanguageModel model,
-        IBrowserSession? browser,
+        IBrowser? browser,
         FakeTimeProvider? clock,
         string[] tools,
         SessionToolExecutor? executor = null,
@@ -579,10 +579,10 @@ public sealed class TerminalDisplayRepairTests
             tools: executor ?? new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll));
     }
 
-    private static SessionRuntime Create(ILanguageModel model, IBrowserSession? browser, FakeTimeProvider? clock, params string[] tools) =>
+    private static SessionRuntime Create(ILanguageModel model, IBrowser? browser, FakeTimeProvider? clock, params string[] tools) =>
         CreateCore(model, browser, clock, tools);
 
-    private static SessionRuntime Create(ILanguageModel model, IBrowserSession? browser, params string[] tools) =>
+    private static SessionRuntime Create(ILanguageModel model, IBrowser? browser, params string[] tools) =>
         Create(model, browser, clock: null, tools);
 
     private sealed class DocumentModel(string document, bool structured) : ILanguageModel
@@ -748,8 +748,9 @@ public sealed class TerminalDisplayRepairTests
         }
     }
 
-    private sealed class CountingBrowser : IBrowserSession
+    private sealed class CountingBrowser : IBrowser
     {
+        public BrowserProviderDescriptor Provider { get; } = new("fixture", "Test browser", new HashSet<BrowserFeature> { BrowserFeature.Navigate, BrowserFeature.Snapshot, BrowserFeature.Click, BrowserFeature.Type, BrowserFeature.Hover, BrowserFeature.Drag, BrowserFeature.FillForm, BrowserFeature.SelectOption, BrowserFeature.PressKey, BrowserFeature.Upload, BrowserFeature.FillCredential, BrowserFeature.Wait, BrowserFeature.Tabs, BrowserFeature.Screenshot, BrowserFeature.Close });
         public List<string> Navigated { get; } = [];
 
         public int ObserveCalls { get; private set; }
@@ -774,14 +775,14 @@ public sealed class TerminalDisplayRepairTests
             Navigated.Add(request.Url!.AbsoluteUri);
             return new(new BrowserOperationResult(
                 null,
-                new BrowserObservation(request.Url!.AbsoluteUri, "Zigwheels", "Open", false, [])));
+                new BrowserSnapshot(request.Url!.AbsoluteUri, "Zigwheels", "Open", false, [])));
         }
 
-        public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             ObserveCalls++;
             var url = Navigated.Count == 0 ? "https://zigwheels.test/" : Navigated[^1];
-            return new(new BrowserOperationResult(null, new BrowserObservation(url, "Zigwheels", "Open", false, [])));
+            return new(new BrowserOperationResult(null, new BrowserSnapshot(url, "Zigwheels", "Open", false, [])));
         }
 
         public ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
@@ -790,7 +791,7 @@ public sealed class TerminalDisplayRepairTests
             return new(new BrowserCloseResult("closed"));
         }
 
-        public ValueTask<BrowserOperationResult> ActAsync(BrowserActRequest request, CancellationToken cancellationToken = default) =>
+        public ValueTask<BrowserOperationResult> InteractAsync(BrowserInteractionRequest request, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }
 }

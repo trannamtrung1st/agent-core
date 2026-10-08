@@ -87,7 +87,7 @@ public sealed class UnifiedAutomationJourneyTests
     {
         await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"automation-review-{Guid.NewGuid():N}.db"));
         var services = host.Services;
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
         var experience = services.GetRequiredService<ExperienceService>();
         await services.GetRequiredService<IExperienceStore>().ConfigureAsync(instance.InstanceId, 0, true);
         var source = await ExperienceJourneyTests.SeedAsync(services, instance.InstanceId);

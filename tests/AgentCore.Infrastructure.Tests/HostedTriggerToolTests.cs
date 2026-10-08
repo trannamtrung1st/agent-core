@@ -20,7 +20,7 @@ public sealed class HostedTriggerToolTests
         services.AddAgentCoreInfrastructure(FindAgents(), "Synthetic");
         await using var provider = services.BuildServiceProvider();
         var definitions = provider.GetRequiredService<IAgentDefinitionStore>();
-        var definition = await definitions.GetAsync("general-assistant", 16);
+        var definition = await definitions.GetAsync("general-assistant", 17);
         Assert.NotNull(definition);
         var tools = provider.GetRequiredService<SessionToolExecutor>();
         var instanceId = Guid.Parse("019944af-00c5-7000-8000-0000000000a1");
@@ -73,7 +73,7 @@ public sealed class HostedTriggerToolTests
         var services = new ServiceCollection();
         services.AddAgentCoreInfrastructure(FindAgents(), "Synthetic");
         await using var provider = services.BuildServiceProvider();
-        var definition = (await provider.GetRequiredService<IAgentDefinitionStore>().GetAsync("secretary", 4))!;
+        var definition = (await provider.GetRequiredService<IAgentDefinitionStore>().GetAsync("secretary", 5))!;
         var tools = provider.GetRequiredService<SessionToolExecutor>();
         var now = DateTimeOffset.UtcNow;
         var instanceId = Guid.NewGuid(); var sessionId = Guid.NewGuid();

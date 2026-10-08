@@ -289,7 +289,7 @@ public sealed class GenerationRetryTests
         new ModelCompleted(ModelStopReason.Completed)
     ];
 
-    private static SessionRuntime Create(ILanguageModel model, IBrowserSession? browser, params string[] tools)
+    private static SessionRuntime Create(ILanguageModel model, IBrowser? browser, params string[] tools)
     {
         var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-02T12:00:00Z"));
         var ids = new DeterministicIdGenerator(
@@ -395,8 +395,9 @@ public sealed class GenerationRetryTests
         }
     }
 
-    private sealed class CountingBrowser : IBrowserSession
+    private sealed class CountingBrowser : IBrowser
     {
+        public BrowserProviderDescriptor Provider { get; } = new("fixture", "Test browser", new HashSet<BrowserFeature> { BrowserFeature.Navigate, BrowserFeature.Snapshot, BrowserFeature.Click, BrowserFeature.Type, BrowserFeature.Hover, BrowserFeature.Drag, BrowserFeature.FillForm, BrowserFeature.SelectOption, BrowserFeature.PressKey, BrowserFeature.Upload, BrowserFeature.FillCredential, BrowserFeature.Wait, BrowserFeature.Tabs, BrowserFeature.Screenshot, BrowserFeature.Close });
         public List<string> Navigated { get; } = [];
 
         public int CloseCalls { get; private set; }
@@ -419,13 +420,13 @@ public sealed class GenerationRetryTests
             Navigated.Add(request.Url!.AbsoluteUri);
             return new(new BrowserOperationResult(
                 null,
-                new BrowserObservation(request.Url!.AbsoluteUri, "Zigwheels", "Open", false, [])));
+                new BrowserSnapshot(request.Url!.AbsoluteUri, "Zigwheels", "Open", false, [])));
         }
 
-        public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public ValueTask<BrowserOperationResult> ActAsync(BrowserActRequest request, CancellationToken cancellationToken = default) =>
+        public ValueTask<BrowserOperationResult> InteractAsync(BrowserInteractionRequest request, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
         public ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)

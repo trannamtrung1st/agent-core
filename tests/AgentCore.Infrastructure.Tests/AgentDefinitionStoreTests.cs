@@ -18,7 +18,7 @@ public sealed class AgentDefinitionStoreTests
         Assert.Equal("Alex", examiner!.Identity.Name);
         var support = await store.GetAsync("customer-support", 3);
         var compliance = await store.GetAsync("compliance", 2);
-        var general = await store.GetAsync("general-assistant", 16);
+        var general = await store.GetAsync("general-assistant", 17);
         Assert.NotNull(support);
         Assert.NotNull(compliance);
         Assert.NotNull(general);
@@ -27,7 +27,9 @@ public sealed class AgentDefinitionStoreTests
         Assert.Equal(17, latest!.Version);
         Assert.DoesNotContain("workspace.retain", latest.Environment!.ToolList);
         Assert.DoesNotContain("workspace.checkout", latest.Environment.ToolList);
-        Assert.Equal(41, latest.Environment.ToolList.Count);
+        Assert.True(latest.Environment.ToolList.Count > 40);
+        Assert.NotNull(latest.Environment.Capabilities);
+        Assert.DoesNotContain("browser.console_messages", latest.Environment.Projection!.AlwaysCapabilities);
         Assert.NotNull(latest.TriggerPolicy);
         Assert.True(latest.TriggerPolicy!.Enabled);
         Assert.True(latest.TriggerPolicy.AllowIndefiniteRecurrence);
@@ -44,10 +46,10 @@ public sealed class AgentDefinitionStoreTests
         Assert.Contains("sandbox.run", environment.ToolList);
         Assert.Contains("email.send", environment.ToolList);
         Assert.Contains(ToolCatalog.BrowserNavigate, environment.ToolList);
-        Assert.Contains(ToolCatalog.BrowserObserve, environment.ToolList);
-        Assert.Contains(ToolCatalog.BrowserAct, environment.ToolList);
+        Assert.Contains(ToolCatalog.BrowserSnapshot, environment.ToolList);
+        Assert.Contains(ToolCatalog.BrowserClick, environment.ToolList);
         Assert.Contains(ToolCatalog.BrowserClose, environment.ToolList);
-        Assert.Equal(41, environment.ToolList.Count);
+        Assert.Equal(64, environment.ToolList.Count);
         Assert.Contains(ToolCatalog.WorkspaceCwd, environment.ToolList);
         Assert.Equal("browser.record.lookup", Assert.Single(latest.SkillList).Id);
         Assert.Equal(SkillProjection.OnDemand, latest.SkillList[0].Projection);

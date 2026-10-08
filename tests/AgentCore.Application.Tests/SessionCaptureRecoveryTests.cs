@@ -45,7 +45,7 @@ public sealed class SessionCaptureRecoveryTests
     }
 
     private static ModelMessage Capture(Guid id) => new(ModelRole.Tool, JsonSerializer.Serialize(new { artifactId = id }),
-        ToolCallId: "capture-1", Name: ToolCatalog.BrowserCapture);
+        ToolCallId: "capture-1", Name: ToolCatalog.BrowserScreenshot);
 
     private sealed class Captures(ArtifactRecord artifact, byte[] bytes, bool missing) : IArtifactStore
     {

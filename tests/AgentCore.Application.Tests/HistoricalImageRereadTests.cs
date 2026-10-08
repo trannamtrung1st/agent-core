@@ -476,8 +476,8 @@ public sealed class HistoricalImageRereadTests
         var encoded = followUp[(imageStart + "data:image/png;base64,".Length)..];
         var imageEnd = encoded.IndexOf('"', StringComparison.Ordinal);
         Assert.True(imageEnd > 0);
-        encoded = encoded[..imageEnd];
-        Assert.True(Convert.FromBase64String(JsonSerializer.Deserialize<string>("\"" + encoded + "\"")!).Length > 8);
+        encoded = JsonSerializer.Deserialize<string>("\"" + encoded[..imageEnd] + "\"")!;
+        Assert.True(Convert.FromBase64String(encoded).Length > 8);
         Assert.Contains("response_format", followUp, StringComparison.Ordinal);
         Assert.Contains("agent_core_assistant_response", followUp, StringComparison.Ordinal);
         var completedText = string.Join(

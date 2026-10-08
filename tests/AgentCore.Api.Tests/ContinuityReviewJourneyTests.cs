@@ -27,7 +27,7 @@ public sealed class ContinuityReviewJourneyTests
     {
         await using var host = new ExperienceHost(Database());
         var services = host.Services;
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
         var client = TestOwnerCapability.CreateOwnerClient(host);
         var root = $"/api/v2/admin/agent-instances/{instance.InstanceId}";
         var path = root + "/automations";
@@ -70,7 +70,7 @@ public sealed class ContinuityReviewJourneyTests
     {
         await using var host = new ExperienceHost(Database());
         var services = host.Services;
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
         var source = await ExperienceJourneyTests.SeedAsync(services, instance.InstanceId);
         var continuity = services.GetRequiredService<ContinuityService>();
         Assert.Empty(await continuity.SearchAsync(instance.InstanceId, "zxq83761unknown"));
@@ -110,7 +110,7 @@ public sealed class ContinuityReviewJourneyTests
         OverrideDefinitions? definitions = null;
         await using var host = new ExperienceHost(Database(), configure: services =>
             services.AddSingleton<IAgentDefinitionStore>(sp => definitions = new(sp.GetRequiredService<IBuiltInAgentDefinitionStore>())));
-        var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
+        var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
         var client = TestOwnerCapability.CreateOwnerClient(host);
         var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/automations";
         var draft = new ScheduleAutomationDraft(0, true, "Known task", new("daily", "UTC", LocalTime: "09:00"));
@@ -136,7 +136,7 @@ public sealed class ContinuityReviewJourneyTests
         await using var host = new ExperienceHost(Database(), configure: services =>
             services.AddSingleton<IAgentDefinitionStore>(sp => definitions = new(sp.GetRequiredService<IBuiltInAgentDefinitionStore>())));
         var s = host.Services;
-        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
+        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
         var client = TestOwnerCapability.CreateOwnerClient(host);
         var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/automations";
         var policy = new TriggerPolicy(true, false, true, true, true, true, 3, 2, 4, ["schedule"], true, 300);
@@ -185,7 +185,7 @@ public sealed class ContinuityReviewJourneyTests
     public async Task Automatic_recall_uses_summary_shortlist_and_does_not_duplicate_cross_session_memory()
     {
         await using var host = new ExperienceHost(Database()); var s = host.Services;
-        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
+        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
         var history = s.GetRequiredService<IMemoryStore>();
         var template = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(instance.InstanceId, SessionMode.Text);
         var now = DateTimeOffset.UtcNow;
@@ -223,7 +223,7 @@ public sealed class ContinuityReviewJourneyTests
     public async Task Maintenance_reaches_instances_and_sessions_beyond_first_page_and_dedupes()
     {
         await using var host = new ExperienceHost(Database()); var s = host.Services;
-        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
+        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
         var instances = s.GetRequiredService<IAgentInstanceStore>();
         Guid Key(int i) => Guid.Parse($"ffffffff-ffff-ffff-ffff-{i:000000000000}");
         for (var i = 1; i <= 101; i++) await instances.InsertAsync(instance with { InstanceId = Key(i) }, initialSkills: (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync(instance.DefinitionId, instance.ActiveVersion))!.SkillList);

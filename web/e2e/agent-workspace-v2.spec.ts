@@ -7,7 +7,7 @@ test("managed workspace uses durable cwd, explicit scratch, and downloads across
   await expect.poll(() => page.evaluate(() => localStorage.getItem("agent-core.owner-capability"))).not.toBeNull();
   const token = await page.evaluate(() => localStorage.getItem("agent-core.owner-capability"));
   const headers = { "X-AgentCore-Owner-Capability": token! };
-  const created = await page.request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "general-assistant", version: 16 } });
+  const created = await page.request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "general-assistant", version: 17 } });
   expect(created.ok(), await created.text()).toBe(true);
   const owner = (await created.json()).instanceId;
   async function session() {

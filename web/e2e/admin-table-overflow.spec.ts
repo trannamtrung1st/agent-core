@@ -18,7 +18,7 @@ test("collection links wrap without overlapping adjacent cells at desktop and mo
   await page.waitForFunction(() => localStorage.getItem("agent-core.owner-capability"));
   const owner = (await page.evaluate(() => localStorage.getItem("agent-core.owner-capability")))!;
   const headers = { "X-AgentCore-Owner-Capability": owner };
-  const created = await page.request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "secretary", version: 4 } });
+  const created = await page.request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "secretary", version: 5 } });
   expect(created.ok()).toBe(true);
   const instanceId = (await created.json()).instanceId;
   const path = `/api/v2/admin/agent-instances/${instanceId}`;
@@ -75,7 +75,7 @@ test("Skill and event-source action buttons stay together across table widths", 
   await page.waitForFunction(() => localStorage.getItem("agent-core.owner-capability"));
   const owner = (await page.evaluate(() => localStorage.getItem("agent-core.owner-capability")))!;
   const headers = { "X-AgentCore-Owner-Capability": owner };
-  const created = await page.request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "general-assistant", version: 16 } });
+  const created = await page.request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "general-assistant", version: 17 } });
   expect(created.ok()).toBe(true);
   const instanceId = (await created.json()).instanceId;
   await page.goto(`/admin/instances/${instanceId}/skills`);
