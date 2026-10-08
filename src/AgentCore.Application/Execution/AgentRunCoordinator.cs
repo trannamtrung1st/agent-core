@@ -39,7 +39,10 @@ public sealed class AgentRunCoordinator(IAgentRunStore store, IAgentRunDispatche
         var now = time.GetUtcNow();
         try
         {
-            if (run.Status == AgentRunStatus.Running)
+            if (run.Status == AgentRunStatus.WaitingForSignal)
+                run = await store.ApplyAsync(run.Owner, run.AgentRunId,
+                    new AgentRunCommand.ResumeWait(run.Revision, now, ids.NewId(), now + ClaimDuration), cancellationToken).ConfigureAwait(false);
+            else if (run.Status == AgentRunStatus.Running)
             {
                 if (run.Claim!.LeaseExpiresAtUtc > now) return false;
                 run = await store.ApplyAsync(run.Owner, run.AgentRunId,

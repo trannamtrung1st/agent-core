@@ -30,7 +30,8 @@ public sealed class AgentRun
         IReadOnlyList<string>? activeSkillKeys = null,
         int skillLoadCount = 0,
         IReadOnlyList<string>? loadedCapabilityIds = null,
-        int capabilityLoadCount = 0)
+        int capabilityLoadCount = 0,
+        AgentRunWait? wait = null, int waitCount = 0, double totalWaitSeconds = 0)
     {
         if (agentRunId == Guid.Empty)
         {
@@ -83,6 +84,13 @@ public sealed class AgentRun
             throw new ArgumentException("Updated time cannot precede creation.");
         }
 
+        wait?.Validate();
+        if ((status == AgentRunStatus.WaitingForSignal) != (wait is not null) || wait is not null && checkpoint is null
+            || wait is not null && (wait.SuspendedGeneration is null || wait.SuspendedGeneration == Guid.Empty)
+            || waitCount is < 0 or > AgentRunLimits.MaxWaitCount || !double.IsFinite(totalWaitSeconds)
+            || totalWaitSeconds is < 0 or > AgentRunLimits.MaxTotalWaitSeconds)
+            throw new ArgumentException("Waiting execution requires a checkpoint and bounded wait accounting.");
+        Wait = wait; WaitCount = waitCount; TotalWaitSeconds = totalWaitSeconds;
         var terminal = status is AgentRunStatus.Completed or AgentRunStatus.Failed or AgentRunStatus.Cancelled;
         if (status == AgentRunStatus.Running)
         {
@@ -202,6 +210,10 @@ public sealed class AgentRun
     public AgentRunAdmission Admission { get; }
 
     public AgentRunModelPin PinnedModel { get; }
+
+    public AgentRunWait? Wait { get; }
+    public int WaitCount { get; }
+    public double TotalWaitSeconds { get; }
 
     public AgentRunStatus Status { get; }
 
@@ -334,7 +346,31 @@ public sealed class AgentRun
         return new AgentRun(AgentRunId, Owner, Admission, PinnedModel, Status, Revision + 1, AttemptCount,
             MaxAttempts, NextRetryAtUtc, Claim, CancellationRequested, CancellationRequestedAtUtc,
             KnownEffectSummary, Progress, Checkpoint, Result, Failure, SideEffect, Approval, CreatedAtUtc,
-            updatedAtUtc, PinnedSkillCatalog, activeSkillKeys, skillLoadCount, loadedCapabilityIds, capabilityLoadCount);
+            updatedAtUtc, PinnedSkillCatalog, activeSkillKeys, skillLoadCount, loadedCapabilityIds, capabilityLoadCount, Wait, WaitCount, TotalWaitSeconds);
+    }
+
+    public AgentRun SuspendForSignal(long revision, Guid generation, AgentRunCheckpoint checkpoint, AgentRunWait wait, DateTimeOffset now)
+    {
+        RequireOperational(revision, generation);
+        wait = wait with { SuspendedGeneration = generation };
+        wait.Validate();
+        var seconds = (wait.DeadlineUtc - wait.StartedAtUtc).TotalSeconds;
+        if (wait.StartedAtUtc != now || WaitCount >= AgentRunLimits.MaxWaitCount || TotalWaitSeconds + seconds > AgentRunLimits.MaxTotalWaitSeconds
+            || SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate)
+            throw new AgentRunTransitionException(AgentRunTransitionFailure.Illegal, "Wait budget or effect fence prevents suspension.");
+        return Copy(AgentRunStatus.WaitingForSignal, Revision + 1, AttemptCount, null, null,
+            false, null, KnownEffectSummary, Progress, checkpoint, null, null, SideEffect, Approval, now,
+            wait, WaitCount + 1, TotalWaitSeconds + seconds);
+    }
+
+    public AgentRun ResumeFromSignal(long revision, Guid generation, AgentRunCheckpoint checkpoint, DateTimeOffset now, DateTimeOffset leaseExpiresAt)
+    {
+        if (Revision != revision) throw new AgentRunTransitionException(AgentRunTransitionFailure.StaleRevision, "AgentRun revision is stale.");
+        if (Status != AgentRunStatus.WaitingForSignal || CancellationRequested)
+            throw new AgentRunTransitionException(AgentRunTransitionFailure.Illegal, "Execution is no longer waiting.");
+        return Copy(AgentRunStatus.Running, Revision + 1, AttemptCount, null,
+            new AgentRunClaim(generation, now, leaseExpiresAt), false, null, KnownEffectSummary, Progress,
+            checkpoint, null, null, SideEffect, Approval, now);
     }
 
     public AgentRun TakeClaim(Guid generation, DateTimeOffset claimedAtUtc, DateTimeOffset leaseExpiresAtUtc)
@@ -1183,7 +1219,7 @@ public sealed class AgentRun
         AgentRunFailure? failure,
         AgentRunSideEffect sideEffect,
         AgentRunApproval? approval,
-        DateTimeOffset updatedAtUtc)
+        DateTimeOffset updatedAtUtc, AgentRunWait? wait = null, int? waitCount = null, double? totalWaitSeconds = null)
     {
         if (updatedAtUtc < UpdatedAtUtc)
         {
@@ -1211,6 +1247,7 @@ public sealed class AgentRun
             sideEffect,
             approval,
             CreatedAtUtc,
-            updatedAtUtc, PinnedSkillCatalog, ActiveSkillKeys, SkillLoadCount, LoadedCapabilityIds, CapabilityLoadCount);
+            updatedAtUtc, PinnedSkillCatalog, ActiveSkillKeys, SkillLoadCount, LoadedCapabilityIds, CapabilityLoadCount,
+            status == AgentRunStatus.WaitingForSignal ? wait ?? Wait : null, waitCount ?? WaitCount, totalWaitSeconds ?? TotalWaitSeconds);
     }
 }

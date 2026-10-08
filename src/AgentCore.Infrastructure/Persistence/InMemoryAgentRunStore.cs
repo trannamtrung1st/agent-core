@@ -57,6 +57,7 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
             sessions.SaveAsync(snapshot, expectedSessionRevision, cancellationToken).GetAwaiter().GetResult();
             if (draftEntryId is { } removed) sessions.RemoveResponseDraft(run.SessionId, removed);
             State.Runs[agentRunId] = updated;
+            SettleInbox(updated, run.Claim?.Generation);
             AgentRunStoreMapping.ObserveTransition(run, updated, completion);
             return ValueTask.FromResult(updated);
         }
@@ -126,7 +127,7 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
     }
 
     private AgentRunAdmissionResult AdmitCore(SessionSnapshot snapshot, long expectedSessionRevision,
-        AgentRun run, CancellationToken cancellationToken, bool occurrenceValidated = false, Guid? expectedParentGeneration = null, Guid? completionSourceRunId = null, bool preserveSession = false)
+        AgentRun run, CancellationToken cancellationToken, bool occurrenceValidated = false, Guid? expectedParentGeneration = null, Guid? completionSourceRunId = null, bool preserveSession = false, IReadOnlyList<Guid>? additionalCompletionSources = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         AgentRunStoreMapping.ValidateAdmission(snapshot, run);
@@ -170,10 +171,17 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
             }
             if (completionSourceRunId is { } completionSource)
             {
-                if (State.CompletionReceipts.ContainsKey(completionSource)) throw AgentCoreErrors.Conflict("Completion was already reported or skipped.");
-                State.Runs.TryGetValue(completionSource, out var child);
+                foreach (var sourceId in new[] { completionSource }.Concat(additionalCompletionSources ?? []))
+                {
+                RepairInbox(run.CreatedAtUtc);
+                CompletionInboxMapping.RequireReportAdmission(snapshot, State.Runs.Values);
+                if (State.CompletionReceipts.TryGetValue(sourceId, out var existingReceipt)
+                    && CompletionInboxMapping.Read(existingReceipt).Status != CompletionInboxStatus.Pending)
+                    throw AgentCoreErrors.Conflict("Completion was already claimed, handled or reported.");
+                State.Runs.TryGetValue(sourceId, out var child);
                 var childSession = child is null ? null : sessions.LoadMetadataAsync(child.SessionId, cancellationToken).GetAwaiter().GetResult();
-                AgentRunStoreMapping.ValidateCompletionSource(snapshot, run, child, childSession);
+                AgentRunStoreMapping.ValidateCompletionSource(snapshot, run, child, childSession, sourceId == completionSource);
+                }
             }
             if (!preserveSession) sessions.SaveAsync(snapshot, expectedSessionRevision, cancellationToken).GetAwaiter().GetResult();
             State.Runs.Add(run.AgentRunId, run);
@@ -184,8 +192,15 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
             if (activation.BackgroundSourceKey is { } backgroundKey)
                 State.ByBackgroundSource.Add((run.Owner, backgroundKey), run.AgentRunId);
             if (completionSourceRunId is { } reported)
-                State.CompletionReceipts.Add(reported, new() { ChildAgentRunId = reported.ToString("D"), AgentInstanceId = run.AgentInstanceId.ToString("D"),
-                    ProfileId = run.ProfileId.ToString("D"), ParentActivationId = run.ActivationId.ToString("D"), CreatedAtUtc = run.CreatedAtUtc.ToUnixTimeMilliseconds() });
+            {
+                foreach (var sourceId in new[] { reported }.Concat(additionalCompletionSources ?? []))
+                {
+                var receipt = State.CompletionReceipts[sourceId];
+                var item = CompletionInboxMapping.Read(receipt);
+                CompletionInboxMapping.Write(receipt, item with { Revision = item.Revision + 1,
+                    Status = CompletionInboxStatus.DeliveryQueued, ReportActivationId = run.ActivationId });
+                }
+            }
             AgentRunStoreMapping.ObserveAdmission(snapshot, run, true);
             return new AgentRunAdmissionResult(true, run);
         }
@@ -253,12 +268,12 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
             throw AgentCoreErrors.Validation("Runnable query requires UTC time and a bounded limit.");
         lock (sessions.AdmissionGate)
             return ValueTask.FromResult<IReadOnlyList<AgentRun>>(State.Runs.Values.Where(run =>
-                run.Status == AgentRunStatus.Queued || run.Status == AgentRunStatus.WaitingToRetry && run.NextRetryAtUtc <= asOfUtc
+                run.Status == AgentRunStatus.WaitingForSignal && AgentRunWaitExecution.IsReady(run, asOfUtc, WaitChildren(run.Wait!.BackgroundSessionIds)) || run.Status == AgentRunStatus.Queued || run.Status == AgentRunStatus.WaitingToRetry && run.NextRetryAtUtc <= asOfUtc
                 || run.Status == AgentRunStatus.Running && run.Claim!.LeaseExpiresAtUtc <= asOfUtc
                 || run.Status == AgentRunStatus.WaitingForApproval && run.Approval!.ExpiresAtUtc <= asOfUtc)
-                .Where(run => run.Status is AgentRunStatus.Running or AgentRunStatus.WaitingForApproval
+                .Where(run => run.Status is AgentRunStatus.Running or AgentRunStatus.WaitingForApproval or AgentRunStatus.WaitingForSignal
                     || !State.Runs.Values.Any(other => other.SessionId == run.SessionId && other.AgentRunId != run.AgentRunId
-                        && other.Status is AgentRunStatus.Running or AgentRunStatus.WaitingForApproval))
+                        && other.Status is AgentRunStatus.Running or AgentRunStatus.WaitingForApproval or AgentRunStatus.WaitingForSignal))
                 .OrderBy(run => run.CreatedAtUtc).ThenBy(run => run.AgentRunId).GroupBy(run => run.SessionId).Select(group => group.First()).Take(limit).ToArray());
     }
 
@@ -278,7 +293,7 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
             if (!State.Runs.TryGetValue(agentRunId, out var run) || run.Owner != owner)
                 throw AgentCoreErrors.NotFound("AgentRun was not found.");
             if (command is AgentRunCommand.Claim && State.Runs.Values.Any(other => other.SessionId == run.SessionId
-                && other.AgentRunId != run.AgentRunId && other.Status is AgentRunStatus.Running or AgentRunStatus.WaitingForApproval))
+                && other.AgentRunId != run.AgentRunId && other.Status is AgentRunStatus.Running or AgentRunStatus.WaitingForApproval or AgentRunStatus.WaitingForSignal))
                 throw AgentCoreErrors.Conflict("Session already owns an active execution.");
             if (command is AgentRunCommand.Complete { OutcomeEntryId: { } entryId })
             {
@@ -288,8 +303,10 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
             }
             try
             {
-                var updated = command.Apply(run, diagnostics.NewId);
+                var updated = command is AgentRunCommand.SuspendWait or AgentRunCommand.ResumeWait
+                    ? AgentRunWaitExecution.Apply(run, command, WaitChildren(command is AgentRunCommand.SuspendWait suspend ? suspend.Wait.BackgroundSessionIds : run.Wait?.BackgroundSessionIds ?? [])) : command.Apply(run, diagnostics.NewId);
                 State.Runs[agentRunId] = updated;
+            SettleInbox(updated, run.Claim?.Generation);
                 AgentRunStoreMapping.ObserveTransition(run, updated, command);
                 return ValueTask.FromResult(updated);
             }

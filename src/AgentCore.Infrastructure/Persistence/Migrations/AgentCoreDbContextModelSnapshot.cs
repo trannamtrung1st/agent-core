@@ -635,7 +635,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.HasIndex("SessionId")
                         .IsUnique()
                         .HasDatabaseName("IX_AgentRuns_SessionExecution")
-                        .HasFilter("Status IN (1, 2)");
+                        .HasFilter("Status IN (1, 2, 7)");
 
                     b.HasIndex("Status", "NextRetryAtUtc", "CreatedAtUtc");
 
@@ -924,24 +924,51 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<long?>("ClaimExpiresAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ClaimRunId")
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("CreatedAtUtc")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("InboxJson")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ParentActivationId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ParentSessionId")
+                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ProfileId")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(1L);
+
                     b.Property<string>("SkipReason")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
                     b.HasKey("ChildAgentRunId");
 
+                    b.HasIndex("ClaimRunId");
+
                     b.HasIndex("ParentActivationId")
-                        .IsUnique()
                         .HasFilter("ParentActivationId IS NOT NULL");
+
+                    b.HasIndex("Status", "CreatedAtUtc", "ChildAgentRunId");
+
+                    b.HasIndex("AgentInstanceId", "ProfileId", "ParentSessionId", "CreatedAtUtc", "ChildAgentRunId");
 
                     b.ToTable("BackgroundCompletionReceipts", (string)null);
                 });
@@ -1860,8 +1887,8 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.HasOne("AgentCore.Infrastructure.Persistence.ActivationRecord", null)
-                        .WithOne()
-                        .HasForeignKey("AgentCore.Infrastructure.Persistence.BackgroundCompletionReceiptRecord", "ParentActivationId")
+                        .WithMany()
+                        .HasForeignKey("ParentActivationId")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 

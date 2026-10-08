@@ -26,6 +26,13 @@ internal static class AgentRunStoreMapping
     internal static void ObserveTransition(AgentRun before, AgentRun after, AgentRunCommand command)
     {
         if (before.Revision == after.Revision) return;
+        if (command is AgentRunCommand.SuspendWait) RuntimeTelemetry.RecordAgentRun("waiting-signal");
+        if (command is AgentRunCommand.ResumeWait)
+        {
+            RuntimeTelemetry.RecordAgentRun("wait-wake");
+            if (before.Wait is { Mode: AgentRunWaitMode.Background } wait && AgentRunToolCallCheckpoint.TryRead(after.Checkpoint!, out var messages) && messages!.LastOrDefault(m => m.ToolCallId == wait.ToolCallId && m.Role == AgentCore.Application.Ports.ModelRole.Tool)?.Text.Contains("\"reason\":\"timeout\"", StringComparison.Ordinal) == true) RuntimeTelemetry.RecordAgentRun("wait-timeout");
+        }
+        if (before.Status == AgentRunStatus.WaitingForSignal && after.Status == AgentRunStatus.Cancelled) RuntimeTelemetry.RecordAgentRun("wait-cancelled");
         if (command is AgentRunCommand.Recover) RuntimeTelemetry.RecordAgentRun("recovered");
         if (command is AgentRunCommand.Claim)
         { RuntimeTelemetry.RecordAgentRun("claimed"); RuntimeTelemetry.RecordAgentRun("attempt"); }
@@ -59,7 +66,8 @@ internal static class AgentRunStoreMapping
         AgentRunProgress? Progress, AgentRunCheckpoint? Checkpoint, AgentRunResult? Result,
         AgentRunFailure? Failure, AgentRunSideEffect SideEffect, AgentRunApproval? Approval,
         IReadOnlyList<EffectiveSkill> PinnedSkillCatalog, IReadOnlyList<string> ActiveSkillKeys,
-        int SkillLoadCount, IReadOnlyList<string> LoadedCapabilityIds, int CapabilityLoadCount);
+        int SkillLoadCount, IReadOnlyList<string> LoadedCapabilityIds, int CapabilityLoadCount,
+        AgentRunWait? Wait = null, int WaitCount = 0, double TotalWaitSeconds = 0);
 
     public static AgentRunRecord ToRecord(AgentRun run)
     {
@@ -86,7 +94,7 @@ internal static class AgentRunStoreMapping
             run.AttemptCount, run.MaxAttempts, run.Claim, run.CancellationRequested,
             run.CancellationRequestedAtUtc, run.KnownEffectSummary, run.Progress, run.Checkpoint,
             run.Result, run.Failure, run.SideEffect, run.Approval, run.PinnedSkillCatalog,
-            run.ActiveSkillKeys, run.SkillLoadCount, run.LoadedCapabilityIds, run.CapabilityLoadCount), Json);
+            run.ActiveSkillKeys, run.SkillLoadCount, run.LoadedCapabilityIds, run.CapabilityLoadCount, run.Wait, run.WaitCount, run.TotalWaitSeconds), Json);
     }
 
     public static AgentRun ToDomain(AgentRunRecord row)
@@ -103,7 +111,7 @@ internal static class AgentRunStoreMapping
             p.Claim, p.CancellationRequested, p.CancellationRequestedAtUtc, p.KnownEffectSummary,
             p.Progress, p.Checkpoint, p.Result, p.Failure, p.SideEffect, p.Approval,
             DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc), DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc),
-            p.PinnedSkillCatalog, p.ActiveSkillKeys, p.SkillLoadCount, p.LoadedCapabilityIds, p.CapabilityLoadCount);
+            p.PinnedSkillCatalog, p.ActiveSkillKeys, p.SkillLoadCount, p.LoadedCapabilityIds, p.CapabilityLoadCount, p.Wait, p.WaitCount, p.TotalWaitSeconds);
     }
 
     public static ActivationRecord ToActivationRecord(SessionSnapshot snapshot, AgentRun run) => new()
@@ -200,13 +208,13 @@ internal static class AgentRunStoreMapping
         }
     }
 
-    public static void ValidateCompletionSource(SessionSnapshot parent, AgentRun report, AgentRun? child, SessionSnapshot? childSession)
+    public static void ValidateCompletionSource(SessionSnapshot parent, AgentRun report, AgentRun? child, SessionSnapshot? childSession, bool primary = true)
     {
         if (report.Admission.Activation.Kind != ActivationKind.BackgroundCompleted || child is null || childSession is null
             || !child.IsTerminal || child.Result?.OutcomeKind == AgentRunOutcomeKind.NoAction
             || child.Owner != report.Owner || childSession.AgentInstanceId != report.AgentInstanceId || childSession.ProfileId != report.ProfileId
             || !childSession.Origin.MayReportCompletion(child.AgentRunId) || childSession.Origin.OriginatingSessionId != parent.SessionId
-            || report.Admission.Activation.SourceSessionId != child.SessionId || report.Admission.Activation.SourceAgentRunId != child.AgentRunId
+            || primary && (report.Admission.Activation.SourceSessionId != child.SessionId || report.Admission.Activation.SourceAgentRunId != child.AgentRunId)
             || childSession.DurablyDeletedAt is not null || parent.DurablyDeletedAt is not null || parent.ArchivedAt is not null
             || SessionLifecycle.IsTerminal(parent.LifecycleStatus) || parent.Status is SessionStatus.Ended or SessionStatus.Ending
             || parent.Status == SessionStatus.Paused && !SessionPauseSemantics.IsTransportResumable(parent.PauseReason))

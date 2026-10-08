@@ -155,3 +155,8 @@ Credential lifecycle belongs to owner Admin operations and explicit per-instance
 Due Schedule work creates ScheduledWork; authored event/manual triggers retain their corresponding source kind. Existing-target Runs carry ConversationResponse, bounded trigger evidence and zero source user entries. They persist ordinary assistant output in the exact Session even when detached, without requiring audio transport. Background children carry BackgroundOutcome. Requested terminal reporting admits BackgroundCompleted with CompletionReport into the exact bound parent. Reporting is structured untrusted outcome evidence, never a new user instruction.
 
 Unavailable targets reject/suspend with a target reason. Busy Sessions queue; a refused unstarted dispatch defers the same Run. Receipt replay, claims and recovery preserve identities. Owner-safe HTTP delivery status distinguishes admitted from delivered and exposes failure/skip reasons. SignalR event names and voice sequencing remain unchanged.
+
+
+## Completion handoff and wait transitions
+
+Completion tools enter the owning SessionRuntime mailbox through a generation-fenced request. Child terminal persistence publishes accounting by immutable initial Run identity. WaitingForSignal persists its pending tool call and typed descriptor, then releases the worker without ending the Response. Existing coordinator dispatch performs revision-CAS wakeup, appends exactly one tool result and changes the claim generation; Run, Activation, Response and attempt remain stable. Cancellation/Steer fences the previous generation. No raw audio or new runner enters this path.

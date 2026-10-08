@@ -156,7 +156,7 @@ export function ExperienceSection({ instanceId, onWork, selection, active = true
   }, [instanceId, order]);
   useEffect(() => { if (active) void reload(); }, [reload, selection?.request, active]);
   useEffect(() => {
-    if (!active || loading || !review?.items.some(item => ["Pending", "Queued", "Running", "WaitingToRetry"].includes(item.status))) return;
+    if (!active || loading || !review?.items.some(item => ["Pending", "Queued", "Running", "WaitingToRetry", "WaitingForSignal"].includes(item.status))) return;
     const timer = window.setInterval(() => {
       if (order.current.mutating) return;
       const generation = ++order.current.generation;

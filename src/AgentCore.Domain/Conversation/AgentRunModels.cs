@@ -27,6 +27,10 @@ public static class AgentRunLimits
     public const int DefaultMaxAttempts = 3;
     public const int MinMaxAttempts = 1;
     public const int MaxMaxAttempts = 8;
+    public const int MaxWaitSeconds = 300;
+    public const int MaxWaitTargets = 8;
+    public const int MaxWaitCount = 8;
+    public const int MaxTotalWaitSeconds = 900;
     public const int MaxListLimit = 100;
 }
 
@@ -38,7 +42,8 @@ public enum AgentRunStatus
     WaitingToRetry = 3,
     Completed = 4,
     Failed = 5,
-    Cancelled = 6
+    Cancelled = 6,
+    WaitingForSignal = 7
 }
 
 public enum AgentRunSideEffectDisposition
@@ -84,6 +89,7 @@ public sealed class AgentRunTransitionException : Exception
 
 public readonly record struct AgentRunOwner
 {
+    [System.Text.Json.Serialization.JsonConstructor]
     public AgentRunOwner(Guid agentInstanceId, Guid profileId)
     {
         if (agentInstanceId == Guid.Empty)

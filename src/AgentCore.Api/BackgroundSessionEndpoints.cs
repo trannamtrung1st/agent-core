@@ -127,7 +127,8 @@ public static class BackgroundSessionEndpoints
         run.Failure?.Code, run.Failure?.Summary, run.Failure?.DiagnosticId?.ToString("D"), run.KnownEffectSummary, run.PinnedModel.CatalogKey, run.ResponseId?.ToString("D"), automationId?.ToString("D"),
         run.Admission.Activation.DedupeKey.StartsWith("experience:", StringComparison.Ordinal) ? run.AgentRunId.ToString("D") : null,
         run.Admission.Activation.TriggerOccurrenceId?.ToString("D"),
-        run.Admission.Activation.Kind == ActivationKind.BackgroundCompleted ? run.Admission.Activation.SourceSessionId?.ToString("D") : null);
+        run.Admission.Activation.Kind == ActivationKind.BackgroundCompleted ? run.Admission.Activation.SourceSessionId?.ToString("D") : null,
+        run.Wait is { } wait ? new(wait.Mode.ToString(), wait.Until.ToString(), wait.BackgroundSessionIds.Select(id => id.ToString("D")).ToArray(), HttpMapping.Format(wait.DeadlineUtc)) : null);
 
     private static async Task<BackgroundSessionResponse> ToSessionAsync(SessionSnapshot session, AgentRun? latest,
         bool ownerActive, IArtifactStore artifacts, IAgentRunStore runs, CancellationToken ct)

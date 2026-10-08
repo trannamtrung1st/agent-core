@@ -12,7 +12,7 @@ import { formatChatTime } from "./chatTime";
 
 export function AgentRunStatus({ run }: { run: AgentRun }) {
   const status = ({ queued: { icon: <ClockCircleOutlined />, color: undefined }, running: { icon: <LoadingOutlined />, color: "processing" },
-    needsApproval: { icon: <ExclamationCircleOutlined />, color: "warning" }, retrying: { icon: <RedoOutlined />, color: "gold" },
+    waitingForSignal: { icon: <ClockCircleOutlined />, color: "processing" }, needsApproval: { icon: <ExclamationCircleOutlined />, color: "warning" }, retrying: { icon: <RedoOutlined />, color: "gold" },
     completed: { icon: <CheckCircleOutlined />, color: "success" }, failed: { icon: <CloseCircleOutlined />, color: "error" },
     cancelled: { icon: <StopOutlined />, color: undefined } } as const)[run.status as "queued"];
   return <Tag variant="filled" icon={status?.icon} color={status?.color} className="background-work-status">{runStatusLabel(run.status)}</Tag>;
@@ -81,6 +81,11 @@ export function AgentRunDetails({ run, onChange }: { run: AgentRun; onChange: (r
       { key: "attempt", label: "Attempt", children: `${run.attemptCount} of ${run.maxAttempts}` },
       { key: "updated", label: "Updated", children: <time dateTime={run.updatedAt}>{formatChatTime(run.updatedAt) ?? "Unknown time"}</time> }
     ]} />
+    {run.wait ? <Flex vertical gap={token.paddingXS} role="status" aria-label="Execution wait">
+      <Typography.Text>{run.wait.mode === "Duration" ? "Waiting for the requested duration." : `Waiting for ${run.wait.until === "All" ? "all" : "any"} background results.`}</Typography.Text>
+      <Typography.Text type="secondary">{run.wait.mode === "Duration" ? "Resumes" : "Timeout"} {new Date(run.wait.deadline).toLocaleString()}</Typography.Text>
+      {run.wait.backgroundSessionIds.map(id => <ConversationDestination key={id} sessionId={id} />)}
+    </Flex> : null}
     {run.nextRetryAt ? <Typography.Text type="secondary">Retry scheduled for {new Date(run.nextRetryAt).toLocaleString()}</Typography.Text> : null}
     {run.outcome ? <ReadingRegion label={runOutcomeLabel(run.outcome.kind)} text={run.outcome.summary || "No action was needed."} /> : null}
     {run.failureSummary ? <Alert type="error" showIcon title={run.failureSummary} action={<DiagnosticDetails fields={{

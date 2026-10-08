@@ -11,6 +11,23 @@ public static class BackgroundCompletionProjection
 {
     private static readonly JsonSerializerOptions Json = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
+    public static string BuildBatch(IReadOnlyList<(AgentRun Run, string Objective)> sources)
+    {
+        if (sources.Count is < 1 or > 2) throw new ArgumentException("Completion report batch must contain one or two sources.");
+        var budget = 800;
+        while (true)
+        {
+            var text = JsonSerializer.Serialize(new { completions = sources.Select(source => new {
+                childSessionId = source.Run.SessionId, initialAgentRunId = source.Run.AgentRunId,
+                objective = ToolJsonResults.ClipUtf8Prefix(source.Objective, budget / 2), status = source.Run.Status.ToString(),
+                summary = ToolJsonResults.ClipUtf8Prefix(source.Run.Result?.Text ?? source.Run.Failure?.Summary ?? "Background work was cancelled.", budget),
+                attentionRequired = source.Run.Result?.AttentionRequired == true || source.Run.Status == AgentRunStatus.Failed }) }, Json);
+            var evidence = JsonSerializer.Serialize(new AgentRunAdmissionFactory.SignalInput(TriggerKind.BackgroundCompleted, text, null), Json);
+            if (Encoding.UTF8.GetByteCount(evidence) <= AgentRunLimits.MaxEvidenceBytes) return evidence;
+            budget /= 2;
+        }
+    }
+
     public static string Build(AgentRun child, string objective, IReadOnlyList<ArtifactRecord> artifacts)
     {
         static string Clip(string value, int bytes) => ToolJsonResults.ClipUtf8Prefix(

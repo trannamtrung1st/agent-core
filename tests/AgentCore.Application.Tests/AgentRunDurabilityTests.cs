@@ -496,6 +496,87 @@ public sealed class AgentRunDurabilityTests
         }
     }
 
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    public async Task Execution_wait_releases_worker_and_resumes_same_response_or_cancels(bool cancel, bool reattach, bool steer)
+    {
+        var memory = new InMemoryMemoryStore(); var runs = new RuntimeAgentRunStore();
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 8, 0, 0, 0, TimeSpan.Zero));
+        var definition = SampleDefinitions.Examiner with { InitiativePolicy = SampleDefinitions.Examiner.InitiativePolicy with { Enabled = false },
+            Environment = new AgentCore.Domain.Definitions.RoleEnvironment(ToolAllowlist: ["execution.wait"]) };
+        var snapshot = RuntimeAgentRunStore.WithPins(new SessionSnapshot(1, Guid.NewGuid(), 1, definition, SessionMode.Text, null,
+            SessionStatus.Created, [], "", 0, null, null, time.GetUtcNow(), time.GetUtcNow(), AgentInstanceId: Guid.NewGuid(),
+            ModelSelection: new("synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.Host, null)));
+        var model = new WaitingModel();
+        await using var runtime = CreateRuntime(new CapturingSessionOutput(), model, time, runs, memory, snapshot);
+        await runtime.AttachAsync();
+        Assert.True(await runtime.SubmitPersistedUserTextAsync("Wait two seconds then answer", Guid.NewGuid()));
+        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        var owner = new AgentRunOwner(snapshot.AgentInstanceId, snapshot.ProfileId!.Value);
+        var waiting = Assert.Single(await runs.ListForSessionAsync(owner, runtime.SessionId));
+        Assert.Equal(AgentRunStatus.WaitingForSignal, waiting.Status); Assert.Null(waiting.Claim); Assert.Equal(1, model.Requests);
+        if (reattach) { await runtime.DetachAsync(); Assert.True(await runtime.AttachAsync()); }
+        if (steer)
+        {
+            Assert.True(await runtime.SubmitPersistedUserTextAsync("Steer during wait", Guid.NewGuid(), behavior: UserTextBehavior.Interrupt));
+            await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(5)); time.Advance(TimeSpan.FromSeconds(3));
+            Assert.Equal(AgentRunStatus.Cancelled, (await runs.GetAsync(owner, waiting.AgentRunId))!.Status);
+            Assert.DoesNotContain(await runs.ListRunnableAsync(time.GetUtcNow(), 8), run => run.AgentRunId == waiting.AgentRunId);
+            Assert.Equal(2, model.Requests);
+            Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Text == "The requested wait elapsed.");
+            return;
+        }
+        if (cancel)
+        {
+            Assert.Equal(ResponseCancelResult.Cancelled, await runtime.CancelResponseAsync(waiting.ResponseId!.Value));
+            await runtime.WaitUntilIdleAsync(); time.Advance(TimeSpan.FromSeconds(3));
+            Assert.Empty(await runs.ListRunnableAsync(time.GetUtcNow(), 8));
+            Assert.Equal(AgentRunStatus.Cancelled, (await runs.GetAsync(owner, waiting.AgentRunId))!.Status);
+            Assert.Equal(1, model.Requests); return;
+        }
+        time.Advance(TimeSpan.FromSeconds(2));
+        var resumed = await runs.ApplyAsync(owner, waiting.AgentRunId, new AgentCore.Application.Execution.AgentRunCommand.ResumeWait(
+            waiting.Revision, time.GetUtcNow(), Guid.NewGuid(), time.GetUtcNow().AddMinutes(5)));
+        Assert.True(await runtime.DispatchAgentRunAsync(resumed.AgentRunId, false));
+        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        var completed = (await runs.GetAsync(owner, waiting.AgentRunId))!;
+        Assert.Equal(AgentRunStatus.Completed, completed.Status); Assert.Equal(waiting.AttemptCount, completed.AttemptCount);
+        Assert.Equal(waiting.ResponseId, completed.ResponseId); Assert.Equal(2, model.Requests);
+        Assert.Single(runtime.Snapshot.Entries, e => e.Role == ConversationRole.Assistant);
+        Assert.Contains("elapsed", model.WaitResult);
+    }
+
+    private sealed class WaitingModel : ILanguageModel
+    {
+        public int Requests { get; private set; }
+        public string WaitResult { get; private set; } = "";
+        public ModelCapabilities Capabilities { get; } = new(true, true);
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            await Task.CompletedTask; Requests++;
+            if (Requests == 1)
+            {
+                yield return new ModelToolCallEvent(new("duration-wait", "execution.wait", "{\"mode\":\"duration\",\"seconds\":2}"));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            }
+            else if (request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text == "Steer during wait")
+            {
+                yield return new ModelTextDelta("The steered turn answered.");
+                yield return new ModelCompleted(ModelStopReason.Completed);
+            }
+            else
+            {
+                WaitResult = request.Messages.Last(m => m.Role == ModelRole.Tool && m.Name == "execution.wait").Text;
+                yield return new ModelTextDelta("The requested wait elapsed.");
+                yield return new ModelCompleted(ModelStopReason.Completed);
+            }
+        }
+    }
+
     private static SessionRuntime CreateRuntime(
         ISessionOutput output,
         ILanguageModel model,

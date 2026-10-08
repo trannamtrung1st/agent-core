@@ -90,6 +90,11 @@
       "mode": "Selected",
       "resolvedCapabilities": [
         "background.start",
+        "background.list",
+        "background.inspect",
+        "background.take",
+        "background.acknowledge",
+        "execution.wait",
         "knowledge.retrieve",
         "workspace.cwd",
         "workspace.read",
@@ -158,6 +163,11 @@
     "projection": {
       "alwaysCapabilities": [
         "background.start",
+        "background.list",
+        "background.inspect",
+        "background.take",
+        "background.acknowledge",
+        "execution.wait",
         "knowledge.retrieve",
         "workspace.cwd",
         "workspace.read",

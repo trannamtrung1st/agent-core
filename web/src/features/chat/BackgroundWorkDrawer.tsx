@@ -2,10 +2,10 @@ import { CompletionDeliveryStatus } from "./AutomationDestination";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Drawer, Empty, Flex, Spin, Typography, theme } from "antd";
 import { ArrowLeftOutlined, BellOutlined, MessageOutlined } from "@ant-design/icons";
-import { continueInChat, getBackgroundSession, listBackgroundSessions, type BackgroundSession } from "../../services/api";
+import { getInstanceAgentRun, type AgentRun, continueInChat, getBackgroundSession, listBackgroundSessions, type BackgroundSession } from "../../services/api";
 import { openCatalogSession } from "../../services/realtime";
 import { refreshCatalog } from "../../services/catalog";
-import { AgentRunStatus, SessionRunHistory } from "./AgentRunDetails";
+import { AgentRunDetailDrawer, AgentRunStatus, SessionRunHistory } from "./AgentRunDetails";
 import { DrawerListFooter } from "./DrawerListFooter";
 import { useCursorPages } from "./useCursorPages";
 import { useWorkReadState } from "./workReadState";
@@ -19,6 +19,8 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
 }) {
   const { token } = theme.useToken();
   const page = useCursorPages(instanceId, open, listBackgroundSessions);
+  const [handlingRun, setHandlingRun] = useState<AgentRun | null>(null);
+  const [handlingOpen, setHandlingOpen] = useState(false);
   const [selected, setSelected] = useState<BackgroundSession | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -29,7 +31,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
   const moveFocus = useRef(false);
   const { isUnread, markRead } = useWorkReadState();
   useEffect(() => {
-    epoch.current++; setSelected(null); setBusy(false); setActionError(null); actionPending.current = false;
+    epoch.current++; setSelected(null); setHandlingOpen(false); setHandlingRun(null); setBusy(false); setActionError(null); actionPending.current = false;
     historyOpener.current = null; moveFocus.current = false;
     return () => { epoch.current++; };
   }, [instanceId, open]);
@@ -44,6 +46,11 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
       ?? list.current?.querySelector<HTMLButtonElement>("[data-background-control]");
     opener?.focus({ preventScroll: true });
   }, [selected, open]);
+  async function inspectHandlingRun(runId: string) {
+    const generation = epoch.current; setHandlingRun(null); setHandlingOpen(true);
+    try { const run = await getInstanceAgentRun(instanceId, runId); if (generation === epoch.current) setHandlingRun(run); }
+    catch (reason) { if (generation === epoch.current) { setHandlingOpen(false); setActionError(reason instanceof Error ? reason.message : "Unable to load handling run. Try again."); } }
+  }
   function select(item: BackgroundSession, control: "title" | "history") {
     historyOpener.current = { sessionId: item.session.sessionId, control }; moveFocus.current = true;
     setActionError(null); setSelected(item);
@@ -80,7 +87,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
     return `${item.artifactCount}${item.artifactCountHasMore ? "+" : ""} ${item.artifactCount === 1 && !item.artifactCountHasMore ? "file" : "files"}`;
   }
   const active = selected ? page.items.find(row => row.session.sessionId === selected.session.sessionId) ?? selected : null;
-  return <Drawer title={active ? active.session.title : "Background work"} open={open} onClose={onClose}
+  return <><Drawer title={active ? active.session.title : "Background work"} open={open} onClose={onClose}
     onKeyDown={event => {
       if (event.key !== "Escape") return;
       event.stopPropagation();
@@ -92,7 +99,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
         <Button ref={backButton} type="text" icon={<ArrowLeftOutlined aria-hidden />} style={{ alignSelf: "flex-start", paddingInline: token.paddingXS }} onClick={() => { moveFocus.current = true; setSelected(null); setActionError(null); }}>All background Sessions</Button>
         <Flex wrap align="center" gap={token.paddingXS}>
           <Typography.Text type="secondary">{runOriginLabel(active.origin.kind)}</Typography.Text>
-          {active.completionDelivery ? <CompletionDeliveryStatus delivery={active.completionDelivery} /> : null}
+          {active.completionDelivery ? <CompletionDeliveryStatus delivery={active.completionDelivery} onInspect={id => void inspectHandlingRun(id)} /> : null}
         </Flex>
         <Button type="primary" icon={<MessageOutlined aria-hidden />} loading={busy} disabled={busy || !active.canContinueInChat} onClick={() => void openChat(active)}>Continue in chat</Button>
         {!active.canContinueInChat ? <Typography.Text type="secondary">This Session or its Agent Instance is unavailable for continuation. Its run history remains available here.</Typography.Text> : null}
@@ -113,9 +120,9 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
               <Typography.Text type="secondary">{runOriginLabel(item.origin.kind)} · <time dateTime={item.session.updatedAt}>{formatChatTime(item.session.updatedAt) ?? "Unknown time"}</time></Typography.Text>
               <Typography.Text type="secondary">{fileCount(item)}{item.latestRun && item.latestRun.attemptCount > 1 ? ` · Attempt ${item.latestRun.attemptCount} of ${item.latestRun.maxAttempts}` : ""}</Typography.Text>
               {item.latestRun?.outcome?.summary || item.latestRun?.failureSummary ? <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }} ellipsis={{ rows: 2 }}>{item.latestRun.outcome?.summary || item.latestRun.failureSummary}</Typography.Paragraph> : null}
-              {item.completionDelivery ? <CompletionDeliveryStatus delivery={item.completionDelivery} /> : null}
+              {item.completionDelivery ? <CompletionDeliveryStatus delivery={item.completionDelivery} onInspect={id => void inspectHandlingRun(id)} /> : null}
               {item.latestRun?.progress ? <Typography.Text>{item.latestRun.progress}</Typography.Text> : null}
-              {item.latestRun && isUnread(item.latestRun) ? <Typography.Text><BellOutlined /> Unread · needs attention</Typography.Text> : null}
+              {item.latestRun && item.completionDelivery?.status !== "handled" && isUnread(item.latestRun) ? <Typography.Text><BellOutlined /> Unread · needs attention</Typography.Text> : null}
               <Flex wrap gap={token.paddingXS}><Button data-background-control="history" onClick={() => select(item, "history")}>View history</Button>
                 <Button disabled={busy || !item.canContinueInChat} onClick={() => void openChat(item)}>Continue in chat</Button>{automationLink(item)}</Flex>
             </Flex>
@@ -126,5 +133,5 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
       </>}
       {actionError ? <Alert type="error" showIcon title={actionError} action={<Button onClick={() => void page.refresh()}>Refresh</Button>} /> : null}
     </Flex>
-  </Drawer>;
+  </Drawer><AgentRunDetailDrawer run={handlingRun} open={handlingOpen} wide={wide} onClose={() => setHandlingOpen(false)} onChange={setHandlingRun} /></>;
 }

@@ -35,11 +35,21 @@ internal sealed class RuntimeAgentRunStore : IAgentRunStore
         lock (_owners) _owners[result.Run.AgentRunId] = result.Run.Owner;
         return result;
     }
+    public ValueTask<CompletionInboxItem?> GetCompletionInboxAsync(AgentRunOwner o, Guid s, Guid c, DateTimeOffset now, CancellationToken ct = default) => Store.GetCompletionInboxAsync(o, s, c, now, ct);
+    public ValueTask<bool> HasCompletionClaimAsync(AgentRunOwner o, Guid r, Guid g, DateTimeOffset now, CancellationToken ct = default) => Store.HasCompletionClaimAsync(o, r, g, now, ct);
+    public ValueTask<IReadOnlyList<BackgroundCompletionCandidate>> ListBackgroundPageAsync(AgentRunOwner o, Guid s, Guid? c, bool p, int l, CancellationToken ct = default) => Store.ListBackgroundPageAsync(o, s, c, p, l, ct);
+    public ValueTask<bool> HasCompletionAcknowledgmentAsync(AgentRunOwner owner, Guid parent, CancellationToken ct = default) => Store.HasCompletionAcknowledgmentAsync(owner, parent, ct);
+    public ValueTask<IReadOnlyList<BackgroundCompletionCandidate>> ListBackgroundChildrenAsync(AgentRunOwner owner, Guid parent, int limit, CancellationToken ct = default) => Store.ListBackgroundChildrenAsync(owner, parent, limit, ct);
+    public ValueTask<IReadOnlyList<CompletionInboxItem>> ListCompletionInboxAsync(AgentRunOwner owner, Guid session, int limit, DateTimeOffset now, CancellationToken ct = default) => Store.ListCompletionInboxAsync(owner, session, limit, now, ct);
+    public ValueTask<CompletionInboxItem> TakeCompletionAsync(AgentRunOwner owner, Guid parent, Guid generation, Guid child, long revision, string call, Guid token, DateTimeOffset now, CancellationToken ct = default) => Store.TakeCompletionAsync(owner, parent, generation, child, revision, call, token, now, ct);
+    public ValueTask<CompletionInboxItem> AcknowledgeCompletionAsync(AgentRunOwner owner, Guid parent, Guid generation, Guid child, long revision, Guid token, string usage, DateTimeOffset now, CancellationToken ct = default) => Store.AcknowledgeCompletionAsync(owner, parent, generation, child, revision, token, usage, now, ct);
     public ValueTask<AgentRunAdmissionResult> AdmitImmediateAsync(SessionSnapshot snapshot, AgentRun run, Guid generation, CancellationToken ct = default) => Store.AdmitImmediateAsync(snapshot, run, generation, ct);
+    public ValueTask<IReadOnlyList<BackgroundCompletionCandidate>> ListDeliveryCandidatesAsync(int limit, DateTimeOffset now, CancellationToken ct = default) => Store.ListDeliveryCandidatesAsync(limit, now, ct);
     public ValueTask<IReadOnlyList<BackgroundCompletionCandidate>> ListUnreportedCompletionsAsync(int limit, CancellationToken ct = default) => Store.ListUnreportedCompletionsAsync(limit, ct);
     public ValueTask<CompletionDeliveryState> GetCompletionDeliveryAsync(AgentRunOwner owner, Guid id, CancellationToken ct = default) => Store.GetCompletionDeliveryAsync(owner, id, ct);
     public ValueTask<bool> HasCompletionReceiptAsync(AgentRunOwner owner, Guid id, CancellationToken ct = default) => Store.HasCompletionReceiptAsync(owner, id, ct);
     public ValueTask SkipCompletionReportAsync(AgentRunOwner owner, Guid id, string reason, DateTimeOffset now, CancellationToken ct = default) => Store.SkipCompletionReportAsync(owner, id, reason, now, ct);
+    public ValueTask<AgentRunAdmissionResult> AdmitCompletionReportBatchAsync(SessionSnapshot parent, long revision, AgentRun report, IReadOnlyList<Guid> children, CancellationToken ct = default) => Store.AdmitCompletionReportBatchAsync(parent, revision, report, children, ct);
     public ValueTask<AgentRunAdmissionResult> AdmitCompletionReportAsync(SessionSnapshot parent, long revision, AgentRun report, Guid child, CancellationToken ct = default) => Store.AdmitCompletionReportAsync(parent, revision, report, child, ct);
     public ValueTask<AgentRun> CommitOutcomeAsync(SessionSnapshot snapshot, long revision, AgentRunOwner owner,
         Guid id, AgentRunCommand.Complete completion, Guid? draft, CancellationToken ct = default) =>

@@ -10,7 +10,7 @@ describe("Run presentation", () => {
     expect(runTriggerLabel("Daily at 09:00")).toBe("Daily at 09:00");
     expect(runTriggerLabel("Once · 2026-99-99Tinvalid")).toBe("Once · 2026-99-99Tinvalid");
   });
-  it.each([["WaitingForApproval", "Needs approval"], ["needsApproval", "Needs approval"], ["WaitingToRetry", "Retrying"], ["retrying", "Retrying"], ["completed", "Completed"]])("uses the same run label for %s", (value, label) => expect(runStatusLabel(value)).toBe(label));
+  it.each([["WaitingForSignal", "Waiting"], ["waitingForSignal", "Waiting"], ["WaitingForApproval", "Needs approval"], ["needsApproval", "Needs approval"], ["WaitingToRetry", "Retrying"], ["retrying", "Retrying"], ["completed", "Completed"]])("uses the same run label for %s", (value, label) => expect(runStatusLabel(value)).toBe(label));
   it.each([["NoAction", "No action"], ["Result", "Result"], ["Response", "Response"], ["NeedsAttention", "Needs attention"]])("displays %s as %s", (value, label) => expect(runOutcomeLabel(value)).toBe(label));
   it("keeps unknown future labels readable and does not invent source configuration", () => {
     expect(runOutcomeLabel("Future outcome")).toBe("Future outcome");

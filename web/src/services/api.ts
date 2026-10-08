@@ -68,6 +68,7 @@ export type AgentRun = {
   agentRunId: string; sessionId: string; activationId: string; activationKind: string;
   status: string; revision: number; attemptCount: number; maxAttempts: number;
   cancellationRequested: boolean; cancellationAvailable: boolean; progress: string | null;
+  wait?: { mode: string; until: string; backgroundSessionIds: string[]; deadline: string } | null;
   nextRetryAt: string | null; createdAt: string; updatedAt: string;
   approval: { approvalId: string; revision: number; actionHash: string; toolName: string; preview: string; expiresAt: string } | null;
   outcome: { kind: string; summary: string; outcomeEntryId: string | null; attentionRequired: boolean } | null;

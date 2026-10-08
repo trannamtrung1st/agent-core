@@ -529,6 +529,38 @@ public sealed class AgentRunContractTests
         Assert.Equal(failedId, repeated.Failure!.DiagnosticId);
     }
 
+    [Theory]
+    [InlineData(8, 1)]
+    [InlineData(3, 300)]
+    public void Durable_waits_enforce_cumulative_count_and_time_without_spending_attempts(int waits, int seconds)
+    {
+        var run = NewItem().TakeClaim(GenerationA, Now, Now.AddMinutes(1)); var at = Now;
+        for (var index = 0; index < waits; index++)
+        {
+            var generation = run.Claim!.Generation;
+            run = run.SuspendForSignal(run.Revision, generation, Checkpoint("{}"),
+                new($"wait-{index}", AgentRunWaitMode.Duration, [], AgentRunWaitUntil.All, at, at.AddSeconds(seconds)), at);
+            Assert.Equal(generation, run.Wait!.SuspendedGeneration); Assert.Null(run.Claim);
+            at = at.AddSeconds(seconds);
+            run = run.ResumeFromSignal(run.Revision, Guid.NewGuid(), Checkpoint("{}"), at, at.AddMinutes(1));
+            Assert.Equal(1, run.AttemptCount);
+        }
+        Assert.Equal(waits, run.WaitCount); Assert.Equal(waits * seconds, run.TotalWaitSeconds);
+        Assert.Throws<AgentRunTransitionException>(() => run.SuspendForSignal(run.Revision, run.Claim!.Generation, Checkpoint("{}"),
+            new("over-budget", AgentRunWaitMode.Duration, [], AgentRunWaitUntil.All, at, at.AddSeconds(1)), at));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(301)]
+    public void Wait_descriptor_rejects_invalid_duration_and_duplicate_targets(int seconds)
+    {
+        Assert.Throws<ArgumentException>(() => new AgentRunWait("wait", AgentRunWaitMode.Duration, [], AgentRunWaitUntil.All, Now, Now.AddSeconds(seconds)).Validate());
+        var target = Guid.NewGuid();
+        Assert.Throws<ArgumentException>(() => new AgentRunWait("wait", AgentRunWaitMode.Background, [target, target], AgentRunWaitUntil.Any, Now, Now.AddSeconds(1)).Validate());
+    }
+
     private static AgentRun CompletedItem() =>
         NewItem()
             .TakeClaim(GenerationA, Now, Now.AddMinutes(1))

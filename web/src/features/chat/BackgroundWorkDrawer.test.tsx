@@ -1,14 +1,14 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App } from "antd";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
 import { AgentRunDetails } from "./AgentRunDetails";
 import { fixtureBackground, fixtureRun } from "./agentRunFixtures";
-import { cancelAgentRun, decideAgentRunApproval, continueInChat, getBackgroundSession, listAgentRuns, listBackgroundSessions } from "../../services/api";
+import { getInstanceAgentRun, cancelAgentRun, decideAgentRunApproval, continueInChat, getBackgroundSession, listAgentRuns, listBackgroundSessions } from "../../services/api";
 import { openCatalogSession } from "../../services/realtime";
 import { refreshCatalog } from "../../services/catalog";
 vi.mock("../../services/api", async original => ({ ...await original<object>(),
-  listBackgroundSessions: vi.fn(), listAgentRuns: vi.fn(), getBackgroundSession: vi.fn(), continueInChat: vi.fn(), cancelAgentRun: vi.fn(), decideAgentRunApproval: vi.fn()
+  getInstanceAgentRun: vi.fn(), listBackgroundSessions: vi.fn(), listAgentRuns: vi.fn(), getBackgroundSession: vi.fn(), continueInChat: vi.fn(), cancelAgentRun: vi.fn(), decideAgentRunApproval: vi.fn()
 }));
 vi.mock("../../services/realtime", () => ({ openCatalogSession: vi.fn() }));
 vi.mock("../../services/catalog", () => ({ refreshCatalog: vi.fn() }));
@@ -150,5 +150,30 @@ describe("Background Sessions", () => {
     expect(screen.getByRole("button", { name: "Approve action" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Reject action" })).toBeDisabled();
     expect(screen.getByText("Approval expired. Waiting for the run to update.")).toBeInTheDocument();
+  });
+});
+
+
+describe("Completion accounting and wait presentation", () => {
+  it("shows a typed wait separately from retry and keeps cancellation available", () => {
+    render(<App><AgentRunDetails run={{ ...fixtureRun, status: "waitingForSignal", cancellationAvailable: true,
+      wait: { mode: "Background", until: "All", backgroundSessionIds: ["child-session"], deadline: "2026-10-08T14:00:00Z" } }} onChange={vi.fn()} /></App>);
+    expect(screen.getByLabelText("Execution wait")).toHaveTextContent("Waiting for all background results");
+    expect(screen.getByRole("button", { name: "Cancel run" })).toBeEnabled();
+    expect(screen.queryByText(/Retry scheduled/)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Conversation child-se/ })).toHaveAttribute("href", "/c/child-session");
+  });
+  it("opens the exact durable handling Run without rendering a completion bubble", async () => {
+    vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [{ ...fixtureBackground,
+      completionDelivery: { status: "handled", targetSessionId: "parent-session", parentAgentRunId: "handling-run", reason: null } }], hasMore: false, nextCursor: null });
+    vi.mocked(getInstanceAgentRun).mockResolvedValue({ ...fixtureRun, agentRunId: "handling-run" });
+    render(<App><BackgroundWorkDrawer instanceId="instance" open wide onClose={vi.fn()} /></App>);
+    await screen.findByText(/Handled in conversation/);
+    expect(screen.queryByText(/Unread · needs attention/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "View handling run" }));
+    await waitFor(() => expect(getInstanceAgentRun).toHaveBeenCalledWith("instance", "handling-run"));
+    // rc-util deliberately uses the same generated ID in NODE_ENV=test; scope by the actual drawer heading.
+    await waitFor(() => expect(screen.getAllByRole("dialog").some(dialog => within(dialog).queryByText("Run details", { exact: true }) !== null)).toBe(true));
+    expect(screen.queryByText("Background work completed")).not.toBeInTheDocument();
   });
 });

@@ -36,6 +36,7 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
         await sessions.StageSaveAsync(db, snapshot, expectedSessionRevision, cancellationToken).ConfigureAwait(false);
         if (draftRow is not null) db.Entries.Remove(draftRow);
         AgentRunStoreMapping.Apply(row, updated);
+        await SettleInboxAsync(db, updated, run.Claim?.Generation, cancellationToken).ConfigureAwait(false);
         await SaveAsync(db, cancellationToken).ConfigureAwait(false);
         await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
         AgentRunStoreMapping.ObserveTransition(run, updated, completion);
@@ -61,7 +62,7 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
         AdmitCoreAsync(snapshot, 0, run, expectedRoutingRevision, cancellationToken);
 
     private async ValueTask<AgentRunAdmissionResult> AdmitCoreAsync(SessionSnapshot snapshot, long expectedSessionRevision,
-        AgentRun run, long? expectedRoutingRevision, CancellationToken cancellationToken, Guid? expectedParentGeneration = null, Guid? completionSourceRunId = null)
+        AgentRun run, long? expectedRoutingRevision, CancellationToken cancellationToken, Guid? expectedParentGeneration = null, Guid? completionSourceRunId = null, IReadOnlyList<Guid>? additionalCompletionSources = null)
     {
         AgentRunStoreMapping.ValidateAdmission(snapshot, run);
         snapshot = snapshot with { PendingAgentInputIds = snapshot.PendingAgentInputIds.Except(run.Admission.Activation.SourceEntryIds).ToArray() };
@@ -137,14 +138,23 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
         }
         if (completionSourceRunId is { } completionSource)
         {
-            if (await db.BackgroundCompletionReceipts.AnyAsync(row => row.ChildAgentRunId == completionSource.ToString("D"), cancellationToken).ConfigureAwait(false))
-                throw AgentCoreErrors.Conflict("Completion was already reported or skipped.");
-            var childRow = await db.AgentRuns.AsNoTracking().SingleOrDefaultAsync(row => row.AgentRunId == completionSource.ToString("D"), cancellationToken).ConfigureAwait(false);
+                foreach (var sourceId in new[] { completionSource }.Concat(additionalCompletionSources ?? []))
+                {
+            await RepairInboxAsync(db, run.CreatedAtUtc, cancellationToken).ConfigureAwait(false);
+            var ownedParentRuns = await db.AgentRuns.AsNoTracking().Where(r => r.SessionId == snapshot.SessionId.ToString("D")).ToArrayAsync(cancellationToken).ConfigureAwait(false);
+            CompletionInboxMapping.RequireReportAdmission(snapshot, ownedParentRuns.Select(AgentRunStoreMapping.ToDomain));
+            var receipt = db.BackgroundCompletionReceipts.Local.SingleOrDefault(r => r.ChildAgentRunId == sourceId.ToString("D"))
+                ?? await db.BackgroundCompletionReceipts.SingleOrDefaultAsync(r => r.ChildAgentRunId == sourceId.ToString("D"), cancellationToken).ConfigureAwait(false)
+                ?? throw AgentCoreErrors.NotFound("Completion was not found.");
+            var item = CompletionInboxMapping.Read(receipt);
+            if (item.Status != CompletionInboxStatus.Pending) throw AgentCoreErrors.Conflict("Completion was already claimed, handled or reported.");
+            var childRow = await db.AgentRuns.AsNoTracking().SingleOrDefaultAsync(row => row.AgentRunId == sourceId.ToString("D"), cancellationToken).ConfigureAwait(false);
             var child = childRow is null ? null : AgentRunStoreMapping.ToDomain(childRow);
             var childSession = child is null ? null : await sessions.LoadMetadataAsync(child.SessionId, cancellationToken).ConfigureAwait(false);
-            AgentRunStoreMapping.ValidateCompletionSource(snapshot, run, child, childSession);
-            db.BackgroundCompletionReceipts.Add(new() { ChildAgentRunId = completionSource.ToString("D"), AgentInstanceId = run.AgentInstanceId.ToString("D"),
-                ProfileId = run.ProfileId.ToString("D"), ParentActivationId = run.ActivationId.ToString("D"), CreatedAtUtc = run.CreatedAtUtc.ToUnixTimeMilliseconds() });
+            AgentRunStoreMapping.ValidateCompletionSource(snapshot, run, child, childSession, sourceId == completionSource);
+            CompletionInboxMapping.Write(receipt, item with { Revision = item.Revision + 1,
+                Status = CompletionInboxStatus.DeliveryQueued, ReportActivationId = run.ActivationId });
+                }
         }
         if (expectedRoutingRevision is not null && occurrence?.ExecutionTarget.Kind == AutomationExecutionTargetKind.ExistingSession)
         {
@@ -237,13 +247,16 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
             throw AgentCoreErrors.Validation("Runnable query requires UTC time and a bounded limit.");
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var utc = asOfUtc.ToUnixTimeMilliseconds();
+        var waiting = await db.AgentRuns.AsNoTracking().Where(r => r.Status == (int)AgentRunStatus.WaitingForSignal).ToArrayAsync(cancellationToken).ConfigureAwait(false);
+        var children = waiting.Length > 0 ? await WaitChildrenAsync(db, waiting.Select(AgentRunStoreMapping.ToDomain).SelectMany(r => r.Wait!.BackgroundSessionIds).Distinct().ToArray(), cancellationToken).ConfigureAwait(false) : [];
+        var readyWaits = waiting.Select(AgentRunStoreMapping.ToDomain).Where(r => AgentRunWaitExecution.IsReady(r, asOfUtc, children)).ToArray();
         var rows = await db.AgentRuns.AsNoTracking().Where(row => row.Status == (int)AgentRunStatus.Queued
             || row.Status == (int)AgentRunStatus.WaitingToRetry && row.NextRetryAtUtc <= utc
             || row.Status == (int)AgentRunStatus.Running && row.LeaseExpiresAtUtc <= utc
             || row.Status == (int)AgentRunStatus.WaitingForApproval && row.ApprovalExpiresAtUtc <= utc)
             .Where(row => row.Status == (int)AgentRunStatus.Running || row.Status == (int)AgentRunStatus.WaitingForApproval
                 || !db.AgentRuns.Any(other => other.SessionId == row.SessionId && other.AgentRunId != row.AgentRunId
-                    && (other.Status == (int)AgentRunStatus.Running || other.Status == (int)AgentRunStatus.WaitingForApproval)))
+                    && (other.Status == (int)AgentRunStatus.Running || other.Status == (int)AgentRunStatus.WaitingForApproval || other.Status == (int)AgentRunStatus.WaitingForSignal)))
             .Where(row => row.Status == (int)AgentRunStatus.Running || row.Status == (int)AgentRunStatus.WaitingForApproval
                 || !db.AgentRuns.Any(earlier => earlier.SessionId == row.SessionId
                 && (earlier.CreatedAtUtc < row.CreatedAtUtc || earlier.CreatedAtUtc == row.CreatedAtUtc && string.Compare(earlier.AgentRunId, row.AgentRunId) < 0)
@@ -253,7 +266,7 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
                     || earlier.Status == (int)AgentRunStatus.WaitingForApproval && earlier.ApprovalExpiresAtUtc <= utc)))
             .OrderBy(row => row.CreatedAtUtc).ThenBy(row => row.AgentRunId).Take(limit)
             .ToArrayAsync(cancellationToken).ConfigureAwait(false);
-        return rows.Select(AgentRunStoreMapping.ToDomain).ToArray();
+        return rows.Select(AgentRunStoreMapping.ToDomain).Concat(readyWaits).OrderBy(r => r.CreatedAtUtc).ThenBy(r => r.AgentRunId).Take(limit).ToArray();
     }
 
     public async ValueTask<IReadOnlyList<Guid>> ListPendingInputSessionsAsync(int limit, CancellationToken cancellationToken = default)
@@ -285,7 +298,7 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
         if (row is null) throw AgentCoreErrors.NotFound("AgentRun was not found.");
         var run = AgentRunStoreMapping.ToDomain(row);
         if (command is AgentRunCommand.Claim && await db.AgentRuns.AnyAsync(other => other.SessionId == row.SessionId
-            && other.AgentRunId != row.AgentRunId && (other.Status == (int)AgentRunStatus.Running || other.Status == (int)AgentRunStatus.WaitingForApproval), cancellationToken).ConfigureAwait(false))
+            && other.AgentRunId != row.AgentRunId && (other.Status == (int)AgentRunStatus.Running || other.Status == (int)AgentRunStatus.WaitingForApproval || other.Status == (int)AgentRunStatus.WaitingForSignal), cancellationToken).ConfigureAwait(false))
             throw AgentCoreErrors.Conflict("Session already owns an active execution.");
         if (command is AgentRunCommand.Complete { OutcomeEntryId: { } entryId })
         {
@@ -296,10 +309,12 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
                 throw AgentCoreErrors.Conflict("Completed outcome must reference the durable Session response.");
         }
         AgentRun updated;
-        try { updated = command.Apply(run, diagnostics.NewId); }
+        try { updated = command is AgentRunCommand.SuspendWait or AgentRunCommand.ResumeWait
+            ? AgentRunWaitExecution.Apply(run, command, await WaitChildrenAsync(db, command is AgentRunCommand.SuspendWait suspend ? suspend.Wait.BackgroundSessionIds : run.Wait?.BackgroundSessionIds ?? [], cancellationToken).ConfigureAwait(false)) : command.Apply(run, diagnostics.NewId); }
         catch (Exception e) when (e is AgentRunTransitionException or ArgumentException)
         { throw AgentRunStoreMapping.Map(e); }
         AgentRunStoreMapping.Apply(row, updated);
+        await SettleInboxAsync(db, updated, run.Claim?.Generation, cancellationToken).ConfigureAwait(false);
         await SaveAsync(db, cancellationToken).ConfigureAwait(false);
         await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
         AgentRunStoreMapping.ObserveTransition(run, updated, command);

@@ -1190,6 +1190,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case BackgroundCompletionReceived completionReport:
                     await HandleBackgroundCompletionAsync(completionReport, cancellationToken).ConfigureAwait(false);
                     break;
+                case CompletionToolReceived completionTool:
+                    await HandleCompletionToolAsync(completionTool, cancellationToken).ConfigureAwait(false);
+                    break;
                 case BackgroundStartReceived backgroundStart:
                     await HandleBackgroundStartAsync(backgroundStart, cancellationToken).ConfigureAwait(false);
                     break;
@@ -1326,6 +1329,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case BackgroundCompletionReceived completionReport:
                 completionReport.Committed.TrySetResult(false);
+                break;
+            case CompletionToolReceived completionTool:
+                completionTool.Completed.TrySetResult(new(SkillLoadAdmission.Error("stale", "Execution no longer owns this request.")));
                 break;
             case BackgroundStartReceived backgroundStart:
                 backgroundStart.Completed.TrySetResult(SkillLoadAdmission.Error("stale", "Session mailbox is unavailable."));
@@ -2659,7 +2665,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 BrowserSnapshotCompaction.Compact(messages);
                 messages = PromptContextBuilder.WithActiveSkillSystem(messages, pinnedCatalog, pinnedSkills).ToList();
                 AgentContext? projectionContext = null;
-                if (_snapshot.Definition.Environment?.Capabilities is not null)
+                if (_snapshot.Definition.Environment?.Capabilities is not null || RolePermissions.AllowsTool(_snapshot.Definition, ToolCatalog.BackgroundAcknowledge))
                 {
                     projectionContext = await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, generateToken);
                     authorizedTools = _tools.ProjectTools(_snapshot.Definition, projectionContext);
@@ -3100,6 +3106,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 OperationalDiagnostics.RecordToolDenial(call.Name);
                                 executionResult = ToolExecutionResult.FromText(
                                     """{"error":"forbidden","message":"Tool is not permitted for this role."}""");
+                            }
+                            else if (ToolCatalog.IsCompletionTool(call.Name))
+                            {
+                                var completion = await RequestCompletionToolAsync(cause, request.ResponseId, call, overallCts.Token).ConfigureAwait(false);
+                                if (completion.Suspended) return;
+                                executionResult = ToolExecutionResult.FromText(completion.Json);
                             }
                             else if (string.Equals(call.Name, ToolCatalog.BackgroundStart, StringComparison.Ordinal))
                             {
@@ -5630,7 +5642,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         long started,
         bool userConversationTerminal,
         AgentRun? admittedRun,
-        AgentRunOutcomeCommit? runOutcome, Guid? completionSourceRunId)
+        AgentRunOutcomeCommit? runOutcome, Guid? completionSourceRunId, IReadOnlyList<Guid>? completionSourceRunIds)
     {
         public SessionSnapshot Proposed { get; } = proposed;
         public PersistKind Kind { get; } = kind;
@@ -5644,7 +5656,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         public AgentRun? AdmissionResult { get; set; }
         public Action<AgentRun>? OnAdmitted { get; set; }
         public AgentRunOutcomeCommit? RunOutcome { get; } = runOutcome;
-        public Guid? CompletionSourceRunId { get; } = completionSourceRunId;
+        public IReadOnlyList<Guid>? CompletionSourceRunIds { get; } = completionSourceRunIds ?? (completionSourceRunId is { } id ? [id] : null);
         public TaskCompletionSource Applied { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
@@ -5735,7 +5747,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         TaskCompletionSource<bool>? ended = null,
         bool userConversationTerminal = false,
         AgentRun? admittedRun = null,
-        AgentRunOutcomeCommit? runOutcome = null, Guid? completionSourceRunId = null, Action<AgentRun>? onAdmitted = null)
+        AgentRunOutcomeCommit? runOutcome = null, Guid? completionSourceRunId = null, Action<AgentRun>? onAdmitted = null, IReadOnlyList<Guid>? completionSourceRunIds = null)
     {
         if (snapshot.Entries.Count > 1000)
         {
@@ -5751,7 +5763,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             BeginUserConversationTerminalPersist();
         }
 
-        var job = new PersistJob(snapshot, kind, token, fence, then, ended, started, userConversationTerminal, admittedRun, runOutcome, completionSourceRunId) { OnAdmitted = onAdmitted };
+        var job = new PersistJob(snapshot, kind, token, fence, then, ended, started, userConversationTerminal, admittedRun, runOutcome, completionSourceRunId, completionSourceRunIds) { OnAdmitted = onAdmitted };
         BeginWork();
         _pendingPersist[token] = job;
         if (!_persistJobs.Writer.TryWrite(job))
@@ -6115,8 +6127,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             toSave = toSave with { PendingAgentInputIds = toSave.PendingAgentInputIds
                 .Except(run.Admission.Activation.SourceEntryIds).ToArray() };
-            var admitted = job.CompletionSourceRunId is { } childRunId
-                ? await _agentRuns.AdmitCompletionReportAsync(toSave, _durableRevision, run, childRunId, cancellationToken).ConfigureAwait(false)
+            var admitted = job.CompletionSourceRunIds is { } childRunIds
+                ? await _agentRuns.AdmitCompletionReportBatchAsync(toSave, _durableRevision, run, childRunIds, cancellationToken).ConfigureAwait(false)
                 : await _agentRuns.AdmitAsync(toSave, _durableRevision, run, cancellationToken).ConfigureAwait(false);
             job.AdmissionResult = admitted.Run;
             if (!admitted.Created)
@@ -6126,6 +6138,18 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 toSave = toSave with { Revision = actual.Revision, UpdatedAt = actual.UpdatedAt };
             }
             foreach (var id in admitted.Run.Admission.Activation.SourceEntryIds) _admittedAgentInputs.TryAdd(id, 0);
+        }
+        else if (job.UserConversationTerminal && _boundAgentRun is { Status: AgentRunStatus.Running, Claim: { } terminalClaim } terminalRun
+            && !terminalRun.CancellationRequested
+            && (terminalRun.Admission.OutputContract == AgentRunOutputContract.CompletionReport || await _agentRuns.HasCompletionAcknowledgmentAsync(terminalRun.Owner, terminalRun.AgentRunId, cancellationToken).ConfigureAwait(false))
+            && toSave.Entries.LastOrDefault(e => e.Role == ConversationRole.Assistant && e.ResponseId == terminalRun.ResponseId) is { Status: EntryStatus.Completed } finalEntry)
+        {
+            var current = await _agentRuns.GetAsync(terminalRun.Owner, terminalRun.AgentRunId, cancellationToken).ConfigureAwait(false)
+                ?? throw AgentCoreErrors.Persistence("Terminal Run was not found.");
+            await _agentRuns.CommitOutcomeAsync(toSave, _durableRevision, current.Owner, current.AgentRunId,
+                new AgentRunCommand.Complete(current.Revision, now, terminalClaim.Generation,
+                    string.IsNullOrWhiteSpace(finalEntry.Text) ? "Response completed." : finalEntry.Text[..Math.Min(finalEntry.Text.Length, AgentRunLimits.MaxResultCharacters)],
+                    AgentRunOutcomeKind.Response, finalEntry.EntryId), null, cancellationToken).ConfigureAwait(false);
         }
         else await _store.SaveAsync(toSave, _durableRevision, cancellationToken).ConfigureAwait(false);
         return toSave;

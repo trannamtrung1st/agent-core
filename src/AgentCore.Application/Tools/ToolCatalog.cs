@@ -79,6 +79,12 @@ public static class ToolCatalog
     public const string ExperienceConsolidate = "experience.consolidate";
     public static bool IsIdentityMaintenance(string name) => name is MemoryConsolidate or MemoryForget or ExperienceConsolidate;
     public const string ExperienceRecent = "experience.recent";
+    public const string BackgroundList = "background.list";
+    public const string BackgroundInspect = "background.inspect";
+    public const string BackgroundTake = "background.take";
+    public const string BackgroundAcknowledge = "background.acknowledge";
+    public const string ExecutionWait = "execution.wait";
+    public static bool IsCompletionTool(string name) => name is BackgroundList or BackgroundInspect or BackgroundTake or BackgroundAcknowledge or ExecutionWait;
     public const string BackgroundStart = "background.start";
     public const string WorkComplete = "work.complete";
 

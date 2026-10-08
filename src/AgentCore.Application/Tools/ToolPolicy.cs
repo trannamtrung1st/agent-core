@@ -18,6 +18,7 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         }
 
+        if (ToolCatalog.IsCompletionTool(toolName) && admission?.OwnedSessionId is null) return ToolPolicyDecision.Deny;
         if (toolName == ToolCatalog.BackgroundStart && admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn, OwnedSessionId: not null })
             return ToolPolicyDecision.Deny;
         if (InstanceSkillTools.IsManagement(toolName) && admission is not { AgentInstanceId: not null, SupportsTools: true })
@@ -149,6 +150,8 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (descriptor.Name == ToolCatalog.BackgroundAcknowledge && context?.HasBackgroundClaim != true) return false;
+        if (ToolCatalog.IsCompletionTool(descriptor.Name) && context?.OwnedSessionId is null) return false;
         if (descriptor.Name == ToolCatalog.BackgroundStart && context is not { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn, OwnedSessionId: not null })
             return false;
         if (InstanceSkillTools.IsManagement(descriptor.Name) && context is not { AgentInstanceId: not null, ModelSupportsTools: true })

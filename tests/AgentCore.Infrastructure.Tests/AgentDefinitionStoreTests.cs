@@ -49,7 +49,7 @@ public sealed class AgentDefinitionStoreTests
         Assert.Contains(ToolCatalog.BrowserSnapshot, environment.ToolList);
         Assert.Contains(ToolCatalog.BrowserClick, environment.ToolList);
         Assert.Contains(ToolCatalog.BrowserClose, environment.ToolList);
-        Assert.Equal(64, environment.ToolList.Count);
+        Assert.Equal(69, environment.ToolList.Count);
         Assert.Contains(ToolCatalog.WorkspaceCwd, environment.ToolList);
         Assert.Equal("browser.record.lookup", Assert.Single(latest.SkillList).Id);
         Assert.Equal(SkillProjection.OnDemand, latest.SkillList[0].Projection);

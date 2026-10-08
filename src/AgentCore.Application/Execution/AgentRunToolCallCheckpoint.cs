@@ -125,6 +125,17 @@ public static class AgentRunToolCallCheckpoint
         return Encoding.UTF8.GetByteCount(payload) + RecoveryHeadroom(blockedActionHash) <= AgentRunLimits.MaxCheckpointBytes;
     }
 
+    public static AgentRunCheckpoint AppendWaitResult(AgentRunCheckpoint checkpoint, string toolCallId, string result)
+    {
+        var document = JsonSerializer.Deserialize<Document>(checkpoint.PayloadJson) ?? throw new ArgumentException("Wait checkpoint is invalid.");
+        var messages = document.Messages.Select(m => m.ToMessage()).ToArray();
+        if (!PendingCalls(messages).Any(c => c.Id == toolCallId && c.Name == "execution.wait"))
+            throw new ArgumentException("Wait result was already appended or its call is missing.");
+        var payload = JsonSerializer.Serialize(document with { Messages = document.Messages.Append(MessageDto.From(
+            new ModelMessage(ModelRole.Tool, result, ToolCallId: toolCallId, Name: "execution.wait"))).ToArray() }, CheckpointJson);
+        return new AgentRunCheckpoint(payload, checkpoint.StepCount, checkpoint.OutputBytes + Encoding.UTF8.GetByteCount(result), checkpoint.RemainingOverallBudgetMs);
+    }
+
     public static int ToolResultBudget(IReadOnlyList<ModelMessage> messages, ModelToolCall call,
         bool observationRequired, string? blockedActionHash, TriggerKind kind = TriggerKind.ScheduledOccurrence,
         IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null)

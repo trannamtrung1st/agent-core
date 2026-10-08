@@ -100,3 +100,8 @@ Labeled controls, keyboard access, visible focus, and actionable errors are requ
 ## Automation destinations and requested completion
 
 An Automation chooses when to act and where its work belongs. Conversational reminders and follow-ups can return directly to their exact conversation even when it is closed in the browser. Independent background tasks retain their own history. Reporting to a conversation is a separate explicit choice; quiet recurring work stays in Background Work. Immediate background work reports by default, including with spontaneous Initiative off. An unavailable conversation produces an inspectable reason rather than moving the task elsewhere. Destination, originally created from and completion status have distinct labels; pending is not reported. Behavior stays authoritative in [docs/03](../../docs/03-system-architecture.md#automation-destinations-and-completion-obligations).
+
+
+## Active background result handoff
+
+A parent can explicitly inspect and use its owned initial child result while answering. A successful durable answer accounts for acknowledged evidence; remaining requested results return after the parent is available. Short duration or child waits retain the same Run and response. Chat and Admin show Ready, In use, Handled in conversation and a distinct Waiting state. Behavior remains in docs/03, docs/12–15.

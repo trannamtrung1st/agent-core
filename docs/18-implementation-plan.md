@@ -444,3 +444,8 @@ Acceptance requires atomic SQLite/InMemory transitions and customization, indepe
 This authorized bounded follow-up extends the frozen AgentRun/Browser v2 substrate without reopening their historical milestones or P10/P11. Phases are A domain/output contract, B persistence/atomic target admission, C routing/headless serialization, D unified reporting, E trusted authoring/API, F shared destination/delivery UI, G bounded Impeccable review/docs/full verification.
 
 Acceptance requires J01–J16 in [Testing](16-testing-strategy.md#automation-destination-and-report-back-acceptance), InMemory/SQLite parity, no implicit fallback or second engine, Initiative-off immediate reporting and explicit-only Automation callbacks. Keep proposal history and prior frozen reports unchanged. Current implementation/evidence is in the [enhancement report](reports/automation-targets-background-reportback-verification.md); TODO owns final exact behavior SHA and five-job hosted closure. Implementation is not frozen until those final gates pass.
+
+
+## Durable completion inbox, result handoff and wait successor
+
+Authorized successor to the completed Automation destinations/report-back enhancement, starting at 513cbed0. Implementation adds canonical accounting, active handoff, deterministic unhandled reporting and typed same-Run suspension through existing owners. P10/P11 remain unopened and prior freeze records remain historical. Acceptance is tracked in TODO and docs/reports/durable-completion-inbox-result-handoff-wait-verification.md. Local implementation and verification are recorded separately from exact-SHA five-job hosted closure; do not infer closure from the preceding enhancement’s workflow.

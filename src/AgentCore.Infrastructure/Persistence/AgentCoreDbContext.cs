@@ -283,10 +283,14 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         modelBuilder.Entity<BackgroundCompletionReceiptRecord>(entity =>
         {
             entity.ToTable("BackgroundCompletionReceipts");
+            entity.Property(row => row.Revision).IsConcurrencyToken().HasDefaultValue(1L);
+            entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.ParentSessionId, row.CreatedAtUtc, row.ChildAgentRunId });
+            entity.HasIndex(row => new { row.Status, row.CreatedAtUtc, row.ChildAgentRunId });
+            entity.HasIndex(row => row.ClaimRunId);
             entity.HasKey(row => row.ChildAgentRunId);
-            entity.HasIndex(row => row.ParentActivationId).IsUnique().HasFilter("ParentActivationId IS NOT NULL");
+            entity.HasIndex(row => row.ParentActivationId).HasFilter("ParentActivationId IS NOT NULL");
             entity.HasOne<AgentRunRecord>().WithOne().HasForeignKey<BackgroundCompletionReceiptRecord>(row => row.ChildAgentRunId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne<ActivationRecord>().WithOne().HasForeignKey<BackgroundCompletionReceiptRecord>(row => row.ParentActivationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ActivationRecord>().WithMany().HasForeignKey(row => row.ParentActivationId).OnDelete(DeleteBehavior.Restrict);
         });
         modelBuilder.Entity<ActivationRecord>(entity =>
         {
@@ -299,7 +303,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         });
         modelBuilder.Entity<AgentRunRecord>(entity =>
         {
-            entity.HasIndex(row => row.SessionId).IsUnique().HasFilter("Status IN (1, 2)").HasDatabaseName("IX_AgentRuns_SessionExecution");
+            entity.HasIndex(row => row.SessionId).IsUnique().HasFilter("Status IN (1, 2, 7)").HasDatabaseName("IX_AgentRuns_SessionExecution");
             entity.ToTable("AgentRuns");
             entity.HasKey(row => row.AgentRunId);
             entity.HasIndex(row => row.ActivationId).IsUnique();

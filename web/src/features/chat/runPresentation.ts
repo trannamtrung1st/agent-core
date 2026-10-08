@@ -2,7 +2,7 @@ import type { BackgroundSession } from "../../services/api";
 
 export function runStatusLabel(value: string | null | undefined) {
   return ({ queued: "Queued", running: "Running", needsApproval: "Needs approval", WaitingForApproval: "Needs approval",
-    retrying: "Retrying", WaitingToRetry: "Retrying", completed: "Completed", failed: "Failed", cancelled: "Cancelled" } as Record<string, string>)[value ?? ""] ?? value ?? "Not yet";
+    waitingForSignal: "Waiting", WaitingForSignal: "Waiting", retrying: "Retrying", WaitingToRetry: "Retrying", completed: "Completed", failed: "Failed", cancelled: "Cancelled" } as Record<string, string>)[value ?? ""] ?? value ?? "Not yet";
 }
 
 export function runOutcomeLabel(value: string | null | undefined) {

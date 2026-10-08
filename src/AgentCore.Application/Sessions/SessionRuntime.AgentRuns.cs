@@ -58,6 +58,14 @@ public sealed partial class SessionRuntime
             if (_boundAgentRun?.AgentRunId == run.AgentRunId && _boundAgentRun.Claim?.Generation == run.Claim?.Generation
                 && (_activeResponseId is not null || _brainEvaluationCts is not null))
             { input.Completed.TrySetResult(true); return; }
+            if (_boundAgentRun is { Status: AgentRunStatus.WaitingForSignal } waiting && waiting.AgentRunId == run.AgentRunId
+                && run.Status == AgentRunStatus.Running && run.Claim is not null)
+            {
+                _responseCts?.Cancel();
+                _responseCts?.Dispose();
+                _responseCts = null;
+                _activeResponseId = null;
+            }
             if (_activeResponseId is not null || _agentRunAdmissionPending || run.Status != AgentRunStatus.Running
                 || run.Claim is null || run.Claim.LeaseExpiresAtUtc <= _time.GetUtcNow())
             { input.Completed.TrySetResult(false); return; }

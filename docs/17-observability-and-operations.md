@@ -354,3 +354,10 @@ Inspect Automation executionTarget, completionDelivery, suspensionReason and lat
 Apply the additive AutomationDestinations migration through normal stopped-host deployment/startup; old authored rows become BackgroundSession/None. Back up the database and durable roots before upgrade. Do not reset user data. Exact EnsureCreated validation remains strict. If conflicting active Session claims prevent the new uniqueness constraint, inspect/recover them under the existing lease policy; migration does not erase them. An eligible explicit Automation edit restores a suspended destination. Do not replace an unavailable conversation with a background child.
 
 Verification uses isolated temporary SQLite paths and ports. Compose smoke proves retained Automation destination/delivery alongside Sessions, Runs, Skills, workspace, resources and credential protection. [Verification ledger](reports/automation-targets-background-reportback-verification.md) records local commands and exact hosted closure; historical reset commands apply only to their explicitly approved old demo cutover.
+
+
+## Completion inbox and wait operations
+
+Continue using the existing SessionRuntime, coordinator and BackgroundCompletionReporter. No additional worker service or broker is required. Recover initial terminal completions idempotently from immutable Runs; claim expiry/failure/cancel releases uncommitted consumption. Busy parents, ordinary restart, transport detach and capacity retain results; unavailable or revoked parents persist an inspectable skip reason.
+
+AgentRun telemetry adds waiting-signal, wait-wake, wait-timeout and wait-cancelled. Background Session telemetry adds inbox pending/claim/ack-intent/handled/released/delivery-queued/delivered/skipped/expiry events with low-cardinality operation labels. Tokens, usage text, identifiers and result contents are not metric labels. Timeout metrics inspect the latest wait tool result, avoiding a timeout from an older checkpoint. Apply the forward migration through normal startup and retain populated-upgrade/restore tests; never use a demo reset to validate this enhancement.

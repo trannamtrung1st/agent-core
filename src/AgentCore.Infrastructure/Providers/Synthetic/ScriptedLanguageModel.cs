@@ -118,6 +118,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             foreach (var item in backgroundEvents) yield return item;
             yield break;
         }
+        if (CompletionHandoffScript.Generate(request) is { } handoffEvents)
+        {
+            foreach (var item in handoffEvents) yield return item;
+            yield break;
+        }
         if (IdentityMaintenanceScript.Generate(request) is { } maintenanceEvents)
         {
             foreach (var item in maintenanceEvents) yield return item;

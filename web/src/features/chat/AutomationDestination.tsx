@@ -1,4 +1,4 @@
-import { Typography } from "antd";
+import { Button, Flex, Typography } from "antd";
 import { navigateToAppPath } from "../../app/appRoute";
 
 import type { AutomationTarget, AutomationDelivery } from "../../services/api";
@@ -20,11 +20,13 @@ export function AutomationDestination({ target, delivery, currentSessionId }: {
   </>;
 }
 
-export function CompletionDeliveryStatus({ delivery }: { delivery: { status: string; targetSessionId: string | null; reason: string | null } }) {
-  const label = ({ notRequested: "Not requested", pending: "Pending", admitted: "Pending · message queued",
+export function CompletionDeliveryStatus({ delivery, onInspect }: { delivery: { status: string; targetSessionId: string | null; parentAgentRunId?: string | null; reason: string | null }; onInspect?: (runId: string) => void }) {
+  const label = ({ notRequested: "Not requested", pending: "Ready", claimed: "In use", handled: "Handled in conversation", admitted: "Pending · message queued",
     delivered: "Reported", failed: "Could not report", skipped: "Not reported" } as Record<string, string>)[delivery.status] ?? "Pending";
-  return <Typography.Text type="secondary">Completion report: {label}
+  return <Flex vertical gap="small"><Typography.Text type="secondary">Completion: {label}
     {delivery.targetSessionId ? <> · <ConversationDestination sessionId={delivery.targetSessionId} /></> : null}
     {delivery.reason ? ` · ${delivery.reason.replaceAll("-", " ")}. Result remains in Background work.` : null}
-  </Typography.Text>;
+  </Typography.Text>
+    {delivery.status === "handled" && delivery.parentAgentRunId && onInspect ? <Button type="link" style={{ alignSelf: "flex-start" }} onClick={() => onInspect(delivery.parentAgentRunId!)}>View handling run</Button> : null}
+  </Flex>;
 }

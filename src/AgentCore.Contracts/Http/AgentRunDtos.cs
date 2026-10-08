@@ -5,11 +5,12 @@ public sealed record ArtifactPageResponse(IReadOnlyList<ArtifactResponse> Items,
 public sealed record AgentRunApprovalResponse(string ApprovalId, long Revision, string ActionHash,
     string ToolName, string Preview, string ExpiresAt);
 public sealed record AgentRunOutcomeResponse(string Kind, string Summary, string? OutcomeEntryId, bool AttentionRequired);
+public sealed record AgentRunWaitResponse(string Mode, string Until, IReadOnlyList<string> BackgroundSessionIds, string Deadline);
 public sealed record AgentRunResponse(string AgentRunId, string SessionId, string ActivationId, string ActivationKind,
     string Status, long Revision, int AttemptCount, int MaxAttempts, bool CancellationRequested, bool CancellationAvailable,
     string? Progress, string? NextRetryAt, string CreatedAt, string UpdatedAt, AgentRunApprovalResponse? Approval,
     AgentRunOutcomeResponse? Outcome, string? FailureCode, string? FailureSummary, string? DiagnosticId,
-    string? KnownEffectSummary, string ModelCatalogKey, string? ResponseId, string? AutomationId, string? ExperienceId, string? SourceOccurrenceId, string? SourceBackgroundSessionId = null);
+    string? KnownEffectSummary, string ModelCatalogKey, string? ResponseId, string? AutomationId, string? ExperienceId, string? SourceOccurrenceId, string? SourceBackgroundSessionId = null, AgentRunWaitResponse? Wait = null);
 public sealed record AgentRunPageResponse(IReadOnlyList<AgentRunResponse> Items, string? NextCursor, bool HasMore);
 public sealed record BackgroundSessionOriginResponse(string Kind, string InitialAgentRunId, string? ParentSessionId,
     string? ParentAgentRunId, string? AutomationId, string? OccurrenceId, bool ReportCompletion);

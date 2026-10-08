@@ -155,3 +155,8 @@ Automation is one owner-authored future behavior: a concise Name, bounded Instru
 Experience remains opt-in, instance-owned, bounded, immutable after completion and revisioned for visibility/reset. Source inspection and recording are normal semantic tools. Explicit review admits a generic manual Run; recurring review uses the same Schedule trigger as other behavior. No implicit pause/end/work-completion synthesis or separate maintenance cadence remains. Consolidation permission remains independent from scheduling, defaults off, and does not grant tools or bypass exact approval.
 
 The current implementation and outstanding verification gates are recorded in [unified Automation verification](reports/unified-automation-model-verification.md). P10/P11 and optional semantic/vector search remain unopened.
+
+
+## Durable completion handoff and short waits
+
+The included enhancement adds an owner-scoped completion inbox, explicit list/inspect/take/acknowledge capabilities, and bounded duration or owned-child waits. Only initial child outcomes create reporting obligations. Quiet outcomes settle without a message; follow-up turns do not create another initial completion. Existing-session Automations execute directly in their destination and create no redundant child inbox item. Cross-Agent results, arbitrary condition subscriptions and long-running wait engines remain excluded.

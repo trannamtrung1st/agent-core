@@ -131,3 +131,7 @@ Continuity retrieves bounded Memory, Experience and Session evidence without rep
 ## Instance administration vocabulary
 
 Automation is one owner-authored future behavior: a concise Name, bounded Instructions, and a Schedule or Event trigger. Thinking, reminders, event reactions, Experience review and identity maintenance are ordinary instructions. A Run is its bounded execution through Trigger → Occurrence → background Session → Activation → AgentRun. A successful NoAction stays quiet. Permitted effects and attention use the existing capability, approval and delivery contracts. Connections owns webhook ingress and credentials; Continuity owns retained context. Background work has a real owned Session with inspectable history and same-Session Continue in chat; no unrestricted reasoning loop is introduced. Instance Admin has six top-level tabs: Identity & version, Continuity, Automation, Runs, Connections and Effective configuration. Historical milestone reports remain acceptance records for their original commits.
+
+## Using a background result during a conversation
+
+A conversation can use a requested, owned background task’s result while its current Run is still open. Explicit short waits retain that Run and release its worker. Successful answers account for results they acknowledge; remaining requested results return after the conversation is available. This extends same-Agent background work without introducing delegation or a workflow engine.

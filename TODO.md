@@ -1,5 +1,15 @@
 # TODO
 
+## Durable completion inbox, result handoff and wait — active successor
+
+Authorized on 2026-10-08 after Automation destinations/report-back closure at `513cbed0`. Existing owners now implement canonical inbox accounting, provisional consumption, bounded reporting batches, same-Run typed waits and shared Chat/Admin presentation. Prior freeze records and P10/P11 remain unchanged. [Verification](docs/reports/durable-completion-inbox-result-handoff-wait-verification.md) owns exact evidence.
+
+- [x] A: Reconcile scope and reproduce missing active-parent handoff/wait behavior.
+- [x] B–E: Implement durable inbox, atomic acknowledgment accounting, unhandled report coordination and typed wait recovery.
+- [x] F: Reuse shared status/details components and exercise responsive Synthetic journeys.
+- [ ] G: Finish full local regression, docs consistency and all five hosted jobs on the exact behavior SHA before closure.
+
+
 ## Closed: Activation, AgentRun and background Sessions
 
 - [x] Add immutable Activation, unified AgentRun transitions and Session origin/surface domain.

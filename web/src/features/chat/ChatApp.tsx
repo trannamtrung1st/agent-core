@@ -90,10 +90,10 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [schedulesOpen, setSchedulesOpen] = useState(false);
   const [workOpen, setWorkOpen] = useState(false);
-  const [attentionItems, setAttentionItems] = useState<AgentRun[]>([]);
+  const [attentionItems, setAttentionItems] = useState<{ run: AgentRun; delivery?: string }[]>([]);
   const [backgroundInstanceId, setBackgroundInstanceId] = useState<string | null>(null);
   const { isUnread } = useWorkReadState();
-  const attentionCount = attentionItems.filter(isUnread).length;
+  const attentionCount = attentionItems.filter(item => item.delivery === "pending" || item.delivery !== "handled" && isUnread(item.run)).length;
 
   useEffect(() => {
     if (!state.sessionId) {
@@ -115,10 +115,10 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
         owner ??= (await getSession(state.sessionId!)).agentInstanceId ?? null;
         if (!owner || !current) return;
         setBackgroundInstanceId(owner);
-        const items: AgentRun[] = []; let cursor: string | undefined;
+        const items: { run: AgentRun; delivery?: string }[] = []; let cursor: string | undefined;
         do {
           const page = await listBackgroundSessions(owner, cursor, 100);
-          for (const item of page.items) if (item.latestRun?.outcome?.attentionRequired) items.push(item.latestRun);
+          for (const item of page.items) if (item.latestRun && (item.completionDelivery?.status === "pending" || item.latestRun.outcome?.attentionRequired)) items.push({ run: item.latestRun, delivery: item.completionDelivery?.status });
           cursor = page.hasMore ? page.nextCursor ?? undefined : undefined;
         } while (current && cursor);
         if (current && request === generation) setAttentionItems(items);

@@ -533,3 +533,12 @@ The existing owner-authorized Admin effective-configuration response includes ad
 ```
 
 The Session UUID must identify an eligible owned Session. Chat authoring instead supplies a safe currentSession mode and relative timing calculated by Core; arbitrary destination IDs are never model arguments. HTTP/SignalR response identity and voice sequencing are unchanged.
+
+
+## Completion inbox tools and typed wait projection
+
+AgentRunResponse adds optional wait: { mode, until, backgroundSessionIds, deadline }; status is waitingForSignal. Terminal Runs clear wait. Raw pending checkpoints and acknowledgment tokens are not exposed in HTTP Run details. CompletionDeliveryResponse adds claimed and handled; parentAgentRunId identifies the exact handling Run for handled, or report Run for report delivery. Other existing statuses retain their meaning.
+
+Explicit model capabilities: background.list accepts limit 1–20, optional UUID cursor and scope pending_results (default) or from_current_session. Cursor is the immutable initial child Run ID in descending creation-time/ID order and must belong to this parent/owner. Responses include nextCursor, hasMore, status/progress/time/parent identity and accounting. pendingCount is bounded with pendingCountHasMore; it is not an unbounded total. background.inspect takes backgroundSessionId and returns initial Run status, bounded summary/progress, safe artifact metadata and disposition; no artifact bytes or inherited authority. background.take additionally takes revision and returns token plus receipt Run/tool-call/generation/expiry. background.acknowledge takes backgroundSessionId, revision, token and usage (1–1000 nonblank characters). It is projected only while this Run holds a matching unexpired claim. All evidence is untrusted. ValidationError, NotFound and Conflict distinguish invalid, unowned/missing and stale/competing operations.
+
+execution.wait accepts either mode duration with seconds, or mode background with unique backgroundSessionIds, until all/any and timeoutSeconds. Each duration/timeout is finite, positive and at most 300 seconds; at most eight targets, eight waits and 900 requested seconds per Run. Wake returns elapsed, condition_met or timeout, ready and pending child IDs, statuses and elapsedSeconds. It never acknowledges or changes completion disposition. Existing response-progress WaitingExternal represents active waiting; resumed output retains the original Response identity.

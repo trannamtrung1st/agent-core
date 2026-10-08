@@ -15,7 +15,7 @@ import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { runStatusLabel, runOutcomeLabel, type AutomationSelection } from "../chat/runPresentation";
 import { useAutomationSelection } from "./useAutomationSelection";
 
-const activeWork = ["Queued", "Running", "WaitingForApproval", "WaitingToRetry"];
+const activeWork = ["Queued", "Running", "WaitingForApproval", "WaitingToRetry", "WaitingForSignal"];
 const terminal = ["Completed", "Cancelled", "Expired"];
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : "Not scheduled";
 const defaultTiming = (): ScheduleTiming => ({ kind: "daily", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", interval: 1, localTime: "09:00" });

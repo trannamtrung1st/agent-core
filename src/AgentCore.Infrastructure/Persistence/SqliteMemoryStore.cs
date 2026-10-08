@@ -72,7 +72,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 var filter = index.GetFilter();
                 var matches = filter is null
                     ? await HasIndexAsync(connection, table, names, index.IsUnique, ct).ConfigureAwait(false)
-                    : await HasUniqueIndexAsync(connection, table, names, index.IsUnique, filter, ct).ConfigureAwait(false);
+                    : await HasFilteredIndexAsync(connection, table, names, index.IsUnique, filter, ct).ConfigureAwait(false);
                 if (!matches) throw ResetRequired($"Canonical index on {table} is missing or incompatible.");
             }
             foreach (var foreignKey in entity.GetForeignKeys())
@@ -1058,11 +1058,11 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         return false;
     }
 
-    private static async Task<bool> HasUniqueIndexAsync(
+    private static async Task<bool> HasFilteredIndexAsync(
         System.Data.Common.DbConnection connection,
         string table,
         string[] columns,
-        bool partial,
+        bool unique,
         string? partialPredicate,
         CancellationToken cancellationToken)
     {
@@ -1077,7 +1077,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             }
         }
 
-        foreach (var index in indexes.Where(item => item.Unique && item.Partial == partial))
+        foreach (var index in indexes.Where(item => item.Unique == unique && item.Partial))
         {
             if (partialPredicate is not null
                 && !await IndexPredicateMatchesAsync(connection, index.Name, partialPredicate, cancellationToken)

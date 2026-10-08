@@ -40,6 +40,12 @@ public sealed class ActivationSourceEntryRecord
 
 public sealed class BackgroundCompletionReceiptRecord
 {
+    public string ParentSessionId { get; set; } = "";
+    public int Status { get; set; }
+    public long? ClaimExpiresAtUtc { get; set; }
+    public string? ClaimRunId { get; set; }
+    public string? InboxJson { get; set; }
+    public long Revision { get; set; } = 1;
     public string ChildAgentRunId { get; set; } = "";
     public string AgentInstanceId { get; set; } = "";
     public string ProfileId { get; set; } = "";

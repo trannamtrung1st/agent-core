@@ -18,7 +18,8 @@ internal static class BackgroundSessionScript
             try
             {
                 using var data = JsonDocument.Parse(evidence[jsonStart..]);
-                var summary = data.RootElement.GetProperty("summary").GetString() ?? "Background work ended.";
+                var summary = data.RootElement.TryGetProperty("completions", out var batch) ? string.Join(" ", batch.EnumerateArray().Select(i => i.GetProperty("summary").GetString()))
+                    : data.RootElement.GetProperty("summary").GetString() ?? "Background work ended.";
                 return [new ModelTextDelta("Background work: " + summary), new ModelCompleted(ModelStopReason.Completed)];
             }
             catch (Exception exception) when (exception is JsonException or ArgumentOutOfRangeException or InvalidOperationException)
