@@ -1,6 +1,6 @@
 # Browser v2 full-cutover verification
 
-Date: 2026-10-08. Status: implementation and key-free verification complete; real-model acceptance is pending.
+Date: 2026-10-08. Status: implementation, key-free verification and authorized real-model Journey L have passed; exact-SHA CI for the corrected live-test candidate is pending. Main integration is deferred.
 
 The authorized migration starts from `bd44046896df6f3e0fc2e7d15d60dd479a5349cd` and its five-job [Synthetic baseline run 37677917533](https://github.com/trannamtrung1st/agent-core/actions/runs/37677917533). That run proves the pre-migration tree, not Browser v2. Historical P9/P9.5/P9.6 and Instance Skills reports and freeze SHAs remain unchanged. P10/P11 remain unopened.
 
@@ -33,7 +33,7 @@ Admin effective configuration shows provider identity, readiness, supported feat
 | I — subset provider | Unadvertised tracing is absent from discovery; an authorized forced call returns `unsupported_operation`; unauthorized calls remain forbidden. | Passed, Application contract |
 | J — System Credentials | Password-target validation and secure sink tests retain redaction, detached injection denial, profile leases and owner-attention boundaries. | Passed, credential/profile regressions; live authenticated-site opt-ins not run |
 | K — vision | Non-vision discovery/execution rejects mouse; screenshot plus coordinate click reaches the visual-only fixture target under a vision admission. | Passed, Application/provider integration |
-| L — real model | An opt-in test drives the owned runtime through find, contextual capability loading and multi-field SPA actions using OpenRouter. | Pending explicit authorization for the external fixture payload |
+| L — real model | An opt-in test drives the owned runtime through find, contextual capability loading and multi-field SPA actions using OpenRouter. | Passed: authorized OpenRouter / DeepSeek v4.1 Flash, actual Chromium assertions, 47 seconds; see follow-up below |
 
 ## Runtime UI verification
 
@@ -80,4 +80,16 @@ Hosted backend on the final candidate passed Domain 152, Infrastructure 824/15 s
 
 Authorized branch `develop/branch-1` is published in [draft PR #3](https://github.com/trannamtrung1st/agent-core/pull/3). [Hosted candidate run 37720003182](https://github.com/trannamtrung1st/agent-core/actions/runs/37720003182) tests behavior SHA `11333f2fa3a4392c41e74b794bb293010b0e72fc`: backend and Compose passed; acceptance exposed the same omitted typing grant. That candidate predates the final bootstrap/telemetry corrections and cannot establish final closure.
 
-All current local gates and all five exact-candidate hosted Synthetic jobs pass. Full closure still requires the real-model generic-fixture proof. Automatic approval review rejected the OpenRouter fixture invocation because destination/payload authorization was required; the requested authorization remains pending. Missing hosted credentials are not counted as offline test failures. The implementation is not behavior-frozen while any required gate remains pending.
+At that checkpoint, key-free gates passed and real-model Journey L remained unverified after automatic approval review required destination/payload authorization. The later authorized proof below supersedes that pending status. Historical freeze SHAs remain unchanged.
+
+## Authorized real-model Journey L follow-up
+
+On 2026-10-08, the owner specifically approved `https://openrouter.ai/api/v1/chat/completions`, model `deepseek/deepseek-v4.1-flash`, General Assistant instructions, browser schemas, the generic SPA task and disposable fixture observations/results. The existing API key was read from user-secrets into the test process; local configuration, persistent profiles and user data were unchanged. No main integration was retained.
+
+The first attempts exposed two live-harness issues: unconditional native structured-output advertisement differed from the configured DeepSeek catalog (`StructuredOutput=false`), and inspecting a missing browser context hid the failure behind a null-reference exception. Use the existing tool-response channel and check runtime errors/context first, reporting only error categories/codes, request counts and tool names. Initial structured-mode attempts ended without browser calls; no product authorization, provider adapter, timeout or expected state assertion was relaxed.
+
+The corrected opt-in test passed in 47 seconds with no skips. Through the owned Session Runtime, the real model selected Asset 159, filled Title with `Browser v2 proof` and Notes with `Generic SPA verified`, checked Enabled, inspected resulting state and emitted a nonempty final response. Actual Chromium state assertions passed, and recorded calls included `browser.find`, `capabilities.load` and `browser.fill_form`; no runtime error output occurred. This verifies the generic SPA workflow, not arbitrary model reliability or integrated behavior with main.
+
+Command: `AGENTCORE_BROWSER_V2_LIVE=1 AGENTCORE_LLM_MODEL=deepseek/deepseek-v4.1-flash AGENTCORE_LLM_REASONING_EFFORT=medium dotnet test tests/AgentCore.Application.Tests/AgentCore.Application.Tests.csproj --no-restore --nologo --filter FullyQualifiedName~BrowserV2LiveJourneyTests -v minimal`, with the approved key supplied privately to the child environment. Result log: `/private/tmp/browser-v2-journey-l-tool-channel.log`. Earlier failure logs remain `/private/tmp/browser-v2-journey-l-first.log`, `/private/tmp/browser-v2-journey-l-diagnostic.log` and `/private/tmp/browser-v2-journey-l-offering.log`.
+
+The corrected candidate still requires all five existing hosted key-free gates. The latest preceding source/fixture candidate `f8e4179b` passed all five in [run 37746737917](https://github.com/trannamtrung1st/agent-core/actions/runs/37746737917). Main integration remains deferred at the owner's request, and the PR stays draft.

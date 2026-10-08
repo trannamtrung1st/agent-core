@@ -41,7 +41,9 @@ public sealed class BrowserV2LiveJourneyTests
             var recording = new RecordingModel(new OpenAICompatibleLanguageModel(http, new LanguageModelProviderOptions
             {
                 Adapter = "OpenAICompatible", BaseUrl = "https://openrouter.ai/api/v1/", ApiKey = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY"),
-                DefaultModel = Environment.GetEnvironmentVariable("AGENTCORE_LLM_MODEL"), Tools = true, StructuredOutput = true,
+                // Tool-capable does not imply native JSON-schema support. Use the tool-response channel,
+                // matching the configured DeepSeek default rather than inventing a higher capability.
+                DefaultModel = Environment.GetEnvironmentVariable("AGENTCORE_LLM_MODEL"), Tools = true, StructuredOutput = false,
                 ReasoningEffort = Environment.GetEnvironmentVariable("AGENTCORE_LLM_REASONING_EFFORT"), ReasoningObjectWire = true,
                 Timeouts = new() { SetupSeconds = 20, StreamIdleSeconds = 60, TotalSeconds = 120 }
             }));
@@ -63,7 +65,13 @@ public sealed class BrowserV2LiveJourneyTests
             using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(5));
             await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput or ErrorOutput, deadline.Token);
             await runtime.WaitUntilIdleAsync();
-            var page = browser.ContextFor(id)!.Pages.First();
+            var errors = output.Items.Select(item => item.Payload).OfType<ErrorOutput>().ToArray();
+            Assert.True(errors.Length == 0, "Runtime errors: " + string.Join(", ", errors.Select(error => $"{error.Category}/{error.Code}/{error.FailureReason}")));
+            var context = browser.ContextFor(id);
+            Assert.True(context is not null, "The model did not open the fixture. Requests: " + recording.Requests.Count
+                + "; offered tools: " + string.Join(", ", recording.Requests.FirstOrDefault()?.Tools?.Select(tool => tool.Name) ?? [])
+                + "; calls: " + string.Join(", ", recording.Calls.Select(call => call.Name)));
+            var page = context.Pages.First();
             Assert.Equal("Browser v2 proof", await page.GetByRole(Microsoft.Playwright.AriaRole.Textbox, new() { Name = "Title", Exact = true }).InputValueAsync());
             Assert.Equal("Generic SPA verified", await page.GetByRole(Microsoft.Playwright.AriaRole.Textbox, new() { Name = "Notes", Exact = true }).InputValueAsync());
             Assert.True(await page.GetByRole(Microsoft.Playwright.AriaRole.Checkbox, new() { Name = "Enabled", Exact = true }).IsCheckedAsync());
@@ -80,9 +88,11 @@ public sealed class BrowserV2LiveJourneyTests
     private sealed class RecordingModel(ILanguageModel model) : ILanguageModel
     {
         public List<ModelToolCall> Calls { get; } = [];
+        public List<ModelRequest> Requests { get; } = [];
         public ModelCapabilities Capabilities => model.Capabilities;
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
         {
+            Requests.Add(request);
             await foreach (var item in model.GenerateAsync(request, ct))
             { if (item is ModelToolCallEvent call) Calls.Add(call.Call); yield return item; }
         }

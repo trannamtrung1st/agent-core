@@ -38,7 +38,7 @@ One intermediate solution run, while another native suite was running, also expo
 | Hosted exact-SHA Synthetic | All five jobs passed on `3b87934abf657aa7e411f06464a050fcc4029e5f` in [run 37734899571](https://github.com/trannamtrung1st/agent-core/actions/runs/37734899571), before the final credential-name normalization. This is historical checkpoint evidence; the final exact-SHA result is recorded below. |
 | Documentation | Interface/backend behavior, capability matrix and testing strategy synchronized; relative links/fences in six changed documents and `git diff --check` passed. No local configuration/secret paths changed. |
 
-Historical full-cutover real-model Journey L remains an explicit open gate. No live-provider inference is authorized or executed by this review, and no full migration freeze is claimed. Previous enhancement/review evidence remains historical at its named SHA.
+At this bounded-review checkpoint, full-cutover real-model Journey L remained an explicit open gate. No live-provider inference had been authorized or executed by that pass, and no full migration freeze was claimed. Previous enhancement/review evidence remains historical at its named SHA.
 
 ## Exact-candidate CI follow-up
 
@@ -58,7 +58,7 @@ All five jobs passed on exact source/test SHA `c9375843845ec08cc3bb596d02d7ba0fc
 | Playwright acceptance | 16 passed across seven journey steps. |
 | Synthetic Compose | Owner-capability, SQLite volume and durable resource survival passed. |
 
-The bounded five-finding follow-up and its CI corrections are verified. The subsequent report-only commit changes no source or tests; the verified behavior remains the SHA above. Journey L is explicitly unverified, the PR remains draft, and the broader migration freeze remains open.
+The bounded five-finding follow-up and its CI corrections are verified. The subsequent report-only commit changes no source or tests; the verified behavior remains the SHA above. Journey L was still unverified at that checkpoint, the PR remained draft, and the broader migration freeze remained open.
 
 ## Remaining fixture collection follow-up
 
@@ -66,4 +66,10 @@ The next review identified `LoopbackBrowserFixtureHostTests` in `BrowserAdapterT
 
 Current `main` advanced through the separate execution/background-session cutover and now conflicts with this Browser branch, so GitHub does not schedule its pull-request workflow. Commit `f8e4179b` enables manual dispatch on the existing Synthetic workflow to verify the branch through the same five key-free jobs. A subsequent uncommitted merge attempt was aborted at the owner's request while main stabilizes; no integration changes were committed or pushed. Branch-source verification does not resolve the PR's merge prerequisite.
 
-All five jobs passed on exact SHA `f8e4179bce301f75704a45e22b249947b4a62666` in [manual Synthetic run 37746737917](https://github.com/trannamtrung1st/agent-core/actions/runs/37746737917): backend 2,693 passed / 20 documented skips (14 live opt-ins, six absent-image Docker prerequisites), frontend 96 files / 739 tests and production build passed, core Playwright 116 passed, acceptance 16 passed, and Compose survival passed. This closes the fixture-collection key-free gate. Integration with main is deferred; Journey L remains a separate real-model acceptance gate.
+All five jobs passed on exact SHA `f8e4179bce301f75704a45e22b249947b4a62666` in [manual Synthetic run 37746737917](https://github.com/trannamtrung1st/agent-core/actions/runs/37746737917): backend 2,693 passed / 20 documented skips (14 live opt-ins, six absent-image Docker prerequisites), frontend 96 files / 739 tests and production build passed, core Playwright 116 passed, acceptance 16 passed, and Compose survival passed. This closes the fixture-collection key-free gate. Integration with main is deferred; Journey L was still a separate open real-model acceptance gate at this checkpoint.
+
+## Authorized Journey L
+
+The owner subsequently approved the exact OpenRouter destination and fixture payload. Journey L passed with DeepSeek v4.1 Flash in 47 seconds: Chromium verifies Asset 159, Title/Notes values and Enabled checked; the runtime invokes find, contextual capability loading and multi-field fill, then completes a nonempty response without errors. Two test-only issues were corrected: overstated native structured-output capability and null-context failure diagnostics. The [full-cutover ledger](browser-v2-full-cutover-verification.md#authorized-real-model-journey-l-follow-up) owns the approved command, failed attempts and passing observation. No production source, expected fixture state assertions, settings or main integration changed. Exact-SHA key-free CI for the corrected test candidate remains required.
+
+Focused key-free Browser/semantic-response regression: 162 passed, one explicit Journey L skip. The default test run made no live inference calls. Documentation links/fences and `git diff --check` passed.
