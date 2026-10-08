@@ -1,6 +1,6 @@
 # Browser v2 full-cutover verification
 
-Date: 2026-10-08. Status: implementation, authorized real-model Journey L and all five hosted gates passed on corrected candidate `ac1cba0b16edaf17b86ee62066fe3aa7b83410ba` ([run 37751900338](https://github.com/trannamtrung1st/agent-core/actions/runs/37751900338)). Main integration is locally verified on `df29ec85`; the [merge report](branch-1-main-merge-verification.md) owns the combined-tree evidence and current hosted status.
+Date: 2026-10-08. Status: implementation, authorized real-model Journey L and all five hosted gates passed on corrected candidate `ac1cba0b16edaf17b86ee62066fe3aa7b83410ba` ([run 37751900338](https://github.com/trannamtrung1st/agent-core/actions/runs/37751900338)). Main integration is locally verified on `df29ec85` and all five hosted Synthetic/Compose jobs pass on combined candidate `8a9115f43d9783d8611726de5594f71a3d5b2353` ([run 37764327206](https://github.com/trannamtrung1st/agent-core/actions/runs/37764327206)); the [merge report](branch-1-main-merge-verification.md) owns combined-tree evidence and publication details.
 
 The authorized migration starts from `bd44046896df6f3e0fc2e7d15d60dd479a5349cd` and its five-job [Synthetic baseline run 37677917533](https://github.com/trannamtrung1st/agent-core/actions/runs/37677917533). That run proves the pre-migration tree, not Browser v2. Historical P9/P9.5/P9.6 and Instance Skills reports and freeze SHAs remain unchanged. P10/P11 remain unopened.
 
