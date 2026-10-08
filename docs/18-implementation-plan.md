@@ -449,3 +449,5 @@ Acceptance requires J01–J16 in [Testing](16-testing-strategy.md#automation-des
 ## Durable completion inbox, result handoff and wait successor
 
 Authorized successor to the completed Automation destinations/report-back enhancement, starting at 513cbed0. Implementation adds canonical accounting, active handoff, deterministic unhandled reporting and typed same-Run suspension through existing owners. P10/P11 remain unopened and prior freeze records remain historical. Acceptance is tracked in TODO and docs/reports/durable-completion-inbox-result-handoff-wait-verification.md. Local implementation and verification are recorded separately from exact-SHA five-job hosted closure; do not infer closure from the preceding enhancement’s workflow.
+
+Closure: all five required hosted Synthetic/Compose jobs [passed](https://github.com/trannamtrung1st/agent-core/actions/runs/37799412089) on final behavior `9edccab46782d616b8b8f7464be9495933e8bdfd`. The successor is closed; the verification report preserves local failures/rechecks and exact gate counts. Documentation-only closure publication does not move the behavior freeze.

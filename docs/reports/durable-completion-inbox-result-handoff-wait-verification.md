@@ -1,6 +1,6 @@
 # Durable completion inbox, result handoff and wait verification
 
-Successor authorized on 2026-10-08, starting at `513cbed0`. The preceding Automation destinations/report-back enhancement is complete on behavior `53c0c2fe9f87f28e866e80a2ff48127b5dbda3e8`; [all five hosted jobs](https://github.com/trannamtrung1st/agent-core/actions/runs/37781579245) are historical baseline evidence. Earlier milestone reports and freeze SHAs remain immutable. P10/P11 remain unopened.
+Closed on final behavior `9edccab46782d616b8b8f7464be9495933e8bdfd` on 2026-10-08. All five required [hosted Synthetic/Compose jobs](https://github.com/trannamtrung1st/agent-core/actions/runs/37799412089) passed on that exact SHA. Successor authorized on 2026-10-08, starting at `513cbed0`. The preceding Automation destinations/report-back enhancement is complete on behavior `53c0c2fe9f87f28e866e80a2ff48127b5dbda3e8`; [all five hosted jobs](https://github.com/trannamtrung1st/agent-core/actions/runs/37781579245) are historical baseline evidence. Earlier milestone reports and freeze SHAs remain immutable. P10/P11 remain unopened.
 
 ## Implemented behavior
 
@@ -38,7 +38,11 @@ Evidence: [handled background mobile](assets/durable-completion-inbox/handled-ba
 
 ## Acceptance status
 
-Implementation is reviewable; closure remains pending all five hosted Synthetic/Compose jobs on the exact behavior SHA. The initial full core run finished with 123 passed and 1 failed (`/tmp/inbox-final-core.log`, 124 selected cases). It exposed one stale presentation assertion (Completion report versus the new shared Completion label). Its affected Automation journey passed after correction; the original failed run remains recorded as failed. All seven local acceptance projects passed, 16 tests total (`/tmp/inbox-final-acceptance.log` and per-project logs). Changed-document checks passed: 497 relative links/anchors, balanced fences, complete JSON examples and git diff whitespace. This report will be updated with the verified candidate SHA and exact hosted workflow link before closure.
+Closed on `9edccab46782d616b8b8f7464be9495933e8bdfd` with [workflow 37799412089](https://github.com/trannamtrung1st/agent-core/actions/runs/37799412089): backend, frontend, Playwright core, Playwright acceptance and Compose smoke all completed successfully. Hosted backend: Domain 173, Infrastructure 874/15 optional skips, Application 1,333/2 skips, API 383/3 skips — 2,763 passed, 20 optional skips. Frontend: 749 passed. Core: 124 passed. Acceptance: 16 passed across seven projects. Compose: passed. The local order-event plugin suite also passed, four tests.
+
+Local full core attempts remain recorded accurately: the first had 123 passed and one obsolete completion-label assertion, corrected and passed in isolation (`/tmp/inbox-admin-rerun2.log`). The clean repeat had 123 passed and one Event Source option-selection timeout (`/tmp/inbox-final-core-clean.log`); that unchanged scenario passed on isolated recheck (`/tmp/inbox-event-rerun.log`, 1 test) and in the exact-SHA hosted full run. It was not a completion/wait failure and no unrelated product change was made. All four new handoff/wait journeys passed in both local full attempts and hosted CI.
+
+Canonical docs, product/design context, surface briefs, definition and report are synchronized. Checks cover 497 relative links/anchors before closure edits, balanced fences, complete JSON examples, definition/design JSON parsing and whitespace. Screenshot dimensions were checked for all nine assets. Task-owned native hosts were stopped; Compose task containers/network were removed, with the test volume retained as persistence evidence. Historical freezes remain immutable; P10/P11 stay unopened. Later documentation-only closure publication does not change the tested behavior SHA.
 
 
 ## Acceptance coverage map
