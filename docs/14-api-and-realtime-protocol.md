@@ -325,7 +325,7 @@ Categories: Provider, Session, Protocol, Audio, Validation, Connection, Transpor
 
 ## Post-MVP planned until verified
 
-Phases A–H are observed on the runtime (including Docker `sandbox.run`). Phase I WorkItems are not-applicable until the future trigger in [Technology Decisions](10-technology-decisions.md#post-mvp-planned-until-verified). Full R1–R6 text is in that same section. Phase D initiative/deactivation and Phase F workspace execution view are observed above.
+Phases A–H are observed on the runtime (including Docker `sandbox.run`). Historical Phase I WorkItems were not-applicable until the future trigger in [Technology Decisions](10-technology-decisions.md#post-mvp-planned-until-verified). Full R1–R6 text is in that same section. Phase D initiative/deactivation and Phase F workspace execution view are observed above.
 
 **Lease versus Attachment.** Wire `attachmentId` is the hub **connection lease**. User-uploaded files are HTTP `Attachment` records with `AttachmentId`. Never send attachment binaries or base64 on SignalR.
 
@@ -503,6 +503,8 @@ Ordinary `skills.list/inspect/create/update/set_enabled/delete/customize` use th
 ### Definition draft Automation policy number errors
 
 Draft create/update returns HTTP 400 for missing required, fractional, unreadable or out-of-range integer Automation policy limits. The optional minimum fixed interval retains its 60-second default when omitted. The existing validation problem includes `field` (for example `triggerPolicy.minRecurrenceDays`), `validationCode: "invalid_integer"` (or `"out_of_range"` for a whole number outside its bounds), and an actionable `detail`: “Minimum recurrence days must be a whole number from 1 to 365.” The same mapping applies to max active registrations, one-shot horizon days and minimum fixed interval seconds using their canonical bounds. Rejected draft updates do not change persisted candidate content or revision.
+
+Background Session DTOs include `artifactCount` and `artifactCountHasMore`: count at most 50 owned Artifact metadata rows and render a plus suffix when more exist. `canContinueInChat` requires an active Agent Instance and an openable Session. Continue rejects an archived/missing instance with 409 before changing visibility. An Automation source can be opened at `/admin/instances/{instanceId}/automation/automations?automation={automationId}`; this is owner-scoped navigation, not context transfer.
 
 ## Quiet background outcome projection
 

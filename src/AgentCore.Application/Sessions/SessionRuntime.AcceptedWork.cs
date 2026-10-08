@@ -56,8 +56,12 @@ public sealed partial class SessionRuntime
     private bool HasAcceptedConversationWork()
     {
         if (_boundAgentRun is { IsTerminal: false }
-            && (!_responseTerminal || HasPendingConversationTerminalPersist()))
+            && (_boundAgentRun.Status == AgentRunStatus.Running
+                || !_responseTerminal || HasPendingConversationTerminalPersist()))
         {
+            // A new claimed attempt owns its brain evaluation before StartSpeakPath
+            // resets the preceding response's terminal flag. Detached cleanup must
+            // retain that attempt even for non-user triggers.
             return true;
         }
 

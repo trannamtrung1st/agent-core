@@ -5,6 +5,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Api;
 
@@ -14,9 +15,9 @@ public static class BackgroundSessionEndpoints
     {
         var owned = app.MapGroup("/api/v2/agent-instances/{instanceId:guid}/background-sessions").AddEndpointFilter<OwnerCapabilityFilter>();
         owned.MapGet("", (Guid instanceId, string? cursor, int? limit, bool? includeArchived, IMemoryStore memory,
-            ILocalUserProfileService profiles, IAgentInstanceStore instances, IAgentRunStore runs, CancellationToken ct) => Safe(async () =>
+            ILocalUserProfileService profiles, IAgentInstanceStore instances, IAgentRunStore runs, IArtifactStore artifacts, CancellationToken ct) => Safe(async () =>
         {
-            if (await instances.FindAsync(instanceId, ct).ConfigureAwait(false) is null) throw AgentCoreErrors.NotFound("Agent Instance was not found.");
+            var instance = await instances.FindAsync(instanceId, ct).ConfigureAwait(false) ?? throw AgentCoreErrors.NotFound("Agent Instance was not found.");
             var profile = await profiles.GetLocalProfileAsync(ct).ConfigureAwait(false);
             var owner = new AgentRunOwner(instanceId, profile.ProfileId);
             var page = await memory.ListBackgroundSessionsAsync(owner, cursor, limit ?? 50, includeArchived ?? false, ct).ConfigureAwait(false);
@@ -24,7 +25,7 @@ public static class BackgroundSessionEndpoints
             foreach (var session in page.Items)
             {
                 var executions = (await runs.ListPageAsync(owner, session.SessionId, null, 1, ct).ConfigureAwait(false)).Items;
-                items.Add(ToSession(session, executions.FirstOrDefault()));
+                items.Add(await ToSessionAsync(session, executions.FirstOrDefault(), instance.Lifecycle == AgentInstanceLifecycle.Active, artifacts, ct));
             }
             return Results.Json(new BackgroundSessionPageResponse(items, page.NextCursor, page.HasMore));
         }));
@@ -46,16 +47,19 @@ public static class BackgroundSessionEndpoints
         }));
         var sessions = app.MapGroup("/api/v2/sessions/{sessionId:guid}").AddEndpointFilter<OwnerCapabilityFilter>();
         sessions.MapGet("/background", (Guid sessionId, SessionManager manager, ILocalUserProfileService profiles,
-            IAgentRunStore runs, CancellationToken ct) => Safe(async () =>
+            IAgentRunStore runs, IArtifactStore artifacts, IAgentInstanceStore instances, CancellationToken ct) => Safe(async () =>
         {
             var session = await RequireSession(manager, profiles, sessionId, ct).ConfigureAwait(false);
             if (!session.Surfaces.HasFlag(SessionSurface.BackgroundWork)) throw AgentCoreErrors.NotFound("Background Session was not found.");
-            return Results.Json(ToSession(session, (await runs.ListPageAsync(new(session.AgentInstanceId, session.ProfileId!.Value), sessionId, null, 1, ct)).Items.FirstOrDefault()));
+            var instance = await instances.FindAsync(session.AgentInstanceId, ct);
+            return Results.Json(await ToSessionAsync(session, (await runs.ListPageAsync(new(session.AgentInstanceId, session.ProfileId!.Value), sessionId, null, 1, ct)).Items.FirstOrDefault(), instance?.Lifecycle == AgentInstanceLifecycle.Active, artifacts, ct));
         }));
         sessions.MapPost("/continue-in-chat", (Guid sessionId, SessionManager manager, ILocalUserProfileService profiles,
-            SessionHost host, CancellationToken ct) => Safe(async () =>
+            SessionHost host, IAgentInstanceStore instances, CancellationToken ct) => Safe(async () =>
         {
-            await RequireSession(manager, profiles, sessionId, ct).ConfigureAwait(false);
+            var session = await RequireSession(manager, profiles, sessionId, ct).ConfigureAwait(false);
+            if ((await instances.FindAsync(session.AgentInstanceId, ct))?.Lifecycle != AgentInstanceLifecycle.Active)
+                throw AgentCoreErrors.Conflict("The Agent Instance is unavailable for continuation.");
             if (!await host.ContinueInChatAsync(sessionId, ct).ConfigureAwait(false)) throw AgentCoreErrors.Conflict("Session cannot be opened in chat.");
             return Results.Json(new ContinueInChatResponse(sessionId.ToString("D")));
         }));
@@ -124,9 +128,16 @@ public static class BackgroundSessionEndpoints
         run.Admission.Activation.DedupeKey.StartsWith("experience:", StringComparison.Ordinal) ? run.AgentRunId.ToString("D") : null,
         run.Admission.Activation.TriggerOccurrenceId?.ToString("D"));
 
-    internal static BackgroundSessionResponse ToSession(SessionSnapshot session, AgentRun? latest) => new(HttpMapping.ToCatalogItem(session),
-        new(session.Origin.Kind.ToString(), session.Origin.InitialBackgroundAgentRunId!.Value.ToString("D"), session.Origin.OriginatingSessionId?.ToString("D"),
-            session.Origin.OriginatingAgentRunId?.ToString("D"), session.Origin.AutomationId?.ToString("D"), session.Origin.TriggerOccurrenceId?.ToString("D"), session.Origin.ReportCompletionToOrigin),
-        new[] { SessionSurface.ChatList, SessionSurface.BackgroundWork }.Where(flag => session.Surfaces.HasFlag(flag)).Select(flag => flag.ToString()).ToArray(),
-        latest is null ? null : ToRun(latest, session.Origin.AutomationId), session.ArchivedAt is null && !SessionLifecycle.IsTerminal(session.LifecycleStatus) && session.Status is not (SessionStatus.Ended or SessionStatus.Ending));
+    private static async Task<BackgroundSessionResponse> ToSessionAsync(SessionSnapshot session, AgentRun? latest,
+        bool ownerActive, IArtifactStore artifacts, CancellationToken ct)
+    {
+        // Count only a bounded metadata page; the UI labels a truncated count with '+'.
+        var files = await artifacts.ListPageAsync(session.SessionId, null, 50, ct).ConfigureAwait(false);
+        return new(HttpMapping.ToCatalogItem(session),
+            new(session.Origin.Kind.ToString(), session.Origin.InitialBackgroundAgentRunId!.Value.ToString("D"), session.Origin.OriginatingSessionId?.ToString("D"),
+                session.Origin.OriginatingAgentRunId?.ToString("D"), session.Origin.AutomationId?.ToString("D"), session.Origin.TriggerOccurrenceId?.ToString("D"), session.Origin.ReportCompletionToOrigin),
+            new[] { SessionSurface.ChatList, SessionSurface.BackgroundWork }.Where(flag => session.Surfaces.HasFlag(flag)).Select(flag => flag.ToString()).ToArray(),
+            latest is null ? null : ToRun(latest, session.Origin.AutomationId), ownerActive && session.ArchivedAt is null && !SessionLifecycle.IsTerminal(session.LifecycleStatus)
+                && session.Status is not (SessionStatus.Ended or SessionStatus.Ending), files.Items.Count, files.HasMore);
+    }
 }

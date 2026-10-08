@@ -1019,7 +1019,7 @@ describe("ChatApp tablet session rail", () => {
       });
       const view = await act(async () => renderChat());
       expect(screen.getByRole("button", { name: "Background work" })).toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Background work" }));
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Background work" })));
       fireEvent.click(await screen.findByRole("button", { name: "View history" }));
       expect(await screen.findByText("Oven timer finished.")).toBeInTheDocument();
       const conversation = screen.getByRole("region", { name: "Conversation" });

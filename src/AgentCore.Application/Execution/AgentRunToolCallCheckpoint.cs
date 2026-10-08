@@ -239,7 +239,7 @@ public static class AgentRunToolCallCheckpoint
                 message.ToolCallId,
                 message.Name,
                 message.ToolCalls?.Select(ToolCallDto.From).ToArray());
-        // Parts stay out of the checkpoint. A browser.capture result keeps its artifact id in text and is reloaded from IAgentRunCaptureStore.
+        // Parts stay out of the checkpoint. A browser.capture result keeps its artifact id in text and is reloaded through SessionCaptureRehydration and IArtifactStore.
 
         public ModelMessage ToMessage() =>
             new(

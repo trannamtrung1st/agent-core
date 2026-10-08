@@ -2393,7 +2393,11 @@ export function InstanceDetail({
     if (tab === "identity") setIdentityTab(section ?? "profile");
     if (tab === "connections") setConnectionsTab(section ?? "credentials");
   }, [instanceId, tab, section]);
-  useEffect(() => { setSourceSelection(undefined); setExperienceSelection(undefined); setSelectedAgentRunId(undefined); setRunDetailsOpen(false); }, [instanceId]);
+  useEffect(() => {
+    const source = new URLSearchParams(window.location.search).get("automation");
+    setSourceSelection(source && /^[0-9a-f-]{36}$/i.test(source) ? { kind: "automation", automationId: source, request: Date.now() } : undefined);
+    setExperienceSelection(undefined); setSelectedAgentRunId(undefined); setRunDetailsOpen(false);
+  }, [instanceId]);
   const setActiveTab = (next: AdminInstanceTab, selectedSection?: AdminInstanceSection) => {
     const nextSection = selectedSection ?? (next === "continuity" ? continuityTab : next === "automation" ? automationTab : next === "identity" ? identityTab === "profile" ? undefined : identityTab : next === "connections" ? connectionsTab : undefined);
     updateActiveTab(next);

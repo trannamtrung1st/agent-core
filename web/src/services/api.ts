@@ -78,7 +78,7 @@ export type BackgroundSession = {
   session: CatalogItem;
   origin: { kind: string; initialAgentRunId: string; parentSessionId: string | null; parentAgentRunId: string | null;
     automationId: string | null; occurrenceId: string | null; reportCompletion: boolean };
-  surfaces: string[]; latestRun: AgentRun | null; canContinueInChat: boolean;
+  surfaces: string[]; latestRun: AgentRun | null; canContinueInChat: boolean; artifactCount: number; artifactCountHasMore: boolean;
 };
 
 export type SessionAutomation = {

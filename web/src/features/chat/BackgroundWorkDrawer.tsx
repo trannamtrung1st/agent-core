@@ -11,6 +11,7 @@ import { useWorkReadState } from "./workReadState";
 import { runOriginLabel } from "./runPresentation";
 import { formatChatTime } from "./chatTime";
 import { SessionArtifacts } from "./SessionArtifacts";
+import { adminInstancePath, navigateToAppPath } from "../../app/appRoute";
 
 export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
   instanceId: string; open: boolean; wide: boolean; onClose: () => void;
@@ -69,6 +70,14 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
       if (generation === epoch.current) setActionError(reason instanceof Error ? reason.message : "Unable to open this Session. Refresh and try again.");
     } finally { if (generation === epoch.current) { actionPending.current = false; setBusy(false); } }
   }
+  function automationLink(item: BackgroundSession) {
+    if (!item.origin.automationId) return null;
+    const path = `${adminInstancePath(instanceId, "automation", "automations")}?automation=${encodeURIComponent(item.origin.automationId)}`;
+    return <Button href={path} onClick={event => { event.preventDefault(); navigateToAppPath(path); }}>View Automation</Button>;
+  }
+  function fileCount(item: BackgroundSession) {
+    return `${item.artifactCount}${item.artifactCountHasMore ? "+" : ""} ${item.artifactCount === 1 && !item.artifactCountHasMore ? "file" : "files"}`;
+  }
   const active = selected ? page.items.find(row => row.session.sessionId === selected.session.sessionId) ?? selected : null;
   return <Drawer title={active ? active.session.title : "Background work"} open={open} onClose={onClose}
     onKeyDown={event => {
@@ -85,7 +94,9 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
           {active.origin.reportCompletion ? <Typography.Text type="secondary">Reports completion to its original chat</Typography.Text> : null}
         </Flex>
         <Button type="primary" icon={<MessageOutlined aria-hidden />} loading={busy} disabled={busy || !active.canContinueInChat} onClick={() => void openChat(active)}>Continue in chat</Button>
-        {!active.canContinueInChat ? <Typography.Text type="secondary">This Session is archived or ended. Its run history remains available here.</Typography.Text> : null}
+        {!active.canContinueInChat ? <Typography.Text type="secondary">This Session or its Agent Instance is unavailable for continuation. Its run history remains available here.</Typography.Text> : null}
+        {automationLink(active)}
+        <Typography.Text type="secondary">{fileCount(active)}</Typography.Text>
         <SessionRunHistory sessionId={active.session.sessionId} open={open} />
         <SessionArtifacts sessionId={active.session.sessionId} open={open} />
       </> : <>
@@ -99,10 +110,12 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
                 {item.latestRun ? <AgentRunStatus run={item.latestRun} /> : null}
               </Flex>
               <Typography.Text type="secondary">{runOriginLabel(item.origin.kind)} · <time dateTime={item.session.updatedAt}>{formatChatTime(item.session.updatedAt) ?? "Unknown time"}</time></Typography.Text>
+              <Typography.Text type="secondary">{fileCount(item)}{item.latestRun && item.latestRun.attemptCount > 1 ? ` · Attempt ${item.latestRun.attemptCount} of ${item.latestRun.maxAttempts}` : ""}</Typography.Text>
+              {item.latestRun?.outcome?.summary || item.latestRun?.failureSummary ? <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }} ellipsis={{ rows: 2 }}>{item.latestRun.outcome?.summary || item.latestRun.failureSummary}</Typography.Paragraph> : null}
               {item.latestRun?.progress ? <Typography.Text>{item.latestRun.progress}</Typography.Text> : null}
               {item.latestRun && isUnread(item.latestRun) ? <Typography.Text><BellOutlined /> Unread · needs attention</Typography.Text> : null}
               <Flex wrap gap={token.paddingXS}><Button data-background-control="history" onClick={() => select(item, "history")}>View history</Button>
-                <Button disabled={busy || !item.canContinueInChat} onClick={() => void openChat(item)}>Continue in chat</Button></Flex>
+                <Button disabled={busy || !item.canContinueInChat} onClick={() => void openChat(item)}>Continue in chat</Button>{automationLink(item)}</Flex>
             </Flex>
           </li>)}
         </ul>

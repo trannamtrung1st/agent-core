@@ -6,6 +6,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -36,12 +37,27 @@ public sealed class BackgroundSessionJourneyTests
         var child = BackgroundSessionAdmissionFactory.ForImmediate(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
             proposedParent, source, "http-background", "Check progress without blocking chat", "Progress check", true, now);
         await runs.AdmitImmediateAsync(child.Session, child.Run, source.Claim!.Generation);
+        var artifacts = services.GetRequiredService<IArtifactStore>();
+        for (var index = 0; index < 51; index++)
+            await artifacts.CreateAsync(child.Session.SessionId, $"result-{index}.txt", "text/plain", "result"u8.ToArray(), null, null);
         var backgroundPath = $"/api/v2/agent-instances/{instanceId}/background-sessions";
         var listed = await client.GetFromJsonAsync<BackgroundSessionPageResponse>(backgroundPath);
         var row = Assert.Single(listed!.Items);
         Assert.Equal(child.Session.SessionId.ToString(), row.Session.SessionId);
+        Assert.Equal(50, row.ArtifactCount);
+        Assert.True(row.ArtifactCountHasMore);
+        Assert.True(row.CanContinueInChat);
         Assert.DoesNotContain((await memory.ListCatalogAsync(null, 50, false)).Items, item => item.SessionId == child.Session.SessionId);
         var path = $"/api/v2/sessions/{child.Session.SessionId}";
+        var instances = services.GetRequiredService<IAgentInstanceStore>();
+        var instance = (await instances.FindAsync(instanceId))!;
+        await instances.UpdateWithExpectedRevisionAsync(new AgentInstanceRevisionUpdate(instanceId, instance.Revision, Lifecycle: AgentInstanceLifecycle.Archived), now);
+        var blocked = await client.GetFromJsonAsync<BackgroundSessionResponse>(path + "/background");
+        Assert.False(blocked!.CanContinueInChat);
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(path + "/continue-in-chat", new { })).StatusCode);
+        Assert.False((await memory.LoadAsync(child.Session.SessionId))!.Surfaces.HasFlag(SessionSurface.ChatList));
+        instance = (await instances.FindAsync(instanceId))!;
+        await instances.UpdateWithExpectedRevisionAsync(new AgentInstanceRevisionUpdate(instanceId, instance.Revision, Lifecycle: AgentInstanceLifecycle.Active), now);
         var first = await client.PostAsJsonAsync(path + "/continue-in-chat", new { }); first.EnsureSuccessStatusCode();
         var second = await client.PostAsJsonAsync(path + "/continue-in-chat", new { }); second.EnsureSuccessStatusCode();
         Assert.Equal(child.Session.SessionId.ToString(), (await second.Content.ReadFromJsonAsync<ContinueInChatResponse>())!.SessionId);

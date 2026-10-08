@@ -21,7 +21,7 @@ This user-authorized follow-on composes with the completed Agent Workspace refin
 
 ## Post-filesystem managed workspace refinement
 
-The workspace refinement is superseded by the authorized full migration: one real Agent Instance owner per Session, durable `/home`, temporary `/working`, transient mailbox cwd and canonical copy/move contracts. Runtime built-ins are current versions only; retired immutable files remain in Git. General Assistant is v16. Existing phase freezes remain historical; P10/P11 remain unopened.
+The workspace refinement is superseded by the authorized full migration: one real Agent Instance owner per Session, durable `/home`, temporary `/working`, transient mailbox cwd and canonical copy/move contracts. Runtime built-ins are current versions only; retired immutable files remain in Git. General Assistant v17 adds background.start to the immutable v16 tool set. Existing phase freezes remain historical; P10/P11 remain unopened.
 
 Full migration acceptance requires mandatory ownership and empty Chat guidance; exact file/tree cross-root copy, the four-file c#→csharp rename, CAS and lifecycle conflicts, Artifact delivery, Session deletion and owner deletion recovery; legacy-data rejection; full backend/frontend tests/build, Synthetic Playwright, Compose recreation, synchronized normative docs and hosted CI. See the migration verification report for the current measured gate status. Cwd persistence, cross-store batches and home sandbox mounts remain deferred.
 
@@ -369,7 +369,7 @@ P9.6 remains closed. **P9.7 is frozen on behavior SHA `8f5afa00`** ([hosted Synt
 
 A dedicated Experience-to-Memory promotion UI/capability is deferred. Ordinary explicit memory admission remains governed by existing memory policy; no automatic promotion occurs. Manual retrospective retry and a recent-Session source picker are deferred usability follow-ups. These do not expand thought authority or reopen P10/P11.
 
-P9.7's frozen behavior remains `8f5afa00`. P9.8 implements separate durable owned Experience, strict bounded retrospective generation, context/read-only inspection, existing stable lifecycle hooks, independent recoverable WorkItems, owner controls and Synthetic evidence. P9.9 builds on it through owner-only thought registrations in the existing scheduler/occurrence/work path, immutable admitted prompt/model snapshots, overlap coalescing, server-origin policy, exact approvals, structured quiet outcomes and instance Admin UX.
+Historical P9.8/P9.9 execution record, superseded by unified Automation and AgentRun ownership. P9.7's frozen behavior remains `8f5afa00`. P9.8 implemented separate durable owned Experience, strict bounded retrospective generation, context/read-only inspection, existing stable lifecycle hooks, independent recoverable WorkItems, owner controls and Synthetic evidence. P9.9 builds on it through owner-only thought registrations in the existing scheduler/occurrence/work path, immutable admitted prompt/model snapshots, overlap coalescing, server-origin policy, exact approvals, structured quiet outcomes and instance Admin UX.
 
 | Slice | Acceptance owner |
 | --- | --- |
@@ -394,7 +394,7 @@ Accepted implementation scope after frozen P9.8/P9.9: (1) bounded unified search
 
 ## P9.10 identity state consolidation follow-on
 
-The accepted bounded follow-on adds atomic Memory consolidation with lineage/capacity relief, separate Experience generalization and supersession, exact-authority learned-memory forget, a default-off durable CAS permission and maintenance tools through existing Thought/WorkItem execution. P9.8/P9.9 remain frozen on `0a3330db`; this phase does not redefine their original acceptance. P10/P11 remain unopened.
+Historical P9.10 execution record, superseded by unified Automation and AgentRun ownership. The accepted bounded follow-on added atomic Memory consolidation with lineage/capacity relief, separate Experience generalization and supersession, exact-authority learned-memory forget, a default-off durable CAS permission and maintenance tools through existing Thought/WorkItem execution. P9.8/P9.9 remain frozen on `0a3330db`; this phase does not redefine their original acceptance. P10/P11 remain unopened.
 
 Required slices: semantic contracts/persistence; Memory authority/admission/atomicity; Experience lineage/visibility/atomicity; current policy/tool/approval/recovery integration; shared Admin presentation; Synthetic/full/local/hosted regression and a bounded Real-provider semantic check. No generic CRUD, automatic Experience-to-Memory promotion, autonomous forgetting, new scheduler, continuous cognition or context-compaction redesign.
 

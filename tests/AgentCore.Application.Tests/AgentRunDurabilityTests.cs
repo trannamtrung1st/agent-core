@@ -372,6 +372,96 @@ public sealed class AgentRunDurabilityTests
         Assert.Equal(ActivationKind.UserTurn, all.Single(item => item.AgentRunId != runId).Admission.Activation.Kind);
     }
 
+    [Fact]
+    public async Task Headless_retry_retains_ownership_while_the_next_brain_decision_is_pending()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 8, 0, 0, 0, TimeSpan.Zero));
+        var memory = new InMemoryMemoryStore();
+        var runs = new RuntimeAgentRunStore();
+        runs.Bind(memory);
+        var sessionId = Guid.NewGuid();
+        var runId = Guid.NewGuid();
+        var responseId = Guid.NewGuid();
+        var now = time.GetUtcNow();
+        var input = new ConversationEntry(Guid.NewGuid(), 1, Guid.NewGuid(), ConversationRole.User,
+            "Check the background objective", null, EntryStatus.Completed, SessionMode.Text, 0, 30, now);
+        var snapshot = RuntimeAgentRunStore.WithPins(new SessionSnapshot(1, sessionId, 1, SampleDefinitions.Examiner,
+            SessionMode.Text, null, SessionStatus.Created, [input], "", 0, null, null, now, now,
+            AgentInstanceId: Guid.NewGuid(), ModelSelection: new("synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.Host, null),
+            Origin: new(SessionOriginKind.ManualBackground, initialBackgroundAgentRunId: runId), Surfaces: SessionSurface.BackgroundWork));
+        var activation = new Activation(Guid.NewGuid(), sessionId, ActivationKind.ManualBackground, [input.EntryId],
+            input.SourceEventId, null, null, null, "manual:test", now);
+        var run = AgentRun.Create(runId, new(snapshot.AgentInstanceId, snapshot.ProfileId!.Value),
+            new(activation, snapshot.Definition.Id, snapshot.Definition.Version, snapshot.PinnedPersona!, responseId),
+            new("synthetic-offline/scripted", "primary-llm", "scripted", null), 3, now);
+        await runs.AdmitAsync(snapshot, 0, run);
+        run = await runs.ApplyAsync(run.Owner, runId, new AgentCore.Application.Execution.AgentRunCommand.Claim(
+            run.Revision, now, Guid.NewGuid(), now.AddMinutes(5)));
+        var brain = new GatedRetryBrain();
+        await using var runtime = CreateRuntime(new CapturingSessionOutput(), new RetryingBackgroundModel(),
+            time, runs, memory, snapshot, brain: brain);
+        Assert.True(await runtime.DispatchAgentRunAsync(runId, headless: true));
+        await runtime.WaitUntilIdleAsync();
+        var waiting = (await runs.GetAsync(run.Owner, runId))!;
+        Assert.Equal(AgentRunStatus.WaitingToRetry, waiting.Status);
+        Assert.False(await runtime.HasAcceptedConversationWorkAsync());
+        time.Advance(TimeSpan.FromSeconds(10));
+        run = await runs.ApplyAsync(run.Owner, runId, new AgentCore.Application.Execution.AgentRunCommand.Claim(
+            waiting.Revision, time.GetUtcNow(), Guid.NewGuid(), time.GetUtcNow().AddMinutes(5)));
+        Assert.True(await runtime.DispatchAgentRunAsync(runId, headless: true));
+        await brain.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        try
+        {
+            // Cleanup must keep the new claimed attempt even though the previous response was terminal.
+            Assert.True(await runtime.HasAcceptedConversationWorkAsync());
+            await runtime.TransportDetachAsync();
+            Assert.True(await runtime.HasAcceptedConversationWorkAsync());
+        }
+        finally { brain.Release.TrySetResult(); }
+        await runtime.WaitUntilIdleAsync();
+        var completed = (await runs.GetAsync(run.Owner, runId))!;
+        Assert.Equal(AgentRunStatus.Completed, completed.Status);
+        Assert.Equal(2, completed.AttemptCount);
+        Assert.Equal(run.ResponseId, completed.ResponseId);
+        Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.False(await runtime.HasAcceptedConversationWorkAsync());
+    }
+
+    private sealed class GatedRetryBrain : IAgentBrain
+    {
+        private int calls;
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public async ValueTask<AgentDecision> DecideAsync(AgentContext context, Guid responseId, CancellationToken ct = default)
+        {
+            if (++calls == 2)
+            {
+                Entered.TrySetResult();
+                await Release.Task.WaitAsync(ct);
+            }
+            return new Speak(new PromptContextBuilder().Build(context, responseId));
+        }
+    }
+
+    private sealed class RetryingBackgroundModel : ILanguageModel
+    {
+        private int calls;
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true);
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            await Task.CompletedTask;
+            if (++calls == 1)
+            {
+                yield return new ModelFailed(new(ProviderErrorCode.Unavailable, "Provider unavailable."));
+                yield break;
+            }
+            yield return new ModelToolCallEvent(new("complete", AgentCore.Application.Tools.ToolCatalog.WorkComplete,
+                "{\"summary\":\"Recovered background result.\",\"outcome\":\"Response\",\"attentionRequired\":false}"));
+            yield return new ModelCompleted(ModelStopReason.ToolCalls);
+        }
+    }
+
     private sealed class BackgroundCompletionModel(string outcome, bool attention) : ILanguageModel
     {
         public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true);
@@ -402,7 +492,8 @@ public sealed class AgentRunDurabilityTests
         RuntimeAgentRunStore agentRuns,
         InMemoryMemoryStore? memory = null,
         SessionSnapshot? snapshot = null,
-        IAgentRunAuthority? authority = null)
+        IAgentRunAuthority? authority = null,
+        IAgentBrain? brain = null)
     {
         var prefix = snapshot?.SessionId.ToString("N")[..8] ?? "019944af";
         var ids = new DeterministicIdGenerator(
@@ -441,7 +532,7 @@ public sealed class AgentRunDurabilityTests
         return new SessionRuntime(
             snapshot,
             model,
-            new DefaultAgentBrain(new PromptContextBuilder()),
+            brain ?? new DefaultAgentBrain(new PromptContextBuilder()),
             memory,
             output,
             ids,

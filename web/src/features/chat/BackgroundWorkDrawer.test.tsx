@@ -26,6 +26,15 @@ beforeEach(() => {
 });
 const show = (instanceId = "instance-1") => render(<App><BackgroundWorkDrawer instanceId={instanceId} open wide onClose={() => undefined} /></App>);
 describe("Background Sessions", () => {
+  it("previews the latest result and bounded file count with its exact Automation source", async () => {
+    vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [{ ...fixtureBackground, artifactCount: 50, artifactCountHasMore: true,
+      origin: { ...fixtureBackground.origin, automationId: "90000000-0000-4000-8000-000000000010" } }], nextCursor: null, hasMore: false });
+    show("90000000-0000-4000-8000-000000000001");
+    expect(await screen.findByText("50+ files")).toBeInTheDocument();
+    expect(screen.getByText("The background check finished.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View Automation" })).toHaveAttribute("href",
+      "/admin/instances/90000000-0000-4000-8000-000000000001/automation/automations?automation=90000000-0000-4000-8000-000000000010");
+  });
   it("dismisses with Escape inside the drawer without reaching its parent", async () => {
     const close = vi.fn(); const parentKeyDown = vi.fn();
     render(<div onKeyDown={parentKeyDown}><App><BackgroundWorkDrawer instanceId="instance-1" open wide onClose={close} /></App></div>);
