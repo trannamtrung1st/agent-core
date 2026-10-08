@@ -1,6 +1,6 @@
 # Browser v2 full-cutover verification
 
-Date: 2026-10-08. Status: implementation, key-free verification and authorized real-model Journey L have passed; exact-SHA CI for the corrected live-test candidate is pending. Main integration is deferred.
+Date: 2026-10-08. Status: implementation, authorized real-model Journey L and all five hosted gates passed on corrected candidate `ac1cba0b16edaf17b86ee62066fe3aa7b83410ba` ([run 37751900338](https://github.com/trannamtrung1st/agent-core/actions/runs/37751900338)). Main integration is locally verified on `df29ec85`; the [merge report](branch-1-main-merge-verification.md) owns the combined-tree evidence and current hosted status.
 
 The authorized migration starts from `bd44046896df6f3e0fc2e7d15d60dd479a5349cd` and its five-job [Synthetic baseline run 37677917533](https://github.com/trannamtrung1st/agent-core/actions/runs/37677917533). That run proves the pre-migration tree, not Browser v2. Historical P9/P9.5/P9.6 and Instance Skills reports and freeze SHAs remain unchanged. P10/P11 remain unopened.
 
@@ -92,4 +92,4 @@ The corrected opt-in test passed in 47 seconds with no skips. Through the owned 
 
 Command: `AGENTCORE_BROWSER_V2_LIVE=1 AGENTCORE_LLM_MODEL=deepseek/deepseek-v4.1-flash AGENTCORE_LLM_REASONING_EFFORT=medium dotnet test tests/AgentCore.Application.Tests/AgentCore.Application.Tests.csproj --no-restore --nologo --filter FullyQualifiedName~BrowserV2LiveJourneyTests -v minimal`, with the approved key supplied privately to the child environment. Result log: `/private/tmp/browser-v2-journey-l-tool-channel.log`. Earlier failure logs remain `/private/tmp/browser-v2-journey-l-first.log`, `/private/tmp/browser-v2-journey-l-diagnostic.log` and `/private/tmp/browser-v2-journey-l-offering.log`.
 
-The corrected candidate still requires all five existing hosted key-free gates. The latest preceding source/fixture candidate `f8e4179b` passed all five in [run 37746737917](https://github.com/trannamtrung1st/agent-core/actions/runs/37746737917). Main integration remains deferred at the owner's request, and the PR stays draft.
+The corrected candidate `ac1cba0b16edaf17b86ee62066fe3aa7b83410ba` passed all five existing hosted key-free gates in [run 37751900338](https://github.com/trannamtrung1st/agent-core/actions/runs/37751900338). The preceding source/fixture candidate `f8e4179b` also passed all five in [run 37746737917](https://github.com/trannamtrung1st/agent-core/actions/runs/37746737917). The owner subsequently authorized main integration and PR completion; [combined-tree verification](branch-1-main-merge-verification.md) supersedes the earlier deferral and draft instruction.
