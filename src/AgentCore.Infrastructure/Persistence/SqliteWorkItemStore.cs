@@ -484,7 +484,7 @@ public sealed class SqliteWorkItemStore(
             item => item.ClearSideEffect(expectedRevision, generation, clearedAtUtc, recordExternalEffect),
             cancellationToken));
 
-    public ValueTask<WorkItem> AcceptBrowserObservationAsync(
+    public ValueTask<WorkItem> AcceptBrowserSnapshotAsync(
         Guid workItemId,
         long expectedRevision,
         Guid generation,
@@ -492,7 +492,7 @@ public sealed class SqliteWorkItemStore(
         CancellationToken cancellationToken = default) =>
         Required(MutateAsync(
             workItemId,
-            item => item.AcceptBrowserObservation(expectedRevision, generation, acceptedAtUtc),
+            item => item.AcceptBrowserSnapshot(expectedRevision, generation, acceptedAtUtc),
             cancellationToken));
 
     private async ValueTask<WorkItem?> MutateAsync(

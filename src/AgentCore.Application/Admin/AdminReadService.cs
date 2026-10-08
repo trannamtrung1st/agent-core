@@ -13,7 +13,8 @@ public sealed class AdminReadService(
     IAgentDefinitionAdminStore adminStore,
     IAgentInstanceStore instances,
     IModelCatalog catalog,
-    IToolConfigurationGate configurationGate)
+    IToolConfigurationGate configurationGate,
+    IBrowser? browser = null)
 {
     public const int MaxInventoryItems = 256;
 
@@ -124,6 +125,11 @@ public sealed class AdminReadService(
             configurationGate,
             source,
             status);
+        resolved = resolved with { Browser = browser is null ? null : new BrowserEffectiveConfiguration(
+            browser.Provider.ProviderId, browser.Provider.DisplayName, browser.HostPolicy.Enabled,
+            configurationGate.IsConfigured(ToolCatalog.BrowserNavigate), browser.HostPolicy.ProfileMode.ToString(),
+            browser.HostPolicy.PolicyMode.ToString(), browser.Provider.SupportedFeatures.Select(f => f.ToString()).Order(StringComparer.Ordinal).ToArray(),
+            BrowserToolLimits.MaxSnapshotChars, BrowserToolLimits.MaxCaptureBytes, BrowserToolLimits.MaxDownloadBytes) };
         OperationalDiagnostics.RecordAdmin(
             "resolve",
             "completed",
@@ -266,4 +272,7 @@ public sealed record AdminEffectiveConfiguration(
     TriggerPolicy? TriggerPolicy,
     AdminDurableExecutionEligibility DurableExecutionEligibility,
     string? UnattendedModelCatalogKey = null,
-    string? UnattendedReasoningEffort = null);
+    string? UnattendedReasoningEffort = null,
+    BrowserEffectiveConfiguration? Browser = null);
+
+public sealed record BrowserEffectiveConfiguration(string ProviderId, string DisplayName, bool Enabled, bool Ready, string ProfileMode, string PolicyMode, IReadOnlyList<string> SupportedFeatures, int MaxSnapshotChars, int MaxCaptureBytes, int MaxDownloadBytes);

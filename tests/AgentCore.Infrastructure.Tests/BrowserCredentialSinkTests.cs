@@ -40,22 +40,22 @@ public sealed class BrowserCredentialSinkTests(BrowserHostFixture fixture) : ICl
             var wrongField = await fixture.Session.FillCredentialAsync(session, usernameRef!, (_, _) => { resolvedNonPassword = true; return ValueTask.FromResult(password); });
             Assert.Equal("unsupported_operation", wrongField.ErrorCode);
             Assert.False(resolvedNonPassword);
-            var raw = await Execute(ToolCatalog.BrowserAct, JsonSerializer.Serialize(new { operation = "fill", @ref = passwordRef, value = "model-supplied" }));
+            var raw = await Execute(ToolCatalog.BrowserType, JsonSerializer.Serialize(new { @ref = passwordRef, text = "model-supplied" }));
             Assert.Contains("unsupported_operation", raw);
-            var detached = await Execute(ToolCatalog.BrowserAct, JsonSerializer.Serialize(new { operation = "fill_credential", @ref = passwordRef, credentialRef = "store-admin" }), admission with { Detached = true, TriggerKind = TriggerKind.ScheduledOccurrence });
+            var detached = await Execute(ToolCatalog.BrowserFillCredential, JsonSerializer.Serialize(new { @ref = passwordRef, credentialRef = "store-admin" }), admission with { Detached = true, TriggerKind = TriggerKind.ScheduledOccurrence });
             Assert.Contains("forbidden", detached);
-            var unknown = await Execute(ToolCatalog.BrowserAct, JsonSerializer.Serialize(new { operation = "fill_credential", @ref = passwordRef, credentialRef = "other-agent" }));
+            var unknown = await Execute(ToolCatalog.BrowserFillCredential, JsonSerializer.Serialize(new { @ref = passwordRef, credentialRef = "other-agent" }));
             Assert.Contains("Forbidden", unknown);
-            var filled = await Execute(ToolCatalog.BrowserAct, JsonSerializer.Serialize(new { operation = "fill_credential", @ref = passwordRef, credentialRef = "store-admin" }));
+            var filled = await Execute(ToolCatalog.BrowserFillCredential, JsonSerializer.Serialize(new { @ref = passwordRef, credentialRef = "store-admin" }));
             Assert.DoesNotContain("error", filled); Assert.DoesNotContain(password, filled); Assert.Contains("redacted", filled);
-            var observed = await Execute(ToolCatalog.BrowserObserve, "{}"); Assert.DoesNotContain(password, observed);
+            var observed = await Execute(ToolCatalog.BrowserSnapshot, "{}"); Assert.DoesNotContain(password, observed);
             var screenshot = await fixture.Session.CaptureViewportAsync(new(session));
             Assert.Null(screenshot.ErrorCode);
             Assert.NotEmpty(screenshot.Png!);
             // The reflected text has a child element; text-node masking must still cover it.
             Assert.True(screenshot.RedactionCount >= 2);
             using var filledDoc = JsonDocument.Parse(observed); var submit = filledDoc.RootElement.GetProperty("elements").EnumerateArray().Single(e => e.GetProperty("name").GetString() == "Sign in").GetProperty("ref").GetString();
-            var login = await Execute(ToolCatalog.BrowserAct, JsonSerializer.Serialize(new { operation = "click", @ref = submit }));
+            var login = await Execute(ToolCatalog.BrowserClick, JsonSerializer.Serialize(new { @ref = submit }));
             Assert.Contains("AC-CREDENTIAL-1042", login); Assert.DoesNotContain(password, login);
             var resolvedStale = false;
             var stale = await fixture.Session.FillCredentialAsync(session, passwordRef!, (_, _) => { resolvedStale = true; return ValueTask.FromResult(password); });
@@ -63,7 +63,7 @@ public sealed class BrowserCredentialSinkTests(BrowserHostFixture fixture) : ICl
             Assert.False(resolvedStale);
             // Unbind denies future protected use without logging out the browser.
             await service.UnbindAsync(owner, binding.BindingId, 1, 1); Assert.Empty(await service.SafeMetadataAsync(owner));
-            Assert.DoesNotContain(password, await Execute(ToolCatalog.BrowserObserve, "{}"));
+            Assert.DoesNotContain(password, await Execute(ToolCatalog.BrowserSnapshot, "{}"));
             var listed = await executor.ExecuteAsync(definition, session, new("list", ToolCatalog.CredentialsList, "{}"), ToolLimits.MaxOutputBytes, admission: admission);
             Assert.Contains("\"items\":[]", listed.Text); Assert.DoesNotContain(password, listed.Text);
         }
@@ -84,7 +84,7 @@ public sealed class BrowserCredentialSinkTests(BrowserHostFixture fixture) : ICl
             reference = filled.Observation.Elements.Single(e => e.Actions.Contains("fill_credential")).Ref;
             var denied = await fixture.Session.FillCredentialAsync(session, reference, (_, _) => ValueTask.FromResult(first + "x"));
             Assert.Equal("user_intervention_required", denied.ErrorCode);
-            var observed = await fixture.Session.ObserveAsync(session);
+            var observed = await fixture.Session.SnapshotAsync(session);
             Assert.DoesNotContain(first, observed.Observation!.VisibleText);
             Assert.Contains("redacted", observed.Observation.VisibleText);
             Assert.DoesNotContain("[redacted]x", observed.Observation.VisibleText);
@@ -120,7 +120,7 @@ public sealed class BrowserCredentialSinkTests(BrowserHostFixture fixture) : ICl
         var root = Path.Combine(Path.GetTempPath(), "credential-profile-" + Guid.NewGuid().ToString("N"));
         var owner = Guid.NewGuid(); var first = Guid.NewGuid(); var next = Guid.NewGuid();
         var origin = fixture.Session.Fixture.Origin!;
-        PlaywrightBrowserSession Browser() => new(new BrowserOptions { Enabled = true, Headless = true,
+        PlaywrightBrowser Browser() => new(new BrowserOptions { Enabled = true, Headless = true,
             ProfileMode = nameof(BrowserProfileMode.PersistentAgent), ProfileRoot = root,
             PolicyMode = nameof(BrowserPolicyMode.Restricted), NavigationOrigins = [origin], InteractionOrigins = [origin], FixtureEnabled = false }, null);
         var browser = Browser(); await browser.StartAsync(default);
@@ -131,7 +131,7 @@ public sealed class BrowserCredentialSinkTests(BrowserHostFixture fixture) : ICl
             var password = login.Elements.Single(e => e.Actions.Contains("fill_credential"));
             var filled = await browser.FillCredentialAsync(first, password.Ref, (_, _) => ValueTask.FromResult("profile-password-5387"));
             Assert.Null(filled.ErrorCode);
-            var signedIn = await browser.ActAsync(new(first, "click", filled.Observation!.Elements.Single(e => e.Name == "Sign in").Ref, null));
+            var signedIn = await browser.InteractAsync(new(first, "click", filled.Observation!.Elements.Single(e => e.Name == "Sign in").Ref, null));
             Assert.Contains("AC-CREDENTIAL-1042", signedIn.Observation!.VisibleText);
             await browser.ReleaseAsync(first); browser.BindSession(next, owner);
             Assert.Contains("AC-CREDENTIAL-1042", (await browser.NavigateAsync(new(next, new(origin + "/credential-login")))).Observation!.VisibleText);

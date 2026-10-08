@@ -3,31 +3,22 @@ using AgentCore.Application.Tools;
 
 namespace AgentCore.Application.Tests;
 
-public sealed class BrowserObserveContractTests
+public sealed class BrowserSnapshotContractTests
 {
     [Fact]
     public void Schema_advertises_only_bounded_stable_wait()
     {
-        var descriptor = ToolRegistry.Get(ToolCatalog.BrowserObserve);
-        using var schema = JsonDocument.Parse(descriptor.ModelDefinition.ParametersJson);
-        var root = schema.RootElement;
-        Assert.Equal("object", root.GetProperty("type").GetString());
-        Assert.False(root.GetProperty("additionalProperties").GetBoolean());
-        var properties = root.GetProperty("properties");
-        Assert.Equal("stable", properties.GetProperty("waitFor").GetProperty("enum")[0].GetString());
-        Assert.Equal(
-            new[] { "stable", "navigation", "role" },
-            properties.GetProperty("waitFor").GetProperty("enum").EnumerateArray().Select(item => item.GetString()!).ToArray());
+        using var snapshot = JsonDocument.Parse(ToolRegistry.Get(ToolCatalog.BrowserSnapshot).ModelDefinition.ParametersJson);
+        Assert.False(snapshot.RootElement.GetProperty("additionalProperties").GetBoolean());
+        Assert.False(snapshot.RootElement.GetProperty("properties").TryGetProperty("waitFor", out _));
+        Assert.Equal(32, snapshot.RootElement.GetProperty("properties").GetProperty("depth").GetProperty("maximum").GetInt32());
+        using var wait = JsonDocument.Parse(ToolRegistry.Get(ToolCatalog.BrowserWait).ModelDefinition.ParametersJson);
+        var properties = wait.RootElement.GetProperty("properties");
+        Assert.Contains("stable", properties.GetProperty("condition").GetProperty("enum").EnumerateArray().Select(v => v.GetString()));
         Assert.Equal(100, properties.GetProperty("timeoutMs").GetProperty("minimum").GetInt32());
         Assert.Equal(5000, properties.GetProperty("timeoutMs").GetProperty("maximum").GetInt32());
-        Assert.Contains(
-            "do not conclude that the data is absent solely from the first observation",
-            descriptor.ModelDefinition.Description,
-            StringComparison.Ordinal);
-        Assert.Contains("bounded wait for stability", descriptor.ModelDefinition.Description, StringComparison.Ordinal);
-        Assert.DoesNotContain("nopCommerce", descriptor.ModelDefinition.Description, StringComparison.Ordinal);
-        Assert.DoesNotContain("selector", descriptor.ModelDefinition.ParametersJson, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("sleep", descriptor.ModelDefinition.ParametersJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("selector", wait.RootElement.GetRawText());
+        Assert.DoesNotContain("sleep", wait.RootElement.GetRawText());
     }
 
     [Theory]
@@ -41,7 +32,7 @@ public sealed class BrowserObserveContractTests
     public void Supported_observe_arguments_are_accepted(string json)
     {
         using var document = JsonDocument.Parse(json);
-        Assert.True(BrowserToolArguments.TryObserve(document.RootElement, out var options, out var error), error);
+        Assert.True(BrowserToolArguments.TrySnapshot(document.RootElement, out var options, out var error), error);
         if (json == "{}")
         {
             Assert.Null(options);
@@ -72,7 +63,7 @@ public sealed class BrowserObserveContractTests
     public void Unsupported_observe_arguments_are_rejected(string json, string reason)
     {
         using var document = JsonDocument.Parse(json);
-        Assert.False(BrowserToolArguments.TryObserve(document.RootElement, out _, out var error));
+        Assert.False(BrowserToolArguments.TrySnapshot(document.RootElement, out _, out var error));
         using var payload = JsonDocument.Parse(error);
         Assert.Equal(reason, payload.RootElement.GetProperty("reason").GetString());
         Assert.DoesNotContain("#grid", error, StringComparison.Ordinal);

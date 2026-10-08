@@ -15,7 +15,7 @@ public sealed class AgentBrowserProfileTests
         var root = Path.Combine(Path.GetTempPath(), "agent-core-profiles-" + Guid.NewGuid().ToString("N"));
         var messages = new List<string>();
         using var logs = LoggerFactory.Create(builder => builder.AddProvider(new CollectingLoggerProvider(messages)));
-        var session = new PlaywrightBrowserSession(
+        var session = new PlaywrightBrowser(
             new BrowserOptions
             {
                 Enabled = false,
@@ -67,7 +67,7 @@ public sealed class AgentBrowserProfileTests
             var allowed = await executor.ExecuteAsync(BrowserDefinition(), Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission);
             Assert.DoesNotContain("forbidden", allowed.Text); Assert.Equal(1, browser.NavigateCalls); Assert.Equal(instanceId, browser.BoundAgent);
             await instances.UpdateWithExpectedRevisionAsync(new(instanceId, 1, Lifecycle: AgentInstanceLifecycle.Archived), now);
-            foreach (var blocked in new[] { call, new ModelToolCall("observe", ToolCatalog.BrowserObserve, "{}"), new ModelToolCall("act", ToolCatalog.BrowserAct, """{"operation":"click","ref":"el_aaaaaaaaaaaaaaaaaaaaaa"}""") })
+            foreach (var blocked in new[] { call, new ModelToolCall("snapshot", ToolCatalog.BrowserSnapshot, "{}"), new ModelToolCall("click", ToolCatalog.BrowserClick, """{"ref":"el_aaaaaaaaaaaaaaaaaaaaaa"}""") })
                 Assert.Contains("forbidden", (await executor.ExecuteAsync(BrowserDefinition(), Guid.NewGuid(), blocked, ToolLimits.MaxOutputBytes, admission: admission)).Text);
             Assert.Equal(1, browser.NavigateCalls); Assert.Equal(0, browser.ObserveCalls); Assert.Equal(0, browser.ActCalls); Assert.True(File.Exists(marker));
             var missing = await executor.ExecuteAsync(BrowserDefinition(), Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission with { AgentInstanceId = Guid.NewGuid() });
@@ -93,12 +93,13 @@ public sealed class AgentBrowserProfileTests
             new RoleEnvironment(ToolAllowlist:
             [
                 ToolCatalog.BrowserNavigate,
-                ToolCatalog.BrowserObserve,
-                ToolCatalog.BrowserAct
+                ToolCatalog.BrowserSnapshot,
+                ToolCatalog.BrowserClick
             ]));
 
-    private sealed class CountingBrowser : IBrowserSession, IBrowserProfileBinding
+    private sealed class CountingBrowser : IBrowser, IBrowserProfileBinding
     {
+        public BrowserProviderDescriptor Provider { get; } = new("fixture", "Test browser", new HashSet<BrowserFeature> { BrowserFeature.Navigate, BrowserFeature.Snapshot, BrowserFeature.Click, BrowserFeature.Type, BrowserFeature.Hover, BrowserFeature.Drag, BrowserFeature.FillForm, BrowserFeature.SelectOption, BrowserFeature.PressKey, BrowserFeature.Upload, BrowserFeature.FillCredential, BrowserFeature.Wait, BrowserFeature.Tabs, BrowserFeature.Screenshot, BrowserFeature.Close });
         public int NavigateCalls { get; private set; }
 
         public int ObserveCalls { get; private set; }
@@ -128,23 +129,23 @@ public sealed class AgentBrowserProfileTests
             NavigateCalls++;
             return ValueTask.FromResult(new BrowserOperationResult(
                 null,
-                new BrowserObservation(request.Url!.AbsoluteUri, "admin", string.Empty, false, [])));
+                new BrowserSnapshot(request.Url!.AbsoluteUri, "admin", string.Empty, false, [])));
         }
 
-        public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             ObserveCalls++;
             return ValueTask.FromResult(new BrowserOperationResult(
                 null,
-                new BrowserObservation("http://127.0.0.1:5088/admin", "admin", string.Empty, false, [])));
+                new BrowserSnapshot("http://127.0.0.1:5088/admin", "admin", string.Empty, false, [])));
         }
 
-        public ValueTask<BrowserOperationResult> ActAsync(BrowserActRequest request, CancellationToken cancellationToken = default)
+        public ValueTask<BrowserOperationResult> InteractAsync(BrowserInteractionRequest request, CancellationToken cancellationToken = default)
         {
             ActCalls++;
             return ValueTask.FromResult(new BrowserOperationResult(
                 null,
-                new BrowserObservation("http://127.0.0.1:5088/admin", "admin", string.Empty, false, [])));
+                new BrowserSnapshot("http://127.0.0.1:5088/admin", "admin", string.Empty, false, [])));
         }
     }
 

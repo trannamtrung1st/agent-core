@@ -267,7 +267,7 @@ public sealed class WorkItemContractTests
     public void In_flight_browser_act_without_the_flag_resumes_for_observation()
     {
         const string arguments = """{"operation":"click","ref":"el_0123456789abcdefghijkl"}""";
-        var hash = WorkActionHash.Compute("browser.act", JsonDocument.Parse(arguments).RootElement);
+        var hash = WorkActionHash.Compute("browser.click", JsonDocument.Parse(arguments).RootElement);
         var payload = JsonSerializer.Serialize(new
         {
             Phase = "model-turn",
@@ -281,7 +281,7 @@ public sealed class WorkItemContractTests
                     Name = (string?)null,
                     ToolCalls = new[]
                     {
-                        new { Id = ToolCallId, Name = "browser.act", ArgumentsJson = arguments }
+                        new { Id = ToolCallId, Name = "browser.click", ArgumentsJson = arguments }
                     }
                 }
             },
@@ -311,7 +311,7 @@ public sealed class WorkItemContractTests
         Assert.Equal(WorkSideEffectDisposition.Indeterminate, capacity.SideEffect.Disposition);
 
         var navigation = WorkActionHash.Compute("browser.navigate", JsonDocument.Parse("""{"url":"http://127.0.0.1:5088/"}""").RootElement);
-        var navigatePayload = payload.Replace("browser.act", "browser.navigate", StringComparison.Ordinal);
+        var navigatePayload = payload.Replace("browser.click", "browser.navigate", StringComparison.Ordinal);
         var navigateClaim = NewItem().TakeClaim(GenerationA, Now, Now.AddMinutes(1));
         var navigatePrepared = navigateClaim.MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ToolCallId, navigation, Now.AddSeconds(1));
         var navigateFlight = navigatePrepared.MarkSideEffect(3, GenerationA, WorkSideEffectDisposition.InFlight, ToolCallId, navigation, Now.AddSeconds(2));

@@ -21,6 +21,7 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
   await page.setViewportSize({ width: 1280, height: 900 });
   const consoleErrors: string[] = [];
   const failedRequests: string[] = [];
+  const failedResponses: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") {
       consoleErrors.push(message.text());
@@ -28,6 +29,9 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
   });
   page.on("requestfailed", (request) => {
     failedRequests.push(`${request.method()} ${request.url()}`);
+  });
+  page.on("response", (response) => {
+    if (response.status() >= 400) failedResponses.push(`${response.status()} ${response.url()}`);
   });
 
   const definitionId = `p8-skills-${Date.now()}`;
@@ -184,5 +188,5 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
   await expect(page.getByText("Instance archived.")).toBeVisible({ timeout: 15_000 });
 
   expect(failedRequests.filter((item) => !item.includes("favicon"))).toEqual([]);
-  expect(consoleErrors.filter((line) => !antdNoise(line) && !line.includes("favicon"))).toEqual([]);
+  expect(consoleErrors.filter((line) => !antdNoise(line) && !line.includes("favicon")), failedResponses.join("\n")).toEqual([]);
 });

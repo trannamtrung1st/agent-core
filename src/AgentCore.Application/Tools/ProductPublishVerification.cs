@@ -9,7 +9,7 @@ public static class ProductPublishVerification
         var lastAct = -1;
         for (var index = 0; index < steps.Count; index++)
         {
-            if (string.Equals(steps[index].Tool, ToolCatalog.BrowserAct, StringComparison.Ordinal))
+            if (BrowserToolCatalog.IsInteraction(steps[index].Tool))
             {
                 lastAct = index;
             }
@@ -23,7 +23,7 @@ public static class ProductPublishVerification
         for (var index = lastAct + 1; index < steps.Count; index++)
         {
             var step = steps[index];
-            if (step.Tool is not (ToolCatalog.BrowserObserve or ToolCatalog.BrowserNavigate))
+            if (step.Tool is not (ToolCatalog.BrowserSnapshot or ToolCatalog.BrowserNavigate))
             {
                 continue;
             }

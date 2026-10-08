@@ -10,7 +10,7 @@ test("managed home survives deleted source, guards a revision and delivers a fre
   const headers = { "X-AgentCore-Owner-Capability": token! };
   const request = page.request;
   async function instance() {
-    const response = await request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "general-assistant", version: 16 } });
+    const response = await request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "general-assistant", version: 17 } });
     expect(response.ok(), await response.text()).toBe(true); return (await response.json()).instanceId as string;
   }
   async function session(id: string) {

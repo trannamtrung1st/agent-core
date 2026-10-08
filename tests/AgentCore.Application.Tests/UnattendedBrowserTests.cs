@@ -141,7 +141,7 @@ public sealed class UnattendedBrowserTests
         var observed = await executor.ExecuteAsync(
             secretary,
             sessionId,
-            Call(ToolCatalog.BrowserObserve, "{}"),
+            Call(ToolCatalog.BrowserSnapshot, "{}"),
             ToolLimits.MaxOutputBytes,
             admission: interactive);
         Assert.DoesNotContain("error", navigated.Text, StringComparison.Ordinal);
@@ -155,7 +155,7 @@ public sealed class UnattendedBrowserTests
         var acted = await executor.ExecuteAsync(
             secretary,
             sessionId,
-            Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}"""),
+            Call(ToolCatalog.BrowserClick, $$"""{"ref":"{{PublishRef}}"}"""),
             ToolLimits.MaxOutputBytes,
             admission: interactive);
         Assert.DoesNotContain("error", acted.Text, StringComparison.Ordinal);
@@ -165,21 +165,22 @@ public sealed class UnattendedBrowserTests
         var textOnly = await executor.ExecuteAsync(
             secretary,
             sessionId,
-            Call(ToolCatalog.BrowserCapture, "{}"),
+            Call(ToolCatalog.BrowserScreenshot, "{}"),
             ToolLimits.MaxOutputBytes,
             admission: interactive);
-        Assert.Contains("model-capability-unsupported", textOnly.Text, StringComparison.Ordinal);
-        Assert.Equal(0, browser.CaptureCalls);
+        Assert.Contains("artifactId", textOnly.Text, StringComparison.Ordinal);
+        Assert.Empty(textOnly.Parts ?? []);
+        Assert.Equal(1, browser.CaptureCalls);
 
         var captured = await executor.ExecuteAsync(
             secretary,
             sessionId,
-            Call(ToolCatalog.BrowserCapture, "{}"),
+            Call(ToolCatalog.BrowserScreenshot, "{}"),
             ToolLimits.MaxOutputBytes,
             admission: interactive with { SupportsVision = true });
         var image = Assert.IsType<ModelImageContent>(Assert.Single(captured.Parts!));
         Assert.Equal(png, image.Bytes);
-        Assert.Equal(1, browser.CaptureCalls);
+        Assert.Equal(2, browser.CaptureCalls);
         Assert.Equal(1, browser.ActCalls);
 
         var scheduled = await RunSecretaryModeAsync(
@@ -193,7 +194,7 @@ public sealed class UnattendedBrowserTests
             "schedule|store-review",
             TriggerKind.ScheduledOccurrence,
             new ScriptModel(
-                () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
+                () => ToolRound(Call(ToolCatalog.BrowserSnapshot, "{}")),
                 () => ToolRound(Call(ToolCatalog.WorkComplete, """{"summary":"No store changes need attention.","attentionRequired":false,"outcome":"ActionCompleted"}"""))));
         Assert.False(scheduled.AttentionRequired);
         Assert.Equal("No store changes need attention.", WorkCompletionRequest.Summary(scheduled.Text));
@@ -222,7 +223,7 @@ public sealed class UnattendedBrowserTests
         Assert.Equal([instanceId], browser.UnattendedAgents.Distinct());
         Assert.Equal([instanceId], browser.BoundAgents.Distinct());
         Assert.Equal(2, browser.NavigateCalls);
-        Assert.Equal(1, browser.CaptureCalls);
+        Assert.Equal(2, browser.CaptureCalls);
     }
 
     [Fact]
@@ -332,7 +333,7 @@ public sealed class UnattendedBrowserTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Executor(browser, agents).ExecuteAsync(
             Definition(),
             WorkId,
-            Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}"""),
+            Call(ToolCatalog.BrowserClick, $$"""{"ref":"{{PublishRef}}"}"""),
             ToolLimits.MaxOutputBytes,
             cancelled.Token,
             admission: Admission()));
@@ -344,7 +345,7 @@ public sealed class UnattendedBrowserTests
             agents,
             new ScriptModel(
                 () => ToolRound(Call(ToolCatalog.BrowserNavigate, $$"""{"url":"{{Store}}/admin"}""")),
-                () => ToolRound(Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""")),
+                () => ToolRound(Call(ToolCatalog.BrowserClick, $$"""{"ref":"{{PublishRef}}"}""")),
                 () => CompleteRound("stopped")));
         Assert.IsType<DurableOccurrenceCompleted>(outcome);
         Assert.Equal(1, browser.NavigateCalls);
@@ -392,7 +393,7 @@ public sealed class UnattendedBrowserTests
         var captures = new InMemoryWorkCaptureStore(TimeProvider.System);
         var model = new RecordingScriptModel(
             true,
-            () => ToolRound(Call(ToolCatalog.BrowserCapture, "{}")),
+            () => ToolRound(Call(ToolCatalog.BrowserScreenshot, "{}")),
             () => CompleteRound("saw the page"));
         var now = DateTimeOffset.Parse("2026-10-03T00:00:00Z");
         var generation = Guid.Parse("019944af-00e6-7000-8000-000000000001");
@@ -449,7 +450,7 @@ public sealed class UnattendedBrowserTests
         var captures = new InMemoryWorkCaptureStore(TimeProvider.System);
         var saved = await captures.SaveAsync(WorkId, OwnerId, "image/png", png);
         var artifactId = saved.Capture!.CaptureId;
-        var call = Call(ToolCatalog.BrowserCapture, "{}");
+        var call = Call(ToolCatalog.BrowserScreenshot, "{}");
         var payload = DurableToolCallCheckpoint.Write(
         [
             new ModelMessage(ModelRole.User, "look"),
@@ -458,7 +459,7 @@ public sealed class UnattendedBrowserTests
                 ModelRole.Tool,
                 $$"""{"contentType":"image/png","byteSize":{{png.Length}},"artifactId":"{{artifactId}}"}""",
                 ToolCallId: call.Id,
-                Name: ToolCatalog.BrowserCapture)
+                Name: ToolCatalog.BrowserScreenshot)
         ], skillState: new([], [], 0));
         var now = DateTimeOffset.Parse("2026-10-03T00:00:00Z");
         var generation = Guid.Parse("019944af-00e6-7000-8000-000000000002");
@@ -499,7 +500,7 @@ public sealed class UnattendedBrowserTests
     [Fact]
     public async Task Missing_capture_bytes_force_a_fresh_capture_before_the_model_continues()
     {
-        var call = Call(ToolCatalog.BrowserCapture, "{}");
+        var call = Call(ToolCatalog.BrowserScreenshot, "{}");
         var missing = Guid.Parse("019944af-00e6-7000-8000-000000000099");
         var payload = DurableToolCallCheckpoint.Write(
         [
@@ -509,7 +510,7 @@ public sealed class UnattendedBrowserTests
                 ModelRole.Tool,
                 $$"""{"artifactId":"{{missing}}"}""",
                 ToolCallId: call.Id,
-                Name: ToolCatalog.BrowserCapture)
+                Name: ToolCatalog.BrowserScreenshot)
         ], skillState: new([], [], 0));
         var now = DateTimeOffset.Parse("2026-10-03T00:00:00Z");
         var generation = Guid.Parse("019944af-00e6-7000-8000-000000000003");
@@ -561,7 +562,7 @@ public sealed class UnattendedBrowserTests
             browser,
             agents,
             new ScriptModel(
-                () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
+                () => ToolRound(Call(ToolCatalog.BrowserSnapshot, "{}")),
                 () => [new ModelCompleted(ModelStopReason.Completed)]));
         var retry = Assert.IsType<DurableOccurrenceRetry>(outcome);
         Assert.Equal("empty-result", retry.Code);
@@ -577,7 +578,7 @@ public sealed class UnattendedBrowserTests
             new RecordingBrowser(),
             await ActiveAgentsAsync(OwnerId),
             new ScriptModel(
-                () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
+                () => ToolRound(Call(ToolCatalog.BrowserSnapshot, "{}")),
                 () => TextRound("I looked at the page.")));
         var retry = Assert.IsType<DurableOccurrenceRetry>(outcome);
         Assert.Equal("completion-required", retry.Code);
@@ -590,8 +591,8 @@ public sealed class UnattendedBrowserTests
             new RecordingBrowser(),
             await ActiveAgentsAsync(OwnerId),
             new ScriptModel(
-                () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
-                () => ToolRound(Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""")),
+                () => ToolRound(Call(ToolCatalog.BrowserSnapshot, "{}")),
+                () => ToolRound(Call(ToolCatalog.BrowserClick, $$"""{"ref":"{{PublishRef}}"}""")),
                 () => CompleteRound("The product was updated.")));
         var completed = Assert.IsType<DurableOccurrenceCompleted>(outcome);
         Assert.Equal(WorkKnownEffects.ExternalActionCompleted, completed.Running.KnownEffectSummary);
@@ -649,7 +650,7 @@ public sealed class UnattendedBrowserTests
         executor.ExecuteAsync(
             Definition(),
             Guid.NewGuid(),
-            Call(ToolCatalog.BrowserCapture, "{}"),
+            Call(ToolCatalog.BrowserScreenshot, "{}"),
             10_000,
             CancellationToken.None,
             admission: new ToolExecutionAdmission(
@@ -728,7 +729,7 @@ public sealed class UnattendedBrowserTests
         var agents = await ActiveAgentsAsync(OwnerId);
         var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
         var generation = Guid.Parse("019944af-00e1-7000-8000-000000000001");
-        var act = Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""");
+        var act = Call(ToolCatalog.BrowserClick, $$"""{"ref":"{{PublishRef}}"}""");
         var payload = DurableToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [act])], skillState: new([], [], 0));
         var store = new InMemoryWorkItemStore();
         await store.CreateAsync(WorkItem.Create(
@@ -741,7 +742,7 @@ public sealed class UnattendedBrowserTests
         var claimed = (await store.TryClaimAsync(WorkId, generation, now, now.AddMinutes(1)))!;
         var checkpoint = new WorkCheckpoint(payload, 0, 0, (int)ToolLimits.Overall.TotalMilliseconds);
         var saved = await store.CheckpointAsync(WorkId, claimed.Revision, generation, checkpoint, null, now);
-        var hash = ToolActionHash.Compute(ToolCatalog.BrowserAct, JsonDocument.Parse(act.ArgumentsJson).RootElement);
+        var hash = ToolActionHash.Compute(ToolCatalog.BrowserClick, JsonDocument.Parse(act.ArgumentsJson).RootElement);
         var prepared = await store.MarkSideEffectAsync(
             WorkId, saved.Revision, generation, WorkSideEffectDisposition.Prepared, act.Id, hash, now);
         var fenced = await store.MarkSideEffectAsync(
@@ -751,8 +752,8 @@ public sealed class UnattendedBrowserTests
             new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "publish")]),
             new ScriptModel(
                 () => ToolRound(act),
-                () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
-                () => ToolRound(Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{RepairRef}}"}""")),
+                () => ToolRound(Call(ToolCatalog.BrowserSnapshot, "{}")),
+                () => ToolRound(Call(ToolCatalog.BrowserClick, $$"""{"ref":"{{RepairRef}}"}""")),
                 () => CompleteRound("observed")),
             Definition(),
             TriggerKind.ApplicationEvent,
@@ -777,7 +778,7 @@ public sealed class UnattendedBrowserTests
         var agents = await ActiveAgentsAsync(OwnerId);
         var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
         var generation = Guid.Parse("019944af-00e4-7000-8000-000000000001");
-        var act = Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""");
+        var act = Call(ToolCatalog.BrowserClick, $$"""{"ref":"{{PublishRef}}"}""");
         var payload = DurableToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [act])], skillState: new([], [], 0));
         var store = new InMemoryWorkItemStore();
         await store.CreateAsync(WorkItem.Create(
@@ -790,7 +791,7 @@ public sealed class UnattendedBrowserTests
         var claimed = (await store.TryClaimAsync(WorkId, generation, now, now.AddMinutes(1)))!;
         var checkpoint = new WorkCheckpoint(payload, 0, 0, (int)ToolLimits.Overall.TotalMilliseconds);
         var saved = await store.CheckpointAsync(WorkId, claimed.Revision, generation, checkpoint, null, now);
-        var hash = ToolActionHash.Compute(ToolCatalog.BrowserAct, JsonDocument.Parse(act.ArgumentsJson).RootElement);
+        var hash = ToolActionHash.Compute(ToolCatalog.BrowserClick, JsonDocument.Parse(act.ArgumentsJson).RootElement);
         var prepared = await store.MarkSideEffectAsync(
             WorkId, saved.Revision, generation, WorkSideEffectDisposition.Prepared, act.Id, hash, now);
         var fenced = await store.MarkSideEffectAsync(
@@ -823,8 +824,8 @@ public sealed class UnattendedBrowserTests
             resumed,
             new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "publish")]),
             new ScriptModel(
-                () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
-                () => ToolRound(Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{RepairRef}}"}""")),
+                () => ToolRound(Call(ToolCatalog.BrowserSnapshot, "{}")),
+                () => ToolRound(Call(ToolCatalog.BrowserClick, $$"""{"ref":"{{RepairRef}}"}""")),
                 () => CompleteRound("observed")),
             Definition(),
             TriggerKind.ScheduledOccurrence,
@@ -853,7 +854,7 @@ public sealed class UnattendedBrowserTests
         var agents = await ActiveAgentsAsync(OwnerId);
         var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
         var generation = Guid.Parse("019944af-00e5-7000-8000-000000000001");
-        var act = Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""");
+        var act = Call(ToolCatalog.BrowserClick, $$"""{"ref":"{{PublishRef}}"}""");
         var payload = DurableToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [act])], skillState: new([], [], 0));
         Assert.DoesNotContain("\"ObservationRequired\":true", payload, StringComparison.Ordinal);
         var store = new InMemoryWorkItemStore();
@@ -872,7 +873,7 @@ public sealed class UnattendedBrowserTests
             new WorkCheckpoint(payload, 0, 0, (int)ToolLimits.Overall.TotalMilliseconds),
             null,
             now);
-        var hash = ToolActionHash.Compute(ToolCatalog.BrowserAct, JsonDocument.Parse(act.ArgumentsJson).RootElement);
+        var hash = ToolActionHash.Compute(ToolCatalog.BrowserClick, JsonDocument.Parse(act.ArgumentsJson).RootElement);
         var prepared = await store.MarkSideEffectAsync(
             WorkId, saved.Revision, generation, WorkSideEffectDisposition.Prepared, act.Id, hash, now);
         await store.MarkSideEffectAsync(
@@ -889,8 +890,8 @@ public sealed class UnattendedBrowserTests
             new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "publish")]),
             new ScriptModel(
                 () => ToolRound(act),
-                () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
-                () => ToolRound(Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{RepairRef}}"}""")),
+                () => ToolRound(Call(ToolCatalog.BrowserSnapshot, "{}")),
+                () => ToolRound(Call(ToolCatalog.BrowserClick, $$"""{"ref":"{{RepairRef}}"}""")),
                 () => CompleteRound("observed")),
             Definition(),
             TriggerKind.ScheduledOccurrence,
@@ -983,7 +984,7 @@ public sealed class UnattendedBrowserTests
         var agents = await ActiveAgentsAsync(OwnerId);
         var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
         var generation = Guid.Parse("019944af-00e7-7000-8000-000000000001");
-        var act = Call(ToolCatalog.BrowserAct, $$"""{"operation":"click","ref":"{{PublishRef}}"}""");
+        var act = Call(ToolCatalog.BrowserClick, $$"""{"ref":"{{PublishRef}}"}""");
         var payload = DurableToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [act])], skillState: new([], [], 0));
         var store = new InMemoryWorkItemStore();
         await store.CreateAsync(WorkItem.Create(
@@ -1001,7 +1002,7 @@ public sealed class UnattendedBrowserTests
             new WorkCheckpoint(payload, 0, 0, (int)ToolLimits.Overall.TotalMilliseconds),
             null,
             now);
-        var hash = ToolActionHash.Compute(ToolCatalog.BrowserAct, JsonDocument.Parse(act.ArgumentsJson).RootElement);
+        var hash = ToolActionHash.Compute(ToolCatalog.BrowserClick, JsonDocument.Parse(act.ArgumentsJson).RootElement);
         var prepared = await store.MarkSideEffectAsync(
             WorkId, saved.Revision, generation, WorkSideEffectDisposition.Prepared, act.Id, hash, now);
         var inflight = await store.MarkSideEffectAsync(
@@ -1014,8 +1015,8 @@ public sealed class UnattendedBrowserTests
             Environment = new RoleEnvironment(ToolAllowlist:
             [
                 ToolCatalog.BrowserNavigate,
-                ToolCatalog.BrowserObserve,
-                ToolCatalog.BrowserAct,
+                ToolCatalog.BrowserSnapshot,
+                ToolCatalog.BrowserClick,
                 ToolCatalog.WorkComplete
             ])
         };
@@ -1024,7 +1025,7 @@ public sealed class UnattendedBrowserTests
             new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "publish")]),
             new ScriptModel(
                 () => ToolRound(act),
-                () => ToolRound(Call(ToolCatalog.BrowserObserve, "{}")),
+                () => ToolRound(Call(ToolCatalog.BrowserSnapshot, "{}")),
                 () => ToolRound(Call(ToolCatalog.WorkComplete, """{"summary":"Order checked.","attentionRequired":false,"outcome":"ActionCompleted"}"""))),
             definition,
             TriggerKind.ApplicationEvent,
@@ -1216,9 +1217,9 @@ public sealed class UnattendedBrowserTests
             new RoleEnvironment(ToolAllowlist:
             [
                 ToolCatalog.BrowserNavigate,
-                ToolCatalog.BrowserObserve,
-                ToolCatalog.BrowserAct,
-                ToolCatalog.BrowserCapture,
+                ToolCatalog.BrowserSnapshot,
+                ToolCatalog.BrowserClick,
+                ToolCatalog.BrowserScreenshot,
                 ToolCatalog.AppMessageSend
             ]));
 
@@ -1313,8 +1314,9 @@ public sealed class UnattendedBrowserTests
         }
     }
 
-    private sealed class RecordingBrowser : IBrowserSession, IBrowserProfileBinding, IBrowserContextUse
+    private sealed class RecordingBrowser : IBrowser, IBrowserProfileBinding, IBrowserContextUse
     {
+        public BrowserProviderDescriptor Provider { get; } = new("fixture", "Test browser", new HashSet<BrowserFeature> { BrowserFeature.Navigate, BrowserFeature.Snapshot, BrowserFeature.Click, BrowserFeature.Type, BrowserFeature.Hover, BrowserFeature.Drag, BrowserFeature.FillForm, BrowserFeature.SelectOption, BrowserFeature.PressKey, BrowserFeature.Upload, BrowserFeature.FillCredential, BrowserFeature.Wait, BrowserFeature.Tabs, BrowserFeature.Screenshot, BrowserFeature.Close });
         private readonly List<Guid> _bound = [];
 
         public string? ErrorCode { get; set; }
@@ -1397,26 +1399,26 @@ public sealed class UnattendedBrowserTests
             return new(Result(request.Url!.AbsoluteUri, "Admin", downloads));
         }
 
-        public ValueTask<BrowserCaptureResult> CaptureViewportAsync(
-            BrowserCaptureRequest request,
+        public ValueTask<BrowserScreenshotResult> CaptureViewportAsync(
+            BrowserScreenshotRequest request,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             CaptureCalls++;
             return new(CapturePng is { Length: > 0 } png
-                ? new BrowserCaptureResult(null, png, 1, 8, 8)
-                : new BrowserCaptureResult("provider_unavailable", null, 0));
+                ? new BrowserScreenshotResult(null, png, 1, 8, 8)
+                : new BrowserScreenshotResult("provider_unavailable", null, 0));
         }
 
-        public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ObserveCalls++;
             return new(Result(Store + "/admin", "AC Keyboard $99 Published ac-keyboard.png"));
         }
 
-        public ValueTask<BrowserOperationResult> ActAsync(
-            BrowserActRequest request,
+        public ValueTask<BrowserOperationResult> InteractAsync(
+            BrowserInteractionRequest request,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1434,7 +1436,7 @@ public sealed class UnattendedBrowserTests
 
             return new BrowserOperationResult(
                 null,
-                new BrowserObservation(
+                new BrowserSnapshot(
                     url,
                     "Page",
                     text,

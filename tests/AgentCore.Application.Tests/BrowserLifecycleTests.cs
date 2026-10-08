@@ -144,8 +144,8 @@ public sealed class BrowserLifecycleTests
     public async Task In_flight_browser_navigation_is_not_replayed()
     {
         Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.BrowserNavigate));
-        Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.BrowserObserve));
-        Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.BrowserAct));
+        Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.BrowserSnapshot));
+        Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.BrowserClick));
 
         var browser = new HoldingBrowser();
         var now = DateTimeOffset.Parse("2026-10-01T00:00:00Z");
@@ -229,7 +229,7 @@ public sealed class BrowserLifecycleTests
 
     private static SessionRuntime Runtime(
         HoldingBrowser browser,
-        IBrowserSessionLease lease,
+        IBrowserLease lease,
         ILanguageModel model,
         CapturingSessionOutput? output = null,
         InMemoryMemoryStore? store = null,
@@ -290,8 +290,8 @@ public sealed class BrowserLifecycleTests
             new RoleEnvironment(ToolAllowlist:
             [
                 ToolCatalog.BrowserNavigate,
-                ToolCatalog.BrowserObserve,
-                ToolCatalog.BrowserAct
+                ToolCatalog.BrowserSnapshot,
+                ToolCatalog.BrowserClick
             ]));
 
     private static DeterministicIdGenerator Ids(string eventPrefix, string sessionPrefix) =>
@@ -312,7 +312,7 @@ public sealed class BrowserLifecycleTests
                     : null);
     }
 
-    private sealed class CountingLease : IBrowserSessionLease
+    private sealed class CountingLease : IBrowserLease
     {
         public List<Guid> Sessions { get; } = [];
 
@@ -323,8 +323,9 @@ public sealed class BrowserLifecycleTests
         }
     }
 
-    private sealed class HoldingBrowser : IBrowserSession
+    private sealed class HoldingBrowser : IBrowser
     {
+        public BrowserProviderDescriptor Provider { get; } = new("fixture", "Test browser", new HashSet<BrowserFeature> { BrowserFeature.Navigate, BrowserFeature.Snapshot, BrowserFeature.Click, BrowserFeature.Type, BrowserFeature.Hover, BrowserFeature.Drag, BrowserFeature.FillForm, BrowserFeature.SelectOption, BrowserFeature.PressKey, BrowserFeature.Upload, BrowserFeature.FillCredential, BrowserFeature.Wait, BrowserFeature.Tabs, BrowserFeature.Screenshot, BrowserFeature.Close });
         public bool IsAvailable { get; set; } = true;
 
         public BrowserHostPolicy HostPolicy { get; set; } = new(
@@ -367,13 +368,13 @@ public sealed class BrowserLifecycleTests
 
             return new BrowserOperationResult(
                 null,
-                new BrowserObservation(request.Url!.AbsoluteUri, LateTitle, "Search", false, []));
+                new BrowserSnapshot(request.Url!.AbsoluteUri, LateTitle, "Search", false, []));
         }
 
-        public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             new(new BrowserOperationResult("provider_unavailable", null));
 
-        public ValueTask<BrowserOperationResult> ActAsync(BrowserActRequest request, CancellationToken cancellationToken = default) =>
+        public ValueTask<BrowserOperationResult> InteractAsync(BrowserInteractionRequest request, CancellationToken cancellationToken = default) =>
             new(new BrowserOperationResult("provider_unavailable", null));
     }
 

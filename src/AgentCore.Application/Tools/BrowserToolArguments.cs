@@ -103,7 +103,7 @@ public static class BrowserToolArguments
         return true;
     }
 
-    public static bool TryObserve(JsonElement args, out BrowserObserveOptions? options, out string errorJson)
+    public static bool TrySnapshot(JsonElement args, out BrowserWaitOptions? options, out string errorJson)
     {
         options = null;
         if (!TryRejectProperties(args, out errorJson))
@@ -157,7 +157,7 @@ public static class BrowserToolArguments
         {
             if (!TryString(args, "role", out var parsedRole)
                 || parsedRole.Length > BrowserToolLimits.MaxRoleLength
-                || !BrowserToolLimits.ObserveRoles.Contains(parsedRole, StringComparer.Ordinal))
+                || !Regex.IsMatch(parsedRole, "^[a-z]+$", RegexOptions.CultureInvariant))
             {
                 errorJson = Error("invalid", "role is required for this wait.", "missing_role");
                 return false;
@@ -184,7 +184,7 @@ public static class BrowserToolArguments
 
         if (waitFor is not null)
         {
-            options = new BrowserObserveOptions(waitFor, timeout, role, name);
+            options = new BrowserWaitOptions(waitFor, timeout, role, name);
         }
 
         return true;
@@ -238,15 +238,15 @@ public static class BrowserToolArguments
         return TryRejectProperties(args, out errorJson);
     }
 
-    public static bool TryAct(
+    public static bool TryInteraction(
         JsonElement args,
         out string operation,
         out string reference,
         out string? value,
         out string errorJson) =>
-        TryAct(args, out operation, out reference, out value, out _, out _, out _, out errorJson);
+        TryInteraction(args, out operation, out reference, out value, out _, out _, out _, out errorJson);
 
-    public static bool TryAct(
+    public static bool TryInteraction(
         JsonElement args,
         out string operation,
         out string reference,
@@ -346,12 +346,14 @@ public static class BrowserToolArguments
         }
         else if (operation is "fill" or "select")
         {
-            if (!TryString(args, "value", out var text))
+            if (!args.TryGetProperty("value", out var rawValue) || rawValue.ValueKind != JsonValueKind.String
+                || operation == "select" && rawValue.GetString()!.Length == 0)
             {
                 errorJson = Error("invalid", "value is required.", "missing_value");
                 return false;
             }
 
+            var text = rawValue.GetString()!;
             var max = operation == "fill" ? BrowserToolLimits.MaxFillLength : BrowserToolLimits.MaxSelectLength;
             if (text.Length > max)
             {
@@ -369,7 +371,7 @@ public static class BrowserToolArguments
                 return false;
             }
 
-            if (!BrowserToolLimits.PressKeys.Contains(key, StringComparer.Ordinal))
+            if (key.Length > 80 || !Regex.IsMatch(key, "^[A-Za-z0-9+_-]+$", RegexOptions.CultureInvariant))
             {
                 errorJson = Error("unsupported_operation", "Browser key is not supported.", "unsupported_key");
                 return false;
@@ -411,44 +413,6 @@ public static class BrowserToolArguments
             targetRef = parsedTarget;
         }
 
-        return true;
-    }
-
-    public static bool TryPages(JsonElement args, out string operation, out string? pageId, out string errorJson)
-    {
-        operation = string.Empty;
-        pageId = null;
-        if (!TryRejectProperties(args, out errorJson))
-        {
-            return false;
-        }
-
-        if (!TryString(args, "operation", out operation)
-            || !BrowserToolLimits.PageOperations.Contains(operation, StringComparer.Ordinal))
-        {
-            errorJson = Error("unsupported_operation", "Browser page operation is not supported.", "unsupported_operation");
-            return false;
-        }
-
-        var needsId = operation is "switch" or "close";
-        if (!HasOnly(args, needsId ? ["operation", "pageId"] : ["operation"], out errorJson))
-        {
-            return false;
-        }
-
-        if (!needsId)
-        {
-            return true;
-        }
-
-        if (!TryString(args, "pageId", out var parsed)
-            || !PageRef.IsMatch(parsed))
-        {
-            errorJson = Error("invalid", "pageId must be an opaque page reference.", "invalid_page");
-            return false;
-        }
-
-        pageId = parsed;
         return true;
     }
 

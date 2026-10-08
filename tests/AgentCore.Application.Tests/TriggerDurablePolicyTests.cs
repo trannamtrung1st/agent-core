@@ -339,7 +339,7 @@ public sealed class TriggerDurablePolicyTests
     private static IAgentDefinitionStore Definitions()
     {
         var builtIns = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
-        var current = builtIns.GetAsync("general-assistant", 16).GetAwaiter().GetResult()!;
+        var current = builtIns.GetAsync("general-assistant", 17).GetAwaiter().GetResult()!;
         return new PolicyDefinitions(current);
     }
 

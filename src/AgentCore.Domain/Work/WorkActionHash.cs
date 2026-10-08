@@ -14,7 +14,7 @@ public static class WorkActionHash
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
-    public static bool MatchesBrowserAct(string? payloadJson, string? actionHash)
+    public static bool MatchesBrowserInteraction(string? payloadJson, string? actionHash)
     {
         if (string.IsNullOrWhiteSpace(payloadJson) || string.IsNullOrWhiteSpace(actionHash))
         {
@@ -40,7 +40,7 @@ public static class WorkActionHash
                 foreach (var call in calls.EnumerateArray())
                 {
                     if (!call.TryGetProperty("Name", out var name)
-                        || !string.Equals(name.GetString(), "browser.act", StringComparison.Ordinal))
+                        || name.GetString() is not { } toolName || !toolName.StartsWith("browser.", StringComparison.Ordinal))
                     {
                         continue;
                     }
@@ -48,7 +48,7 @@ public static class WorkActionHash
                     var arguments = call.TryGetProperty("ArgumentsJson", out var raw) ? raw.GetString() : null;
                     var parsed = JsonSerializer.Deserialize<JsonElement>(
                         string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments);
-                    if (string.Equals(Compute("browser.act", parsed), actionHash, StringComparison.Ordinal))
+                    if (string.Equals(Compute(name.GetString()!, parsed), actionHash, StringComparison.Ordinal))
                     {
                         return true;
                     }

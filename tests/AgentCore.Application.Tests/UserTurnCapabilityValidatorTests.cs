@@ -1,12 +1,10 @@
+using SkiaSharp;
 using AgentCore.Application.Models;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
 using AgentCore.Infrastructure.Attachments;
 using AgentCore.Infrastructure.Persistence;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Png;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace AgentCore.Application.Tests;
 
@@ -107,9 +105,10 @@ public sealed class UserTurnCapabilityValidatorTests
 
     private static byte[] PngBytes()
     {
-        using var image = new Image<Rgba32>(2, 2);
+        using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        image.Save(buffer, new PngEncoder());
+        using var encoded = SKImage.FromBitmap(image).Encode(SKEncodedImageFormat.Png, 90);
+        encoded.SaveTo(buffer);
         return buffer.ToArray();
     }
 }

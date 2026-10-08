@@ -309,7 +309,7 @@ public static class DurableToolCallCheckpoint
                 message.ToolCallId,
                 message.Name,
                 message.ToolCalls?.Select(ToolCallDto.From).ToArray());
-        // Parts stay out of the checkpoint. A browser.capture result keeps its artifact id in text and is reloaded from IWorkCaptureStore.
+        // Parts stay out of the checkpoint. A browser.screenshot result keeps its artifact id in text and is reloaded from IWorkCaptureStore.
 
         public ModelMessage ToMessage() =>
             new(

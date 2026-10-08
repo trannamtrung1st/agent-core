@@ -303,6 +303,26 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
                 return;
             }
 
+            if (path is "/browser-v2.html" or "/browser-v2-frame.html")
+            {
+                await WriteResourceAsync(context, "AgentCore.Infrastructure.Browser.Fixture." + path[1..], 200).ConfigureAwait(false);
+                return;
+            }
+            if (path == "/browser-v2-data")
+            {
+                var bytes = Encoding.UTF8.GetBytes("Async fixture loaded");
+                context.Response.ContentType = "text/plain";
+                await context.Response.OutputStream.WriteAsync(bytes).ConfigureAwait(false);
+                return;
+            }
+            if (path == "/browser-v2-download")
+            {
+                context.Response.ContentType = "text/plain";
+                context.Response.AddHeader("Content-Disposition", "attachment; filename=browser-note.txt");
+                await context.Response.OutputStream.WriteAsync(Encoding.UTF8.GetBytes("Generic browser fixture note.")).ConfigureAwait(false);
+                return;
+            }
+
             if (string.Equals(path, "/controls", StringComparison.Ordinal))
             {
                 await WriteResourceAsync(context, ControlsResource, 200).ConfigureAwait(false);

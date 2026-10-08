@@ -29,7 +29,7 @@ public sealed partial class SessionToolExecutor(
     IAgentInstanceStore? agentInstances = null,
     IAgentDefinitionStore? agentDefinitions = null,
     IMemoryStore? profiles = null,
-    IBrowserSession? browser = null,
+    IBrowser? browser = null,
     IAgentDefinitionResourceAdminStore? definitionResources = null,
     IWorkCaptureStore? workCaptures = null,
     Func<HarnessManagementService>? harnessAuthoring = null,
@@ -430,26 +430,8 @@ public sealed partial class SessionToolExecutor(
                 ToolCatalog.HttpRequest => FitResult(
                     remainingOutputBytes,
                     await ExecuteHttpRequestAsync(args, approvalGrant, cancellationToken).ConfigureAwait(false)),
-                ToolCatalog.BrowserNavigate => FitResult(
-                    remainingOutputBytes,
-                    await NavigateBrowserAsync(sessionId, args, admission, cancellationToken).ConfigureAwait(false)),
-                ToolCatalog.BrowserObserve => FitResult(
-                    remainingOutputBytes,
-                    await ObserveBrowserAsync(sessionId, args, admission, cancellationToken).ConfigureAwait(false)),
-                ToolCatalog.BrowserAct => FitResult(
-                    remainingOutputBytes,
-                    await ActBrowserAsync(definition, sessionId, args, admission, cancellationToken).ConfigureAwait(false)),
-                ToolCatalog.BrowserClose => FitResult(
-                    remainingOutputBytes,
-                    await CloseBrowserAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
-                ToolCatalog.BrowserPages => FitResult(
-                    remainingOutputBytes,
-                    await PagesBrowserAsync(sessionId, args, admission, cancellationToken).ConfigureAwait(false)),
-                ToolCatalog.BrowserCapture => await CaptureBrowserAsync(
-                    sessionId,
-                    args,
-                    admission,
-                    cancellationToken).ConfigureAwait(false),
+                _ when ToolCatalog.IsBrowserTool(call.Name) => await ExecuteBrowserV2Async(
+                    definition, sessionId, call.Name, args, admission, remainingOutputBytes, cancellationToken).ConfigureAwait(false),
                 ToolCatalog.DemoSensitiveAction => TextResult(
                     ExecuteDemoSensitiveAction(sessionId, args, approvalGrant)),
                 ToolCatalog.EmailSearch => FitResult(

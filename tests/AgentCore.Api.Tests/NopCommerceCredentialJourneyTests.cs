@@ -67,7 +67,7 @@ public sealed class NopCommerceCredentialJourneyTests(ITestOutputHelper output)
             Assert.True(await runtime.SubmitUserTextAsync(prompt));
             await runtime.WaitUntilIdleAsync(new CancellationTokenSource(TimeSpan.FromMinutes(4)).Token);
             Assert.Contains(runtime.Snapshot.Entries, e => e.Role == ConversationRole.Assistant && !string.IsNullOrWhiteSpace(e.Text));
-            var observed = await services.GetRequiredService<IBrowserSession>().ObserveAsync(snapshot.SessionId);
+            var observed = await services.GetRequiredService<IBrowser>().SnapshotAsync(snapshot.SessionId);
             Assert.Null(observed.ErrorCode);
             Assert.Contains("/Admin", observed.Observation!.Url, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("/login", observed.Observation.Url, StringComparison.OrdinalIgnoreCase);
@@ -83,8 +83,8 @@ public sealed class NopCommerceCredentialJourneyTests(ITestOutputHelper output)
                 _ = TestOwnerCapability.CreateOwnerClient(host);
                 var services = host.Services;
                 var instances = services.GetRequiredService<AdminAgentInstanceService>();
-                owner = (await instances.CreateManagedAsync("secretary", 4)).InstanceId;
-                other = (await instances.CreateManagedAsync("secretary", 4)).InstanceId;
+                owner = (await instances.CreateManagedAsync("secretary", 5)).InstanceId;
+                other = (await instances.CreateManagedAsync("secretary", 5)).InstanceId;
                 var credentials = services.GetRequiredService<CredentialService>();
                 var credential = await credentials.CreateAsync("nopCommerce proof", "Password", new Dictionary<string,string> { ["username"] = username, ["application"] = "nopCommerce" }, [origin], password);
                 credentialId = credential.CredentialId;
@@ -113,16 +113,16 @@ public sealed class NopCommerceCredentialJourneyTests(ITestOutputHelper output)
                 Assert.True(await credentials.ResolvePasswordAsync(owner, "store-admin", origin) == password);
                 Assert.True(await credentials.ResolvePasswordAsync(other, "ecommerce-admin", origin) == password);
                 await Chat(services, other, $"Sign in to the nopCommerce store at {origin}/Admin. Read credentials.list and use your own bound alias ecommerce-admin (the store-admin alias is another owner's grant). Fill the existing account username from safe metadata and password with fill_credential. Read the dashboard and stop; do not change store data.");
-                var browser = services.GetRequiredService<IBrowserSession>();
+                var browser = services.GetRequiredService<IBrowser>();
                 var tools = services.GetRequiredService<SessionToolExecutor>();
-                var definition = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("secretary", 4))!;
+                var definition = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("secretary", 5))!;
                 var detached = new ToolExecutionAdmission(true, TriggerKind.ApplicationEvent, AgentInstanceId: owner);
                 var detachedSession = Guid.NewGuid();
                 var args = JsonSerializer.Serialize(new { url = origin + "/Admin/Product/List" });
                 var review = await tools.ExecuteAsync(definition, detachedSession, new("review", ToolCatalog.BrowserNavigate, args), ToolLimits.MaxOutputBytes, admission: detached);
                 Assert.DoesNotContain("user_intervention_required", review.Text);
                 Assert.Contains("/Admin/Product/List", review.Text);
-                await services.GetRequiredService<IBrowserSessionLease>().ReleaseAsync(detachedSession);
+                await services.GetRequiredService<IBrowserLease>().ReleaseAsync(detachedSession);
                 await browser.ResetPersistentProfileAsync(owner);
                 var wall = await tools.ExecuteAsync(definition, Guid.NewGuid(), new("expired-login", ToolCatalog.BrowserNavigate, args), ToolLimits.MaxOutputBytes, admission: detached);
                 Assert.Contains("user_intervention_required", wall.Text);
@@ -137,7 +137,7 @@ public sealed class NopCommerceCredentialJourneyTests(ITestOutputHelper output)
         }
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
-    private static bool IsCredentialFill(ModelToolCall call) => call.Name == ToolCatalog.BrowserAct && call.ArgumentsJson.Contains("fill_credential", StringComparison.Ordinal);
+    private static bool IsCredentialFill(ModelToolCall call) => call.Name == ToolCatalog.BrowserClick && call.ArgumentsJson.Contains("fill_credential", StringComparison.Ordinal);
     private sealed class Resolver(ILanguageModel model) : ILanguageModelResolver
     { public ILanguageModel Resolve(SessionModelSelection selection, ModelPurpose purpose) => model; }
     private sealed class ObservedModel(ILanguageModel inner) : ILanguageModel

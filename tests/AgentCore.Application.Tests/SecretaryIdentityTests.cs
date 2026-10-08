@@ -84,9 +84,9 @@ public sealed class SecretaryIdentityTests
     public async Task Retired_general_definitions_are_absent_from_the_runtime_catalog()
     {
         var current = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
-        for (var version = 1; version <= 15; version++)
+        for (var version = 1; version <= 16; version++)
             Assert.Null(await current.GetAsync("general-assistant", version));
-        Assert.Equal(16, (await current.GetAsync("general-assistant"))!.Version);
+        Assert.Equal(17, (await current.GetAsync("general-assistant"))!.Version);
     }
 
     [Fact]
@@ -141,8 +141,8 @@ public sealed class SecretaryIdentityTests
             .Select(tool => tool.Name)
             .ToArray();
         Assert.DoesNotContain(ToolCatalog.BrowserNavigate, offered);
-        Assert.DoesNotContain(ToolCatalog.BrowserObserve, offered);
-        Assert.DoesNotContain(ToolCatalog.BrowserAct, offered);
+        Assert.DoesNotContain(ToolCatalog.BrowserSnapshot, offered);
+        Assert.DoesNotContain(ToolCatalog.BrowserClick, offered);
         Assert.DoesNotContain(ToolCatalog.BrowserClose, offered);
         Assert.Equal(
             ToolPolicyDecision.Deny,

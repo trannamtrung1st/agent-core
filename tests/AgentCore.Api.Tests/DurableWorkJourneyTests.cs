@@ -418,7 +418,7 @@ public sealed class DurableWorkJourneyTests
                 createdAt,
                 "{}",
                 "general-assistant",
-                16,
+                17,
                 "Riley"),
             new WorkModelPin("scripted-alpha", "primary-llm", "scripted-alpha", "medium"),
             WorkLimits.DefaultMaxAttempts,

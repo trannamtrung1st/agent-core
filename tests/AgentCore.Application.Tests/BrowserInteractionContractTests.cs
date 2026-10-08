@@ -3,32 +3,24 @@ using AgentCore.Application.Tools;
 
 namespace AgentCore.Application.Tests;
 
-public sealed class BrowserActContractTests
+public sealed class BrowserInteractionContractTests
 {
     private const string Ref = "el_0123456789abcdefghijkl";
 
     [Fact]
     public void Advertised_schema_matches_operation_specific_required_fields()
     {
-        using var schema = JsonDocument.Parse(ToolRegistry.Get(ToolCatalog.BrowserAct).ModelDefinition.ParametersJson);
-        var root = schema.RootElement;
-        Assert.Equal("object", root.GetProperty("type").GetString());
-        Assert.False(root.TryGetProperty("required", out _));
-        var branches = root.GetProperty("oneOf");
-        Assert.Equal(12, branches.GetArrayLength());
-
-        AssertBranch(branches, "click", ["operation", "ref"]);
-        AssertBranch(branches, "check", ["operation", "ref"]);
-        AssertBranch(branches, "uncheck", ["operation", "ref"]);
-        AssertBranch(branches, "fill", ["operation", "ref", "value"], valueMaxLength: 500);
-        AssertBranch(branches, "fill_credential", ["operation", "ref", "credentialRef"]);
-        AssertBranch(branches, "select", ["operation", "ref", "value"], valueMaxLength: 200);
-        AssertBranch(branches, "press", ["operation", "ref", "key"]);
-        AssertBranch(branches, "upload", ["operation", "ref", "artifactId"]);
-        AssertBranch(branches, "doubleClick", ["operation", "ref"]);
-        AssertBranch(branches, "hover", ["operation", "ref"]);
-        AssertBranch(branches, "scroll", ["operation", "direction"]);
-        AssertBranch(branches, "drag", ["operation", "ref", "targetRef"]);
+        foreach (var name in new[] { "browser.click", "browser.hover", "browser.drag", "browser.type", "browser.fill_form", "browser.select_option", "browser.press_key", "browser.upload", "browser.fill_credential" })
+        {
+            using var schema = JsonDocument.Parse(ToolRegistry.Get(name).ModelDefinition.ParametersJson);
+            var root = schema.RootElement;
+            Assert.Equal("object", root.GetProperty("type").GetString());
+            Assert.False(root.GetProperty("additionalProperties").GetBoolean());
+            Assert.True(root.TryGetProperty("required", out _));
+            Assert.False(root.TryGetProperty("oneOf", out _));
+            Assert.False(root.GetProperty("properties").TryGetProperty("selector", out _));
+            Assert.False(root.GetProperty("properties").TryGetProperty("path", out _));
+        }
     }
 
     [Fact]
@@ -93,7 +85,7 @@ public sealed class BrowserActContractTests
     private static void AssertAccepted(string operation, string json)
     {
         using var document = JsonDocument.Parse(json);
-        Assert.True(BrowserToolArguments.TryAct(document.RootElement, out var actual, out _, out _, out var error), error);
+        Assert.True(BrowserToolArguments.TryInteraction(document.RootElement, out var actual, out _, out _, out var error), error);
         Assert.Equal(operation, actual);
         Assert.DoesNotContain("reason", error, StringComparison.Ordinal);
     }
@@ -101,7 +93,7 @@ public sealed class BrowserActContractTests
     private static void AssertRejected(string json, string reason, string? absent = null)
     {
         using var document = JsonDocument.Parse(json);
-        Assert.False(BrowserToolArguments.TryAct(document.RootElement, out _, out _, out _, out var error));
+        Assert.False(BrowserToolArguments.TryInteraction(document.RootElement, out _, out _, out _, out var error));
         using var payload = JsonDocument.Parse(error);
         Assert.Equal(reason, payload.RootElement.GetProperty("reason").GetString());
         if (absent is not null)

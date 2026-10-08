@@ -23,14 +23,14 @@ public sealed class BrowserOriginHandoffTests
             Navigate("a-2", "https://a.test/again"),
             Navigate("b-1", "https://b.test/specs"),
             [
-                new ModelToolCallEvent(new ModelToolCall("see-b", ToolCatalog.BrowserObserve, "{}")),
+                new ModelToolCallEvent(new ModelToolCall("see-b", ToolCatalog.BrowserSnapshot, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             [
                 new ModelToolCallEvent(new ModelToolCall(
                     "act-b",
-                    ToolCatalog.BrowserAct,
-                    """{"operation":"click","ref":"el_bbbbbbbbbbbbbbbbbbbbbb"}""")),
+                    ToolCatalog.BrowserClick,
+                    """{"ref":"el_bbbbbbbbbbbbbbbbbbbbbb"}""")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             Answer("Compared the open site."));
@@ -56,7 +56,7 @@ public sealed class BrowserOriginHandoffTests
             Navigate("a-1", "https://a.test/"),
             Navigate("a-2", "https://a.test/again"),
             [
-                new ModelToolCallEvent(new ModelToolCall("see-a", ToolCatalog.BrowserObserve, "{}")),
+                new ModelToolCallEvent(new ModelToolCall("see-a", ToolCatalog.BrowserSnapshot, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             Answer("Cars.com needs you."));
@@ -79,7 +79,7 @@ public sealed class BrowserOriginHandoffTests
             Navigate("a-1", "https://a.test/"),
             Answer("Please finish the check."),
             [
-                new ModelToolCallEvent(new ModelToolCall("see-again", ToolCatalog.BrowserObserve, "{}")),
+                new ModelToolCallEvent(new ModelToolCall("see-again", ToolCatalog.BrowserSnapshot, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             Answer("The check is still there."));
@@ -156,7 +156,7 @@ public sealed class BrowserOriginHandoffTests
         var model = new SequencedModel(
             Navigate("a-1", "https://a.test/"),
             [
-                new ModelToolCallEvent(new ModelToolCall("see-a", ToolCatalog.BrowserObserve, "{}")),
+                new ModelToolCallEvent(new ModelToolCall("see-a", ToolCatalog.BrowserSnapshot, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             [
@@ -166,7 +166,7 @@ public sealed class BrowserOriginHandoffTests
             Navigate("a-2", "https://a.test/again"),
             Navigate("b-1", "https://b.test/specs"),
             [
-                new ModelToolCallEvent(new ModelToolCall("see-b", ToolCatalog.BrowserObserve, "{}")),
+                new ModelToolCallEvent(new ModelToolCall("see-b", ToolCatalog.BrowserSnapshot, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             Answer("Specs are open."));
@@ -176,13 +176,13 @@ public sealed class BrowserOriginHandoffTests
         Assert.True(await runtime.SubmitUserTextAsync("close the challenged page and continue"));
         await runtime.WaitUntilIdleAsync();
 
-        Assert.Contains(model.Requests[3].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserObserve);
-        Assert.Contains(model.Requests[3].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserAct);
+        Assert.Contains(model.Requests[3].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserSnapshot);
+        Assert.Contains(model.Requests[3].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserClick);
         Assert.DoesNotContain(
             model.Requests[3].Messages,
             message => message.Text.Contains("requires human intervention", StringComparison.Ordinal));
         Assert.Equal(["https://a.test/", "https://b.test/specs"], browser.Navigated);
-        Assert.Contains(model.Requests[4].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserObserve);
+        Assert.Contains(model.Requests[4].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserSnapshot);
         Assert.Contains(model.Requests[4].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserNavigate);
         Assert.DoesNotContain(
             model.Requests[4].Messages,
@@ -190,7 +190,7 @@ public sealed class BrowserOriginHandoffTests
         Assert.DoesNotContain(
             model.Requests[4].Messages,
             message => message.Text.Contains("Do not request more browser actions", StringComparison.Ordinal));
-        Assert.Contains(model.Requests[5].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserObserve);
+        Assert.Contains(model.Requests[5].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserSnapshot);
         Assert.Equal(1, browser.CloseCalls);
         Assert.Equal(1, browser.ObserveCalls);
         Assert.Equal(
@@ -207,7 +207,7 @@ public sealed class BrowserOriginHandoffTests
             Navigate("b-1", "https://b.test/specs"),
             Navigate("a-2", "https://a.test/again"),
             [
-                new ModelToolCallEvent(new ModelToolCall("see-b", ToolCatalog.BrowserObserve, "{}")),
+                new ModelToolCallEvent(new ModelToolCall("see-b", ToolCatalog.BrowserSnapshot, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             Answer("Specs stayed open."));
@@ -218,8 +218,8 @@ public sealed class BrowserOriginHandoffTests
         await runtime.WaitUntilIdleAsync();
 
         Assert.Equal(["https://a.test/", "https://b.test/specs"], browser.Navigated);
-        Assert.Contains(model.Requests[3].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserObserve);
-        Assert.Contains(model.Requests[3].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserAct);
+        Assert.Contains(model.Requests[3].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserSnapshot);
+        Assert.Contains(model.Requests[3].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserClick);
         Assert.DoesNotContain(
             model.Requests[3].Messages,
             message => message.Text.Contains("requires human intervention", StringComparison.Ordinal));
@@ -238,7 +238,7 @@ public sealed class BrowserOriginHandoffTests
             Navigate("b-1", "https://b.test/specs"),
             Navigate("a-2", "https://a.test/again"),
             [
-                new ModelToolCallEvent(new ModelToolCall("see-b", ToolCatalog.BrowserObserve, "{}")),
+                new ModelToolCallEvent(new ModelToolCall("see-b", ToolCatalog.BrowserSnapshot, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             Navigate("a-3", "https://a.test/later"),
@@ -251,8 +251,8 @@ public sealed class BrowserOriginHandoffTests
 
         Assert.Equal(["https://a.test/", "https://b.test/specs"], browser.Navigated);
         Assert.Equal(1, browser.ObserveCalls);
-        Assert.Contains(model.Requests[5].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserObserve);
-        Assert.Contains(model.Requests[5].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserAct);
+        Assert.Contains(model.Requests[5].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserSnapshot);
+        Assert.Contains(model.Requests[5].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserClick);
         Assert.DoesNotContain(
             model.Requests[5].Messages,
             message => message.Text.Contains("Do not request more browser actions", StringComparison.Ordinal));
@@ -269,7 +269,7 @@ public sealed class BrowserOriginHandoffTests
             Navigate("a-1", "https://a.test/"),
             Navigate("b-1", "https://b.test/specs"),
             [
-                new ModelToolCallEvent(new ModelToolCall("see-b", ToolCatalog.BrowserObserve, "{}")),
+                new ModelToolCallEvent(new ModelToolCall("see-b", ToolCatalog.BrowserSnapshot, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             Answer("Specs are open."));
@@ -279,12 +279,12 @@ public sealed class BrowserOriginHandoffTests
         Assert.True(await runtime.SubmitUserTextAsync("open another site"));
         await runtime.WaitUntilIdleAsync();
 
-        Assert.DoesNotContain(model.Requests[1].Tools ?? [], tool => tool.Name is ToolCatalog.BrowserObserve or ToolCatalog.BrowserAct);
+        Assert.DoesNotContain(model.Requests[1].Tools ?? [], tool => tool.Name is ToolCatalog.BrowserSnapshot or ToolCatalog.BrowserClick);
         Assert.Contains(model.Requests[1].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserNavigate);
         Assert.Contains(model.Requests[1].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserClose);
         Assert.Contains(model.Requests[1].Messages, message => message.Role == ModelRole.System && message.Text.Contains("requires human intervention", StringComparison.Ordinal));
-        Assert.Contains(model.Requests[2].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserObserve);
-        Assert.Contains(model.Requests[2].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserAct);
+        Assert.Contains(model.Requests[2].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserSnapshot);
+        Assert.Contains(model.Requests[2].Tools ?? [], tool => tool.Name == ToolCatalog.BrowserClick);
         Assert.Equal(1, browser.ObserveCalls);
         Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Text.Contains("requires human intervention", StringComparison.Ordinal));
     }
@@ -296,11 +296,11 @@ public sealed class BrowserOriginHandoffTests
         var model = new SequencedModel(
             Navigate("a-1", "https://a.test/"),
             [
-                new ModelToolCallEvent(new ModelToolCall("see-a", ToolCatalog.BrowserObserve, "{}")),
+                new ModelToolCallEvent(new ModelToolCall("see-a", ToolCatalog.BrowserSnapshot, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             [
-                new ModelToolCallEvent(new ModelToolCall("see-a-2", ToolCatalog.BrowserObserve, "{}")),
+                new ModelToolCallEvent(new ModelToolCall("see-a-2", ToolCatalog.BrowserSnapshot, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             Answer("Cars.com needs you before I can continue."));
@@ -327,15 +327,15 @@ public sealed class BrowserOriginHandoffTests
         var model = new SequencedModel(
             Navigate("a-1", "https://a.test/"),
             [
-                new ModelToolCallEvent(new ModelToolCall("see-a", ToolCatalog.BrowserObserve, "{}")),
+                new ModelToolCallEvent(new ModelToolCall("see-a", ToolCatalog.BrowserSnapshot, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             [
-                new ModelToolCallEvent(new ModelToolCall("see-a-2", ToolCatalog.BrowserObserve, "{}")),
+                new ModelToolCallEvent(new ModelToolCall("see-a-2", ToolCatalog.BrowserSnapshot, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             [
-                new ModelToolCallEvent(new ModelToolCall("see-a-3", ToolCatalog.BrowserObserve, "{}")),
+                new ModelToolCallEvent(new ModelToolCall("see-a-3", ToolCatalog.BrowserSnapshot, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ]);
         await using var runtime = Create(model, browser);
@@ -359,15 +359,15 @@ public sealed class BrowserOriginHandoffTests
         var model = new SequencedModel(
             Navigate("open", "https://store.test/orders"),
             [
-                new ModelToolCallEvent(new ModelToolCall("see-1", ToolCatalog.BrowserObserve, """{"waitFor":"stable"}""")),
+                new ModelToolCallEvent(new ModelToolCall("see-1", ToolCatalog.BrowserWait, """{"condition":"stable"}""")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             [
-                new ModelToolCallEvent(new ModelToolCall("see-2", ToolCatalog.BrowserObserve, "{}")),
+                new ModelToolCallEvent(new ModelToolCall("see-2", ToolCatalog.BrowserSnapshot, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             [
-                new ModelToolCallEvent(new ModelToolCall("see-3", ToolCatalog.BrowserObserve, "{}")),
+                new ModelToolCallEvent(new ModelToolCall("see-3", ToolCatalog.BrowserSnapshot, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             Answer("Orders are listed. Low stock and products are unknown."));
@@ -410,7 +410,7 @@ public sealed class BrowserOriginHandoffTests
         new ModelCompleted(ModelStopReason.Completed)
     ];
 
-    private static SessionRuntime Create(ILanguageModel model, IBrowserSession browser)
+    private static SessionRuntime Create(ILanguageModel model, IBrowser browser)
     {
         var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-02T12:00:00Z"));
         var ids = new DeterministicIdGenerator(
@@ -433,8 +433,9 @@ public sealed class BrowserOriginHandoffTests
             new RoleEnvironment(ToolAllowlist:
             [
                 ToolCatalog.BrowserNavigate,
-                ToolCatalog.BrowserObserve,
-                ToolCatalog.BrowserAct,
+                ToolCatalog.BrowserSnapshot,
+                ToolCatalog.BrowserWait,
+                ToolCatalog.BrowserClick,
                 ToolCatalog.BrowserClose
             ]));
         var snapshot = new SessionSnapshot(
@@ -497,8 +498,9 @@ public sealed class BrowserOriginHandoffTests
         }
     }
 
-    private sealed class StablePageBrowser : IBrowserSession
+    private sealed class StablePageBrowser : IBrowser
     {
+        public BrowserProviderDescriptor Provider { get; } = new("fixture", "Test browser", new HashSet<BrowserFeature> { BrowserFeature.Navigate, BrowserFeature.Snapshot, BrowserFeature.Click, BrowserFeature.Type, BrowserFeature.Hover, BrowserFeature.Drag, BrowserFeature.FillForm, BrowserFeature.SelectOption, BrowserFeature.PressKey, BrowserFeature.Upload, BrowserFeature.FillCredential, BrowserFeature.Wait, BrowserFeature.Tabs, BrowserFeature.Screenshot, BrowserFeature.Close });
         public int ObserveCalls { get; private set; }
 
         public bool IsAvailable => true;
@@ -517,13 +519,13 @@ public sealed class BrowserOriginHandoffTests
             CancellationToken cancellationToken = default) =>
             new(Page($"el_nav_{request.Url!.AbsoluteUri.Length}"));
 
-        public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             ObserveCalls++;
             return new(Page($"el_obs_{ObserveCalls}"));
         }
 
-        public ValueTask<BrowserOperationResult> ActAsync(BrowserActRequest request, CancellationToken cancellationToken = default) =>
+        public ValueTask<BrowserOperationResult> InteractAsync(BrowserInteractionRequest request, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
         public ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
@@ -532,7 +534,7 @@ public sealed class BrowserOriginHandoffTests
         private static BrowserOperationResult Page(string reference) =>
             new(
                 null,
-                new BrowserObservation(
+                new BrowserSnapshot(
                     "https://store.test/orders",
                     "Orders",
                     "Orders grid",
@@ -541,8 +543,9 @@ public sealed class BrowserOriginHandoffTests
                     Settled: true));
     }
 
-    private sealed class TwoSiteBrowser(string closeStatus = "closed") : IBrowserSession
+    private sealed class TwoSiteBrowser(string closeStatus = "closed") : IBrowser
     {
+        public BrowserProviderDescriptor Provider { get; } = new("fixture", "Test browser", new HashSet<BrowserFeature> { BrowserFeature.Navigate, BrowserFeature.Snapshot, BrowserFeature.Click, BrowserFeature.Type, BrowserFeature.Hover, BrowserFeature.Drag, BrowserFeature.FillForm, BrowserFeature.SelectOption, BrowserFeature.PressKey, BrowserFeature.Upload, BrowserFeature.FillCredential, BrowserFeature.Wait, BrowserFeature.Tabs, BrowserFeature.Screenshot, BrowserFeature.Close });
         public List<string> Navigated { get; } = [];
 
         public int ObserveCalls { get; private set; }
@@ -570,14 +573,14 @@ public sealed class BrowserOriginHandoffTests
             return new(Page(request.Url));
         }
 
-        public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             ObserveCalls++;
             return new(Page(new Uri(Navigated[^1])));
         }
 
-        public ValueTask<BrowserOperationResult> ActAsync(
-            BrowserActRequest request,
+        public ValueTask<BrowserOperationResult> InteractAsync(
+            BrowserInteractionRequest request,
             CancellationToken cancellationToken = default)
         {
             ActCalls++;
@@ -595,7 +598,7 @@ public sealed class BrowserOriginHandoffTests
             var challenged = string.Equals(url.Host, "a.test", StringComparison.OrdinalIgnoreCase);
             return new BrowserOperationResult(
                 null,
-                new BrowserObservation(
+                new BrowserSnapshot(
                     url.AbsoluteUri,
                     challenged ? "Verify" : "Specs",
                     challenged ? "Human verification required" : "Listed price",
@@ -605,8 +608,9 @@ public sealed class BrowserOriginHandoffTests
         }
     }
 
-    private sealed class RedirectingBrowser : IBrowserSession
+    private sealed class RedirectingBrowser : IBrowser
     {
+        public BrowserProviderDescriptor Provider { get; } = new("fixture", "Test browser", new HashSet<BrowserFeature> { BrowserFeature.Navigate, BrowserFeature.Snapshot, BrowserFeature.Click, BrowserFeature.Type, BrowserFeature.Hover, BrowserFeature.Drag, BrowserFeature.FillForm, BrowserFeature.SelectOption, BrowserFeature.PressKey, BrowserFeature.Upload, BrowserFeature.FillCredential, BrowserFeature.Wait, BrowserFeature.Tabs, BrowserFeature.Screenshot, BrowserFeature.Close });
         public List<string> Navigated { get; } = [];
 
         public bool IsAvailable => true;
@@ -631,7 +635,7 @@ public sealed class BrowserOriginHandoffTests
                 : request.Url;
             return new(new BrowserOperationResult(
                 null,
-                new BrowserObservation(
+                new BrowserSnapshot(
                     final.AbsoluteUri,
                     challenged ? "Verify" : "Specs",
                     challenged ? "Human verification required" : "Listed price",
@@ -640,10 +644,10 @@ public sealed class BrowserOriginHandoffTests
                     challenged ? BrowserInterventionKind.HumanVerificationRequired : BrowserInterventionKind.None)));
         }
 
-        public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public ValueTask<BrowserOperationResult> ActAsync(BrowserActRequest request, CancellationToken cancellationToken = default) =>
+        public ValueTask<BrowserOperationResult> InteractAsync(BrowserInteractionRequest request, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }
 }

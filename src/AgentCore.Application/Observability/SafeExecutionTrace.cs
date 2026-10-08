@@ -70,8 +70,8 @@ public static class SafeExecutionTrace
         return toolName switch
         {
             ToolCatalog.BrowserNavigate => BuildNavigateDetail(argumentsJson, resultJson),
-            ToolCatalog.BrowserObserve => BuildObserveDetail(argumentsJson, resultJson),
-            ToolCatalog.BrowserAct => BuildActDetail(argumentsJson, resultJson),
+            ToolCatalog.BrowserSnapshot => BuildObserveDetail(argumentsJson, resultJson),
+            _ when BrowserToolCatalog.IsInteraction(toolName) => BuildActDetail(argumentsJson, resultJson),
             ToolCatalog.BrowserClose => BuildCloseDetail(resultJson),
             _ => string.Empty
         };

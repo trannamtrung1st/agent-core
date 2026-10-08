@@ -34,7 +34,7 @@ public sealed class NopCommerceBrowserProbeTests
         var agentText = Environment.GetEnvironmentVariable("AGENTCORE_NOPCOMMERCE_AGENT")
             ?? "01a0fcc9-e7b6-7a19-84e9-bc0aec2396d6";
         var agentId = Guid.Parse(agentText);
-        var session = new PlaywrightBrowserSession(
+        var session = new PlaywrightBrowser(
             new BrowserOptions
             {
                 Enabled = true,
@@ -80,7 +80,7 @@ public sealed class NopCommerceBrowserProbeTests
     }
 
     private static async Task<BrowserOperationResult> EnsureGridAsync(
-        PlaywrightBrowserSession session,
+        PlaywrightBrowser session,
         Guid browserId,
         BrowserOperationResult first,
         string marker)
@@ -90,9 +90,9 @@ public sealed class NopCommerceBrowserProbeTests
             return first;
         }
 
-        return await session.ObserveAsync(
+        return await session.SnapshotAsync(
             browserId,
-            new BrowserObserveOptions("stable", 4000),
+            new BrowserWaitOptions("stable", 4000),
             CancellationToken.None);
     }
 
@@ -105,7 +105,7 @@ public sealed class NopCommerceBrowserProbeTests
         var agentId = Guid.Parse(agentText);
         var profileRoot = FindProfileRoot(agentId);
         var sku = "AC-PROBE-001";
-        var session = new PlaywrightBrowserSession(
+        var session = new PlaywrightBrowser(
             new BrowserOptions
             {
                 Enabled = true,
@@ -143,7 +143,7 @@ public sealed class NopCommerceBrowserProbeTests
             Assert.DoesNotContain(
                 create.Observation.Elements,
                 element => element.Name.Contains("token", StringComparison.OrdinalIgnoreCase) && element.Actions.Contains("click"));
-            var settled = await session.ObserveAsync(browserId, CancellationToken.None);
+            var settled = await session.SnapshotAsync(browserId, CancellationToken.None);
             Assert.Null(settled.ErrorCode);
             var current = settled.Observation!;
             var visible = Names(current);
@@ -158,12 +158,12 @@ public sealed class NopCommerceBrowserProbeTests
                 ?? Require(current, element => element.Name.Contains("Price", StringComparison.OrdinalIgnoreCase), visible);
             var save = Require(current, element => element.Name.Contains("Save and Continue", StringComparison.OrdinalIgnoreCase) && element.Actions.Contains("click"), visible);
 
-            var named = await session.ActAsync(new BrowserActRequest(browserId, "fill", name.Ref, "AC Probe"), CancellationToken.None);
+            var named = await session.InteractAsync(new BrowserInteractionRequest(browserId, "fill", name.Ref, "AC Probe"), CancellationToken.None);
             Assert.Null(named.ErrorCode);
             current = named.Observation!;
             Assert.Equal("AC Probe", Require(current, element => element.Name.Contains("Product name", StringComparison.OrdinalIgnoreCase) && element.Actions.Contains("fill"), Names(current)).State?.Value);
             skuField = Require(current, element => element.Name.Equals("SKU", StringComparison.OrdinalIgnoreCase) && element.Actions.Contains("fill"), Names(current));
-            var skuSet = await session.ActAsync(new BrowserActRequest(browserId, "fill", skuField.Ref, sku), CancellationToken.None);
+            var skuSet = await session.InteractAsync(new BrowserInteractionRequest(browserId, "fill", skuField.Ref, sku), CancellationToken.None);
             Assert.Null(skuSet.ErrorCode);
             current = skuSet.Observation!;
             Assert.Equal(sku, Require(current, element => element.Name.Equals("SKU", StringComparison.OrdinalIgnoreCase) && element.Actions.Contains("fill"), Names(current)).State?.Value);
@@ -172,7 +172,7 @@ public sealed class NopCommerceBrowserProbeTests
                 element => element.Name.Contains("Short description", StringComparison.OrdinalIgnoreCase) && element.Actions.Contains("fill"),
                 Names(current));
             const string summary = "Probe keyboard for the catalog.";
-            var described = await session.ActAsync(new BrowserActRequest(browserId, "fill", description.Ref, summary), CancellationToken.None);
+            var described = await session.InteractAsync(new BrowserInteractionRequest(browserId, "fill", description.Ref, summary), CancellationToken.None);
             Assert.Null(described.ErrorCode);
             current = described.Observation!;
             Assert.Contains(
@@ -185,12 +185,12 @@ public sealed class NopCommerceBrowserProbeTests
                 ?? Require(current, element => element.Name.Contains("Price", StringComparison.OrdinalIgnoreCase), Names(current));
             if (!priceOrCard.Actions.Contains("fill"))
             {
-                var opened = await session.ActAsync(new BrowserActRequest(browserId, priceOrCard.Actions[0], priceOrCard.Ref, null), CancellationToken.None);
+                var opened = await session.InteractAsync(new BrowserInteractionRequest(browserId, priceOrCard.Actions[0], priceOrCard.Ref, null), CancellationToken.None);
                 Assert.Null(opened.ErrorCode);
                 priceOrCard = Require(opened.Observation!, element => element.Name.Contains("Price", StringComparison.OrdinalIgnoreCase) && element.Actions.Contains("fill"), Names(opened.Observation!));
             }
 
-            var priced = await session.ActAsync(new BrowserActRequest(browserId, "fill", priceOrCard.Ref, "99"), CancellationToken.None);
+            var priced = await session.InteractAsync(new BrowserInteractionRequest(browserId, "fill", priceOrCard.Ref, "99"), CancellationToken.None);
             Assert.Null(priced.ErrorCode);
             var priceState = Require(
                 priced.Observation!,
@@ -209,11 +209,11 @@ public sealed class NopCommerceBrowserProbeTests
                 priced.Observation!,
                 element => element.Name.Contains("Save and Continue", StringComparison.OrdinalIgnoreCase) && element.Actions.Contains("click"),
                 Names(priced.Observation!));
-            var saved = await session.ActAsync(new BrowserActRequest(browserId, "click", save.Ref, null), CancellationToken.None);
+            var saved = await session.InteractAsync(new BrowserInteractionRequest(browserId, "click", save.Ref, null), CancellationToken.None);
             Assert.Null(saved.ErrorCode);
             Assert.Contains("/Admin/Product/Edit/", saved.Observation!.Url, StringComparison.OrdinalIgnoreCase);
 
-            var settledEdit = await session.ObserveAsync(browserId, CancellationToken.None);
+            var settledEdit = await session.SnapshotAsync(browserId, CancellationToken.None);
             Assert.Null(settledEdit.ErrorCode);
             var upload = settledEdit.Observation!.Elements.FirstOrDefault(element =>
                 element.Actions.Contains("upload")
@@ -225,8 +225,8 @@ public sealed class NopCommerceBrowserProbeTests
                     element => element.Name.Contains("Multimedia", StringComparison.OrdinalIgnoreCase)
                         || element.Name.Contains("Picture", StringComparison.OrdinalIgnoreCase),
                     Names(settledEdit.Observation));
-                var expanded = await session.ActAsync(
-                    new BrowserActRequest(browserId, multimedia.Actions[0], multimedia.Ref, null),
+                var expanded = await session.InteractAsync(
+                    new BrowserInteractionRequest(browserId, multimedia.Actions[0], multimedia.Ref, null),
                     CancellationToken.None);
                 Assert.Null(expanded.ErrorCode);
                 upload = Require(
@@ -237,14 +237,14 @@ public sealed class NopCommerceBrowserProbeTests
 
             Assert.Equal(["upload"], upload.Actions);
             var png = await File.ReadAllBytesAsync(FindKeyboardImage());
-            var uploaded = await session.ActAsync(
-                new BrowserActRequest(browserId, "upload", upload.Ref, null, new BrowserUpload("ac-keyboard.png", "image/png", png)),
+            var uploaded = await session.InteractAsync(
+                new BrowserInteractionRequest(browserId, "upload", upload.Ref, null, new BrowserUpload("ac-keyboard.png", "image/png", png)),
                 CancellationToken.None);
             Assert.Null(uploaded.ErrorCode);
             Assert.All(
                 uploaded.Observation!.Elements,
                 element => Assert.DoesNotContain("fakepath", element.State?.Value ?? string.Empty, StringComparison.OrdinalIgnoreCase));
-            var pictured = await session.ObserveAsync(browserId, CancellationToken.None);
+            var pictured = await session.SnapshotAsync(browserId, CancellationToken.None);
             Assert.Null(pictured.ErrorCode);
             Assert.Contains("/Admin/Product/Edit/", pictured.Observation!.Url, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(
@@ -268,7 +268,7 @@ public sealed class NopCommerceBrowserProbeTests
     }
 
     private static async Task<string> SubmitSkuLookup(
-        PlaywrightBrowserSession session,
+        PlaywrightBrowser session,
         Guid browserId,
         string origin,
         string sku)
@@ -277,7 +277,7 @@ public sealed class NopCommerceBrowserProbeTests
             new BrowserNavigateRequest(browserId, new Uri($"{origin}/Admin/Product/List")),
             CancellationToken.None);
         Assert.Null(list.ErrorCode);
-        var observed = await session.ObserveAsync(browserId, CancellationToken.None);
+        var observed = await session.SnapshotAsync(browserId, CancellationToken.None);
         Assert.Null(observed.ErrorCode);
         var field = Require(
             observed.Observation!,
@@ -285,8 +285,8 @@ public sealed class NopCommerceBrowserProbeTests
                 && element.Name.Contains("SKU", StringComparison.OrdinalIgnoreCase)
                 && element.Name.Contains("directly", StringComparison.OrdinalIgnoreCase),
             Names(observed.Observation!));
-        var filled = await session.ActAsync(
-            new BrowserActRequest(browserId, "fill", field.Ref, sku),
+        var filled = await session.InteractAsync(
+            new BrowserInteractionRequest(browserId, "fill", field.Ref, sku),
             CancellationToken.None);
         Assert.Null(filled.ErrorCode);
         var go = Require(
@@ -294,17 +294,17 @@ public sealed class NopCommerceBrowserProbeTests
             element => element.Actions.Contains("click")
                 && element.Name.Equals("Go", StringComparison.OrdinalIgnoreCase),
             Names(filled.Observation!));
-        var clicked = await session.ActAsync(
-            new BrowserActRequest(browserId, "click", go.Ref, null),
+        var clicked = await session.InteractAsync(
+            new BrowserInteractionRequest(browserId, "click", go.Ref, null),
             CancellationToken.None);
         Assert.Null(clicked.ErrorCode);
         return clicked.Observation!.Url;
     }
 
-    private static string Names(BrowserObservation observation) =>
+    private static string Names(BrowserSnapshot observation) =>
         string.Join(" | ", observation.Elements.Select(element => $"{element.Name} [{string.Join(",", element.Actions)}]"));
 
-    private static BrowserElement Require(BrowserObservation observation, Func<BrowserElement, bool> match, string detail)
+    private static BrowserElement Require(BrowserSnapshot observation, Func<BrowserElement, bool> match, string detail)
     {
         var found = observation.Elements.FirstOrDefault(match);
         Assert.True(found is not null, detail);

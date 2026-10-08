@@ -33,7 +33,7 @@ public sealed class SessionManager
     private readonly IAgentInstanceService? _instances;
     private readonly ITriggerPolicyRecoveryService? _triggerPolicyRecovery;
     private readonly AdminLifecycleCoordinator? _lifecycleGate;
-    private readonly IBrowserSessionLease? _browserLease;
+    private readonly IBrowserLease? _browserLease;
     private readonly ExperienceService? _experience;
 
     public SessionManager(
@@ -52,7 +52,7 @@ public sealed class SessionManager
         IAgentInstanceService? instances = null,
         ITriggerPolicyRecoveryService? triggerPolicyRecovery = null,
         AdminLifecycleCoordinator? lifecycleGate = null,
-        IBrowserSessionLease? browserLease = null,
+        IBrowserLease? browserLease = null,
         ExperienceService? experience = null,
         AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null)
     {
@@ -973,7 +973,7 @@ public sealed class SessionRuntimeFactory(
     IStructuredMemoryService? structuredMemory = null,
     IConversationTurnExecutionStore? turnExecutions = null,
     IDiagnosticIdSource? diagnostics = null,
-    IBrowserSessionLease? browserLease = null)
+    IBrowserLease? browserLease = null)
 {
     public SessionRuntime Create(SessionSnapshot snapshot, ISessionOutput output) =>
         new(

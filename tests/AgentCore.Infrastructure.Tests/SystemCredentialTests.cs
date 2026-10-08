@@ -87,7 +87,7 @@ public sealed class SystemCredentialTests
             await owners.InsertAsync(owner);
             var service = new CredentialService(store, bindings, new LocalCredentialProtector(Path.Combine(root, "keys")), owners, new SystemIdGenerator(TimeProvider.System), TimeProvider.System);
             var dir = new DirectoryInfo(AppContext.BaseDirectory); while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "AgentCore.sln"))) dir = dir.Parent;
-            var definition = (await new FileAgentDefinitionStore(Path.Combine(dir!.FullName, "agents"), SyntheticProviderAliases.Default).GetAsync("secretary", 4))!;
+            var definition = (await new FileAgentDefinitionStore(Path.Combine(dir!.FullName, "agents"), SyntheticProviderAliases.Default).GetAsync("secretary", 5))!;
             var draft = AgentDefinitionCandidate.FromDefinition(definition) with { Environment = definition.Environment! with { ToolAllowlist = null, Capabilities = new("All", []), Projection = new([]) } };
             var before = CapabilityAuthorizationResolver.ResolveCandidate(draft).Environment!.Capabilities!;
             Assert.DoesNotContain(ToolCatalog.CredentialsList, before.ResolvedCapabilities);

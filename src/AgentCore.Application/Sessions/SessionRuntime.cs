@@ -57,7 +57,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly IStructuredMemoryService? _structuredMemory;
     private readonly IArtifactReferenceAuthorizer _artifacts;
     private readonly SessionToolExecutor _tools;
-    private readonly IBrowserSessionLease? _browserLease;
+    private readonly IBrowserLease? _browserLease;
     private bool _intermediateMessagingAllowed;
     private readonly ApplicationMessagePolicy _applicationMessagePolicy = ApplicationMessagePolicy.Default;
     private readonly InteractionPolicy _policy;
@@ -213,7 +213,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IStructuredMemoryService? structuredMemory = null,
         IConversationTurnExecutionStore? turnExecutions = null,
         IDiagnosticIdSource? diagnostics = null,
-        IBrowserSessionLease? browserLease = null)
+        IBrowserLease? browserLease = null)
     {
         _diagnostics = diagnostics ?? FallbackDiagnosticIdSource.Instance;
         _snapshot = snapshot;
@@ -2612,7 +2612,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
 
                 retryingGeneration = false;
-                BrowserObservationCompaction.Compact(messages);
+                BrowserSnapshotCompaction.Compact(messages);
                 messages = PromptContextBuilder.WithActiveSkillSystem(messages, pinnedCatalog, pinnedSkills).ToList();
                 AgentContext? projectionContext = null;
                 if (_snapshot.Definition.Environment?.Capabilities is not null)
@@ -6225,7 +6225,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         var offered = tools
-            .Where(tool => tool.Name is not (ToolCatalog.BrowserObserve or ToolCatalog.BrowserAct))
+            .Where(tool => tool.Name is not (ToolCatalog.BrowserSnapshot or ToolCatalog.BrowserFind) && !BrowserToolCatalog.IsInteraction(tool.Name))
             .ToArray();
         if (offered.Length == tools.Count)
         {
@@ -6272,7 +6272,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         json = string.Empty;
         if (blockedOrigins.Count == 0
-            || call.Name is not (ToolCatalog.BrowserNavigate or ToolCatalog.BrowserObserve or ToolCatalog.BrowserAct))
+            || !ToolCatalog.IsBrowserTool(call.Name) || call.Name is ToolCatalog.BrowserClose or ToolCatalog.BrowserTabs)
         {
             return false;
         }
@@ -6339,7 +6339,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         if (finalOrigin is not null
             && error is null
-            && tool is ToolCatalog.BrowserNavigate or ToolCatalog.BrowserObserve or ToolCatalog.BrowserAct)
+            && ToolCatalog.IsBrowserTool(tool))
         {
             pageOrigin = finalOrigin;
         }
@@ -6352,7 +6352,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         string? json,
         string? pageOrigin,
         HashSet<string> blockedOrigins) =>
-        tool is ToolCatalog.BrowserNavigate or ToolCatalog.BrowserObserve or ToolCatalog.BrowserAct
+        ToolCatalog.IsBrowserTool(tool)
         && pageOrigin is not null
         && !blockedOrigins.Contains(pageOrigin)
         && !BrowserResultHasError(json);

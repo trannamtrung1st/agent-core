@@ -1,3 +1,4 @@
+using SkiaSharp;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
 using AgentCore.Application.Models;
@@ -12,9 +13,6 @@ using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Png;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace AgentCore.Application.Tests;
 
@@ -146,9 +144,10 @@ public sealed class VisionCapabilityRuntimeTests
 
     private static byte[] PngBytes()
     {
-        using var image = new Image<Rgba32>(2, 2);
+        using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        image.Save(buffer, new PngEncoder());
+        using var encoded = SKImage.FromBitmap(image).Encode(SKEncodedImageFormat.Png, 90);
+        encoded.SaveTo(buffer);
         return buffer.ToArray();
     }
 

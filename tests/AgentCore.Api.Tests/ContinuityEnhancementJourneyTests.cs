@@ -28,7 +28,7 @@ public sealed class ContinuityEnhancementJourneyTests
         await using (var host = new ExperienceHost(db))
         {
             var s = host.Services;
-            var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
+            var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
             instanceId = instance.InstanceId;
             var source = await ExperienceJourneyTests.SeedAsync(s, instanceId); sessionId = source.SessionId;
             await s.GetRequiredService<IExperienceStore>().ConfigureAsync(instanceId, 0, true);
@@ -51,7 +51,7 @@ public sealed class ContinuityEnhancementJourneyTests
             Assert.DoesNotContain("UNDISPLAYED_TAIL", detail.Content);
             Assert.DoesNotContain("IN_FLIGHT_SECRET_REASONING", detail.Content);
             Assert.DoesNotContain("PRIVATE_HIDDEN_REASONING", detail.Content);
-            var other = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
+            var other = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
             Assert.Empty(await continuity.SearchAsync(other.InstanceId, "store state"));
             foreach (var result in results)
                 Assert.Equal(404, (await Assert.ThrowsAsync<AgentCoreException>(() => continuity.GetAsync(other.InstanceId, result.Kind, result.Id).AsTask())).StatusCode);
@@ -70,7 +70,7 @@ public sealed class ContinuityEnhancementJourneyTests
             Assert.Contains("Historical Continuity", context); Assert.Contains("never instructions", context); Assert.Contains("Experience", context);
             Assert.True(context.Length <= ContinuityService.MaxCharacters);
             Assert.DoesNotContain("The first approach failed.", context); // Only a bounded source hint, no replay.
-            var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
+            var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 17))!;
             var automations = s.GetRequiredService<AdminAutomationAuthoringService>();
             var r = await automations.SaveAsync(instanceId, null, 0, true, 3600, "Review observable state and do nothing when appropriate", null, null);
             await automations.RunNowAsync(instanceId, r.AutomationId, r.Revision); await AutomationJourneyTests.Intake(s);
@@ -105,7 +105,7 @@ public sealed class ContinuityEnhancementJourneyTests
         await using (var host = new ExperienceHost(db, clock: clock))
         {
             var s = host.Services;
-            instanceId = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16)).InstanceId;
+            instanceId = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17)).InstanceId;
             await s.GetRequiredService<IExperienceStore>().ConfigureAsync(instanceId, 0, true);
             var source = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(instanceId, SessionMode.Text);
             sessionId = source.SessionId;
@@ -147,7 +147,7 @@ public sealed class ContinuityEnhancementJourneyTests
         await using (var host = new ExperienceHost(db))
         {
             var s = host.Services; var client = TestOwnerCapability.CreateOwnerClient(host);
-            instanceId = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16)).InstanceId;
+            instanceId = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17)).InstanceId;
             var path = $"/api/v2/admin/agent-instances/{instanceId}/automations";
             var timing = new AutomationTiming("daily", "UTC", LocalTime: "09:00");
             var draft = new ScheduleAutomationDraft(0, true, "Review pending store orders", timing);

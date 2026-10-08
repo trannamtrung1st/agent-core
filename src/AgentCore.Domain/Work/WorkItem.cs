@@ -552,9 +552,9 @@ public sealed class WorkItem
         if (SideEffect.Disposition is WorkSideEffectDisposition.InFlight or WorkSideEffectDisposition.Indeterminate)
         {
             var flagged = IsObservationRequiredCheckpoint(Checkpoint);
-            var uncertainBrowserAct = flagged
-                || WorkActionHash.MatchesBrowserAct(Checkpoint?.PayloadJson, SideEffect.ActionHash);
-            if (uncertainBrowserAct && Checkpoint is not null)
+            var uncertainBrowserInteraction = flagged
+                || WorkActionHash.MatchesBrowserInteraction(Checkpoint?.PayloadJson, SideEffect.ActionHash);
+            if (uncertainBrowserInteraction && Checkpoint is not null)
             {
                 var generation = allocateDiagnosticId?.Invoke() ?? Guid.Empty;
                 if (generation == Guid.Empty)
@@ -839,7 +839,7 @@ public sealed class WorkItem
             updatedAtUtc);
     }
 
-    public WorkItem AcceptBrowserObservation(long expectedRevision, Guid generation, DateTimeOffset updatedAtUtc)
+    public WorkItem AcceptBrowserSnapshot(long expectedRevision, Guid generation, DateTimeOffset updatedAtUtc)
     {
         if (SideEffect.Disposition is not (WorkSideEffectDisposition.InFlight or WorkSideEffectDisposition.Indeterminate))
         {

@@ -43,11 +43,33 @@ public static class ToolCatalog
     public const string SkillsLoad = "skills.load";
     public const string AppMessageSend = "app.message.send";
     public const string BrowserNavigate = "browser.navigate";
-    public const string BrowserObserve = "browser.observe";
-    public const string BrowserAct = "browser.act";
+    public const string BrowserSnapshot = "browser.snapshot";
     public const string BrowserClose = "browser.close";
-    public const string BrowserPages = "browser.pages";
-    public const string BrowserCapture = "browser.capture";
+    public const string BrowserTabs = "browser.tabs";
+    public const string BrowserScreenshot = "browser.screenshot";
+    public const string BrowserFind = "browser.find";
+    public const string BrowserClick = "browser.click";
+    public const string BrowserHover = "browser.hover";
+    public const string BrowserDrag = "browser.drag";
+    public const string BrowserDrop = "browser.drop";
+    public const string BrowserType = "browser.type";
+    public const string BrowserFillForm = "browser.fill_form";
+    public const string BrowserSelectOption = "browser.select_option";
+    public const string BrowserPressKey = "browser.press_key";
+    public const string BrowserUpload = "browser.upload";
+    public const string BrowserFillCredential = "browser.fill_credential";
+    public const string BrowserWait = "browser.wait_for";
+    public const string BrowserDialog = "browser.dialog";
+    public const string BrowserResize = "browser.resize";
+    public const string BrowserConsole = "browser.console_messages";
+    public const string BrowserStorageState = "browser.storage_state";
+    public const string BrowserVisionMouse = "browser.mouse";
+    public const string BrowserPdf = "browser.pdf";
+    public const string BrowserTrace = "browser.trace";
+    public const string BrowserHighlight = "browser.highlight";
+    public const string BrowserMedia = "browser.emulate_media";
+    public const string BrowserVideo = "browser.video";
+    public const string BrowserEvaluate = "browser.evaluate";
     public const string ContinuitySearch = "continuity.search";
     public const string ContinuityGet = "continuity.get";
     public const string MemoryConsolidate = "memory.consolidate";
@@ -58,10 +80,11 @@ public static class ToolCatalog
     public const string WorkComplete = "work.complete";
 
     public static bool RecordsOwnerVisibleEffect(string toolName) =>
-        toolName is not (BrowserNavigate or BrowserObserve or BrowserPages or BrowserCapture or BrowserClose);
+        BrowserToolCatalog.TryGet(toolName, out var browser)
+            ? browser.Effect != ToolEffect.ReadOnly && browser.Feature != BrowserFeature.Close
+            : true;
 
-    public static bool IsBrowserTool(string toolName) =>
-        toolName is BrowserNavigate or BrowserObserve or BrowserAct or BrowserClose or BrowserPages or BrowserCapture;
+    public static bool IsBrowserTool(string toolName) => BrowserToolCatalog.Tools.ContainsKey(toolName);
 
     public static bool AuthorizesBrowser(IReadOnlyList<ModelToolDefinition>? tools) =>
         tools?.Any(tool => IsBrowserTool(tool.Name)) == true;

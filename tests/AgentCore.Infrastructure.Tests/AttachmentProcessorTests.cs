@@ -1,14 +1,9 @@
+using SkiaSharp;
 using System.Text;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
 using AgentCore.Infrastructure.Attachments;
 using AgentCore.Infrastructure.Persistence;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Gif;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.Formats.Png;
-using SixLabors.ImageSharp.Formats.Webp;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace AgentCore.Infrastructure.Tests;
 
@@ -99,7 +94,7 @@ public sealed class AttachmentProcessorTests
         var legacy = AttachmentProcessor.CacheKey(id, "attachment-processors/1");
         var current = AttachmentProcessor.CacheKey(id, AttachmentLimits.ProcessorVersion);
         Assert.NotEqual(legacy, current);
-        Assert.Equal("attachment-processors/2", AttachmentLimits.ProcessorVersion);
+        Assert.Equal("attachment-processors/3", AttachmentLimits.ProcessorVersion);
     }
 
     [Fact]
@@ -217,19 +212,25 @@ trailer<< /Root 1 0 R >>
 
     private static byte[] PngWithExif()
     {
-        using var image = new Image<Rgba32>(2, 2, new Rgba32(10, 20, 30));
-        image.Metadata.ExifProfile = new SixLabors.ImageSharp.Metadata.Profiles.Exif.ExifProfile();
-        image.Metadata.ExifProfile.SetValue(SixLabors.ImageSharp.Metadata.Profiles.Exif.ExifTag.ImageDescription, "AgentCoreSecret");
-        using var buffer = new MemoryStream();
-        image.SaveAsPng(buffer);
-        return buffer.ToArray();
+        var png = MinimalPngBytes();
+        // Inject a standards-compliant EXIF chunk so metadata stripping remains independently tested.
+        var metadata = System.Text.Encoding.ASCII.GetBytes("II\x2A\0\x08\0\0\0\x01\0\x0E\x01\x02\0\x10\0\0\0\x1A\0\0\0\0\0\0\0AgentCoreSecret\0");
+        var type = System.Text.Encoding.ASCII.GetBytes("eXIf");
+        using var output = new MemoryStream(); output.Write(png.AsSpan(0, png.Length - 12));
+        Span<byte> length = stackalloc byte[4]; System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(length, metadata.Length); output.Write(length);
+        output.Write(type); output.Write(metadata);
+        uint crc = 0xffffffff;
+        foreach (var value in type.Concat(metadata)) { crc ^= value; for (var bit = 0; bit < 8; bit++) crc = (crc & 1) != 0 ? 0xedb88320 ^ (crc >> 1) : crc >> 1; }
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(length, ~crc); output.Write(length); output.Write(png.AsSpan(png.Length - 12));
+        return output.ToArray();
     }
 
     private static byte[] OversizedPngHeader()
     {
-        using var image = new Image<Rgba32>(2, 2);
+        using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        image.SaveAsPng(buffer);
+        using var encoded = SKImage.FromBitmap(image).Encode(SKEncodedImageFormat.Png, 90);
+        encoded.SaveTo(buffer);
         var png = buffer.ToArray();
         var width = BitConverter.GetBytes(System.Net.IPAddress.HostToNetworkOrder(20000));
         var height = BitConverter.GetBytes(System.Net.IPAddress.HostToNetworkOrder(20000));
@@ -250,33 +251,36 @@ trailer<< /Root 1 0 R >>
 
     private static byte[] MinimalPngBytes()
     {
-        using var image = new Image<Rgba32>(2, 2, new Rgba32(1, 2, 3));
+        using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        image.Save(buffer, new PngEncoder());
+        using var encoded = SKImage.FromBitmap(image).Encode(SKEncodedImageFormat.Png, 90);
+        encoded.SaveTo(buffer);
         return buffer.ToArray();
     }
 
     private static byte[] MinimalJpegBytes()
     {
-        using var image = new Image<Rgba32>(2, 2, new Rgba32(4, 5, 6));
+        using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        image.Save(buffer, new JpegEncoder { Quality = 90 });
+        using var encoded = SKImage.FromBitmap(image).Encode(SKEncodedImageFormat.Jpeg, 90);
+        encoded.SaveTo(buffer);
         return buffer.ToArray();
     }
 
     private static byte[] MinimalWebpBytes()
     {
-        using var image = new Image<Rgba32>(2, 2, new Rgba32(7, 8, 9));
+        using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        image.Save(buffer, new WebpEncoder());
+        using var encoded = SKImage.FromBitmap(image).Encode(SKEncodedImageFormat.Webp, 90);
+        encoded.SaveTo(buffer);
         return buffer.ToArray();
     }
 
     private static byte[] MinimalGifBytes()
     {
-        using var image = new Image<Rgba32>(2, 2, new Rgba32(10, 11, 12));
+        using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        image.Save(buffer, new GifEncoder());
+        buffer.Write(Convert.FromBase64String("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"));
         return buffer.ToArray();
     }
 }

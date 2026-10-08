@@ -80,7 +80,7 @@ public sealed class ProductPublishWorkflowTests
         var uploaded = await executor.ExecuteAsync(
             Definition(),
             sessionId,
-            Call($$"""{"operation":"upload","ref":"{{Reference}}","artifactId":"{{created.ArtifactId}}"}"""),
+            Call($$"""{"ref":"{{Reference}}","artifactIds":["{{created.ArtifactId}}"]}"""),
             ToolLimits.MaxOutputBytes,
             admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn));
 
@@ -99,13 +99,13 @@ public sealed class ProductPublishWorkflowTests
         var path = await executor.ExecuteAsync(
             Definition(),
             sessionId,
-            Call($$"""{"operation":"upload","ref":"{{Reference}}","artifactId":"/tmp/ac-keyboard.png"}"""),
+            Call($$"""{"ref":"{{Reference}}","artifactIds":["/tmp/ac-keyboard.png"]}"""),
             ToolLimits.MaxOutputBytes,
             admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn));
         var url = await executor.ExecuteAsync(
             Definition(),
             sessionId,
-            Call($$"""{"operation":"upload","ref":"{{Reference}}","artifactId":"https://files.example/ac-keyboard.png"}"""),
+            Call($$"""{"ref":"{{Reference}}","artifactIds":["https://files.example/ac-keyboard.png"]}"""),
             ToolLimits.MaxOutputBytes,
             admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn));
         Assert.Contains("invalid", path.Text, StringComparison.Ordinal);
@@ -125,7 +125,7 @@ public sealed class ProductPublishWorkflowTests
         var uploaded = await executor.ExecuteAsync(
             Definition(),
             Guid.NewGuid(),
-            Call($$"""{"operation":"upload","ref":"{{Reference}}","artifactId":"{{resourceId}}"}"""),
+            Call($$"""{"ref":"{{Reference}}","artifactIds":["{{resourceId}}"]}"""),
             ToolLimits.MaxOutputBytes,
             admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn));
 
@@ -141,7 +141,7 @@ public sealed class ProductPublishWorkflowTests
             message => message.Name == ToolCatalog.AppMessageSend
                 || message.ToolCalls?.Any(call => call.Name == ToolCatalog.AppMessageSend) == true);
 
-    private static ModelToolCall Call(string arguments) => new("c1", ToolCatalog.BrowserAct, arguments);
+    private static ModelToolCall Call(string arguments) => new("c1", ToolCatalog.BrowserUpload, arguments);
 
     private static async Task<PublishRun> RunAsync(string userText)
     {
@@ -183,8 +183,9 @@ public sealed class ProductPublishWorkflowTests
             new RoleEnvironment(ToolAllowlist:
             [
                 ToolCatalog.BrowserNavigate,
-                ToolCatalog.BrowserObserve,
-                ToolCatalog.BrowserAct
+                ToolCatalog.BrowserSnapshot,
+                ToolCatalog.BrowserClick,
+                ToolCatalog.BrowserUpload
             ]),
             Skills:
             [
@@ -269,8 +270,9 @@ public sealed class ProductPublishWorkflowTests
         }
     }
 
-    private sealed class ProductBrowser : IBrowserSession
+    private sealed class ProductBrowser : IBrowser
     {
+        public BrowserProviderDescriptor Provider { get; } = new("fixture", "Test browser", new HashSet<BrowserFeature> { BrowserFeature.Navigate, BrowserFeature.Snapshot, BrowserFeature.Click, BrowserFeature.Type, BrowserFeature.Hover, BrowserFeature.Drag, BrowserFeature.FillForm, BrowserFeature.SelectOption, BrowserFeature.PressKey, BrowserFeature.Upload, BrowserFeature.FillCredential, BrowserFeature.Wait, BrowserFeature.Tabs, BrowserFeature.Screenshot, BrowserFeature.Close });
         private readonly Dictionary<string, string> _refs = new(StringComparer.Ordinal);
         private string _page = "none";
         private int _mint;
@@ -313,7 +315,7 @@ public sealed class ProductPublishWorkflowTests
             return new(Ok(Capture()));
         }
 
-        public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             if (_page == "none")
             {
@@ -321,16 +323,16 @@ public sealed class ProductPublishWorkflowTests
             }
 
             var observation = Capture();
-            Steps.Add(new ProductPublishStep(ToolCatalog.BrowserObserve, observation.VisibleText));
+            Steps.Add(new ProductPublishStep(ToolCatalog.BrowserSnapshot, observation.VisibleText));
             return new(Ok(observation));
         }
 
-        public ValueTask<BrowserOperationResult> ActAsync(
-            BrowserActRequest request,
+        public ValueTask<BrowserOperationResult> InteractAsync(
+            BrowserInteractionRequest request,
             CancellationToken cancellationToken = default)
         {
             ActCalls++;
-            Steps.Add(new ProductPublishStep(ToolCatalog.BrowserAct, request.Operation));
+            Steps.Add(new ProductPublishStep(ToolCatalog.BrowserClick, request.Operation));
             if (!_refs.TryGetValue(request.Ref, out var name) || name != "Publish" || request.Operation != "click")
             {
                 return new(new BrowserOperationResult("unsupported_operation", null));
@@ -346,23 +348,23 @@ public sealed class ProductPublishWorkflowTests
             _ => new Uri(Origin + "/")
         };
 
-        private BrowserOperationResult Ok(BrowserObservation observation) => new(null, observation);
+        private BrowserOperationResult Ok(BrowserSnapshot observation) => new(null, observation);
 
-        private BrowserObservation Capture()
+        private BrowserSnapshot Capture()
         {
             _refs.Clear();
             _mint++;
             var reference = "el_" + _mint.ToString("D22");
             return _page switch
             {
-                "login" => new BrowserObservation(
+                "login" => new BrowserSnapshot(
                     Origin + "/login",
                     "Sign in",
                     "Sign in",
                     false,
                     [],
                     BrowserInterventionKind.AuthenticationRequired),
-                "storefront" => new BrowserObservation(
+                "storefront" => new BrowserSnapshot(
                     Origin + "/storefront",
                     "AC Keyboard",
                     "AC Keyboard $99 Published ac-keyboard.png",
@@ -372,10 +374,10 @@ public sealed class ProductPublishWorkflowTests
             };
         }
 
-        private BrowserObservation Remember(string reference)
+        private BrowserSnapshot Remember(string reference)
         {
             _refs[reference] = "Publish";
-            return new BrowserObservation(
+            return new BrowserSnapshot(
                 Origin + "/",
                 "Product",
                 "Saved",
@@ -384,8 +386,9 @@ public sealed class ProductPublishWorkflowTests
         }
     }
 
-    private sealed class UploadBrowser : IBrowserSession
+    private sealed class UploadBrowser : IBrowser
     {
+        public BrowserProviderDescriptor Provider { get; } = new("fixture", "Test browser", new HashSet<BrowserFeature> { BrowserFeature.Navigate, BrowserFeature.Snapshot, BrowserFeature.Click, BrowserFeature.Type, BrowserFeature.Hover, BrowserFeature.Drag, BrowserFeature.FillForm, BrowserFeature.SelectOption, BrowserFeature.PressKey, BrowserFeature.Upload, BrowserFeature.FillCredential, BrowserFeature.Wait, BrowserFeature.Tabs, BrowserFeature.Screenshot, BrowserFeature.Close });
         public int ActCalls { get; private set; }
 
         public BrowserUpload? LastUpload { get; private set; }
@@ -406,19 +409,19 @@ public sealed class ProductPublishWorkflowTests
             CancellationToken cancellationToken = default) =>
             new(new BrowserOperationResult(null, Page()));
 
-        public ValueTask<BrowserOperationResult> ObserveAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             new(new BrowserOperationResult(null, Page()));
 
-        public ValueTask<BrowserOperationResult> ActAsync(
-            BrowserActRequest request,
+        public ValueTask<BrowserOperationResult> InteractAsync(
+            BrowserInteractionRequest request,
             CancellationToken cancellationToken = default)
         {
             ActCalls++;
-            LastUpload = request.Upload;
+            LastUpload = request.Uploads?.FirstOrDefault() ?? request.Upload;
             return new(new BrowserOperationResult(null, Page()));
         }
 
-        private static BrowserObservation Page() =>
+        private static BrowserSnapshot Page() =>
             new("http://127.0.0.1:5091/", "Upload", "chosen", false, []);
     }
 

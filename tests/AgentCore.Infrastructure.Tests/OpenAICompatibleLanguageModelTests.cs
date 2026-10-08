@@ -445,9 +445,9 @@ public sealed class OpenAICompatibleLanguageModelTests
 
     [Theory]
     [InlineData("browser.navigate", false)]
-    [InlineData("browser.act", true)]
-    [InlineData("browser.pages", true)]
-    public async Task Browser_object_unions_map_to_provider_compatible_function_parameters(string name, bool operationRequired)
+    [InlineData("browser.click", false)]
+    [InlineData("browser.tabs", true)]
+    public async Task Focused_browser_schemas_map_to_provider_function_parameters(string name, bool operationRequired)
     {
         const string body = "data: {\"choices\":[{\"delta\":{\"content\":\"Ready\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
         var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
@@ -461,18 +461,19 @@ public sealed class OpenAICompatibleLanguageModelTests
         Assert.False(schema.TryGetProperty("anyOf", out _));
         Assert.False(schema.GetProperty("additionalProperties").GetBoolean());
         var fields = schema.GetProperty("properties");
-        Assert.True(fields.TryGetProperty("operation", out _));
         if (operationRequired)
             Assert.Equal(["operation"], schema.GetProperty("required").EnumerateArray().Select(field => field.GetString()));
-        else Assert.False(schema.TryGetProperty("required", out _));
-        if (name == "browser.act")
+        else if (name == "browser.navigate") Assert.False(schema.TryGetProperty("required", out _));
+        if (name == "browser.click")
         {
-            Assert.Equal([200, 500], fields.GetProperty("value").GetProperty("anyOf").EnumerateArray()
-                .Select(field => field.GetProperty("maxLength").GetInt32()).Order());
+            Assert.False(fields.TryGetProperty("operation", out _));
+            Assert.False(fields.TryGetProperty("value", out _));
+            Assert.Equal(["ref"], schema.GetProperty("required").EnumerateArray().Select(field => field.GetString()));
             Assert.Equal(128, fields.GetProperty("ref").GetProperty("maxLength").GetInt32());
         }
         using var original = JsonDocument.Parse(definition.ParametersJson);
-        Assert.True(original.RootElement.TryGetProperty("oneOf", out _));
+        Assert.False(original.RootElement.TryGetProperty("oneOf", out _));
+        Assert.Equal(original.RootElement.GetProperty("properties").GetRawText(), schema.GetProperty("properties").GetRawText());
     }
 
     [Theory]

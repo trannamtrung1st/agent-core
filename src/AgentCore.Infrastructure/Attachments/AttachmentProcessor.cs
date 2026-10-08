@@ -4,9 +4,7 @@ using System.Text.RegularExpressions;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.Formats.Png;
+using SkiaSharp;
 
 namespace AgentCore.Infrastructure.Attachments;
 
@@ -247,62 +245,30 @@ public sealed class AttachmentProcessor : IAttachmentProcessor
         return builder.ToString();
     }
 
-    private static string SavePng(Image image, MemoryStream output)
-    {
-        image.Save(output, new PngEncoder());
-        return "image/png";
-    }
-
-    private static string SaveJpeg(Image image, MemoryStream output)
-    {
-        image.Save(output, new JpegEncoder { Quality = 90 });
-        return "image/jpeg";
-    }
-
     private static AttachmentProcessResult ProcessImage(AttachmentRecord record, byte[] bytes)
     {
-        try
+        // Check dimensions before allocating decoded pixels, including malformed oversized PNGs.
+        if (bytes.Length >= 24 && bytes.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }))
         {
-            using var image = Image.Load(bytes);
-            var pixels = (long)image.Width * image.Height;
-            if (pixels > AttachmentLimits.MaxDecodedPixels)
-            {
-                return Unsupported(record, "pixel_limit");
-            }
-
-            image.Metadata.ExifProfile = null;
-            image.Metadata.IccProfile = null;
-            image.Metadata.XmpProfile = null;
-            image.Metadata.IptcProfile = null;
-            using var output = new MemoryStream();
-            var normalizedType = AttachmentMedia.NormalizeContentType(record.ContentType);
-            var outputContentType = normalizedType switch
-            {
-                "image/png" => SavePng(image, output),
-                "image/jpeg" => SaveJpeg(image, output),
-                "image/webp" or "image/gif" => SavePng(image, output),
-                _ => SaveJpeg(image, output),
-            };
-
-            return new AttachmentProcessResult(
-                record.AttachmentId,
-                AttachmentLimits.ProcessorVersion,
-                AttachmentProcessKind.Image,
-                record.DisplayName,
-                outputContentType,
-                Text: string.Empty,
-                Provenance: null,
-                StrippedImage: output.ToArray(),
-                FailureCode: null);
+            var width = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(16, 4));
+            var height = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(20, 4));
+            if ((ulong)width * height > (ulong)AttachmentLimits.MaxDecodedPixels) return Unsupported(record, "pixel_limit");
         }
-        catch (UnknownImageFormatException)
-        {
+        using var input = new SKMemoryStream(bytes);
+        using var codec = SKCodec.Create(input);
+        if (codec is null || codec.EncodedFormat is not (SKEncodedImageFormat.Png or SKEncodedImageFormat.Jpeg or SKEncodedImageFormat.Webp or SKEncodedImageFormat.Gif))
             return Unsupported(record, "unsupported_reader");
-        }
-        catch (InvalidImageContentException)
-        {
-            return Unsupported(record, "pixel_limit");
-        }
+        if ((long)codec.Info.Width * codec.Info.Height > AttachmentLimits.MaxDecodedPixels) return Unsupported(record, "pixel_limit");
+        using var bitmap = new SKBitmap(new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Bgra8888, SKAlphaType.Premul));
+        if (codec.GetPixels(bitmap.Info, bitmap.GetPixels()) != SKCodecResult.Success) return Unsupported(record, "pixel_limit");
+        using var image = SKImage.FromBitmap(bitmap);
+        var jpeg = AttachmentMedia.NormalizeContentType(record.ContentType) == "image/jpeg";
+        // Encoding decoded pixels into a new image drops source EXIF/ICC/XMP/IPTC metadata.
+        using var output = image.Encode(jpeg ? SKEncodedImageFormat.Jpeg : SKEncodedImageFormat.Png, 90);
+        if (output is null) return Unsupported(record, "unsupported_reader");
+        return new AttachmentProcessResult(record.AttachmentId, AttachmentLimits.ProcessorVersion, AttachmentProcessKind.Image,
+            record.DisplayName, jpeg ? "image/jpeg" : "image/png", Text: string.Empty, Provenance: null,
+            StrippedImage: output.ToArray(), FailureCode: null);
     }
 
     private static string Truncate(string text)

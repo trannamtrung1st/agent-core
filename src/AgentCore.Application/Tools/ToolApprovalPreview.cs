@@ -8,6 +8,21 @@ public static class ToolApprovalPreview
         string toolName,
         JsonElement args)
     {
+        if (BrowserToolCatalog.TryGet(toolName, out var browser)
+            && browser.Effect is ToolEffect.SensitiveWrite or ToolEffect.Destructive)
+        {
+            using var schema = JsonDocument.Parse(browser.ParametersJson);
+            var details = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Browser effect"] = toolName,
+                ["Scope"] = "Current policy-allowed browser/profile; host authority remains unchanged."
+            };
+            foreach (var property in args.EnumerateObject())
+                if (schema.RootElement.GetProperty("properties").TryGetProperty(property.Name, out _))
+                    details[property.Name] = BoundDetail(property.Value.ToString());
+            return (Bound($"Approve browser change: {toolName}"), details);
+        }
+
         if (toolName is ToolCatalog.WorkspaceDelete or ToolCatalog.WorkspaceBatch)
         {
             WorkspaceStructureArguments.Parse(toolName, args);

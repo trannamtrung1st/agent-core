@@ -3,7 +3,7 @@ using AgentCore.Application.Ports;
 
 namespace AgentCore.Application.Tools;
 
-internal static class BrowserObservationCompaction
+internal static class BrowserSnapshotCompaction
 {
     internal const int RecentFullObservations = 1;
     internal const int DuplicateReceiptChars = 240;
@@ -18,6 +18,14 @@ internal static class BrowserObservationCompaction
             {
                 full.Add(index);
             }
+        }
+
+        if (full.Count > 0)
+        {
+            // A newer snapshot invalidates refs in older discovery receipts too.
+            for (var index = 0; index < full[^1]; index++)
+                if (messages[index] is { Role: ModelRole.Tool, Name: "browser.find" } found)
+                    messages[index] = found with { Text = Receipt(found.Text, false), Parts = null };
         }
 
         if (full.Count <= RecentFullObservations)
@@ -96,6 +104,7 @@ internal static class BrowserObservationCompaction
             url = Read(root, "url");
             title = Read(root, "title");
             visible = Read(root, "visibleText");
+            if (visible.Length == 0) visible = System.Text.RegularExpressions.Regex.Replace(Read(root, "content"), @"\s*\[ref=[^\]]+\]", "");
             if (root.TryGetProperty("settled", out var settledProperty)
                 && settledProperty.ValueKind is JsonValueKind.True or JsonValueKind.False)
             {

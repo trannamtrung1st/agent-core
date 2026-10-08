@@ -75,7 +75,7 @@ test("Chat copies and renames an exact four-file project, edits with CAS, and pr
   // Conversation execution receipts deliberately prevent cascading instance deletion.
   // A separate unreferenced owner exercises the normal durable-home purge boundary.
   const provisioned = await page.request.post("/api/v2/admin/agent-instances", {
-    headers, data: { definitionId: "general-assistant", version: 16 }
+    headers, data: { definitionId: "general-assistant", version: 17 }
   });
   expect(provisioned.ok()).toBe(true);
   const disposable = (await provisioned.json()).instanceId;

@@ -153,7 +153,7 @@ public interface IWorkItemStore
         CancellationToken cancellationToken = default,
         bool recordExternalEffect = true);
 
-    ValueTask<WorkItem> AcceptBrowserObservationAsync(
+    ValueTask<WorkItem> AcceptBrowserSnapshotAsync(
         Guid workItemId,
         long expectedRevision,
         Guid generation,

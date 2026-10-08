@@ -319,7 +319,7 @@ public sealed class DurableOccurrenceExecution(
             // A persisted uncertain external effect remains terminal even if current policy denies the call.
             // Policy changes cannot erase the recovery fence or turn it into a replayable retry.
             if (running.SideEffect.Disposition is WorkSideEffectDisposition.InFlight or WorkSideEffectDisposition.Indeterminate
-                && !IsBrowserActHash(messages, running.SideEffect.ActionHash))
+                && !IsBrowserInteractionHash(messages, running.SideEffect.ActionHash))
                 return new DurableOccurrenceFailed(running, "side-effect-indeterminate", "External effect outcome is unknown and was not replayed.");
             if (HarnessChatTools.IsHarness(call.Name))
                 admission = admission with { Harness = await tools.HarnessContextAsync(running.Owner.AgentInstanceId, cancellationToken),
@@ -366,7 +366,7 @@ public sealed class DurableOccurrenceExecution(
 
             if (blockedActionHash is not null
                 && string.Equals(hash, blockedActionHash, StringComparison.Ordinal)
-                && (call.Name == ToolCatalog.BrowserAct
+                && (BrowserToolCatalog.IsInteraction(call.Name)
                     || ToolCatalog.ReplaySafetyOf(call.Name) != ToolReplaySafety.ReplaySafe))
             {
                 return await AppendResultAsync(
@@ -376,14 +376,14 @@ public sealed class DurableOccurrenceExecution(
                     false).ConfigureAwait(false);
             }
 
-            var uncertainBrowserAct = running.SideEffect.Disposition is WorkSideEffectDisposition.InFlight
+            var uncertainBrowserInteraction = running.SideEffect.Disposition is WorkSideEffectDisposition.InFlight
                     or WorkSideEffectDisposition.Indeterminate
-                && IsBrowserActHash(messages, running.SideEffect.ActionHash);
-            if (uncertainBrowserAct)
+                && IsBrowserInteractionHash(messages, running.SideEffect.ActionHash);
+            if (uncertainBrowserInteraction)
             {
                 observationRequired = true;
                 blockedActionHash ??= running.SideEffect.ActionHash;
-                if (call.Name is not (ToolCatalog.BrowserNavigate or ToolCatalog.BrowserObserve))
+                if (call.Name is not (ToolCatalog.BrowserNavigate or ToolCatalog.BrowserSnapshot))
                 {
                     return await AppendResultAsync(
                         call,
@@ -441,7 +441,7 @@ public sealed class DurableOccurrenceExecution(
             }
 
             var needsApproval = policy == ToolPolicyDecision.RequireApproval;
-            var dispatchFenced = !uncertainBrowserAct
+            var dispatchFenced = !uncertainBrowserInteraction
                 && (needsApproval || ToolCatalog.ReplaySafetyOf(call.Name) != ToolReplaySafety.ReplaySafe);
             if (dispatchFenced)
             {
@@ -500,7 +500,7 @@ public sealed class DurableOccurrenceExecution(
                     execution = ToolExecutionResult.FromText(
                         """{"error":"timeout","message":"Tool deadline reached."}""");
                 }
-                else if (call.Name == ToolCatalog.BrowserAct)
+                else if (BrowserToolCatalog.IsInteraction(call.Name))
                 {
                     running = await store.MarkSideEffectAsync(
                         running.WorkItemId,
@@ -564,12 +564,12 @@ public sealed class DurableOccurrenceExecution(
                 browserUnavailable = true;
             }
 
-            if (uncertainBrowserAct
-                && call.Name is ToolCatalog.BrowserNavigate or ToolCatalog.BrowserObserve
+            if (uncertainBrowserInteraction
+                && call.Name is ToolCatalog.BrowserNavigate or ToolCatalog.BrowserSnapshot
                 && !execution.Text.Contains("\"error\"", StringComparison.Ordinal))
             {
                 observationRequired = false;
-                running = await store.AcceptBrowserObservationAsync(
+                running = await store.AcceptBrowserSnapshotAsync(
                     running.WorkItemId,
                     running.Revision,
                     generation,
@@ -736,7 +736,7 @@ public sealed class DurableOccurrenceExecution(
         && string.Equals(approval.ToolName, call.Name, StringComparison.Ordinal)
         && string.Equals(approval.ActionHash, hash, StringComparison.Ordinal);
 
-    private static bool IsBrowserActHash(IReadOnlyList<ModelMessage> messages, string? actionHash)
+    private static bool IsBrowserInteractionHash(IReadOnlyList<ModelMessage> messages, string? actionHash)
     {
         if (string.IsNullOrWhiteSpace(actionHash))
         {
@@ -752,7 +752,7 @@ public sealed class DurableOccurrenceExecution(
 
             foreach (var call in message.ToolCalls)
             {
-                if (!string.Equals(call.Name, ToolCatalog.BrowserAct, StringComparison.Ordinal))
+                if (!string.Equals(call.Name, ToolCatalog.BrowserClick, StringComparison.Ordinal))
                 {
                     continue;
                 }

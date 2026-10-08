@@ -8,9 +8,14 @@ public sealed class ToolConfigurationGate(
     IWebSearchProvider? webSearch,
     IPublicWebFetcher? publicWebFetcher,
     IEmailProvider? emailProvider,
-    IBrowserSession? browserSession = null,
+    IBrowser? browserSession = null,
     bool browserEnabled = false) : IToolConfigurationGate
 {
+    public bool IsExecutionConfigured(string toolName) => ToolCatalog.IsBrowserTool(toolName)
+        ? browserEnabled && browserSession is { IsAvailable: true }
+            && browserSession is IBrowserRuntimeReadiness { IsRuntimeReady: true }
+        : IsConfigured(toolName);
+
     public bool IsConfigured(string toolName) =>
         toolName switch
         {
@@ -21,6 +26,8 @@ public sealed class ToolConfigurationGate(
             _ when ToolCatalog.IsBrowserTool(toolName) =>
                 browserEnabled
                 && browserSession is { IsAvailable: true }
+                && BrowserToolCatalog.TryGet(toolName, out var metadata)
+                && browserSession.Provider.Supports(metadata.Feature)
                 && browserSession is IBrowserRuntimeReadiness { IsRuntimeReady: true },
             _ => true
         };

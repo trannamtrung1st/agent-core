@@ -44,6 +44,6 @@ public sealed class ToolExecutionBudgetTests
     {
         Assert.False(ToolCatalog.AuthorizesBrowser(null));
         Assert.False(ToolCatalog.AuthorizesBrowser([new ModelToolDefinition(ToolCatalog.WorkspaceWrite, "write", "{}")]));
-        Assert.True(ToolCatalog.AuthorizesBrowser([new ModelToolDefinition(ToolCatalog.BrowserObserve, "look", "{}")]));
+        Assert.True(ToolCatalog.AuthorizesBrowser([new ModelToolDefinition(ToolCatalog.BrowserSnapshot, "look", "{}")]));
     }
 }

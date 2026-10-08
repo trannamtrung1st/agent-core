@@ -1720,7 +1720,7 @@ public sealed class DurableReminderTests
             observedAt,
             evidence,
             "general-assistant",
-            16,
+            17,
             "Riley");
 
     private static WorkModelPin Pin(SessionModelSelection selection) =>
@@ -1933,7 +1933,7 @@ public sealed class DurableReminderTests
     private static async Task<AgentDefinition> LoadDefinitionAsync()
     {
         var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
-        return (await store.GetAsync("general-assistant", 16))!;
+        return (await store.GetAsync("general-assistant", 17))!;
     }
 
     private static string FindAgents()

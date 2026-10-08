@@ -460,13 +460,13 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
         return Mutate(workItemId, item => item.ClearSideEffect(expectedRevision, generation, clearedAtUtc, recordExternalEffect));
     }
 
-    public ValueTask<WorkItem> AcceptBrowserObservationAsync(
+    public ValueTask<WorkItem> AcceptBrowserSnapshotAsync(
         Guid workItemId,
         long expectedRevision,
         Guid generation,
         DateTimeOffset acceptedAtUtc,
         CancellationToken cancellationToken = default) =>
-        Mutate(workItemId, item => item.AcceptBrowserObservation(expectedRevision, generation, acceptedAtUtc));
+        Mutate(workItemId, item => item.AcceptBrowserSnapshot(expectedRevision, generation, acceptedAtUtc));
 
     private ValueTask<WorkItem> Mutate(Guid workItemId, Func<WorkItem, WorkItem> change, WorkOwner? owner = null)
     {

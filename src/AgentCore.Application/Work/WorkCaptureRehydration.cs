@@ -23,7 +23,7 @@ public static class WorkCaptureRehydration
         {
             var message = messages[index];
             if (message.Role != ModelRole.Tool
-                || !string.Equals(message.Name, ToolCatalog.BrowserCapture, StringComparison.Ordinal)
+                || !string.Equals(message.Name, ToolCatalog.BrowserScreenshot, StringComparison.Ordinal)
                 || message.Parts?.OfType<ModelImageContent>().Any() == true
                 || !TryReadArtifactId(message.Text, out var captureId))
             {

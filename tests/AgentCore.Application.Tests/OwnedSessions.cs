@@ -35,7 +35,7 @@ internal static class OwnedSessions
         IAgentInstanceService? instances = null,
         ITriggerPolicyRecoveryService? triggerPolicyRecovery = null,
         AdminLifecycleCoordinator? lifecycleGate = null,
-        IBrowserSessionLease? browserLease = null,
+        IBrowserLease? browserLease = null,
         ExperienceService? experience = null,
         AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null)
     {
