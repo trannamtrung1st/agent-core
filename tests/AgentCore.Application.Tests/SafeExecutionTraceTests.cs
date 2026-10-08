@@ -58,6 +58,20 @@ public sealed class SafeExecutionTraceTests
         Assert.DoesNotContain("Processing", detail, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("https://private-user:private-password@example.test/customer/private-customer?token=private-token")]
+    [InlineData("private-customer")]
+    public void Browser_navigation_trace_omits_private_url_components(string url)
+    {
+        var json = JsonSerializer.Serialize(new { url });
+        var detail = SafeExecutionTrace.BuildToolDetail(ToolCatalog.BrowserNavigate, json, json);
+        Assert.DoesNotContain("private-", detail, StringComparison.Ordinal);
+        if (url.StartsWith("https:", StringComparison.Ordinal))
+        {
+            Assert.Contains("origin=https://example.test", detail, StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public void BuildActDetail_records_operation_and_safe_target_metadata()
     {
@@ -75,7 +89,8 @@ public sealed class SafeExecutionTraceTests
         var detail = SafeExecutionTrace.BuildToolDetail(ToolCatalog.BrowserClick, args, result);
         Assert.Contains("operation=fill", detail, StringComparison.Ordinal);
         Assert.Contains("targetRole=textbox", detail, StringComparison.Ordinal);
-        Assert.Contains("targetName=Product name", detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("Product name", detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("targetName=", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("AC Keyboard", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("e12", detail, StringComparison.Ordinal);
     }
@@ -103,7 +118,7 @@ public sealed class SafeExecutionTraceTests
             """;
         var detail = SafeExecutionTrace.BuildToolDetail(ToolCatalog.BrowserClick, args, result);
         Assert.Contains("operation=upload", detail, StringComparison.Ordinal);
-        Assert.Contains("targetName=Picture", detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("targetName=", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("11111111", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("artifactId", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("/workspace/", detail, StringComparison.Ordinal);

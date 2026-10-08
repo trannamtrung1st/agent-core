@@ -51,6 +51,25 @@ A later full regression attempt encountered a full host disk and Docker build-ca
 
 ## Gate ledger
 
-Final local and hosted results will be recorded here after execution. Current evidence includes a clean audited build, Domain 152 passed, Infrastructure 830 passed/9 opt-in skips, API 371 passed/3 opt-in skips, plugin 4 passed, frontend 739 passed before the final diagnostics addition, and the final Admin file's 42 tests passed. The first complete Playwright core run passed 110/116 and exposed stale built-in pins plus two timing/noise failures; this is not a passing core gate. Corrections and complete reruns are in progress.
+Local checks use native Synthetic hosts, isolated SQLite files, ephemeral profiles and distinct ports. `NODE_OPTIONS=--no-experimental-webstorage` avoids the local Node 22.18 storage-global mismatch; it is an execution override, not tracked configuration.
 
-Full closure requires all current local gates, the real-model generic-fixture proof, and all five hosted Synthetic jobs green on the final behavior SHA. The implementation is not behavior-frozen while any required gate remains pending.
+| Gate / command | Current evidence |
+| --- | --- |
+| Audited `dotnet build` | Passed, zero warnings/errors |
+| `dotnet test tests/AgentCore.Domain.Tests/AgentCore.Domain.Tests.csproj` | 152 passed |
+| `dotnet test tests/AgentCore.Application.Tests/AgentCore.Application.Tests.csproj --nologo -m:1` | 1317 passed, 2 explicit live opt-in skips, after final telemetry/privacy corrections |
+| `dotnet test tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj` | 830 passed, 9 opt-in/platform skips |
+| `dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj` | 371 passed, 3 opt-in skips; final Application-change rerun pending |
+| OrderEvents plugin tests | 4 passed |
+| `pnpm --dir web run test --run --maxWorkers=2` | 739 passed across 96 files; complete rerun after bootstrap correction pending |
+| Five realtime unit files | 81 passed after bootstrap correction |
+| `pnpm --dir web run build` | Passed after bootstrap correction; existing bundle-size warning |
+| Playwright core (Synthetic, Browser STT and Browser/Browser) | Previous complete run 115/116. Deterministic held-models deep-link regression and full workspace/Artifact journey pass after correction. Complete final rerun pending. |
+| Seven Playwright acceptance projects | All seven projects passed, 16 tests total. Secretary passed all four scenarios after adding its omitted Browser v2 typing grant and scoping the final-response selector. |
+| `COMPOSE_PROJECT_NAME=agent-core-browser-v2-final` Compose smoke | Release build, owner-capability path, SQLite/keyring/profile/workspace/Skill-copy survival across recreation passed |
+
+Earlier core attempts exposed stale built-in pins and a deep-link bootstrap race. The browser acceptance journey's custom Definition still had the former multiplexed action's click-only migration; Browser v2 additionally requires its explicit typing grant. Corrections retain all scenario assertions. Deep links stay Connecting with Message and Send disabled until attachment to the requested identity. Browser logs record provider/feature/operation/outcome durations while omitting accessible names and private URL components.
+
+Authorized branch `develop/branch-1` is published in [draft PR #3](https://github.com/trannamtrung1st/agent-core/pull/3). [Hosted candidate run 37720003182](https://github.com/trannamtrung1st/agent-core/actions/runs/37720003182) tests behavior SHA `11333f2fa3a4392c41e74b794bb293010b0e72fc`: backend and Compose passed; acceptance exposed the same omitted typing grant. That candidate predates the final bootstrap/telemetry corrections and cannot establish final closure.
+
+Full closure requires all current local gates, the real-model generic-fixture proof, and all five hosted Synthetic jobs green on the final behavior SHA. Automatic approval review rejected the OpenRouter fixture invocation because destination/payload authorization was required; the requested authorization remains pending. Missing hosted credentials are not counted as offline test failures. The implementation is not behavior-frozen while any required gate remains pending.

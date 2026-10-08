@@ -1889,6 +1889,12 @@ export function reloadChatAgentInstances(): Promise<void> {
 }
 
 async function bootstrapInner(): Promise<string> {
+  const requestedSession = parseSessionIdFromPath(window.location.pathname);
+  const initial = useSessionStore.getState();
+  if (requestedSession && (!sameSessionId(initial.sessionId, requestedSession) || !isOpenSession(initial))) {
+    // Resolve a deep link before presenting a sendable default-identity chat.
+    useSessionStore.setState({ connection: "connecting" });
+  }
   const [health, models] = await Promise.all([getHealth(), listModels()]);
   useSessionStore.setState({
     agents: [],

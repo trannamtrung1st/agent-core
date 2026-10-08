@@ -900,7 +900,7 @@ public sealed partial class SessionToolExecutor
             _ => "Browser is unavailable."
         };
 
-    private static string FinishBrowser(string toolName, long started, string json)
+    private string FinishBrowser(string toolName, long started, string json)
     {
         var outcome = "ok";
         try
@@ -922,11 +922,13 @@ public sealed partial class SessionToolExecutor
         return json;
     }
 
-    private static void RecordBrowser(string toolName, long started, string outcome) =>
-        RuntimeTelemetry.RecordDiagnostic(
-            "browser",
-            RuntimeTelemetry.ElapsedMs(started),
-            $"{toolName}:{outcome}");
+    private void RecordBrowser(string toolName, long started, string outcome) =>
+        RuntimeTelemetry.RecordBrowserOperation(
+            browser?.Provider.ProviderId ?? "unavailable",
+            BrowserToolCatalog.TryGet(toolName, out var metadata) ? metadata.Feature.ToString() : "Unknown",
+            toolName,
+            outcome is "ok" or "canceled" || BrowserErrorCodes.Contains(outcome) ? outcome : "unknown",
+            RuntimeTelemetry.ElapsedMs(started));
 
     public async ValueTask<OccurrenceBrowserScope> OpenOccurrenceBrowserAsync(Guid workItemId, Guid agentInstanceId, CancellationToken ct)
     {

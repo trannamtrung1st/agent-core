@@ -18,7 +18,7 @@ public sealed partial class SessionToolExecutor
         if (args.ValueKind == JsonValueKind.Object && args.EnumerateObject().Any(p => p.Name is "targetOrigins" or "origins" or "headless" or "enabled" or "interactionMode")) return Fail("forbidden", "Browser arguments cannot change host policy.");
         if (!ValidateBrowserShape(args, schema.RootElement)) return Fail("invalid", "Browser arguments do not match the bounded tool schema.");
         var denied = await BindBrowserAsync(sessionId, admission, ct).ConfigureAwait(false);
-        if (denied is not null) return TextResult(denied);
+        if (denied is not null) return TextResult(FinishBrowser(name, started, denied));
         if (browser is not { IsAvailable: true }) return Fail("provider_unavailable", "Browser is unavailable.");
         if (!browser.Provider.Supports(metadata.Feature)) return Fail("unsupported_operation", "The active provider does not support this feature.");
         if (metadata.Feature == BrowserFeature.VisionMouse && admission?.SupportsVision != true) return Fail("forbidden", "Coordinate actions require a vision model.");
@@ -54,7 +54,7 @@ public sealed partial class SessionToolExecutor
             foreach (var id in args.GetProperty("artifactIds").EnumerateArray())
             {
                 var resolved = await ResolveBrowserUploadAsync(definition, sessionId, id.GetString(), ct);
-                if (resolved.ErrorJson is not null) return TextResult(resolved.ErrorJson);
+                if (resolved.ErrorJson is not null) return TextResult(FinishBrowser(name, started, resolved.ErrorJson));
                 uploads.Add(resolved.Upload!);
             }
             var result = await browser.InteractAsync(new BrowserInteractionRequest(sessionId, "upload", args.GetProperty("ref").GetString()!, null, Uploads: uploads), ct);
@@ -64,15 +64,24 @@ public sealed partial class SessionToolExecutor
 
         async ValueTask<ToolExecutionResult> Command()
         {
-            var result = await browser.ExecuteAsync(new BrowserCommand(sessionId, name, args.Clone()), ct).ConfigureAwait(false);
+            BrowserCommandResult result;
+            try
+            {
+                result = await browser.ExecuteAsync(new BrowserCommand(sessionId, name, args.Clone()), ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                RecordBrowser(name, started, "canceled");
+                throw;
+            }
             if (result.ErrorCode is not null) return Fail(result.ErrorCode, "Browser operation did not complete.");
             if (result.Bytes is { Length: > 0 } bytes)
             {
                 if (bytes.Length > BrowserToolLimits.MaxDownloadBytes) return Fail("capture_too_large", "Browser output exceeds the byte budget.");
                 var stored = await StoreBrowserBytesAsync(sessionId, admission, result.FileName ?? "browser-output", result.ContentType ?? "application/octet-stream", bytes, ct);
-                if (stored.Error is not null) return TextResult(stored.Error);
+                if (stored.Error is not null) return TextResult(FinishBrowser(name, started, stored.Error));
                 var json = JsonSerializer.Serialize(new { status = "ok", artifactId = stored.ArtifactId, byteSize = bytes.Length, contentType = result.ContentType });
-                return new ToolExecutionResult(json, admission?.SupportsVision == true && result.ContentType?.StartsWith("image/", StringComparison.Ordinal) == true
+                return new ToolExecutionResult(FinishBrowser(name, started, json), admission?.SupportsVision == true && result.ContentType?.StartsWith("image/", StringComparison.Ordinal) == true
                     ? [new ModelImageContent(result.ContentType, bytes, result.FileName ?? "browser-output")] : []);
             }
             if (result.Snapshot is not null)
