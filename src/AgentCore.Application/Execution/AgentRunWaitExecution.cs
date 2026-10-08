@@ -5,10 +5,14 @@ namespace AgentCore.Application.Execution;
 
 public static class AgentRunWaitExecution
 {
+    private static IReadOnlyList<BackgroundCompletionCandidate> OwnedChildren(AgentRun run, IReadOnlyList<BackgroundCompletionCandidate> children) =>
+        children.Where(c => c.Run.Owner == run.Owner && c.Session.DurablyDeletedAt is null
+            && c.Session.Origin.OriginatingSessionId == run.SessionId
+            && c.Session.Origin.InitialBackgroundAgentRunId == c.Run.AgentRunId).ToArray();
+
     public static IReadOnlyList<Guid> ReadyTargets(AgentRun run, AgentRunWait wait, IReadOnlyList<BackgroundCompletionCandidate> children)
     {
-        var owned = children.Where(c => c.Run.Owner == run.Owner && c.Session.Origin.OriginatingSessionId == run.SessionId
-            && c.Session.Origin.InitialBackgroundAgentRunId == c.Run.AgentRunId).ToArray();
+        var owned = OwnedChildren(run, children);
         if (wait.BackgroundSessionIds.Any(id => id == run.SessionId || !owned.Any(c => c.Session.SessionId == id)))
             throw new ArgumentException("Wait targets must be initial background children owned by this parent Session.");
         return wait.BackgroundSessionIds.Where(id => owned.Any(c => c.Session.SessionId == id && c.Run.IsTerminal)).ToArray();
@@ -19,8 +23,11 @@ public static class AgentRunWaitExecution
         if (run.Wait is not { } wait) return false;
         if (wait.DeadlineUtc <= now) return true;
         if (wait.Mode == AgentRunWaitMode.Duration) return false;
-        var ready = ReadyTargets(run, wait, children);
-        return wait.Until == AgentRunWaitUntil.All ? ready.Count == wait.BackgroundSessionIds.Count : ready.Count > 0;
+        var owned = OwnedChildren(run, children);
+        // Admission already validated targets. Lost targets must wake, not throw on every scan.
+        if (wait.BackgroundSessionIds.Any(id => !owned.Any(c => c.Session.SessionId == id))) return true;
+        var ready = wait.BackgroundSessionIds.Where(id => owned.Any(c => c.Session.SessionId == id && c.Run.IsTerminal)).ToArray();
+        return wait.Until == AgentRunWaitUntil.All ? ready.Length == wait.BackgroundSessionIds.Count : ready.Length > 0;
     }
 
     public static AgentRun Apply(AgentRun run, AgentRunCommand command, IReadOnlyList<BackgroundCompletionCandidate> children)
@@ -38,11 +45,14 @@ public static class AgentRunWaitExecution
         if (command is not AgentRunCommand.ResumeWait wake || run.Status != AgentRunStatus.WaitingForSignal || run.Wait is not { } wait
             || !IsReady(run, wake.AtUtc, children))
             throw new AgentRunTransitionException(AgentRunTransitionFailure.NotClaimable, "Wait condition is not ready.");
-        var ready = wait.Mode == AgentRunWaitMode.Background ? ReadyTargets(run, wait, children) : [];
-        var met = wait.Mode == AgentRunWaitMode.Background && (wait.Until == AgentRunWaitUntil.All ? ready.Count == wait.BackgroundSessionIds.Count : ready.Count > 0);
-        var result = System.Text.Json.JsonSerializer.Serialize(new { reason = wait.Mode == AgentRunWaitMode.Duration ? "elapsed" : met ? "condition_met" : "timeout",
-            backgroundSessionIds = ready, pendingBackgroundSessionIds = wait.BackgroundSessionIds.Except(ready).ToArray(),
-            statuses = wait.BackgroundSessionIds.Select(id => new { backgroundSessionId = id, status = children.Single(c => c.Session.SessionId == id && c.Session.Origin.InitialBackgroundAgentRunId == c.Run.AgentRunId).Run.Status.ToString() }), elapsedSeconds = Math.Max(0, (wake.AtUtc - wait.StartedAtUtc).TotalSeconds) });
+        var owned = OwnedChildren(run, children);
+        var ready = wait.BackgroundSessionIds.Where(id => owned.Any(c => c.Session.SessionId == id && c.Run.IsTerminal)).ToArray();
+        var unavailable = wait.BackgroundSessionIds.Where(id => !owned.Any(c => c.Session.SessionId == id)).ToArray();
+        var met = wait.Mode == AgentRunWaitMode.Background && (wait.Until == AgentRunWaitUntil.All ? ready.Length == wait.BackgroundSessionIds.Count : ready.Length > 0);
+        var result = System.Text.Json.JsonSerializer.Serialize(new { reason = wait.Mode == AgentRunWaitMode.Duration ? "elapsed" : met ? "condition_met" : unavailable.Length > 0 ? "unavailable" : "timeout",
+            backgroundSessionIds = ready, pendingBackgroundSessionIds = wait.BackgroundSessionIds.Except(ready).Except(unavailable).ToArray(),
+            unavailableBackgroundSessionIds = unavailable,
+            statuses = wait.BackgroundSessionIds.Select(id => new { backgroundSessionId = id, status = owned.SingleOrDefault(c => c.Session.SessionId == id)?.Run.Status.ToString() ?? "Unavailable" }), elapsedSeconds = Math.Max(0, (wake.AtUtc - wait.StartedAtUtc).TotalSeconds) });
         var checkpoint = AgentRunToolCallCheckpoint.AppendWaitResult(run.Checkpoint!, wait.ToolCallId, result);
         return run.ResumeFromSignal(wake.ExpectedRevision, wake.Generation, checkpoint, wake.AtUtc, wake.LeaseExpiresAt);
     }

@@ -57,3 +57,18 @@ Canonical docs, product/design context, surface briefs, definition and report ar
 | CI-22–24 | Existing Automation destination, Initiative-off requested reporting, explicit background reporting and direct conversation-target Synthetic scenarios. |
 | CI-25 | Shared UI tests, actual MCP handoff/wait/handling navigation, keyboard dismissal and three viewport review. |
 | CI-26 | Full backend/frontend, core browser/voice, seven acceptance projects, Compose volume and exact-SHA hosted workflow gates. |
+
+## Post-closure claim renewal and unavailable wait targets (2026-10-08)
+
+The bounded review reproduced eight failures across SQLite and InMemory before correction: four long-running consumption cases and four deleted-child wait cases. A parent renewed its execution lease, but its inbox claim expired at the original deadline and became Pending. A tombstoned child remained a wait target, producing no early wake and a timeout after the deadline. Missing target metadata also caused strict target resolution to throw on recovery.
+
+Valid parent transitions now extend an unexpired consumption claim to the current execution lease in the existing outcome/Run transaction, retaining token and provisional acknowledgment. Expired claims are released rather than revived; generation and revision checks remain in place. Wait admission still rejects unresolved or foreign targets. Recovery of an already admitted wait instead appends a normal unavailable result for missing or durably deleted targets, retaining Run, Response and attempt identity and excluding unavailable IDs from pending IDs. No schema migration, data reset or new execution owner is introduced.
+
+`Renewed_parent_consumption_survives_original_expiry_and_settles_once` verifies acknowledgment both before and after renewal, passage beyond the original expiry, stale generation rejection, reopen, atomic successful answer and no remaining report candidate. `Suspended_wait_resolves_unavailable_child_before_or_after_deadline` verifies deletion before/after deadline, entirely missing target metadata, normal result contents, preserved identities and one wake. Both run against SQLite and InMemory.
+
+Local gates:
+
+- `dotnet test AgentCore.sln --no-restore --nologo -p:UseSharedCompilation=false -m:1`: 2,784 passed, 14 optional skips, including four nopCommerce plugin tests (`/tmp/inbox-hardening-backend.log`).
+- Persistence admission parity: 106 passed after the correction (`/tmp/inbox-hardening-store.log`); strengthened final assertions are checked separately in `/tmp/inbox-hardening-store-final.log`.
+- Frontend verification and build: pending. The parallel local unit run was interrupted after rendering timeouts; the retry uses one worker with unchanged assertions and timeout.
+- Exact behavior-SHA hosted Synthetic workflow: pending. Original feature closure above remains historical evidence.

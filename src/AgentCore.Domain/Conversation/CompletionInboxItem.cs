@@ -57,8 +57,15 @@ public sealed record CompletionInboxItem(Guid ChildAgentRunId, AgentRunOwner Own
             if (run.Status == AgentRunStatus.Completed && run.Result?.OutcomeEntryId is not null && Acknowledgment is not null
                 && ClaimExpiresAtUtc > run.UpdatedAtUtc && ClaimGeneration == generation)
                 return Release() with { Status = CompletionInboxStatus.Handled, HandledByRunId = run.AgentRunId };
-            if (run.Status == AgentRunStatus.Running && run.Claim is { } claim && claim.Generation != ClaimGeneration)
-                return ClaimExpiresAtUtc > run.UpdatedAtUtc ? this with { Revision = Revision + 1, ClaimGeneration = claim.Generation } : Release();
+            if (run.Status == AgentRunStatus.Running && run.Claim is { } claim)
+            {
+                // Renewal and signal resume settle in the same transaction as the parent transition.
+                // A claim that already expired cannot be revived by a later parent lease.
+                if (ClaimExpiresAtUtc <= run.UpdatedAtUtc) return Release();
+                if (claim.Generation != ClaimGeneration || claim.LeaseExpiresAtUtc != ClaimExpiresAtUtc)
+                    return this with { Revision = Revision + 1, ClaimGeneration = claim.Generation,
+                        ClaimExpiresAtUtc = claim.LeaseExpiresAtUtc };
+            }
             if (run.IsTerminal || run.Status == AgentRunStatus.WaitingToRetry) return Release();
         }
         if (Status == CompletionInboxStatus.DeliveryQueued && ReportActivationId == run.ActivationId

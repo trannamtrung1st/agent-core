@@ -1329,13 +1329,102 @@ public sealed class AgentRunAdmissionStoreTests
         Assert.DoesNotContain((await f.Memory.LoadAsync(parent.SessionId))!.Entries, entry => entry.EntryId == answer.EntryId);
     }
 
-    private static async Task<AgentRun> CompleteParent(Fixture f, AgentRun parent)
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Renewed_parent_consumption_survives_original_expiry_and_settles_once(bool sqlite, bool acknowledgeBeforeRenewal)
+    {
+        await using var f = await Fixture.CreateAsync(sqlite);
+        var parent = await ParentTurn(f);
+        var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation);
+        await CompleteChild(f, child, false);
+        var item = (await f.Runs.GetCompletionInboxAsync(Owner, parent.SessionId, child.Run.AgentRunId, Now))!;
+        item = await f.Runs.TakeCompletionAsync(Owner, parent.AgentRunId, parent.Claim.Generation,
+            child.Run.AgentRunId, item.Revision, "take-renew", Guid.NewGuid(), Now);
+        var token = item.ClaimToken!.Value;
+        if (acknowledgeBeforeRenewal)
+            item = await f.Runs.AcknowledgeCompletionAsync(Owner, parent.AgentRunId, parent.Claim.Generation,
+                child.Run.AgentRunId, item.Revision, token, "Used the findings", Now);
+        var originalExpiry = item.ClaimExpiresAtUtc!.Value;
+        parent = await f.Runs.ApplyAsync(Owner, parent.AgentRunId, new AgentRunCommand.Renew(parent.Revision,
+            Now.AddSeconds(30), parent.Claim.Generation, Now.AddMinutes(5)));
+        await f.ReopenAsync();
+        var afterExpiry = originalExpiry.AddSeconds(1);
+        await f.Runs.ListDeliveryCandidatesAsync(20, afterExpiry);
+        item = (await f.Runs.GetCompletionInboxAsync(Owner, parent.SessionId, child.Run.AgentRunId, afterExpiry))!;
+        Assert.Equal(CompletionInboxStatus.Claimed, item.Status);
+        Assert.Equal(parent.Claim!.LeaseExpiresAtUtc, item.ClaimExpiresAtUtc);
+        Assert.Equal(token, item.ClaimToken);
+        Assert.True(await f.Runs.HasCompletionClaimAsync(Owner, parent.AgentRunId, parent.Claim.Generation, afterExpiry));
+        Assert.Equal("Conflict", (await Assert.ThrowsAsync<AgentCoreException>(() => f.Runs.ApplyAsync(Owner,
+            parent.AgentRunId, new AgentRunCommand.Renew(parent.Revision, afterExpiry, Guid.NewGuid(), Now.AddMinutes(6))).AsTask())).Code);
+        if (!acknowledgeBeforeRenewal)
+            await f.Runs.AcknowledgeCompletionAsync(Owner, parent.AgentRunId, parent.Claim.Generation,
+                child.Run.AgentRunId, item.Revision, token, "Used the findings", afterExpiry);
+        await CompleteParent(f, parent, afterExpiry);
+        await f.ReopenAsync();
+        item = (await f.Runs.GetCompletionInboxAsync(Owner, parent.SessionId, child.Run.AgentRunId, afterExpiry))!;
+        Assert.Equal(CompletionInboxStatus.Handled, item.Status);
+        Assert.Equal(parent.AgentRunId, item.HandledByRunId);
+        Assert.Empty(await f.Runs.ListDeliveryCandidatesAsync(20, afterExpiry));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Suspended_wait_resolves_unavailable_child_before_or_after_deadline(bool sqlite, bool afterDeadline)
+    {
+        await using var f = await Fixture.CreateAsync(sqlite);
+        var parent = await ParentTurn(f);
+        var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation);
+        var call = new ModelToolCall("wait-unavailable", "execution.wait", "{}");
+        var checkpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([
+            new ModelMessage(ModelRole.Assistant, "", ToolCalls: [call])]), 1, 0, 15000);
+        var wait = new AgentRunWait(call.Id, AgentRunWaitMode.Background, [child.Run.SessionId], AgentRunWaitUntil.All, Now, Now.AddSeconds(10));
+        Assert.Throws<ArgumentException>(() => AgentRunWaitExecution.Apply(parent,
+            new AgentRunCommand.SuspendWait(parent.Revision, Now, parent.Claim.Generation, checkpoint, wait), []));
+        var suspended = await f.Runs.ApplyAsync(Owner, parent.AgentRunId,
+            new AgentRunCommand.SuspendWait(parent.Revision, Now, parent.Claim.Generation, checkpoint, wait));
+        await f.Memory.SaveAsync(child.Snapshot with { Revision = 2, DurablyDeletedAt = Now, Entries = [] }, 1);
+        await f.ReopenAsync();
+        var wakeAt = Now.AddSeconds(afterDeadline ? 11 : 1);
+        Assert.True(AgentRunWaitExecution.IsReady(suspended, wakeAt, []));
+        var missing = AgentRunWaitExecution.Apply(suspended,
+            new AgentRunCommand.ResumeWait(suspended.Revision, wakeAt, Guid.NewGuid(), wakeAt.AddMinutes(1)), []);
+        Assert.True(AgentRunToolCallCheckpoint.TryRead(missing.Checkpoint, out var missingMessages));
+        using var missingResult = System.Text.Json.JsonDocument.Parse(Assert.Single(missingMessages!, m => m.Role == ModelRole.Tool).Text);
+        Assert.Equal("unavailable", missingResult.RootElement.GetProperty("reason").GetString());
+        Assert.Contains(await f.Runs.ListRunnableAsync(wakeAt, 20), r => r.AgentRunId == parent.AgentRunId);
+        var resumed = await f.Runs.ApplyAsync(Owner, parent.AgentRunId,
+            new AgentRunCommand.ResumeWait(suspended.Revision, wakeAt, Guid.NewGuid(), wakeAt.AddMinutes(1)));
+        Assert.Equal(parent.AgentRunId, resumed.AgentRunId);
+        Assert.Equal(parent.ResponseId, resumed.ResponseId);
+        Assert.Equal(parent.AttemptCount, resumed.AttemptCount);
+        Assert.Null(resumed.Wait);
+        Assert.True(AgentRunToolCallCheckpoint.TryRead(resumed.Checkpoint, out var messages));
+        var result = Assert.Single(messages!, m => m.Role == ModelRole.Tool).Text;
+        using var json = System.Text.Json.JsonDocument.Parse(result);
+        Assert.Equal("unavailable", json.RootElement.GetProperty("reason").GetString());
+        Assert.Equal(child.Run.SessionId, Assert.Single(json.RootElement.GetProperty("unavailableBackgroundSessionIds").EnumerateArray()).GetGuid());
+        Assert.Empty(json.RootElement.GetProperty("pendingBackgroundSessionIds").EnumerateArray());
+        Assert.Equal("Unavailable", Assert.Single(json.RootElement.GetProperty("statuses").EnumerateArray()).GetProperty("status").GetString());
+        await f.ReopenAsync();
+        Assert.DoesNotContain(await f.Runs.ListRunnableAsync(wakeAt, 20), r => r.AgentRunId == parent.AgentRunId);
+    }
+
+    private static async Task<AgentRun> CompleteParent(Fixture f, AgentRun parent, DateTimeOffset? at = null)
     {
         var snapshot = (await f.Memory.LoadAsync(parent.SessionId))!;
         var result = new ConversationEntry(Guid.NewGuid(), snapshot.Entries.Max(e => e.Sequence) + 1, null, ConversationRole.Assistant,
             "Used background findings.", parent.ResponseId, EntryStatus.Completed, SessionMode.Text, 0, 25, Now);
         return await f.Runs.CommitOutcomeAsync(snapshot with { Revision = snapshot.Revision + 1, Entries = snapshot.Entries.Append(result).ToArray() }, snapshot.Revision,
-            Owner, parent.AgentRunId, new AgentRunCommand.Complete(parent.Revision, Now, parent.Claim!.Generation,
+            Owner, parent.AgentRunId, new AgentRunCommand.Complete(parent.Revision, at ?? Now, parent.Claim!.Generation,
                 result.Text, AgentRunOutcomeKind.Response, result.EntryId), null);
     }
 
