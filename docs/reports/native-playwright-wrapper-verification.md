@@ -28,6 +28,7 @@ All listed tools first intersect Definition authorization, current projection, r
 | `fill_form` | Fill / SetChecked | Preflight all owned fields; secure fields denied; form and policy tests |
 | `select_option`, `press_key` | SelectOption / Locator.Press or Keyboard.Press | Safe focused control reclassification and unique target; select/keyboard tests |
 | `hover`, `drag` | Hover / DragTo | Both endpoints must be ordinary, owned and allowed; native interaction tests |
+| `mouse` | Native Mouse.Move / Click / Down / Up / Wheel | Vision-enabled projection, finite viewport bounds, fixed point/ancestor protection checks and guarded drag endpoints; native visual-target and protected-boundary tests |
 | `drop` | Fixed structured DataTransfer dispatch | Bounded text payload; artifact drop explicitly unsupported; no arbitrary model JS |
 | `scroll` | Optional target Hover then Mouse.Wheel | Bounded signed deltas, ordinary allowed target; virtualized fixture reveals actual rendered content |
 | `wait_for`, `verify` | Native locator state waits / observed value/text/checked state | Bounded 100–5000 ms wait; missing hidden/detached targets handled without fabricated elements |
