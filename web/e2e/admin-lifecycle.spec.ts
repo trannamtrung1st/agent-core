@@ -5,7 +5,7 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import {
   seedActiveAutomation,
-  seedCompletedHistoricalWorkItem,
+  seedCompletedHistoricalAgentRun,
   seedIdentityLearnedMemory
 } from "./admin-lifecycle-sqlite";
 import {
@@ -232,7 +232,7 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
   expect(pinnedAfterV2.agentVersion).toBe(versionOne);
   expect(pinnedAfterV2.pinnedPersonaRevision).toBe(1);
 
-  const historicalWorkItemId = seedCompletedHistoricalWorkItem(instance.instanceId, firstSession.sessionId);
+  const historicalAgentRunId = seedCompletedHistoricalAgentRun(instance.instanceId, firstSession.sessionId);
 
   await page.goto(`/admin/instances/${instance.instanceId}`);
   await page.getByLabel("Target definition version").click();
@@ -268,12 +268,12 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
   });
   expect(deniedCreate.status()).toBe(400);
 
-  const workItems = await request.get(`/api/v2/sessions/${firstSession.sessionId}/work-items`, {
+  const agentRuns = await request.get(`/api/v2/agent-instances/${instance.instanceId}/agent-runs`, {
     headers: await ownerHeaders(page)
   });
-  expect(workItems.ok()).toBe(true);
-  const workBody = (await workItems.json()) as { items: { workItemId: string; status: string }[] };
-  const historical = workBody.items.find((item) => item.workItemId === historicalWorkItemId);
+  expect(agentRuns.ok()).toBe(true);
+  const workBody = (await agentRuns.json()) as { items: { agentRunId: string; status: string }[] };
+  const historical = workBody.items.find((item) => item.agentRunId === historicalAgentRunId);
   expect(historical).toBeTruthy();
   expect(historical?.status).toBe("completed");
 

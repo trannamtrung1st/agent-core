@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Execution;
 using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
@@ -14,11 +15,11 @@ public sealed partial class SessionRuntime
     private LiveOccurrenceCapabilities? _liveOccurrenceCapabilities;
 
     private IReadOnlyList<string> LoadedCapabilitiesFor(Guid responseId) =>
-        _boundConversationExecution?.ResponseId == responseId ? _boundConversationExecution.LoadedCapabilityIds
+        _boundAgentRun?.ResponseId == responseId ? _boundAgentRun.LoadedCapabilityIds
         : _liveOccurrenceCapabilities is { } live && live.ResponseId == responseId && live.Epoch == _epoch ? live.Ids : [];
 
     private int CapabilityLoadCountFor(Guid responseId) =>
-        _boundConversationExecution?.ResponseId == responseId ? _boundConversationExecution.CapabilityLoadCount
+        _boundAgentRun?.ResponseId == responseId ? _boundAgentRun.CapabilityLoadCount
         : _liveOccurrenceCapabilities is { } live && live.ResponseId == responseId && live.Epoch == _epoch ? live.Calls : 0;
 
     private async Task<AgentContext> CapabilityProjectionContextAsync(AgentTrigger trigger, ILanguageModel model,
@@ -27,7 +28,7 @@ public sealed partial class SessionRuntime
             false, null, trigger, SessionAttachments: await BuildSessionAttachmentManifestAsync(ct),
             ModelSupportsTools: model.Capabilities.Tools, ModelSupportsVision: model.Capabilities.Vision,
             PinnedSkillCatalog: catalog, ActiveSkillKeys: skills, LoadedCapabilityIds: loaded, IntermediateMessagingAllowed: _intermediateMessagingAllowed,
-            AgentInstanceId: _snapshot.AgentInstanceId,
+            DetachedExecution: IsInitialBackgroundRun, OwnedSessionId: SessionId, AgentInstanceId: _snapshot.AgentInstanceId,
             CredentialMetadataAvailable: await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, ct),
             Harness: await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, ct),
             AgentWorkspaceAvailable: await _tools.AgentWorkspaceAvailableAsync(SessionId, ct),
@@ -39,7 +40,7 @@ public sealed partial class SessionRuntime
     {
         var completed = new TaskCompletionSource<CapabilityLoadMailboxResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         BeginWork();
-        if (!TryMailbox(new CapabilityLoadRequested(NewContext(cause.EventId), responseId, _epoch, json, context, ct, completed)))
+        if (!TryMailbox(new CapabilityLoadRequested(WorkerContext(cause), responseId, cause.Epoch, json, context, ct, completed)))
         { EndWork(); return new(SkillLoadAdmission.Error("stale", "Capability load is no longer owned by this execution."), null, "load_stale"); }
         return await completed.Task.WaitAsync(ct).ConfigureAwait(false);
     }
@@ -51,8 +52,9 @@ public sealed partial class SessionRuntime
         try
         {
             if (_deactivated || _responseTerminal || _activeResponseId != input.ResponseId || _epoch != input.Epoch
-                || input.Context.Epoch != _epoch || input.RequestCancellation.IsCancellationRequested) return;
-            if (_activeResponseTriggerKind is { } occurrenceKind && ToolResources.IsOccurrence(occurrenceKind)
+                || input.Context.Epoch != _epoch || input.RequestCancellation.IsCancellationRequested
+                || !await OwnsWorkerAsync(input.Context, input.ResponseId, ct).ConfigureAwait(false)) return;
+            if (_agentRuns is null && _activeResponseTriggerKind is { } occurrenceKind && ToolResources.IsOccurrence(occurrenceKind)
                 && _liveOccurrenceCapabilities is { } live && live.ResponseId == input.ResponseId && live.Epoch == input.Epoch)
             {
                 using var occurrenceToken = CancellationTokenSource.CreateLinkedTokenSource(ct, input.RequestCancellation);
@@ -68,21 +70,20 @@ public sealed partial class SessionRuntime
                 result = new(load.ToJson(), updatedLive.Ids, load.Outcome);
                 return;
             }
-            if (_activeResponseTriggerKind != TriggerKind.UserTurn
-                || _boundConversationExecution is not { Status: ConversationTurnExecutionStatus.Running, Claim: not null, CancellationRequested: false } bound
-                || bound.ResponseId != input.ResponseId || _turnExecutions is null) return;
-            var current = await _turnExecutions.GetAsync(bound.ExecutionId, ct);
+            if (_boundAgentRun is not { Status: AgentRunStatus.Running, Claim: not null, CancellationRequested: false } bound
+                || bound.ResponseId != input.ResponseId || _agentRuns is null) return;
+            var current = await _agentRuns.GetAsync(bound.Owner, bound.AgentRunId, ct);
             if (current is null || current.Revision != bound.Revision || current.Claim?.Generation != bound.Claim.Generation
-                || current.CancellationRequested || current.Status != ConversationTurnExecutionStatus.Running) return;
+                || current.CancellationRequested || current.Status != AgentRunStatus.Running) return;
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, input.RequestCancellation);
             using var json = JsonDocument.Parse(input.ArgumentsJson);
             var context = input.ProjectionContext with { Definition = _snapshot.Definition, LoadedCapabilityIds = current.LoadedCapabilityIds, ActiveSkillKeys = current.ActiveSkillKeys, PinnedSkillCatalog = current.PinnedSkillCatalog };
             if (!ToolPolicy.IsOffered(_snapshot.Definition, context, ToolCatalog.CapabilitiesLoad, _tools.ConfigurationGate)) return;
             var plan = CapabilityDiscoveryMatcher.Load(_snapshot.Definition, context, _tools.ConfigurationGate, json.RootElement, current.CapabilityLoadCount);
             matches = plan.Loaded.Count;
-            var updated = plan.Outcome == "load_over_budget" ? current : await _turnExecutions.AdmitCapabilitiesAsync(current.ExecutionId,
-                current.Revision, current.Claim!.Generation, plan.Loaded, _time.GetUtcNow(), linked.Token);
-            _boundConversationExecution = updated;
+            var updated = plan.Outcome == "load_over_budget" ? current : await _agentRuns.ApplyAsync(current.Owner, current.AgentRunId,
+                new AgentRunCommand.LoadCapabilities(current.Revision, _time.GetUtcNow(), current.Claim!.Generation, plan.Loaded), linked.Token);
+            _boundAgentRun = updated;
             result = new(plan.ToJson(), updated.LoadedCapabilityIds, plan.Outcome);
         }
         catch (AgentCoreException) { result = new(SkillLoadAdmission.Error("invalid", "Capability load arguments or admission were invalid."), null, "load_no_match"); }

@@ -3,8 +3,11 @@ name: Agent Core
 description: Ant Design v6 dark operate UI for Chat and the shipped Admin configuration surface.
 colors:
   primary: "#1668dc"
+  primaryBg: "#15325b"
+  error: "#dc4446"
   success: "#49aa19"
   successHover: "#6abe39"
+  successBg: "#162312"
   text: "rgba(255, 255, 255, 0.85)"
   textSecondary: "rgba(255, 255, 255, 0.65)"
   textTertiary: "rgba(255, 255, 255, 0.45)"
@@ -16,22 +19,22 @@ colors:
   bubble: "rgba(255, 255, 255, 0.12)"
 typography:
   headline:
-    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, sans-serif"
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'"
     fontSize: "28px"
     fontWeight: 600
     lineHeight: 1.3
   title:
-    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, sans-serif"
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'"
     fontSize: "16px"
     fontWeight: 600
     lineHeight: 1.3
   body:
-    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, sans-serif"
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'"
     fontSize: "14px"
     fontWeight: 400
     lineHeight: 1.5714285714
   label:
-    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, sans-serif"
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'"
     fontSize: "12px"
     fontWeight: 400
     lineHeight: 1.4
@@ -99,6 +102,13 @@ components:
     backgroundColor: "{colors.container}"
     textColor: "{colors.text}"
     width: "640px"
+  background-session-title:
+    backgroundColor: "transparent"
+    textColor: "{colors.text}"
+    padding: "{spacing.controlInner}"
+  agent-run-details:
+    backgroundColor: "transparent"
+    textColor: "{colors.text}"
   operational-detail-inset:
     backgroundColor: "{colors.elevated}"
     textColor: "{colors.text}"
@@ -115,7 +125,7 @@ components:
 
 # Design System: Agent Core
 
-This file is lightweight MVP **presentation** guidance only. Screens, copy, and behavior stay in `/docs`. If this file conflicts with `/docs`, `/docs` wins.
+This file is lightweight MVP **presentation** guidance only. Screens, copy, and behavior stay in [Frontend Implementation](../../docs/13-frontend-implementation-spec.md); `/docs` wins on conflicts. The current component source, `antdTheme`, `AppShell` and `app.css` supply the visual values recorded here. The [verification report](../../docs/reports/activation-agent-run-background-sessions-verification.md) distinguishes completed component/fixture checks from pending Synthetic backend and hosted acceptance.
 
 ## Overview
 
@@ -132,7 +142,7 @@ The shipped appearance is Ant Design `darkAlgorithm`: black layout, conversation
 - Composer owns Model (reasoning level inside the Model button when supported) with Attach/Voice and context-sensitive Stop/Queue/Send; header owns identity, Speech locale, compact icon actions, and status metadata.
 - Model catalog rows expose enabled vision, reasoning, tools, and structured-output capabilities as compact named icons. Queued drafts remain a compact local work list above the composer.
 - Assistant display Markdown stays primary for reading; persisted public speech text is a quieter **Spoken** inset first on the same turn when it differs (the TTS projection).
-- Background Work and Automations share an operational drawer language: quiet headers, semantic execution rows, semantic filled icon-and-text status chips, elevated detail insets, and trailing actions where needed.
+- Background Work lists Sessions; shared Run details serve both Chat history and Admin inspection. Operational drawers use quiet headers, open rows, filled icon-and-text status chips, bounded reading regions and inline recovery. Automations retain their elevated schedule inset.
 - Admin collections use compact tables with local horizontal scrolling; Experience and Automations expand one record at a time. Read-only details share aligned labels on wider screens and stacked labels on mobile.
 
 - Admin uses contextual creation, sticky draft actions, shared conversation source selection, explicit time-zone previews and inline recovery on the same Ant Design baseline.
@@ -142,10 +152,11 @@ The shipped appearance is Ant Design `darkAlgorithm`: black layout, conversation
 Dark operate neutrals with one primary accent and one success accent for live microphone state.
 
 ### Primary
-- **Ant Design primary** (`{colors.primary}`): Send, Voice-on (`aria-pressed`), focus rings, and selection tint. Use sparingly so the transcript stays readable.
+- **Ant Design primary** (`{colors.primary}`): primary actions, Voice-on (`aria-pressed`) and focus rings. Selection tint uses `{colors.primaryBg}`. Keep the transcript visually quiet.
+- **Ant Design error** (`{colors.error}`): failure and destructive-action feedback; retain the visible error label and recovery control.
 
 ### Secondary
-- **Listening green** (`{colors.success}` / `{colors.successHover}`): microphone is actively capturing. Distinct from Voice mode (primary). Do not use green for Voice-on.
+- **Listening green** (`{colors.success}` / `{colors.successHover}`): microphone is actively capturing; `{colors.successBg}` supplies its active fill. Completed operational status uses Ant Design semantic success. Voice-on uses primary.
 
 ### Neutral
 - **Layout** (`{colors.layout}`): rail and page chrome.
@@ -196,13 +207,13 @@ One session: black rail + conversation column + sticky composer. Column is `min(
 
 Audit: Message placeholder left edge equals the Model name left edge; Model hover fill matches session-row inset and does not overlap the next control. Never zero a text button's padding to force alignment, and never use negative margin to grow a hover fill.
 
-Ownership: `AppShell` owns resolved colors, spacing, type and Ant Design radius aliases. `app.css` owns the product-specific chip/composer/bubble radii (12/16/18px), reading measure and responsive geometry. Inventory and definition panels share one surface/header/title rule; Chat and Admin headers both use compact block padding. A contained Versions collection owns sibling gaps and gives its toolbar no extra inset. `AdminCollectionToolbar` and `useAdminCollectionSearch` share collection search/pagination; `useAdminDetailLayout` shares responsive label alignment. `AdminSessionPicker` shares conversation browsing and manual entry across Memory and Experience; its stack owns compact sibling gaps. Memory owns the compact wrapping scope/action toolbar for IdentityUser and User; Session keeps its scope/source row and separate actions below the picker. `.admin-draft-actions` owns sticky draft chrome, spacing and borders; fields use scroll clearance beneath that bar. Product components compose Ant Design Table and Descriptions directly. These helpers are product layout policies, not a replacement component library.
+Ownership: `AppShell` owns resolved colors, spacing, type and Ant Design radius aliases. `app.css` owns the product-specific chip/composer/bubble radii (12/16/18px), reading measure and responsive geometry. Inventory and definition panels share one surface/header/title rule; Chat and Admin headers both use compact block padding. A contained Versions collection owns sibling gaps and gives its toolbar no extra inset. `AdminCollectionToolbar` and `useAdminCollectionSearch` share collection search/pagination; `useAdminDetailLayout` shares responsive label alignment. `AdminSessionPicker` shares conversation browsing and manual entry across Memory and Experience; its stack owns compact sibling gaps. Memory owns the compact wrapping scope/action toolbar for IdentityUser and User; Session keeps its scope/source row and separate actions below the picker. `.admin-draft-actions` owns sticky draft chrome, spacing and borders; fields use scroll clearance beneath that bar. BackgroundWorkDrawer owns its 16px body inset; catalog rows own 12px inline padding, 16px block padding and the 8px first-row top inset. SessionRunHistory owns its 16px sibling gap; subsequent history sections own a hairline and 16px top padding. AgentRunDetails owns a 16px content stack and 8px status/action groups, with no catalog-row padding or outer inset. Admin Run inspection reuses that same composition. SessionArtifacts reuses ArtifactView; DrawerListFooter supplies cursor loading/retry states. Product components compose Ant Design Table and Descriptions directly. These helpers are product layout policies, not a replacement component library.
 
 ## Elevation & Depth
 
 Mostly flat tonal layering (layout → container → elevated → bubble/fill). One structural shadow is shared by the composer and its Model overlay.
 
-Operational drawer details use the elevated tone, a border, and an 8px radius to distinguish approval previews, results, or schedule expressions without adding another shadow. Background work and Run details share the RunTextSection composition: 12px inner padding, 8px label/content gap, and a focusable, independently scrollable text region capped at `clamp(8rem, 24dvh, 16rem)`. Short content remains natural height. The drawer body owns 16px outer padding; 12px top-aligned metadata uses a compact label/value grid with wrapping IDs.
+Automation schedule expressions retain an elevated inset with a border, 8px radius, 12px padding and 8px internal gap. Current Run outcomes, confirmed effects and approval previews use open labeled ReadingRegion sections inside AgentRunDetails. They add no card fill, border or outer padding; each text region is independently scrollable, keyboard-focusable and capped at `clamp(8rem, 24dvh, 16rem)`. Short content remains natural height. Run metadata uses direct compact Ant Design Descriptions for Model, Attempt and Updated. The drawer body owns the shared 16px outer inset.
 
 ### Shadow Vocabulary
 - **Composer lift** (`box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45)`): sticky message well and its anchored Model overlay.
@@ -282,11 +293,17 @@ Ant Design owns control hover, pressed, disabled, loading and semantic states. P
 - Preserve the established forms, revisioned actions and confirmations described in [Frontend Implementation](../../docs/13-frontend-implementation-spec.md). This section documents presentation, not operation eligibility or API limits.
 
 ### Operational drawers
-- Background Work and Automations use a two-line title: a strong title above a 12px secondary subtitle.
-- Use open semantic execution rows and direct Ant Design schedule rows with 16px block padding and an 8px first-row top inset. The primary row heading and filled status chip share the top line and tolerate wrapped content.
-- Detail insets use the elevated surface, a 1px border, 8px radius, 12px padding, and an 8px internal gap. Use them for implemented detail types such as approval previews, completed results, and schedule expressions; do not force every row field into an inset.
-- Schedule metadata keeps the time-zone identifier in a compact chip and renders the next occurrence with `Intl.DateTimeFormat` using the viewer locale and the schedule time zone. Fall back to a readable local string when the named zone cannot be formatted.
-- When a row has actions, rely on the row stack gap before trailing controls; align them to the trailing edge and allow wrapping. Current narrow-layout drawer actions use a 40px minimum target height.
+- Background Work has a single title, Background work; selecting a Session changes the title to that Session's name. Introductory copy belongs in the body. The Automations drawer retains its own title/subtitle composition.
+- Catalog rows are semantic list items for Sessions. A wrapping, start-aligned text button presents the complete Session name beside its latest filled status chip. Keep the title's 8px inner padding, 600 weight and natural height; do not reuse the ellipsized Admin table-name link. Origin and Updated appear below, then optional progress/unread attention and a wrapping 8px action row.
+- The title and View history enter the same Session detail. All background Sessions is a compact, start-aligned Back control with 8px inner padding. History navigation moves focus to Back, then restores the exact opener on return; polling does not move focus.
+- The selected Session shows origin, optional report-back copy, Continue in chat, Run history and Files. Continue in chat is the full-width primary action in this detail view; catalog actions wrap at their natural width. Archived/ended rows keep history available with continuation disabled and a readable explanation.
+- Continue failures stay in an inline Ant Design Alert with recovery guidance. Loading disables repeated continuation. A successful live, paused or read-only ended opening closes the drawer to reveal the conversation. Eligibility and same-Session behavior remain owned by `/docs`.
+- AgentRunDetails is shared by SessionRunHistory and Admin Run inspection. It shows status/turn kind/attention, optional progress, Model/Attempt/Updated, retry time, outcome, confirmed effects, exact approval preview and safe diagnostics. Labels name the displayed outcome: Response, Result, No action or Needs attention. A quiet No action retains readable copy without an attention badge.
+- Outcome, confirmed effects and approval preview retain complete escaped, wrapping text in separate labeled focusable regions. Each uses natural short-content height, a `clamp(8rem, 24dvh, 16rem)` scroll cap, 72ch text measure and the shared primary focus outline. Keep these sections open; schedule-expression insets remain specific to Automations.
+- Approve action and Reject action share a wrapping 8px control row; expiry has visible copy and disables both decisions. Cancel run stays content-width and start-aligned. Consequential actions use the shared centered confirmation, retain inline stale/error feedback and expose loading/disabled states.
+- Run history and Files retain their own heading, loading, empty, inline error/retry and bounded-page footer. Files reuse the same ArtifactView Download/Retry card as conversation history. Failed older-page loads keep the existing content visible.
+- Background Work and Run details cap at 640px on wide layouts and use full viewport width below 768px. Their body owns 16px padding; narrow drawer buttons retain at least 40px height. Automations remains 400px/320px with its existing schedule rows and elevated expression inset.
+- Schedule metadata keeps its time-zone chip and formats the next occurrence for the viewer locale in the schedule's named zone, with a readable fallback.
 
 ### Conversation turns
 - User: right-aligned bubble (`8px 12px`, 18px radius).
@@ -299,12 +316,22 @@ Ant Design owns control hover, pressed, disabled, loading and semantic states. P
 - Right: context-sensitive Stop / Queue / Send. With queued work above the shell, Steer and Remove stay row actions rather than joining the toolbar.
 - Accessible names stay Model, Reasoning, Attach, Voice, Send, Stop.
 
+### Instance automation and execution navigation
+
+Instance tabs separate Identity & version, Skills, Continuity, Automation, Runs, Connections and Effective configuration. Nested sections use the same URL-backed Ant Design tab composition and retain visited form drafts. Configuration is a searchable compact collection with concise Name, readable When, lifecycle, next activation, last Run, model and creation provenance. Schedule and Event variants share the editor's Name/Instructions/model fields. Expanded record details retain the shared top-aligned desktop labels and stacked mobile layout.
+
+Runs uses the bounded compact Ant Design collection with Run ID, readable Turn, Status and Updated. Run links open the exact AgentRun in the right-side Run details drawer, using the shared AgentRunDetails composition. The current collection does not show an Automation-name or admitted-Instructions column. Tables scroll locally while long drawer IDs/results wrap. Source controls expand/focus the exact configuration or Experience checkpoint without discarding drafts. Save returns focus to its source; deletion returns it to New automation. Close/Escape/mask restore the Run opener. Existing action groups wrap and retain at least 40px height below 768px. Safe errors and explicit retry stay inside the affected panel/drawer. No execution-authoring controls belong in Runs.
+
+### Artifact cards
+
+Published file cards reuse the file-chip elevated fill, 1px border, 12px radius and 8px × 12px padding. The enclosing block owns available width; the card caps at 32rem. A shrinking metadata column owns filename ellipsis and the secondary type/size line. The Ant Design Download/Retry button keeps its normal hit area, focus and busy state. Loading and failure use safe text; the complete filename remains accessible. No preview, extra shadow or workspace browsing surface is added.
+
 ## Do's and Don'ts
 
 ### Do:
 - **Do** import `antd` in feature files; ConfigProvider uses `darkAlgorithm`. Keep Sider `theme="light"` so chat surfaces stay black.
 - **Do** use compact/default/section (8/12/16px) for shells and sibling `gap`; use Ant Design `paddingXS` (8px, `{spacing.controlInner}`) via `theme.useToken()` for text-control inner padding so it matches session-row inset; align Spoken and composer toolbar to that rhythm.
-- **Do** disclose a failed turn, work item, or admin error with one Ant Design popover, Error details, and a keyboard-reachable Copy control. Keep the Failed label. Show the popover only when a diagnostic id exists. Space the id and the copy control with `paddingXS`.
+- **Do** disclose a failed turn, AgentRun, or admin error with one Ant Design popover, Error details, and a keyboard-reachable Copy control. Keep the Failed label. Show the popover only when a diagnostic id exists. Space the id and the copy control with `paddingXS`.
 - **Do** put Model in the composer when the composer is shown (Reasoning level inside the Model button when supported); keep Identity/Speech locale in the new-chat intro; keep Speech locale in the live header.
 - **Do** show enabled model capabilities as compact tooltip-backed icons in catalog rows; preserve the Default tag and selected-row check as separate signals.
 - **Do** keep queued drafts above the composer in a compact local work list, with truncation, bounded expansion, and trailing Steer/Remove actions.
@@ -315,15 +342,16 @@ Ant Design owns control hover, pressed, disabled, loading and semantic states. P
 - **Do** treat Admin as the same dark product: shared spacing tokens, configuration panels, and operator copy. Behavior stays in `/docs`.
 - **Do** keep table action buttons together with sufficient column width and local scrolling; retain wrapping for forms and expanded details.
 - **Do** reuse Admin collection search/pagination and responsive detail alignment; keep table summaries compact, expanded content contained, and mobile labels stacked.
-- **Do** use the shared centered Ant Design confirmation dialog (`confirmAction` in `web/src/app/confirmAction.ts`) for destructive or consequential actions across Chat, Admin, Background Work, and Automations (session delete, Admin definition/instance delete, deprecation, work cancel, approval decisions, memory reset, automation revoke, and similar). Prefer a stable `dialog` surface for tests and keyboard focus.
+- **Do** use the shared centered Ant Design confirmation dialog (`confirmAction` in `web/src/app/confirmAction.ts`) for destructive or consequential actions across Chat, Admin, Background Work, and Automations (session delete, Admin definition/instance delete, deprecation, run cancellation, approval decisions, memory reset, automation revoke, and similar). Prefer a stable `dialog` surface for tests and keyboard focus.
 - **Do** keep header identity, Speech locale, compact icon actions, profile, and connection status visible. Use 32×32px, 6px-radius fill-hover actions; keep Background Work at an 18px inbox icon with attention badge and Automations/Admin/End at 16px.
 - **Do** keep ended history on the same reading column with a quiet ended note, not a disabled input.
-- **Do** reuse the operational drawer language for Background Work and Automations: quiet headers, semantic execution rows, semantic filled icon-and-text status chips, elevated 8px detail insets, and trailing actions only where the row exposes an operation.
+- **Do** reuse AgentRunDetails across Chat history and Admin inspection, keeping one outer drawer inset, semantic filled status chips, open bounded reading regions and content-width consequential controls. Automations retains its elevated schedule inset.
 - **Do** reuse the global Admin collection and per-instance binding layouts for System Credentials. Mask transient protected input with no reveal control; safe metadata and grant aliases use existing forms and tables. Keep browser state reset in its own section and event reactions in the shared Automation collection. Attention results use the words Needs attention plus an icon. Quiet completions do not change the header count.
 - **Do** format schedule occurrences for the viewer locale in the schedule’s named time zone; keep the zone identifier visible beside the readable time.
-- **Do** show run timestamps with the shared chat time formatter and a `time` element. Use readable origin labels (`Automation · Schedule`, `Automation · Event`, `Automation · Manual`) while retaining transport values internally.
+- **Do** show updated timestamps with the shared chat time formatter and a `time` element. Background Session origins use readable labels (Immediate task, Automation, Application event, Manual task); Run turn kinds use Chat turn, Scheduled task, Completion report and the other implemented labels. Keep transport values internal.
 - **Do** keep the unattended model and its effective-source sentence in Automation → Policies & models. Show a webhook credential once in a dialog, then clear it on Done or Escape. The resting Event source collection keeps public keys and status only; System Credential projections keep only safe metadata and policy.
 
+- **Do** preserve keyboard focus across Background Session history navigation and keep continuation failures/recovery visible inside the drawer.
 - **Do** reuse AdminSessionPicker across Memory and Experience, align scope/source labels at the top, keep actions in a wrapping row, and preserve sticky draft actions with field scroll clearance. Date/time fields disclose the viewer zone; errors and copy recovery stay on their affected surface.
 
 ### Don't:
@@ -337,17 +365,7 @@ Ant Design owns control hover, pressed, disabled, loading and semantic states. P
 - **Don't** render queued drafts as transcript turns or move pending attachments into a separate dock.
 - **Don't** zero a text control’s padding, use negative margin, or stack extra child padding to fake alignment with a sibling.
 - **Don't** show Spoken as another conversational turn or from internal generated tails.
-- **Don't** wrap every operational List row in a card or generalize drawer actions to rows that do not expose an operation.
+- **Don't** wrap every operational row in a card, apply catalog-row padding inside shared Run details, truncate Background Session names with Admin table styles, or generalize actions to rows without an operation.
 - **Don't** present schedule occurrence timestamps as raw transport strings when they parse as dates.
 - **Don't** use transient `Popconfirm` overlays for lifecycle, deletion, approval, cancellation, reset, or revoke actions when `confirmAction` is available; reserve Popconfirm for low-risk inline affordances only.
 - **Don't** add a browser panel, iframe, screenshot, or click log. Browser progress stays on the existing activity row as `Using browser…`.
-
-### Instance automation and execution navigation
-
-Instance tabs separate Identity & version, Skills, Continuity, Automation, Runs, Connections and Effective configuration. Nested sections use the same URL-backed Ant Design tab composition and retain visited form drafts. Configuration is a searchable compact collection with concise Name, readable When, lifecycle, next activation, last Run, model and creation provenance. Schedule and Event variants share the editor's Name/Instructions/model fields. Expanded record details retain the shared top-aligned desktop labels and stacked mobile layout.
-
-Runs uses the compact Ant Design collection with Automation name, admitted Instructions, Run ID, Status/attention and Updated. Full text appears in native titles and the right-side Run details drawer; later configuration edits do not alter this historical display. Tables scroll locally while long drawer IDs/results wrap. Source controls expand/focus the exact configuration or Experience checkpoint without discarding drafts. Save returns focus to its source; deletion returns it to New automation. Close/Escape/mask restore the Run opener. Existing action groups wrap and retain at least 40px height below 768px. Safe errors and explicit retry stay inside the affected panel/drawer. No execution-authoring controls belong in Runs.
-
-## Artifact cards
-
-Published file cards reuse the file-chip elevated fill, 1px border, 12px radius and 8px × 12px padding. The enclosing block owns available width; the card caps at 32rem. A shrinking metadata column owns filename ellipsis and the secondary type/size line. The Ant Design Download/Retry button keeps its normal hit area, focus and busy state. Loading and failure use safe text; the complete filename remains accessible. No preview, extra shadow or workspace browsing surface is added.

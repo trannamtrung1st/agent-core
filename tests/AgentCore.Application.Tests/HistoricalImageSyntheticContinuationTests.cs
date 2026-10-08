@@ -1,3 +1,4 @@
+using SkiaSharp;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
@@ -12,8 +13,6 @@ using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace AgentCore.Application.Tests;
 
@@ -121,9 +120,10 @@ public sealed class HistoricalImageSyntheticContinuationTests
 
     private static byte[] PngBytes()
     {
-        using var image = new Image<Rgba32>(2, 2, new Rgba32(10, 20, 30));
+        using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        image.SaveAsPng(buffer);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+        encoded.SaveTo(buffer);
         return buffer.ToArray();
     }
 

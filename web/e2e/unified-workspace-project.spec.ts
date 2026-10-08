@@ -69,10 +69,10 @@ test("Chat copies and renames an exact four-file project, edits with CAS, and pr
   expect((await page.request.delete(`/api/v2/sessions/${fresh}`, { headers })).ok()).toBe(true);
   const removed = await page.request.delete(`/api/v2/admin/agent-instances/${owner}`, { headers, data: { expectedRevision: 2 } });
   expect(removed.status()).toBe(409);
-  expect((await removed.json()).detail).toContain("conversation executions");
+  expect((await removed.json()).detail).toContain("AgentRuns");
   expect((await page.request.get(`/api/v2/agent-instances/${owner}/workspace`, { headers })).ok()).toBe(true);
 
-  // Conversation execution receipts deliberately prevent cascading instance deletion.
+  // AgentRun receipts deliberately prevent cascading instance deletion.
   // A separate unreferenced owner exercises the normal durable-home purge boundary.
   const provisioned = await page.request.post("/api/v2/admin/agent-instances", {
     headers, data: { definitionId: "general-assistant", version: 16 }

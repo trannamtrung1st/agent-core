@@ -76,8 +76,8 @@ public sealed class InstanceSkillsStartupTests
                 db.AgentDefinitionDrafts.Add(new() { DraftId = Guid.NewGuid().ToString("D"), DefinitionId = "examiner", CandidateJson = legacy });
                 await db.SaveChangesAsync();
             }
-            var error = await Assert.ThrowsAsync<InvalidOperationException>(async () => await memory.EnsureCreatedAsync());
-            Assert.Contains("Legacy Skill data reset required", error.Message);
+            var error = await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(async () => await memory.EnsureCreatedAsync());
+            Assert.Contains("Stored Skill JSON is incompatible", error.Message);
             Assert.Contains("back up", error.Message);
             var retained = location == "session" ? (await db.Sessions.SingleAsync()).DefinitionJson
                 : location == "publication" ? (await db.AgentDefinitionPublications.SingleAsync()).PayloadJson

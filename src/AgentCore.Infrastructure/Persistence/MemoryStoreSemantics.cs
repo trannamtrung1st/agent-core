@@ -38,6 +38,7 @@ internal static class MemoryStoreSemantics
         && left.PinnedPersona == right.PinnedPersona
         && left.PinnedPersonaRevision == right.PinnedPersonaRevision
         && left.Origin == right.Origin
+        && left.PendingAgentInputIds.SequenceEqual(right.PendingAgentInputIds)
         && left.Surfaces == right.Surfaces
         && IncomingEntriesMatch(left.Entries, right.Entries);
 
@@ -105,10 +106,10 @@ internal static class MemoryStoreSemantics
         return true;
     }
 
-    public static SessionSnapshot Recover(SessionSnapshot snapshot, DateTimeOffset now)
+    public static SessionSnapshot Recover(SessionSnapshot snapshot, DateTimeOffset now, IReadOnlySet<Guid>? ownedResponseIds = null)
     {
         var entries = snapshot.Entries
-            .Select(entry => entry.Status == EntryStatus.Streaming
+            .Select(entry => entry.Status == EntryStatus.Streaming && (entry.ResponseId is not { } responseId || ownedResponseIds?.Contains(responseId) != true)
                 ? entry with { Status = EntryStatus.Interrupted }
                 : entry)
             .ToArray();

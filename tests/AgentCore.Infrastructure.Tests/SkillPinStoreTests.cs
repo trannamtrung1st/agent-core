@@ -1,7 +1,9 @@
+using AgentCore.Application.Execution;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
-using AgentCore.Domain.Work;
+using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -10,104 +12,60 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class SkillPinStoreTests
 {
+    private static readonly DateTimeOffset Now = new(2026, 10, 8, 0, 0, 0, TimeSpan.Zero);
+    private static readonly AgentRunOwner Owner = new(Guid.NewGuid(), Guid.NewGuid());
+    private static readonly AgentDefinition Definition = new(1, "skill-guide", 1,
+        new("Guide", "Role", "Guidance", "Calm"), [], "Instructions", new("answerNewTurn", true, true),
+        new("concise", false, "en", 256), new(false, 8000, 30000, 1, ["longSilence"]),
+        new(false, "default", 1), new("primary-llm", null, null), new Dictionary<string, string>());
+    private static readonly EffectiveSkill[] Catalog = [
+        new("definition:refund.handle", SkillOrigin.Definition, "refund.handle", "Refund", "Guidance", "PINNED_REFUND",
+            SkillProjection.OnDemand, [], []),
+        new("definition:billing.note", SkillOrigin.Definition, "billing.note", "Billing", "Guidance", "PINNED_BILLING",
+            SkillProjection.OnDemand, [], []),
+        new("instance:019944af-00d1-7000-8000-0000000000c1", SkillOrigin.Instance, "019944af-00d1-7000-8000-0000000000c1",
+            "Local", "Local procedure", "PINNED_LOCAL_PROCEDURE", SkillProjection.OnDemand, ["workspace.read"], [])];
+
     [Fact]
-    public async Task Startup_rejects_old_execution_without_catalog_instead_of_synthesizing_a_pin()
+    public async Task Startup_rejects_legacy_execution_instead_of_synthesizing_a_pin_or_stamping_it()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"agent-core-old-pin-{Guid.NewGuid():N}.db");
-        var factory = new SqliteContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
-        try
-        {
-            var memory = new SqliteMemoryStore(factory, TimeProvider.System);
-            await memory.EnsureCreatedAsync();
-            await new SqliteConversationTurnExecutionStore(factory).CreateAsync(Execution(Guid.NewGuid(), Guid.NewGuid(), DateTimeOffset.UtcNow, []));
-            await using var db = await factory.CreateDbContextAsync();
-            await db.Database.ExecuteSqlRawAsync("UPDATE ConversationTurnExecutions SET PinnedSkillCatalogJson = ''");
-            var error = await Assert.ThrowsAsync<InvalidOperationException>(async () => await memory.EnsureCreatedAsync());
-            Assert.Contains("Legacy Skill data reset required", error.Message);
-            Assert.Equal("", (await db.ConversationTurnExecutions.SingleAsync()).PinnedSkillCatalogJson);
-        }
-        finally
-        {
-            SqliteConnection.ClearAllPools();
-            File.Delete(path);
-        }
+        await using var f = await Fixture.CreateAsync(true);
+        await using var db = f.Factory!.CreateDbContext();
+        await db.Database.ExecuteSqlRawAsync("CREATE TABLE ConversationTurnExecutions (ExecutionId TEXT NOT NULL PRIMARY KEY, PinnedSkillCatalogJson TEXT NOT NULL)");
+        await db.Database.ExecuteSqlRawAsync("INSERT INTO ConversationTurnExecutions VALUES ('demo', '')");
+        var error = await Assert.ThrowsAsync<AgentCoreException>(() => new SqliteMemoryStore(f.Factory!, TimeProvider.System).EnsureCreatedAsync().AsTask());
+        Assert.Contains("reset", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM ConversationTurnExecutions").SingleAsync());
     }
 
     [Fact]
-    public async Task Sqlite_reopen_keeps_the_complete_catalog_and_active_keys()
+    public async Task Sqlite_reopen_keeps_catalog_skill_loads_and_capabilities_across_lease_recovery()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"agent-core-skill-pin-{Guid.NewGuid():N}.db");
-        var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
-        var factory = new SqliteContextFactory(options);
-        var now = DateTimeOffset.Parse("2026-09-30T00:00:00Z");
-        var sessionId = Guid.Parse("019944af-00d1-7000-8000-0000000000b1");
-        var sourceEventId = Guid.Parse("019944af-00d1-7000-8000-0000000000b2");
-        try
-        {
-            await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
-            var store = new SqliteConversationTurnExecutionStore(factory);
-            var created = await store.CreateAsync(Execution(sessionId, sourceEventId, now, ["definition:refund.handle", "definition:order.lookup"]));
-            Assert.Equal(ConversationTurnExecutionCreateKind.Created, created.Kind);
-
-            var reopened = new SqliteConversationTurnExecutionStore(factory);
-            var loaded = await reopened.GetBySourceEventAsync(sessionId, sourceEventId);
-            Assert.Equal(["definition:refund.handle", "definition:order.lookup"], loaded!.ActiveSkillKeys);
-            Assert.Equal("PINNED_LOCAL_PROCEDURE", loaded.PinnedSkillCatalog.Single(s => s.Origin == SkillOrigin.Instance).Procedure);
-
-            var claimed = await reopened.TryClaimAsync(
-                loaded.ExecutionId,
-                Guid.Parse("019944af-00d1-7000-8000-0000000000b9"),
-                now.AddMinutes(1),
-                now.AddMinutes(6));
-            Assert.Equal(["definition:refund.handle", "definition:order.lookup"], claimed!.ActiveSkillKeys);
-            var admitted = await reopened.AdmitActiveSkillsAsync(
-                claimed.ExecutionId,
-                claimed.Revision,
-                Guid.Parse("019944af-00d1-7000-8000-0000000000b9"),
-                ["definition:billing.note"],
-                now.AddMinutes(2));
-            Assert.Equal(["definition:refund.handle", "definition:order.lookup", "definition:billing.note"], admitted.ActiveSkillKeys);
-            Assert.Equal(1, admitted.SkillLoadCount);
-            var reloadedCount = await reopened.GetAsync(admitted.ExecutionId);
-            Assert.Equal(1, reloadedCount!.SkillLoadCount);
-
-            var loadedCapabilities = await reopened.AdmitCapabilitiesAsync(admitted.ExecutionId, admitted.Revision,
-                admitted.Claim!.Generation, ["workspace.read", "email.search"], now.AddMinutes(3));
-            var afterReopen = await new SqliteConversationTurnExecutionStore(factory).GetAsync(loadedCapabilities.ExecutionId);
-            Assert.Equal(["workspace.read", "email.search"], afterReopen!.LoadedCapabilityIds);
-            Assert.Equal(1, afterReopen.CapabilityLoadCount);
-            await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(async () =>
-                await reopened.AdmitCapabilitiesAsync(admitted.ExecutionId, admitted.Revision, admitted.Claim.Generation, ["workspace.write"], now.AddMinutes(4)));
-
-            Assert.Equal(1, await reopened.RecoverExpiredClaimsAsync(now.AddMinutes(7)));
-            var reclaim = (await reopened.TryClaimAsync(admitted.ExecutionId, Guid.NewGuid(), now.AddMinutes(7), now.AddMinutes(12)))!;
-            Assert.Equal(afterReopen.LoadedCapabilityIds, reclaim.LoadedCapabilityIds);
-            Assert.Equal(1, reclaim.CapabilityLoadCount);
-            await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(async () =>
-                await reopened.AdmitCapabilitiesAsync(reclaim.ExecutionId, reclaim.Revision, admitted.Claim.Generation, ["workspace.write"], now.AddMinutes(8)));
-            var cancelled = await reopened.RequestCancellationAsync(sessionId, reclaim.ExecutionId, reclaim.Revision, now.AddMinutes(8));
-            await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(async () =>
-                await reopened.AdmitCapabilitiesAsync(cancelled.ExecutionId, cancelled.Revision, reclaim.Claim!.Generation, ["workspace.write"], now.AddMinutes(9)));
-            Assert.Equal(afterReopen.LoadedCapabilityIds, (await reopened.GetAsync(cancelled.ExecutionId))!.LoadedCapabilityIds);
-
-            var empty = await reopened.CreateAsync(Execution(
-                sessionId,
-                Guid.Parse("019944af-00d1-7000-8000-0000000000b3"),
-                now,
-                []));
-            var reloadedEmpty = await reopened.GetAsync(empty.Item.ExecutionId);
-            Assert.Empty(reloadedEmpty!.ActiveSkillKeys);
-            Assert.Empty(reloadedEmpty.LoadedCapabilityIds);
-            Assert.Equal(0, reloadedEmpty.CapabilityLoadCount);
-        }
-        finally
-        {
-            SqliteConnection.ClearAllPools();
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
+        await using var f = await Fixture.CreateAsync(true);
+        var snapshot = AgentRunTestFixtures.Snapshot(Owner, Definition, Now);
+        var run = (await f.Store.AdmitAsync(snapshot, 0, AgentRunTestFixtures.Run(snapshot, Now, Catalog))).Run;
+        run = await f.Store.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Claim(run.Revision, Now, Guid.NewGuid(), Now.AddMinutes(5)));
+        var generation = run.Claim!.Generation;
+        run = await f.Store.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.LoadSkills(run.Revision, Now, generation, ["definition:refund.handle"]));
+        run = await f.Store.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.LoadCapabilities(run.Revision, Now, generation, ["workspace.read", "email.search"]));
+        var reopened = new SqliteAgentRunStore(f.Factory!, (SqliteMemoryStore)f.Memory, new SystemDiagnosticIdSource());
+        var loaded = (await reopened.GetAsync(Owner, run.AgentRunId))!;
+        Assert.Equal(Catalog.Select(s => s.Procedure), loaded.PinnedSkillCatalog.Select(s => s.Procedure));
+        Assert.Equal(["definition:refund.handle"], loaded.ActiveSkillKeys);
+        Assert.Equal(["workspace.read", "email.search"], loaded.LoadedCapabilityIds);
+        Assert.Equal(1, loaded.SkillLoadCount); Assert.Equal(1, loaded.CapabilityLoadCount);
+        await Assert.ThrowsAsync<AgentCoreException>(() => reopened.ApplyAsync(Owner, run.AgentRunId,
+            new AgentRunCommand.LoadCapabilities(run.Revision - 1, Now, generation, ["workspace.write"])).AsTask());
+        run = await reopened.ApplyAsync(Owner, loaded.AgentRunId, new AgentRunCommand.Recover(loaded.Revision, Now.AddMinutes(6)));
+        run = await reopened.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Claim(run.Revision, Now.AddMinutes(6), Guid.NewGuid(), Now.AddMinutes(11)));
+        await Assert.ThrowsAsync<AgentCoreException>(() => reopened.ApplyAsync(Owner, run.AgentRunId,
+            new AgentRunCommand.LoadSkills(run.Revision, Now.AddMinutes(7), generation, ["definition:billing.note"])).AsTask());
+        run = await reopened.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.RequestCancellation(run.Revision, Now.AddMinutes(7), null));
+        await Assert.ThrowsAsync<AgentCoreException>(() => reopened.ApplyAsync(Owner, run.AgentRunId,
+            new AgentRunCommand.LoadCapabilities(run.Revision, Now.AddMinutes(7), run.Claim!.Generation, ["workspace.write"])).AsTask());
+        loaded = (await reopened.GetAsync(Owner, run.AgentRunId))!;
+        Assert.Equal(["workspace.read", "email.search"], loaded.LoadedCapabilityIds);
+        Assert.Equal(1, loaded.CapabilityLoadCount);
     }
 
     [Theory]
@@ -115,70 +73,38 @@ public sealed class SkillPinStoreTests
     [InlineData(true)]
     public async Task Cancelled_capability_admission_leaves_revision_ids_and_count_unchanged(bool sqlite)
     {
-        var path = Path.Combine(Path.GetTempPath(), $"agent-core-capability-cancel-{Guid.NewGuid():N}.db");
-        var factory = new SqliteContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
-        try
-        {
-            IConversationTurnExecutionStore store;
-            if (sqlite)
-            {
-                await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
-                store = new SqliteConversationTurnExecutionStore(factory);
-            }
-            else store = new InMemoryConversationTurnExecutionStore();
-            var now = DateTimeOffset.Parse("2026-10-07T00:00:00Z");
-            var item = (await store.CreateAsync(Execution(Guid.NewGuid(), Guid.NewGuid(), now, []))).Item;
-            var claim = (await store.TryClaimAsync(item.ExecutionId, Guid.NewGuid(), now, now.AddMinutes(5)))!;
-            using var cancellation = new CancellationTokenSource();
-            cancellation.Cancel();
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-                await store.AdmitCapabilitiesAsync(claim.ExecutionId, claim.Revision, claim.Claim!.Generation,
-                    ["workspace.write"], now.AddSeconds(1), cancellation.Token));
-            var unchanged = (await store.GetAsync(claim.ExecutionId))!;
-            Assert.Equal(claim.Revision, unchanged.Revision);
-            Assert.Empty(unchanged.LoadedCapabilityIds);
-            Assert.Equal(0, unchanged.CapabilityLoadCount);
-            var admitted = await store.AdmitCapabilitiesAsync(claim.ExecutionId, claim.Revision, claim.Claim!.Generation,
-                ["workspace.read"], now.AddSeconds(2));
-            Assert.Equal(["workspace.read"], admitted.LoadedCapabilityIds);
-            Assert.Equal(1, admitted.CapabilityLoadCount);
-        }
-        finally
-        {
-            SqliteConnection.ClearAllPools();
-            if (File.Exists(path)) File.Delete(path);
-        }
+        await using var f = await Fixture.CreateAsync(sqlite);
+        var snapshot = AgentRunTestFixtures.Snapshot(Owner, Definition, Now);
+        var run = (await f.Store.AdmitAsync(snapshot, 0, AgentRunTestFixtures.Run(snapshot, Now, Catalog))).Run;
+        var claim = await f.Store.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Claim(run.Revision, Now, Guid.NewGuid(), Now.AddMinutes(5)));
+        using var cancellation = new CancellationTokenSource(); cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => f.Store.ApplyAsync(Owner, claim.AgentRunId,
+            new AgentRunCommand.LoadCapabilities(claim.Revision, Now, claim.Claim!.Generation, ["workspace.write"]), cancellation.Token).AsTask());
+        var unchanged = (await f.Store.GetAsync(Owner, claim.AgentRunId))!;
+        Assert.Equal(claim.Revision, unchanged.Revision); Assert.Empty(unchanged.LoadedCapabilityIds); Assert.Equal(0, unchanged.CapabilityLoadCount);
+        var admitted = await f.Store.ApplyAsync(Owner, claim.AgentRunId,
+            new AgentRunCommand.LoadCapabilities(claim.Revision, Now, claim.Claim!.Generation, ["workspace.read"]));
+        Assert.Equal(["workspace.read"], admitted.LoadedCapabilityIds); Assert.Equal(1, admitted.CapabilityLoadCount);
     }
 
-    private static ConversationTurnExecution Execution(
-        Guid sessionId,
-        Guid sourceEventId,
-        DateTimeOffset now,
-        IReadOnlyList<string> skillIds) =>
-        ConversationTurnExecution.AcceptNew(
-            Guid.NewGuid(),
-            sessionId,
-            Guid.NewGuid(),
-            sourceEventId,
-            Guid.NewGuid(),
-            null,
-            null,
-            "skill-guide",
-            1,
-            null,
-            new WorkModelPin("scripted-alpha", "primary-llm", "scripted-alpha", null),
-            now,
-            skillIds, pinnedSkillCatalog: new[] { "definition:refund.handle", "definition:order.lookup", "definition:billing.note" }
-                .Select(key => new EffectiveSkill(key, SkillOrigin.Definition, key[11..], key, "Guidance", "Pinned procedure",
-                    SkillProjection.OnDemand, [], [])).Append(new EffectiveSkill("instance:019944af-00d1-7000-8000-0000000000c1",
-                    SkillOrigin.Instance, "019944af-00d1-7000-8000-0000000000c1", "Local", "Local procedure", "PINNED_LOCAL_PROCEDURE",
-                    SkillProjection.OnDemand, ["workspace.read"], [])).ToArray());
-
+    private sealed class Fixture(string? path, IMemoryStore memory, IAgentRunStore store, SqliteContextFactory? factory) : IAsyncDisposable
+    {
+        public IMemoryStore Memory { get; } = memory;
+        public IAgentRunStore Store { get; } = store;
+        public SqliteContextFactory? Factory { get; } = factory;
+        public static async Task<Fixture> CreateAsync(bool sqlite)
+        {
+            if (!sqlite) { var memory = new InMemoryMemoryStore(); return new(null, memory, new InMemoryAgentRunStore(memory, new SystemDiagnosticIdSource()), null); }
+            var path = Path.Combine(Path.GetTempPath(), $"agent-core-skill-pin-{Guid.NewGuid():N}.db");
+            var factory = new SqliteContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
+            var sqliteMemory = new SqliteMemoryStore(factory, TimeProvider.System); await sqliteMemory.EnsureCreatedAsync();
+            return new(path, sqliteMemory, new SqliteAgentRunStore(factory, sqliteMemory, new SystemDiagnosticIdSource()), factory);
+        }
+        public ValueTask DisposeAsync() { SqliteConnection.ClearAllPools(); if (path is not null) File.Delete(path); return ValueTask.CompletedTask; }
+    }
     private sealed class SqliteContextFactory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>
     {
         public AgentCoreDbContext CreateDbContext() => new(options);
-
-        public Task<AgentCoreDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(CreateDbContext());
+        public Task<AgentCoreDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
     }
 }

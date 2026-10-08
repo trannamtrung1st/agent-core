@@ -82,6 +82,25 @@ public sealed class ActivationAdmissionTests
     }
 
     [Fact]
+    public void Native_occurrence_origin_requires_its_source_and_cannot_report_to_a_parent()
+    {
+        var runId = Guid.NewGuid();
+        var occurrenceId = Guid.NewGuid();
+        var origin = new SessionOrigin(SessionOriginKind.SourceOccurrence,
+            initialBackgroundAgentRunId: runId, triggerOccurrenceId: occurrenceId);
+        Assert.Equal(occurrenceId, origin.TriggerOccurrenceId);
+        Assert.Null(origin.AutomationId);
+        Assert.False(origin.MayReportCompletion(runId));
+        Assert.Equal(SessionSurface.BackgroundWork, origin.InitialSurface);
+        Assert.Throws<ArgumentException>(() => new SessionOrigin(SessionOriginKind.SourceOccurrence,
+            initialBackgroundAgentRunId: runId));
+        Assert.Throws<ArgumentException>(() => new SessionOrigin(SessionOriginKind.SourceOccurrence,
+            initialBackgroundAgentRunId: runId, automationId: Guid.NewGuid(), triggerOccurrenceId: occurrenceId));
+        Assert.Throws<ArgumentException>(() => new SessionOrigin(SessionOriginKind.SourceOccurrence,
+            initialBackgroundAgentRunId: runId, triggerOccurrenceId: occurrenceId, reportCompletionToOrigin: true));
+    }
+
+    [Fact]
     public void Quiet_completion_does_not_invent_a_chat_entry_and_response_requires_one()
     {
         var run = NewRun(UserActivation(Guid.NewGuid(), [Guid.NewGuid()]))

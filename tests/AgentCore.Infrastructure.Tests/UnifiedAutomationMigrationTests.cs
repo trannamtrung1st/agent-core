@@ -55,6 +55,12 @@ public sealed class UnifiedAutomationMigrationTests
         {
             var name = reader.GetName(i);
             Assert.NotEqual(oldSchema ? "TriggerRevision" : "ScheduleRevision", name);
+            if (name is "BackgroundSessionId" or "AcceptedAgentRunId" or "LiveSessionId" or "LiveEvaluationCompletedAtUtc" or "DurableWorkItemId")
+            {
+                // The later admission schema adds nullable links without converting old receipts.
+                Assert.True(reader.IsDBNull(i));
+                continue;
+            }
             values[oldSchema && name == "ScheduleRevision" ? "TriggerRevision" : name] = reader.IsDBNull(i) ? null : reader.GetValue(i);
         }
         Assert.Equal(7L, values["TriggerRevision"]);
@@ -84,13 +90,13 @@ public sealed class UnifiedAutomationMigrationTests
                     await SeedRequiredColumnsAsync(connection, table);
                 }
                 await db.GetService<IMigrator>().MigrateAsync();
-                foreach (var table in reset.Skip(2).Concat(["Automations"]))
+                foreach (var table in new[] { "TriggerOccurrences", "ExternalEventDeliveries", "ExternalEvents", "Experiences", "Automations" })
                 {
                     await using var count = connection.CreateCommand(); count.CommandText = $"SELECT COUNT(*) FROM \"{table}\"";
                     Assert.Equal(0L, (long)(await count.ExecuteScalarAsync())!);
                 }
                 await using var retired = connection.CreateCommand();
-                retired.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE name IN ('TriggerRegistrations','ContinuityMaintenanceSettings')";
+                retired.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE name IN ('TriggerRegistrations','ContinuityMaintenanceSettings','ConversationTurnExecutions','WorkItems','WorkApprovals','WorkAttentionAlerts','WorkCaptures')";
                 Assert.Equal(0L, (long)(await retired.ExecuteScalarAsync())!);
                 Assert.Equal("sentinel", (await db.AgentInstances.SingleAsync()).InstanceId);
                 Assert.Equal("sentinel", (await db.Profiles.SingleAsync()).ProfileId);

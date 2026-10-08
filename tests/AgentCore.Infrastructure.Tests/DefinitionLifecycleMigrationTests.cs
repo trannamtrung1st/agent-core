@@ -15,7 +15,7 @@ public sealed class DefinitionLifecycleMigrationTests
     private const string PreP7BMigrationId = "20260924155535_WorkSideEffectToolCallId";
 
     [Fact]
-    public async Task Upgrade_from_pre_p7b_baseline_preserves_sessions_and_enables_lifecycle_store()
+    public async Task Startup_rejects_pre_p7b_baseline_without_changing_the_session()
     {
         var path = Path.Combine(Path.GetTempPath(), $"agent-core-p7b-migrate-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
@@ -28,34 +28,13 @@ public sealed class DefinitionLifecycleMigrationTests
                 PreP7BSession(sessionId),
                 PreP7BMigrationId);
 
-            await using (var db = await factory.CreateDbContextAsync())
-            {
-                await db.Database.MigrateAsync();
-                var tables = await TableNamesAsync(db);
-                Assert.Contains("AgentDefinitionDrafts", tables);
-                Assert.Contains("AgentDefinitionPublications", tables);
-            }
-
-            var reopenedMemory = new SqliteMemoryStore(factory, TimeProvider.System);
-            var session = await reopenedMemory.LoadAsync(sessionId);
-            Assert.NotNull(session);
-            Assert.Contains("pre-p7b-session-marker", session!.Definition.SystemInstructions, StringComparison.Ordinal);
-            Assert.Null(session.PinnedPersonaRevision);
-
-            var admin = new SqliteAgentDefinitionAdminStore(
-                factory,
-                new SystemIdGenerator(TimeProvider.System),
-                new InMemoryDefinitionResourceContentStore());
-            var candidate = SampleCandidate("post-upgrade-agent");
-            var draft = await admin.CreateDraftAsync(
-                new AgentDefinitionDraftCreate("post-upgrade-agent", candidate, DefinitionDraftSourceKind.New, null, Now),
-                CancellationToken.None);
-            var published = await admin.PublishDraftAsync(
-                new AgentDefinitionDraftPublish(draft.DraftId, draft.Revision, [], Now.AddMinutes(1)),
-                CancellationToken.None);
-            var loaded = await admin.GetPublicationAsync("post-upgrade-agent", published.Version);
-            Assert.NotNull(loaded);
-            Assert.Equal("You are a demo agent.", loaded!.Payload.SystemInstructions);
+            var error = await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(() =>
+                new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync().AsTask());
+            Assert.Contains("reset", error.Message, StringComparison.OrdinalIgnoreCase);
+            await using var verify = await factory.CreateDbContextAsync();
+            var json = await verify.Database.SqlQuery<string>($"SELECT DefinitionJson AS Value FROM Sessions WHERE SessionId = {sessionId.ToString("D")}").SingleAsync();
+            Assert.Contains("pre-p7b-session-marker", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("20261008063000_RetireLegacyExecution", await verify.Database.GetAppliedMigrationsAsync());
         }
         finally
         {

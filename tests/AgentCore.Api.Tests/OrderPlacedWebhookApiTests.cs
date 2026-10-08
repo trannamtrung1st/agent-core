@@ -10,7 +10,6 @@ using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Events;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Triggers;
-using AgentCore.Domain.Work;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Providers;
 using Microsoft.Extensions.DependencyInjection;

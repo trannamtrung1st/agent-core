@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
-import type { WorkItem } from "../../services/api";
+import type { AgentRun } from "../../services/api";
 
-export const WORK_READ_STORAGE_KEY = "agent-core.background-work-read";
+export const WORK_READ_STORAGE_KEY = "agent-core.background-run-read";
 const listeners = new Set<() => void>();
 function subscribe(listener: () => void) {
   listeners.add(listener);
@@ -18,7 +18,7 @@ function parse(value: string): Record<string, string> {
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, string> : {};
   } catch { return {}; }
 }
-function version(item: WorkItem) { return `${item.revision}:${item.updatedAt}`; }
+function version(item: AgentRun) { return `${item.revision}:${item.updatedAt}`; }
 function acknowledgedRevision(value: unknown): number {
   if (typeof value !== "string") return -1;
   const revision = Number(value.split(":", 1)[0]);
@@ -27,12 +27,12 @@ function acknowledgedRevision(value: unknown): number {
 export function useWorkReadState() {
   const read = parse(useSyncExternalStore(subscribe, snapshot));
   return {
-    isUnread: (item: WorkItem) => item.status === "completed" && !!item.attentionRequired && acknowledgedRevision(read[item.workItemId]) <= item.revision && read[item.workItemId] !== version(item),
-    markRead: (items: WorkItem[]) => {
+    isUnread: (item: AgentRun) => item.status === "completed" && !!item.outcome?.attentionRequired && acknowledgedRevision(read[item.agentRunId]) <= item.revision && read[item.agentRunId] !== version(item),
+    markRead: (items: AgentRun[]) => {
       const next = parse(snapshot());
       for (const item of items) {
-        if (item.status === "completed" && item.attentionRequired && acknowledgedRevision(next[item.workItemId]) <= item.revision) {
-          next[item.workItemId] = version(item);
+        if (item.status === "completed" && item.outcome?.attentionRequired && acknowledgedRevision(next[item.agentRunId]) <= item.revision) {
+          next[item.agentRunId] = version(item);
         }
       }
       try { window.localStorage.setItem(WORK_READ_STORAGE_KEY, JSON.stringify(next)); }

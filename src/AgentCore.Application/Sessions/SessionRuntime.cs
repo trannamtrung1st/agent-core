@@ -211,12 +211,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IModelCatalog? catalog = null,
         IUserTurnCapabilityValidator? turnCapabilities = null,
         IStructuredMemoryService? structuredMemory = null,
-        IConversationTurnExecutionStore? turnExecutions = null,
+        IAgentRunStore? agentRuns = null,
         IDiagnosticIdSource? diagnostics = null,
-        IBrowserSessionLease? browserLease = null)
+        IBrowserSessionLease? browserLease = null,
+        IAgentRunAuthority? runAuthority = null,
+        ITriggerStore? triggerOccurrences = null)
     {
         _diagnostics = diagnostics ?? FallbackDiagnosticIdSource.Instance;
         _snapshot = snapshot;
+        _runAuthority = runAuthority;
+        _triggerOccurrences = triggerOccurrences;
         _models = modelResolver ?? new StaticLanguageModelResolver(languageModel);
         _catalog = catalog;
         _brain = brain;
@@ -233,7 +237,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _processor = processor;
         _turnCapabilities = turnCapabilities;
         _structuredMemory = structuredMemory;
-        _turnExecutions = turnExecutions;
+        _agentRuns = agentRuns;
         _artifacts = artifacts ?? new FixtureArtifactReferenceAuthorizer();
         _tools = tools ?? new SessionToolExecutor();
         _browserLease = browserLease;
@@ -999,6 +1003,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             switch (input)
             {
+                case AgentRunOutcomeReceived outcome:
+                    await HandleRunOutcomeAsync(outcome, cancellationToken).ConfigureAwait(false);
+                    break;
+                case AgentRunCommandReceived command:
+                    await HandleAgentRunCommandAsync(command, cancellationToken).ConfigureAwait(false);
+                    break;
+                case AgentRunDispatchReceived dispatch:
+                    await HandleAgentRunDispatchAsync(dispatch, cancellationToken).ConfigureAwait(false);
+                    break;
                 case UserTextReceived user:
                     await HandleUserTextAsync(user, cancellationToken).ConfigureAwait(false);
                     break;
@@ -1167,7 +1180,19 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     await HandleApplicationMessageAsync(applicationMessage, cancellationToken).ConfigureAwait(false);
                     break;
                 case WorkspaceCwdRequested workspaceCwd:
-                    HandleWorkspaceCwd(workspaceCwd);
+                    await HandleWorkspaceCwdAsync(workspaceCwd, cancellationToken).ConfigureAwait(false);
+                    break;
+                case AgentRunControlReceived control:
+                    await HandleAgentRunControlAsync(control, cancellationToken).ConfigureAwait(false);
+                    break;
+                case ContinueInChatReceived foreground:
+                    HandleContinueInChat(foreground);
+                    break;
+                case BackgroundCompletionReceived completionReport:
+                    await HandleBackgroundCompletionAsync(completionReport, cancellationToken).ConfigureAwait(false);
+                    break;
+                case BackgroundStartReceived backgroundStart:
+                    await HandleBackgroundStartAsync(backgroundStart, cancellationToken).ConfigureAwait(false);
                     break;
                 case CapabilityLoadRequested capabilityLoad:
                     await HandleCapabilityLoadAsync(capabilityLoad, cancellationToken).ConfigureAwait(false);
@@ -1291,6 +1316,30 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         switch (input)
         {
+            case AcceptedConversationWorkQueryReceived query:
+                query.Result.TrySetResult(value);
+                break;
+            case AgentRunControlReceived control:
+                control.Completed.TrySetException(AgentCoreErrors.Conflict("Session mailbox is unavailable."));
+                break;
+            case ContinueInChatReceived foreground:
+                foreground.Committed.TrySetResult(false);
+                break;
+            case BackgroundCompletionReceived completionReport:
+                completionReport.Committed.TrySetResult(false);
+                break;
+            case BackgroundStartReceived backgroundStart:
+                backgroundStart.Completed.TrySetResult(SkillLoadAdmission.Error("stale", "Session mailbox is unavailable."));
+                break;
+            case AgentRunOutcomeReceived outcome:
+                outcome.Accepted.TrySetResult(false);
+                break;
+            case AgentRunCommandReceived command:
+                command.Completed.TrySetException(AgentCoreErrors.Conflict("Session mailbox is unavailable."));
+                break;
+            case AgentRunDispatchReceived dispatch:
+                dispatch.Completed.TrySetResult(false);
+                break;
             case WorkspaceCwdRequested workspaceCwd:
                 workspaceCwd.Completed.TrySetResult(null);
                 break;
@@ -1412,8 +1461,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         .ConfigureAwait(false);
                 }
 
-                await EnsureConversationExecutionsForUserBatchAsync([existingByEvent], cancellationToken)
-                    .ConfigureAwait(false);
                 input.Persisted?.TrySetResult(true);
                 return;
             }
@@ -1494,7 +1541,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _undurableUserEntryIds.Add(userEntry.EntryId);
 
         var titleHints = await AttachmentTitleHintsAsync(attachmentIds, cancellationToken).ConfigureAwait(false);
-        _snapshot = Append(userEntry, titleHints) with { Status = _snapshot.Status };
+        _snapshot = Append(userEntry, titleHints) with
+        {
+            Status = _snapshot.Status,
+            PendingAgentInputIds = _snapshot.PendingAgentInputIds.Append(userEntry.EntryId).ToArray()
+        };
 
         var queued = input.Behavior == UserTextBehavior.Queue && _activeResponseId is not null;
         var cause = input.Context;
@@ -1541,20 +1592,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     }
 
                     var wire = UserTextBehaviors.WireName(input.Behavior);
-                    IReadOnlyList<ConversationTurnExecution> executions;
-                    try
-                    {
-                        executions = await EnsureConversationExecutionsForUserBatchAsync(
-                                TrailingUserSuffix.Of(_snapshot.Entries),
-                                ct)
-                            .ConfigureAwait(false);
-                    }
-                    catch (Exception)
-                    {
-                        input.Persisted?.TrySetResult(false);
-                        throw;
-                    }
-
                     if (queued)
                     {
                         UserTextQueueTelemetry.Record(wire, queued: true);
@@ -1578,13 +1615,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         text.Length);
                     try
                     {
-                        await CloseBoundExecutionIfAssistantTerminalAsync(ct).ConfigureAwait(false);
-                        if (_turnExecutions is not null && executions.Count == 0)
-                        {
-                            input.Persisted?.TrySetResult(false);
-                            return;
-                        }
-
+                        await CloseBoundAgentRunIfAssistantTerminalAsync(ct).ConfigureAwait(false);
                         await TryStartPendingUserBatchAsync(cause, ct).ConfigureAwait(false);
                     }
                     catch (Exception)
@@ -1619,6 +1650,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _snapshot = _snapshot with
         {
             Entries = entries,
+            PendingAgentInputIds = _snapshot.PendingAgentInputIds.Where(id => id != entryId).ToArray(),
             UpdatedAt = _time.GetUtcNow()
         };
     }
@@ -1626,8 +1658,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private async Task HandleBrainAsync(BrainReturned input, CancellationToken cancellationToken)
     {
         var proactive = input.Trigger.Kind != TriggerKind.UserTurn;
+        if (_boundAgentRun?.ResponseId == input.ResponseId && !await OwnsWorkerAsync(input.Context, input.ResponseId, cancellationToken).ConfigureAwait(false)) return;
         if (_deactivated || input.TurnGeneration != _turnGeneration)
         {
+            await CompleteQuietLiveOccurrenceAsync(input.Trigger, cancellationToken).ConfigureAwait(false);
             if (proactive)
             {
                 InitiativeEvaluationTelemetry.RecordDisposition(
@@ -1640,8 +1674,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
-        if (proactive && IsStaleProactiveDecision(input.Trigger))
+        if (proactive && _boundAgentRun?.ResponseId != input.ResponseId && IsStaleProactiveDecision(input.Trigger))
         {
+            await CompleteQuietLiveOccurrenceAsync(input.Trigger, cancellationToken).ConfigureAwait(false);
             InitiativeEvaluationTelemetry.RecordDisposition(
                 input.Trigger,
                 input.Decision,
@@ -1656,6 +1691,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         if (input.Decision is RequestDeactivate)
         {
+            await CompleteQuietLiveOccurrenceAsync(input.Trigger, cancellationToken).ConfigureAwait(false);
             if (proactive)
             {
                 InitiativeEvaluationTelemetry.RecordDisposition(input.Trigger, input.Decision, admitted: true, blockReason: "deactivate");
@@ -1669,6 +1705,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         if (input.Decision is not Speak speakable)
         {
+            await CompleteQuietLiveOccurrenceAsync(input.Trigger, cancellationToken).ConfigureAwait(false);
             if (input.Decision is StaySilent silent
                 && silent.CountsTowardSilentCap
                 && proactive
@@ -1704,6 +1741,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private async Task HandleBrainFailedAsync(BrainFailed input, CancellationToken cancellationToken)
     {
+        await CompleteQuietLiveOccurrenceAsync(input.Trigger, cancellationToken).ConfigureAwait(false);
         if (input.TurnGeneration != _turnGeneration)
         {
             return;
@@ -1760,6 +1798,41 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private async Task StartSpeakPathAsync(BrainReturned input, Speak speakable, CancellationToken cancellationToken)
     {
+        if (_agentRuns is not null && _boundAgentRun?.ResponseId != input.ResponseId)
+        {
+            if (_agentRunAdmissionPending || HasPendingUserBatch()) return;
+            PinModelSelectionIfMissing();
+            var run = AgentCore.Application.Execution.AgentRunAdmissionFactory.ForAdmittedSignal(
+                _ids.NewId(), _ids.NewId(), input.ResponseId, _snapshot, input.Trigger, _time.GetUtcNow(),
+                input.SkillCatalog ?? [], ToolResources.IsOccurrence(input.Trigger.Kind) ? _activeOccurrencePin : null);
+            _agentRunAdmissionPending = true;
+            RequestPersist(_snapshot, admittedRun: run, onAdmitted: committed => run = committed, then: async ct =>
+            {
+                _agentRunAdmissionPending = false;
+                if (run.Status != AgentRunStatus.Queued) return;
+                if (input.TurnGeneration != _turnGeneration || HasPendingUserBatch() || _deactivated)
+                {
+                    await _agentRuns.ApplyAsync(run.Owner, run.AgentRunId,
+                        new AgentCore.Application.Execution.AgentRunCommand.RequestCancellation(run.Revision, _time.GetUtcNow(), null), ct);
+                    await TryStartPendingUserBatchAsync(input.Context, ct).ConfigureAwait(false);
+                    return;
+                }
+                var now = _time.GetUtcNow();
+                try
+                {
+                    _boundAgentRun = await _agentRuns.ApplyAsync(run.Owner, run.AgentRunId,
+                        new AgentCore.Application.Execution.AgentRunCommand.Claim(run.Revision, now, _ids.NewId(), now.AddMinutes(5)), ct);
+                }
+                catch (AgentCoreException exception) when (exception.Code == "Conflict")
+                {
+                    // The shared coordinator owns the winning claim and queued mailbox dispatch.
+                    _boundAgentRun = await _agentRuns.GetAsync(run.Owner, run.AgentRunId, ct);
+                    return;
+                }
+                await StartSpeakPathAsync(input, speakable, ct).ConfigureAwait(false);
+            });
+            return;
+        }
         if (input.Trigger.Kind == TriggerKind.LongSilence)
         {
             _helpOfferedDuringSilence = true;
@@ -1780,8 +1853,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         PinModelSelectionIfMissing();
         var now = _time.GetUtcNow();
-        var entryId = _ids.NewId();
-        var sequence = NextSequence();
+        var recoveredAssistant = _boundAgentRun?.ResponseId == input.ResponseId
+            ? _snapshot.Entries.LastOrDefault(entry => entry.Role == ConversationRole.Assistant
+                && entry.ResponseId == input.ResponseId && entry.Status == EntryStatus.Streaming) : null;
+        var entryId = recoveredAssistant?.EntryId ?? _ids.NewId();
+        var sequence = recoveredAssistant?.Sequence ?? NextSequence();
         var assistant = new ConversationEntry(
             entryId,
             sequence,
@@ -1796,6 +1872,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             now,
             ModelProvenance: OccurrenceProvenance(input.Trigger.Kind) ?? ToProvenance(_snapshot.ModelSelection));
 
+        _agentRunProviderFailure = null;
         _activeResponseId = input.ResponseId;
         _activeResponseTriggerKind = input.Trigger.Kind;
         _progressOwnerResponseId = input.ResponseId;
@@ -1803,6 +1880,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _accumulator.Reset();
         _envelope = null;
         _committedEffects.Clear();
+        if (recoveredAssistant?.Envelope?.EffectReceipts is { } recoveredEffects)
+            _committedEffects.AddRange(recoveredEffects);
         _protocolRepair = null;
         _protocolRepairOutcome = null;
         _usesResponseContract = true;
@@ -1823,7 +1902,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _outputActivity = OutputActivity.AgentGenerating;
         _responseCts = new CancellationTokenSource();
         _lastCheckpoint = DateTimeOffset.MinValue;
-        _snapshot = Append(assistant);
+        _snapshot = recoveredAssistant is null ? Append(assistant)
+            : _snapshot with { Entries = _snapshot.Entries.Select(entry => entry.EntryId == entryId ? assistant : entry).ToArray() };
         RequestPersist(_snapshot);
         await PublishAsync(
                 new SessionOutput(
@@ -1833,7 +1913,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         entryId,
                         sequence,
                         input.Trigger.Kind.ToString(),
-                        _boundConversationExecution?.ExecutionId)),
+                        _boundAgentRun?.AgentRunId)),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -1843,7 +1923,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             ReasoningEffort = ReasoningEffortFor(input.Trigger.Kind),
             ResponseContract = new ModelResponseContract(
                 SpeechWillBeUsed: _snapshot.Mode == SessionMode.Voice,
-                RequireChatResponse: input.Trigger.Kind == TriggerKind.UserTurn)
+                RequireChatResponse: input.Trigger.Kind is TriggerKind.UserTurn or TriggerKind.BackgroundCompleted)
         };
         var model = ResolveTurnModel(input.Trigger.Kind);
         _structuredOutput = model.Capabilities.StructuredOutput;
@@ -1854,13 +1934,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         BeginWork();
         var responseToken = _responseCts.Token;
         _responseSkillCatalog = input.SkillCatalog ?? [];
+        var workerContext = input.Context with { AgentRunGeneration = _boundAgentRun?.Claim?.Generation };
         var pinnedCatalog = SkillCatalogFor(input.ResponseId);
         var activeSkillKeys = ResolveActiveSkillKeys(input.Trigger, input.ResponseId);
         _ = Task.Run(async () =>
         {
             try
             {
-                await PumpModelAsync(model, request, input.Context, input.Trigger, pinnedCatalog, activeSkillKeys, responseToken)
+                await PumpModelAsync(model, request, workerContext, input.Trigger, pinnedCatalog, activeSkillKeys, responseToken)
                     .ConfigureAwait(false);
             }
             finally
@@ -2042,64 +2123,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         cts.Dispose();
     }
 
-    private bool HasPendingUserBatch() => TrailingUserSuffix.HasPending(_snapshot.Entries);
-
-    private async Task<bool> TryStartPendingUserBatchAsync(
-        EventContext cause,
-        CancellationToken cancellationToken)
-    {
-        if (!CanStartUserConversationBatch())
-        {
-            return false;
-        }
-
-        var suffix = TrailingUserSuffix.Of(_snapshot.Entries);
-        if (suffix.Count == 0 || suffix.Any(entry => _undurableUserEntryIds.Contains(entry.EntryId)))
-        {
-            return false;
-        }
-
-        RetainProposalOnlyForConfirmingTurn(suffix.Select(entry => entry.Text).ToArray());
-        var last = suffix[^1];
-        var executions = await EnsureConversationExecutionsForUserBatchAsync(suffix, cancellationToken)
-            .ConfigureAwait(false);
-        if (!await BindConversationExecutionsForStartAsync(executions, cancellationToken).ConfigureAwait(false))
-        {
-            return false;
-        }
-
-        var eventId = last.SourceEventId ?? last.EntryId;
-        var batchCause = new EventContext(
-            eventId,
-            SessionId,
-            _epoch,
-            _time.GetUtcNow(),
-            cause.CorrelationId == Guid.Empty ? eventId : cause.CorrelationId,
-            cause.EventId);
-        var attachmentIds = suffix
-            .SelectMany(entry => entry.Attachments ?? [])
-            .Select(item => item.AttachmentId)
-            .Distinct()
-            .ToArray();
-        var trigger = new AgentTrigger(eventId, TriggerKind.UserTurn, last.Text);
-        var turn = ++_turnGeneration;
-        var responseId = _boundConversationExecution?.ResponseId ?? _ids.NewId();
-        _pendingUploadHold = false;
-        NoteUserActivity();
-        _environmentQueue.Clear();
-        _outputActivity = OutputActivity.WaitingForAgent;
-        UserTextQueueTelemetry.RecordPendingBatchStarted(suffix.Count);
-        if (ShouldDeferUserTurnForCompaction())
-        {
-            AssignDeferredUserTurn(new DeferredUserTurn(batchCause, trigger, responseId, turn, attachmentIds));
-            await PublishWaitingOutputAsync(batchCause).ConfigureAwait(false);
-            return true;
-        }
-
-        await LaunchPreparedTurnAsync(batchCause, trigger, responseId, turn, attachmentIds).ConfigureAwait(false);
-        await PublishWaitingOutputAsync(batchCause).ConfigureAwait(false);
-        return true;
-    }
+    private bool HasPendingUserBatch() => PendingUserBatch().Count > 0;
 
     private async Task LaunchPreparedTurnAsync(
         EventContext cause,
@@ -2129,7 +2153,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         _outputActivity = OutputActivity.ProcessingAttachments;
-        var inbound = NewContext(cause.EventId);
+        var inbound = WorkerContext(cause);
         BeginWork();
         _ = Task.Run(async () =>
         {
@@ -2188,6 +2212,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         if (_deactivated
             || input.TurnGeneration != _turnGeneration
+            || input.Context.Epoch != _epoch
+            || !await OwnsWorkerAsync(input.Context, input.ResponseId, cancellationToken).ConfigureAwait(false)
             || (_progressOwnerResponseId is { } owner && owner != input.ResponseId))
         {
             if (!_deactivated
@@ -2274,10 +2300,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     }
 
     private IReadOnlyList<EffectiveSkill> SkillCatalogFor(Guid responseId) =>
-        _boundConversationExecution is { } e && e.ResponseId == responseId ? e.PinnedSkillCatalog : _responseSkillCatalog;
+        _boundAgentRun is { } e && e.ResponseId == responseId ? e.PinnedSkillCatalog : _responseSkillCatalog;
     private IReadOnlyList<EffectiveSkill> _responseSkillCatalog = [];
     private IReadOnlyList<string> ResolveActiveSkillKeys(AgentTrigger trigger, Guid responseId) =>
-        _boundConversationExecution is { } e && e.ResponseId == responseId ? e.ActiveSkillKeys
+        _boundAgentRun is { } e && e.ResponseId == responseId ? e.ActiveSkillKeys
         : _responseSkillCatalog.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray();
 
     private void LaunchBrain(
@@ -2331,7 +2357,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     _snapshot.Entries,
                     evaluationToken,
                     _snapshot.AgentInstanceId).ConfigureAwait(false);
-                var skillCatalog = _boundConversationExecution is { } execution && execution.ResponseId == responseId
+                var skillCatalog = _boundAgentRun is { } execution && execution.ResponseId == responseId
                     ? execution.PinnedSkillCatalog : await _tools.ResolveSkillCatalogAsync(_snapshot.AgentInstanceId, _snapshot.Definition, evaluationToken);
                 var context = new AgentContext(
                     _snapshot.Definition,
@@ -2362,6 +2388,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     Persona: _snapshot.PinnedPersona,
                     ScheduleConversation: _scheduleConversationContext,
                     ScheduleDraft: _scheduleDraftContext,
+                    DetachedExecution: IsInitialBackgroundRun,
+                    OwnedSessionId: SessionId,
                     ActiveSkillKeys: skillCatalog.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray(),
                     PinnedSkillCatalog: skillCatalog,
                     AgentInstanceId: _snapshot.AgentInstanceId,
@@ -2369,6 +2397,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     Harness: trigger.Kind == TriggerKind.UserTurn ? await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, evaluationToken) : null,
                     AgentWorkspaceAvailable: await _tools.AgentWorkspaceAvailableAsync(SessionId, evaluationToken),
                     AllowAgentConsolidation: await _tools.AllowsAgentConsolidationAsync(_snapshot.AgentInstanceId, evaluationToken),
+                    ExperienceContext: await RunExperienceContextAsync(evaluationToken),
                     ContinuityContext: await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, _snapshot.SessionId, _snapshot.Definition, evaluationToken));
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
@@ -2383,7 +2412,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     if (trigger.Kind == TriggerKind.UserTurn)
                     {
                         failure = new BrainFailed(
-                            NewContext(cause.EventId),
+                            WorkerContext(cause),
                             turn,
                             responseId,
                             trigger,
@@ -2408,7 +2437,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 {
                     var diagnosticId = _diagnostics.NewId();
                     LogConversationFailure(
-                        NewContext(cause.EventId),
+                        WorkerContext(cause),
                         responseId,
                         diagnosticId,
                         "Session",
@@ -2416,7 +2445,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         "The agent could not prepare a response.",
                         ex);
                     failure = new BrainFailed(
-                        NewContext(cause.EventId),
+                        WorkerContext(cause),
                         turn,
                         responseId,
                         trigger,
@@ -2428,7 +2457,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                 RuntimeTelemetry.Record("brain", RuntimeTelemetry.ElapsedMs(brainStarted));
                 var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                var inbound = NewContext(cause.EventId);
+                var inbound = WorkerContext(cause);
                 BeginWork();
                 if (failure is not null)
                 {
@@ -2557,15 +2586,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         var started = Stopwatch.GetTimestamp();
         using var activity = RuntimeTelemetry.Activity.StartActivity("model");
-        var messages = request.Messages.ToList();
+        var checkpoint = _boundAgentRun?.ResponseId == request.ResponseId ? _boundAgentRun.Checkpoint : null;
+        var restored = AgentRunToolCallCheckpoint.TryRead(checkpoint, out var restoredMessages);
+        var messages = restored ? request.Messages.Concat(restoredMessages!).ToList() : request.Messages.ToList();
+        if (restored) messages = await _tools.RehydrateCapturesAsync(SessionId, messages, cancellationToken).ConfigureAwait(false);
+        var checkpointPrefixCount = request.Messages.Count(message => !PromptContextBuilder.IsActiveSkillSystem(message));
+        ModelMessage[] CheckpointSuffix() => messages.Where(message => !PromptContextBuilder.IsActiveSkillSystem(message)).Skip(checkpointPrefixCount).ToArray();
+        var resumePending = restored ? AgentRunToolCallCheckpoint.PendingCalls(messages).ToList() : [];
         var authorizedTools = request.Tools;
-        var pinnedSkills = activeSkillKeys.ToArray();
+        var pinnedSkills = (_boundAgentRun?.ResponseId == request.ResponseId ? _boundAgentRun.ActiveSkillKeys : activeSkillKeys).ToArray();
         var loadedCapabilities = LoadedCapabilitiesFor(request.ResponseId);
         var workspaceCwd = await RequestWorkspaceCwdAsync(cause, request.ResponseId, null, cancellationToken).ConfigureAwait(false);
         if (workspaceCwd is null) return;
-        var steps = 0;
+        var steps = checkpoint is null ? 0 : AgentRunToolCallCheckpoint.NormalizeResumedStepCount(checkpoint.StepCount, messages);
         var harnessSources = new List<HarnessSourceReceipt>();
-        var outputBytes = 0;
+        var outputBytes = checked((int)(checkpoint?.OutputBytes ?? 0));
         var retryingGeneration = false;
         var repairingTerminal = false;
         var protocolRepairAttempted = false;
@@ -2576,6 +2611,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         string? browserPageOrigin = null;
         var blockedNoProgress = 0;
         var terminalBrowserContinuation = false;
+        var checkpointCapacityReached = false;
         string? continuationInstruction = null;
         var evidence = new BrowserEvidenceProgress();
         var budgetTools = _snapshot.Definition.Environment?.Capabilities is null
@@ -2587,15 +2623,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 && ToolCatalog.AuthorizesBrowser(budgetTools),
             PersistentBrowserLease: false));
         var toolDeadline = request.Tools is { Count: > 0 };
+        var remainingBudget = checkpoint is null ? budget.Overall
+            : TimeSpan.FromMilliseconds(checkpoint.RemainingOverallBudgetMs);
+        await using var backgroundBrowser = IsInitialBackgroundRun
+            ? await _tools.OpenOccurrenceBrowserAsync(SessionId, _snapshot.AgentInstanceId, cancellationToken).ConfigureAwait(false) : null;
         using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        using ITimer? overallTimer = toolDeadline ? ScheduleCancel(_time, overallCts, budget.Overall) : null;
-        var overallDeadline = toolDeadline ? _time.GetUtcNow() + budget.Overall : (DateTimeOffset?)null;
+        using ITimer? overallTimer = toolDeadline ? ScheduleCancel(_time, overallCts, remainingBudget) : null;
+        var overallDeadline = toolDeadline ? _time.GetUtcNow() + remainingBudget : (DateTimeOffset?)null;
         var generateToken = toolDeadline ? overallCts.Token : cancellationToken;
         try
         {
             while (!generateToken.IsCancellationRequested)
             {
-                var pending = new List<ModelToolCall>();
+                var resumingBatch = resumePending.Count > 0;
+                var pending = resumePending;
+                resumePending = [];
                 var finished = false;
                 var publishedVisible = false;
                 var retryGeneration = false;
@@ -2626,6 +2668,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 {
                     prompt = messages.ToList();
                     prompt.Add(new ModelMessage(ModelRole.System, ProtocolFailures.RepairInstruction(repairReason)!));
+                }
+                else if (checkpointCapacityReached)
+                {
+                    prompt = messages.ToList();
+                    prompt.Add(new ModelMessage(ModelRole.System, IsInitialBackgroundRun
+                        ? "Checkpoint capacity reached. Finish this task using work.complete from evidence already collected. Do not request other tools."
+                        : "Checkpoint capacity reached. Finish your response from evidence already collected. Do not request tools."));
                 }
                 else if (terminalBrowserContinuation)
                 {
@@ -2658,14 +2707,27 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             model),
                         pageBlocked,
                         terminalBrowserContinuation);
-                var projectionModel = _boundConversationExecution is { } binding && binding.ResponseId == request.ResponseId
+                if (checkpointCapacityReached) working = working with { Tools = IsInitialBackgroundRun ? [AgentCore.Application.Work.WorkCompletionRequest.Contract] : null };
+                if (trigger.Kind == TriggerKind.BackgroundCompleted) working = working with { Tools = null };
+                var projectionModel = _boundAgentRun is { } binding && binding.ResponseId == request.ResponseId
                     ? binding.PinnedModel.CatalogKey : ToolResources.IsOccurrence(trigger.Kind)
                         ? _activeOccurrencePin?.CatalogKey : _snapshot.ModelSelection?.CatalogKey;
                 CapabilityProjectionTelemetry.Record(_snapshot.Definition, projectionContext, _tools.ConfigurationGate, working.Tools, projectionModel, CapabilityLoadCountFor(request.ResponseId));
                 try
                 {
+                if (!resumingBatch)
+                    await RequireProviderRunAuthorityAsync(cause, request.ResponseId, generateToken).ConfigureAwait(false);
+                if (!resumingBatch)
                 await foreach (var evt in model.GenerateAsync(working, generateToken).ConfigureAwait(false))
                 {
+                    if (IsInitialBackgroundRun && evt is ModelTextDelta or ModelDisplayDelta or ModelSemanticResponseReady)
+                        continue;
+                    if (IsInitialBackgroundRun && evt is ModelCompleted { Reason: not ModelStopReason.ToolCalls })
+                    {
+                        await MailboxModelAsync(cause, request.ResponseId,
+                            new ModelFailed(new ProviderFailure(ProviderErrorCode.InvalidResponse, "Background work requires an explicit completion outcome.")), generateToken).ConfigureAwait(false);
+                        return;
+                    }
                     if (evt is ModelToolCallEvent tool)
                     {
                         if (!inRepair && !terminalBrowserContinuation)
@@ -2746,7 +2808,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         continue;
                     }
 
-                    if (evt is ModelFailed failed
+                    if (_agentRuns is null && evt is ModelFailed failed
                         && TryRetryGeneration(failed, pending, publishedVisible, transientGenerationRetryCount, generateToken))
                     {
                         transientGenerationRetryCount++;
@@ -2872,7 +2934,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     return;
                 }
 
-                if (steps + pending.Count > budget.MaxSteps)
+                if (steps + (resumingBatch ? 0 : pending.Count) > budget.MaxSteps)
                 {
                     await MailboxModelAsync(
                             cause,
@@ -2896,7 +2958,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     return;
                 }
 
-                messages.Add(new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: pending));
+                if (!resumingBatch)
+                {
+                    messages.Add(new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: pending));
+                    steps += pending.Count;
+                }
+                await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken).ConfigureAwait(false);
                 var allowedIntermediate = _intermediateMessagingAllowed;
                 var substantiveWorkInBatch = false;
                 foreach (var call in pending)
@@ -2912,6 +2979,32 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         return;
                     }
 
+                    if (_boundAgentRun is { SideEffect.Disposition: AgentRunSideEffectDisposition.Succeeded } completedEffect
+                        && completedEffect.SideEffect.ToolCallId == call.Id)
+                    {
+                        var recovered = call.Name == ToolCatalog.BackgroundStart
+                            ? await RequestBackgroundStartAsync(cause, request.ResponseId, call, generateToken).ConfigureAwait(false)
+                            : "{\"completed\":true,\"recovered\":true,\"message\":\"The action completed before recovery; it was not repeated.\"}";
+                        messages.Add(new ModelMessage(ModelRole.Tool, recovered, ToolCallId: call.Id, Name: call.Name));
+                        outputBytes = checked(outputBytes + Encoding.UTF8.GetByteCount(recovered));
+                        await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken).ConfigureAwait(false);
+                        await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.ClearSideEffect(run.Revision, now, run.Claim!.Generation, ToolCatalog.RecordsOwnerVisibleEffect(call.Name)), generateToken).ConfigureAwait(false);
+                        continue;
+                    }
+                    var checkpointBudget = _agentRuns is null ? ToolLimits.MaxOutputBytes - outputBytes
+                        : AgentRunToolCallCheckpoint.ToolResultBudget(CheckpointSuffix(), call,
+                            _boundAgentRun?.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate, _boundAgentRun?.SideEffect.ActionHash, trigger.Kind, _boundAgentRun?.LoadedCapabilityIds, _boundAgentRun?.CapabilityLoadCount ?? 0);
+                    var resultBudget = Math.Min(ToolLimits.MaxOutputBytes - outputBytes, checkpointBudget);
+                    if (_agentRuns is not null && call.Name != ToolCatalog.WorkComplete && (resultBudget < 256 || checkpointCapacityReached))
+                    {
+                        // Refuse before dispatch: no effect can occur without room for its durable result.
+                        checkpointCapacityReached = true;
+                        var refusal = AgentRunToolCallCheckpoint.FinishRequired;
+                        messages.Add(new ModelMessage(ModelRole.Tool, refusal, ToolCallId: call.Id, Name: call.Name));
+                        outputBytes = checked(outputBytes + Encoding.UTF8.GetByteCount(refusal));
+                        await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken).ConfigureAwait(false);
+                        continue;
+                    }
                     var operationId = _ids.NewId();
                     await PublishProgressAsync(
                             cause,
@@ -2928,6 +3021,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     var refusedBlocked = false;
                     var toolStarted = Stopwatch.GetTimestamp();
                     ToolApprovalGrant? approvalGrant = null;
+                    var effectFenced = false;
+                    string? effectHash = null;
                     try
                     {
                         JsonElement args;
@@ -2990,12 +3085,20 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 _snapshot.Definition,
                                 _snapshot.SessionId, call, args,
                                 admission: new ToolExecutionAdmission(
-                                    Detached: false,
+                                    Detached: IsInitialBackgroundRun,
                                     trigger.Kind,
                                     allowedIntermediate,
                                     _snapshot.AgentInstanceId,
                                     Harness: await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, overallCts.Token),
-                                    SupportsTools: model.Capabilities.Tools), overallCts.Token);
+                                    SupportsTools: model.Capabilities.Tools, OwnedSessionId: SessionId), overallCts.Token);
+                            if (_runAuthority is not null && _boundAgentRun is { } authorizedRun)
+                            {
+                                var currentDefinition = await _runAuthority.CurrentDefinitionAsync(authorizedRun, overallCts.Token).ConfigureAwait(false);
+                                if (currentDefinition is null || ToolRegistry.TryGet(call.Name, out var currentDescriptor)
+                                    && currentDescriptor.DefinitionAuthorizable && !RolePermissions.AllowsTool(currentDefinition, call.Name))
+                                    policy = ToolPolicyDecision.Deny;
+                            }
+                            if (trigger.Kind == TriggerKind.BackgroundCompleted) policy = ToolPolicyDecision.Deny;
                             if (policy == ToolPolicyDecision.Deny || string.IsNullOrWhiteSpace(call.Name))
                             {
                                 if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal))
@@ -3011,6 +3114,23 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 OperationalDiagnostics.RecordToolDenial(call.Name);
                                 executionResult = ToolExecutionResult.FromText(
                                     """{"error":"forbidden","message":"Tool is not permitted for this role."}""");
+                            }
+                            else if (string.Equals(call.Name, ToolCatalog.BackgroundStart, StringComparison.Ordinal))
+                            {
+                                executionResult = ToolExecutionResult.FromText(await RequestBackgroundStartAsync(cause,
+                                    request.ResponseId, call, overallCts.Token).ConfigureAwait(false));
+                            }
+                            else if (string.Equals(call.Name, ToolCatalog.WorkComplete, StringComparison.Ordinal) && IsInitialBackgroundRun)
+                            {
+                                if (AgentCore.Application.Work.WorkCompletionRequest.TryParse(args, messages, out var result, out var attention, out var rejection))
+                                {
+                                    var kind = attention ? AgentRunOutcomeKind.NeedsAttention
+                                        : AgentCore.Application.Work.WorkCompletionRequest.Outcome(result) == "NoAction" ? AgentRunOutcomeKind.NoAction : AgentRunOutcomeKind.Response;
+                                    if (await RequestRunOutcomeAsync(cause, request.ResponseId, kind,
+                                        AgentCore.Application.Work.WorkCompletionRequest.Summary(result), overallCts.Token).ConfigureAwait(false)) return;
+                                    return;
+                                }
+                                executionResult = ToolExecutionResult.FromText(JsonSerializer.Serialize(new { error = "invalid", message = rejection }));
                             }
                             else if (string.Equals(call.Name, ToolCatalog.CapabilitiesLoad, StringComparison.Ordinal) && projectionContext is not null)
                             {
@@ -3057,7 +3177,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             args,
                                             overallCts.Token,
                                             _snapshot.Definition, SessionId,
-                                            new ToolExecutionAdmission(false, trigger.Kind, AgentInstanceId: _snapshot.AgentInstanceId, SupportsTools: model.Capabilities.Tools, WorkspaceCwd: workspaceCwd))
+                                            new ToolExecutionAdmission(IsInitialBackgroundRun, trigger.Kind, AgentInstanceId: _snapshot.AgentInstanceId, SupportsTools: model.Capabilities.Tools, WorkspaceCwd: workspaceCwd, OwnedSessionId: SessionId))
                                         .ConfigureAwait(false);
                                     if (prepared.Preparation is null)
                                     {
@@ -3084,6 +3204,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     var pausedOverallRemaining = PauseToolClock(overallTimer, overallDeadline);
                                     try
                                     {
+                                        if (_boundAgentRun?.Approval is { Decision: AgentRunApprovalDecision.Approved } approved
+                                            && approved.ToolName == call.Name && approved.ActionHash == actionHash
+                                            && approved.PreparedActionJson == args.GetRawText())
+                                            approvalGrant = new ToolApprovalGrant(approved.ApprovalId, call.Name, actionHash, _epoch, request.ResponseId, operationId);
+                                        else if (_boundAgentRun?.Approval is { Decision: AgentRunApprovalDecision.Rejected or AgentRunApprovalDecision.Expired } denied
+                                            && denied.ToolName == call.Name && denied.ActionHash == actionHash)
+                                            approvalGrant = null;
+                                        else
                                         approvalGrant = await WaitForToolApprovalAsync(
                                                 cause,
                                                 request.ResponseId,
@@ -3104,6 +3232,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             pausedOverallRemaining);
                                     }
 
+                                    if (_boundAgentRun?.Claim is { } resumedClaim)
+                                        cause = cause with { AgentRunGeneration = resumedClaim.Generation };
                                     if (approvalGrant is null
                                         || approvalGrant.RuntimeEpoch != _epoch
                                         || approvalGrant.ResponseId != request.ResponseId
@@ -3115,6 +3245,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     }
                                 }
 
+                                if (!preparedFailed && _runAuthority is not null && _boundAgentRun is { } currentRun)
+                                {
+                                    var currentDefinition = await _runAuthority.CurrentDefinitionAsync(currentRun, overallCts.Token).ConfigureAwait(false);
+                                    if (currentDefinition is null || ToolRegistry.TryGet(call.Name, out var descriptor)
+                                        && descriptor.DefinitionAuthorizable && !RolePermissions.AllowsTool(currentDefinition, call.Name))
+                                    { preparedFailed = true; executionResult = ToolExecutionResult.FromText("{\"error\":\"forbidden\",\"message\":\"Current policy no longer permits this action.\"}"); }
+                                }
                                 if (!preparedFailed)
                                 {
                                     if (TryRefuseBlockedBrowser(
@@ -3134,18 +3271,39 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     }
                                     else
                                     {
+                                    if (!await AdmitToolActivityAsync(cause, request.ResponseId, OutputActivity.RunningTools, true, overallCts.Token).ConfigureAwait(false)) return;
+                                    effectFenced = _agentRuns is not null && (policy == ToolPolicyDecision.RequireApproval || ToolCatalog.ReplaySafetyOf(call.Name) != ToolReplaySafety.ReplaySafe);
+                                    effectHash = actionHash;
+                                    var skipDispatch = false;
+                                    if (_boundAgentRun is { SideEffect.Disposition: AgentRunSideEffectDisposition.Indeterminate or AgentRunSideEffectDisposition.InFlight })
+                                    {
+                                        if (call.Name is not (ToolCatalog.BrowserObserve or ToolCatalog.BrowserNavigate))
+                                        {
+                                            executionResult = ToolExecutionResult.FromText("{\"error\":\"observation_required\",\"message\":\"Observe the page before continuing; the previous change was not repeated.\"}");
+                                            effectFenced = false;
+                                            skipDispatch = true;
+                                        }
+                                        effectFenced = false;
+                                    }
+                                    if (!skipDispatch)
+                                    {
+                                    if (effectFenced)
+                                    {
+                                        await MarkRunEffectAsync(cause, request.ResponseId, call, actionHash, AgentRunSideEffectDisposition.Prepared, overallCts.Token).ConfigureAwait(false);
+                                        await MarkRunEffectAsync(cause, request.ResponseId, call, actionHash, AgentRunSideEffectDisposition.InFlight, overallCts.Token).ConfigureAwait(false);
+                                    }
                                     using var toolCts = CancellationTokenSource.CreateLinkedTokenSource(overallCts.Token);
                                     using var toolTimer = ScheduleCancel(_time, toolCts, ToolLimits.PerTool);
                                     executionResult = await _tools.ExecuteAsync(
                                             _snapshot.Definition,
                                             SessionId,
                                             call,
-                                            ToolLimits.MaxOutputBytes - outputBytes,
+                                            resultBudget,
                                             toolCts.Token,
                                             approvalGrant,
                                             TriggerCommand(trigger),
                                             new ToolExecutionAdmission(
-                                                Detached: false,
+                                                Detached: IsInitialBackgroundRun,
                                                 trigger.Kind,
                                                 allowedIntermediate,
                                                 _snapshot.AgentInstanceId,
@@ -3154,8 +3312,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                                 HarnessSources: harnessSources.ToArray(),
                                                 OwnerTurnText: trigger.Kind == TriggerKind.UserTurn ? trigger.Text : null,
                                                 SupportsTools: model.Capabilities.Tools,
-                                                Model: _snapshot.ModelSelection is { } choice ? new AgentCore.Domain.Work.WorkModelPin(choice.CatalogKey, choice.ProviderAlias, choice.ModelId, choice.ReasoningEffort) : null,
-                                                WorkspaceCwd: workspaceCwd))
+                                                Model: _snapshot.ModelSelection is { } choice ? new AgentCore.Domain.Conversation.AgentRunModelPin(choice.CatalogKey, choice.ProviderAlias, choice.ModelId, choice.ReasoningEffort) : null,
+                                                WorkspaceCwd: workspaceCwd, OwnedSessionId: SessionId, AgentRunId: _boundAgentRun?.AgentRunId))
                                         .ConfigureAwait(false);
                                     if (executionResult.WorkspaceCwd is { } nextCwd)
                                     {
@@ -3173,6 +3331,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                         && ApplicationMessageToolPolicy.UnlocksIntermediateMessaging(call.Name))
                                     {
                                         substantiveWorkInBatch = true;
+                                    }
                                     }
                                     }
                                 }
@@ -3209,6 +3368,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         return;
                     }
 
+                    if (effectFenced)
+                        await MarkRunEffectAsync(cause, request.ResponseId, call, effectHash!, RejectedEffect(executionResult.Text)
+                            ? AgentRunSideEffectDisposition.DefinitelyFailed : AgentRunSideEffectDisposition.Succeeded, generateToken).ConfigureAwait(false);
+                    if (_agentRuns is not null && _boundAgentRun?.SideEffect.Disposition is AgentRunSideEffectDisposition.Indeterminate or AgentRunSideEffectDisposition.InFlight
+                        && call.Name is ToolCatalog.BrowserObserve or ToolCatalog.BrowserNavigate && !RejectedEffect(executionResult.Text))
+                        await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.AcceptBrowserObservation(run.Revision, now, run.Claim!.Generation), generateToken).ConfigureAwait(false);
                     var toolOutcome = SafeExecutionTrace.NormalizeToolOutcome(executionResult.Text);
                     var toolDetail = SafeExecutionTrace.BuildToolDetail(
                         call.Name,
@@ -3227,6 +3392,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                     harnessSources.AddRange(HarnessChatTools.Sources(call, executionResult.Text));
                     executionResult = ToolResultAdmission.AdmitForModel(model, executionResult);
+                    if (_agentRuns is not null && Encoding.UTF8.GetByteCount(executionResult.Text) > resultBudget)
+                        executionResult = executionResult with { Text = ToolJsonResults.FitToBudget(resultBudget, executionResult.Text) };
                     var closedPage = false;
                     if (!refusedBlocked)
                     {
@@ -3301,7 +3468,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         Parts: executionResult.Parts,
                         ToolCallId: call.Id,
                         Name: call.Name));
-                    steps++;
+                    await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken).ConfigureAwait(false);
+                    if (effectFenced)
+                        await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.ClearSideEffect(run.Revision, now, run.Claim!.Generation, ToolCatalog.RecordsOwnerVisibleEffect(call.Name)), generateToken).ConfigureAwait(false);
                 }
 
                 if (substantiveWorkInBatch)
@@ -3402,7 +3571,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         BeginWork();
-        var admitted = TryMailbox(new ModelResultReceived(NewContext(cause.EventId), responseId, evt, processed));
+        var admitted = TryMailbox(new ModelResultReceived(WorkerContext(cause), responseId, evt, processed));
         if (!admitted)
         {
             EndWork();
@@ -3431,7 +3600,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         var admitted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         BeginWork();
-        if (!TryMailbox(new ToolActivityReceived(NewContext(cause.EventId), activity, hold, responseId, _epoch, admitted)))
+        if (!TryMailbox(new ToolActivityReceived(WorkerContext(cause), activity, hold, responseId, cause.Epoch, admitted)))
         {
             EndWork();
             return false;
@@ -3452,7 +3621,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (_deactivated
             || _responseTerminal
             || _activeResponseId != input.ResponseId
-            || _epoch != input.Epoch)
+            || _epoch != input.Epoch
+            || !await OwnsWorkerAsync(input.Context, input.ResponseId, cancellationToken).ConfigureAwait(false))
         {
             input.Admitted.TrySetResult(false);
             return;
@@ -3501,7 +3671,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         if (_activeResponseId != input.ResponseId
             || _responseTerminal
-            || input.Context.Epoch != _epoch)
+            || input.Context.Epoch != _epoch
+            || !await OwnsWorkerAsync(input.Context, input.ResponseId, cancellationToken).ConfigureAwait(false))
         {
             input.Processed.TrySetResult();
             return;
@@ -3601,6 +3772,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                 break;
             case ModelFailed failed:
+                _agentRunProviderFailure = failed.Failure;
+                if (ScheduleAgentRunRetry(input.Context, input.ResponseId, failed.Failure)) break;
                 if (_usesResponseContract)
                 {
                     _envelope = null;
@@ -3629,31 +3802,18 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             if (_activeResponseId is null)
             {
-                await ReconcileDurableConversationBeforeAttachAsync(cancellationToken).ConfigureAwait(false);
+                await ReconcileAgentRunBeforeAttachAsync(cancellationToken).ConfigureAwait(false);
             }
 
             if (_activeResponseId == input.ResponseId)
             {
-                if (_turnExecutions is not null
-                    && _boundConversationExecution is { Claim: not null } bound
+                if (_agentRuns is not null
+                    && _boundAgentRun is { Claim: not null } bound
                     && bound.ResponseId == input.ResponseId)
                 {
-                    var open = await _turnExecutions.ListOpenForSessionAsync(SessionId, cancellationToken)
-                        .ConfigureAwait(false);
-                    foreach (var execution in open.Where(item => item.ResponseId == bound.ResponseId))
-                    {
-                        var requested = await _turnExecutions.RequestCancellationAsync(
-                                SessionId,
-                                execution.ExecutionId,
-                                execution.Revision,
-                                _time.GetUtcNow(),
-                                cancellationToken)
-                            .ConfigureAwait(false);
-                        if (requested.ExecutionId == bound.ExecutionId)
-                        {
-                            _boundConversationExecution = requested;
-                        }
-                    }
+                    _boundAgentRun = await _agentRuns.ApplyAsync(bound.Owner, bound.AgentRunId,
+                        new AgentCore.Application.Execution.AgentRunCommand.RequestCancellation(
+                            bound.Revision, _time.GetUtcNow(), null), cancellationToken).ConfigureAwait(false);
                 }
 
                 await SupersedeAsync(input.Context, input.ResponseId, cancellationToken, "userStop").ConfigureAwait(false);
@@ -3813,10 +3973,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 .ConfigureAwait(false);
             if (requestPersist && _snapshot.Status is SessionStatus.Attached or SessionStatus.Created)
             {
-                var userTerminal = _activeResponseTriggerKind == TriggerKind.UserTurn;
+                var userTerminal = _boundAgentRun?.ResponseId == responseId || _activeResponseTriggerKind == TriggerKind.UserTurn;
                 if (userTerminal)
                 {
-                    MarkConversationExecutionPendingTerminal();
+                    MarkAgentRunPendingTerminal();
                 }
 
                 RequestPersist(
@@ -3826,7 +3986,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     {
                         if (userTerminal)
                         {
-                            await FinalizeConversationExecutionAfterPersistAsync(_snapshot, ct).ConfigureAwait(false);
+                            await FinalizeAgentRunAfterPersistAsync(_snapshot, ct).ConfigureAwait(false);
                         }
 
                         await PublishAsync(
@@ -3926,10 +4086,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var capturedEntryId = _activeEntryId;
         var textLength = DisplayLength();
         var heard = CurrentHeard();
-        var userTerminal = _activeResponseTriggerKind == TriggerKind.UserTurn;
+        var userTerminal = _boundAgentRun?.ResponseId == responseId || _activeResponseTriggerKind == TriggerKind.UserTurn;
         if (userTerminal)
         {
-            MarkConversationExecutionPendingTerminal();
+            MarkAgentRunPendingTerminal();
         }
 
         RequestPersist(
@@ -3939,7 +4099,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             {
                 if (userTerminal)
                 {
-                    await FinalizeConversationExecutionAfterPersistAsync(_snapshot, ct).ConfigureAwait(false);
+                    await FinalizeAgentRunAfterPersistAsync(_snapshot, ct).ConfigureAwait(false);
                 }
 
                 var stillOwns = _activeResponseId == capturedResponseId && _activeEntryId == capturedEntryId;
@@ -4546,6 +4706,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         AgentStepEffect effect,
         CancellationToken cancellationToken)
     {
+        if (_agentRuns is not null && _boundAgentRun is { Claim: not null } run && run.ResponseId == responseId)
+        {
+            await CommitRunOutcomeFromMailboxAsync(context, run, AgentRunOutcomeKind.NoAction, "", cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         _traceDisposition = effect.ToString();
         _traceActionKind = "none";
         _traceHasDisplayText = false;
@@ -5460,7 +5626,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         Func<CancellationToken, Task>? then,
         TaskCompletionSource<bool>? ended,
         long started,
-        bool userConversationTerminal)
+        bool userConversationTerminal,
+        AgentRun? admittedRun,
+        AgentRunOutcomeCommit? runOutcome, Guid? completionSourceRunId)
     {
         public SessionSnapshot Proposed { get; } = proposed;
         public PersistKind Kind { get; } = kind;
@@ -5470,6 +5638,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         public TaskCompletionSource<bool>? Ended { get; } = ended;
         public long Started { get; } = started;
         public bool UserConversationTerminal { get; } = userConversationTerminal;
+        public AgentRun? AdmittedRun { get; } = admittedRun;
+        public AgentRun? AdmissionResult { get; set; }
+        public Action<AgentRun>? OnAdmitted { get; set; }
+        public AgentRunOutcomeCommit? RunOutcome { get; } = runOutcome;
+        public Guid? CompletionSourceRunId { get; } = completionSourceRunId;
         public TaskCompletionSource Applied { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
@@ -5495,6 +5668,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private ILanguageModel ResolveTurnModel(TriggerKind kind)
     {
+        if (_boundAgentRun is { } run)
+            return ResolvePinnedModel(new ExecutionModelPin(run.PinnedModel.CatalogKey, run.PinnedModel.ProviderAlias,
+                run.PinnedModel.ModelId, run.PinnedModel.ReasoningEffort, ExecutionModelSource.ConversationDefault));
         if (kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent
             && _activeOccurrencePin is ExecutionModelPin pin)
         {
@@ -5511,7 +5687,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             ? new ModelGenerationProvenance(pin.CatalogKey, pin.ProviderAlias, pin.ModelId, pin.ReasoningEffort)
             : null;
 
-    private string? ReasoningEffortFor(TriggerKind kind) =>
+    private string? ReasoningEffortFor(TriggerKind kind) => _boundAgentRun is { } run ? run.PinnedModel.ReasoningEffort :
         kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent
             && _activeOccurrencePin is ExecutionModelPin pin
             ? pin.ReasoningEffort
@@ -5555,7 +5731,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         PersistKind kind = PersistKind.Normal,
         Func<CancellationToken, Task>? then = null,
         TaskCompletionSource<bool>? ended = null,
-        bool userConversationTerminal = false)
+        bool userConversationTerminal = false,
+        AgentRun? admittedRun = null,
+        AgentRunOutcomeCommit? runOutcome = null, Guid? completionSourceRunId = null, Action<AgentRun>? onAdmitted = null)
     {
         if (snapshot.Entries.Count > 1000)
         {
@@ -5571,7 +5749,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             BeginUserConversationTerminalPersist();
         }
 
-        var job = new PersistJob(snapshot, kind, token, fence, then, ended, started, userConversationTerminal);
+        var job = new PersistJob(snapshot, kind, token, fence, then, ended, started, userConversationTerminal, admittedRun, runOutcome, completionSourceRunId) { OnAdmitted = onAdmitted };
         BeginWork();
         _pendingPersist[token] = job;
         if (!_persistJobs.Writer.TryWrite(job))
@@ -5608,6 +5786,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
             if (input.Error is not null)
             {
+                if (job.AdmittedRun is not null) _agentRunAdmissionPending = false;
                 var diagnosticId = _diagnostics.NewId();
                 LogConversationFailure(
                     input.Context,
@@ -5669,17 +5848,18 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                 if (job.UserConversationTerminal && job.Then is null)
                 {
-                    if (_pendingTerminalExecutionId is null && _boundConversationExecution is not null)
+                    if (_pendingTerminalAgentRunId is null && _boundAgentRun is not null)
                     {
-                        _pendingTerminalExecutionId = _boundConversationExecution.ExecutionId;
+                        _pendingTerminalAgentRunId = _boundAgentRun.AgentRunId;
                     }
 
-                    await FinalizeConversationExecutionAfterPersistAsync(saved, cancellationToken).ConfigureAwait(false);
+                    await FinalizeAgentRunAfterPersistAsync(saved, cancellationToken).ConfigureAwait(false);
                 }
             }
 
             try
             {
+                if (job.AdmissionResult is { } committedRun) job.OnAdmitted?.Invoke(committedRun);
                 if (job.Then is { } then && ShouldRunPersistThen(job.Kind))
                 {
                     await then(cancellationToken).ConfigureAwait(false);
@@ -5924,7 +6104,28 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             }
         };
 
-        await _store.SaveAsync(toSave, _durableRevision, cancellationToken).ConfigureAwait(false);
+        toSave = toSave with { PendingAgentInputIds = toSave.PendingAgentInputIds
+            .Where(id => !_admittedAgentInputs.ContainsKey(id)).ToArray() };
+        if (job.RunOutcome is { } outcome && _agentRuns is not null)
+            await _agentRuns.CommitOutcomeAsync(toSave, _durableRevision, outcome.Owner, outcome.AgentRunId,
+                outcome.Completion, outcome.DraftEntryId, cancellationToken).ConfigureAwait(false);
+        else if (job.AdmittedRun is { } run && _agentRuns is not null)
+        {
+            toSave = toSave with { PendingAgentInputIds = toSave.PendingAgentInputIds
+                .Except(run.Admission.Activation.SourceEntryIds).ToArray() };
+            var admitted = job.CompletionSourceRunId is { } childRunId
+                ? await _agentRuns.AdmitCompletionReportAsync(toSave, _durableRevision, run, childRunId, cancellationToken).ConfigureAwait(false)
+                : await _agentRuns.AdmitAsync(toSave, _durableRevision, run, cancellationToken).ConfigureAwait(false);
+            job.AdmissionResult = admitted.Run;
+            if (!admitted.Created)
+            {
+                var actual = await _store.LoadMetadataAsync(toSave.SessionId, cancellationToken).ConfigureAwait(false)
+                    ?? throw AgentCoreErrors.Persistence("Admitted Session was not found.");
+                toSave = toSave with { Revision = actual.Revision, UpdatedAt = actual.UpdatedAt };
+            }
+            foreach (var id in admitted.Run.Admission.Activation.SourceEntryIds) _admittedAgentInputs.TryAdd(id, 0);
+        }
+        else await _store.SaveAsync(toSave, _durableRevision, cancellationToken).ConfigureAwait(false);
         return toSave;
     }
 

@@ -7,9 +7,9 @@ public sealed record AdminDeletionReferenceCounts(
     int LearnedMemoryItems,
     int Automations,
     int TriggerOccurrences,
-    int WorkItems,
+    int AgentRuns,
     int Approvals,
-    int ConversationExecutions,
+    int Activations,
     int Instances)
 {
     public bool HasReferences =>
@@ -17,9 +17,9 @@ public sealed record AdminDeletionReferenceCounts(
         || LearnedMemoryItems > 0
         || Automations > 0
         || TriggerOccurrences > 0
-        || WorkItems > 0
+        || AgentRuns > 0
         || Approvals > 0
-        || ConversationExecutions > 0
+        || Activations > 0
         || Instances > 0;
 }
 
@@ -62,9 +62,9 @@ public static class AdminDeletionMessages
         Append(lines, counts.LearnedMemoryItems, "learned memory item", "learned memory items");
         Append(lines, counts.Automations, "trigger registration", "trigger registrations");
         Append(lines, counts.TriggerOccurrences, "trigger occurrence", "trigger occurrences");
-        Append(lines, counts.WorkItems, "background work item", "background work items");
+        Append(lines, counts.AgentRuns, "AgentRun", "AgentRuns");
         Append(lines, counts.Approvals, "approval", "approvals");
-        Append(lines, counts.ConversationExecutions, "conversation execution", "conversation executions");
+        Append(lines, counts.Activations, "Activation", "Activations");
         lines.Add("");
         lines.Add("Archive keeps it inactive without breaking history.");
         return string.Join('\n', lines);
@@ -80,9 +80,9 @@ public static class AdminDeletionMessages
         };
         Append(lines, counts.Instances, "agent instance", "agent instances");
         Append(lines, counts.Sessions, "session", "sessions");
-        Append(lines, counts.WorkItems, "background work item", "background work items");
+        Append(lines, counts.AgentRuns, "AgentRun", "AgentRuns");
         Append(lines, counts.Approvals, "approval", "approvals");
-        Append(lines, counts.ConversationExecutions, "conversation execution", "conversation executions");
+        Append(lines, counts.Activations, "Activation", "Activations");
         lines.Add("");
         lines.Add("Deleting a definition does not remove instances, sessions, or their history.");
         return string.Join('\n', lines);

@@ -9,6 +9,23 @@ public sealed class InMemoryTriggerStore : ITriggerStore
 {
     private readonly InMemoryDurableState _state;
     private readonly AgentCore.Infrastructure.Admin.InMemoryAdminEventStore? _admin;
+    private InMemoryMemoryStore? _runSessions;
+
+    internal void BindAgentRuns(InMemoryMemoryStore sessions)
+    {
+        lock (_state.Gate)
+        {
+            if (_runSessions is not null && !ReferenceEquals(_runSessions, sessions))
+                throw AgentCoreErrors.Persistence("Trigger receipts cannot bind to two Session stores.");
+            _runSessions = sessions;
+        }
+    }
+
+    internal object AdmissionGate => _state.Gate;
+    internal TriggerOccurrence? FindAdmissionOccurrence(Guid occurrenceId) =>
+        _state.Occurrences.GetValueOrDefault(occurrenceId);
+    internal void CommitAdmissionOccurrence(TriggerOccurrence occurrence) =>
+        _state.Occurrences[occurrence.OccurrenceId] = occurrence;
 
     public ValueTask<Automation> SaveAutomationAsync(Automation proposed, long expectedRevision,
         AgentCore.Application.Admin.AdminEventAppend history, CancellationToken ct = default, int maxActiveRegistrations = 32)
@@ -45,7 +62,15 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     }
     private bool RegistrationBusy(Guid automationId) => _state.Occurrences.Values.Any(o => o.AutomationId == automationId
         && (o.Disposition is OccurrenceRoutingDisposition.Pending or OccurrenceRoutingDisposition.Claimed or OccurrenceRoutingDisposition.AwaitingDurableWork
-            || o.DurableWorkItemId is Guid id && _state.WorkItems.TryGetValue(id, out var item) && !item.IsTerminal));
+                || HasOpenAcceptedRun(o)));
+
+    private bool HasOpenAcceptedRun(TriggerOccurrence occurrence)
+    {
+        if (occurrence.AcceptedAgentRunId is not { } id) return false;
+        if (_runSessions is null) throw AgentCoreErrors.Persistence("Canonical occurrence Run store is not bound.");
+        lock (_runSessions.AdmissionGate)
+            return _runSessions.AgentRuns.Runs.TryGetValue(id, out var run) && !run.IsTerminal;
+    }
 
     public InMemoryTriggerStore()
         : this(new InMemoryDurableState())
@@ -60,7 +85,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
             var registrations = _state.Registrations.Values.Count(item => item.Owner.AgentInstanceId == agentInstanceId && !deletedAutomations.Contains(item.AutomationId));
             var occurrences = _state.Occurrences.Values.Count(item => item.Owner.AgentInstanceId == agentInstanceId
                 && !(item.AutomationId is Guid id && deletedAutomations.Contains(id)
-                    && item.Disposition == OccurrenceRoutingDisposition.Rejected && item.DurableWorkItemId is null));
+                    && item.Disposition == OccurrenceRoutingDisposition.Rejected && item.AcceptedAgentRunId is null));
             return (registrations, occurrences);
         }
     }
@@ -76,7 +101,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
             var ids = DeletedAutomationIds(instanceId);
             foreach (var occurrence in _state.Occurrences.Values.Where(o => o.Owner.AgentInstanceId == instanceId && o.AutomationId is Guid id && ids.Contains(id)
  && o.Disposition == OccurrenceRoutingDisposition.Rejected
-                && o.DurableWorkItemId is null).ToArray())
+                && o.AcceptedAgentRunId is null).ToArray())
                 _state.Occurrences.Remove(occurrence.OccurrenceId);
             foreach (var id in ids) _state.Registrations.Remove(id);
         }
@@ -559,6 +584,37 @@ public sealed class InMemoryTriggerStore : ITriggerStore
                     null,
                     null)
                 : null));
+
+    public ValueTask<TriggerOccurrence?> BindLiveSessionAsync(Guid occurrenceId, long expectedRoutingRevision,
+        Guid sessionId, DateTimeOffset atUtc, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(Mutate(occurrenceId, current =>
+            current.Disposition == OccurrenceRoutingDisposition.LivePrepared && current.RoutingRevision == expectedRoutingRevision
+                ? current.WithLiveSession(sessionId, expectedRoutingRevision, atUtc) : null));
+    }
+
+    public ValueTask<TriggerOccurrence?> CompleteLiveEvaluationAsync(Guid occurrenceId, Guid sessionId,
+        DateTimeOffset atUtc, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(Mutate(occurrenceId, current => current.LiveSessionId == sessionId
+            && current.Disposition is OccurrenceRoutingDisposition.LivePrepared or OccurrenceRoutingDisposition.AcceptedLive
+            && current.LiveEvaluationCompletedAtUtc is null
+                ? current.WithLiveEvaluation(sessionId, null, atUtc) : null));
+    }
+
+    public ValueTask<IReadOnlyList<TriggerOccurrence>> ListUnsettledLiveAsync(int limit, Guid? after = null, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (limit is < 1 or > 100) throw AgentCoreErrors.Validation("Live repair limit is invalid.");
+        lock (AdmissionGate)
+            return ValueTask.FromResult<IReadOnlyList<TriggerOccurrence>>(_state.Occurrences.Values
+                .Where(item => item.Disposition == OccurrenceRoutingDisposition.AcceptedLive
+                    && item.LiveSessionId is not null && item.LiveEvaluationCompletedAtUtc is null
+                    && (after is null || string.CompareOrdinal(item.OccurrenceId.ToString("D"), after.Value.ToString("D")) > 0))
+                .OrderBy(item => item.OccurrenceId.ToString("D"), StringComparer.Ordinal).Take(limit).ToArray());
+    }
 
     public ValueTask<TriggerOccurrence?> RevertLivePreparedAsync(
         Guid occurrenceId,

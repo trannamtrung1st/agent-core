@@ -56,6 +56,9 @@ public interface IMemoryStore
     ValueTask<IReadOnlyList<SessionSnapshot>> ListOwnedActivePageAsync(Guid instanceId, Guid profileId,
         Guid? afterId, int limit, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
+    ValueTask<SessionCatalogPage> ListBackgroundSessionsAsync(AgentRunOwner owner, string? cursor, int limit,
+        bool includeArchived = false, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
     ValueTask<SessionCatalogPage> ListCatalogAsync(
         string? cursor,
         int limit,

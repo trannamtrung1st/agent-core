@@ -9,7 +9,7 @@ internal static class AutomationRunScript
 {
     public static IReadOnlyList<ModelGenerationEvent>? Generate(ModelRequest request)
     {
-        if (!request.Messages.Any(m => m.Role == ModelRole.System && m.Text.StartsWith("Bounded Automation Run.", StringComparison.Ordinal))) return null;
+        if (!request.Messages.Any(m => m.Role == ModelRole.System && m.Text.StartsWith("Bounded background Session task.", StringComparison.Ordinal))) return null;
         var prompt = request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text ?? "";
         bool Offers(string name) => request.Tools?.Any(t => t.Name == name) == true;
         var results = request.Messages.Where(m => m.Role == ModelRole.Tool).ToArray();
@@ -21,7 +21,7 @@ internal static class AutomationRunScript
                 return Complete("NoAction", "Experience review is unavailable.", false);
             var recorded = results.LastOrDefault(m => m.Name == ExperienceService.RecordTool);
             if (recorded is not null)
-                return Complete((recorded.Text.Contains("\"error\"", StringComparison.Ordinal) || recorded.Text.Contains("\"changed\":false", StringComparison.Ordinal)) ? "NoAction" : "ActionCompleted",
+                return Complete((recorded.Text.Contains("\"error\"", StringComparison.Ordinal) || recorded.Text.Contains("\"changed\":false", StringComparison.Ordinal)) ? "NoAction" : "Response",
                     "Reviewed the selected completed Session.", false);
             var inspected = results.LastOrDefault(m => m.Name == ExperienceService.SourceTool);
             if (inspected is null) return Call(ExperienceService.SourceTool, new { sourceKind = "Session", sourceId = selectedSession.Groups[1].Value });
@@ -38,7 +38,7 @@ internal static class AutomationRunScript
         if (prompt.Contains("\"experienceId\"", StringComparison.Ordinal))
         {
             if (results.Any(m => m.Name == ExperienceService.RecordTool))
-                return Complete("ActionCompleted", "Recorded observable completed work as Experience.", false);
+                return Complete("Response", "Recorded observable completed work as Experience.", false);
             var source = string.Join("\n", request.Messages.Where(m => m.Text.Contains("Selected Experience source", StringComparison.Ordinal)).Select(m => m.Text));
             if (source.Length == 0 || !Offers(ExperienceService.RecordTool))
                 return Complete("NoAction", "No eligible selected source is available.", false);
@@ -52,7 +52,7 @@ internal static class AutomationRunScript
         {
             if (!Offers("skills.create") || !Offers("skills.list")) return Complete("NoAction", "Skill management is unavailable; no change was made.", false);
             if (results.LastOrDefault(m => m.Name == "skills.create") is { } saved)
-                return Complete(saved.Text.Contains("\"error\"", StringComparison.Ordinal) ? "NoAction" : "ActionCompleted", "Created an independent Instance review Skill.", false);
+                return Complete(saved.Text.Contains("\"error\"", StringComparison.Ordinal) ? "NoAction" : "Response", "Created an independent Instance review Skill.", false);
             if (results.LastOrDefault(m => m.Name == "skills.list") is not { } inspected) return Call("skills.list", new { });
             using var inspection = JsonDocument.Parse(inspected.Text);
             if (inspection.RootElement.ValueKind == JsonValueKind.Array && inspection.RootElement.EnumerateArray().Any(s => s.GetProperty("name").GetString() == "Experience review"))
@@ -61,16 +61,16 @@ internal static class AutomationRunScript
                 procedure = "Observe current state, check outcomes, and report confirmed results.", projection = "OnDemand", enabled = true, requiredCapabilities = Array.Empty<string>() });
         }
         if (prompt.Contains("synthetic-automation-attention", StringComparison.Ordinal))
-            return Complete("AttentionRequested", "An unresolved checkpoint needs the owner's attention.", true);
+            return Complete("NeedsAttention", "An unresolved checkpoint needs the owner's attention.", true);
         if (prompt.Contains("Call John", StringComparison.OrdinalIgnoreCase))
-            return Complete("AttentionRequested", "Reminder: Call John.", true);
+            return Complete("NeedsAttention", "Reminder: Call John.", true);
         if (prompt.Contains("check the oven", StringComparison.OrdinalIgnoreCase))
-            return Complete("AttentionRequested", "Oven is ready.", true);
+            return Complete("NeedsAttention", "Oven is ready.", true);
         if (prompt.Contains(ScriptedLanguageModel.SensitiveApprovalMarker, StringComparison.Ordinal) && Offers(ToolCatalog.DemoSensitiveAction))
         {
             var action = results.LastOrDefault(m => m.Name == ToolCatalog.DemoSensitiveAction);
             return action is null ? Call(ToolCatalog.DemoSensitiveAction, new { label = "Synthetic sensitive approval" })
-                : Complete("ActionCompleted", "Sensitive action completed after approval.", false);
+                : Complete("Response", "Sensitive action completed after approval.", false);
         }
         return Complete("NoAction", "No meaningful change requires action.", false);
     }

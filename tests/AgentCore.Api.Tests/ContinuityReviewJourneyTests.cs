@@ -9,9 +9,8 @@ using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Triggers;
 using AgentCore.Application.Work;
-using AgentCore.Domain.Work;
-using AgentCore.Contracts.Http;
 using AgentCore.Domain.Conversation;
+using AgentCore.Contracts.Http;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Memory;
 using AgentCore.Domain.Triggers;
@@ -48,22 +47,21 @@ public sealed class ContinuityReviewJourneyTests
         var run = await client.PostAsJsonAsync(path + "/" + automationId + "/run", new ContinuityRevisionRequest(1));
         run.EnsureSuccessStatusCode();
         await AutomationJourneyTests.Intake(services);
-        var store = services.GetRequiredService<IWorkItemStore>();
-        var owner = new WorkOwner(instance.InstanceId, LocalUserProfile.Id);
+        var store = services.GetRequiredService<IAgentRunStore>();
+        var owner = new AgentRunOwner(instance.InstanceId, LocalUserProfile.Id);
         var original = Assert.Single(await store.ListAsync(owner, 100));
         // Imported historical rows represent other sources without executing them.
         for (var index = 0; index < 101; index++)
         {
             var at = original.CreatedAtUtc.AddMinutes(index + 1);
-            var source = Guid.NewGuid();
-            var provenance = new WorkProvenance(source, WorkSourceKind.ApplicationEvent, null, null, source, $"history|{source:N}", null, at,
-                "{}", original.Provenance.DefinitionId, original.Provenance.DefinitionVersion, original.Provenance.PersonaName);
-            await store.CreateAsync(WorkItem.Create(Guid.NewGuid(), owner, provenance, original.Model, 3, at));
+            var snapshot = AgentRunTestFixtures.Snapshot(owner,
+                (await services.SessionAsync(original)).Definition, at);
+            await store.AdmitAsync(snapshot, 0, AgentRunTestFixtures.Run(snapshot, at));
         }
-        Assert.DoesNotContain(await store.ListAsync(owner, 100), item => item.WorkItemId == original.WorkItemId);
+        Assert.DoesNotContain(await store.ListAsync(owner, 100), item => item.AgentRunId == original.AgentRunId);
         var review = await client.GetFromJsonAsync<System.Text.Json.JsonElement>(path);
-        Assert.Equal(original.WorkItemId.ToString("D"), review.GetProperty("items")[0].GetProperty("lastWorkItemId").GetString());
-        var detail = (await client.GetFromJsonAsync<WorkItemResponse>(root + "/work-items/" + original.WorkItemId))!;
+        Assert.Equal(original.AgentRunId.ToString("D"), review.GetProperty("items")[0].GetProperty("lastAgentRunId").GetString());
+        var detail = (await client.GetFromJsonAsync<AgentRunResponse>(root.Replace("/admin/", "/") + "/agent-runs/" + original.AgentRunId))!;
         Assert.Equal(automationId, detail.AutomationId);
     }
 
@@ -228,7 +226,7 @@ public sealed class ContinuityReviewJourneyTests
         var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         var instances = s.GetRequiredService<IAgentInstanceStore>();
         Guid Key(int i) => Guid.Parse($"ffffffff-ffff-ffff-ffff-{i:000000000000}");
-        for (var i = 1; i <= 101; i++) await instances.InsertAsync(instance with { InstanceId = Key(i) });
+        for (var i = 1; i <= 101; i++) await instances.InsertAsync(instance with { InstanceId = Key(i) }, initialSkills: (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync(instance.DefinitionId, instance.ActiveVersion))!.SkillList);
         var target = Key(101);
         await s.GetRequiredService<IExperienceStore>().ConfigureAsync(target, 0, true);
         var template = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(target, SessionMode.Text);
@@ -244,7 +242,7 @@ public sealed class ContinuityReviewJourneyTests
         await s.GetRequiredService<ExperienceService>().RequestSessionAsync(target, Key(101));
         var record = Assert.Single(await s.GetRequiredService<IExperienceStore>().ListAsync(target, 100));
         Assert.Equal(Key(101), record.SourceId);
-        Assert.Single(await s.GetRequiredService<IWorkItemStore>().ListAsync(new(target, LocalUserProfile.Id), 100));
+        Assert.Single(await s.GetRequiredService<IAgentRunStore>().ListAsync(new(target, LocalUserProfile.Id), 100));
     }
 
     private static string Database() => Path.Combine(Path.GetTempPath(), $"continuity-review-{Guid.NewGuid():N}.db");

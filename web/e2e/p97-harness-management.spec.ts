@@ -77,9 +77,8 @@ test('Managed tool and instruction proposals require exact Chat approval',async(
   expect((await review(page,id)).activeVersion).toBe(16);await approval.getByRole('button',{name:'Approve',exact:true}).click();
   await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible();expect((await review(page,id)).selectedTools).not.toContain('http.request');
   await send(page,'Try a sensitive HTTP action now.');
-  const sensitive=page.getByRole('dialog',{name:'Approve sensitive action'});await expect(sensitive).toBeVisible();
-  await sensitive.getByRole('button',{name:'Reject',exact:true}).click();
-  await expect(sensitive).toBeHidden({timeout:20_000});
+  // A new AgentRun rechecks current tool authority even in this pinned Session.
+  await expect(page.getByRole('dialog',{name:'Approve sensitive action'})).toHaveCount(0);
   await expect(page.getByText('The sensitive action was not executed.',{exact:true})).toBeVisible({timeout:30_000});
   await expect(page.getByTestId('connection')).toHaveText('Ready',{timeout:20_000});
 });

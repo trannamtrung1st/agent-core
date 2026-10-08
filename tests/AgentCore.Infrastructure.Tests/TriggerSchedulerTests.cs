@@ -633,6 +633,17 @@ public sealed class TriggerSchedulerTests
         public ValueTask<TriggerOccurrence?> TryAcceptLiveAsync(Guid occurrenceId, Guid claimId, DateTimeOffset acceptedAt, CancellationToken cancellationToken = default) =>
             inner.TryAcceptLiveAsync(occurrenceId, claimId, acceptedAt, cancellationToken);
 
+        public ValueTask<IReadOnlyList<TriggerOccurrence>> ListUnsettledLiveAsync(int limit, Guid? after = null, CancellationToken cancellationToken = default) =>
+            inner.ListUnsettledLiveAsync(limit, after, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> BindLiveSessionAsync(Guid occurrenceId, long expectedRoutingRevision,
+            Guid sessionId, DateTimeOffset atUtc, CancellationToken cancellationToken = default) =>
+            inner.BindLiveSessionAsync(occurrenceId, expectedRoutingRevision, sessionId, atUtc, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> CompleteLiveEvaluationAsync(Guid occurrenceId, Guid sessionId,
+            DateTimeOffset atUtc, CancellationToken cancellationToken = default) =>
+            inner.CompleteLiveEvaluationAsync(occurrenceId, sessionId, atUtc, cancellationToken);
+
         public ValueTask<TriggerOccurrence?> ConfirmLiveBeginAsync(
             Guid occurrenceId,
             long expectedRoutingRevision,

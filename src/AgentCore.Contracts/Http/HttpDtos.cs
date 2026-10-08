@@ -272,41 +272,6 @@ public sealed record SessionAutomationListResponse(IReadOnlyList<SessionAutomati
 
 public sealed record CancelTriggerRequest(long ExpectedRevision);
 
-public sealed record WorkItemResponse(
-    string WorkItemId,
-    string Status,
-    long Revision,
-    string Origin,
-    string? Progress,
-    bool NeedsApproval,
-    string? ApprovalId,
-    long? ApprovalRevision,
-    string? ApprovalPreview,
-    string? ActionHash,
-    bool CancellationAvailable,
-    string? FailureCode,
-    string? FailureSummary,
-    string? KnownEffect,
-    string CreatedAt,
-    string UpdatedAt,
-    string? DiagnosticId = null,
-    bool AttentionRequired = false,
-    int? AttemptCount = null,
-    int? MaxAttempts = null,
-    string? SourceId = null, string? AutomationId = null, string? ModelKey = null, string? Outcome = null, string? Instructions = null, string? AutomationName = null, string? TriggerSummary = null);
-
-public sealed record WorkItemListResponse(IReadOnlyList<WorkItemResponse> Items);
-
-public sealed record WorkItemResultResponse(
-    string WorkItemId,
-    string Text,
-    string CompletedAt,
-    bool AttentionRequired = false);
-
-public sealed record CancelWorkItemRequest(long ExpectedRevision);
-
-public sealed record DecideWorkApprovalRequest(long ExpectedRevision, long ExpectedApprovalRevision, string ActionHash);
-
 public sealed record ArtifactResponse(
     string ArtifactId,
     string SessionId,

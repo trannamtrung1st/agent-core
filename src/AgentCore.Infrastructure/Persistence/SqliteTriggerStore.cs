@@ -50,7 +50,11 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         var id = automationId.ToString("D");
         return db.TriggerOccurrences.AnyAsync(o => o.AutomationId == id && (o.Disposition == (int)OccurrenceRoutingDisposition.Pending || o.Disposition == (int)OccurrenceRoutingDisposition.Claimed
                 || o.Disposition == (int)OccurrenceRoutingDisposition.AwaitingDurableWork
-                || db.WorkItems.Any(w => w.WorkItemId == o.DurableWorkItemId && w.Status < (int)AgentCore.Domain.Work.WorkItemStatus.Completed)), ct);
+                || db.AgentRuns.Any(run => run.AgentRunId == o.AcceptedAgentRunId
+                    && (run.Status == (int)AgentCore.Domain.Conversation.AgentRunStatus.Queued
+                        || run.Status == (int)AgentCore.Domain.Conversation.AgentRunStatus.Running
+                        || run.Status == (int)AgentCore.Domain.Conversation.AgentRunStatus.WaitingForApproval
+                        || run.Status == (int)AgentCore.Domain.Conversation.AgentRunStatus.WaitingToRetry))), ct);
     }
 
     public async ValueTask<Automation> CreateAsync(
@@ -815,6 +819,43 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
                 : null,
             cancellationToken);
 
+    public ValueTask<TriggerOccurrence?> BindLiveSessionAsync(Guid occurrenceId, long expectedRoutingRevision,
+        Guid sessionId, DateTimeOffset atUtc, CancellationToken cancellationToken = default) =>
+        MutateOccurrenceAsync(occurrenceId, current =>
+            current.Disposition == OccurrenceRoutingDisposition.LivePrepared && current.RoutingRevision == expectedRoutingRevision
+                ? current.WithLiveSession(sessionId, expectedRoutingRevision, atUtc) : null, cancellationToken);
+
+    public async ValueTask<TriggerOccurrence?> CompleteLiveEvaluationAsync(Guid occurrenceId, Guid sessionId,
+        DateTimeOffset atUtc, CancellationToken cancellationToken = default)
+    {
+        // Begin confirmation may win between the read and quiet settlement. Re-read once;
+        // a Run admission that wins the same CAS is already a settled receipt.
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await MutateOccurrenceAsync(occurrenceId, current => current.LiveSessionId == sessionId
+                    && current.Disposition is OccurrenceRoutingDisposition.LivePrepared or OccurrenceRoutingDisposition.AcceptedLive
+                    && current.LiveEvaluationCompletedAtUtc is null
+                        ? current.WithLiveEvaluation(sessionId, null, atUtc) : null, cancellationToken).ConfigureAwait(false);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt == 0) { }
+        }
+    }
+
+    public async ValueTask<IReadOnlyList<TriggerOccurrence>> ListUnsettledLiveAsync(int limit, Guid? after = null, CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 100) throw AgentCoreErrors.Validation("Live repair limit is invalid.");
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var cursor = after?.ToString("D");
+        var rows = await db.TriggerOccurrences.AsNoTracking().Where(row => row.Disposition == (int)OccurrenceRoutingDisposition.AcceptedLive
+            && row.LiveSessionId != null && row.LiveEvaluationCompletedAtUtc == null
+            && (cursor == null || string.Compare(row.OccurrenceId, cursor) > 0))
+            .OrderBy(row => row.OccurrenceId).Take(limit)
+            .ToArrayAsync(cancellationToken).ConfigureAwait(false);
+        return rows.Select(TriggerStoreMapping.ToOccurrence).ToArray();
+    }
+
     public ValueTask<TriggerOccurrence?> RevertLivePreparedAsync(
         Guid occurrenceId,
         long expectedRoutingRevision,
@@ -1074,7 +1115,10 @@ internal static class TriggerStoreMapping
         RoutingUpdatedAtUtc = occurrence.RoutingUpdatedAtUtc?.ToUnixTimeMilliseconds(),
         ClaimId = occurrence.ClaimId?.ToString("D"),
         ClaimLeaseExpiresAtUtc = occurrence.ClaimLeaseExpiresAtUtc?.ToUnixTimeMilliseconds(),
-        DurableWorkItemId = occurrence.DurableWorkItemId?.ToString("D"),
+        BackgroundSessionId = occurrence.BackgroundSessionId?.ToString("D"),
+        AcceptedAgentRunId = occurrence.AcceptedAgentRunId?.ToString("D"),
+        LiveSessionId = occurrence.LiveSessionId?.ToString("D"),
+        LiveEvaluationCompletedAtUtc = occurrence.LiveEvaluationCompletedAtUtc?.ToUnixTimeMilliseconds(),
         ModelCatalogKey = occurrence.ModelPin?.CatalogKey,
         ModelProviderAlias = occurrence.ModelPin?.ProviderAlias,
         ModelId = occurrence.ModelPin?.ModelId,
@@ -1090,7 +1134,10 @@ internal static class TriggerStoreMapping
         row.RoutingUpdatedAtUtc = next.RoutingUpdatedAtUtc?.ToUnixTimeMilliseconds();
         row.ClaimId = next.ClaimId?.ToString("D");
         row.ClaimLeaseExpiresAtUtc = next.ClaimLeaseExpiresAtUtc?.ToUnixTimeMilliseconds();
-        row.DurableWorkItemId = next.DurableWorkItemId?.ToString("D");
+        row.BackgroundSessionId = next.BackgroundSessionId?.ToString("D");
+        row.AcceptedAgentRunId = next.AcceptedAgentRunId?.ToString("D");
+        row.LiveSessionId = next.LiveSessionId?.ToString("D");
+        row.LiveEvaluationCompletedAtUtc = next.LiveEvaluationCompletedAtUtc?.ToUnixTimeMilliseconds();
     }
 
     public static TriggerOccurrence ToOccurrence(TriggerOccurrenceRecord row) => new(
@@ -1111,8 +1158,7 @@ internal static class TriggerStoreMapping
         FromUnix(row.RoutingUpdatedAtUtc),
         ParseOptional(row.ClaimId),
         FromUnix(row.ClaimLeaseExpiresAtUtc),
-        ParseOptional(row.DurableWorkItemId),
-        ReadModelPin(row));
+        ReadModelPin(row), ParseOptional(row.BackgroundSessionId), ParseOptional(row.AcceptedAgentRunId), ParseOptional(row.LiveSessionId), FromUnix(row.LiveEvaluationCompletedAtUtc));
 
     private static ExecutionModelPin? ReadModelPin(TriggerOccurrenceRecord row)
     {

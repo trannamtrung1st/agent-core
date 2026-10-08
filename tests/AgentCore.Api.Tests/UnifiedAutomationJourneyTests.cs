@@ -1,3 +1,4 @@
+using AgentCore.Application.Execution;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -10,7 +11,6 @@ using AgentCore.Application.Work;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Triggers;
-using AgentCore.Domain.Work;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AgentCore.Api.Tests;
@@ -40,14 +40,14 @@ public sealed class UnifiedAutomationJourneyTests
             run.EnsureSuccessStatusCode();
             Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(path + "/" + scheduleId + "/run", new ContinuityRevisionRequest(schedule.Revision))).StatusCode);
             await Drain(s);
-            var owner = new WorkOwner(instanceId, LocalUserProfile.Id);
-            var work = s.GetRequiredService<IWorkItemStore>();
+            var owner = new AgentRunOwner(instanceId, LocalUserProfile.Id);
+            var work = s.GetRequiredService<IAgentRunStore>();
             var manual = Assert.Single(await work.ListAsync(owner, 20));
-            Assert.Equal(WorkItemStatus.Completed, manual.Status);
-            Assert.Equal("NoAction", WorkCompletionRequest.Outcome(manual.Result!.Text));
-            Assert.Equal(Guid.Parse(scheduleId), manual.Provenance.AutomationId);
-            Assert.Equal("Automation · Manual", manual.OriginLabel);
-            Assert.Empty(await work.ListAttentionAlertKeysAsync(manual.WorkItemId));
+            Assert.Equal(AgentRunStatus.Completed, manual.Status);
+            Assert.Equal("NoAction", manual.Result!.OutcomeKind.ToString());
+            Assert.Equal(Guid.Parse(scheduleId), (await s.SessionAsync(manual)).Origin.AutomationId);
+            Assert.Equal(SessionOriginKind.AutomationOccurrence, (await s.SessionAsync(manual)).Origin.Kind);
+            Assert.False(manual.Result?.AttentionRequired ?? false);
             var sourceResponse = await client.PostAsJsonAsync("/api/v2/admin/event-sources", new { displayName = "Orders" }); sourceResponse.EnsureSuccessStatusCode();
             var source = (await sourceResponse.Content.ReadFromJsonAsync<AdminEventSourceCredentialResponse>())!;
             var reaction = draft with { Name = "Review new order", Trigger = new("event", EventSourceId: source.SourceId, EventType: "order.placed") };
@@ -62,12 +62,12 @@ public sealed class UnifiedAutomationJourneyTests
             Assert.Single(await s.GetRequiredService<ITriggerStore>().ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 20));
             await Drain(s);
             var items = await work.ListAsync(owner, 20);
-            var eventRun = Assert.Single(items, item => item.Provenance.SourceKind == WorkSourceKind.ApplicationEvent);
-            Assert.Equal("NoAction", WorkCompletionRequest.Outcome(eventRun.Result!.Text));
-            Assert.Contains("1001", eventRun.Provenance.EvidenceJson);
-            Assert.Contains(reaction.Instructions, eventRun.Provenance.EvidenceJson);
+            var eventRun = Assert.Single(items, item => item.Admission.Activation.Kind == ActivationKind.ApplicationEvent);
+            Assert.Equal("NoAction", eventRun.Result!.OutcomeKind.ToString());
+            Assert.Contains("1001", (await s.SessionAsync(eventRun)).Entries[0].Text);
+            Assert.Contains(reaction.Instructions, (await s.SessionAsync(eventRun)).Entries[0].Text);
             var review = (await client.GetFromJsonAsync<AutomationReview>(path))!;
-            Assert.Equal(eventRun.WorkItemId.ToString(), Assert.Single(review.Items, item => item.AutomationId == eventAutomationId).LastWorkItemId);
+            Assert.Equal(eventRun.AgentRunId.ToString(), Assert.Single(review.Items, item => item.AutomationId == eventAutomationId).LastAgentRunId);
             Assert.Equal(2, review.Items.Count);
         }
         await using (var restarted = new ExperienceHost(db))
@@ -99,26 +99,26 @@ public sealed class UnifiedAutomationJourneyTests
         var automation = (await response.Content.ReadFromJsonAsync<AutomationResponse>())!;
         (await client.PostAsJsonAsync(path + "/" + automation.AutomationId + "/run", new ContinuityRevisionRequest(automation.Revision))).EnsureSuccessStatusCode();
         await Drain(services);
-        var owner = new WorkOwner(instance.InstanceId, LocalUserProfile.Id);
-        var run = Assert.Single(await services.GetRequiredService<IWorkItemStore>().ListAsync(owner, 20));
-        Assert.Equal("ActionCompleted", WorkCompletionRequest.Outcome(run.Result!.Text));
+        var owner = new AgentRunOwner(instance.InstanceId, LocalUserProfile.Id);
+        var run = Assert.Single(await services.GetRequiredService<IAgentRunStore>().ListAsync(owner, 20));
+        Assert.Equal("Response", run.Result!.OutcomeKind.ToString());
         var records = await services.GetRequiredService<IExperienceStore>().ListAsync(instance.InstanceId, 20);
         var record = Assert.Single(records);
         Assert.Equal(source.SessionId, record.SourceId); Assert.Equal(4, record.ThroughCursor);
-        Assert.Equal(run.WorkItemId, record.GenerationWorkItemId);
-        Assert.Equal(Guid.Parse(automation.AutomationId), run.Provenance.AutomationId);
-        Assert.Empty(await services.GetRequiredService<IWorkItemStore>().ListAttentionAlertKeysAsync(run.WorkItemId));
+        Assert.Equal(run.AgentRunId, record.GenerationAgentRunId);
+        Assert.Equal(Guid.Parse(automation.AutomationId), (await services.SessionAsync(run)).Origin.AutomationId);
+        Assert.False(run.Result?.AttentionRequired ?? false);
         (await client.PostAsJsonAsync(path + "/" + automation.AutomationId + "/run", new ContinuityRevisionRequest(automation.Revision))).EnsureSuccessStatusCode();
         await Drain(services);
-        var repeated = (await services.GetRequiredService<IWorkItemStore>().ListAsync(owner, 20)).First(item => item.WorkItemId != run.WorkItemId);
-        Assert.Equal("NoAction", WorkCompletionRequest.Outcome(repeated.Result!.Text));
+        var repeated = (await services.GetRequiredService<IAgentRunStore>().ListAsync(owner, 20)).First(item => item.AgentRunId != run.AgentRunId);
+        Assert.Equal("NoAction", repeated.Result!.OutcomeKind.ToString());
         Assert.Single(await services.GetRequiredService<IExperienceStore>().ListAsync(instance.InstanceId, 20));
         using var args = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(new {
             sourceKind = "Session", sourceId = source.SessionId, throughCursor = 3,
             goal = "Stale source", attempts = Array.Empty<string>(), decisions = Array.Empty<string>(), outcomes = Array.Empty<string>(),
             corrections = Array.Empty<string>(), unresolved = Array.Empty<string>(), difficulties = Array.Empty<string>(), lessons = Array.Empty<string>() }));
         var stale = await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(async () =>
-            await experience.RecordAsync(instance.InstanceId, run.WorkItemId, args.RootElement, CancellationToken.None));
+            await experience.RecordAsync(instance.InstanceId, run.AgentRunId, args.RootElement, CancellationToken.None));
         Assert.Equal("Conflict", stale.Code);
     }
 
@@ -126,7 +126,7 @@ public sealed class UnifiedAutomationJourneyTests
     public void Correlated_events_are_bounded_and_preserve_the_root()
     {
         var root = Guid.NewGuid();
-        string Payload(int depth) => $$$"""{"eventId":"new","type":"order.placed","rootWorkItemId":"{{{root}}}","triggerDepth":{{{depth}}},"data":{"orderReference":"1001"}}""";
+        string Payload(int depth) => $$$"""{"eventId":"new","type":"order.placed","rootAgentRunId":"{{{root}}}","triggerDepth":{{{depth}}},"data":{"orderReference":"1001"}}""";
         Assert.True(ExternalEventEnvelope.TryNormalize(Encoding.UTF8.GetBytes(Payload(4)), out var evidence, out _, out _, out _, out _));
         Assert.Contains(root.ToString(), evidence);
         Assert.False(ExternalEventEnvelope.TryNormalize(Encoding.UTF8.GetBytes(Payload(5)), out _, out _, out _, out _, out var reason));
@@ -136,7 +136,7 @@ public sealed class UnifiedAutomationJourneyTests
     internal static async Task Drain(IServiceProvider s)
     {
         await s.GetRequiredService<TriggerOccurrenceRouter>().RouteOnceAsync();
-        await s.GetRequiredService<DurableWorkIntake>().AcceptAwaitingAsync();
-        await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
+        await s.GetRequiredService<BackgroundOccurrenceIntake>().AcceptAwaitingAsync();
+        await s.ExecuteRunsAsync(100);
     }
 }

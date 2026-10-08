@@ -95,16 +95,16 @@ test('Automation consolidates separately owned Memory and Experience; lineage, o
     await expect(source).toBeVisible();
     if (await source.getAttribute('aria-expanded') !== 'true') await source.click();
     await automations.getByRole('button', { name: 'Run automation now', exact: true }).click();
-    await expect(automations.getByRole('row').filter({ hasText: marker }).getByText(/Completed · Action completed/).first()).toBeVisible({ timeout: 30_000 });
+    await expect(automations.getByRole('row').filter({ hasText: marker }).getByText(/Completed · Response/).first()).toBeVisible({ timeout: 30_000 });
   }
   await createAndRun('synthetic-maintain-memory');
   await automations.getByRole('button', { name: 'View automation: synthetic-maintain-memory', exact: true }).click();
   await createAndRun('synthetic-maintain-experience');
-  const work = await (await page.request.get(root + '/work-items', { headers })).json();
-  const maintenance = work.items.filter((w: { origin: string; automationId?: string }) => w.origin === 'Automation · Manual' && w.automationId);
-  expect(maintenance).toHaveLength(2); expect(maintenance.every((w: { attentionRequired: boolean }) => !w.attentionRequired)).toBe(true);
+  const work = await (await page.request.get(root.replace('/admin/', '/') + '/agent-runs', { headers })).json();
+  const maintenance = work.items.filter((w: { activationKind: string; automationId?: string }) => w.activationKind === 'ManualBackground' && w.automationId);
+  expect(maintenance).toHaveLength(2); expect(maintenance.every((w: { outcome: { attentionRequired: boolean } }) => !w.outcome.attentionRequired)).toBe(true);
   await automations.getByRole('button', { name: 'View last run: synthetic-maintain-experience', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Run details', exact: true }).getByText('synthetic-maintain-experience', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Run details', exact: true }).getByText('Response', { exact: true }).first()).toBeVisible();
   await page.getByRole('dialog', { name: 'Run details', exact: true }).getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('tab', { name: 'Continuity', exact: true }).click();
   await page.getByRole('tab', { name: 'Memory', exact: true }).click();

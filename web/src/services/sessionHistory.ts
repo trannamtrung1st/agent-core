@@ -119,7 +119,7 @@ export function reconcileOrphanedLiveConversation(
   outputState: string
 ): {
   liveResponseId: null;
-  conversationExecutionId: null;
+  agentRunId: null;
   outputState: "idle";
   activeProgress: null;
   pendingApproval: null;
@@ -134,7 +134,7 @@ export function reconcileOrphanedLiveConversation(
 
   return {
     liveResponseId: null,
-    conversationExecutionId: null,
+    agentRunId: null,
     outputState: "idle",
     activeProgress: null,
     pendingApproval: null
@@ -209,7 +209,7 @@ export async function loadNewestHistoryPage(
       ...(clearLiveConversation
         ? (orphaned ?? {
             liveResponseId: null,
-            conversationExecutionId: null,
+            agentRunId: null,
             outputState: "idle",
             activeProgress: null,
             pendingApproval: null

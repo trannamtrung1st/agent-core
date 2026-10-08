@@ -992,7 +992,7 @@ describe("agent.progress", () => {
         mode: "text",
         status: "attached",
         outputState: "agentGenerating",
-        conversationExecutionId: "execution-1",
+        agentRunId: "execution-1",
         activeResponseId: "response-1",
         history: [{
           entryId: "assistant-1",
@@ -1010,7 +1010,7 @@ describe("agent.progress", () => {
       }
     }));
 
-    expect(restored.conversationExecutionId).toBe("execution-1");
+    expect(restored.agentRunId).toBe("execution-1");
     expect(restored.liveResponseId).toBe("response-1");
     expect(restored.outputState).toBe("agentGenerating");
     expect(restored.entries[0]?.text).toBe("Hello");

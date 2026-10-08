@@ -148,7 +148,7 @@ public sealed class ProductPublishWorkflowTests
         var browser = new ProductBrowser();
         var recording = new RecordingModel(new ScriptedLanguageModel());
         var output = new CapturingSessionOutput();
-        var turns = new InMemoryConversationTurnExecutionStore();
+        var turns = new RuntimeAgentRunStore();
         await using var runtime = Create(
             new SemanticResponseLanguageModel(recording),
             output,
@@ -202,7 +202,7 @@ public sealed class ProductPublishWorkflowTests
         CapturingSessionOutput output,
         AgentDefinition definition,
         ProductBrowser browser,
-        InMemoryConversationTurnExecutionStore turns)
+        RuntimeAgentRunStore turns)
     {
         var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-01T12:00:00Z"));
         var ids = new DeterministicIdGenerator(
@@ -232,6 +232,8 @@ public sealed class ProductPublishWorkflowTests
                 ModelSelectionSource.SystemDefault,
                 null), AgentInstanceId: instanceId);
         var store = new InMemoryMemoryStore();
+        snapshot = RuntimeAgentRunStore.WithPins(snapshot);
+        turns.Bind(store);
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         var agents = new InMemoryAgentInstanceStore();
         agents.InsertAsync(new AgentInstance(instanceId, definition.Id, definition.Version, definition.Identity,
@@ -246,7 +248,7 @@ public sealed class ProductPublishWorkflowTests
             time,
             NullLogger<SessionRuntime>.Instance,
             tools: new SessionToolExecutor(browser: browser, agentInstances: agents, configurationGate: ToolConfigurationGates.AllowAll),
-            turnExecutions: turns);
+            agentRuns: turns);
     }
 
     private sealed record PublishRun(string Answer, ProductBrowser Browser, RecordingModel Recording);

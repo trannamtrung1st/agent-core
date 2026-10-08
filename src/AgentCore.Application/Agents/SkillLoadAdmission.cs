@@ -125,7 +125,7 @@ public static class SkillLoadAdmission
         foreach (var raw in requestedIds)
         {
             var id = raw.Trim();
-            if (!ConversationTurnExecution.IsSkillKey(id))
+            if (!SkillKeys.IsValid(id))
             {
                 rejected.Add(new SkillLoadRejection(id, "invalid"));
                 continue;

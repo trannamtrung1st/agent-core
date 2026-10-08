@@ -81,7 +81,7 @@ public sealed class AgentStepControllerTests
     private static void AssertNoDirectMutation(AgentStepControllerDecision decision)
     {
         Assert.False(decision.MutatesSessionLifecycle);
-        Assert.False(decision.MutatesWorkItem);
+        Assert.False(decision.MutatesAgentRun);
         Assert.False(decision.MutatesApproval);
         Assert.False(decision.MutatesTrigger);
         Assert.False(decision.MutatesMemoryDirectly);

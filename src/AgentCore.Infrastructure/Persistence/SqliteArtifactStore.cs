@@ -166,6 +166,23 @@ public sealed class SqliteArtifactStore(
         return rows.Select(FromRow).ToArray();
     }
 
+    public async ValueTask<ArtifactPage> ListPageAsync(Guid sessionId, Guid? before, int limit, CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 100) throw AgentCoreErrors.Validation("Artifact limit must be between 1 and 100.");
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var query = db.Artifacts.AsNoTracking().Where(row => row.SessionId == sessionId.ToString("D"));
+        if (_deleted.ContainsKey(sessionId)) query = query.Where(_ => false);
+        if (before is { } cursor)
+        {
+            var last = await query.SingleOrDefaultAsync(row => row.ArtifactId == cursor.ToString("D"), cancellationToken).ConfigureAwait(false)
+                ?? throw AgentCoreErrors.Validation("Artifact cursor does not belong to this Session.");
+            query = query.Where(row => row.CreatedAtUtc < last.CreatedAtUtc || row.CreatedAtUtc == last.CreatedAtUtc && string.Compare(row.ArtifactId, last.ArtifactId) < 0);
+        }
+        var rows = await query.OrderByDescending(row => row.CreatedAtUtc).ThenByDescending(row => row.ArtifactId).Take(limit + 1).ToArrayAsync(cancellationToken).ConfigureAwait(false);
+        var more = rows.Length > limit;
+        return new ArtifactPage(rows.Take(limit).Select(FromRow).ToArray(), more ? Guid.Parse(rows[limit - 1].ArtifactId) : null, more);
+    }
+
     public async ValueTask<Stream> OpenContentAsync(
         Guid sessionId,
         Guid artifactId,

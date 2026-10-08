@@ -12,10 +12,12 @@ public sealed partial class SessionRuntime
 
     public bool HeadlessTransportDetached => _headlessTransportDetached;
 
-    public Task<bool> HasAcceptedConversationWorkAsync(CancellationToken cancellationToken = default)
+    public async Task<bool> HasAcceptedConversationWorkAsync(CancellationToken cancellationToken = default)
     {
-        _ = cancellationToken;
-        return Task.FromResult(HasAcceptedConversationWork());
+        var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        BeginWork();
+        if (!Enqueue(new AcceptedConversationWorkQueryReceived(NewContext(), completed), urgent: true)) return false;
+        return await completed.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task WaitUntilAcceptedConversationWorkSettledAsync(CancellationToken cancellationToken = default)
@@ -53,13 +55,13 @@ public sealed partial class SessionRuntime
 
     private bool HasAcceptedConversationWork()
     {
-        if (_boundConversationExecution?.IsOpen == true
+        if (_boundAgentRun is { IsTerminal: false }
             && (!_responseTerminal || HasPendingConversationTerminalPersist()))
         {
             return true;
         }
 
-        if (_pendingApproval is not null)
+        if (_agentRunAdmissionPending || _pendingApproval is not null)
         {
             return true;
         }
@@ -109,7 +111,7 @@ public sealed partial class SessionRuntime
 
     private bool HasDurablePendingUserBatch()
     {
-        var suffix = TrailingUserSuffix.Of(_snapshot.Entries);
+        var suffix = PendingUserBatch();
         return suffix.Count > 0 && suffix.All(entry => !_undurableUserEntryIds.Contains(entry.EntryId));
     }
 
@@ -117,5 +119,5 @@ public sealed partial class SessionRuntime
         input.Result.TrySetResult(HasAcceptedConversationWork());
 
     private bool ShouldBlockProactiveWhileHeadless(TriggerKind kind) =>
-        _headlessTransportDetached && kind != TriggerKind.UserTurn;
+        _headlessTransportDetached && kind != TriggerKind.UserTurn && _boundAgentRun is not { IsTerminal: false };
 }

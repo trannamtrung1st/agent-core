@@ -318,6 +318,7 @@ public sealed partial class SessionRuntime
 
     private async Task RecoverProactiveHandleFailureAsync(BrainReturned brain, CancellationToken cancellationToken)
     {
+        await CompleteQuietLiveOccurrenceAsync(brain.Trigger, cancellationToken).ConfigureAwait(false);
         if (brain.Trigger.Kind == TriggerKind.UserTurn || _activeResponseId != brain.ResponseId)
         {
             return;

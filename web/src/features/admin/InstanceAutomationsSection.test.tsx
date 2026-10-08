@@ -10,7 +10,7 @@ const request = vi.mocked(instanceContinuityRequest);
 const row: Automation = { automationId: "scheduled", revision: 2, name: "Review store orders", outcome: null, instructions: "Review store orders", enabled: true, status: "Active",
   trigger: { kind: "schedule", schedule: { kind: "daily", interval: 1, localTime: "09:00", timeZone: "UTC" } }, authorizationOrigin: "CurrentUserTurn",
   sourceSessionId: "source-session", sourceEventId: null, createdAt: "2026-10-05T00:00:00Z", nextRunAt: "2026-10-06T09:00:00Z",
-  modelKey: null, reasoningEffort: null, effectiveModelKey: "scripted-alpha", lastWorkItemId: null, executionStatus: null };
+  modelKey: null, reasoningEffort: null, effectiveModelKey: "scripted-alpha", lastAgentRunId: null, executionStatus: null };
 const view = () => <ConfigProvider><App><InstanceAutomationsSection instanceId="instance" onWork={vi.fn()} /></App></ConfigProvider>;
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 beforeEach(() => {
@@ -19,7 +19,7 @@ beforeEach(() => {
 });
 describe("Owner schedule authoring", () => {
   it.each(["Completed", "Expired"])("deletes %s automations with the current revision", async status => {
-    const completed = { ...row, status, enabled: false, lastWorkItemId: "retained-run", executionStatus: "Completed" };
+    const completed = { ...row, status, enabled: false, lastAgentRunId: "retained-run", executionStatus: "Completed" };
     let removed = false;
     request.mockImplementation(async (_instance, _path, method) => {
       if (method === "DELETE") { removed = true; return { cancelled: true }; }
@@ -38,7 +38,7 @@ describe("Owner schedule authoring", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "New automation" })).toHaveFocus());
   });
   it.each([["WaitingForApproval", "Needs approval"], ["WaitingToRetry", "Retrying"]])("uses readable run state for %s", async (executionStatus, label) => {
-    request.mockResolvedValue({ items: [{ ...row, executionStatus, lastWorkItemId: "last-run" }] });
+    request.mockResolvedValue({ items: [{ ...row, executionStatus, lastAgentRunId: "last-run" }] });
     render(view());
     await screen.findByRole("button", { name: `View automation: ${row.name}` });
     fireEvent.click(screen.getByRole("button", { name: `View automation: ${row.name}` }));
@@ -118,7 +118,7 @@ describe("Owner schedule authoring", () => {
     await act(async () => { run.click(); run.click(); });
     await waitFor(() => expect(request.mock.calls.filter(c => c[1].endsWith("/run"))).toHaveLength(1));
     expect(run).toBeDisabled(); expect(run).toHaveTextContent("Starting…");
-    current = { ...row, lastWorkItemId: "new-run", executionStatus: "Completed" };
+    current = { ...row, lastAgentRunId: "new-run", executionStatus: "Completed" };
     fireEvent.click(screen.getByRole("button", { name: "Refresh automations" }));
     await waitFor(() => expect(run).toBeEnabled());
   });
@@ -143,7 +143,7 @@ describe("Owner schedule authoring", () => {
   it("opens the exact source beyond pagination without discarding an editor draft", async () => {
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
     const rows = Array.from({ length: 12 }, (_, index) => ({ ...row, automationId: `schedule-${index}`, name: `Task ${index}`, instructions: `Task ${index}`,
-      lastWorkItemId: index === 11 ? "run-11" : null }));
+      lastAgentRunId: index === 11 ? "run-11" : null }));
     request.mockResolvedValue({ items: rows });
     const onWork = vi.fn();
     const ui = (selection?: { kind: "automation"; automationId: string; request: number }) => <ConfigProvider><App>

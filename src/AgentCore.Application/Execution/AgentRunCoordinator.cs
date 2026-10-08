@@ -6,7 +6,7 @@ namespace AgentCore.Application.Execution;
 
 /// <summary>One claim/recovery path for both immediate admission and scheduler dispatch.</summary>
 public sealed class AgentRunCoordinator(IAgentRunStore store, IAgentRunDispatcher dispatcher,
-    IIdGenerator ids, TimeProvider time)
+    IIdGenerator ids, TimeProvider time, BackgroundCompletionReporter? reports = null)
 {
     public const int DefaultBatchSize = 8;
     public static readonly TimeSpan ClaimDuration = TimeSpan.FromMinutes(5);
@@ -20,6 +20,10 @@ public sealed class AgentRunCoordinator(IAgentRunStore store, IAgentRunDispatche
 
     public async ValueTask<int> ExecuteRunnableAsync(int limit, CancellationToken cancellationToken = default)
     {
+        if (reports is not null) await reports.ReportPendingAsync(limit, cancellationToken).ConfigureAwait(false);
+        var pendingSessions = await store.ListPendingInputSessionsAsync(limit, cancellationToken).ConfigureAwait(false);
+        foreach (var sessionId in pendingSessions)
+            await dispatcher.RepairPendingInputsAsync(sessionId, cancellationToken).ConfigureAwait(false);
         var due = await store.ListRunnableAsync(time.GetUtcNow(), limit, cancellationToken).ConfigureAwait(false);
         var dispatched = 0;
         foreach (var run in due)

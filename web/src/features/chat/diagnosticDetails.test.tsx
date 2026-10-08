@@ -2,10 +2,11 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { App as AntApp } from "antd";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminDeletionBlockedAlert } from "../admin/adminDeletionBlocked";
-import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
+import { AgentRunDetails } from "./AgentRunDetails";
+import { fixtureRun } from "./agentRunFixtures";
 import { ChatMessage } from "./ChatMessage";
 import { diagnosticCopyText } from "./diagnosticCopy";
-import type { WorkItem } from "../../services/api";
+
 import type { HistoryEntry } from "../../state/sessionStore";
 
 const writeText = vi.fn().mockResolvedValue(undefined);
@@ -71,7 +72,7 @@ describe("diagnostic copy", () => {
     expect(diagnosticCopyText({
       diagnosticId: "diag-1",
       sessionId: "session-1",
-      workItemId: "work-1",
+      agentRunId: "work-1",
       code: "model-timeout",
       triggerOccurrenceId: "occurrence-1"
     })).toBe(
@@ -79,7 +80,7 @@ describe("diagnostic copy", () => {
         "Agent Core diagnostic",
         "Diagnostic ID: diag-1",
         "Session ID: session-1",
-        "Work Item ID: work-1",
+        "AgentRun ID: work-1",
         "Occurrence ID: occurrence-1",
         "Error: model-timeout"
       ].join("\n")
@@ -211,56 +212,13 @@ describe("failed assistant details", () => {
 });
 
 describe("diagnosed work and admin errors", () => {
-  const failedWork: WorkItem = {
-    workItemId: "work-failed",
-    status: "failed",
-    revision: 3,
-    origin: "Scheduled reminder",
-    progress: null,
-    needsApproval: false,
-    approvalId: null,
-    approvalRevision: null,
-    approvalPreview: null,
-    actionHash: null,
-    cancellationAvailable: false,
-    failureCode: "model-timeout",
-    failureSummary: "The model timed out.",
-    knownEffect: null,
-    createdAt: "2026-09-24T09:00:00.000Z",
-    updatedAt: "2026-09-24T09:01:00.000Z",
-    diagnosticId: "diag-work",
-    sourceId: "occurrence-1"
-  };
-
-  it("shows work diagnostic copy without a trigger id the item does not have", async () => {
-    render(
-      <AntApp>
-        <BackgroundWorkDrawer
-          sessionId="session-1"
-          open
-          wide
-          onClose={() => undefined}
-          load={async () => [failedWork]}
-          loadResult={async () => {
-            throw new Error("unused");
-          }}
-          cancel={async () => failedWork}
-          approve={async () => failedWork}
-          reject={async () => failedWork}
-        />
-      </AntApp>
-    );
-    expect(await screen.findByText("The model timed out.")).toBeInTheDocument();
+  it("shows scoped AgentRun diagnostic details", async () => {
+    render(<AntApp><AgentRunDetails run={{ ...fixtureRun, status: "failed", failureCode: "model-timeout", failureSummary: "The model timed out.", diagnosticId: "diag-run" }} onChange={() => undefined} /></AntApp>);
     fireEvent.click(screen.getByRole("button", { name: "Error details" }));
     const details = await screen.findByTestId("diagnostic-details");
-    expect(details).toHaveTextContent("Work Item ID");
-    expect(details).toHaveTextContent("work-failed");
-    expect(details).toHaveTextContent("Occurrence ID");
-    expect(details).toHaveTextContent("occurrence-1");
-    expect(details).toHaveTextContent("Error");
-    expect(details).toHaveTextContent("model-timeout");
+    expect(details).toHaveTextContent("AgentRun ID"); expect(details).toHaveTextContent("run-1");
+    expect(details).toHaveTextContent("Session ID"); expect(details).toHaveTextContent("model-timeout");
     expect(details).not.toHaveTextContent("Trigger ID");
-    expect(details).not.toHaveTextContent("The model timed out.");
   });
 
   it("shows admin diagnostic details only when an id exists", async () => {

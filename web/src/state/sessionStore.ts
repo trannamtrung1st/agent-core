@@ -157,7 +157,7 @@ export type SessionView = {
   inputState: string;
   outputState: string;
   entries: HistoryEntry[];
-  conversationExecutionId: string | null;
+  agentRunId: string | null;
   liveResponseId: string | null;
   activeProgress: ResponseProgress | null;
   pendingApproval: PendingApproval | null;
@@ -214,7 +214,7 @@ export const emptySession = (): SessionView => ({
   inputState: "idle",
   outputState: "idle",
   entries: [],
-  conversationExecutionId: null,
+  agentRunId: null,
   liveResponseId: null,
   activeProgress: null,
   pendingApproval: null,
@@ -735,9 +735,9 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         inputState: asString(payload.inputState) || "idle",
         outputState: orphanLiveClear ? "idle" : outputState,
         entries: history,
-        conversationExecutionId: orphanLiveClear
+        agentRunId: orphanLiveClear
           ? null
-          : payload.conversationExecutionId == null ? null : asString(payload.conversationExecutionId),
+          : payload.agentRunId == null ? null : asString(payload.agentRunId),
         liveResponseId: orphanLiveClear ? null : activeResponseId,
         activeProgress: null,
         pendingApproval: pendingApprovalFromPayload(
@@ -760,6 +760,11 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         modelMutationPending: false,
         modelMutationOwner: null
       };
+    }
+    case "session.entry.removed": {
+      const entryId = asString(event.payload.entryId);
+      return { ...state, lastServerSequence: event.sequence, entries: state.entries.filter((entry) =>
+        !(entry.entryId === entryId && entry.role === "assistant" && entry.responseId === event.responseId)) };
     }
     case "session.entry.upsert": {
       const entry = historyFromPayload([event.payload])[0];
@@ -794,10 +799,10 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       };
       return {
         ...state,
-        conversationExecutionId:
-          event.payload.conversationExecutionId == null
-            ? state.conversationExecutionId
-            : asString(event.payload.conversationExecutionId),
+        agentRunId:
+          event.payload.agentRunId == null
+            ? state.agentRunId
+            : asString(event.payload.agentRunId),
         liveResponseId: event.responseId,
         entries: upsert(state.entries, entry),
         lastServerSequence: event.sequence
@@ -980,8 +985,8 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       const liveResponseId = state.liveResponseId === event.responseId ? null : state.liveResponseId;
       return {
         ...state,
-        conversationExecutionId:
-          state.liveResponseId === event.responseId ? null : state.conversationExecutionId,
+        agentRunId:
+          state.liveResponseId === event.responseId ? null : state.agentRunId,
         liveResponseId,
         activeProgress: event.responseId && state.activeProgress?.responseId === event.responseId
           ? null

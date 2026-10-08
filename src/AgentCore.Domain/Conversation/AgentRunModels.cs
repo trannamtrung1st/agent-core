@@ -15,6 +15,9 @@ public static class AgentRunLimits
     public const int MaxFailureSummaryCharacters = 500;
     public const int MaxFailureCodeCharacters = 64;
     public const int MaxResultCharacters = 16_000;
+    public const int MaxImmediateChildren = 2;
+    public const int MaxActiveBackgroundRuns = 8;
+    public const int MaxBackgroundObjectiveCharacters = 4000;
     public const int MaxCheckpointBytes = 65_536;
     public const int MaxPreviewCharacters = 12_000;
     public const int MaxPreparedActionBytes = 8_192;
@@ -85,12 +88,12 @@ public readonly record struct AgentRunOwner
     {
         if (agentInstanceId == Guid.Empty)
         {
-            throw new ArgumentException("Work owner requires an Agent Instance.", nameof(agentInstanceId));
+            throw new ArgumentException("AgentRun owner requires an Agent Instance.", nameof(agentInstanceId));
         }
 
         if (profileId == Guid.Empty)
         {
-            throw new ArgumentException("Work owner requires a trusted profile.", nameof(profileId));
+            throw new ArgumentException("AgentRun owner requires a trusted profile.", nameof(profileId));
         }
 
         AgentInstanceId = agentInstanceId;

@@ -1,435 +1,137 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { App as AntApp } from "antd";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { WorkItem, WorkItemResult } from "../../services/api";
+import { App } from "antd";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
-import { formatChatTime } from "./chatTime";
-
-const queued: WorkItem = {
-  workItemId: "work-queued",
-  status: "queued",
-  revision: 1,
-  origin: "Automation · Schedule",
-  progress: "Waiting to start",
-  needsApproval: false,
-  approvalId: null,
-  approvalRevision: null,
-  approvalPreview: null,
-  actionHash: null,
-  cancellationAvailable: true,
-  failureCode: null,
-  failureSummary: null,
-  knownEffect: null,
-  createdAt: "2026-09-24T09:00:00.000Z",
-  updatedAt: "2026-09-24T09:00:00.000Z"
-};
-
-const approval: WorkItem = {
-  ...queued,
-  workItemId: "work-approval",
-  status: "needsApproval",
-  revision: 4,
-  origin: "Automation · Event",
-  progress: null,
-  needsApproval: true,
-  approvalId: "approval-1",
-  approvalRevision: 1,
-  approvalPreview: "POST https://example.com/items",
-  actionHash: "a".repeat(64),
-  cancellationAvailable: true
-};
-
-const completed: WorkItem = {
-  ...queued,
-  workItemId: "work-done",
-  status: "completed",
-  revision: 5,
-  progress: "Checking the oven",
-  instructions: "A recorded task with a deliberately long prompt that remains available in full when its run opens.",
-  cancellationAvailable: false
-};
-
-const retrying: WorkItem = {
-  ...queued,
-  workItemId: "work-retry",
-  status: "retrying",
-  progress: null,
-  failureCode: "empty-result",
-  failureSummary: "The model returned no result.",
-  attemptCount: 2,
-  maxAttempts: 3
-};
-
-const failed: WorkItem = {
-  ...queued,
-  workItemId: "work-failed",
-  status: "failed",
-  progress: null,
-  cancellationAvailable: false,
-  failureCode: "model-failed",
-  failureSummary: "The model failed."
-};
-
-function renderDrawer(
-  load: (sessionId: string) => Promise<WorkItem[]>,
-  options: {
-    wide?: boolean;
-    open?: boolean;
-    refreshKey?: number;
-    pollIntervalMs?: number;
-    loadResult?: (sessionId: string, workItemId: string) => Promise<WorkItemResult>;
-    cancel?: ReturnType<typeof vi.fn>;
-    approve?: ReturnType<typeof vi.fn>;
-    reject?: ReturnType<typeof vi.fn>;
-  } = {}
-) {
-  return render(
-    <AntApp>
-      <BackgroundWorkDrawer
-        sessionId="session-1"
-        open={options.open ?? true}
-        wide={options.wide ?? true}
-        refreshKey={options.refreshKey ?? 0}
-        pollIntervalMs={options.pollIntervalMs ?? 60_000}
-        onClose={() => undefined}
-        load={load}
-        loadResult={options.loadResult ?? (async () => ({ workItemId: "", text: "", completedAt: "" }))}
-        cancel={options.cancel ?? vi.fn()}
-        approve={options.approve ?? vi.fn()}
-        reject={options.reject ?? vi.fn()}
-      />
-    </AntApp>
-  );
-}
-
-describe("BackgroundWorkDrawer", () => {
-  afterEach(() => {
-    vi.useRealTimers();
+import { AgentRunDetails } from "./AgentRunDetails";
+import { fixtureBackground, fixtureRun } from "./agentRunFixtures";
+import { cancelAgentRun, decideAgentRunApproval, continueInChat, getBackgroundSession, listAgentRuns, listBackgroundSessions } from "../../services/api";
+import { openCatalogSession } from "../../services/realtime";
+import { refreshCatalog } from "../../services/catalog";
+vi.mock("../../services/api", async original => ({ ...await original<object>(),
+  listBackgroundSessions: vi.fn(), listAgentRuns: vi.fn(), getBackgroundSession: vi.fn(), continueInChat: vi.fn(), cancelAgentRun: vi.fn(), decideAgentRunApproval: vi.fn()
+}));
+vi.mock("../../services/realtime", () => ({ openCatalogSession: vi.fn() }));
+vi.mock("../../services/catalog", () => ({ refreshCatalog: vi.fn() }));
+vi.mock("../../services/artifacts", async original => ({ ...await original<object>(), listArtifactPage: vi.fn(async () => ({ items: [], nextCursor: null, hasMore: false })) }));
+beforeEach(() => {
+  const storage = new Map<string, string>();
+    Object.defineProperty(window, "localStorage", { configurable: true, value: { getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key), clear: () => storage.clear() } });
+    vi.clearAllMocks(); window.localStorage.clear();
+  vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [fixtureBackground], nextCursor: null, hasMore: false });
+  vi.mocked(listAgentRuns).mockResolvedValue({ items: [fixtureRun], nextCursor: null, hasMore: false });
+  vi.mocked(getBackgroundSession).mockResolvedValue(fixtureBackground);
+  vi.mocked(continueInChat).mockResolvedValue({ sessionId: fixtureBackground.session.sessionId });
+  vi.mocked(openCatalogSession).mockResolvedValue("ready");
+});
+const show = (instanceId = "instance-1") => render(<App><BackgroundWorkDrawer instanceId={instanceId} open wide onClose={() => undefined} /></App>);
+describe("Background Sessions", () => {
+  it("opens a Session's run history and preserves bounded reading regions", async () => {
+    show(); fireEvent.click(await screen.findByRole("button", { name: "View history" }));
+    expect(await screen.findByText("The background check finished.")).toBeInTheDocument();
+    expect(listAgentRuns).toHaveBeenCalledWith("background-1", undefined);
+    expect(screen.getByRole("region", { name: "Response" })).toHaveAttribute("tabindex", "0");
+    fireEvent.click(screen.getByRole("button", { name: "All background Sessions" }));
+    expect(screen.getByRole("button", { name: "Progress check" })).toBeInTheDocument();
   });
-
-  it("shows an empty list", async () => {
-    renderDrawer(async () => []);
-    expect(await screen.findByText("No runs yet. Runs appear when Automations or manual reviews execute.")).toBeInTheDocument();
-
+  it("moves focus into history and returns to the control that opened it", async () => {
+    show();
+    for (const label of ["View history", "Progress check"]) {
+      const opener = await screen.findByRole("button", { name: label });
+      opener.focus(); fireEvent.click(opener);
+      const back = await screen.findByRole("button", { name: "All background Sessions" });
+      expect(back).toHaveFocus();
+      fireEvent.click(back);
+      expect(screen.getByRole("button", { name: label })).toHaveFocus();
+    }
   });
-
-  it("shows the retry attempt and the last safe reason", async () => {
-    renderDrawer(async () => [retrying]);
-    expect(await screen.findByText("Retrying · attempt 2 of 3")).toBeInTheDocument();
-    expect(screen.getByText("The model returned no result.")).toBeInTheDocument();
+  it("continues the same Session in chat and refreshes the chat rail", async () => {
+    show(); fireEvent.click(await screen.findByRole("button", { name: "Continue in chat" }));
+    await waitFor(() => expect(openCatalogSession).toHaveBeenCalledWith(fixtureBackground.session));
+    expect(continueInChat).toHaveBeenCalledWith("background-1"); expect(refreshCatalog).toHaveBeenCalledWith(true);
   });
-
-  it("closes when Escape is pressed inside the drawer", async () => {
-    const onClose = vi.fn();
-    render(
-      <AntApp>
-        <BackgroundWorkDrawer
-          sessionId="session-1"
-          open
-          wide
-          refreshKey={0}
-          pollIntervalMs={60_000}
-          onClose={onClose}
-          load={async () => []}
-          loadResult={async () => ({ workItemId: "", text: "", completedAt: "" })}
-          cancel={vi.fn()}
-          approve={vi.fn()}
-          reject={vi.fn()}
-        />
-      </AntApp>
-    );
-    expect(await screen.findByText("No runs yet. Runs appear when Automations or manual reviews execute.")).toBeInTheDocument();
-    fireEvent.keyDown(screen.getByRole("dialog", { name: "Background work" }), { key: "Escape" });
-    expect(onClose).toHaveBeenCalledOnce();
+  it.each([
+    ["failed", "The chat connection could not be opened. Try Continue in chat again."],
+    ["blocked", "This Session is archived. Refresh to update its availability."]
+  ] as const)("keeps a %s chat opening visible and allows recovery", async (result, message) => {
+    vi.mocked(openCatalogSession).mockResolvedValueOnce(result).mockResolvedValueOnce("ready");
+    const close = vi.fn();
+    render(<App><BackgroundWorkDrawer instanceId="instance-1" open wide onClose={close} /></App>);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue in chat" }));
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(close).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Continue in chat" }));
+    await waitFor(() => expect(close).toHaveBeenCalledOnce());
+    expect(screen.queryByText(message)).not.toBeInTheDocument();
   });
-
-  it("closes when Escape is pressed while focus stays outside the drawer", async () => {
-    const onClose = vi.fn();
-    render(
-      <AntApp>
-        <BackgroundWorkDrawer
-          sessionId="session-1"
-          open
-          wide
-          refreshKey={0}
-          pollIntervalMs={60_000}
-          onClose={onClose}
-          load={async () => []}
-          loadResult={async () => ({ workItemId: "", text: "", completedAt: "" })}
-          cancel={vi.fn()}
-          approve={vi.fn()}
-          reject={vi.fn()}
-        />
-      </AntApp>
-    );
-    expect(await screen.findByText("No runs yet. Runs appear when Automations or manual reviews execute.")).toBeInTheDocument();
-    fireEvent.keyDown(document.body, { key: "Escape" });
-    // The capture listener and Ant Design's portal Escape handler both close.
-    expect(onClose).toHaveBeenCalledTimes(2);
+  it("reveals the read-only chat if the Session ends while opening it", async () => {
+    vi.mocked(openCatalogSession).mockResolvedValue("ended");
+    const close = vi.fn();
+    render(<App><BackgroundWorkDrawer instanceId="instance-1" open wide onClose={close} /></App>);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue in chat" }));
+    await waitFor(() => expect(close).toHaveBeenCalledOnce());
   });
-
-  it("shows a load error", async () => {
-    renderDrawer(async () => {
-      throw new Error("Unable to load background work.");
-    });
-    expect(await screen.findByText("Unable to load background work.")).toBeInTheDocument();
+  it("never opens an old Session after changing owner during admission", async () => {
+    let finish!: (value: { sessionId: string }) => void;
+    vi.mocked(continueInChat).mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    const view = show(); fireEvent.click(await screen.findByRole("button", { name: "Continue in chat" }));
+    view.rerender(<App><BackgroundWorkDrawer instanceId="instance-2" open wide onClose={() => undefined} /></App>);
+    await act(async () => finish({ sessionId: "background-1" }));
+    expect(openCatalogSession).not.toHaveBeenCalled();
   });
-
-  it("shows origin, status, progress, approval, failure, and result without private terms", async () => {
-    const loadResult = vi.fn().mockResolvedValue({
-      workItemId: completed.workItemId,
-      text: "Oven timer finished.",
-      completedAt: completed.updatedAt
-    });
-    renderDrawer(async () => [queued, approval, completed, failed], { loadResult });
-    expect(await screen.findByText("Oven timer finished.")).toBeInTheDocument();
-    expect(screen.getAllByText("Automation · Schedule").length).toBeGreaterThan(0);
-    expect(screen.getByText("Automation · Event")).toBeInTheDocument();
-    expect(screen.getByText("Queued")).toBeInTheDocument();
-    expect(screen.queryByText("Needs attention")).not.toBeInTheDocument();
-    expect(screen.getByText("Needs approval")).toBeInTheDocument();
-    expect(screen.getAllByText("Completed")[0]).toBeInTheDocument();
-    expect(screen.getByText("Failed")).toBeInTheDocument();
-    expect(screen.getByText("Waiting to start")).toBeInTheDocument();
-    expect(screen.getByText("Checking the oven")).toBeInTheDocument();
-    expect(screen.getByText("Result")).toBeInTheDocument();
-    expect(screen.getByText("POST https://example.com/items")).toBeInTheDocument();
-    expect(screen.getByText("The model failed.")).toBeInTheDocument();
-    expect(screen.queryByText("model-failed")).not.toBeInTheDocument();
-    expect(screen.queryByText(/checkpoint|evidence|lease/i)).not.toBeInTheDocument();
-    expect(loadResult).toHaveBeenCalledWith("session-1", completed.workItemId);
+  it("keeps failure and recovery inline", async () => {
+    vi.mocked(listBackgroundSessions).mockRejectedValueOnce(new Error("Background Sessions could not be loaded."));
+    show(); expect(await screen.findByText("Background Sessions could not be loaded.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("button", { name: "Progress check" })).toBeInTheDocument();
   });
-
-  it("confirms cancel, approve, and reject", async () => {
-    const cancel = vi.fn().mockResolvedValue({ ...queued, status: "cancelled", cancellationAvailable: false });
-    const approve = vi.fn().mockResolvedValue({
-      ...approval,
-      status: "queued",
-      needsApproval: false,
-      approvalId: null,
-      approvalPreview: null,
-      actionHash: null
-    });
-    const reject = vi.fn().mockResolvedValue({
-      ...approval,
-      workItemId: "work-reject",
-      status: "queued",
-      needsApproval: false,
-      approvalId: null,
-      approvalPreview: null,
-      actionHash: null
-    });
-    renderDrawer(async () => [queued, approval, { ...approval, workItemId: "work-reject", origin: "Second event" }], {
-      cancel,
-      approve,
-      reject
-    });
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel Automation · Schedule" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel work" }));
-    await waitFor(() => expect(cancel).toHaveBeenCalledWith("session-1", queued.workItemId, 1));
-    expect(await screen.findByText("Cancelled")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Approve Automation · Event" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Approve action" }));
-    await waitFor(() => expect(approve).toHaveBeenCalledWith("session-1", approval.workItemId, "approval-1", 4, 1, approval.actionHash));
-
-    const rejectButton = screen.getByRole("button", { name: "Reject Second event" });
-    rejectButton.focus();
-    expect(rejectButton).toHaveFocus();
-    fireEvent.click(rejectButton);
-    fireEvent.click(await screen.findByRole("button", { name: "Reject action" }));
-    await waitFor(() => expect(reject).toHaveBeenCalled());
+  it("uses the server cursor for bounded pagination", async () => {
+    vi.mocked(listBackgroundSessions).mockResolvedValueOnce({ items: [fixtureBackground], nextCursor: "opaque-cursor", hasMore: true });
+    vi.mocked(listBackgroundSessions).mockResolvedValueOnce({ items: [{ ...fixtureBackground, session: { ...fixtureBackground.session, sessionId: "background-2", title: "Another task" } }], nextCursor: null, hasMore: false });
+    show(); fireEvent.click(await screen.findByRole("button", { name: "Load more" }));
+    await waitFor(() => expect(listBackgroundSessions).toHaveBeenCalledWith("instance-1", "opaque-cursor"));
   });
-
-  it("uses the wide and narrow drawer widths", async () => {
-    const wide = renderDrawer(async () => [], { wide: true });
-    expect(await screen.findByText("No runs yet. Runs appear when Automations or manual reviews execute.")).toBeInTheDocument();
-    expect(document.querySelector(".ant-drawer-content-wrapper")).toHaveStyle({ width: "min(640px, 100vw)" });
-    wide.unmount();
-
-    renderDrawer(async () => [], { wide: false });
-    expect(await screen.findByText("No runs yet. Runs appear when Automations or manual reviews execute.")).toBeInTheDocument();
-    expect(document.querySelector(".ant-drawer-content-wrapper")).toHaveStyle({ width: "100vw" });
+  it("preserves archive boundaries and quiet NoAction", async () => {
+    vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [{ ...fixtureBackground, canContinueInChat: false }], nextCursor: null, hasMore: false });
+    vi.mocked(listAgentRuns).mockResolvedValue({ items: [{ ...fixtureRun, outcome: { kind: "NoAction", summary: "", outcomeEntryId: null, attentionRequired: false } }], nextCursor: null, hasMore: false });
+    show(); expect(await screen.findByRole("button", { name: "Continue in chat" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "View history" }));
+    expect(await screen.findByText("No action was needed.")).toBeInTheDocument();
   });
-
-  it("reuses a slow result request across polls until it completes", async () => {
-    vi.useFakeTimers();
-    let release: (result: WorkItemResult) => void = () => undefined;
-    const pending = new Promise<WorkItemResult>(resolve => { release = resolve; });
-    const load = vi.fn().mockResolvedValue([completed]);
-    const loadResult = vi.fn().mockReturnValue(pending);
-    renderDrawer(load, { loadResult, pollIntervalMs: 1000 });
-    await act(async () => { await Promise.resolve(); });
-    expect(loadResult).toHaveBeenCalledTimes(1);
-    await act(() => vi.advanceTimersByTimeAsync(3000));
-    expect(loadResult).toHaveBeenCalledTimes(1);
-    await act(async () => { release({ workItemId: completed.workItemId, text: "Slow result delivered", completedAt: completed.updatedAt }); });
-    expect(screen.getByText("Slow result delivered")).toBeInTheDocument();
+  it("sends cancellation only after review and retains a stale-action error", async () => {
+    const run = { ...fixtureRun, status: "running", cancellationAvailable: true };
+    vi.mocked(cancelAgentRun).mockRejectedValue(new Error("Run revision is stale. Refresh and try again."));
+    render(<App><AgentRunDetails run={run} onChange={() => undefined} /></App>);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel run" }));
+    expect(cancelAgentRun).not.toHaveBeenCalled();
+    fireEvent.click(screen.getAllByRole("button", { name: "Cancel run" })[1]);
+    await waitFor(() => expect(cancelAgentRun).toHaveBeenCalledWith(run));
+    expect(await screen.findByText("Run revision is stale. Refresh and try again.")).toBeInTheDocument();
   });
-
-  it("does not show an old owner's cancellation failure after switching scope", async () => {
-    let reject: (reason: Error) => void = () => undefined;
-    const pending = new Promise<WorkItem>((_resolve, failure) => { reject = failure; });
-    const cancel = vi.fn().mockReturnValue(pending);
-    const load = vi.fn(async (owner: string) => [owner === "session-1" ? queued : { ...completed, origin: "Other owner's work" }]);
-    const view = renderDrawer(load, { cancel });
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel Automation · Schedule" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel work" }));
-    await waitFor(() => expect(cancel).toHaveBeenCalledTimes(1));
-    view.rerender(<AntApp><BackgroundWorkDrawer sessionId="session-2" open wide onClose={() => undefined}
-      load={load} loadResult={async () => ({ workItemId: "", text: "", completedAt: "" })}
-      cancel={cancel} approve={vi.fn()} reject={vi.fn()} /></AntApp>);
-    await screen.findByText("Other owner's work");
-    await act(async () => { reject(new Error("Old owner cancellation failed")); });
-    expect(screen.queryByText("Old owner cancellation failed")).not.toBeInTheDocument();
+  it("does not submit a confirmation after switching to a different run", async () => {
+    const run = { ...fixtureRun, status: "running", cancellationAvailable: true };
+    const view = render(<App><AgentRunDetails run={run} onChange={() => undefined} /></App>);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel run" }));
+    view.rerender(<App><AgentRunDetails run={{ ...run, agentRunId: "another-run" }} onChange={() => undefined} /></App>);
+    fireEvent.click(screen.getAllByRole("button", { name: "Cancel run" })[1]);
+    await waitFor(() => expect(screen.queryByText("Cancel this run?")).not.toBeInTheDocument());
+    expect(cancelAgentRun).not.toHaveBeenCalled();
   });
-
-  it("polls only while open and queues refresh behind a slow response", async () => {
-    vi.useFakeTimers();
-    let resolveFirst: (items: WorkItem[]) => void = () => undefined;
-    const first = new Promise<WorkItem[]>((resolve) => {
-      resolveFirst = resolve;
-    });
-    const newer: WorkItem = { ...queued, origin: "Newer reminder" };
-    const older: WorkItem = { ...queued, origin: "Older reminder" };
-    const load = vi.fn()
-      .mockImplementationOnce(() => first)
-      .mockResolvedValue([newer]);
-    const view = renderDrawer(load, { pollIntervalMs: 1_000 });
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(load).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_000);
-    });
-    expect(load).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      resolveFirst([older]);
-      await Promise.resolve();
-    });
-    expect(load).toHaveBeenCalledTimes(2);
-    expect(screen.queryByText("Older reminder")).not.toBeInTheDocument();
-    expect(screen.getByText("Newer reminder")).toBeInTheDocument();
-
-    view.unmount();
-    const calls = load.mock.calls.length;
-    renderDrawer(load, { open: false, pollIntervalMs: 1_000 });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
-    });
-    expect(load).toHaveBeenCalledTimes(calls);
+  it("requires a fresh review if the run changes while approval confirmation is open", async () => {
+    const run = { ...fixtureRun, status: "needsApproval", approval: { approvalId: "approval-1", revision: 1,
+      actionHash: "exact-hash", toolName: "browser.act", preview: "Submit this form", expiresAt: new Date(Date.now() + 60_000).toISOString() } };
+    const view = render(<App><AgentRunDetails run={run} onChange={() => undefined} /></App>);
+    fireEvent.click(screen.getByRole("button", { name: "Approve action" }));
+    view.rerender(<App><AgentRunDetails run={{ ...run, revision: run.revision + 1 }} onChange={() => undefined} /></App>);
+    fireEvent.click(screen.getAllByRole("button", { name: "Approve action" })[1]);
+    expect(await screen.findByText("The run changed or the approval expired. Review the current details and try again.")).toBeInTheDocument();
+    expect(decideAgentRunApproval).not.toHaveBeenCalled();
   });
-
-  it("labels attention results and leaves quiet completions unlabeled", async () => {
-    const attention = { ...completed, workItemId: "work-attention", origin: "Morning review", attentionRequired: true };
-    const quiet = { ...completed, workItemId: "work-quiet", origin: "Quiet check", attentionRequired: false };
-    renderDrawer(async () => [attention, quiet], {
-      loadResult: async (_sessionId, workItemId) => ({
-        workItemId,
-        text: workItemId === attention.workItemId ? "Two orders need review." : "Nothing to report.",
-        completedAt: completed.updatedAt,
-        attentionRequired: workItemId === attention.workItemId
-      })
-    });
-    expect(await screen.findByText("Needs attention")).toBeInTheDocument();
-    expect(screen.getAllByText("Needs attention")).toHaveLength(1);
-    expect(await screen.findByText("Two orders need review.")).toBeInTheDocument();
-    expect(await screen.findByText("Nothing to report.")).toBeInTheDocument();
+  it("makes expired approvals readable and disables both decisions", () => {
+    render(<App><AgentRunDetails run={{ ...fixtureRun, status: "needsApproval", approval: { approvalId: "approval-1", revision: 1,
+      actionHash: "exact-hash", toolName: "browser.act", preview: "Submit this form", expiresAt: new Date(Date.now() - 1000).toISOString() } }} onChange={() => undefined} /></App>);
+    expect(screen.getByRole("button", { name: "Approve action" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reject action" })).toBeDisabled();
+    expect(screen.getByText("Approval expired. Waiting for the run to update.")).toBeInTheDocument();
   });
-
-  it("shows scheduled and order-placed sources without webhook evidence", async () => {
-    const placed = {
-      ...completed,
-      workItemId: "work-placed",
-      origin: "Automation · Event",
-      updatedAt: "2026-10-04T01:00:00.000Z"
-    };
-    renderDrawer(async () => [queued, placed], {
-      loadResult: async () => ({ workItemId: "", text: "", completedAt: "" })
-    });
-    expect(await screen.findByText("Automation · Schedule")).toBeInTheDocument();
-    expect(screen.getByText("Automation · Event")).toBeInTheDocument();
-    const source = screen.getByLabelText("Source: Automation · Event");
-    const updated = [...source.closest("li")!.querySelectorAll("time")].find(time => time.parentElement?.textContent?.startsWith("Updated"));
-    expect(updated).toHaveAttribute("dateTime", placed.updatedAt);
-    expect(updated).toHaveTextContent(formatChatTime(placed.updatedAt) ?? placed.updatedAt);
-    expect(screen.queryByText(/sourceEventId|orderReference|\{/)).not.toBeInTheDocument();
-  });
-  it("opens a specific older run outside the first page and links to its exact source", async () => {
-    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
-    const onSource = vi.fn();
-    const target = { ...completed, workItemId: "older-run", automationId: "original-schedule" };
-    const loadOne = vi.fn().mockResolvedValue(target);
-    render(<AntApp><BackgroundWorkDrawer sessionId="instance" open inline wide selectedWorkItemId="older-run"
-      onClose={vi.fn()} load={async () => [queued]} loadOne={loadOne}
-      loadResult={async () => ({ workItemId: target.workItemId, text: "Original result", completedAt: target.updatedAt })}
-      cancel={vi.fn()} approve={vi.fn()} reject={vi.fn()} onSource={onSource} /></AntApp>);
-    expect(await screen.findByText("Original result")).toBeVisible();
-    expect(loadOne).toHaveBeenCalledWith("instance", "older-run");
-    const selected = document.querySelector('[data-work-item-id="older-run"]')!;
-    expect(selected).toHaveClass("background-work-selected");
-    fireEvent.click(screen.getByRole("button", { name: "View automation" }));
-    expect(onSource).toHaveBeenCalledWith({ kind: "automation", automationId: "original-schedule" });
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
-
-  it("shows actionable failure when a selected run cannot be read", async () => {
-    const loadOne = vi.fn().mockRejectedValue(new Error("Run is no longer available."));
-    render(<AntApp><BackgroundWorkDrawer sessionId="instance" open inline wide selectedWorkItemId="missing-run"
-      onClose={vi.fn()} load={async () => []} loadOne={loadOne}
-      loadResult={vi.fn()} cancel={vi.fn()} approve={vi.fn()} reject={vi.fn()} /></AntApp>);
-    expect(await screen.findByText("Run is no longer available.")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Retry selected run" }));
-    await waitFor(() => expect(loadOne).toHaveBeenCalledTimes(2));
-  });
-
-  it("exposes a failed result read and retries without changing the run", async () => {
-    const loadResult = vi.fn().mockRejectedValueOnce(new Error("Result storage temporarily unavailable"))
-      .mockResolvedValue({ workItemId: completed.workItemId, text: "Recovered result", completedAt: completed.updatedAt });
-    renderDrawer(async () => [completed], { loadResult });
-    expect(await screen.findByText("Result storage temporarily unavailable")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Retry result" }));
-    expect(await screen.findByText("Recovered result")).toBeVisible();
-    expect(screen.queryByText("Result storage temporarily unavailable")).not.toBeInTheDocument();
-    expect(loadResult).toHaveBeenCalledTimes(2);
-  });
-
-  it("disables every owner action while a run mutation is pending", async () => {
-    let finish!: (item: WorkItem) => void;
-    const cancel = vi.fn(() => new Promise<WorkItem>(resolve => { finish = resolve; }));
-    renderDrawer(async () => [queued, approval], { cancel });
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel Automation · Schedule" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel work" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Approve Automation · Event" })).toBeDisabled());
-    await act(async () => { finish({ ...queued, revision: 2, status: "cancelled", cancellationAvailable: false }); });
-    expect(screen.getByRole("button", { name: "Approve Automation · Event" })).toBeEnabled();
-  });
-
-  it("keeps the run list compact and loads results only in the details drawer", async () => {
-    const onRun = vi.fn();
-    const loadResult = vi.fn().mockResolvedValue({ workItemId: completed.workItemId, text: "Only the selected result", completedAt: completed.updatedAt });
-    const load = vi.fn().mockResolvedValue([completed, queued, retrying]);
-    const common = { sessionId: "instance", open: true, wide: true, onClose: vi.fn(), load,
-      loadResult, cancel: vi.fn(), approve: vi.fn(), reject: vi.fn(), pollIntervalMs: 0 };
-    const view = render(<AntApp><BackgroundWorkDrawer {...common} inline onRun={onRun} /></AntApp>);
-    fireEvent.click(await screen.findByRole("button", { name: "View automation · schedule run work-done" }));
-    expect(onRun).toHaveBeenCalledWith(completed.workItemId);
-    expect(loadResult).not.toHaveBeenCalled();
-    expect(screen.getByRole("table", { name: "Runs table" })).toBeVisible();
-    expect(screen.getByText("Retrying", { exact: true }).closest(".ant-tag")).toHaveAttribute("title", "Retrying · attempt 2 of 3");
-    expect(screen.getByText(completed.instructions!)).toHaveAttribute("title", completed.instructions);
-    expect(screen.queryByText(completed.progress!)).not.toBeInTheDocument();
-    view.unmount(); load.mockClear();
-    render(<AntApp><BackgroundWorkDrawer {...common} detailsOnly selectedWorkItemId={completed.workItemId} loadOne={async () => completed} /></AntApp>);
-    expect(await screen.findByText("Only the selected result")).toBeVisible();
-    expect(screen.getByRole("dialog", { name: "Run details" })).toBeVisible();
-    expect(load).not.toHaveBeenCalled();
-    expect(loadResult).toHaveBeenCalledWith("instance", completed.workItemId);
-    expect(screen.queryByRole("button", { name: "Mark all as read" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Run work-queued")).not.toBeInTheDocument();
-  });
-
 });

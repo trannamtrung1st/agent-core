@@ -9,7 +9,7 @@ public sealed record ExperienceContentResponse(string Goal, IReadOnlyList<string
     IReadOnlyList<string> Outcomes, IReadOnlyList<string> Corrections, IReadOnlyList<string> Unresolved,
     IReadOnlyList<string> Difficulties, IReadOnlyList<string> Lessons);
 public sealed record ExperienceResponse(string ExperienceId, string SourceKind, string SourceId, long ThroughCursor,
-    string SourceAt, string DefinitionId, int DefinitionVersion, string GenerationWorkItemId, string ModelKey,
+    string SourceAt, string DefinitionId, int DefinitionVersion, string GenerationAgentRunId, string ModelKey,
     string Status, string Visibility, long Revision, bool EligibleForContext, ExperienceContentResponse? Content,
     string? DiagnosticId, string? FailureSummary, string? SourceCreatedAt = null, string? CheckpointAt = null,
     IReadOnlyList<string>? DerivedFromExperienceIds = null, string? MaintenanceOrigin = null);

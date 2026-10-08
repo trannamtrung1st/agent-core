@@ -37,3 +37,13 @@ public sealed class ActivationSourceEntryRecord
     public string ActivationId { get; set; } = "";
     public int Ordinal { get; set; }
 }
+
+public sealed class BackgroundCompletionReceiptRecord
+{
+    public string ChildAgentRunId { get; set; } = "";
+    public string AgentInstanceId { get; set; } = "";
+    public string ProfileId { get; set; } = "";
+    public string? ParentActivationId { get; set; }
+    public string? SkipReason { get; set; }
+    public long CreatedAtUtc { get; set; }
+}

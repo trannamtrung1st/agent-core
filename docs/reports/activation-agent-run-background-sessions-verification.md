@@ -1,116 +1,72 @@
 # Activation, AgentRun and background Sessions verification
 
-## Status and reviewed source
+## Current status
 
-**In progress — foundation only; the complete proposal is not implemented or accepted.**
+The user approved destructive legacy retirement and disposable demo reset on 2026-10-08. The implementation is complete enough to run the shared production path; final regression and exact-SHA hosted acceptance remain in progress. This report supersedes the earlier foundation-only and retirement-blocked status. No final freeze is claimed before the remaining gates pass.
 
-Reviewed baseline: `bd44046896df6f3e0fc2e7d15d60dd479a5349cd`, the proposal's reviewed main, with a clean starting working tree on 2026-10-08 (Asia/Ho_Chi_Minh). The development foundation is derived from that baseline. There is no final migration behavior SHA or exact-SHA hosted result. Baseline CI is historical evidence and does not verify these changes.
+Reviewed starting main: `bd44046896df6f3e0fc2e7d15d60dd479a5349cd`. Foundation commit: `f98dbb6236ab976b5e2923e00a47ec90a140cf1e`. Final candidate SHA and hosted workflow are recorded after verification.
 
-Phase A domain proof, the initial Phase B storage foundation, a batched admission factory and the common claim/recovery coordinator are implemented. The new execution store is not registered as the production execution owner and has no production dispatcher. Existing WorkItem and ConversationTurnExecution engines, APIs and UI still operate. No adapter, alias, dual writing or old-execution conversion was introduced. The additive foundation migration is an intermediate step, not the proposal's required final destructive schema cutover.
+## Implementation and retirement
 
-## Implementation mapping
+SessionRuntime is the mutable Session owner. Both attached and headless AgentRuns dispatch through SessionHost and its mailbox. The common coordinator uses revision/generation CAS claims, lease recovery and the same run/Activation/response identities across retries. Input batching retains one effective turn for the accepted suffix. Pending accepted input is repaired durably.
 
-| Concern | Current artifact | Evidence and limit |
-| --- | --- | --- |
-| Immutable effective-turn admission | `src/AgentCore.Domain/Conversation/Activation.cs` | Frozen ordered source IDs, bounded inputs, source fingerprint, dedupe identity and provenance validation |
-| Shared lifecycle | `AgentRun.cs`, `AgentRunModels.cs`, `AgentRunAdmission.cs`, `AgentRunActionHash.cs`, `AgentRunKnownEffects.cs` in the same directory | Stronger retry/claim/approval/effect transitions ported into an independent target model; no old execution object dependency |
-| Execution configuration | AgentRun admission/projection state | Frozen model, Definition/persona and effective Skill catalog; bounded Skill/capability load counters survive copies and recovery |
-| Origin and presentation | `SessionOrigin.cs`, `ConversationModels.cs` | Immutable origin, separate surface flags, initial-run-only report eligibility; task completion leaves Session lifecycle separate |
-| Shared persisted transitions | `src/AgentCore.Application/Execution/AgentRunCommand.cs` | Store CAS, monotonic UTC time and expired-lease checks precede domain transitions |
-| Batch construction and dispatch coordination | `AgentRunAdmissionFactory.cs`, `AgentRunCoordinator.cs`, `Ports/AgentRunDispatcher.cs` | Stable input-batch dedupe and single response ownership; common direct/scheduled CAS claim and safe recovery. Dispatcher is a port, not a production runtime implementation |
-| Atomic admission port | `src/AgentCore.Application/Ports/AgentRunStore.cs` | One operation for snapshot/input/Activation/run; no standalone Activation insert |
-| Storage | `InMemoryAgentRunStore.cs`, `SqliteAgentRunStore.cs`, `AgentRunStoreMapping.cs`, `AgentRunRecords.cs` under Infrastructure Persistence | One memory gate/shared state or one SQLite transaction with the existing Session mapper; owner-scoped reads and commands |
-| Relational proof | `20261008013446_ActivationAgentRunFoundation` | Unique Session/dedupe, owner/background receipt, accepted source entry and run/Activation identity; required foreign keys and revision fencing |
-| Current-schema reopen | `SqliteMemoryStore.StampAgentRunFoundationAsync` | Stamps only a complete current-model EnsureCreated schema after column/index/foreign-key checks; rejects incomplete shapes without repair/conversion |
-| Historical fixture seeding | `MigrationSessionSeed.cs`, `UnifiedWorkspaceMigrationTests.cs` | Copies only columns present in the target historical schema; uses actual SessionSnapshots/ConversationEntries table names; no production legacy writer |
+Occurrence intake atomically commits child Session, task input, Activation, AgentRun and acceptance receipt. Immediate `background.start` is fenced by the current parent user Run and same-instance ownership, with two children per parent Run and eight active children per owner. Frozen Definition/persona/model/Skill pins and checkpoint load state survive recovery; current authorization is still rechecked before provider and tool use.
 
-Phase B still needs occurrence acceptance receipts, atomic occurrence routing and the destructive current-schema/store cutover. Phases C–G remain incomplete: production runtime/coordinator adoption; background.start; Automation child execution; safe completion receipts and parent activation; same-Session UI/API foregrounding; legacy deletion; Impeccable; complete canonical synchronization and hosted closure.
+Outcomes commit with their assistant entry; NoAction removes only its empty draft. External effects retain receipts across retries, exact approval decisions and uncertain-effect recovery. Initial child completion emits at most one eligible parent Activation; quiet/unavailable/policy-disabled parents receive a durable skip receipt. Later child user turns cannot report again.
 
-## Acceptance scope
+Continue in chat adds ChatList to the existing background Session. It preserves ID, history, artifacts, workspace and immutable origin; opening it creates no Run. Background Work is Session-first. Admin Runs and shared run controls use the canonical AgentRun API with bounded owner-safe fields and revision-bound decisions.
 
-| Criteria | Status |
+Legacy WorkItem/ConversationTurnExecution production models, stores, workers, executors, DTOs, routes and EF mappings are retired. Migration `20261008063000_RetireLegacyExecution` removes their current tables. Historical migration source files are immutable. Startup validates the exact current model or migrates a fresh database; no old-schema converter, repair or compatibility suite remains. The approved demo reset removed the selected native demo database and sidecars; blobs were retained.
+
+Packaging exposed an ImageSharp audit/license blocker. At the user's request, Infrastructure now uses MIT-licensed SkiaSharp 4.153.1 plus matching minimal Linux native assets. Metadata stripping, PNG/JPEG output, first-frame GIF/WebP normalization and pixel bounds remain verified. Cache version advances to `/3`; vulnerability auditing remains enabled.
+
+## Acceptance and scenario coverage
+
+The coverage below identifies current tests, not historical execution engines. Final milestone acceptance additionally requires every mandatory local and hosted gate below.
+
+| Criteria / journeys | Canonical evidence |
 | --- | --- |
-| AC01 | Domain/storage batch admission and replay tested; production live admission not migrated |
-| AC02 | Atomic Session/input/Activation/run and immediate source-receipt dedupe tested; Automation occurrence transaction not implemented |
-| AC03–AC04 | Domain/store identity, attempts, concurrent claim, revision/generation and expired-lease fencing tested; unified production dispatch/retry not implemented |
-| AC05–AC06 | Exact action decisions, approval same-attempt resume, bounded checkpoint/effect rules and uncertain-effect reopen tested at domain/store boundaries; attached/detached runtime integration pending |
-| AC07 | Frozen configuration and load state covered by the domain; current execution authorization and capability background policy remain application cutover work |
-| AC08 | Origin/surface persistence, owner isolation, fresh SQLite/current-model reopen and historical migration regressions exercised; final reset/Compose cutover pending |
-| AC09–AC18 | New production/browser journeys remain unverified and their missing implementation is tracked below |
-| AC19 | No web/composer or cross-Session context-reference changes introduced |
-| AC20 | Not met: old production engines/schemas/routes remain; full migration and exact-SHA hosted gates are pending |
+| AC01–04, J1–2 | ActivationAdmissionTests, AgentRunContractTests, AgentRunCoordinatorTests, AgentRunAdmissionStoreTests, AgentRunDurabilityTests: batch/replay, CAS winner, same-ID attempt/recovery, stale-worker fencing |
+| AC05–07, J8–9 | AgentRunToolCallCheckpointTests, AgentRunCheckpointFormatTests, EffectReceiptJourneyTests, SessionCaptureRecoveryTests, store approval/effect cases: exact hashes, expiry, receipt retention, indeterminate effects, pinned load state |
+| AC08, J9 | Fresh/current-model SQLite reopen tests, native receipt recovery fixtures, API SQLite host recovery, current-schema Compose restart; historical migrations remain unchanged |
+| AC09–10, J7 | Existing native initiative, voice, interruption, SignalR/MessagePack and browser speech fixtures; atomic live receipt/run and quiet settlement parity tests |
+| AC11–12, J3/J12 | AgentRunDurabilityTests and AgentRunAdmissionStoreTests: committed prompt return, bounded fan-out, independent child, atomic response/NoAction/attention outcomes |
+| AC13, J6–7 | Store occurrence/intake parity, AutomationJourneyTests, ContinuityBoundaryTests, unified-event-automation browser tests: separate recurrence Sessions, admitted pins, dedupe and revoked policy |
+| AC14–15, J4/J11 | Completion projection/reporter/store/runtime cases: initial-only reports, replay, parent races/terminal/deletion/policy guards; eligible-parent browser journey |
+| AC16–17, J5/J10 | BackgroundSessionJourneyTests, shared runtime headless completion tests, agent-run-background-session E2E: same Session foreground, follow-up user Run, no second report |
+| AC18, J8/J11 | Owner-scoped API/store cases, shared run control tests, Session/Admin cursor paging, exact approval and diagnostics browser fixtures |
+| AC19 | No Add to chat, mention chips, ContextRef or cross-Session context APIs introduced |
+| AC20 | Production retirement inventory, canonical docs/design synchronization and final exact-SHA CI; pending until all gates pass |
 
-No required J1–J12 production migration journey is declared passed. Store scenarios below establish storage behavior, not an end-to-end migration.
+Legacy test retirement preserves behavior under canonical owners: domain work transition cases map to AgentRunContractTests; work-store/handoff cases map to atomic AgentRunAdmissionStoreTests; standalone runner/coordinator cases map to AgentRunCoordinatorTests and AgentRunDurabilityTests; checkpoint/capture cases map to AgentRunToolCallCheckpointTests and SessionCaptureRecoveryTests. Existing real tool, approval, browser recovery and API SQLite journeys continue to run through the shared Session runtime. Old-schema compatibility assertions are intentionally retired rather than ported.
 
-## Executed integrated scenarios
+## Executed runtime journeys
 
-The following run against both InMemory and fresh temporary SQLite through `AgentRunAdmissionStoreTests`:
+- Playwright MCP on the reset Synthetic native host: send an actual background-start turn, inspect the completed child, Continue in chat to its original ID, and send a follow-up. Observed a new completed child user Run. The default General Assistant parent has initiative disabled; its completion receipt correctly skipped `parent-policy-unavailable`.
+- Real eligible-parent Playwright E2E: publish a bounded Synthetic Definition with initiative enabled, send `[test:background-start]`, observe parent start and one completion report, open child history, Continue in chat and send `Check B too`. Observed same child Session, new user Run, both surfaces, one parent report and no page errors. This found and fixed drawer unmounting during the route transition.
+- Integrated first-tool flow found `JsonElement.TryGetProperty` on array-valued tool output; SafeExecutionTrace now handles nonobjects. Model retry now waits durably on the same Run with preserved receipts rather than using an internal generation retry.
+- A real fast-admission/coordinator race found a stale Claim revision. Both user and initiative fast paths now defer to the winning coordinator dispatch; the canonical runtime regression proves one provider request and one response.
+- Detached cleanup regression: full API execution exposed extraction racing the next retry claim. Cleanup now shares admission exclusion, cancels obsolete cleanup waits and rechecks accepted work through the Session mailbox. The recovery/reattach suite passes 22 cases.
+- Image processor: eight attachment tests passed on SkiaSharp, including metadata stripping, GIF/WebP normalization, MIME truthfulness and pixel bounds.
+- Compose: Release image built with SkiaSharp; container recreation retained completed AgentRun outcome and waiting approval with redacted DTOs, Session catalog, published resources, Skills, binary home/scratch, Automation, credentials and bindings.
 
-- Admit “Check A” and “Check B” together; replay concurrently. Expected one Activation/run and both persisted inputs. Observed one run, ordered source IDs, original response ownership, and changed-content conflict.
-- Admit an immediate child from a claimed owned parent; replay the same receipt with fresh candidate Session/run/input IDs. Expected original committed child and no orphan candidate Sessions. Observed original run returned, candidates absent and changed objective rejected.
-- Collide on run identity after staging another Session. Expected atomic rollback. Observed no new Session or Activation and the original graph intact.
-- Submit a new admission with stale Session revision or already-admitted source entries under another key. Expected conflict without advancing history. Observed unchanged stored revision and one input owner.
-- Read/claim with a foreign instance or profile. Expected absent reads and denied commands. Observed null/empty reads and NotFound commands. Missing, foreign and cancelled parent admission produced no child.
-- Race two claims, then attempt an effect at lease expiry. Expected one winner; expired/stale worker denied. Observed one claim, same-run recovery, attempt increment and preserved Activation/response identity.
-- Complete before saving the assistant response. Expected conflict. Save the matching response, complete and reopen. Observed a durable outcome-entry link and original Session response/history on reopen.
-- Complete a child with NoAction, add ChatList surface, reopen and admit “Check B too.” Expected no fabricated reply, same active Session and a new Activation/run. Observed one original task entry, preserved origin, both surfaces and a second run in the same Session. This exercises persistence, not the Continue in chat UI.
-- Persist approval; reject an altered action hash; approve the exact action and resume. Expected same attempt. Persist an InFlight external action, reopen and expire its claim. Observed Indeterminate/Failed with no runnable replay.
-- Attempt to rewrite background origin as UserChat. Expected conflict. Observed immutable stored origin.
-- Admit and reopen with submillisecond UTC time. Expected indexed-millisecond creation and exact embedded admission time to remain valid. Observed successful restore with unchanged run identity and source time.
-- Reopen a complete current-model EnsureCreated database. Expected migration stamp and successful admission. Remove run/Activation uniqueness from another schema. Expected no false stamp. Observed explicit incomplete-schema rejection and no foundation migration receipt.
+## UI and documentation evidence
 
-Eight `AgentRunCoordinatorTests` exercise accepted-batch admission/replay and invalid input rejection, direct/scheduled claim ownership, same-ID safe lease recovery with stale-worker rejection, uncertain effect terminalization without dispatch, approval expiry resuming the same attempt, missing-Session isolation and transport errors retaining a claim until lease recovery. They use the actual InMemory stores and a capturing dispatcher; they do not exercise a production model/mailbox path.
+The bounded Impeccable inspection and confirmation used the actual shared components at 1440×900, 768×900 and 390×844. Local evidence is under `local/verification/agent-run-layout-preview/`: `agent-run-catalog-final-{1440,768,390}.png`, `agent-run-history-final-{1440,768,390}.png` and `agent-run-admin-final-{1440,768,390}.png`. Shared Ant Design v6 tokens, operational drawer geometry, status text/icons, bounded reading regions, narrow-screen action targets and focus return were synchronized in the product design context. Functional browser fixtures cover approval expiry, cancelled/failed/retrying details, source navigation, pagination error/retry and same-Session Continue in chat. No second UI kit or composer context feature was introduced.
 
-Domain tests additionally exercise cancellation/known-effect warnings, reject/expire/cancel approval paths, uncertain browser observation recovery, bounded retry exhaustion, terminal immutability, deep catalog freezing, load-state recovery and stale generation rejection on idempotent effect acknowledgements.
+Canonical architecture, interfaces, event routing, implementation, frontend, protocol, persistence, testing and operations documents now describe the same owners. Historical freeze reports and migration sources remain unchanged. Link/anchor/fence validation checked 22 changed Markdown documents with zero issues; `git diff --check` passed.
 
-## Commands and results
+## Gate ledger
 
-Local evidence directory: `local/verification/activation-agent-run-foundation/` (ignored test artifacts).
-
-| Command | Result |
+| Gate | Current result |
 | --- | --- |
-| `dotnet build src/AgentCore.Infrastructure --no-restore --disable-build-servers` | Passed, zero warnings/errors |
-| `dotnet test tests/AgentCore.Domain.Tests --no-restore --disable-build-servers` | 178 passed, zero failures/skips |
-| `dotnet test tests/AgentCore.Infrastructure.Tests --no-restore --disable-build-servers --filter FullyQualifiedName~AgentRunAdmissionStoreTests` | 28 passed including schema-stamp and submillisecond regressions; `foundation-admission-final.trx` |
-| `dotnet test tests/AgentCore.Infrastructure.Tests --no-restore --disable-build-servers --filter 'FullyQualifiedName~AgentRunAdmissionStoreTests\|FullyQualifiedName~PinnedPersonaRevisionMigrationTests\|FullyQualifiedName~DefinitionLifecycleMigrationTests\|FullyQualifiedName~UnifiedWorkspaceMigrationTests\|FullyQualifiedName~Sqlite_migrate_reopens_legacy_ensurecreated_database'` | 33 passed after all six migration failures were repaired; `foundation-migration-repair.trx` |
-| `dotnet test tests/AgentCore.Application.Tests --no-restore --disable-build-servers --filter FullyQualifiedName~AgentRunCoordinatorTests` | 8 passed; `foundation-coordinator.trx` |
-| Full Infrastructure first pass | 844 passed, 6 failed, 9 opt-in skips; retained in `foundation-infrastructure.trx` |
-| Full Application first pass | 1306 passed, 1 opt-in skip; `foundation-application.trx` |
-| Full API first pass | 371 passed, 3 opt-in skips; `foundation-api.trx` |
-| Full Infrastructure after repair | 852 passed, 9 opt-in skips before the additional submillisecond parity cases; `foundation-infrastructure-final.trx` |
-| Full Application after repair | 1306 passed, 1 opt-in skip before coordinator tests; `foundation-application-final.trx` |
-| Full API after repair | 371 passed, 3 opt-in skips before coordinator changes; `foundation-api-final.trx` |
-| `dotnet test AgentCore.sln --no-restore --disable-build-servers --blame-hang --blame-hang-timeout 5m` on current source | Domain 178 passed; Application 1314 passed / 1 opt-in skip; order-event plugin 4 passed; API 371 passed / 3 opt-in skips; Infrastructure 854 passed / 9 opt-in skips. Total 2721 passed, 13 opt-in skips, zero failures; no hang sequence generated |
+| Frontend unit | 98 files, 743 tests passed (`NODE_OPTIONS=--no-experimental-webstorage pnpm run test --run --maxWorkers=1`) |
+| Frontend build | TypeScript/Vite passed; existing chunk-size warning remains |
+| Focused current store/runtime | 65 store cases, 62 runtime cases, 26 receipt/retry cases and 12 fast-admission/durability cases passed before final instrumentation |
+| Full backend | Domain 161 and order-event plugin 4 passed; Infrastructure 809 passed, 15 opt-in/environment skips; Application 1,303 passed, one opt-in skip on the final cleanup fence; final API gate in progress |
+| API regression | Prior 360 passed, 3 opt-in skips; retry cleanup race corrected and 22 recovery/reattach cases passed; final full rerun in progress |
+| Browser | Prior primary 111/117 passed; all six failures corrected and focused batch 10 passed with paging setup corrected. Phase batch 14/16 passed; remaining secretary assertion corrected. Final primary/secretary reruns in progress |
+| Compose/SQLite volume | Passed on the current SkiaSharp Release image; final candidate also requires hosted Compose |
+| Exact-SHA hosted | Pending candidate commit/push and all five Synthetic jobs |
 
-The final current-source solution command uses a shared `foundation-current.trx` name; VSTest overwrites it as projects finish. Per-project console summaries establish the current-source counts, while earlier per-project TRX files and focused admission/coordinator files remain separately retained. This is local foundation evidence, not exact-SHA hosted closure.
-
-Full commands include `--logger 'trx;LogFileName=…' --results-directory local/verification/activation-agent-run-foundation`. Infrastructure final uses `--no-build --no-restore`; Application/API use `--no-restore --disable-build-servers`. Application includes `--blame-hang --blame-hang-timeout 5m`.
-
-Failed gates and corrections are retained:
-
-1. The sandboxed test runner could not bind its local socket. Authorized local execution succeeded. A sandboxed Infrastructure build stalled; its replacement passed and only that task-owned stalled process was stopped.
-2. An admission fingerprint anonymous projection duplicated the property name Kind; corrected to OriginKind before successful build.
-3. The first Infrastructure test compile violated xUnit2031; changed to the predicate Assert.Single overload.
-4. Four focused assertions expected Validation rather than the repository's ValidationError code; corrected, then all focused cases passed.
-5. Full Infrastructure found six schema regressions: historical seed helpers copied new columns into old schemas, three legacy-owner tests used the current writer against an older schema, and current-model EnsureCreated reopen attempted duplicate OriginJson addition. Corrected test-only historical seeding and added strict current-schema stamping plus positive/negative regressions. The affected repair suite passed.
-
-The new coordinator initially failed compilation because its owner check assumed the inverse SessionSnapshot nullability; corrected to required Instance/optional Profile. Nonblocking awaited task assertions repaired xUnit1031. SQLite timestamp restoration initially compared exact admission ticks to truncated indexed milliseconds; aligned that temporal guard to persisted precision and added both-store regression coverage.
-
-Hosted-provider skips were intentional. No Real model/browser checks were run.
-
-## Remaining cutover work and verification
-
-- Finish the atomic occurrence receipt and one-child-per-occurrence mapping; complete the explicit destructive execution reset/schema migration.
-- Adopt AgentRun in production SessionRuntime/SessionHost with one registered runtime, coordinator, hosted loop and shared live/detached tool checkpoint/approval/effect lifecycle. Preserve batching, initiative/native events, voice/supersession and fast ACK behavior.
-- Implement current-policy-authorized background.start, bounded fan-out, own scratch/artifacts, quiet outcomes and independent child dispatch.
-- Implement trusted bounded completion receipts, initial-child-only parent activation, safe arbitration and no authority escalation/recursion.
-- Implement owner-scoped Background Session and AgentRun APIs, pagination/control, same-Session foregrounding, Chat rail and Admin source navigation.
-- Delete old WorkItem/ConversationTurnExecution production domain, store, runner, hosted, API and web contracts; retain only immutable historical migrations/reports.
-- Run all new J1–J12 Synthetic journeys, existing browser/voice/initiative/approval/Automation/Skill/workspace/artifact regressions, order-event plugin, frontend tests/build and SQLite/Compose crash/restart/ownership checks.
-- Complete the bounded Impeccable batch at 1440×900, 768×900 and 390×844 with at most one coherent correction and final visual confirmation. No UI pass, screenshot batch or design-context change has been performed in this foundation.
-- Finish canonical docs 07/09/11/12/13/14/17 and actual UI design-context synchronization after implementation. Current foundation docs accurately preserve the running baseline rather than claiming it already uses the new model.
-- Commit/push the final complete behavior candidate and verify every required hosted Synthetic/Compose job on its exact SHA. No closure/freeze may be claimed until then.
-
-Added documentation links and fragments (14) and balanced fences passed local checks, and `git diff --check` passed. No complete runnable JSON example was added or modified by this foundation.
-
-A current production symbol scan still finds the previous execution owners and routes; that is an explicit unmet deletion gate. No final production compatibility-surface removal or migration acceptance is claimed.
+Opt-in hosted provider/nopCommerce checks are not part of default key-free acceptance. Default Synthetic makes no paid provider calls. Manual audible headset quality is outside this cutover's automated evidence. Until the full browser/backend/phase and exact-SHA gates pass, this report remains an in-progress acceptance record.

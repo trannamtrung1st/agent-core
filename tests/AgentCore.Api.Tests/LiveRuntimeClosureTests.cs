@@ -1,3 +1,4 @@
+using AgentCore.Application.Execution;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
@@ -11,7 +12,6 @@ using AgentCore.Application.Work;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Experience;
 using AgentCore.Domain.Memory;
-using AgentCore.Domain.Work;
 using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using AgentCore.Infrastructure.Providers.SemanticResponses;
@@ -96,13 +96,13 @@ public sealed class LiveRuntimeClosureTests(ITestOutputHelper output)
         var automations = s.GetRequiredService<AdminAutomationAuthoringService>();
         var r = await automations.SaveAsync(id, null, 0, true, 3600, "try to consolidate your memory and experience", null, null);
         await automations.RunNowAsync(id, r.AutomationId, r.Revision); await AutomationJourneyTests.Intake(s);
-        await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
-        var work = (await s.GetRequiredService<IWorkItemStore>().ListAsync(new(id, LocalUserProfile.Id), 100)).Single(w => w.Provenance.SourceKind == WorkSourceKind.ManualInvocation);
+        await s.ExecuteRunsAsync(100);
+        var work = (await s.GetRequiredService<IAgentRunStore>().ListAsync(new(id, LocalUserProfile.Id), 100)).Single(w => w.Admission.Activation.Kind == ActivationKind.ManualBackground);
         output.WriteLine("Real Automation status={0}; outcome={1}; checkpointBytes={2}; calls={3}; failure={4}", work.Status,
             work.Result is null ? null : WorkCompletionRequest.Outcome(work.Result.Text), Encoding.UTF8.GetByteCount(work.Checkpoint!.PayloadJson),
             string.Join(", ", model.Calls.Select(c => c.Name)), work.Failure?.Code);
-        Assert.Equal(WorkItemStatus.Completed, work.Status);
-        Assert.Contains(WorkCompletionRequest.Outcome(work.Result!.Text), new[] { "NoAction", "ActionCompleted" });
+        Assert.Equal(AgentRunStatus.Completed, work.Status);
+        Assert.Contains(work.Result!.OutcomeKind.ToString(), new[] { "NoAction", "Response" });
         Assert.False(work.Result.AttentionRequired); Assert.Null(work.Failure);
         Assert.InRange(model.Calls.Count(c => ToolCatalog.IsIdentityMaintenance(c.Name)), 0, 1);
         foreach (var call in model.Calls.Where(c => ToolCatalog.IsIdentityMaintenance(c.Name)))

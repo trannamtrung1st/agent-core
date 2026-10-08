@@ -5,7 +5,7 @@ export type DiagnosticFields = {
   correlationId?: string | null;
   sessionId?: string | null;
   responseId?: string | null;
-  workItemId?: string | null;
+  agentRunId?: string | null;
   triggerRegistrationId?: string | null;
   triggerOccurrenceId?: string | null;
   category?: string | null;
@@ -98,7 +98,7 @@ export function diagnosticCopyText(fields: DiagnosticFields, extraLines: DetailL
   const correlationId = present(fields.correlationId);
   const sessionId = present(fields.sessionId);
   const responseId = present(fields.responseId);
-  const workItemId = present(fields.workItemId);
+  const agentRunId = present(fields.agentRunId);
   const triggerRegistrationId = present(fields.triggerRegistrationId);
   const triggerOccurrenceId = present(fields.triggerOccurrenceId);
   const category = present(fields.category);
@@ -112,8 +112,8 @@ export function diagnosticCopyText(fields: DiagnosticFields, extraLines: DetailL
   if (responseId) {
     lines.push(`Response ID: ${responseId}`);
   }
-  if (workItemId) {
-    lines.push(`Work Item ID: ${workItemId}`);
+  if (agentRunId) {
+    lines.push(`AgentRun ID: ${agentRunId}`);
   }
   if (triggerRegistrationId) {
     lines.push(`Trigger ID: ${triggerRegistrationId}`);

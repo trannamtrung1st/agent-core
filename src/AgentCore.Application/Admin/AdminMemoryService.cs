@@ -26,7 +26,7 @@ public sealed record AdminLearnedMemoryItem(
     DateTimeOffset UpdatedAt,
     MemoryItemStatus Status = MemoryItemStatus.Active,
     IReadOnlyList<Guid>? DerivedFromMemoryIds = null, string? MaintenanceOrigin = null,
-    Guid? MaintenanceAgentInstanceId = null, Guid? MaintenanceSessionId = null, Guid? MaintenanceWorkItemId = null);
+    Guid? MaintenanceAgentInstanceId = null, Guid? MaintenanceSessionId = null, Guid? MaintenanceAgentRunId = null);
 
 public sealed record AdminLearnedMemoryListResult(
     AdminLearnedMemoryScope Scope,
@@ -383,5 +383,5 @@ public sealed class AdminMemoryService(
             item.Provenance.OriginMemoryId,
             item.Provenance.RecordedAt,
             item.UpdatedAt, item.Status, item.Provenance.DerivedFromMemoryIds, item.Provenance.MaintenanceOrigin,
-            item.Provenance.MaintenanceAgentInstanceId, item.Provenance.MaintenanceSessionId, item.Provenance.MaintenanceWorkItemId);
+            item.Provenance.MaintenanceAgentInstanceId, item.Provenance.MaintenanceSessionId, item.Provenance.MaintenanceAgentRunId);
 }

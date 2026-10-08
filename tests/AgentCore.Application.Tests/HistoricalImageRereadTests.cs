@@ -1,3 +1,4 @@
+using SkiaSharp;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
@@ -19,10 +20,6 @@ using AgentCore.Infrastructure.Providers.SemanticResponses;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Gif;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace AgentCore.Application.Tests;
 
@@ -59,9 +56,10 @@ public sealed class HistoricalImageRereadTests
         var processor = new AttachmentProcessor(attachments);
         var executor = new SessionToolExecutor(attachments: attachments, processor: processor);
         var sessionId = Guid.NewGuid();
-        using var image = new Image<Rgba32>(3, 3, new Rgba32(1, 2, 3));
+        using var image = new SKBitmap(3, 3);
         using var webp = new MemoryStream();
-        image.SaveAsWebp(webp);
+        using var encoded = image.Encode(SKEncodedImageFormat.Webp, 90);
+        encoded.SaveTo(webp);
         var uploaded = await attachments.UploadPendingAsync(
             sessionId,
             "shot.webp",
@@ -479,7 +477,7 @@ public sealed class HistoricalImageRereadTests
         var imageEnd = encoded.IndexOf('"', StringComparison.Ordinal);
         Assert.True(imageEnd > 0);
         encoded = encoded[..imageEnd];
-        Assert.True(Convert.FromBase64String(encoded).Length > 8);
+        Assert.True(Convert.FromBase64String(JsonSerializer.Deserialize<string>("\"" + encoded + "\"")!).Length > 8);
         Assert.Contains("response_format", followUp, StringComparison.Ordinal);
         Assert.Contains("agent_core_assistant_response", followUp, StringComparison.Ordinal);
         var completedText = string.Join(
@@ -732,27 +730,23 @@ public sealed class HistoricalImageRereadTests
 
     private static byte[] PngBytes()
     {
-        using var image = new Image<Rgba32>(2, 2, new Rgba32(10, 20, 30));
+        using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        image.SaveAsPng(buffer);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+        encoded.SaveTo(buffer);
         return buffer.ToArray();
     }
 
     private static byte[] JpegBytes()
     {
-        using var image = new Image<Rgba32>(2, 2, new Rgba32(40, 50, 60));
+        using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        image.Save(buffer, new JpegEncoder { Quality = 90 });
+        using var encoded = image.Encode(SKEncodedImageFormat.Jpeg, 90);
+        encoded.SaveTo(buffer);
         return buffer.ToArray();
     }
 
-    private static byte[] GifBytes()
-    {
-        using var image = new Image<Rgba32>(2, 2, new Rgba32(70, 80, 90));
-        using var buffer = new MemoryStream();
-        image.Save(buffer, new GifEncoder());
-        return buffer.ToArray();
-    }
+    private static byte[] GifBytes() => Convert.FromBase64String("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
 
     private sealed class NonVisionLanguageModel : ILanguageModel
     {

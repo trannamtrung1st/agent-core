@@ -6,7 +6,7 @@ using AgentCore.Domain.Experience;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed partial class InMemoryExperienceStore(InMemoryAdminEventStore? events = null, IWorkItemStore? work = null) : IExperienceStore
+public sealed partial class InMemoryExperienceStore(InMemoryAdminEventStore? events = null, IAgentRunStore? runs = null) : IExperienceStore
 {
     private readonly object gate = new();
     private readonly Dictionary<Guid, ExperienceSettings> settings = [];
@@ -48,7 +48,7 @@ public sealed partial class InMemoryExperienceStore(InMemoryAdminEventStore? eve
         foreach (var record in pending)
         {
             ct.ThrowIfCancellationRequested();
-            if (work is not null && await work.GetAsync(new(record.AgentInstanceId, record.ProfileId), record.GenerationWorkItemId, ct) is not null) continue;
+            if (runs is not null && await runs.GetAsync(new(record.AgentInstanceId, record.ProfileId), record.GenerationAgentRunId, ct) is not null) continue;
             missing.Add(record);
             if (missing.Count >= Math.Clamp(limit, 1, 100)) break;
         }

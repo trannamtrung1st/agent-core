@@ -4,12 +4,18 @@
 
 - [x] Add immutable Activation, unified AgentRun transitions and Session origin/surface domain.
 - [x] Add atomic Session/input/Activation/run storage foundation and InMemory/SQLite safety scenarios.
-- [x] Add batched admission factory and common fast/scheduled claim coordinator; production dispatcher adoption remains pending.
-- [ ] Finish Phase B occurrence receipt and destructive execution schema/store cutover.
-- [ ] Unify live, initiative, native event and detached runtime ownership; remove old engines.
-- [ ] Implement authorized background.start, Automation child Sessions and safe initial-child report-back.
-- [ ] Implement same-Session Continue in chat, Session-first Background Work and AgentRun-first Admin/API.
-- [ ] Complete full Synthetic/browser/SQLite/Compose regressions, bounded Impeccable and canonical documentation sync.
+- [x] Add batched admission factory and common fast/scheduled claim coordinator and registered SessionHost dispatcher.
+- [x] Add atomic occurrence/child admission receipts, canonical input and configuration pins; exercise recurrence, rollback, policy and reopen in both stores.
+- [x] Finish approved destructive execution schema/store cutover; reset disposable demo SQLite.
+- [x] Adopt AgentRun dispatch in the registered attached/detached SessionRuntime.
+- [x] Implement native live receipt target fencing, atomic speaking admission and quiet settlement/repair; Domain invariants pass.
+- [x] Verify native live receipt migration/runtime recovery and remove old production engines.
+- [x] Implement authorized background.start, bounded fan-out, Automation child Sessions and atomic initial-child completion receipts; targeted tests passed before later cutover edits.
+- [ ] Finish the full recovery, policy, approval and reporting regression matrix.
+- [x] Implement same-Session Continue in chat, Session-first Background Work, shared run details, bounded artifact pages and AgentRun Admin/API.
+- [ ] Verify the complete current backend and live browser journeys after retirement.
+- [x] Complete bounded Impeccable component preview at 1440×900, 768×900 and 390×900; fix mobile title wrapping, shared detail insets and cancel-control hierarchy.
+- [ ] Complete full Synthetic/browser/SQLite/Compose regressions, integrated UI acceptance and canonical documentation sync.
 - [ ] Commit/push final behavior candidate and verify all hosted Synthetic/Compose jobs on that exact SHA.
 
 This requirement does not reopen historical freezes or start P10/P11. The foundation is an intermediate development state; the complete migration is not accepted. [Implementation plan](docs/18-implementation-plan.md#activation-agentrun-and-background-sessions-cutover) and [verification](docs/reports/activation-agent-run-background-sessions-verification.md) own current evidence.

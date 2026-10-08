@@ -48,8 +48,8 @@ export function DiagnosticDetails({
           {fields.responseId?.trim() ? (
             <DetailField label="Response ID" value={fields.responseId.trim()} />
           ) : null}
-          {fields.workItemId?.trim() ? (
-            <DetailField label="Work Item ID" value={fields.workItemId.trim()} />
+          {fields.agentRunId?.trim() ? (
+            <DetailField label="AgentRun ID" value={fields.agentRunId.trim()} />
           ) : null}
           {fields.triggerRegistrationId?.trim() ? (
             <DetailField label="Trigger ID" value={fields.triggerRegistrationId.trim()} />

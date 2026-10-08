@@ -151,7 +151,6 @@ public sealed class AgentWorkspaceDeletionTests
                 var state = new InMemoryDurableState();
                 f.Deletion = new InMemoryAdminLifecycleDeletion((InMemoryAgentInstanceStore)f.Instances,
                     new InMemoryMemoryStore(), new InMemoryStructuredMemoryStore(), new InMemoryTriggerStore(state),
-                    new InMemoryWorkItemStore(state), new InMemoryConversationTurnExecutionStore(state),
                     new InMemoryAgentDefinitionAdminStore(f.Ids), (InMemoryAdminEventStore)f.Events, workspace: f.Workspace);
             }
             var now = TimeProvider.System.GetUtcNow();

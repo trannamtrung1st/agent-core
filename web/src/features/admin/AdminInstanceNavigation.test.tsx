@@ -5,12 +5,12 @@ import type { AdminEffectiveConfiguration } from "../../services/adminApi";
 import { InstanceDetail } from "./AdminApp";
 vi.mock("./InstanceContinuitySection", () => ({
   IdentityMaintenanceSection: () => <div>Identity maintenance permission</div>,
-  ExperienceSection: ({ selection }: { selection?: { workItemId: string } }) => <div>Experience controls {selection?.workItemId}</div>,
-  InstanceRunsSection: ({ open, detailsOnly, selectedWorkItemId, onSource, onRun }: {
-    open: boolean; detailsOnly?: boolean; selectedWorkItemId?: string;
+  ExperienceSection: ({ selection }: { selection?: { agentRunId: string } }) => <div>Experience controls {selection?.agentRunId}</div>,
+  InstanceRunsSection: ({ open, detailsOnly, selectedAgentRunId, onSource, onRun }: {
+    open: boolean; detailsOnly?: boolean; selectedAgentRunId?: string;
     onSource?: (source: { kind: string; automationId: string }) => void;
     onRun?: (id: string) => void;
-  }) => !open ? null : detailsOnly ? <div role="dialog" aria-label="Run details">Run history {selectedWorkItemId}<button onClick={() => onSource?.({ kind: "automation", automationId: "original-thought" })}>Back to thought fixture</button><button onClick={() => onSource?.({ kind: "automation", automationId: "event-source" })}>Back to event fixture</button></div> : <div>Run history<button onClick={() => onRun?.("event-run")}>Inspect run fixture</button></div>
+  }) => !open ? null : detailsOnly ? <div role="dialog" aria-label="Run details">Run history {selectedAgentRunId}<button onClick={() => onSource?.({ kind: "automation", automationId: "original-thought" })}>Back to thought fixture</button><button onClick={() => onSource?.({ kind: "automation", automationId: "event-source" })}>Back to event fixture</button></div> : <div>Run history<button onClick={() => onRun?.("event-run")}>Inspect run fixture</button></div>
 }));
 vi.mock("./CredentialsSection", () => ({ CredentialsSection: () => null, InstanceCredentialsSection: () => <div>Credential bindings</div> }));
 vi.mock("./InstanceAutomationsSection", () => ({ InstanceAutomationsSection: ({ onWork, selection }: { onWork: (id: string) => void; selection?: { automationId: string } }) => <div>Automation controls {selection?.automationId}<button onClick={() => onWork("automation-run")}>Inspect automation fixture</button></div> }));

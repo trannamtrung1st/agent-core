@@ -1,10 +1,10 @@
 using System.Text.Json;
-using AgentCore.Domain.Work;
+using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Domain.Experience;
 
-public enum ExperienceSourceKind { Session = 0, WorkItem = 1, Consolidation = 2 }
+public enum ExperienceSourceKind { Session = 0, AgentRun = 1, Consolidation = 2 }
 public enum ExperienceVisibility { Eligible = 0, Suppressed = 1, Deleted = 2, Superseded = 3 }
 
 public sealed record ExperienceSettings(Guid AgentInstanceId, bool Enabled, long Revision);
@@ -28,7 +28,7 @@ public sealed record ExperienceContent(string Goal, string[] Attempts, string[] 
 
 public sealed record AgentExperience(Guid ExperienceId, Guid AgentInstanceId, Guid ProfileId,
     ExperienceSourceKind SourceKind, Guid SourceId, long ThroughCursor, DateTimeOffset SourceAtUtc,
-    string DefinitionId, int DefinitionVersion, Guid GenerationWorkItemId, WorkModelPin Model,
+    string DefinitionId, int DefinitionVersion, Guid GenerationAgentRunId, AgentRunModelPin Model,
     DateTimeOffset CreatedAtUtc, ExperienceContent? Content = null,
     ExperienceVisibility Visibility = ExperienceVisibility.Eligible, long Revision = 1,
     string? GenerationDefinitionId = null, int? GenerationDefinitionVersion = null, AgentIdentity? GenerationPersona = null,

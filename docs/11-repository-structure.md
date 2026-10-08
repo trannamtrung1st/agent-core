@@ -64,12 +64,14 @@ Infrastructure-only physical layout for session workspaces (`data/workspaces/age
 
 ## P9.8-P9.9 ownership locations
 
-- Domain: `Experience/` owns immutable observation/provenance records; existing `Triggers/` and `Work/` own thought registration/source/status identities.
-- Application: `Experience/ExperienceService`, `Ports/IExperienceStore`, `Triggers/ThoughtRegistrationService` and existing durable work/tool/prompt owners. Application references Domain, never Infrastructure or wire DTOs.
-- Infrastructure: `Persistence/*ExperienceStore`, EF records/migration, existing trigger/work transactions and Synthetic thought/retrospection fixtures. Provider DTOs remain local to adapters.
-- API/Contracts: owner-protected `ContinuityEndpoints` and `Http/ContinuityDtos`; ordinary work DTOs add optional source/registration/model/thought outcome metadata.
+- Domain: `Experience/` owns immutable observation/provenance records; `Triggers/` owns Automation/occurrence values and `Conversation/` owns Activation/AgentRun identities.
+- Application: `Experience/ExperienceService`, `Ports/IExperienceStore`, `Triggers/AdminAutomationAuthoringService`, `Execution/` and shared Session runtime/tool/prompt owners. Application references Domain, never Infrastructure or wire DTOs.
+- Infrastructure: `Persistence/*ExperienceStore`, EF records/migration, atomic occurrence/AgentRun transactions and Synthetic Automation/retrospection fixtures. Provider DTOs remain local to adapters.
+- API/Contracts: owner-protected `ContinuityEndpoints` and `Http/ContinuityDtos`; `Http/AgentRunDtos` exposes owner-safe execution/source/model/outcome metadata.
 - Web: instance `InstanceContinuitySection`, shared `ExecutionModelFields`, and the existing `BackgroundWorkDrawer`/confirmation/diagnostic components. No second component kit or timer service.
 
 ## Credential modules
 
 `Domain/Credentials` defines resources, grants and bounded validation; `Application/Credentials` and `Application/Ports/Credentials.cs` own safe lifecycle and resolution. `Infrastructure/Credentials` owns local protection, while the existing persistence adapters store ciphertext/grants. Contracts HTTP and thin Admin endpoints expose safe DTOs. `web/src/features/admin/CredentialsSection.tsx` reuses Ant Design and Admin collections. The local key ring is runtime data (`Persistence:CredentialProtectionKeyRoot`), never a repository resource or browser profile. Historical connection migrations stay in persistence; production connection services and UI are retired.
+
+Current execution ownership is `Domain/Conversation` (Activation/AgentRun/origin), `Application/Execution` (admission, coordination and recovery), and `Application/Sessions/SessionRuntime.*` (one mailbox). Infrastructure persists that graph through `IAgentRunStore`; API `AgentRunDispatcher` routes attached and headless execution through `SessionHost`. Legacy WorkItem and ConversationTurnExecution production modules are retired. Historical migrations remain under Persistence/Migrations.

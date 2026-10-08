@@ -233,6 +233,15 @@ public interface ITriggerStore
         DateTimeOffset confirmedAt,
         CancellationToken cancellationToken = default);
 
+    ValueTask<TriggerOccurrence?> BindLiveSessionAsync(Guid occurrenceId, long expectedRoutingRevision,
+        Guid sessionId, DateTimeOffset atUtc, CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerOccurrence?> CompleteLiveEvaluationAsync(Guid occurrenceId, Guid sessionId,
+        DateTimeOffset atUtc, CancellationToken cancellationToken = default);
+
+    ValueTask<IReadOnlyList<TriggerOccurrence>> ListUnsettledLiveAsync(int limit, Guid? after = null,
+        CancellationToken cancellationToken = default);
+
     ValueTask<TriggerOccurrence?> RevertLivePreparedAsync(
         Guid occurrenceId,
         long expectedRoutingRevision,

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Execution;
 using AgentCore.Application.Events;
 using AgentCore.Application.Observability;
 using AgentCore.Domain.Conversation;
@@ -19,9 +20,9 @@ public sealed partial class SessionRuntime
             TaskCreationOptions.RunContinuationsAsynchronously);
         BeginWork();
         if (!TryMailbox(new ApplicationMessageRequested(
-                NewContext(cause.EventId),
+                WorkerContext(cause),
                 responseId,
-                _epoch,
+                cause.Epoch,
                 toolCallId,
                 argumentsJson,
                 completed)))
@@ -60,24 +61,25 @@ public sealed partial class SessionRuntime
         CancellationToken cancellationToken)
     {
         var fence = ApplicationMessageFence(input);
-        if (fence is not null)
+        if (fence is not null || !await OwnsWorkerAsync(input.Context, input.ResponseId, cancellationToken).ConfigureAwait(false))
         {
-            return fence;
+            return fence ?? ApplicationMessageMailboxResult.Failed(
+                ApplicationMessageAdmission.Error("stale", "Application message is no longer owned by this execution."), "stale");
         }
 
-        var bound = _boundConversationExecution!;
-        if (_turnExecutions is null)
+        var bound = _boundAgentRun!;
+        if (_agentRuns is null)
         {
             return ApplicationMessageMailboxResult.Failed(
                 ApplicationMessageAdmission.Error("forbidden", "Application message requires a conversation execution."),
                 "denied");
         }
 
-        var current = await _turnExecutions.GetAsync(bound.ExecutionId, cancellationToken).ConfigureAwait(false);
+        var current = await _agentRuns.GetAsync(bound.Owner, bound.AgentRunId, cancellationToken).ConfigureAwait(false);
         if (current is null
             || current.Revision != bound.Revision
             || current.Claim?.Generation != bound.Claim!.Generation
-            || current.Status != ConversationTurnExecutionStatus.Running
+            || current.Status != AgentRunStatus.Running
             || current.CancellationRequested
             || current.ResponseId != input.ResponseId)
         {
@@ -106,7 +108,7 @@ public sealed partial class SessionRuntime
             return ApplicationMessageMailboxResult.Failed(errorJson, "denied");
         }
 
-        if (!ApplicationMessageAdmission.TryCreateEffectKey(current.ExecutionId, input.ToolCallId, out var effectKey))
+        if (!ApplicationMessageAdmission.TryCreateEffectKey(current.AgentRunId, input.ToolCallId, out var effectKey))
         {
             return ApplicationMessageMailboxResult.Failed(
                 ApplicationMessageAdmission.Error("invalid", "Application message effect identity is too long."),
@@ -183,9 +185,9 @@ public sealed partial class SessionRuntime
                 "stale");
         }
 
-        if (_boundConversationExecution is not
+        if (_boundAgentRun is not
             {
-                Status: ConversationTurnExecutionStatus.Running,
+                Status: AgentRunStatus.Running,
                 Claim: not null
             } bound
             || bound.ResponseId != input.ResponseId)

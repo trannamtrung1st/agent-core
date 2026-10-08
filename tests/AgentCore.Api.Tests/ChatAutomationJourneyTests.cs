@@ -1,3 +1,4 @@
+using AgentCore.Application.Execution;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -11,7 +12,6 @@ using AgentCore.Application.Work;
 using AgentCore.Contracts.Realtime;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Triggers;
-using AgentCore.Domain.Work;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
@@ -49,8 +49,8 @@ public sealed class ChatAutomationJourneyTests
             var source = await ExperienceJourneyTests.SeedAsync(services, instanceId);
             await services.GetRequiredService<ExperienceService>().RequestSessionAsync(instanceId, source.SessionId);
         }
-        var executor = services.GetRequiredService<DurableReminderExecutor>();
-        Assert.Equal(3, await executor.ExecuteDueAsync(clock.GetUtcNow(), 100));
+        var executor = services.GetRequiredService<AgentRunCoordinator>();
+        Assert.Equal(3, await services.ExecuteRunsAsync(100));
         var sources = await experience.ListAsync(instanceId, 100);
         Assert.Equal(3, sources.Count);
 
@@ -96,13 +96,12 @@ public sealed class ChatAutomationJourneyTests
         clock.Advance(TimeSpan.FromHours(1));
         Assert.Equal(1, (await services.GetRequiredService<TriggerScheduler>().RunOnceAsync(clock.GetUtcNow())).Admitted);
         await AutomationJourneyTests.Intake(services);
-        Assert.Equal(1, await executor.ExecuteDueAsync(clock.GetUtcNow(), 100));
-        var run = Assert.Single(await services.GetRequiredService<IWorkItemStore>()
-            .ListAsync(new(instanceId, LocalUserProfile.Id), 100), w => w.Provenance.AutomationId == registration.AutomationId);
-        Assert.Equal(WorkSourceKind.Schedule, run.Provenance.SourceKind);
-        Assert.Contains(Instructions, run.Provenance.EvidenceJson);
-        Assert.Equal(WorkItemStatus.Completed, run.Status);
-        Assert.Equal(authorizedAtRun ? "ActionCompleted" : "NoAction", WorkCompletionRequest.Outcome(run.Result!.Text));
+        Assert.Equal(1, await services.ExecuteRunsAsync(100));
+        var run = Assert.Single(await services.AutomationRunsAsync(new(instanceId, LocalUserProfile.Id), registration.AutomationId));
+        Assert.Equal(ActivationKind.ScheduledWork, run.Admission.Activation.Kind);
+        Assert.Contains(Instructions, (await services.SessionAsync(run)).Entries[0].Text);
+        Assert.Equal(AgentRunStatus.Completed, run.Status);
+        Assert.Equal(authorizedAtRun ? "Response" : "NoAction", run.Result!.OutcomeKind.ToString());
         Assert.False(run.Result.AttentionRequired);
         Assert.Contains(ToolCatalog.WorkComplete, model.Calls);
         var retained = await experience.ListAsync(instanceId, 100);
@@ -121,7 +120,7 @@ public sealed class ChatAutomationJourneyTests
             Assert.Equal(JsonSerializer.Serialize(sources.OrderBy(e => e.ExperienceId)),
                 JsonSerializer.Serialize(retained.OrderBy(e => e.ExperienceId)));
         }
-        Assert.Empty(await services.GetRequiredService<IWorkItemStore>().ListAttentionAlertKeysAsync(run.WorkItemId));
+        Assert.False(run.Result?.AttentionRequired ?? false);
         var chat = Assert.Single(model.ChatRequests);
         Assert.Contains(chat.Messages, m => m.Role == ModelRole.System && m.Text.Contains("action-oriented Instructions"));
         Assert.Contains(chat.Messages, m => m.Role == ModelRole.System && m.Text.Contains("exact-action approvals still apply"));
@@ -168,7 +167,7 @@ public sealed class ChatAutomationJourneyTests
                 yield break;
             }
             if (user is not null && user.Text.Contains(Instructions)
-                && request.Messages.Any(m => m.Role == ModelRole.System && m.Text.StartsWith("Bounded Automation Run.")))
+                && request.Messages.Any(m => m.Role == ModelRole.System && m.Text.StartsWith("Bounded background Session task.")))
             {
                 RunRequests.Enqueue(request);
                 // Reuse the deterministic semantic consolidation fixture without storing a test marker in Instructions.

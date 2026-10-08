@@ -1,3 +1,4 @@
+using AgentCore.Application.Execution;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -5,7 +6,6 @@ using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Memory;
 using AgentCore.Domain.Triggers;
-using AgentCore.Domain.Work;
 using AgentCore.Infrastructure.Admin;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
@@ -27,8 +27,7 @@ public sealed class InMemoryAdminLifecycleDeletionTests : AdminLifecycleDeletion
         var sessions = new InMemoryMemoryStore();
         var memories = new InMemoryStructuredMemoryStore();
         var triggers = new InMemoryTriggerStore(state);
-        var work = new InMemoryWorkItemStore(state);
-        var executions = new InMemoryConversationTurnExecutionStore(state);
+        var runs = new InMemoryAgentRunStore(sessions, new SystemDiagnosticIdSource(), triggers);
         var definitions = new InMemoryAgentDefinitionAdminStore(ids) { EventStore = events };
         var resources = new InMemoryAgentDefinitionResourceAdminStore(
             definitions,
@@ -41,8 +40,6 @@ public sealed class InMemoryAdminLifecycleDeletionTests : AdminLifecycleDeletion
             sessions,
             memories,
             triggers,
-            work,
-            executions,
             definitions,
             events);
         return exercise(new DeletionFixture(
@@ -51,8 +48,7 @@ public sealed class InMemoryAdminLifecycleDeletionTests : AdminLifecycleDeletion
             sessions,
             memories,
             triggers,
-            work,
-            executions,
+            runs,
             events,
             deletion,
             clock,
@@ -77,8 +73,7 @@ public sealed class SqliteAdminLifecycleDeletionTests : AdminLifecycleDeletionTe
             var sessions = new SqliteMemoryStore(factory, clock);
             var memories = new SqliteStructuredMemoryStore(factory);
             var triggers = new SqliteTriggerStore(factory);
-            var work = new SqliteWorkItemStore(factory);
-            var executions = new SqliteConversationTurnExecutionStore(factory);
+            var runs = new SqliteAgentRunStore(factory, sessions, new SystemDiagnosticIdSource());
             var definitions = new SqliteAgentDefinitionAdminStore(
                 factory,
                 ids,
@@ -90,8 +85,7 @@ public sealed class SqliteAdminLifecycleDeletionTests : AdminLifecycleDeletionTe
                 sessions,
                 memories,
                 triggers,
-                work,
-                executions,
+                runs,
                 events,
                 deletion,
                 clock,
@@ -125,8 +119,7 @@ public abstract class AdminLifecycleDeletionTests
         IMemoryStore Sessions,
         IStructuredMemoryStore Memories,
         ITriggerStore Triggers,
-        IWorkItemStore WorkItems,
-        IConversationTurnExecutionStore Executions,
+        IAgentRunStore Runs,
         IAdminEventStore Events,
         IAdminLifecycleDeletion Deletion,
         TimeProvider Clock,
@@ -389,38 +382,12 @@ public abstract class AdminLifecycleDeletionTests
                 1,
                 new TriggerProvenance(TriggerAuthorizationOrigin.CurrentUserTurn, null, null, now, now),
                 null), CancellationToken.None);
-            await fixture.WorkItems.CreateAsync(WorkItem.Create(
-                Guid.Parse("019944af-00d1-7000-8000-00000000009b"),
-                new WorkOwner(instanceId, profileId),
-                new WorkProvenance(
-                    Guid.Parse("019944af-00d1-7000-8000-00000000009c"),
-                    WorkSourceKind.Schedule,
-                    null,
-                    null,
-                    null,
-                    "source|delete",
-                    now,
-                    now,
-                    """{"instruction":"ping"}""",
-                    "field-guide",
-                    1,
-                    "Guide"),
-                new WorkModelPin("scripted-alpha", "primary-llm", "scripted-alpha", null),
-                3,
-                now), CancellationToken.None);
-            await fixture.Executions.CreateAsync(ConversationTurnExecution.AcceptNew(
-                Guid.Parse("019944af-00d1-7000-8000-00000000009d"),
-                Guid.Parse("019944af-00d1-7000-8000-00000000009e"),
-                Guid.Parse("019944af-00d1-7000-8000-00000000009f"),
-                Guid.Parse("019944af-00d1-7000-8000-0000000000a0"),
-                Guid.Parse("019944af-00d1-7000-8000-0000000000a1"),
-                instanceId,
-                profileId,
-                "field-guide",
-                1,
-                null,
-                new WorkModelPin("scripted-alpha", "primary-llm", "scripted-alpha", null),
-                now), CancellationToken.None);
+            var stored = Snapshot(instanceId) with { ProfileId = profileId, PinnedPersona = Snapshot(instanceId).Definition.Identity,
+                ModelSelection = new("scripted-alpha", "primary-llm", "scripted-alpha", ModelSelectionSource.SystemDefault, null) };
+            var entry = new ConversationEntry(Guid.NewGuid(), 1, Guid.NewGuid(), ConversationRole.User, "Check", null,
+                EntryStatus.Completed, SessionMode.Text, 0, 5, now);
+            stored = stored with { Revision = 2, Entries = [entry] };
+            await fixture.Runs.AdmitAsync(stored, 1, AgentRunTestFixtures.Run(stored, now));
 
             var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
                 fixture.Deletion.DeleteInstanceAsync(
@@ -431,8 +398,8 @@ public abstract class AdminLifecycleDeletionTests
             Assert.Contains("1 session", error.Message, StringComparison.Ordinal);
             Assert.Contains("1 learned memory item", error.Message, StringComparison.Ordinal);
             Assert.Contains("1 trigger registration", error.Message, StringComparison.Ordinal);
-            Assert.Contains("1 background work item", error.Message, StringComparison.Ordinal);
-            Assert.Contains("1 conversation execution", error.Message, StringComparison.Ordinal);
+            Assert.Contains("1 AgentRun", error.Message, StringComparison.Ordinal);
+            Assert.Contains("1 Activation", error.Message, StringComparison.Ordinal);
             Assert.Contains("Archive keeps it inactive", error.Message, StringComparison.Ordinal);
             Assert.NotNull(await fixture.Instances.FindAsync(instanceId, CancellationToken.None));
             var history = await fixture.Events.ListAsync(new AdminEventListQuery(), CancellationToken.None);

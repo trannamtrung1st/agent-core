@@ -21,6 +21,26 @@ public sealed class InMemoryMemoryStore : IMemoryStore
     private readonly Dictionary<Guid, List<ConversationEntry>> _entries = [];
     private readonly Dictionary<Guid, UserProfile> _profiles = [];
 
+    internal void RemoveResponseDraft(Guid sessionId, Guid entryId)
+    {
+        lock (_gate)
+        {
+            if (_entries.TryGetValue(sessionId, out var entries)) entries.RemoveAll(entry => entry.EntryId == entryId);
+        }
+    }
+
+    internal IReadOnlyList<Guid> PendingInputSessions(int limit)
+    {
+        lock (_gate) return _sessions.Values.Where(session => session.PendingAgentInputIds.Count > 0
+                && session.DurablyDeletedAt is null && session.ArchivedAt is null
+                && !SessionLifecycle.IsTerminal(session.LifecycleStatus)
+                && session.Status is not (SessionStatus.Ended or SessionStatus.Ending)
+                && (session.Status != SessionStatus.Paused || SessionPauseSemantics.IsTransportResumable(session.PauseReason))
+                && !AgentRuns.Runs.Values.Any(run => run.SessionId == session.SessionId && !run.IsTerminal))
+            .OrderBy(session => session.UpdatedAt).ThenBy(session => session.SessionId).Take(limit)
+            .Select(session => session.SessionId).ToArray();
+    }
+
     internal int CountLiveByInstance(Guid instanceId)
     {
         lock (_gate)
@@ -206,7 +226,9 @@ public sealed class InMemoryMemoryStore : IMemoryStore
             foreach (var id in _sessions.Keys.ToArray())
             {
                 var snapshot = Full(id);
-                var recovered = MemoryStoreSemantics.Recover(snapshot, DateTimeOffset.UtcNow);
+                var ownedResponses = AgentRuns.Runs.Values.Where(run => run.SessionId == id && !run.IsTerminal)
+                    .Select(run => run.ResponseId).OfType<Guid>().ToHashSet();
+                var recovered = MemoryStoreSemantics.Recover(snapshot, DateTimeOffset.UtcNow, ownedResponses);
                 Store(recovered, replaceEntries: true);
             }
         }
@@ -238,6 +260,18 @@ public sealed class InMemoryMemoryStore : IMemoryStore
             .OrderBy(s => s.SessionId.ToString("D"), StringComparer.Ordinal).Take(limit).Select(CloneMeta).ToArray());
     }
 
+    public ValueTask<SessionCatalogPage> ListBackgroundSessionsAsync(AgentRunOwner owner, string? cursor, int limit,
+        bool includeArchived = false, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            var items = _sessions.Values.Where(session => session.AgentInstanceId == owner.AgentInstanceId && session.ProfileId == owner.ProfileId
+                && session.Surfaces.HasFlag(SessionSurface.BackgroundWork)).Select(CloneMeta).ToArray();
+            return ValueTask.FromResult(CatalogCursor.Page(items, cursor, limit, includeArchived));
+        }
+    }
+
     public ValueTask<SessionCatalogPage> ListCatalogAsync(
         string? cursor,
         int limit,
@@ -247,7 +281,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            var items = _sessions.Values.Select(CloneMeta).ToArray();
+            var items = _sessions.Values.Where(session => session.Surfaces.HasFlag(SessionSurface.ChatList)).Select(CloneMeta).ToArray();
             return ValueTask.FromResult(CatalogCursor.Page(items, cursor, limit, includeArchived));
         }
     }
@@ -302,7 +336,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         var entries = _entries.TryGetValue(sessionId, out var list) ? list : (IReadOnlyList<ConversationEntry>)[];
         return snapshot with
         {
-            Entries = HistoryRestoreWindow.Select(entries),
+            Entries = HistoryRestoreWindow.Select(entries, snapshot.PendingAgentInputIds),
             LastEntrySequence = snapshot.LastEntrySequence
         };
     }

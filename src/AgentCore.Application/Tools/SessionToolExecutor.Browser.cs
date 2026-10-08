@@ -728,17 +728,8 @@ public sealed partial class SessionToolExecutor
         byte[] bytes,
         CancellationToken cancellationToken)
     {
-        if (admission is { Detached: true, WorkItemId: Guid workItemId }
-            && workCaptures is not null
-            && admission.AgentInstanceId is Guid agentInstanceId)
-        {
-            var saved = await workCaptures
-                .SaveAsync(workItemId, agentInstanceId, contentType, bytes, cancellationToken)
-                .ConfigureAwait(false);
-            return saved.ErrorCode is null
-                ? (saved.Capture?.CaptureId.ToString("D"), null)
-                : (null, Error(saved.ErrorCode, "The work item cannot store another capture."));
-        }
+        if (admission is { Detached: true } && admission.OwnedSessionId != sessionId)
+            return (null, Error("forbidden", "Capture requires the admitted Session scope."));
 
         if (artifacts is null)
         {

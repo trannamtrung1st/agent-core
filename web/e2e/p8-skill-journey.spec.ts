@@ -171,7 +171,7 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
 
   const database = process.env.PLAYWRIGHT_SQLITE_PATH;
   expect(database).toBeTruthy();
-  const pins = execFileSync("sqlite3", [database!, "SELECT ActiveSkillKeysJson FROM ConversationTurnExecutions;"], {
+  const pins = execFileSync("sqlite3", [database!, "SELECT json_extract(PayloadJson, '$.activeSkillKeys') FROM AgentRuns;"], {
     encoding: "utf8"
   });
   expect(pins).toContain("refund.handle");

@@ -8,6 +8,18 @@ namespace AgentCore.Application.Tests;
 [Collection("telemetry-global")]
 public sealed class SafeExecutionTraceTests
 {
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("[1,2]")]
+    [InlineData("null")]
+    [InlineData("42")]
+    [InlineData("\"text\"")]
+    public void Non_object_tool_results_do_not_break_runtime_tracing(string result)
+    {
+        Assert.Equal("ok", SafeExecutionTrace.NormalizeToolOutcome(result));
+        Assert.Empty(SafeExecutionTrace.BuildToolDetail("skills.list", "{}", result));
+    }
+
     [Fact]
     public void RecordToolStep_includes_tool_name_and_step_number()
     {

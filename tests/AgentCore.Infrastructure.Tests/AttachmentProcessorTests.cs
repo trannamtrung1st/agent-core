@@ -1,14 +1,9 @@
+using SkiaSharp;
 using System.Text;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
 using AgentCore.Infrastructure.Attachments;
 using AgentCore.Infrastructure.Persistence;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Gif;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.Formats.Png;
-using SixLabors.ImageSharp.Formats.Webp;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace AgentCore.Infrastructure.Tests;
 
@@ -48,12 +43,12 @@ public sealed class AttachmentProcessorTests
     }
 
     [Fact]
-    public async Task Images_strip_exif_and_pixel_bombs_fail_closed()
+    public async Task Images_strip_metadata_and_pixel_bombs_fail_closed()
     {
         var store = new InMemoryAttachmentStore(TimeProvider.System);
         var session = Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842");
         var processor = new AttachmentProcessor(store);
-        var png = PngWithExif();
+        var png = PngWithMetadata();
         var uploaded = await Upload(store, session, "shot.png", "image/png", png);
         var result = (await processor.ProcessTurnAsync(session, [uploaded.AttachmentId]))[0];
         Assert.Equal(AttachmentProcessKind.Image, result.Kind);
@@ -99,7 +94,7 @@ public sealed class AttachmentProcessorTests
         var legacy = AttachmentProcessor.CacheKey(id, "attachment-processors/1");
         var current = AttachmentProcessor.CacheKey(id, AttachmentLimits.ProcessorVersion);
         Assert.NotEqual(legacy, current);
-        Assert.Equal("attachment-processors/2", AttachmentLimits.ProcessorVersion);
+        Assert.Equal("attachment-processors/3", AttachmentLimits.ProcessorVersion);
     }
 
     [Fact]
@@ -215,21 +210,30 @@ trailer<< /Root 1 0 R >>
         return Encoding.ASCII.GetBytes(pdf.Replace("\r\n", "\n", StringComparison.Ordinal));
     }
 
-    private static byte[] PngWithExif()
+    private static byte[] PngWithMetadata()
     {
-        using var image = new Image<Rgba32>(2, 2, new Rgba32(10, 20, 30));
-        image.Metadata.ExifProfile = new SixLabors.ImageSharp.Metadata.Profiles.Exif.ExifProfile();
-        image.Metadata.ExifProfile.SetValue(SixLabors.ImageSharp.Metadata.Profiles.Exif.ExifTag.ImageDescription, "AgentCoreSecret");
-        using var buffer = new MemoryStream();
-        image.SaveAsPng(buffer);
-        return buffer.ToArray();
+        var png = MinimalPngBytes();
+        var payload = Encoding.ASCII.GetBytes("Description\0AgentCoreSecret");
+        var type = "tEXt"u8.ToArray();
+        var chunk = new byte[payload.Length + 12];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(chunk, payload.Length);
+        type.CopyTo(chunk, 4); payload.CopyTo(chunk, 8);
+        uint crc = 0xffffffff;
+        foreach (var value in chunk.AsSpan(4, payload.Length + 4))
+        {
+            crc ^= value;
+            for (var bit = 0; bit < 8; bit++) crc = (crc >> 1) ^ ((crc & 1) != 0 ? 0xedb88320u : 0);
+        }
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(chunk.AsSpan(chunk.Length - 4), ~crc);
+        return [.. png.AsSpan(0, png.Length - 12), .. chunk, .. png.AsSpan(png.Length - 12)];
     }
 
     private static byte[] OversizedPngHeader()
     {
-        using var image = new Image<Rgba32>(2, 2);
+        using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        image.SaveAsPng(buffer);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+        encoded.SaveTo(buffer);
         var png = buffer.ToArray();
         var width = BitConverter.GetBytes(System.Net.IPAddress.HostToNetworkOrder(20000));
         var height = BitConverter.GetBytes(System.Net.IPAddress.HostToNetworkOrder(20000));
@@ -250,33 +254,30 @@ trailer<< /Root 1 0 R >>
 
     private static byte[] MinimalPngBytes()
     {
-        using var image = new Image<Rgba32>(2, 2, new Rgba32(1, 2, 3));
+        using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        image.Save(buffer, new PngEncoder());
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 90);
+        encoded.SaveTo(buffer);
         return buffer.ToArray();
     }
 
     private static byte[] MinimalJpegBytes()
     {
-        using var image = new Image<Rgba32>(2, 2, new Rgba32(4, 5, 6));
+        using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        image.Save(buffer, new JpegEncoder { Quality = 90 });
+        using var encoded = image.Encode(SKEncodedImageFormat.Jpeg, 90);
+        encoded.SaveTo(buffer);
         return buffer.ToArray();
     }
 
     private static byte[] MinimalWebpBytes()
     {
-        using var image = new Image<Rgba32>(2, 2, new Rgba32(7, 8, 9));
+        using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        image.Save(buffer, new WebpEncoder());
+        using var encoded = image.Encode(SKEncodedImageFormat.Webp, 90);
+        encoded.SaveTo(buffer);
         return buffer.ToArray();
     }
 
-    private static byte[] MinimalGifBytes()
-    {
-        using var image = new Image<Rgba32>(2, 2, new Rgba32(10, 11, 12));
-        using var buffer = new MemoryStream();
-        image.Save(buffer, new GifEncoder());
-        return buffer.ToArray();
-    }
+    private static byte[] MinimalGifBytes() => Convert.FromBase64String("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
 }

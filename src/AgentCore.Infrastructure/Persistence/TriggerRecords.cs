@@ -48,7 +48,10 @@ public sealed class TriggerOccurrenceRecord
     public long? RoutingUpdatedAtUtc { get; set; }
     public string? ClaimId { get; set; }
     public long? ClaimLeaseExpiresAtUtc { get; set; }
-    public string? DurableWorkItemId { get; set; }
+    public string? BackgroundSessionId { get; set; }
+    public string? AcceptedAgentRunId { get; set; }
+    public string? LiveSessionId { get; set; }
+    public long? LiveEvaluationCompletedAtUtc { get; set; }
     public string? ModelCatalogKey { get; set; }
     public string? ModelProviderAlias { get; set; }
     public string? ModelId { get; set; }

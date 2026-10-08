@@ -187,9 +187,11 @@ public sealed class AgentRunCoordinatorTests
 
     private sealed class Dispatcher : IAgentRunDispatcher
     {
+        public ValueTask<bool> AdmitCompletionAsync(BackgroundCompletionCandidate source, CancellationToken ct = default) => ValueTask.FromResult(false);
         public List<AgentRun> Dispatched { get; } = [];
         public Exception? Error { get; set; }
         public Guid? MissingSession { get; set; }
+        public ValueTask<bool> RepairPendingInputsAsync(Guid sessionId, CancellationToken ct = default) => ValueTask.FromResult(false);
         public ValueTask<bool> DispatchAsync(AgentRun run, CancellationToken cancellationToken = default)
         {
             Dispatched.Add(run);

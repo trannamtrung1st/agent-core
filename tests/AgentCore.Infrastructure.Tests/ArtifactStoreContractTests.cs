@@ -10,6 +10,32 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class ArtifactStoreContractTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Artifact_pages_are_bounded_and_foreign_session_cursors_are_rejected(bool sqlite)
+    {
+        await using var harness = sqlite ? await SqliteAsync() : null;
+        IArtifactStore store = harness is null ? new InMemoryArtifactStore(TimeProvider.System) : harness.Store;
+        var sessionId = harness?.SessionId ?? Guid.NewGuid();
+        var files = new List<ArtifactRecord>();
+        for (var index = 0; index < 5; index++)
+            files.Add(await store.CreateAsync(sessionId, $"report-{index}.md", "text/markdown", new byte[] { 1 }, null, null));
+        var expected = files.OrderByDescending(file => file.CreatedAt).ThenByDescending(file => file.ArtifactId.ToString("D"), StringComparer.Ordinal).Select(file => file.ArtifactId).ToArray();
+        var seen = new List<Guid>(); Guid? cursor = null;
+        do
+        {
+            var page = await store.ListPageAsync(sessionId, cursor, 2);
+            Assert.InRange(page.Items.Count, 1, 2);
+            Assert.All(page.Items, file => Assert.Equal(sessionId, file.SessionId));
+            seen.AddRange(page.Items.Select(file => file.ArtifactId)); cursor = page.NextCursor;
+            Assert.Equal(cursor is not null, page.HasMore);
+        } while (cursor is not null);
+        Assert.Equal(expected, seen);
+        Assert.Equal("ValidationError", (await Assert.ThrowsAsync<AgentCoreException>(() =>
+            store.ListPageAsync(Guid.NewGuid(), files[0].ArtifactId, 2).AsTask())).Code);
+    }
+
     [Fact]
     public async Task Sqlite_blobs_stay_out_of_rows_and_delete_does_not_resurrect()
     {

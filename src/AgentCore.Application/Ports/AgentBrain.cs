@@ -11,7 +11,8 @@ public enum TriggerKind
     UnfinishedInteraction,
     ScheduledOccurrence,
     ApplicationEvent,
-    ManualInvocation
+    ManualInvocation,
+    BackgroundCompleted
 }
 
 public sealed record AgentTrigger(Guid EventId, TriggerKind Kind, string? Text, string? EnvironmentKind = null);
@@ -61,7 +62,7 @@ public sealed record AgentContext(
     string? ContinuityContext = null,
     bool AllowAgentConsolidation = false,
     bool AgentWorkspaceAvailable = false,
-    IReadOnlyList<string>? LoadedCapabilityIds = null, IReadOnlyList<EffectiveSkill>? PinnedSkillCatalog = null)
+    IReadOnlyList<string>? LoadedCapabilityIds = null, IReadOnlyList<EffectiveSkill>? PinnedSkillCatalog = null, Guid? OwnedSessionId = null)
 {
     public AgentIdentity EffectiveIdentity => Persona ?? Definition.Identity;
 }

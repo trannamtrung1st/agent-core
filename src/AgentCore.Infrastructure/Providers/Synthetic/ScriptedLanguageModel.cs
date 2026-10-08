@@ -107,6 +107,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield return new ModelCompleted(ModelStopReason.ToolCalls);
             yield break;
         }
+        if (BackgroundSessionScript.Generate(request) is { } backgroundEvents)
+        {
+            foreach (var item in backgroundEvents) yield return item;
+            yield break;
+        }
         if (IdentityMaintenanceScript.Generate(request) is { } maintenanceEvents)
         {
             foreach (var item in maintenanceEvents) yield return item;
@@ -424,7 +429,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                 yield return new ModelToolCallEvent(new ModelToolCall(
                     "call-sensitive-complete",
                     ToolCatalog.WorkComplete,
-                    """{"summary":"Sensitive action completed after approval.","attentionRequired":false,"outcome":"ActionCompleted"}"""));
+                    """{"summary":"Sensitive action completed after approval.","attentionRequired":false,"outcome":"Response"}"""));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls);
                 yield break;
             }

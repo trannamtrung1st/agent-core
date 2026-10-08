@@ -1,3 +1,4 @@
+using AgentCore.Application.Execution;
 using System.Net;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
@@ -13,7 +14,6 @@ using AgentCore.Contracts.Http;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Experience;
-using AgentCore.Domain.Work;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,22 +38,17 @@ public sealed class ContinuityBoundaryTests
         Assert.Equal(target, (await manager.GetAsync(source.SessionId)).LifecycleStatus);
 
         var now = DateTimeOffset.UtcNow;
-        var store = s.GetRequiredService<IWorkItemStore>();
-        var id = Guid.NewGuid(); var generation = Guid.NewGuid(); var owner = new WorkOwner(instance.InstanceId, LocalUserProfile.Id);
-        await store.CreateAsync(WorkItem.Create(id, owner, new(Guid.NewGuid(), WorkSourceKind.Schedule, null, null, null,
-            $"cancel-source:{id:D}", now, now, "{}", "general-assistant", 16, instance.Persona.Name, instance.Persona),
-            new("synthetic-default", "synthetic", "synthetic", null), 3, now));
-        var running = (await store.TryClaimAsync(id, generation, now, now.AddMinutes(3)))!;
-        running = await store.CheckpointAsync(id, running.Revision, generation,
-            new(DurableToolCallCheckpoint.Write([new(ModelRole.Tool, "{\"ok\":true}", ToolCallId: "read", Name: "http.request")]), 1, 0, 180000), null, now);
-        var completed = await store.CompleteAsync(id, running.Revision, generation, "Source succeeded", now);
+        var store = s.GetRequiredService<IAgentRunStore>();
+        var owner = new AgentRunOwner(instance.InstanceId, LocalUserProfile.Id);
+        var completed = await s.CompleteSourceAsync(instance.InstanceId);
+        var id = completed.AgentRunId;
         var service = s.GetRequiredService<ExperienceService>();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await service.RequestWorkAsync(completed, CancellationToken.None));
-        Assert.Equal(WorkItemStatus.Completed, (await store.GetAsync(owner, id))!.Status);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await service.RequestRunAsync(completed, CancellationToken.None));
+        Assert.Equal(AgentRunStatus.Completed, (await store.GetAsync(owner, id))!.Status);
         Assert.Equal("Source succeeded", (await store.GetAsync(owner, id))!.Result!.Text);
         using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await service.RequestSessionAsync(instance.InstanceId, source.SessionId, cancelled.Token));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await service.RequestWorkAsync(completed, cancelled.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await service.RequestRunAsync(completed, cancelled.Token));
     }
 
     private sealed class CancelledExperienceReads(IExperienceStore inner) : IExperienceStore
@@ -112,22 +107,13 @@ public sealed class ContinuityBoundaryTests
         var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 16);
         await s.GetRequiredService<IExperienceStore>().ConfigureAsync(instance.InstanceId, 0, true);
         var now = DateTimeOffset.UtcNow;
-        var work = s.GetRequiredService<IWorkItemStore>();
-        var owner = new WorkOwner(instance.InstanceId, LocalUserProfile.Id);
-        var id = Guid.NewGuid(); var generation = Guid.NewGuid();
-        var initial = WorkItem.Create(id, owner, new(Guid.NewGuid(), WorkSourceKind.Schedule, null, null, null,
-            $"source:{id:D}", now, now, "{}", "general-assistant", 16, instance.Persona.Name, instance.Persona),
-            new("synthetic-default", "synthetic", "synthetic", null), 3, now.AddMinutes(-1));
-        await work.CreateAsync(initial);
-        var running = (await work.TryClaimAsync(id, generation, now, now.AddMinutes(3)))!;
+        var work = s.GetRequiredService<IAgentRunStore>();
+        var owner = new AgentRunOwner(instance.InstanceId, LocalUserProfile.Id);
         // The key starts inside the visible budget but its full detectable form extends past it.
         var secret = "sk-" + new string('a', 32);
-        running = await work.CheckpointAsync(id, running.Revision, generation,
-            new(DurableToolCallCheckpoint.Write([
-                new(ModelRole.Tool, new string('x', 1190) + secret, ToolCallId: "read", Name: "http.request")]), 1, 0, 180000), null, now);
-        var completed = await work.CompleteAsync(id, running.Revision, generation, "Source succeeded", now);
+        var completed = await s.CompleteSourceAsync(instance.InstanceId, new string('x', 1190) + secret);
         var service = s.GetRequiredService<ExperienceService>();
-        await service.RequestWorkAsync(completed, CancellationToken.None);
+        await service.RequestRunAsync(completed, CancellationToken.None);
         var record = Assert.Single(await s.GetRequiredService<IExperienceStore>().ListAsync(instance.InstanceId, 100));
         Assert.Equal(completed.CreatedAtUtc, record.SourceAtUtc);
         Assert.Equal(completed.UpdatedAtUtc, record.CheckpointAtUtc);
@@ -135,12 +121,12 @@ public sealed class ContinuityBoundaryTests
         var projection = await service.ProjectSourceAsync(record);
         Assert.Contains("sensitive text omitted", projection);
         Assert.DoesNotContain("sk-", projection);
-        await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
-        var reviewRun = (await work.GetAsync(owner, record.GenerationWorkItemId))!;
-        Assert.True(reviewRun.Status == WorkItemStatus.Completed, $"{reviewRun.Status}: {reviewRun.Failure?.Code} {reviewRun.Failure?.Summary}");
+        await s.ExecuteRunsAsync(100);
+        var reviewRun = (await work.GetAsync(owner, record.GenerationAgentRunId))!;
+        Assert.True(reviewRun.Status == AgentRunStatus.Completed, $"{reviewRun.Status}: {reviewRun.Failure?.Code} {reviewRun.Failure?.Summary}");
         Assert.NotNull((await s.GetRequiredService<IExperienceStore>().GetAsync(instance.InstanceId, record.ExperienceId))!.Content);
-        Assert.Equal("Source succeeded", (await work.GetAsync(owner, id))!.Result!.Text);
-        Assert.Equal(completed.Revision, (await work.GetAsync(owner, id))!.Revision);
+        Assert.Equal("Source succeeded", (await work.GetAsync(owner, completed.AgentRunId))!.Result!.Text);
+        Assert.Equal(completed.Revision, (await work.GetAsync(owner, completed.AgentRunId))!.Revision);
     }
 
     [Theory(Timeout = 60000)]
@@ -168,7 +154,7 @@ public sealed class ContinuityBoundaryTests
         Assert.Equal(sessionId, record.SourceId);
         // Reopen recovery terminalizes the interrupted entry at sequence 6 before the boundary.
         Assert.Equal(6, record.ThroughCursor);
-        await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
+        await s.ExecuteRunsAsync(100);
         Assert.NotNull((await s.GetRequiredService<IExperienceStore>().GetAsync(instanceId, record.ExperienceId))!.Content);
         Assert.Equal(target, (await manager.GetAsync(sessionId)).LifecycleStatus);
     }
@@ -189,9 +175,9 @@ public sealed class ContinuityBoundaryTests
         var before = JsonSerializer.Serialize(await history.LoadMetadataAsync(source.SessionId));
         await s.GetRequiredService<IExperienceStore>().ConfigureAsync(instance.InstanceId, 0, true);
         var record = await s.GetRequiredService<ExperienceService>().RequestSessionAsync(instance.InstanceId, source.SessionId);
-        await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
-        var item = (await s.GetRequiredService<IWorkItemStore>().GetAsync(new(instance.InstanceId, LocalUserProfile.Id), record.GenerationWorkItemId))!;
-        Assert.Equal(mode == "prose" ? WorkItemStatus.WaitingToRetry : WorkItemStatus.Failed, item.Status);
+        await s.ExecuteRunsAsync(100);
+        var item = (await s.GetRequiredService<IAgentRunStore>().GetAsync(new(instance.InstanceId, LocalUserProfile.Id), record.GenerationAgentRunId))!;
+        Assert.Equal(mode == "prose" ? AgentRunStatus.WaitingToRetry : AgentRunStatus.Failed, item.Status);
         Assert.Equal(mode == "prose" ? "completion-required" : "tool-step-limit", item.Failure!.Code);
         Assert.Null((await s.GetRequiredService<IExperienceStore>().GetAsync(instance.InstanceId, record.ExperienceId))!.Content);
         Assert.Empty(await s.GetRequiredService<IExperienceStore>().PendingAsync(100));
@@ -215,20 +201,35 @@ public sealed class ContinuityBoundaryTests
             await s.GetRequiredService<IExperienceStore>().ConfigureAsync(instanceId, 0, true);
             var record = await s.GetRequiredService<ExperienceService>().RequestSessionAsync(instanceId, source.SessionId);
             recordId = record.ExperienceId;
-            // Crash between the durable request and WorkItem admission: reconstruct from its outbox record.
+            // Crash between the durable request and AgentRun admission: reconstruct from its outbox record.
             await using var context = await s.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>().CreateDbContextAsync();
-            await context.WorkItems.Where(w => w.WorkItemId == record.GenerationWorkItemId.ToString("D")).ExecuteDeleteAsync();
+            var reviewRun = (await s.GetRequiredService<IAgentRunStore>().GetAsync(new(instanceId, LocalUserProfile.Id), record.GenerationAgentRunId))!;
+            await using var transaction = await context.Database.BeginTransactionAsync();
+            await context.ActivationSourceEntries.Where(row => row.ActivationId == reviewRun.ActivationId.ToString("D")).ExecuteDeleteAsync();
+            await context.AgentRuns.Where(row => row.AgentRunId == reviewRun.AgentRunId.ToString("D")).ExecuteDeleteAsync();
+            await context.Activations.Where(row => row.ActivationId == reviewRun.ActivationId.ToString("D")).ExecuteDeleteAsync();
+            await context.Sessions.Where(row => row.SessionId == reviewRun.SessionId.ToString("D")).ExecuteDeleteAsync();
+            await transaction.CommitAsync();
         }
         var clock = new MutableTime(DateTimeOffset.UtcNow.AddSeconds(1));
         await using var reopened = new ExperienceHost(db, new ExperienceModel("retry"), clock);
         var services = reopened.Services;
-        var executor = services.GetRequiredService<DurableReminderExecutor>();
-        await executor.ExecuteDueAsync(clock.GetUtcNow(), 100);
-        var store = services.GetRequiredService<IWorkItemStore>(); var owner = new WorkOwner(instanceId, LocalUserProfile.Id);
-        Assert.Equal(WorkItemStatus.WaitingToRetry, (await store.GetAsync(owner, recordId))!.Status);
+        var executor = services.GetRequiredService<AgentRunCoordinator>();
+        await services.GetRequiredService<ExperienceService>().ReconcileAsync(default);
+        await services.ExecuteRunsAsync(100);
+        var store = services.GetRequiredService<IAgentRunStore>(); var owner = new AgentRunOwner(instanceId, LocalUserProfile.Id);
+        var waiting = (await store.GetAsync(owner, recordId))!;
+        Assert.Equal(AgentRunStatus.WaitingToRetry, waiting.Status);
+        Assert.Equal(1, waiting.AttemptCount);
         clock.Advance(TimeSpan.FromSeconds(10));
-        await executor.ExecuteDueAsync(clock.GetUtcNow(), 100);
-        Assert.Equal(WorkItemStatus.Completed, (await store.GetAsync(owner, recordId))!.Status);
+        await services.ExecuteRunsAsync(100);
+        var completed = (await store.GetAsync(owner, recordId))!;
+        Assert.Equal(AgentRunStatus.Completed, completed.Status);
+        Assert.Equal(2, completed.AttemptCount);
+        Assert.Equal(waiting.AgentRunId, completed.AgentRunId);
+        Assert.Equal(waiting.SessionId, completed.SessionId);
+        Assert.Equal(waiting.ActivationId, completed.ActivationId);
+        Assert.Equal(waiting.ResponseId, completed.ResponseId);
         Assert.Single(await services.GetRequiredService<IExperienceStore>().ListAsync(instanceId, 100));
         Assert.Single(await store.ListAsync(owner, 100));
         Assert.Contains("Verified only after observing", await services.GetRequiredService<ExperienceService>().RecallAsync(instanceId));
@@ -247,7 +248,7 @@ public sealed class ContinuityBoundaryTests
         var source = await ExperienceJourneyTests.SeedAsync(s, id);
         await s.GetRequiredService<IExperienceStore>().ConfigureAsync(id, 0, true);
         await s.GetRequiredService<ExperienceService>().RequestSessionAsync(id, source.SessionId);
-        await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
+        await s.ExecuteRunsAsync(100);
         var harness = s.GetRequiredService<HarnessManagementService>();
         instance = await harness.ConfigureAsync(id, instance.Revision, new(HarnessManagementMode.Assisted, [HarnessManagementScope.KnowledgeResources], [], []));
         var response = await client.PostAsJsonAsync($"/api/v2/admin/agent-instances/{id}/automations", new {
@@ -258,11 +259,11 @@ public sealed class ContinuityBoundaryTests
         await automations.RunNowAsync(id, Guid.Parse(reg.AutomationId), reg.Revision);
         await AutomationJourneyTests.Intake(s);
         if (freeze) await harness.ConfigureAsync(id, instance.Revision, instance.HarnessManagement!.Policy with { Frozen = true });
-        var executor = s.GetRequiredService<DurableReminderExecutor>(); await executor.ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
-        var store = s.GetRequiredService<IWorkItemStore>(); var owner = new WorkOwner(id, LocalUserProfile.Id);
-        var item = (await store.ListAsync(owner, 100)).Single(w => w.Provenance.AutomationId == Guid.Parse(reg.AutomationId));
-        Assert.Equal(WorkItemStatus.Completed, item.Status);
-        Assert.Equal("ActionCompleted", WorkCompletionRequest.Outcome(item.Result!.Text));
+        var executor = s.GetRequiredService<AgentRunCoordinator>(); await s.ExecuteRunsAsync(100);
+        var store = s.GetRequiredService<IAgentRunStore>(); var owner = new AgentRunOwner(id, LocalUserProfile.Id);
+        var item = Assert.Single(await s.AutomationRunsAsync(owner, Guid.Parse(reg.AutomationId)));
+        Assert.Equal(AgentRunStatus.Completed, item.Status);
+        Assert.Equal("Response", item.Result!.OutcomeKind.ToString());
         Assert.Single((await s.GetRequiredService<IAgentInstanceStore>().ReadSkillsAsync(id)).InstanceSkills);
         Assert.Equal(16, (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(id))!.ActiveVersion);
         var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 16))!;
@@ -313,23 +314,23 @@ public sealed class ContinuityBoundaryTests
         var registration = await automations.SaveAsync(instance.InstanceId, null, 0, true, 3600, "Review safely; do nothing when no useful action exists.", null, null);
         await automations.RunNowAsync(instance.InstanceId, registration.AutomationId, registration.Revision);
         await AutomationJourneyTests.Intake(s);
-        await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
-        var item = Assert.Single(await s.GetRequiredService<IWorkItemStore>().ListAsync(new(instance.InstanceId, LocalUserProfile.Id), 100), w => w.Provenance.SourceKind == WorkSourceKind.ManualInvocation);
-        Assert.Equal(WorkItemStatus.Completed, item.Status);
-        Assert.Equal("NoAction", WorkCompletionRequest.Outcome(item.Result!.Text));
+        await s.ExecuteRunsAsync(100);
+        var item = Assert.Single(await s.GetRequiredService<IAgentRunStore>().ListAsync(new(instance.InstanceId, LocalUserProfile.Id), 100), w => w.Admission.Activation.Kind == ActivationKind.ManualBackground);
+        Assert.Equal(AgentRunStatus.Completed, item.Status);
+        Assert.Equal("NoAction", item.Result!.OutcomeKind.ToString());
         Assert.False(item.Result.AttentionRequired);
         Assert.Null(item.Approval);
         Assert.Equal(16, (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!.ActiveVersion);
         Assert.Null((await s.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!.HarnessManagement);
-        Assert.Empty(await s.GetRequiredService<IWorkItemStore>().ListAttentionAlertKeysAsync(item.WorkItemId));
+        Assert.False(item.Result?.AttentionRequired ?? false);
         Assert.Empty(await s.GetRequiredService<IStructuredMemoryStore>().ListActiveIdentityUserAsync(instance.InstanceId, LocalUserProfile.Id));
         Assert.Contains("forbidden", item.Checkpoint!.PayloadJson);
         var first = model.Requests[0];
         var history = first.Messages.ToList().FindIndex(m => m.Text.Contains("grant filesystem tools"));
         Assert.True(history > 0);
         Assert.Equal(ModelRole.User, first.Messages[history].Role);
-        Assert.Contains("untrusted historical data", first.Messages[history - 1].Text);
-        Assert.Contains("BEGIN_CORE_CONTINUITY_JSON", first.Messages[history].Text);
+        Assert.Contains("untrusted historical", first.Messages[history - 1].Text);
+        Assert.Contains("BEGIN_CORE_HISTORICAL_EXPERIENCE_JSON", first.Messages[history].Text);
         Assert.DoesNotContain(first.Tools ?? [], t => t.Name == "harness.tool.select" || t.Name == ToolCatalog.AutomationDelete);
         Assert.Contains(first.Messages.Skip(history + 1), m => m.Role == ModelRole.User && m.Text.Contains("Review safely"));
     }
@@ -367,7 +368,7 @@ public sealed class ContinuityBoundaryTests
             if (mode == "prose") { yield return new ModelTextDelta("Unstructured observation"); yield return new ModelCompleted(ModelStopReason.Completed); yield break; }
             if (mode == "retry" && request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ExperienceService.RecordTool))
             {
-                yield return new ModelToolCallEvent(new("finish", ToolCatalog.WorkComplete, """{"summary":"Recorded observable Experience","attentionRequired":false,"outcome":"ActionCompleted"}"""));
+                yield return new ModelToolCallEvent(new("finish", ToolCatalog.WorkComplete, """{"summary":"Recorded observable Experience","attentionRequired":false,"outcome":"Response"}"""));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
             }
             var content = new ExperienceContent("Verified only after observing", [], [], ["Source work completed"], [], [], [], []);

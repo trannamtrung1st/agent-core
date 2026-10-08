@@ -35,7 +35,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     const before = await page.locator('.chat-message-assistant').count();
     await page.getByLabel('Message', { exact: true }).fill(text);
     await page.getByRole('button', { name: 'Send', exact: true }).click();
-    await expect(page.locator('.chat-message-assistant')).toHaveCount(before + 1);
+    await expect(page.locator('.chat-message-assistant')).toHaveCount(before + 1, { timeout: 30_000 });
     await expect(page.locator('.assistant-body').last()).toHaveText(answer, { timeout: 30_000 });
     await waitForResponseSettled(page);
   }
@@ -213,8 +213,8 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await expect(automations.getByText(/Completed · No action/).first()).toBeVisible({ timeout: 30_000 });
     await automations.getByRole('button', { name: 'View last run: Atlas follow-up review', exact: true }).click();
     const work = page.getByRole('dialog', { name: 'Run details', exact: true });
-    await expect(work.getByText('Atlas follow-up review', { exact: true })).toBeVisible();
-    await work.getByRole('button', { name: 'View automation', exact: true }).click();
+    await expect(work.locator('.agent-run-details').getByText('No action', { exact: true })).toBeVisible();
+    await work.getByRole('button', { name: 'View Automation', exact: true }).click();
     await automations.getByRole('button', { name: 'Disable automation', exact: true }).click();
     const ownerHeaders = await headers(page);
     const profile = await (await page.request.get('/api/v2/profile', { headers: ownerHeaders })).json();
@@ -240,15 +240,15 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await automations.getByRole('button', { name: 'Run automation now', exact: true }).click();
     await expect(automations.getByText(/Completed · Needs attention/).first()).toBeVisible({ timeout: 30_000 });
     await automations.getByRole('button', { name: 'View last run: Call John', exact: true }).click();
-    await expect(work.locator('.background-work-metadata').getByText('Needs attention', { exact: true })).toBeVisible();
-    await work.getByRole('button', { name: 'View automation', exact: true }).click();
+    await expect(work.getByRole('region', { name: 'Needs attention', exact: true })).toContainText("An unresolved checkpoint needs the owner's attention.");
+    await work.getByRole('button', { name: 'View Automation', exact: true }).click();
     await automations.getByRole('button', { name: 'Delete automation', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Delete automation', exact: true }).click();
     await expect(automations.getByRole('button', { name: 'View automation: Call John', exact: true })).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     const rows = (await (await page.request.get(`/api/v2/admin/agent-instances/${instanceId}/automations`, { headers: ownerHeaders })).json()).items;
     expect(rows[0].authorizationOrigin).toBe('AdminOwner'); expect(rows[0].status).toBe('Disabled');
-    expect(rows[0].trigger.schedule.maxOccurrences).toBe(5); expect(rows[0].lastWorkItemId).toBeTruthy();
+    expect(rows[0].trigger.schedule.maxOccurrences).toBe(5); expect(rows[0].lastAgentRunId).toBeTruthy();
   });
 
   test('uses the configured browser for observed record lookup and keeps progress separate from the answer', async ({ page }) => {

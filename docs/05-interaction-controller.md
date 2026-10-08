@@ -170,11 +170,11 @@ Managed chat create uses `agentInstanceId`; Session Runtime pins the active defi
 
 ## P6 detached work (observed)
 
-Durable work does not keep a Session Runtime attached and does not change live turn-taking, interruption, or the microphone-during-playback rule. A due occurrence still prefers one compatible live runtime. When none exists, durable intake accepts the occurrence as a WorkItem and `DurableWorkHostedService` runs it without a browser or SignalR connection, on a cadence separate from P5 scheduling and routing. Approval and cancellation for that work happen in Background Work, not on the live response mailbox. See [P6 freeze candidate](reports/p6-freeze-candidate.md).
+Headless work uses the same Session Runtime mailbox and preserves live turn-taking, interruption and full-duplex microphone behavior. Authored Automation occurrences create separate background Sessions. Native occurrences may select one compatible live Session; receipts pin that target and settle quiet evaluation or atomically admit a speaking AgentRun. Shared coordinator dispatch never creates competing mutable Session owners. Background history exposes exact approval and cancellation controls.
 
 ## P7 accepted conversational execution durability
 
-An Accepted text turn means the user entry and its `ConversationTurnExecution` ownership are durable. SignalR detach stops browser-dependent input/playback delivery but does not supersede accepted user execution. Detach grace may retain the live attachment experience; after grace the same accepted work continues headlessly, while initiative remains blocked. Idle detach with no accepted work keeps the existing disconnected pause behavior.
+An Accepted text turn means the user entry and its pending AgentRun input intent are durable. SignalR detach stops browser-dependent input/playback delivery but does not supersede accepted user execution. Detach grace may retain the live attachment experience; after grace the same accepted work continues headlessly, while initiative remains blocked. Idle detach with no accepted work keeps the existing disconnected pause behavior.
 
 Durable worker dispatch preserves an existing live Runtime’s transport state. Only a newly created silent Runtime is explicitly marked headless; dispatching accepted work into an attached Runtime cannot disable normal post-response compaction or completion checks.
 

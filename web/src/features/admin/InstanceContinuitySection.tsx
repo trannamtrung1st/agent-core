@@ -1,16 +1,19 @@
 import { AdminErrorNotice } from "./adminFailure";
 import { useCallback, useEffect, useRef, useState, type Key } from "react";
-import { Alert, App, Button, Descriptions, Empty, Flex, Form, Spin, Switch, Table, Tag, Typography, theme } from "antd";
+import { Alert, App, Button, Descriptions, Drawer, Empty, Flex, Form, Spin, Switch, Table, Tag, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
-import { drawerPageSearch, type DrawerPageQuery, type WorkItem, type WorkItemResult } from "../../services/api";
+import { getInstanceAgentRun, listInstanceAgentRuns, type AgentRun } from "../../services/api";
 import { instanceContinuityRequest as request, type IdentityMaintenanceSettings, type ExperienceItem, type ExperienceReview } from "../../services/adminApi";
-import { BackgroundWorkDrawer } from "../chat/BackgroundWorkDrawer";
+import { AgentRunDetails, AgentRunStatus } from "../chat/AgentRunDetails";
+import { useCursorPages } from "../chat/useCursorPages";
+import { DrawerListFooter } from "../chat/DrawerListFooter";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 
 import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 
-import { type RunSource } from "../chat/runPresentation";
+import { runActivationLabel, type RunSource } from "../chat/runPresentation";
+import { formatChatTime } from "../chat/chatTime";
 import { AdminSessionPicker } from "./AdminSessionPicker";
 
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : "Not yet";
@@ -22,24 +25,46 @@ function useResponseOrder() {
   return order;
 }
 
-const loadInstanceWork = async (id: string, query?: DrawerPageQuery) =>
-  (await request<{ items: WorkItem[] }>(id, `work-items${drawerPageSearch(query)}`)).items;
-const loadInstanceWorkResult = (id: string, workId: string) =>
-  request<WorkItemResult>(id, `work-items/${workId}/result`);
-
-const loadInstanceWorkItem = (id: string, workId: string) => request<WorkItem>(id, `work-items/${workId}`);
-export function InstanceRunsSection({ instanceId, open, wide = true, inline = false, selectedWorkItemId, onClose, onSource, onRun, detailsOnly, afterClose }: {
-  instanceId: string; open: boolean; wide?: boolean; inline?: boolean; selectedWorkItemId?: string; onClose: () => void;
-  onSource?: (source: RunSource) => void;
-  onRun?: (workId: string) => void; detailsOnly?: boolean; afterClose?: () => void;
+export function InstanceRunsSection({ instanceId, open, wide = true, inline = false, selectedAgentRunId, onClose, onSource, onRun, detailsOnly, afterClose }: {
+  instanceId: string; open: boolean; wide?: boolean; inline?: boolean; selectedAgentRunId?: string; onClose: () => void;
+  onSource?: (source: RunSource) => void; onRun?: (runId: string) => void; detailsOnly?: boolean; afterClose?: () => void;
 }) {
-  return <BackgroundWorkDrawer sessionId={instanceId} open={open} wide={wide} inline={inline} selectedWorkItemId={selectedWorkItemId}
-    onClose={onClose} onSource={onSource} onRun={onRun} detailsOnly={detailsOnly} afterClose={afterClose} load={loadInstanceWork} loadOne={loadInstanceWorkItem} loadResult={loadInstanceWorkResult}
-    cancel={(id, workId, expectedRevision) => request<WorkItem>(id, `work-items/${workId}/cancel`, "POST", { expectedRevision })}
-    approve={(id, workId, approvalId, expectedRevision, expectedApprovalRevision, actionHash) => request<WorkItem>(id,
-      `work-items/${workId}/approvals/${approvalId}/approve`, "POST", { expectedRevision, expectedApprovalRevision, actionHash })}
-    reject={(id, workId, approvalId, expectedRevision, expectedApprovalRevision, actionHash) => request<WorkItem>(id,
-      `work-items/${workId}/approvals/${approvalId}/reject`, "POST", { expectedRevision, expectedApprovalRevision, actionHash })} />;
+  const { token } = theme.useToken();
+  const page = useCursorPages(instanceId, open && !detailsOnly, listInstanceAgentRuns);
+  const [selected, setSelected] = useState<AgentRun | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let current = true; let generation = 0; setSelected(null); setError(null);
+    async function refresh() {
+      if (!open || !selectedAgentRunId) return;
+      const request = ++generation;
+      try { const row = await getInstanceAgentRun(instanceId, selectedAgentRunId);
+        if (current && request === generation) { setSelected(prior => prior && prior.revision > row.revision ? prior : row); setError(null); }
+      } catch (reason) { if (current && request === generation) setError(reason instanceof Error ? reason.message : "Unable to load this run. Return to Runs and try again."); }
+    }
+    void refresh(); const timer = window.setInterval(() => void refresh(), 5_000);
+    return () => { current = false; generation++; window.clearInterval(timer); };
+  }, [instanceId, selectedAgentRunId, open]);
+  const content = detailsOnly ? <Flex vertical gap={token.padding}>
+    {selected?.automationId ? <Button onClick={() => onSource?.({ kind: "automation", automationId: selected.automationId! })}>View Automation</Button>
+      : selected?.experienceId ? <Button onClick={() => onSource?.({ kind: "experience", agentRunId: selected.agentRunId })}>View Experience</Button> : null}
+    {error ? <Alert type="error" showIcon title={error} /> : selected ? <AgentRunDetails run={selected} onChange={setSelected} /> : <Spin aria-label="Loading run details" />}
+  </Flex> : <Flex vertical gap={token.padding}>
+    {page.error ? <Alert type="error" showIcon title={page.error} /> : null}
+    <Table<AgentRun> aria-label="Runs table" className="admin-collection-table" size="small" rowKey="agentRunId"
+      loading={page.loading} dataSource={page.items} pagination={false} scroll={{ x: 850 }}
+      locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No runs yet. Runs appear when this Agent takes a turn." /> }}
+      columns={[
+        { title: "Run", key: "run", width: 320, render: (_, row) => <Button type="link" className="admin-collection-name" onClick={() => onRun?.(row.agentRunId)}>{row.agentRunId}</Button> },
+        { title: "Turn", dataIndex: "activationKind", key: "kind", width: 180, render: (value: string) => runActivationLabel(value) },
+        { title: "Status", key: "status", width: 150, render: (_, row) => <AgentRunStatus run={row} /> },
+        { title: "Updated", key: "updated", width: 200, render: (_, row) => <time dateTime={row.updatedAt}>{formatChatTime(row.updatedAt) ?? "Unknown time"}</time> }
+      ]} />
+    <DrawerListFooter loadingMore={page.loadingMore} hasMore={page.hasMore} error={page.error} count={page.items.length} onLoadMore={() => void page.loadMore()} onRetry={() => void page.retry()} />
+  </Flex>;
+  if (inline) return <section aria-label="Runs">{content}</section>;
+  return <Drawer title={detailsOnly ? "Run details" : "Runs"} open={open} onClose={onClose} className="background-work-drawer"
+    size={wide ? "min(640px, 100vw)" : "100vw"} afterOpenChange={visible => { if (!visible) afterClose?.(); }}>{content}</Drawer>;
 }
 
 function Failure({ error, reload }: { error: AdminFailureNotice | null; reload: () => void }) {
@@ -90,7 +115,7 @@ export function IdentityMaintenanceSection({ instanceId }: { instanceId: string 
   </section>;
 }
 
-export type ExperienceSelection = { workItemId: string; request: number };
+export type ExperienceSelection = { agentRunId: string; request: number };
 export function ExperienceSection({ instanceId, onWork, selection, active = true }: { instanceId: string; active?: boolean; onWork: (workId?: string) => void; selection?: ExperienceSelection }) {
   const { token } = theme.useToken();
   const { modal } = App.useApp();
@@ -105,7 +130,7 @@ export function ExperienceSection({ instanceId, onWork, selection, active = true
   const appliedSelection = useRef<ExperienceSelection | undefined>(undefined);
   useEffect(() => {
     if (!selection || appliedSelection.current === selection) return;
-    const item = review?.items.find(item => item.generationWorkItemId === selection.workItemId);
+    const item = review?.items.find(item => item.generationAgentRunId === selection.agentRunId);
     if (!item) return;
     appliedSelection.current = selection;
     setSearch(""); setExpanded([item.experienceId]); setTableVersion(value => value + 1);
@@ -113,7 +138,7 @@ export function ExperienceSection({ instanceId, onWork, selection, active = true
   useEffect(() => {
     if (!selection) return;
     const frame = requestAnimationFrame(() => {
-      const button = document.querySelector<HTMLButtonElement>(`[data-experience-generation-id="${selection.workItemId}"]`);
+      const button = document.querySelector<HTMLButtonElement>(`[data-experience-generation-id="${selection.agentRunId}"]`);
       button?.scrollIntoView({ block: "nearest" });
       const table = button?.closest(".ant-table-content"); if (table) table.scrollLeft = 0;
       button?.focus({ preventScroll: true });
@@ -158,7 +183,7 @@ export function ExperienceSection({ instanceId, onWork, selection, active = true
       <Typography.Text type="secondary">Derived observations about past work, kept separately from learned memory.</Typography.Text></div>
     <div className="admin-definition-panel-body"><Flex vertical gap={token.padding}>
       {loading ? <Spin aria-label="Loading experience" /> : null}
-      {selection && !loading && !error && review && !review.items.some(item => item.generationWorkItemId === selection.workItemId) ? <Alert type="info" showIcon title="This experience checkpoint is not available in the current records" description="It may have been deleted or be outside the bounded review. Its run remains available in Runs." /> : null}
+      {selection && !loading && !error && review && !review.items.some(item => item.generationAgentRunId === selection.agentRunId) ? <Alert type="info" showIcon title="This experience checkpoint is not available in the current records" description="It may have been deleted or be outside the bounded review. Its run remains available in Runs." /> : null}
       <Failure error={error} reload={() => void reload()} />
       {review ? <>
         <Flex wrap align="center" gap={token.paddingXS}><Switch aria-label="Enable experience" checked={review.enabled} disabled={busy}
@@ -189,7 +214,7 @@ export function ExperienceSection({ instanceId, onWork, selection, active = true
           columns={[
             { title: "Goal", key: "goal", width: 350, ellipsis: true,
               render: (_, item) => <Button type="link" size="small" className="admin-collection-name" title={experienceGoal(item)}
-                data-experience-generation-id={item.generationWorkItemId} aria-label={`View experience: ${experienceGoal(item)}`} aria-expanded={expanded.includes(item.experienceId)}
+                data-experience-generation-id={item.generationAgentRunId} aria-label={`View experience: ${experienceGoal(item)}`} aria-expanded={expanded.includes(item.experienceId)}
                 onClick={() => setExpanded(expanded.includes(item.experienceId) ? [] : [item.experienceId])}>{experienceGoal(item)}</Button> },
             { title: "Status", dataIndex: "status", width: 120,
               filters: [...new Set(review.items.map(item => item.status))].map(value => ({ text: value, value })),
@@ -200,18 +225,18 @@ export function ExperienceSection({ instanceId, onWork, selection, active = true
               onFilter: (value, item) => experienceContext(item) === value,
               render: (_, item) => <Tag>{experienceContext(item)}</Tag> },
             { title: "Source", dataIndex: "sourceKind", width: 150,
-              filters: [{ text: "Session", value: "Session" }, { text: "Background work", value: "WorkItem" }, { text: "Consolidated", value: "Consolidation" }],
+              filters: [{ text: "Session", value: "Session" }, { text: "Background work", value: "AgentRun" }, { text: "Consolidated", value: "Consolidation" }],
               onFilter: (value, item) => item.sourceKind === value,
               render: (kind: string) => kind === "Consolidation" ? "Consolidated" : kind === "Session" ? "Session" : "Background work" },
             { title: "Checkpoint captured", key: "checkpointAt", width: 220, defaultSortOrder: "descend",
-              sorter: (a, b) => Number(a.generationWorkItemId === selection?.workItemId) - Number(b.generationWorkItemId === selection?.workItemId) || (a.checkpointAt ?? a.sourceCreatedAt ?? a.sourceAt).localeCompare(b.checkpointAt ?? b.sourceCreatedAt ?? b.sourceAt),
+              sorter: (a, b) => Number(a.generationAgentRunId === selection?.agentRunId) - Number(b.generationAgentRunId === selection?.agentRunId) || (a.checkpointAt ?? a.sourceCreatedAt ?? a.sourceAt).localeCompare(b.checkpointAt ?? b.sourceCreatedAt ?? b.sourceAt),
               render: (_, item) => item.checkpointAt ? date(item.checkpointAt) : <Typography.Text type="secondary" title={`Source created: ${date(item.sourceCreatedAt ?? item.sourceAt)}`}>Not recorded</Typography.Text> }
           ]}
           expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, item) => setExpanded(open ? [item.experienceId] : []),
             expandedRowRender: item => <Flex vertical gap={token.padding} style={{ whiteSpace: "normal" }}>
               <ExperienceDetails item={item} />
               <Flex wrap align="center" justify="space-between" gap={token.padding}>
-                {item.generationWorkItemId !== "00000000-0000-0000-0000-000000000000" ? <Button onClick={() => onWork(item.generationWorkItemId)}>View generation run</Button> : null}
+                {item.generationAgentRunId !== "00000000-0000-0000-0000-000000000000" ? <Button onClick={() => onWork(item.generationAgentRunId)}>View generation run</Button> : null}
                 <Flex wrap gap={token.paddingXS}>
                   <Button disabled={busy || item.visibility === "Superseded" || item.visibility === "Deleted"} onClick={() => void mutate(`experience/${item.experienceId}`, "PUT", { expectedRevision: item.revision, visibility: item.visibility === "Suppressed" ? "Eligible" : "Suppressed" })}>
                     {item.visibility === "Suppressed" ? "Include in context" : "Suppress experience"}</Button>

@@ -1,3 +1,4 @@
+using SkiaSharp;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using AgentCore.Contracts.Http;
@@ -5,9 +6,6 @@ using AgentCore.Contracts.Realtime;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Png;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace AgentCore.Api.Tests;
 
@@ -147,9 +145,10 @@ public sealed class VisionCapabilityAdmissionTests : IClassFixture<AgentCoreApiF
 
     private static byte[] MinimalPng()
     {
-        using var image = new Image<Rgba32>(2, 2);
+        using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        image.Save(buffer, new PngEncoder());
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 90);
+        encoded.SaveTo(buffer);
         return buffer.ToArray();
     }
 }

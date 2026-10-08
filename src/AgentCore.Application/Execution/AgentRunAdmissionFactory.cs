@@ -1,14 +1,47 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Triggers;
+using AgentCore.Application.Tools;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Triggers;
 
 namespace AgentCore.Application.Execution;
 
 /// <summary>Freezes one effective model turn; the caller commits its input graph through IAgentRunStore.</summary>
 public static class AgentRunAdmissionFactory
 {
+    public sealed record SignalInput(TriggerKind TriggerKind, string? Text, string? EnvironmentKind);
+
+    public static AgentRun ForAdmittedSignal(Guid activationId, Guid runId, Guid responseId, SessionSnapshot snapshot,
+        AgentTrigger trigger, DateTimeOffset atUtc, IReadOnlyList<EffectiveSkill> catalog, ExecutionModelPin? occurrenceModel = null)
+    {
+        var kind = trigger.Kind switch
+        {
+            TriggerKind.ScheduledOccurrence => ActivationKind.ScheduledWork,
+            TriggerKind.ApplicationEvent => ActivationKind.ApplicationEvent,
+            TriggerKind.ManualInvocation => ActivationKind.ManualBackground,
+            _ => ActivationKind.Initiative
+        };
+        var activation = new Activation(activationId, snapshot.SessionId, kind, [], trigger.EventId,
+            ToolResources.IsOccurrence(trigger.Kind) ? trigger.EventId : null, null, null,
+            $"signal:{trigger.EventId:D}", atUtc, JsonSerializer.Serialize(new SignalInput(trigger.Kind, trigger.Text, trigger.EnvironmentKind)));
+        var model = occurrenceModel is { } pin
+            ? new AgentRunModelPin(pin.CatalogKey, pin.ProviderAlias, pin.ModelId, pin.ReasoningEffort)
+            : snapshot.ModelSelection is { } selection
+                ? new AgentRunModelPin(selection.CatalogKey, selection.ProviderAlias, selection.ModelId, selection.ReasoningEffort)
+                : throw AgentCoreErrors.Validation("AgentRun requires a resolved model.");
+        return AgentRun.Create(runId, new(snapshot.AgentInstanceId, snapshot.ProfileId
+            ?? throw AgentCoreErrors.Validation("AgentRun requires a trusted profile.")),
+            new(activation, snapshot.Definition.Id, snapshot.Definition.Version,
+                snapshot.PinnedPersona ?? throw AgentCoreErrors.Validation("AgentRun requires a pinned persona."), responseId),
+            model, AgentRunLimits.DefaultMaxAttempts, atUtc, catalog,
+            catalog.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
+    }
+
     public static AgentRun ForAcceptedUserBatch(Guid activationId, Guid agentRunId, Guid responseId,
         SessionSnapshot snapshot, IReadOnlyList<ConversationEntry> users, DateTimeOffset admittedAtUtc,
         IReadOnlyList<EffectiveSkill> catalog)

@@ -11,7 +11,7 @@ public sealed class PinnedPersonaRevisionMigrationTests
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-01-06T00:00:00Z");
 
     [Fact]
-    public async Task Upgrade_preserves_legacy_session_with_null_pinned_persona_revision()
+    public async Task Startup_rejects_legacy_schema_without_rewriting_pinned_persona_data()
     {
         var path = Path.Combine(Path.GetTempPath(), $"agent-core-pin-rev-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
@@ -24,16 +24,13 @@ public sealed class PinnedPersonaRevisionMigrationTests
                 LegacySession(sessionId),
                 MigrationSessionSeed.PrePinnedPersonaRevisionMigrationId);
 
-            await using (var db = await factory.CreateDbContextAsync())
-            {
-                await db.Database.MigrateAsync();
-            }
-
-            var memory = new SqliteMemoryStore(factory, TimeProvider.System);
-            var loaded = await memory.LoadAsync(sessionId);
-            Assert.NotNull(loaded);
-            Assert.Null(loaded!.PinnedPersonaRevision);
-            Assert.Contains("legacy-pin-marker", loaded.Definition.SystemInstructions, StringComparison.Ordinal);
+            var error = await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(() =>
+                new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync().AsTask());
+            Assert.Contains("reset", error.Message, StringComparison.OrdinalIgnoreCase);
+            await using var verify = await factory.CreateDbContextAsync();
+            var json = await verify.Database.SqlQuery<string>($"SELECT DefinitionJson AS Value FROM Sessions WHERE SessionId = {sessionId.ToString("D")}").SingleAsync();
+            Assert.Contains("legacy-pin-marker", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("20261008063000_RetireLegacyExecution", await verify.Database.GetAppliedMigrationsAsync());
         }
         finally
         {

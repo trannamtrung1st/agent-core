@@ -398,7 +398,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                 }
 
                 var hasOpenConversationExecution = await live.Runtime
-                    .HasOpenConversationExecutionsAsync(cancellationToken)
+                    .HasOpenAgentRunsAsync(cancellationToken)
                     .ConfigureAwait(false);
                 if (!hasOpenConversationExecution)
                 {
@@ -532,7 +532,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                 && current.AttachmentId == attachmentId
                 && string.Equals(current.ConnectionId, connectionId, StringComparison.Ordinal))
             {
-                if (!await live.Runtime.HasOpenConversationExecutionsAsync().ConfigureAwait(false))
+                if (!await live.Runtime.HasOpenAgentRunsAsync().ConfigureAwait(false))
                 {
                     await live.Runtime.RefreshDurableConversationProjectionAsync().ConfigureAwait(false);
                     return;
@@ -861,32 +861,34 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
     private async Task FinalizeDetachedSessionAsync(Guid sessionId, Live live)
     {
-        if (!_live.TryGetValue(sessionId, out var current) || !ReferenceEquals(current, live))
+        CancellationTokenSource? finalizeCts = null;
+        await live.Admission.WaitAsync().ConfigureAwait(false);
+        try
         {
-            return;
-        }
+            if (!_live.TryGetValue(sessionId, out var current) || !ReferenceEquals(current, live)
+                || live.ConnectionId is not null) return;
 
-        if (live.ConnectionId is not null)
-        {
-            return;
-        }
-
-        if (await live.Runtime.HasAcceptedConversationWorkAsync().ConfigureAwait(false)
-            || await live.Runtime.HasOpenConversationExecutionsAsync().ConfigureAwait(false))
-        {
-            live.CancelHeadlessFinalize();
-            var finalizeCts = new CancellationTokenSource();
-            live.SetHeadlessFinalizeCts(finalizeCts);
-            try
+            if (await live.Runtime.HasAcceptedConversationWorkAsync().ConfigureAwait(false)
+                || await live.Runtime.HasOpenAgentRunsAsync().ConfigureAwait(false))
             {
-                await live.Runtime.TransportDetachAsync().ConfigureAwait(false);
+                live.CancelHeadlessFinalize();
+                finalizeCts = new CancellationTokenSource();
+                live.SetHeadlessFinalizeCts(finalizeCts);
+                try
+                {
+                    await live.Runtime.TransportDetachAsync().ConfigureAwait(false);
+                }
+                catch (AgentCoreException)
+                {
+                    finalizeCts.Dispose();
+                    return;
+                }
             }
-            catch (AgentCoreException)
-            {
-                finalizeCts.Dispose();
-                return;
-            }
+        }
+        finally { live.Admission.Release(); }
 
+        if (finalizeCts is not null)
+        {
             _ = WaitForAcceptedWorkThenFinalizeAsync(sessionId, live, finalizeCts);
             return;
         }
@@ -915,24 +917,26 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
     private async Task ExtractAndShutdownDetachedAsync(Guid sessionId, Live live)
     {
-        Live? extracted;
-        lock (_gate)
+        Live? extracted = null;
+        // Admission and extraction share this gate. A completed wait belongs to the
+        // preceding attempt; it cannot revoke work admitted after that wait settled.
+        await live.Admission.WaitAsync().ConfigureAwait(false);
+        try
         {
-            if (!_live.TryGetValue(sessionId, out var current)
-                || !ReferenceEquals(current, live)
-                || live.ConnectionId is not null)
+            if (!_live.TryGetValue(sessionId, out var owner) || !ReferenceEquals(owner, live)
+                || live.ConnectionId is not null) return;
+            if (await live.Runtime.HasAcceptedConversationWorkAsync().ConfigureAwait(false)) return;
+            lock (_gate)
             {
-                return;
+                if (!_live.TryGetValue(sessionId, out var current)
+                    || !ReferenceEquals(current, live)
+                    || live.ConnectionId is not null) return;
+                extracted = ExtractLive(sessionId, connectionId: null, admissionHeld: true);
             }
-
-            extracted = ExtractLive(sessionId, connectionId: null);
         }
+        finally { live.Admission.Release(); }
 
-        if (extracted is null)
-        {
-            return;
-        }
-
+        if (extracted is null) return;
         using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         await ShutdownLiveAsync(extracted, sessionId, detachRuntime: true, joinDispatcher: true, budget.Token)
             .ConfigureAwait(false);
@@ -1030,7 +1034,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         }
     }
 
-    private Live? ExtractLive(Guid sessionId, string? connectionId)
+    private Live? ExtractLive(Guid sessionId, string? connectionId, bool admissionHeld = false)
     {
         Live? found;
         lock (_gate)
@@ -1043,7 +1047,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             return null;
         }
 
-        found.Admission.Wait();
+        if (!admissionHeld) found.Admission.Wait();
         try
         {
             if (connectionId is not null
@@ -1086,7 +1090,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         }
         finally
         {
-            found.Admission.Release();
+            if (!admissionHeld) found.Admission.Release();
         }
     }
 
@@ -2528,7 +2532,7 @@ public static class SessionEventMapper
                 ["entryId"] = started.EntryId.ToString(),
                 ["entrySequence"] = started.EntrySequence,
                 ["trigger"] = ToTrigger(started.Trigger),
-                ["conversationExecutionId"] = started.ConversationExecutionId?.ToString()
+                ["agentRunId"] = started.AgentRunId?.ToString()
             }),
             TextDeltaOutput delta => ("agent.text.delta", new Dictionary<string, object?>
             {
@@ -2613,6 +2617,7 @@ public static class SessionEventMapper
                 ["reason"] = intent.Reason,
                 ["advisory"] = intent.Advisory
             }),
+            HistoryEntryRemovedOutput removed => ("session.entry.removed", new Dictionary<string, object?> { ["entryId"] = removed.EntryId.ToString() }),
             HistoryEntryUpsertOutput entry => ("session.entry.upsert", HistoryItem(entry.Entry)),
             ResponseProgressOutput progress => ("agent.progress", new Dictionary<string, object?>
             {
@@ -2713,7 +2718,7 @@ public static class SessionEventMapper
             ["pendingMode"] = ready.PendingMode is { } pending ? HttpMapping.ToMode(pending) : null,
             ["status"] = HttpMapping.ToStatus(ready.Status),
             ["outputState"] = ToOutput(ready.OutputActivity),
-            ["conversationExecutionId"] = ready.ConversationExecutionId?.ToString(),
+            ["agentRunId"] = ready.AgentRunId?.ToString(),
             ["lifecycleStatus"] = LifecycleTransition.ToWire(ready.LifecycleStatus),
             ["agent"] = new Dictionary<string, object?>
             {

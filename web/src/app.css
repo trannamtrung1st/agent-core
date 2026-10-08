@@ -628,6 +628,21 @@ body,
   min-width: 0;
 }
 
+.background-work-item-title.ant-btn {
+  height: auto;
+  min-height: 32px;
+  max-width: 100%;
+  justify-content: flex-start;
+  padding: var(--ac-space-compact);
+  white-space: normal;
+  text-align: start;
+  font-weight: 600;
+}
+
+.background-work-item-title > span {
+  overflow-wrap: anywhere;
+}
+
 .background-work-metadata dd {
   margin: 0;
   overflow-wrap: anywhere;
@@ -1480,6 +1495,7 @@ body,
   }
 
   .admin-run-source.ant-btn,
+  .background-work-drawer .ant-btn,
   .background-work-actions .ant-btn,
   .background-work-attention .ant-btn,
   .background-work-read-all.ant-btn,
@@ -2538,10 +2554,9 @@ body,
 
 .admin-run-row { cursor: pointer; }
 
-.run-details-drawer .background-work-item {
-  padding: 0;
-  border: 0;
-  outline: none;
+.agent-run-history-item + .agent-run-history-item {
+  padding-block-start: var(--ac-space-section);
+  border-block-start: 1px solid var(--ac-color-border);
 }
 
 /* Product text controls keep one visible keyboard focus policy. */

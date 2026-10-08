@@ -848,7 +848,7 @@ export type AdminLearnedMemoryItem = {
     maintenanceOrigin?: string | null;
     maintenanceAgentInstanceId?: string | null;
     maintenanceSessionId?: string | null;
-    maintenanceWorkItemId?: string | null;
+    maintenanceAgentRunId?: string | null;
   };
   updatedAt: string;
 };
@@ -1052,8 +1052,8 @@ export type ExperienceContent = {
   unresolved: string[]; difficulties: string[]; lessons: string[];
 };
 export type ExperienceItem = {
-  experienceId: string; sourceKind: "Session" | "WorkItem" | "Consolidation"; sourceId: string; throughCursor: number;
-  sourceAt: string; sourceCreatedAt?: string; checkpointAt?: string | null; definitionId: string; definitionVersion: number; generationWorkItemId: string;
+  experienceId: string; sourceKind: "Session" | "AgentRun" | "Consolidation"; sourceId: string; throughCursor: number;
+  sourceAt: string; sourceCreatedAt?: string; checkpointAt?: string | null; definitionId: string; definitionVersion: number; generationAgentRunId: string;
   modelKey: string; status: string; visibility: "Eligible" | "Suppressed" | "Superseded" | "Deleted"; revision: number;
   derivedFromExperienceIds?: string[]; maintenanceOrigin?: string | null;
   eligibleForContext: boolean; content: ExperienceContent | null; diagnosticId: string | null; failureSummary: string | null;
@@ -1079,7 +1079,7 @@ export type AutomationDraft = { expectedRevision: number; enabled: boolean; name
 export type Automation = { automationId: string; revision: number; name: string; instructions: string; enabled: boolean; status: string;
   trigger: AutomationTrigger; authorizationOrigin: string; sourceSessionId: string | null; sourceEventId: string | null;
   createdAt: string; nextRunAt: string | null; modelKey: string | null; reasoningEffort: string | null;
-  effectiveModelKey: string | null; lastWorkItemId: string | null; executionStatus: string | null; outcome: string | null };
+  effectiveModelKey: string | null; lastAgentRunId: string | null; executionStatus: string | null; outcome: string | null };
 export type AutomationPolicy = { allowOneShot: boolean; allowDaily: boolean; allowWeekly: boolean; allowFixedInterval: boolean;
   allowIndefiniteRecurrence: boolean; oneShotHorizonDays: number; minRecurrenceDays: number; minFixedIntervalSeconds: number; maxActiveRegistrations: number };
 export type AutomationReview = { items: Automation[]; policy?: AutomationPolicy | null };

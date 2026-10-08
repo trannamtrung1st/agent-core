@@ -55,6 +55,7 @@ public static class ToolCatalog
     public const string ExperienceConsolidate = "experience.consolidate";
     public static bool IsIdentityMaintenance(string name) => name is MemoryConsolidate or MemoryForget or ExperienceConsolidate;
     public const string ExperienceRecent = "experience.recent";
+    public const string BackgroundStart = "background.start";
     public const string WorkComplete = "work.complete";
 
     public static bool RecordsOwnerVisibleEffect(string toolName) =>

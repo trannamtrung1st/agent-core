@@ -149,6 +149,23 @@ public static class RuntimeTelemetry
     private static readonly Counter<long> IdentityMaintenanceEvents = Meter.CreateCounter<long>("identity_maintenance_events");
     public static void RecordIdentityMaintenance(string outcome) => IdentityMaintenanceEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
     public static void RecordExperience(string outcome) => ExperienceEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
+    private static readonly Counter<long> AgentRunEvents = Meter.CreateCounter<long>("agent_run_events");
+    private static readonly Counter<long> ActivationEvents = Meter.CreateCounter<long>("activation_events");
+    private static readonly Counter<long> BackgroundSessionEvents = Meter.CreateCounter<long>("background_session_events");
+    public static void RecordAgentRun(string outcome)
+    {
+        if (outcome is "created" or "claimed" or "attempt" or "retry" or "approval" or "completed" or "failed" or "cancelled" or "recovered" or "unconfirmed-effect")
+            AgentRunEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
+    }
+    public static void RecordActivation(string outcome)
+    {
+        if (outcome is "admitted" or "duplicate") ActivationEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
+    }
+    public static void RecordBackgroundSession(string outcome)
+    {
+        if (outcome is "admitted" or "foregrounded" or "completion-emitted" or "completion-deduped" or "completion-skipped")
+            BackgroundSessionEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
+    }
     private static readonly Counter<long> WorkEvents = Meter.CreateCounter<long>("work_events");
     private static readonly Counter<long> AgentSteps = Meter.CreateCounter<long>("agent_steps");
     private static readonly Counter<long> ActiveSkills = Meter.CreateCounter<long>("active_skills");

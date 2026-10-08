@@ -2382,7 +2382,7 @@ export function InstanceDetail({
   const [connectionsTab, setConnectionsTab] = useState("credentials");
   const [sourceSelection, setSourceSelection] = useState<AutomationSelection>();
   const [experienceSelection, setExperienceSelection] = useState<ExperienceSelection>();
-  const [selectedWorkItemId, setSelectedWorkItemId] = useState<string>();
+  const [selectedAgentRunId, setSelectedAgentRunId] = useState<string>();
   const [runDetailsOpen, setRunDetailsOpen] = useState(false);
   const runOpener = useRef<HTMLElement | null>(null);
   const restoreRunFocus = useRef(false);
@@ -2393,7 +2393,7 @@ export function InstanceDetail({
     if (tab === "identity") setIdentityTab(section ?? "profile");
     if (tab === "connections") setConnectionsTab(section ?? "credentials");
   }, [instanceId, tab, section]);
-  useEffect(() => { setSourceSelection(undefined); setExperienceSelection(undefined); setSelectedWorkItemId(undefined); setRunDetailsOpen(false); }, [instanceId]);
+  useEffect(() => { setSourceSelection(undefined); setExperienceSelection(undefined); setSelectedAgentRunId(undefined); setRunDetailsOpen(false); }, [instanceId]);
   const setActiveTab = (next: AdminInstanceTab, selectedSection?: AdminInstanceSection) => {
     const nextSection = selectedSection ?? (next === "continuity" ? continuityTab : next === "automation" ? automationTab : next === "identity" ? identityTab === "profile" ? undefined : identityTab : next === "connections" ? connectionsTab : undefined);
     updateActiveTab(next);
@@ -2407,14 +2407,14 @@ export function InstanceDetail({
     if (!workId) { setActiveTab("runs"); return; }
     runOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     restoreRunFocus.current = false;
-    setSelectedWorkItemId(workId);
+    setSelectedAgentRunId(workId);
     setRunDetailsOpen(true);
   };
   const viewSource = (source: RunSource) => {
     restoreRunFocus.current = false;
     setRunDetailsOpen(false);
     if (source.kind === "experience") {
-      setExperienceSelection({ workItemId: source.workItemId, request: Date.now() }); setActiveTab("continuity", "experience"); return;
+      setExperienceSelection({ agentRunId: source.agentRunId, request: Date.now() }); setActiveTab("continuity", "experience"); return;
     }
     setSourceSelection({ ...source, request: Date.now() });
     setActiveTab("automation", "automations");
@@ -2545,7 +2545,7 @@ export function InstanceDetail({
         </div>
       ) : null}
       {resolved?.instanceLifecycle === "Active" ? <InstanceRunsSection instanceId={instanceId}
-        open={runDetailsOpen} detailsOnly selectedWorkItemId={selectedWorkItemId} onSource={viewSource}
+        open={runDetailsOpen} detailsOnly selectedAgentRunId={selectedAgentRunId} onSource={viewSource}
         onClose={() => { restoreRunFocus.current = true; setRunDetailsOpen(false); }}
         afterClose={() => { if (restoreRunFocus.current && runOpener.current?.isConnected) runOpener.current.focus({ preventScroll: true }); }} /> : null}
     </Flex>

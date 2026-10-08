@@ -2,6 +2,7 @@ using AgentCore.Application.Admin;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Triggers;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Persistence;
@@ -14,8 +15,6 @@ public sealed class InMemoryAdminLifecycleDeletion(
     InMemoryMemoryStore sessions,
     InMemoryStructuredMemoryStore memories,
     InMemoryTriggerStore triggers,
-    InMemoryWorkItemStore workItems,
-    InMemoryConversationTurnExecutionStore executions,
     InMemoryAgentDefinitionAdminStore definitions,
     InMemoryAdminEventStore events,
     InMemoryExperienceStore? experience = null,
@@ -117,29 +116,31 @@ public sealed class InMemoryAdminLifecycleDeletion(
     private AdminDeletionReferenceCounts CountInstance(Guid instanceId)
     {
         var triggersForInstance = triggers.CountForInstance(instanceId);
-        var work = workItems.CountForInstance(instanceId);
+        AgentRun[] runs;
+        lock (sessions.AdmissionGate) runs = sessions.AgentRuns.Runs.Values.Where(run => run.AgentInstanceId == instanceId).ToArray();
         return new AdminDeletionReferenceCounts(
             sessions.CountLiveByInstance(instanceId),
             memories.CountActiveIdentityUser(instanceId),
             triggersForInstance.Registrations,
             triggersForInstance.Occurrences,
-            work.Items,
-            work.Approvals,
-            executions.CountForInstance(instanceId),
+            runs.Length,
+            runs.Count(run => run.Approval is not null),
+            runs.Length,
             Instances: 0);
     }
 
     private AdminDeletionReferenceCounts CountDefinition(string definitionId)
     {
-        var work = workItems.CountForDefinition(definitionId);
+        AgentRun[] runs;
+        lock (sessions.AdmissionGate) runs = sessions.AgentRuns.Runs.Values.Where(run => run.DefinitionId == definitionId).ToArray();
         return new AdminDeletionReferenceCounts(
             sessions.CountLiveByDefinition(definitionId),
             LearnedMemoryItems: 0,
             Automations: 0,
             TriggerOccurrences: 0,
-            work.Items,
-            work.Approvals,
-            executions.CountForDefinition(definitionId),
+            runs.Length,
+            runs.Count(run => run.Approval is not null),
+            runs.Length,
             instances.CountByDefinition(definitionId));
     }
 
@@ -208,7 +209,7 @@ public sealed class SqliteAdminLifecycleDeletion(
         var deletedAutomations = DeletedAutomations(db, key).Select(r => r.AutomationId);
         await db.TriggerOccurrences.Where(o => o.AgentInstanceId == key && deletedAutomations.Contains(o.AutomationId!)
             && o.Disposition == (int)OccurrenceRoutingDisposition.Rejected
-            && o.DurableWorkItemId == null).ExecuteDeleteAsync(cancellationToken);
+            && o.AcceptedAgentRunId == null).ExecuteDeleteAsync(cancellationToken);
         await DeletedAutomations(db, key).ExecuteDeleteAsync(cancellationToken);
         db.AgentInstances.Remove(row);
         AdminEventPersistence.StageAppend(
@@ -313,7 +314,7 @@ public sealed class SqliteAdminLifecycleDeletion(
         string instanceId,
         CancellationToken cancellationToken)
     {
-        var workItemIds = db.WorkItems.Where(item => item.AgentInstanceId == instanceId).Select(item => item.WorkItemId);
+        var runs = db.AgentRuns.Where(item => item.AgentInstanceId == instanceId);
         var deletedAutomations = DeletedAutomations(db, instanceId).Select(r => r.AutomationId);
         return new AdminDeletionReferenceCounts(
             await db.Sessions.CountAsync(
@@ -328,15 +329,11 @@ public sealed class SqliteAdminLifecycleDeletion(
             await db.TriggerOccurrences.CountAsync(
                 item => item.AgentInstanceId == instanceId && !(deletedAutomations.Contains(item.AutomationId!)
 
-                    && item.Disposition == (int)OccurrenceRoutingDisposition.Rejected && item.DurableWorkItemId == null),
+                    && item.Disposition == (int)OccurrenceRoutingDisposition.Rejected && item.AcceptedAgentRunId == null),
                 cancellationToken).ConfigureAwait(false),
-            await db.WorkItems.CountAsync(item => item.AgentInstanceId == instanceId, cancellationToken)
-                .ConfigureAwait(false),
-            await db.WorkApprovals.CountAsync(item => workItemIds.Contains(item.WorkItemId), cancellationToken)
-                .ConfigureAwait(false),
-            await db.ConversationTurnExecutions.CountAsync(
-                item => item.AgentInstanceId == instanceId,
-                cancellationToken).ConfigureAwait(false),
+            await runs.CountAsync(cancellationToken).ConfigureAwait(false),
+            await runs.CountAsync(item => item.Status == (int)AgentRunStatus.WaitingForApproval, cancellationToken).ConfigureAwait(false),
+            await db.Activations.CountAsync(item => item.AgentInstanceId == instanceId, cancellationToken).ConfigureAwait(false),
             Instances: 0);
     }
 
@@ -349,7 +346,8 @@ public sealed class SqliteAdminLifecycleDeletion(
         string definitionId,
         CancellationToken cancellationToken)
     {
-        var workItemIds = db.WorkItems.Where(item => item.DefinitionId == definitionId).Select(item => item.WorkItemId);
+        var sessionIds = db.Sessions.Where(item => item.AgentId == definitionId).Select(item => item.SessionId);
+        var runs = db.AgentRuns.Where(item => sessionIds.Contains(item.SessionId));
         return new AdminDeletionReferenceCounts(
             await db.Sessions.CountAsync(
                 item => item.AgentId == definitionId && item.DurablyDeletedAtUtc == null,
@@ -357,13 +355,9 @@ public sealed class SqliteAdminLifecycleDeletion(
             LearnedMemoryItems: 0,
             Automations: 0,
             TriggerOccurrences: 0,
-            await db.WorkItems.CountAsync(item => item.DefinitionId == definitionId, cancellationToken)
-                .ConfigureAwait(false),
-            await db.WorkApprovals.CountAsync(item => workItemIds.Contains(item.WorkItemId), cancellationToken)
-                .ConfigureAwait(false),
-            await db.ConversationTurnExecutions.CountAsync(
-                item => item.DefinitionId == definitionId,
-                cancellationToken).ConfigureAwait(false),
+            await runs.CountAsync(cancellationToken).ConfigureAwait(false),
+            await runs.CountAsync(item => item.Status == (int)AgentRunStatus.WaitingForApproval, cancellationToken).ConfigureAwait(false),
+            await db.Activations.CountAsync(item => sessionIds.Contains(item.SessionId), cancellationToken).ConfigureAwait(false),
             await db.AgentInstances.CountAsync(item => item.DefinitionId == definitionId, cancellationToken)
                 .ConfigureAwait(false));
     }

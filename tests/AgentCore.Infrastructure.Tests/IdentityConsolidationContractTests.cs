@@ -2,7 +2,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Experience;
 using AgentCore.Domain.Memory;
-using AgentCore.Domain.Work;
+using AgentCore.Domain.Conversation;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -21,7 +21,7 @@ public sealed class IdentityConsolidationContractTests
             Provenance = sources[0].Provenance with { DerivedFromMemoryIds = sources.Select(s => s.MemoryId).Order().ToArray() } };
     private static ExperienceContent Content => new("Browser write lessons", ["Refreshed page"], [], ["Write succeeded"], [], [], [], ["Check current page state"]);
     private static AgentExperience Experience() => new(Guid.NewGuid(), Instance, Profile, ExperienceSourceKind.Session,
-        Guid.NewGuid(), 2, Now, "general-assistant", 7, Guid.NewGuid(), new WorkModelPin("synthetic", "synthetic", "scripted", null), Now, Content);
+        Guid.NewGuid(), 2, Now, "general-assistant", 7, Guid.NewGuid(), new AgentRunModelPin("synthetic", "synthetic", "scripted", null), Now, Content);
     private static AgentExperience Result(AgentExperience[] sources) => sources[0] with { ExperienceId = Guid.NewGuid(), SourceKind = ExperienceSourceKind.Consolidation,
         SourceId = Guid.NewGuid(), DerivedFromExperienceIds = sources.Select(s => s.ExperienceId).Order().ToArray() };
 
@@ -107,12 +107,12 @@ public sealed class IdentityConsolidationContractTests
             var workId = Guid.NewGuid();
             var result = Result(sources);
             result = result with { Provenance = result.Provenance with {
-                MaintenanceOrigin = "Automation", MaintenanceAgentInstanceId = Instance, MaintenanceWorkItemId = workId } };
+                MaintenanceOrigin = "Automation", MaintenanceAgentInstanceId = Instance, MaintenanceAgentRunId = workId } };
             await memories.ConsolidateAsync(sources, result);
-            var replay = result with { Provenance = result.Provenance with { MaintenanceAgentInstanceId = Guid.NewGuid(), MaintenanceWorkItemId = Guid.NewGuid() } };
+            var replay = result with { Provenance = result.Provenance with { MaintenanceAgentInstanceId = Guid.NewGuid(), MaintenanceAgentRunId = Guid.NewGuid() } };
             var canonical = await memories.ConsolidateAsync(sources, replay);
             Assert.Equal(Instance, canonical.Provenance.MaintenanceAgentInstanceId);
-            Assert.Equal(workId, canonical.Provenance.MaintenanceWorkItemId);
+            Assert.Equal(workId, canonical.Provenance.MaintenanceAgentRunId);
             Assert.Null(canonical.OwnerInstanceId);
             Assert.Equal(Profile, canonical.OwnerProfileId);
             Assert.Equal(result.MemoryId, Assert.Single(await memories.ListActiveUserAsync(Profile)).MemoryId);
@@ -231,7 +231,7 @@ public sealed class IdentityConsolidationContractTests
             Assert.Empty(memory.Provenance.DerivedFromMemoryIds!);
             Assert.Null(memory.Provenance.MaintenanceAgentInstanceId);
             Assert.Null(memory.Provenance.MaintenanceSessionId);
-            Assert.Null(memory.Provenance.MaintenanceWorkItemId);
+            Assert.Null(memory.Provenance.MaintenanceAgentRunId);
             var experiences = new SqliteExperienceStore(factory);
             Assert.False((await experiences.MaintenanceSettingsAsync(Instance)).AllowAgentConsolidation);
             Assert.Equal(ExperienceVisibility.Eligible, Assert.Single(await experiences.ListAsync(Instance, 10)).Visibility);

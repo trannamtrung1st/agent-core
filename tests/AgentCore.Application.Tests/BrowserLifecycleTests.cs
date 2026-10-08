@@ -1,3 +1,4 @@
+using AgentCore.Application.Execution;
 using System.Text.Json;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
@@ -9,7 +10,6 @@ using AgentCore.Application.Work;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Triggers;
-using AgentCore.Domain.Work;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -147,84 +147,25 @@ public sealed class BrowserLifecycleTests
         Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.BrowserObserve));
         Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.BrowserAct));
 
-        var browser = new HoldingBrowser();
-        var now = DateTimeOffset.Parse("2026-10-01T00:00:00Z");
-        var generation = Guid.Parse("019944af-00c4-7000-8000-000000000001");
-        var workId = Guid.Parse("019944af-00c4-7000-8000-000000000002");
-        var owner = new WorkOwner(
-            Guid.Parse("019944af-00c4-7000-8000-000000000003"),
-            Guid.Parse("019944af-00c4-7000-8000-000000000004"));
-        var call = new ModelToolCall("nav-1", ToolCatalog.BrowserNavigate, """{"url":"http://127.0.0.1:5091/"}""");
-        var payload = DurableToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [call])], skillState: new([], [], 0));
-        var store = new InMemoryWorkItemStore();
-        var created = await store.CreateAsync(WorkItem.Create(
-            workId,
-            owner,
-            new WorkProvenance(
-                Guid.Parse("019944af-00c4-7000-8000-000000000005"),
-                WorkSourceKind.ApplicationEvent,
-                null,
-                null,
-                null,
-                "source|browser-replay",
-                now,
-                now,
-                """{"instruction":"synthetic"}""",
-                "general-assistant",
-                11,
-                "Test"),
-            new WorkModelPin("synthetic-default", "synthetic", "synthetic-small", "minimal"),
-            3,
-            now));
-        var claimed = (await store.TryClaimAsync(workId, generation, now, now.AddMinutes(5)))!;
-        var checkpoint = new WorkCheckpoint(payload, 0, 0, (int)ToolLimits.Overall.TotalMilliseconds);
-        var saved = await store.CheckpointAsync(
-            workId,
-            claimed.Revision,
-            generation,
-            checkpoint,
-            null,
-            now);
-        var hash = ToolActionHash.Compute(
-            ToolCatalog.BrowserNavigate,
-            JsonDocument.Parse(call.ArgumentsJson).RootElement);
-        var prepared = await store.MarkSideEffectAsync(
-            workId,
-            saved.Revision,
-            generation,
-            WorkSideEffectDisposition.Prepared,
-            call.Id,
-            hash,
-            now);
-        var fenced = await store.MarkSideEffectAsync(
-            workId,
-            prepared.Revision,
-            generation,
-            WorkSideEffectDisposition.InFlight,
-            call.Id,
-            hash,
-            now);
-        var model = new UnusedModel();
-        var outcome = await new DurableOccurrenceExecution(
-                new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll),
-                TimeProvider.System)
-            .RunAsync(
-                fenced,
-                new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "open the record")]),
-                model,
-                BrowserDefinition(),
-                TriggerKind.ApplicationEvent,
-                (_, _, _) => ValueTask.FromResult(fenced),
-                store,
-                generation,
-                now,
-                Ids("019944af-00c5-7000-8000-", "873f07d1-e264-4c81-a31b-7e59e940c5"),
-                CancellationToken.None);
-        var failed = Assert.IsType<DurableOccurrenceFailed>(outcome);
-        Assert.Equal("side-effect-indeterminate", failed.Code);
-        Assert.Equal(0, browser.NavigateCalls);
-        Assert.Equal(0, model.Calls);
-        Assert.Equal(WorkItemCreateKind.Created, created.Kind);
+        var now = DateTimeOffset.Parse("2026-10-08T00:00:00Z");
+        var owner = new AgentRunOwner(Guid.NewGuid(), Guid.NewGuid());
+        var memory = new InMemoryMemoryStore();
+        var store = new InMemoryAgentRunStore(memory, new SystemDiagnosticIdSource());
+        var snapshot = AgentRunTestFixtures.Snapshot(owner, BrowserDefinition(), now);
+        var run = (await store.AdmitAsync(snapshot, 0, AgentRunTestFixtures.Run(snapshot, now))).Run;
+        var generation = Guid.NewGuid();
+        run = await store.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.Claim(run.Revision, now, generation, now.AddMinutes(5)));
+        var call = new ModelToolCall("nav-1", ToolCatalog.BrowserNavigate, "{\"url\":\"http://127.0.0.1:5091/\"}");
+        var payload = AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [call])]);
+        run = await store.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.Checkpoint(run.Revision, now, generation,
+            new(payload, 1, 0, (int)ToolLimits.Overall.TotalMilliseconds), null));
+        var hash = ToolActionHash.Compute(call.Name, JsonDocument.Parse(call.ArgumentsJson).RootElement);
+        foreach (var disposition in new[] { AgentRunSideEffectDisposition.Prepared, AgentRunSideEffectDisposition.InFlight })
+            run = await store.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.MarkSideEffect(run.Revision, now, generation, disposition, call.Id, hash));
+        var recovered = await store.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.Recover(run.Revision, now.AddMinutes(6)));
+        Assert.Equal(AgentRunStatus.Failed, recovered.Status);
+        Assert.Equal("side-effect-indeterminate", recovered.Failure!.Code);
+        Assert.Empty(await store.ListRunnableAsync(now.AddMinutes(6), 10));
     }
 
     private static SessionRuntime Runtime(

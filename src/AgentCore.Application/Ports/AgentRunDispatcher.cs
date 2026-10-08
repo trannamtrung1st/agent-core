@@ -8,5 +8,9 @@ namespace AgentCore.Application.Ports;
 /// </summary>
 public interface IAgentRunDispatcher
 {
+    ValueTask<bool> AdmitCompletionAsync(BackgroundCompletionCandidate source, CancellationToken cancellationToken = default);
+
+    ValueTask<bool> RepairPendingInputsAsync(Guid sessionId, CancellationToken cancellationToken = default);
+
     ValueTask<bool> DispatchAsync(AgentRun run, CancellationToken cancellationToken = default);
 }

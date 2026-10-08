@@ -5,7 +5,8 @@ public enum SessionOriginKind
     UserChat,
     ImmediateBackground,
     AutomationOccurrence,
-    ManualBackground
+    ManualBackground,
+    SourceOccurrence
 }
 
 [Flags]
@@ -42,8 +43,11 @@ public sealed record SessionOrigin
             throw new ArgumentException("Immediate work requires parent identity and has no Automation.");
         if (kind == SessionOriginKind.AutomationOccurrence && (automationId is null || triggerOccurrenceId is null))
             throw new ArgumentException("An Automation origin requires both Automation and occurrence.");
-        if (kind != SessionOriginKind.AutomationOccurrence && (automationId is not null || triggerOccurrenceId is not null))
-            throw new ArgumentException("Only an Automation origin carries Automation provenance.");
+        if (kind == SessionOriginKind.SourceOccurrence && (automationId is not null || triggerOccurrenceId is null))
+            throw new ArgumentException("A source occurrence requires an occurrence without an Automation.");
+        if (kind is not (SessionOriginKind.AutomationOccurrence or SessionOriginKind.SourceOccurrence)
+            && (automationId is not null || triggerOccurrenceId is not null))
+            throw new ArgumentException("Only occurrence origins carry occurrence provenance.");
         if (reportCompletionToOrigin && kind != SessionOriginKind.ImmediateBackground)
             throw new ArgumentException("Only explicitly parent-linked immediate work can report back.");
         Kind = kind;

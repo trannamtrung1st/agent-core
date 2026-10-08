@@ -13,7 +13,8 @@ public sealed record EventContext(
     Guid Epoch,
     DateTimeOffset Timestamp,
     Guid CorrelationId,
-    Guid? CausationId);
+    Guid? CausationId,
+    Guid? AgentRunGeneration = null);
 
 public abstract record SessionInput(EventContext Context);
 
@@ -386,7 +387,7 @@ public sealed record SessionReadyProjection(
     SpeechLocaleResolution? SpeechLocale = null,
     SessionModelSelection? ModelSelection = null,
     PublicPendingApproval? PendingApproval = null,
-    Guid? ConversationExecutionId = null,
+    Guid? AgentRunId = null,
     string OutputActivity = "Idle",
     bool HasOlderHistory = false,
     long? HistoryBeforeSequence = null);
@@ -397,7 +398,7 @@ public sealed record ResponseStartedOutput(
     Guid EntryId,
     long EntrySequence,
     string Trigger,
-    Guid? ConversationExecutionId = null) : OutputPayload;
+    Guid? AgentRunId = null) : OutputPayload;
 
 public sealed record TextDeltaOutput(int TextStart, string Text) : OutputPayload;
 
@@ -524,6 +525,8 @@ public static class ResponseProgressMessages
 }
 
 public sealed record CompletionIntentOutput(string Reason, bool Advisory) : OutputPayload;
+
+public sealed record HistoryEntryRemovedOutput(Guid EntryId) : OutputPayload;
 
 public sealed record HistoryEntryUpsertOutput(PublicHistoryEntry Entry) : OutputPayload;
 

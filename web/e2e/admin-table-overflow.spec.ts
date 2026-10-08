@@ -30,14 +30,14 @@ test("collection links wrap without overlapping adjacent cells at desktop and mo
   } });
   expect(saved.ok(), await saved.text()).toBe(true);
   await expect.poll(async () => {
-    const response = await page.request.get(`${path}/work-items`, { headers });
+    const response = await page.request.get(`/api/v2/agent-instances/${instanceId}/agent-runs`, { headers });
     return (await response.json()).items[0]?.status;
   }, { timeout: 30000 }).toBe("completed");
   // Reproduce the longer attention label from the reported screenshot.
   await page.route(`**${path}/automations`, async route => {
     const response = await route.fetch();
     const data = await response.json();
-    data.items[0].outcome = "AttentionRequested";
+    data.items[0].outcome = "NeedsAttention";
     data.items[0].effectiveModelKey = "deepseek-v41-flash";
     await route.fulfill({ response, json: data });
   });
@@ -54,12 +54,12 @@ test("collection links wrap without overlapping adjacent cells at desktop and mo
   }
   await link.click();
   const details = page.getByRole("dialog", { name: "Run details", exact: true });
-  await expect(details).toContainText("Review only. Do nothing when nothing needs action.");
+  await expect(details.getByText("No action", { exact: true }).first()).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(details).toBeHidden();
   await page.getByRole("tab", { name: "Runs", exact: true }).click();
   const runs = page.getByRole("table", { name: "Runs table", exact: true });
-  await expect(runs).toContainText(name.trim());
+  await expect(runs).toContainText("Scheduled task");
   const runName = runs.locator("tbody tr").first().locator("td").first();
   await expectContainedText(runName);
   await page.goto("/admin/definitions/examiner/versions");

@@ -29,7 +29,8 @@ public sealed class Activation
         Guid? sourceSessionId,
         Guid? sourceAgentRunId,
         string dedupeKey,
-        DateTimeOffset admittedAtUtc)
+        DateTimeOffset admittedAtUtc,
+        string? evidenceJson = null)
     {
         if (activationId == Guid.Empty || sessionId == Guid.Empty || !Enum.IsDefined(kind))
             throw new ArgumentException("Activation, Session and valid kind are required.");
@@ -50,6 +51,13 @@ public sealed class Activation
             && (sourceSessionId is null || sourceAgentRunId is null || sourceSessionId == sessionId))
             throw new ArgumentException("Background admission requires another Session and its source run.");
         AgentRunTime.RequireUtc(admittedAtUtc, "Admission");
+        EvidenceJson = evidenceJson is null ? null : AgentRunText.RequireUtf8(evidenceJson, AgentRunLimits.MaxEvidenceBytes, "Activation evidence");
+        if (EvidenceJson is not null)
+        {
+            using var evidence = System.Text.Json.JsonDocument.Parse(EvidenceJson);
+            if (evidence.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+                throw new ArgumentException("Activation evidence must be an object.");
+        }
         ActivationId = activationId;
         SessionId = sessionId;
         Kind = kind;
@@ -60,9 +68,11 @@ public sealed class Activation
         SourceAgentRunId = sourceAgentRunId;
         DedupeKey = AgentRunText.RequireDedupeKey(dedupeKey);
         AdmittedAtUtc = admittedAtUtc;
-        var fingerprint = $"{sessionId:D}\n{kind}\n{string.Join(',', entries.Select(id => id.ToString("D")))}\n{sourceEventId:D}\n{triggerOccurrenceId:D}\n{sourceSessionId:D}\n{sourceAgentRunId:D}";
+        var fingerprint = $"{sessionId:D}\n{kind}\n{string.Join(',', entries.Select(id => id.ToString("D")))}\n{sourceEventId:D}\n{triggerOccurrenceId:D}\n{sourceSessionId:D}\n{sourceAgentRunId:D}\n{EvidenceJson}";
         SourceFingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprint))).ToLowerInvariant();
     }
+
+    public string? EvidenceJson { get; }
 
     public Guid ActivationId { get; }
     public Guid SessionId { get; }

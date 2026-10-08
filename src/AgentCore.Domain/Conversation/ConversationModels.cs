@@ -335,8 +335,25 @@ public sealed record SessionSnapshot(
     AgentIdentity? PinnedPersona = null,
     long? PinnedPersonaRevision = null,
     SessionOrigin? Origin = null,
-    SessionSurface Surfaces = SessionSurface.ChatList)
+    SessionSurface Surfaces = SessionSurface.ChatList,
+    IReadOnlyList<Guid>? PendingAgentInputIds = null)
 {
+    private IReadOnlyList<Guid> _pendingAgentInputIds = ValidatePendingInputs(PendingAgentInputIds ?? []);
+    public IReadOnlyList<Guid> PendingAgentInputIds
+    {
+        get => _pendingAgentInputIds;
+        init => _pendingAgentInputIds = ValidatePendingInputs(value);
+    }
+
+    private static IReadOnlyList<Guid> ValidatePendingInputs(IReadOnlyList<Guid> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        if (ids.Count > Activation.MaxSourceEntries || ids.Any(id => id == Guid.Empty)
+            || ids.Distinct().Count() != ids.Count)
+            throw new ArgumentException("Pending agent inputs must have bounded distinct identities.");
+        return Array.AsReadOnly(ids.ToArray());
+    }
+
     private SessionOrigin _origin = Origin ?? SessionOrigin.UserChat;
     public SessionOrigin Origin
     {

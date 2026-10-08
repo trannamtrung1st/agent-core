@@ -1,3 +1,4 @@
+using AgentCore.Application.Execution;
 using System.Diagnostics;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
@@ -25,13 +26,11 @@ public sealed class DiagnosticLoggingTests
         Assert.IsType<SystemDiagnosticIdSource>(diagnostics);
         Assert.IsType<SystemIdGenerator>(factory.Services.GetRequiredService<IIdGenerator>());
         Assert.Same(diagnostics, factory.Services.GetRequiredService<TriggerScheduler>().DiagnosticIds);
-        Assert.Same(diagnostics, factory.Services.GetRequiredService<DurableWorkIntake>().DiagnosticIds);
 
         var hosted = factory.Services.GetServices<IHostedService>().ToArray();
         Assert.Contains(hosted, service => service is TriggerSchedulerHostedService);
-        Assert.Contains(hosted, service => service is DurableWorkIntakeHostedService);
-        Assert.Contains(hosted, service => service is DurableWorkHostedService);
-        Assert.Contains(hosted, service => service is ConversationExecutionHostedService);
+        Assert.Contains(hosted, service => service is BackgroundOccurrenceIntakeHostedService);
+        Assert.Contains(hosted, service => service is AgentRunHostedService);
     }
 
     [Fact]
@@ -41,17 +40,17 @@ public sealed class DiagnosticLoggingTests
             "Trigger scheduler pass failed.",
             (pass, logs, diagnostics) => new TriggerSchedulerHostedService(pass, TimeProvider.System, logs, diagnostics),
             service => service.RunPassAsync(CancellationToken.None));
-        await AssertPassAsync<DurableWorkHostedService>(
-            "Durable work pass failed.",
-            (pass, logs, diagnostics) => new DurableWorkHostedService(pass, TimeProvider.System, logs, diagnostics),
+        await AssertPassAsync<AgentRunHostedService>(
+            "AgentRun pass failed.",
+            (pass, logs, diagnostics) => new AgentRunHostedService(pass, TimeProvider.System, logs, diagnostics),
             service => service.RunPassAsync(CancellationToken.None));
-        await AssertPassAsync<DurableWorkIntakeHostedService>(
-            "Durable intake pass failed.",
-            (pass, logs, diagnostics) => new DurableWorkIntakeHostedService(pass, TimeProvider.System, logs, diagnostics),
+        await AssertPassAsync<BackgroundOccurrenceIntakeHostedService>(
+            "Background admission pass failed.",
+            (pass, logs, diagnostics) => new BackgroundOccurrenceIntakeHostedService(pass, TimeProvider.System, logs, diagnostics),
             service => service.RunPassAsync(CancellationToken.None));
-        await AssertPassAsync<ConversationExecutionHostedService>(
-            "Conversation execution pass failed.",
-            (pass, logs, diagnostics) => new ConversationExecutionHostedService(pass, TimeProvider.System, logs, diagnostics),
+        await AssertPassAsync<AgentRunHostedService>(
+            "AgentRun pass failed.",
+            (pass, logs, diagnostics) => new AgentRunHostedService(pass, TimeProvider.System, logs, diagnostics),
             service => service.RunPassAsync(CancellationToken.None));
     }
 

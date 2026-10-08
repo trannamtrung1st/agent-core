@@ -109,7 +109,7 @@ describe("session history controller", () => {
       sessionId: "s1",
       attachmentId: "a1",
       connection: "ready",
-      conversationExecutionId: "x1",
+      agentRunId: "x1",
       liveResponseId: "r2",
       outputState: "agentGenerating",
       entries: [streaming]
@@ -126,7 +126,7 @@ describe("session history controller", () => {
 
     const state = useSessionStore.getState();
     expect(state.liveResponseId).toBe("r2");
-    expect(state.conversationExecutionId).toBe("x1");
+    expect(state.agentRunId).toBe("x1");
     expect(state.outputState).toBe("agentGenerating");
   });
 
@@ -148,7 +148,7 @@ describe("session history controller", () => {
       sessionId: "s1",
       attachmentId: "a1",
       connection: "ready",
-      conversationExecutionId: "x1",
+      agentRunId: "x1",
       liveResponseId: "r2",
       outputState: "idle",
       entries: [streaming]
@@ -167,7 +167,7 @@ describe("session history controller", () => {
     expect(state.entries[0]?.text).toBe("Hello from synthetic.");
     expect(state.entries[0]?.status).toBe("completed");
     expect(state.liveResponseId).toBeNull();
-    expect(state.conversationExecutionId).toBeNull();
+    expect(state.agentRunId).toBeNull();
     expect(state.outputState).toBe("idle");
   });
 
@@ -192,7 +192,7 @@ describe("session history controller", () => {
       sessionId: "s1",
       attachmentId: "a1",
       connection: "ready",
-      conversationExecutionId: "x1",
+      agentRunId: "x1",
       liveResponseId: "r2",
       outputState: "idle",
       entries: [streaming]
@@ -209,7 +209,7 @@ describe("session history controller", () => {
 
     const state = useSessionStore.getState();
     expect(state.liveResponseId).toBe("r2");
-    expect(state.conversationExecutionId).toBe("x1");
+    expect(state.agentRunId).toBe("x1");
     expect(state.outputState).toBe("idle");
     expect(state.entries.find((entry) => entry.role === "applicationMessage")?.status).toBe("completed");
     expect(state.entries.find((entry) => entry.role === "assistant")?.status).toBe("streaming");
@@ -220,7 +220,7 @@ describe("session history controller", () => {
       ...emptySession(),
       sessionId: "s1",
       liveResponseId: "r-ghost",
-      conversationExecutionId: "exec-1",
+      agentRunId: "exec-1",
       outputState: "idle",
       entries: []
     });
@@ -236,7 +236,7 @@ describe("session history controller", () => {
 
     const state = useSessionStore.getState();
     expect(state.liveResponseId).toBeNull();
-    expect(state.conversationExecutionId).toBeNull();
+    expect(state.agentRunId).toBeNull();
     expect(state.outputState).toBe("idle");
   });
 

@@ -1,9 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { WorkItem } from "../../services/api";
+import type { AgentRun } from "../../services/api";
 import { WORK_READ_STORAGE_KEY, useWorkReadState } from "./workReadState";
 
-const attention = { workItemId: "read-test-work", status: "completed", revision: 3, updatedAt: "2026-10-05T10:00:00Z", attentionRequired: true } as WorkItem;
+const attention = { agentRunId: "read-test-work", status: "completed", revision: 3, updatedAt: "2026-10-05T10:00:00Z", outcome: { attentionRequired: true } } as AgentRun;
 
 describe("background work read state", () => {
   beforeEach(() => {
@@ -24,7 +24,7 @@ describe("background work read state", () => {
     const remounted = renderHook(useWorkReadState);
     expect(remounted.result.current.isUnread(attention)).toBe(false);
     expect(remounted.result.current.isUnread({ ...attention, revision: 4 })).toBe(true);
-    expect(remounted.result.current.isUnread({ ...attention, workItemId: "another-work" })).toBe(true);
+    expect(remounted.result.current.isUnread({ ...attention, agentRunId: "another-work" })).toBe(true);
   });
   it("does not let an older view overwrite a newer acknowledgement", () => {
     const view = renderHook(useWorkReadState);
@@ -39,7 +39,7 @@ describe("background work read state", () => {
     window.localStorage.setItem(WORK_READ_STORAGE_KEY, "invalid json");
     const view = renderHook(useWorkReadState);
     expect(view.result.current.isUnread(attention)).toBe(true);
-    expect(view.result.current.isUnread({ ...attention, attentionRequired: false })).toBe(false);
+    expect(view.result.current.isUnread({ ...attention, outcome: { ...attention.outcome!, attentionRequired: false } })).toBe(false);
     expect(view.result.current.isUnread({ ...attention, status: "needsApproval" })).toBe(false);
     act(() => view.result.current.markRead([attention]));
     expect(view.result.current.isUnread(attention)).toBe(false);

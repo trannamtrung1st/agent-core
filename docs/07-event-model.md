@@ -2,6 +2,8 @@
 
 ## Three separate contracts
 
+The accepted Activation/AgentRun cutover preserves native occurrence routing. Authored Automation occurrences and all manual invocations always go to durable background admission, even when a compatible chat is attached. A source-owned occurrence without an Automation can use the live path only when exactly one compatible runtime reserves and begins it. Zero or multiple compatible runtimes sends it to durable intake; an unavailable single runtime releases its claim for a later routing pass. Durable native fallback creates a SourceOccurrence Session; authored work creates an AutomationOccurrence Session. Production registrations now use background Session intake and the shared SessionRuntime AgentRun path. Obsolete unregistered source/schema retirement and final runtime acceptance are still pending. Native live preparation persists its target Session before Begin. Quiet evaluation durably settles the receipt without an Activation/Run; speaking evaluation commits the existing Session snapshot, Activation, Run and receipt link atomically. Accepted live receipts with unfinished evaluation are repaired only into that same compatible Session, while completed quiet receipts are excluded from the bounded repair query. Current owner/source/model authority is checked before Run-backed provider requests and tool effects. Native receipt migration, restart and runtime regressions are prepared but unverified until the legacy compile blocker is retired.
+
 | Family | Owner | Purpose |
 | --- | --- | --- |
 | Internal application | Application | Mailbox commands/results with runtime ownership and causal identity |
@@ -124,9 +126,9 @@ Keep a bounded 500-event developer timeline per runtime without raw audio or con
 
 ## P6 durable work (observed)
 
-A detached WorkItem does not add a SignalR event family and does not write its result into conversation history. Progress and the final result are owner-scoped HTTP reads. A stale execution generation cannot commit a checkpoint, side effect, or completion. See [P6 freeze candidate](reports/p6-freeze-candidate.md).
+A detached AgentRun uses the existing Session event family and persists its outcome in its owned background Session. Session catalog, progress and safe run detail are owner-scoped HTTP reads. A stale execution generation cannot commit a checkpoint, side effect, or completion. See [P6 freeze candidate](reports/p6-freeze-candidate.md).
 
-User-accepted chat turns use a separate `ConversationTurnExecution` record. `user.text` is accepted only after the user entry and that execution row are durable. The execution becomes Completed, Failed, or Cancelled only after the terminal assistant entry is persisted. These rows are not Background Work items.
+User-accepted chat turns use the common Activation/AgentRun graph. `user.text` returns Accepted only after the user input and pending execution intent are durable. Batch repair/admission preserves one effective response owner. The Run terminalizes with its durable assistant outcome. Background Work visibility belongs to Session surfaces, independently of execution status.
 
 For live observation, **`session.ready`** and the durable history snapshot are authoritative; **`SessionEvent`** envelopes carry sequenced progress (including `agent.text.delta` and terminal response events). Clients track `lastServerSequence` as the replay cursor. Reconnect fetches a fresh ready snapshot, then continues from the server sequence—client projections must not treat replayed events as the source of lifecycle or execution identity.
 

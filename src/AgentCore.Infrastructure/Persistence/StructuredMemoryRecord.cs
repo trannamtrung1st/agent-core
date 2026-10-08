@@ -24,5 +24,5 @@ public sealed class StructuredMemoryRecord
     public string? MaintenanceOrigin { get; set; }
     public string? MaintenanceAgentInstanceId { get; set; }
     public string? MaintenanceSessionId { get; set; }
-    public string? MaintenanceWorkItemId { get; set; }
+    public string? MaintenanceAgentRunId { get; set; }
 }
