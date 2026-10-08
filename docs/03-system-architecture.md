@@ -1,5 +1,15 @@
 # System Architecture
 
+## Accepted Activation and AgentRun cutover
+
+The approved execution target is `Session → Activation → AgentRun`. A Session remains the durable conversation owned by one Agent Instance and trusted profile. An immutable Activation admits one effective agent turn and freezes its ordered input batch. Exactly one AgentRun owns that Activation's attempts, claim, checkpoint, approvals, effect fence, frozen execution configuration and outcome. Retrying retains run, activation and response identity; conversational continuation creates a new Activation and run in the same Session.
+
+Background work is a normal Session with immutable creation origin and separate mutable surface flags. Immediate work links its originating Session/run; Automation work links its occurrence and creates a distinct Session for each accepted firing. Completing the initial run does not complete the Session. Continue in chat adds ChatList visibility to that same identity. Only an explicitly eligible initial immediate child completion may activate its parent, through a trusted bounded completion receipt. Mentions and cross-Session context attachments are outside this cutover.
+
+One SessionRuntime mailbox remains the conversation writer. The final implementation must converge live, initiative, native event and detached execution into one claim/approval/retry/effect state machine and remove the previous production execution engines. There is no legacy adapter, dual writing or endpoint alias in the approved target.
+
+**Implementation status:** the new domain and atomic Session/input/Activation/AgentRun storage foundation exist. Production dispatch and Automation intake still use the existing engines described below. This is an intermediate implementation, not an accepted architecture cutover. [Implementation order](18-implementation-plan.md#activation-agentrun-and-background-sessions-cutover) and [verification](reports/activation-agent-run-background-sessions-verification.md) track the remaining work.
+
 ## Capability authority and projection
 
 Capability-aware Definitions pin `environment.capabilities` (`mode: Selected|All`, exact `resolvedCapabilities`, SHA-256 `authorizationFingerprint`) separately from `environment.projection.alwaysCapabilities`. All resolves the current trusted registry when a draft is saved and again at publication, excluding workspace interfaces incompatible with its explicit workspace policy. Runtime never resolves All again. Future registrations require a new reviewed publication. Legacy `toolAllowlist` remains supported with historical runtime offers; no Definition authorization count ceiling remains.

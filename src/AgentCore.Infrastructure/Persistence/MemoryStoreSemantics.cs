@@ -37,6 +37,8 @@ internal static class MemoryStoreSemantics
         && left.AgentInstanceId == right.AgentInstanceId
         && left.PinnedPersona == right.PinnedPersona
         && left.PinnedPersonaRevision == right.PinnedPersonaRevision
+        && left.Origin == right.Origin
+        && left.Surfaces == right.Surfaces
         && IncomingEntriesMatch(left.Entries, right.Entries);
 
     private static bool PurposeEquals(SessionPurpose? left, SessionPurpose? right)

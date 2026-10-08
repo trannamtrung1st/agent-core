@@ -1,5 +1,19 @@
 # TODO
 
+## Active: Activation, AgentRun and background Sessions
+
+- [x] Add immutable Activation, unified AgentRun transitions and Session origin/surface domain.
+- [x] Add atomic Session/input/Activation/run storage foundation and InMemory/SQLite safety scenarios.
+- [x] Add batched admission factory and common fast/scheduled claim coordinator; production dispatcher adoption remains pending.
+- [ ] Finish Phase B occurrence receipt and destructive execution schema/store cutover.
+- [ ] Unify live, initiative, native event and detached runtime ownership; remove old engines.
+- [ ] Implement authorized background.start, Automation child Sessions and safe initial-child report-back.
+- [ ] Implement same-Session Continue in chat, Session-first Background Work and AgentRun-first Admin/API.
+- [ ] Complete full Synthetic/browser/SQLite/Compose regressions, bounded Impeccable and canonical documentation sync.
+- [ ] Commit/push final behavior candidate and verify all hosted Synthetic/Compose jobs on that exact SHA.
+
+This requirement does not reopen historical freezes or start P10/P11. The foundation is an intermediate development state; the complete migration is not accepted. [Implementation plan](docs/18-implementation-plan.md#activation-agentrun-and-background-sessions-cutover) and [verification](docs/reports/activation-agent-run-background-sessions-verification.md) own current evidence.
+
 Living roadmap: current status, active requirements, future dependency order, and cross-phase invariants.
 
 Detailed architecture and behavior live in `/docs`. Historical implementation and freeze evidence live in `docs/reports/`. This file does not duplicate either.

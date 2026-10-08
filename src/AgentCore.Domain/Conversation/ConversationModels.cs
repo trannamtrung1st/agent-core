@@ -333,8 +333,28 @@ public sealed record SessionSnapshot(
     DateTimeOffset? SummaryGeneratedAt = null,
     ModelGenerationProvenance? SummaryModel = null,
     AgentIdentity? PinnedPersona = null,
-    long? PinnedPersonaRevision = null)
+    long? PinnedPersonaRevision = null,
+    SessionOrigin? Origin = null,
+    SessionSurface Surfaces = SessionSurface.ChatList)
 {
+    private SessionOrigin _origin = Origin ?? SessionOrigin.UserChat;
+    public SessionOrigin Origin
+    {
+        get => _origin;
+        init => _origin = value ?? throw new ArgumentNullException(nameof(Origin));
+    }
+
+    private SessionSurface _surfaces = RequireSurfaces(Surfaces);
+    public SessionSurface Surfaces
+    {
+        get => _surfaces;
+        init => _surfaces = RequireSurfaces(value);
+    }
+
+    private static SessionSurface RequireSurfaces(SessionSurface surfaces) =>
+        (surfaces & ~(SessionSurface.ChatList | SessionSurface.BackgroundWork)) == 0 ? surfaces
+            : throw new ArgumentException("Session surface flags are invalid.", nameof(Surfaces));
+
     private Guid _agentInstanceId = RequireOwner(AgentInstanceId);
 
     public Guid AgentInstanceId

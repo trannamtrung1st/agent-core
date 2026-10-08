@@ -1,5 +1,15 @@
 # Technology Decisions
 
+## Decision: unified Activation, AgentRun and background Sessions
+
+Adopt one durable execution model: each admitted agent turn has an immutable Activation and exactly one AgentRun. Multiple accepted user entries may form one Activation; message acknowledgement does not imply a separate model invocation. Attempts retry the same run, while a later conversational turn gets a new run. Preserve stable response identity, conservative voice/history projections, exact-action approval, frozen model/Definition/persona/Skill state, current capability authorization and non-replayable effect fencing.
+
+Asynchronous work creates another normal same-instance Session, with its own scratch, Session-owned artifacts and immutable origin. Automations create one child per accepted occurrence. Origin and UI visibility are separate from Session purpose/lifecycle. The initial run may complete quietly without fabricated chat prose; Continue in chat preserves the Session identity. Report-back is a trusted completion-only admission for the eligible initial child run, not a context-reference API or an agent delegation system.
+
+The final migration removes both old execution schemas and their production stores, runners, hosted services, APIs and UI contracts. No compatibility reader, adapter, fallback, dual writing, old route alias or historical execution conversion is supported. Disposable execution data requires an explicit operator reset; permanent home, credentials and unrelated data must not be deleted at startup. Immutable historical migrations and freeze reports remain factual records.
+
+The current additive foundation migration is an intermediate development step. It does not perform the destructive cutover, replace production dispatch, or establish phase closure. The [implementation plan](18-implementation-plan.md#activation-agentrun-and-background-sessions-cutover) owns remaining gates; the [verification report](reports/activation-agent-run-background-sessions-verification.md) distinguishes observed foundation behavior from unimplemented runtime behavior.
+
 Physical Infrastructure paths use one `Persistence:WorkspaceRoot`: `agent-<instanceN>/home/blobs/<opaqueBlobIdN>` for immutable home bytes and `agent-<instanceN>/sessions/session-<sessionN>/working/` for scratch. The model sees `/home` and `/working`, never these host paths. Artifacts, attachments and definition resources retain separate roots. The sibling `.provisioned` marker prevents repeat template seeding; no scratch artifacts/state or intermediate workspace directory is created.
 
 ## Decision: scalable capability authorization and contextual projection

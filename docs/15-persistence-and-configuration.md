@@ -1,5 +1,15 @@
 # Persistence and Configuration
 
+## Activation and AgentRun storage foundation
+
+The `ActivationAgentRunFoundation` migration adds Session `OriginJson` and `Surfaces`, plus `Activations`, `ActivationSourceEntries` and `AgentRuns`. Existing ordinary Session metadata defaults to UserChat/ChatList; no old execution rows are converted. Origin is immutable on subsequent saves. Surface mutation remains revision protected and does not change origin or lifecycle.
+
+Activations have unique Session/dedupe identity and an owner-scoped filtered unique background receipt key. Ordered source rows are unique by Session/entry and Activation/ordinal, so one accepted input cannot belong to two admitted turns. Runs have a unique Activation foreign key, a required Session link, indexed runnable state and a concurrency revision. Bounded JSON preserves the validated domain state, frozen configuration, checkpoint, approval and effect fence. UTC times use the existing SQLite millisecond representation. Both relational foreign keys and atomic admission prevent partial Session/Activation/run graphs through supported writes.
+
+Normal snapshot saves and admission share the existing Session mapper and entry upsert logic; admission stages them on the same DbContext transaction as the execution graph. InMemory stores share one gate and state across reopened run-store instances. A response outcome requires the persisted assistant entry; a semantic quiet outcome does not terminalize its Session or create prose.
+
+This additive foundation is **not the final schema cutover**. Occurrence acceptance receipts, completion receipts, production recovery and destructive removal of old execution tables/stores remain pending. No compatibility path or data conversion was added. The explicit execution reset/runbook will be completed with that cutover; this phase performs no automatic database or home reset. See [verification](reports/activation-agent-run-background-sessions-verification.md).
+
 ## Execution-local capability loads
 
 Migration `CapabilityExecutionLoads` adds nullable `ConversationTurnExecutions.LoadedCapabilityIdsJson` and non-null `CapabilityLoadCount` default zero. Existing rows remain empty. In-memory and SQLite stores use the same Domain revision/claim/state/cancellation admission. Both reject an already-canceled admission token before mutating loaded IDs, call count or revision. Loaded state survives requeue/reclaim of the same execution and is fresh on a new execution. Upgraded EnsureCreated databases stamp the migration only when both fields exist; partial schemas fail closed.

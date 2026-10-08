@@ -1,5 +1,17 @@
 # Implementation Plan
 
+## Activation, AgentRun and background Sessions cutover
+
+Accepted follow-on requirement reviewed against `bd44046896df6f3e0fc2e7d15d60dd479a5349cd` on 2026-10-08. This does not reopen historical freezes or start P10/P11. The approved target and migration policy are owned by [Architecture](03-system-architecture.md#accepted-activation-and-agentrun-cutover) and [Technology Decisions](10-technology-decisions.md#decision-unified-activation-agentrun-and-background-sessions).
+
+Execute in order: A domain/contract proof; B atomic input, Session, Activation, run and occurrence receipt persistence; C unified live/detached execution; D background creation and Automation intake; E trusted conditional report-back; F same-Session Continue in chat, APIs and UI; G old-engine deletion, bounded Impeccable, canonical documentation and exact-SHA closure.
+
+The domain, initial atomic storage foundation, batched admission factory and common claim/recovery coordinator are implemented. Phase B remains incomplete because occurrence acceptance and the destructive schema/store cutover are not implemented. The coordinator has no production dispatcher or registration yet; Phase C is not complete. Production still uses the baseline execution engines. No final merge, closure or freeze is established by these intermediate artifacts.
+
+Acceptance requires all AC01–AC20 and J1–J12 in the approved proposal: batched live admission; same-run retry; one child per immediate receipt/occurrence; one Session writer; safe approval, cancellation and effect recovery; frozen execution configuration with current authorization; quiet outcomes; non-recursive conditional report-back; same-Session continuation/foreground races; owner-scoped pagination/control; no mentions; and zero old production execution surface. Run focused/full backend, order-event plugin, frontend tests/build, Synthetic browser, SQLite/Compose restart and existing voice/initiative/browser/Automation/Skill/workspace/artifact regressions. Complete the bounded 1440/768/390 Impeccable pass and synchronize canonical docs.
+
+The final behavior commit must have all required hosted Synthetic/Compose jobs green on its exact SHA before closure. The baseline's hosted result does not verify this migration. [Verification](reports/activation-agent-run-background-sessions-verification.md) records phase/AC evidence, failed gates and outstanding work.
+
 Physical Infrastructure paths use one `Persistence:WorkspaceRoot`: `agent-<instanceN>/home/blobs/<opaqueBlobIdN>` for immutable home bytes and `agent-<instanceN>/sessions/session-<sessionN>/working/` for scratch. The model sees `/home` and `/working`, never these host paths. Artifacts, attachments and definition resources retain separate roots. The sibling `.provisioned` marker prevents repeat template seeding; no scratch artifacts/state or intermediate workspace directory is created.
 
 ## Bounded capability authorization and projection enhancement

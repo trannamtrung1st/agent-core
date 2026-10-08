@@ -8,6 +8,15 @@ namespace AgentCore.Infrastructure.Persistence;
 public sealed class InMemoryMemoryStore : IMemoryStore
 {
     private readonly object _gate = new();
+
+    internal object AdmissionGate => _gate;
+    internal AgentRunMemoryState AgentRuns { get; } = new();
+
+    internal ConversationEntry? FindEntry(Guid sessionId, Guid entryId)
+    {
+        lock (_gate) return _entries.TryGetValue(sessionId, out var entries)
+            ? entries.SingleOrDefault(entry => entry.EntryId == entryId) : null;
+    }
     private readonly Dictionary<Guid, SessionSnapshot> _sessions = [];
     private readonly Dictionary<Guid, List<ConversationEntry>> _entries = [];
     private readonly Dictionary<Guid, UserProfile> _profiles = [];
@@ -82,6 +91,8 @@ public sealed class InMemoryMemoryStore : IMemoryStore
                 throw AgentCoreErrors.Conflict("Stale session revision.");
             }
 
+            if (existing.Origin != snapshot.Origin)
+                throw AgentCoreErrors.Conflict("Session origin is immutable.");
             Store(snapshot, replaceEntries: snapshot.DurablyDeletedAt is not null);
             return ValueTask.CompletedTask;
         }

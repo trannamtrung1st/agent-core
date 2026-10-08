@@ -25,6 +25,8 @@ public sealed class SessionRecord
     public string AgentInstanceId { get; set; } = "";
     public string? PinnedPersonaJson { get; set; }
     public long? PinnedPersonaRevision { get; set; }
+    public string OriginJson { get; set; } = "{\"kind\":0}";
+    public int Surfaces { get; set; } = (int)SessionSurface.ChatList;
     public SnapshotRecord? Snapshot { get; set; }
     public List<EntryRecord> Entries { get; set; } = [];
 }
@@ -203,6 +205,9 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<ExternalEventDeliveryRecord> ExternalEventDeliveries => Set<ExternalEventDeliveryRecord>();
     public DbSet<TriggerOccurrenceRecord> TriggerOccurrences => Set<TriggerOccurrenceRecord>();
     public DbSet<WorkItemRecord> WorkItems => Set<WorkItemRecord>();
+    public DbSet<ActivationRecord> Activations => Set<ActivationRecord>();
+    public DbSet<AgentRunRecord> AgentRuns => Set<AgentRunRecord>();
+    public DbSet<ActivationSourceEntryRecord> ActivationSourceEntries => Set<ActivationSourceEntryRecord>();
 
     public DbSet<ConversationTurnExecutionRecord> ConversationTurnExecutions => Set<ConversationTurnExecutionRecord>();
     public DbSet<WorkApprovalRecord> WorkApprovals => Set<WorkApprovalRecord>();
@@ -276,6 +281,36 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.HasIndex(row => new { row.DurablyDeletedAtUtc, row.ArchivedAtUtc, row.UpdatedAtUtc, row.SessionId });
             entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();
             entity.HasIndex(row => row.AgentInstanceId);
+            entity.Property(row => row.OriginJson).HasDefaultValue("{\"kind\":0}").IsRequired();
+            entity.Property(row => row.Surfaces).HasDefaultValue((int)SessionSurface.ChatList);
+        });
+        modelBuilder.Entity<ActivationRecord>(entity =>
+        {
+            entity.ToTable("Activations");
+            entity.HasKey(row => row.ActivationId);
+            entity.HasIndex(row => new { row.SessionId, row.DedupeKey }).IsUnique();
+            entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.BackgroundSourceKey })
+                .IsUnique().HasFilter("BackgroundSourceKey IS NOT NULL");
+            entity.HasOne<SessionRecord>().WithMany().HasForeignKey(row => row.SessionId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<AgentRunRecord>(entity =>
+        {
+            entity.ToTable("AgentRuns");
+            entity.HasKey(row => row.AgentRunId);
+            entity.HasIndex(row => row.ActivationId).IsUnique();
+            entity.HasOne<ActivationRecord>().WithOne().HasForeignKey<AgentRunRecord>(row => row.ActivationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<SessionRecord>().WithMany().HasForeignKey(row => row.SessionId).OnDelete(DeleteBehavior.Restrict);
+            entity.Property(row => row.Revision).IsConcurrencyToken();
+            entity.HasIndex(row => new { row.Status, row.NextRetryAtUtc, row.CreatedAtUtc });
+            entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.SessionId, row.CreatedAtUtc });
+        });
+        modelBuilder.Entity<ActivationSourceEntryRecord>(entity =>
+        {
+            entity.ToTable("ActivationSourceEntries");
+            entity.HasKey(row => new { row.SessionId, row.EntryId });
+            entity.HasIndex(row => new { row.ActivationId, row.Ordinal }).IsUnique();
+            entity.HasOne<ActivationRecord>().WithMany().HasForeignKey(row => row.ActivationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<EntryRecord>().WithMany().HasForeignKey(row => row.EntryId).OnDelete(DeleteBehavior.Restrict);
         });
         modelBuilder.Entity<SnapshotRecord>(entity =>
         {

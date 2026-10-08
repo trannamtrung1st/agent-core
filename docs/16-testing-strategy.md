@@ -1,5 +1,13 @@
 # Testing Strategy
 
+## Activation and AgentRun cutover gates
+
+Foundation tests freeze ordered batched inputs, distinguish same-run retry from same-Session continuation, validate origin/surface separation and initial-only reporting eligibility, preserve frozen Skill/capability state, and fence stale generation even for idempotent effect acknowledgements. InMemory/SQLite parity must exercise atomic input/Activation/run admission, changed-receipt conflicts, unique source-entry ownership, concurrent child replay/claim, rollback after an identity collision, owner isolation, exact approval resume, persisted uncertain effects, outcome-entry verification and reopening the same background Session after a quiet completion. Include submillisecond UTC admission/reopen because indexed SQLite timestamps use milliseconds while immutable admission JSON preserves exact source time.
+
+Common coordinator tests exercise direct and scheduled claim ownership, same-run expired-lease recovery, expired approval continuing the same attempt, uncertain external effects terminalizing without replay, missing-Session isolation and transport failure retaining a claim until recovery. The dispatcher in these tests captures claimed work; it is not a production SessionRuntime integration proof.
+
+These integrated storage flows do not establish production runtime acceptance. The complete cutover requires runnable J1–J12: live text batching/streaming; retry; immediate background start; report-back; Continue in chat; recurrence; native/authored event routing; approval; crash recovery; foreground race; security boundaries; and quiet automation. Retain voice, initiative, browser, Automation, Skill, workspace and artifact regressions. Required frontend/backend suites, order-event plugin, SQLite/Compose recovery, bounded Impeccable and exact-final-SHA hosted gates remain mandatory before AC01–AC20 closure. Current evidence and remaining gaps live in [verification](reports/activation-agent-run-background-sessions-verification.md).
+
 ## Capability authorization and projection acceptance
 
 Verify >32 Selected/All grants, exact immutable All publication snapshots, unknown/duplicate rejection, always subset/context-only checks and legacy offers. Projection checks cover bootstrap, trusted context, attachments, active Skills, loaded tools, deduplication, configuration and tool-less models. Discovery checks cover exact/category/tag/description match, unauthorized/non-discoverable hiding, bounds/no-match/already-projected and restricted occurrence policy.

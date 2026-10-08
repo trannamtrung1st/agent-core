@@ -31,6 +31,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         await StampLegacyEnsureCreatedAsync(db, cancellationToken).ConfigureAwait(false);
         await RepairEnsureCreatedP7SchemaGapsAsync(db, cancellationToken).ConfigureAwait(false);
         await StampP7MigrationsWhenSchemaCompleteAsync(db, cancellationToken).ConfigureAwait(false);
+        await StampAgentRunFoundationAsync(db, cancellationToken).ConfigureAwait(false);
         await db.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
         await ValidateStoredSkillContractAsync(db, cancellationToken).ConfigureAwait(false);
     }
@@ -64,6 +65,51 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             """;
         if (Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)) != 0)
             throw new InvalidOperationException("Legacy Skill data reset required: stop the API, back up the configured database and data roots together, then start with fresh data. See docs/17-observability-and-operations.md. Stored Skill JSON is incompatible with the Instance Skills cutover.");
+    }
+
+    private static async Task StampAgentRunFoundationAsync(AgentCoreDbContext db, CancellationToken cancellationToken)
+    {
+        var connection = db.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        var hasOrigin = await ColumnExistsAsync(connection, "Sessions", "OriginJson", cancellationToken).ConfigureAwait(false);
+        var hasActivations = await TableExistsAsync(connection, "Activations", cancellationToken).ConfigureAwait(false);
+        if (!hasOrigin && !hasActivations) return;
+
+        // Only a complete current-model EnsureCreated schema may be stamped. No partial repair or old execution conversion.
+        var complete = hasOrigin && hasActivations
+            && await ColumnMatchesSqliteSpecAsync(connection, "Sessions", "OriginJson", "TEXT", true, cancellationToken).ConfigureAwait(false)
+            && await ColumnMatchesSqliteSpecAsync(connection, "Sessions", "Surfaces", "INTEGER", true, cancellationToken).ConfigureAwait(false)
+            && await ColumnsMatchAsync(connection, "Activations", [
+                new("ActivationId", "TEXT", true, true), new("SessionId", "TEXT", true, false),
+                new("DedupeKey", "TEXT", true, false), new("BackgroundSourceKey", "TEXT", false, false),
+                new("AdmissionHash", "TEXT", true, false), new("AgentInstanceId", "TEXT", true, false),
+                new("ProfileId", "TEXT", true, false), new("PayloadJson", "TEXT", true, false),
+                new("AdmittedAtUtc", "INTEGER", true, false)], cancellationToken).ConfigureAwait(false)
+            && await ColumnsMatchAsync(connection, "AgentRuns", [
+                new("AgentRunId", "TEXT", true, true), new("ActivationId", "TEXT", true, false),
+                new("SessionId", "TEXT", true, false), new("AgentInstanceId", "TEXT", true, false),
+                new("ProfileId", "TEXT", true, false), new("Status", "INTEGER", true, false),
+                new("Revision", "INTEGER", true, false), new("NextRetryAtUtc", "INTEGER", false, false),
+                new("LeaseExpiresAtUtc", "INTEGER", false, false), new("ApprovalExpiresAtUtc", "INTEGER", false, false),
+                new("CreatedAtUtc", "INTEGER", true, false), new("UpdatedAtUtc", "INTEGER", true, false),
+                new("PayloadJson", "TEXT", true, false)], cancellationToken).ConfigureAwait(false)
+            && await ColumnsMatchAsync(connection, "ActivationSourceEntries", [
+                new("SessionId", "TEXT", true, true), new("EntryId", "TEXT", true, true),
+                new("ActivationId", "TEXT", true, false), new("Ordinal", "INTEGER", true, false)], cancellationToken).ConfigureAwait(false)
+            && await HasIndexAsync(connection, "Activations", ["SessionId", "DedupeKey"], true, cancellationToken).ConfigureAwait(false)
+            && await HasUniqueIndexAsync(connection, "Activations", ["AgentInstanceId", "ProfileId", "BackgroundSourceKey"],
+                true, "BackgroundSourceKey IS NOT NULL", cancellationToken).ConfigureAwait(false)
+            && await HasIndexAsync(connection, "AgentRuns", ["ActivationId"], true, cancellationToken).ConfigureAwait(false)
+            && await HasIndexAsync(connection, "ActivationSourceEntries", ["ActivationId", "Ordinal"], true, cancellationToken).ConfigureAwait(false)
+            && await HasForeignKeyAsync(connection, "Activations", "SessionId", "Sessions", "SessionId", "RESTRICT", cancellationToken).ConfigureAwait(false)
+            && await HasForeignKeyAsync(connection, "AgentRuns", "ActivationId", "Activations", "ActivationId", "RESTRICT", cancellationToken).ConfigureAwait(false)
+            && await HasForeignKeyAsync(connection, "AgentRuns", "SessionId", "Sessions", "SessionId", "RESTRICT", cancellationToken).ConfigureAwait(false)
+            && await HasForeignKeyAsync(connection, "ActivationSourceEntries", "EntryId", "ConversationEntries", "EntryId", "RESTRICT", cancellationToken).ConfigureAwait(false)
+            && await HasForeignKeyAsync(connection, "ActivationSourceEntries", "ActivationId", "Activations", "ActivationId", "RESTRICT", cancellationToken).ConfigureAwait(false);
+        if (!complete) throw AgentCoreErrors.Persistence("AgentRun foundation schema is incomplete; explicit disposable-data reset required.");
+        await db.Database.ExecuteSqlRawAsync("INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ('20261008013446_ActivationAgentRunFoundation', '10.0.12');",
+            cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task StampLegacyEnsureCreatedAsync(AgentCoreDbContext db, CancellationToken cancellationToken)
@@ -517,14 +563,21 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         return row is null ? null : ToSnapshot(row, []);
     }
 
-    public async ValueTask SaveAsync(
-        SessionSnapshot snapshot,
-        long expectedRevision,
+    public async ValueTask SaveAsync(SessionSnapshot snapshot, long expectedRevision,
         CancellationToken cancellationToken = default)
     {
         MaterializedEntryRows = 0;
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await StageSaveAsync(db, snapshot, expectedRevision, cancellationToken).ConfigureAwait(false);
+        await SaveChangesOrThrowAsync(db, cancellationToken).ConfigureAwait(false);
+        await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    // Shared by normal persistence and atomic input/Activation/AgentRun admission.
+    internal async Task StageSaveAsync(AgentCoreDbContext db, SessionSnapshot snapshot,
+        long expectedRevision, CancellationToken cancellationToken)
+    {
         var key = snapshot.SessionId.ToString("D");
         var existing = await db.Sessions
             .Include(item => item.Snapshot)
@@ -539,8 +592,6 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
 
             db.Sessions.Add(ToRecord(snapshot));
             MaterializedEntryRows += snapshot.Entries.Count;
-            await SaveChangesOrThrowAsync(db, cancellationToken).ConfigureAwait(false);
-            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -549,7 +600,6 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         var current = ToSnapshot(existing, matched);
         if (existing.Revision == snapshot.Revision && MemoryStoreSemantics.SameContent(current, snapshot))
         {
-            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -558,10 +608,10 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             throw AgentCoreErrors.Conflict("Stale session revision.");
         }
 
+        if (current.Origin != snapshot.Origin)
+            throw AgentCoreErrors.Conflict("Session origin is immutable.");
         ApplySession(existing, snapshot);
         await UpsertEntriesAsync(db, existing, snapshot, cancellationToken).ConfigureAwait(false);
-        await SaveChangesOrThrowAsync(db, cancellationToken).ConfigureAwait(false);
-        await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask<IReadOnlyList<ConversationEntry>> ReadHistoryAsync(
@@ -948,6 +998,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             ? null
             : JsonSerializer.Serialize(snapshot.PinnedPersona, Json);
         row.PinnedPersonaRevision = snapshot.PinnedPersonaRevision;
+        row.OriginJson = JsonSerializer.Serialize(snapshot.Origin, Json);
+        row.Surfaces = (int)snapshot.Surfaces;
         row.Mode = snapshot.Mode.ToString();
         row.PendingMode = snapshot.PendingMode?.ToString();
         row.Status = snapshot.Status.ToString();
@@ -1077,7 +1129,9 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             string.IsNullOrEmpty(row.PinnedPersonaJson)
                 ? null
                 : JsonSerializer.Deserialize<AgentIdentity>(row.PinnedPersonaJson, Json),
-            row.PinnedPersonaRevision);
+            row.PinnedPersonaRevision,
+            JsonSerializer.Deserialize<SessionOrigin>(row.OriginJson, Json) ?? throw AgentCoreErrors.Persistence("Session origin is missing."),
+            (SessionSurface)row.Surfaces);
     }
 
     private static ConversationEntry ToEntry(EntryRecord row) =>

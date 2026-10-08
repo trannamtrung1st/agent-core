@@ -1,5 +1,15 @@
 # Backend Interfaces
 
+## Activation and AgentRun admission foundation
+
+`IAgentRunStore` admits a Session snapshot, accepted source entries, immutable Activation and initial queued AgentRun in one operation. It exposes no standalone Activation insert. SQLite shares `SqliteMemoryStore.StageSaveAsync` inside one transaction; InMemory shares the Session store's gate and execution state. `(SessionId, DedupeKey)`, background source receipts, unique accepted source-entry ownership and unique run-per-Activation identity prevent competing admissions. Replaying a background receipt returns the originally committed child/run even if the proposed child identifiers differ; changed source content or execution pins conflict.
+
+Run and Activation reads are scoped by `AgentRunOwner`. `AgentRunCommand` is the shared transition vocabulary for claim, renewal, checkpoint, result, failure/retry, approval, cancellation, recovery, Skill/capability loading and effect state. Its revision and lease checks precede mutation; domain transitions additionally fence generation and exact action. Response completion must link to an already durable completed assistant entry in the same Session and response; NoAction has no invented entry. Immediate child admission requires an active owned user-turn source and matching Definition/persona/model pins. Execution capability authorization and background resource policy belong to the forthcoming application admission service, not this persistence port.
+
+`AgentRunAdmissionFactory.ForAcceptedUserBatch` freezes one ordered, accepted batch with stable input-derived dedupe, one response and pinned execution configuration. `AgentRunCoordinator` uses the same CAS claim/recovery path for direct admission dispatch and scheduler dispatch through `IAgentRunDispatcher`. The dispatcher contract requires delivery into the sole SessionRuntime mailbox and current eligibility checks. Expired approval resumes the same attempt; uncertain external effects do not replay. Unexpected dispatch failures retain their lease because mailbox delivery may already have occurred.
+
+These ports and coordinator are implemented for foundation tests. They are not yet registered as the production execution owner, and the production dispatcher is pending. The old interfaces elsewhere in this document describe the still-running baseline until the [cutover](18-implementation-plan.md#activation-agentrun-and-background-sessions-cutover) removes them.
+
 Physical Infrastructure paths use one `Persistence:WorkspaceRoot`: `agent-<instanceN>/home/blobs/<opaqueBlobIdN>` for immutable home bytes and `agent-<instanceN>/sessions/session-<sessionN>/working/` for scratch. The model sees `/home` and `/working`, never these host paths. Artifacts, attachments and definition resources retain separate roots. The sibling `.provisioned` marker prevents repeat template seeding; no scratch artifacts/state or intermediate workspace directory is created.
 
 ## Capability projection interfaces
