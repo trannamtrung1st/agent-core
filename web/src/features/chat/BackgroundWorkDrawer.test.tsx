@@ -29,10 +29,10 @@ const show = (instanceId = "instance-1") => render(<App><BackgroundWorkDrawer in
 describe("Background Sessions", () => {
   it("marks attention results across unloaded pages without acknowledging quiet or handled results", async () => {
     const attention = { ...fixtureRun, outcome: { ...fixtureRun.outcome!, attentionRequired: true } };
-    const next = { ...fixtureBackground, session: { ...fixtureBackground.session, sessionId: "second" }, latestRun: { ...attention, agentRunId: "second-run" } };
+    const next = { ...fixtureBackground, session: { ...fixtureBackground.session, sessionId: "second" }, initialRun: { ...attention, agentRunId: "second-run" } };
     vi.mocked(listBackgroundSessions).mockImplementation(async (_owner, cursor) => {
-      if (cursor) return { items: [next, { ...fixtureBackground, latestRun: { ...attention, agentRunId: "handled" }, completionDelivery: { status: "handled", targetSessionId: "parent", parentAgentRunId: "handling-run", reason: null } }, fixtureBackground], hasMore: false, nextCursor: null };
-      return { items: [{ ...fixtureBackground, latestRun: attention }], hasMore: true, nextCursor: "opaque-next" };
+      if (cursor) return { items: [next, { ...fixtureBackground, initialRun: { ...attention, agentRunId: "handled" }, completionDelivery: { status: "handled", targetSessionId: "parent", parentAgentRunId: "handling-run", reason: null } }, fixtureBackground], hasMore: false, nextCursor: null };
+      return { items: [{ ...fixtureBackground, initialRun: attention }], hasMore: true, nextCursor: "opaque-next" };
     });
     show();
     expect(await screen.findByText("Unread · needs attention")).toBeVisible();
@@ -44,7 +44,7 @@ describe("Background Sessions", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Read status saved in this browser.");
   });
   it("keeps all results unread after a failed later page and supports retry", async () => {
-    const attention = { ...fixtureBackground, latestRun: { ...fixtureRun, outcome: { ...fixtureRun.outcome!, attentionRequired: true } } };
+    const attention = { ...fixtureBackground, initialRun: { ...fixtureRun, outcome: { ...fixtureRun.outcome!, attentionRequired: true } } };
     let fail = true;
     vi.mocked(listBackgroundSessions).mockImplementation(async (_owner, cursor) => {
       if (cursor && fail) throw new Error("Unable to load next page");
@@ -60,7 +60,7 @@ describe("Background Sessions", () => {
     expect(screen.queryByText("Unable to load next page")).not.toBeInTheDocument();
   });
   it("shows a storage failure and allows bulk read to recover", async () => {
-    vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [{ ...fixtureBackground, latestRun: { ...fixtureRun, outcome: { ...fixtureRun.outcome!, attentionRequired: true } } }], hasMore: false, nextCursor: null });
+    vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [{ ...fixtureBackground, initialRun: { ...fixtureRun, outcome: { ...fixtureRun.outcome!, attentionRequired: true } } }], hasMore: false, nextCursor: null });
     const saved = window.localStorage.setItem;
     window.localStorage.setItem = () => { throw new Error("storage blocked"); };
     show(); await screen.findByText("Unread · needs attention");
@@ -72,14 +72,14 @@ describe("Background Sessions", () => {
     await waitFor(() => expect(screen.queryByText("Unread · needs attention")).not.toBeInTheDocument());
   });
   it("does not acknowledge results when pagination repeats a cursor", async () => {
-    vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [{ ...fixtureBackground, latestRun: { ...fixtureRun, outcome: { ...fixtureRun.outcome!, attentionRequired: true } } }], hasMore: true, nextCursor: "repeat" });
+    vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [{ ...fixtureBackground, initialRun: { ...fixtureRun, outcome: { ...fixtureRun.outcome!, attentionRequired: true } } }], hasMore: true, nextCursor: "repeat" });
     show(); await screen.findByText("Unread · needs attention");
     fireEvent.click(screen.getByRole("button", { name: "Mark all as read" }));
     expect(await screen.findByText("Unable to load all background results. Try marking all as read again.")).toBeVisible();
     expect(localStorage.getItem(WORK_READ_STORAGE_KEY)).toBeNull();
   });
   it("ignores a pending bulk-read response after the owner changes", async () => {
-    const attention = { ...fixtureBackground, latestRun: { ...fixtureRun, outcome: { ...fixtureRun.outcome!, attentionRequired: true } } };
+    const attention = { ...fixtureBackground, initialRun: { ...fixtureRun, outcome: { ...fixtureRun.outcome!, attentionRequired: true } } };
     let resolve!: (value: Awaited<ReturnType<typeof listBackgroundSessions>>) => void;
     vi.mocked(listBackgroundSessions).mockImplementation(async (_owner, _cursor, limit) => limit === 100
       ? new Promise(done => { resolve = done; }) : { items: [attention], hasMore: false, nextCursor: null });
@@ -175,7 +175,7 @@ describe("Background Sessions", () => {
     expect(continueInChat).toHaveBeenCalledOnce();
   });
   it("keeps an unavailable historical initial result separate from mutable chat presentation", async () => {
-    vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [{ ...fixtureBackground, originalTitle: null, latestRun: null,
+    vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [{ ...fixtureBackground, originalTitle: null, initialRun: null,
       session: { ...fixtureBackground.session, title: "New conversation title" } }], nextCursor: null, hasMore: false });
     show();
     expect(await screen.findByRole("heading", { name: "Background task" })).toBeVisible();
@@ -205,7 +205,7 @@ describe("Background Sessions", () => {
   });
   it("preserves archive boundaries and quiet NoAction", async () => {
     vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [{ ...fixtureBackground, canContinueInChat: false }], nextCursor: null, hasMore: false });
-    vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [{ ...fixtureBackground, canContinueInChat: false, latestRun: { ...fixtureRun, outcome: { kind: "NoAction", summary: "", outcomeEntryId: null, attentionRequired: false } } }], nextCursor: null, hasMore: false });
+    vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [{ ...fixtureBackground, canContinueInChat: false, initialRun: { ...fixtureRun, outcome: { kind: "NoAction", summary: "", outcomeEntryId: null, attentionRequired: false } } }], nextCursor: null, hasMore: false });
     show(); expect(await screen.findByRole("button", { name: "Continue in chat" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "View original result" }));
     expect(await screen.findByText("No action was needed.")).toBeInTheDocument();

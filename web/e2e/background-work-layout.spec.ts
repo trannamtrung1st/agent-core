@@ -43,8 +43,8 @@ test('long run outcomes scroll independently and remain usable across drawer wid
     expect(await drawer.locator('.ant-drawer-body').evaluate(e => e.scrollTop)).toBe(before);
     await result.evaluate(e => { e.scrollTop = 0; });
   }
-  item.latestRun = { ...item.latestRun!, revision: 4, outcome: { ...item.latestRun!.outcome!, summary: 'Sample hello! This is a one-time reminder.' } };
-  await expect(result).toHaveText(item.latestRun.outcome!.summary, { timeout: 10000 });
+  item.initialRun = { ...item.initialRun!, revision: 4, outcome: { ...item.initialRun!.outcome!, summary: 'Sample hello! This is a one-time reminder.' } };
+  await expect(result).toHaveText(item.initialRun.outcome!.summary, { timeout: 10000 });
   expect(await result.evaluate(e => e.scrollHeight <= e.clientHeight)).toBe(true);
   await page.keyboard.press('Escape'); await expect(drawer).toBeHidden(); expect(errors).toEqual([]);
 });

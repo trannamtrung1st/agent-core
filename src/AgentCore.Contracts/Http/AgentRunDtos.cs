@@ -16,7 +16,7 @@ public sealed record BackgroundSessionOriginResponse(string Kind, string Initial
     string? ParentAgentRunId, string? AutomationId, string? OccurrenceId, bool ReportCompletion);
 public sealed record CompletionDeliveryResponse(string Status, string? TargetSessionId, string? ParentAgentRunId, string? Reason);
 public sealed record BackgroundSessionResponse(SessionCatalogItemResponse Session, BackgroundSessionOriginResponse Origin,
-    IReadOnlyList<string> Surfaces, AgentRunResponse? LatestRun, bool CanContinueInChat, int ArtifactCount, bool ArtifactCountHasMore, CompletionDeliveryResponse? CompletionDelivery = null, string? OriginalTitle = null);
+    IReadOnlyList<string> Surfaces, AgentRunResponse? InitialRun, bool CanContinueInChat, int ArtifactCount, bool ArtifactCountHasMore, CompletionDeliveryResponse? CompletionDelivery = null, string? OriginalTitle = null);
 public sealed record BackgroundSessionPageResponse(IReadOnlyList<BackgroundSessionResponse> Items, string? NextCursor, bool HasMore);
 public sealed record ContinueInChatResponse(string SessionId);
 public sealed record CancelAgentRunRequest(long ExpectedRevision);

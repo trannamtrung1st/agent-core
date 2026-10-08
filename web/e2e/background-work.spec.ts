@@ -108,7 +108,7 @@ test('mark all as read includes unloaded pages, persists, and preserves later at
   }
   await page.reload(); await opener.click();
   await expect(drawer.getByText('Unread · needs attention')).toHaveCount(0);
-  rows[0].latestRun = { ...rows[0].latestRun!, revision: rows[0].latestRun!.revision + 1 };
+  rows[0].initialRun = { ...rows[0].initialRun!, revision: rows[0].initialRun!.revision + 1 };
   await drawer.getByRole('button', { name: 'Close', exact: true }).click(); await opener.click();
   await expect(drawer.getByText('Unread · needs attention')).toHaveCount(1);
   expect(errors).toEqual([]);

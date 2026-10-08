@@ -118,7 +118,7 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
         const items: { run: AgentRun; delivery?: string }[] = []; let cursor: string | undefined;
         do {
           const page = await listBackgroundSessions(owner, cursor, 100);
-          for (const item of page.items) if (item.latestRun && (item.completionDelivery?.status === "pending" || item.latestRun.outcome?.attentionRequired)) items.push({ run: item.latestRun, delivery: item.completionDelivery?.status });
+          for (const item of page.items) if (item.initialRun && (item.completionDelivery?.status === "pending" || item.initialRun.outcome?.attentionRequired)) items.push({ run: item.initialRun, delivery: item.completionDelivery?.status });
           cursor = page.hasMore ? page.nextCursor ?? undefined : undefined;
         } while (current && cursor);
         if (current && request === generation) setAttentionItems(items);

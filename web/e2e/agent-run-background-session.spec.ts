@@ -28,7 +28,7 @@ test("immediate child reports once, then continues as the same Session with a ne
   expect(child.origin.parentSessionId).toBe(parentId);
   expect(child.completionDelivery?.status).toBe("delivered");
   await expect(page.locator(".conversation-scroll")).toContainText("Background work completed");
-  expect(child.latestRun?.outcome?.attentionRequired).toBe(true);
+  expect(child.initialRun?.outcome?.attentionRequired).toBe(true);
   expect(child.surfaces).toEqual(["BackgroundWork"]);
   const parentRuns = await (await page.request.get(`/api/v2/sessions/${parentId}/agent-runs`, { headers })).json() as CursorPage<AgentRun>;
   expect(parentRuns.items.filter(run => run.activationKind === "BackgroundCompleted")).toHaveLength(1);
@@ -56,7 +56,7 @@ test("immediate child reports once, then continues as the same Session with a ne
   expect(current.session.sessionId).toBe(child.session.sessionId);
   expect(current.origin).toEqual(child.origin);
   expect(current.surfaces).toEqual(["ChatList", "BackgroundWork"]);
-  expect(current.latestRun).toEqual(child.latestRun);
+  expect(current.initialRun).toEqual(child.initialRun);
   expect(current.originalTitle).toBe(child.originalTitle);
   expect(child.artifactCount).toBe(1);
   expect(current.artifactCount).toBe(1);

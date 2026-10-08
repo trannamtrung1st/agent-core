@@ -82,7 +82,7 @@ export type BackgroundSession = {
   origin: { kind: string; initialAgentRunId: string; parentSessionId: string | null; parentAgentRunId: string | null;
     automationId: string | null; occurrenceId: string | null; reportCompletion: boolean };
   completionDelivery?: { status: string; targetSessionId: string | null; parentAgentRunId: string | null; reason: string | null };
-  originalTitle?: string | null; surfaces: string[]; latestRun: AgentRun | null; canContinueInChat: boolean; artifactCount: number; artifactCountHasMore: boolean;
+  originalTitle?: string | null; surfaces: string[]; initialRun: AgentRun | null; canContinueInChat: boolean; artifactCount: number; artifactCountHasMore: boolean;
 };
 
 export type SessionAutomation = {

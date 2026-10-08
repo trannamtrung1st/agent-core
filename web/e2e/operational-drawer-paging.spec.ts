@@ -45,7 +45,7 @@ test('Admin AgentRun pages survive resizing and refresh', async ({ page }) => {
   const headers = { 'X-AgentCore-Owner-Capability': (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))! };
   const response = await page.request.post('/api/v2/admin/agent-instances', { headers, data: { definitionId: 'examiner', version: 1 } });
   const { instanceId } = await response.json();
-  const runs = Array.from({ length: 45 }, (_, index) => backgroundFixture(index, `Review ${index}`).latestRun!);
+  const runs = Array.from({ length: 45 }, (_, index) => backgroundFixture(index, `Review ${index}`).initialRun!);
   let heads = 0;
   await page.route(`**/agent-instances/${instanceId}/agent-runs?**`, route => {
     const url = new URL(route.request().url()); const before = url.searchParams.get('before'); if (!before) heads++;

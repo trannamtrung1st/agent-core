@@ -987,7 +987,7 @@ describe("ChatApp tablet session rail", () => {
 
   it("keeps background work available for live, paused, and ended sessions without a transcript result", async () => {
     const completedRun = { ...fixtureRun, outcome: { ...fixtureRun.outcome!, summary: "Oven timer finished.", attentionRequired: true } };
-    vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [{ ...fixtureBackground, latestRun: completedRun }], nextCursor: null, hasMore: false });
+    vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [{ ...fixtureBackground, initialRun: completedRun }], nextCursor: null, hasMore: false });
     vi.mocked(listAgentRuns).mockResolvedValue({ items: [completedRun], nextCursor: null, hasMore: false });
 
     for (const status of ["active", "paused", "ended"] as const) {

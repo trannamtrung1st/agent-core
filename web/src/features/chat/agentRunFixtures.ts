@@ -11,5 +11,5 @@ export const fixtureBackground: BackgroundSession = {
   session: { sessionId: "background-1", title: "Progress check", agentId: "examiner", agentVersion: 1, status: "active", archived: false, ended: false,
     workspaceOwned: true, runtimeEpoch: 1, revision: 3, createdAt: fixtureRun.createdAt, updatedAt: fixtureRun.updatedAt },
   origin: { kind: "ImmediateBackground", initialAgentRunId: "run-1", parentSessionId: "parent-1", parentAgentRunId: "parent-run",
-    automationId: null, occurrenceId: null, reportCompletion: true }, surfaces: ["BackgroundWork"], latestRun: fixtureRun, canContinueInChat: true, artifactCount: 0, artifactCountHasMore: false
+    automationId: null, occurrenceId: null, reportCompletion: true }, surfaces: ["BackgroundWork"], initialRun: fixtureRun, canContinueInChat: true, artifactCount: 0, artifactCountHasMore: false
 };

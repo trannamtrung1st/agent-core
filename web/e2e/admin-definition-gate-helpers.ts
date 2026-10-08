@@ -1,10 +1,21 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
+async function comboboxOption(page: Page, combobox: Locator, optionText: string) {
+  const listboxId = await combobox.getAttribute("aria-controls");
+  expect(listboxId).toBeTruthy();
+  // A closing portal can stay visible during motion. Match the actual owner,
+  // rather than all visible Select portals or whichever option happens to be last.
+  const dropdown = page.locator(".ant-select-dropdown").filter({
+    has: page.locator(`[id="${listboxId}"]`)
+  });
+  return dropdown.locator(`.ant-select-item-option[title="${optionText}"]`);
+}
+
 async function selectAntdComboboxOption(page: Page, combobox: Locator, optionText: string) {
   await page.keyboard.press("Escape");
   await combobox.click();
   await combobox.fill(optionText);
-  const option = page.locator(`.ant-select-item-option[title="${optionText}"]`).last();
+  const option = await comboboxOption(page, combobox, optionText);
   await expect(option).toBeVisible({ timeout: 15_000 });
   await option.click();
 }
@@ -23,7 +34,7 @@ export async function ensureToolAllowlisted(
     await page.keyboard.press("Escape");
     await selector.click();
     await selector.fill(toolName);
-    const option = page.locator(`.ant-select-dropdown:visible .ant-select-item-option[title="${toolName}"]`);
+    const option = await comboboxOption(page, selector, toolName);
     await expect(option).toBeVisible();
     if (await option.getAttribute("aria-selected") !== "true"
         && !(await option.getAttribute("class"))?.includes("ant-select-item-option-selected")) await option.click();

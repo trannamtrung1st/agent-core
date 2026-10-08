@@ -57,8 +57,8 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
   function select(item: BackgroundSession, control: "history") {
     historyOpener.current = { sessionId: item.session.sessionId, control }; moveFocus.current = true;
     setActionError(null); setSelected(item);
-    if (item.latestRun && isUnread(item.latestRun)) {
-      try { markRead([item.latestRun]); } catch (reason) { setActionError(reason instanceof Error ? reason.message : "Unable to mark this result as read."); }
+    if (item.initialRun && isUnread(item.initialRun)) {
+      try { markRead([item.initialRun]); } catch (reason) { setActionError(reason instanceof Error ? reason.message : "Unable to mark this result as read."); }
     }
   }
   async function openChat(item: BackgroundSession) {
@@ -102,7 +102,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
         const result = await listBackgroundSessions(instanceId, cursor, 100);
         if (generation !== epoch.current) return;
         for (const item of result.items) {
-          if (item.latestRun && item.completionDelivery?.status !== "handled") runs.push(item.latestRun);
+          if (item.initialRun && item.completionDelivery?.status !== "handled") runs.push(item.initialRun);
         }
         if (!result.hasMore) break;
         if (!result.nextCursor || cursors.has(result.nextCursor)) throw new Error("Unable to load all background results. Try marking all as read again.");
@@ -140,7 +140,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
         {active.surfaces.includes("ChatList") ? <Typography.Text type="secondary">Continued in chat</Typography.Text> : null}
         {automationLink(active)}
         <Typography.Text type="secondary">{fileCount(active)}</Typography.Text>
-        {active.latestRun ? <AgentRunDetails run={active.latestRun} onChange={() => void page.refresh()} />
+        {active.initialRun ? <AgentRunDetails run={active.initialRun} onChange={() => void page.refresh()} />
           : <Alert type="info" title="The original run is unavailable." />}
         <Collapse items={[{ key: "history", label: "Conversation run history", children: <SessionRunHistory sessionId={active.session.sessionId} open={open} /> }]} />
         <SessionArtifacts sessionId={active.session.sessionId} agentRunId={active.origin.initialAgentRunId} open={open} />
@@ -161,17 +161,17 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
             <Flex vertical gap={token.paddingXS}>
               <Flex wrap align="center" justify="space-between" gap={token.paddingXS}>
                 <Typography.Title level={5} className="background-work-item-title">{item.originalTitle ?? "Background task"}</Typography.Title>
-                {item.latestRun ? <AgentRunStatus run={item.latestRun} /> : null}
+                {item.initialRun ? <AgentRunStatus run={item.initialRun} /> : null}
               </Flex>
               <Flex wrap gap={token.paddingXS}>
-                <Typography.Text type="secondary">{runOriginLabel(item.origin.kind)} · <time dateTime={item.latestRun?.updatedAt ?? item.session.createdAt}>{formatChatTime(item.latestRun?.updatedAt ?? item.session.createdAt) ?? "Unknown time"}</time></Typography.Text>
-                <Typography.Text type="secondary">{fileCount(item)}{item.latestRun && item.latestRun.attemptCount > 1 ? ` · Attempt ${item.latestRun.attemptCount} of ${item.latestRun.maxAttempts}` : ""}</Typography.Text>
+                <Typography.Text type="secondary">{runOriginLabel(item.origin.kind)} · <time dateTime={item.initialRun?.updatedAt ?? item.session.createdAt}>{formatChatTime(item.initialRun?.updatedAt ?? item.session.createdAt) ?? "Unknown time"}</time></Typography.Text>
+                <Typography.Text type="secondary">{fileCount(item)}{item.initialRun && item.initialRun.attemptCount > 1 ? ` · Attempt ${item.initialRun.attemptCount} of ${item.initialRun.maxAttempts}` : ""}</Typography.Text>
               </Flex>
-              {item.latestRun?.outcome?.summary || item.latestRun?.failureSummary ? <Typography.Paragraph style={{ marginBottom: 0 }} ellipsis={{ rows: 2 }}>{item.latestRun.outcome?.summary || item.latestRun.failureSummary}</Typography.Paragraph> : null}
+              {item.initialRun?.outcome?.summary || item.initialRun?.failureSummary ? <Typography.Paragraph style={{ marginBottom: 0 }} ellipsis={{ rows: 2 }}>{item.initialRun.outcome?.summary || item.initialRun.failureSummary}</Typography.Paragraph> : null}
               {item.completionDelivery ? <CompletionDeliveryStatus delivery={item.completionDelivery} onInspect={id => void inspectHandlingRun(id)} /> : null}
               {item.surfaces.includes("ChatList") ? <Typography.Text type="secondary">Continued in chat</Typography.Text> : null}
-              {item.latestRun?.progress ? <Typography.Text className="background-work-progress">{item.latestRun.progress}</Typography.Text> : null}
-              {item.latestRun && item.completionDelivery?.status !== "handled" && isUnread(item.latestRun) ? <Typography.Text><BellOutlined /> Unread · needs attention</Typography.Text> : null}
+              {item.initialRun?.progress ? <Typography.Text className="background-work-progress">{item.initialRun.progress}</Typography.Text> : null}
+              {item.initialRun && item.completionDelivery?.status !== "handled" && isUnread(item.initialRun) ? <Typography.Text><BellOutlined /> Unread · needs attention</Typography.Text> : null}
               <Flex wrap align="center" gap={token.paddingXS}><Button data-background-control="history" onClick={() => select(item, "history")}>View original result</Button>
                 <Button disabled={busy || !item.canContinueInChat} onClick={() => void openChat(item)}>{item.surfaces.includes("ChatList") ? "Open chat" : "Continue in chat"}</Button>{automationLink(item)}</Flex>
             </Flex>

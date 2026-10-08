@@ -1,3 +1,5 @@
+# TODO
+
 ## Stable original Background Work results (2026-10-09)
 
 - [x] Resolve immutable initial Run; retain original title in origin, preserving same-Session Chat and dynamic completion accounting.
@@ -7,9 +9,9 @@
 - [x] Final expanded Synthetic A/B/C/browser regressions: 12 passed; final frontend build and full frontend suite (757 tests) passed.
 - [x] Full local regression checks passed after documented reruns; final Infrastructure 897 passed/9 optional skips.
 - [x] Follow-up consistency review: fix same-Session artifact Run-filter race; synchronize Impeccable preview/brief; repeat focused storage/API/frontend and live Synthetic review.
-- [ ] Exact-behavior-SHA hosted CI; publication scope remains pending for the shared checkout. See [verification ledger](docs/reports/background-original-result-verification.md); no closure claim until required gates pass.
+- [x] Final local cleanup: scope Admin capability/evaluation options to their owning combobox, rename `latestRun` to `initialRun` without an alias, correct commit/workflow records and move this section below the main heading. Local checks: 3 API, 57 frontend, 8 browser journeys and build passed.
+- [ ] Exact-behavior-SHA hosted CI: original changes were committed/pushed as `afe01cef`; workflow [37824587611](https://github.com/trannamtrung1st/agent-core/actions/runs/37824587611) reported an Admin acceptance selector failure. Local final cleanup is tracked below; waiting for hosted results is outside the requested scope. See [verification ledger](docs/reports/background-original-result-verification.md); no closure claim until required gates pass.
 
-# TODO
 
 ## Durable completion inbox, result handoff and wait — closed successor
 

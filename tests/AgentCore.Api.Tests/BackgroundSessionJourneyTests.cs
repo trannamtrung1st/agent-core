@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using AgentCore.Api;
 using AgentCore.Application.Execution;
 using AgentCore.Application.Ports;
@@ -140,14 +141,17 @@ public sealed class BackgroundSessionJourneyTests
         }
         async Task Check(HttpClient checkClient)
         {
+            using var wire = JsonDocument.Parse(await checkClient.GetStringAsync(path + "/background"));
+            Assert.Equal(original.AgentRunId.ToString(), wire.RootElement.GetProperty("initialRun").GetProperty("agentRunId").GetString());
+            Assert.False(wire.RootElement.TryGetProperty("latestRun", out _));
             var after = (await checkClient.GetFromJsonAsync<BackgroundSessionResponse>(path + "/background"))!;
-            Assert.Equal(before.LatestRun, after.LatestRun);
+            Assert.Equal(before.InitialRun, after.InitialRun);
             Assert.Equal("Original title", after.OriginalTitle);
             Assert.Equal(before.Origin, after.Origin);
             Assert.Contains("ChatList", after.Surfaces);
             Assert.Equal(1, after.ArtifactCount); Assert.False(after.ArtifactCountHasMore);
             var list = (await checkClient.GetFromJsonAsync<BackgroundSessionPageResponse>($"/api/v2/agent-instances/{instanceId}/background-sessions"))!;
-            Assert.Equal(after.LatestRun, Assert.Single(list.Items).LatestRun);
+            Assert.Equal(after.InitialRun, Assert.Single(list.Items).InitialRun);
             var page = (await checkClient.GetFromJsonAsync<ArtifactPageResponse>(path + $"/artifacts/page?agentRunId={original.AgentRunId}"))!;
             Assert.Equal(fileA.ArtifactId.ToString(), Assert.Single(page.Items).ArtifactId);
             Assert.Equal(4, (await checkClient.GetFromJsonAsync<ArtifactPageResponse>(path + "/artifacts/page"))!.Items.Count);

@@ -6,7 +6,7 @@ export function backgroundFixture(index: number, title: string, patch: Partial<A
   const id = `90000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
   const run = { ...fixtureRun, agentRunId: id, sessionId: id, ...patch };
   return { ...fixtureBackground, originalTitle: title, session: { ...fixtureBackground.session, sessionId: id, title },
-    origin: { ...fixtureBackground.origin, initialAgentRunId: run.agentRunId }, latestRun: run };
+    origin: { ...fixtureBackground.origin, initialAgentRunId: run.agentRunId }, initialRun: run };
 }
 export function cursorPage<T>(items: T[], start: number, limit: number, key: (row: T) => string): CursorPage<T> {
   const rows = items.slice(start, start + limit); const hasMore = start + rows.length < items.length;
@@ -24,10 +24,10 @@ export async function mockBackgroundSessions(page: Page, rows: BackgroundSession
     const row = rows.find(row => row.session.sessionId === id);
     if (!row) return route.continue();
     if (route.request().method() === 'POST' && url.pathname.endsWith('/approve')) {
-      row.latestRun = { ...row.latestRun!, revision: row.latestRun!.revision + 1, status: 'queued', approval: null };
-      return route.fulfill({ json: row.latestRun });
+      row.initialRun = { ...row.initialRun!, revision: row.initialRun!.revision + 1, status: 'queued', approval: null };
+      return route.fulfill({ json: row.initialRun });
     }
-    return route.fulfill({ json: { items: row.latestRun ? [row.latestRun] : [], hasMore: false, nextCursor: null } });
+    return route.fulfill({ json: { items: row.initialRun ? [row.initialRun] : [], hasMore: false, nextCursor: null } });
   });
   await page.route('**/sessions/*/artifacts/page?**', route => {
     const id = new URL(route.request().url()).pathname.split('/sessions/')[1].split('/')[0];
