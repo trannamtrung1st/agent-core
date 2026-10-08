@@ -3,6 +3,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Infrastructure.Browser;
 namespace AgentCore.Infrastructure.Tests;
 
+[Collection(BrowserChromiumCollection.Name)]
 public sealed class BrowserV2JourneyTests
 {
     [Fact]

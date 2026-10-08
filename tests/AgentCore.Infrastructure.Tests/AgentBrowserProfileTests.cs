@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Infrastructure.Tests;
 
+[Collection(BrowserChromiumCollection.Name)]
 public sealed class AgentBrowserProfileTests
 {
     [Fact]

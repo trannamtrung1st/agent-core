@@ -4,6 +4,7 @@ using Microsoft.Playwright;
 
 namespace AgentCore.Infrastructure.Tests;
 
+[Collection(BrowserChromiumCollection.Name)]
 public sealed class BrowserV2FinalReviewTests
 {
     [Theory]

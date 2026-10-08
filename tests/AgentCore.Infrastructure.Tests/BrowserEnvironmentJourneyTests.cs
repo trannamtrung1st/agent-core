@@ -17,6 +17,7 @@ using Microsoft.Playwright;
 
 namespace AgentCore.Infrastructure.Tests;
 
+[Collection(BrowserChromiumCollection.Name)]
 public sealed class BrowserEnvironmentJourneyTests
 {
     [Theory]

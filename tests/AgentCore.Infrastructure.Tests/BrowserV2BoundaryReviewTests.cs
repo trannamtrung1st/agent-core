@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentCore.Infrastructure.Tests;
 
+[Collection(BrowserChromiumCollection.Name)]
 public sealed class BrowserV2BoundaryReviewTests
 {
     [Theory]

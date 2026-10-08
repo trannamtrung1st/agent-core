@@ -25,6 +25,7 @@ public sealed class NopCommerceBrowserProbeFactAttribute : FactAttribute
     }
 }
 
+[Collection(BrowserChromiumCollection.Name)]
 public sealed class NopCommerceBrowserProbeTests
 {
     [NopCommerceReadProbeFact]
