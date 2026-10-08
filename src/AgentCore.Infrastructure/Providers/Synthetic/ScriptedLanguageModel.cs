@@ -1537,7 +1537,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                     JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = origin + "/" }));
                 return true;
             case 2:
-                events = ToolTurn("product-observe", ToolCatalog.BrowserSnapshot, "{}");
+                events = ToolTurn("product-find", ToolCatalog.BrowserFind, JsonSerializer.Serialize(new { role = "button", name = "Publish" }));
                 return true;
             case 3:
                 return TryInteraction("product-publish", "click", ElementRef(request.Messages, "Publish"), null, out events);
@@ -1583,41 +1583,27 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         switch (rounds)
         {
             case 0:
-                events = ToolTurn(
-                    "p9-navigate",
-                    ToolCatalog.BrowserNavigate,
-                    JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = startUrl }));
-                return true;
+                events = ToolTurn("p9-navigate", ToolCatalog.BrowserNavigate, JsonSerializer.Serialize(new { url = startUrl })); return true;
             case 1:
-            case 6:
-            case 8:
-                events = ToolTurn($"p9-observe-{rounds}", ToolCatalog.BrowserSnapshot, "{}");
-                return true;
+                events = ToolTurn("p9-find-record", ToolCatalog.BrowserFind, JsonSerializer.Serialize(new { label = "Record" })); return true;
             case 2:
-                events = ToolTurn(
-                    "p9-skill",
-                    ToolCatalog.SkillsLoad,
-                    JsonSerializer.Serialize(new { ids = new[] { "definition:" + BrowserRecordSkillId } }));
-                return true;
+                events = ToolTurn("p9-skill", ToolCatalog.SkillsLoad, JsonSerializer.Serialize(new { ids = new[] { "definition:" + BrowserRecordSkillId } })); return true;
             case 3 when Offers(request, ToolCatalog.AppMessageSend):
-                events = ToolTurn(
-                    "p9-message",
-                    ToolCatalog.AppMessageSend,
-                    JsonSerializer.Serialize(new { text = BrowserRecordMessage }));
-                return true;
+                events = ToolTurn("p9-message", ToolCatalog.AppMessageSend, JsonSerializer.Serialize(new { text = BrowserRecordMessage })); return true;
             case 4:
                 return TryInteraction("fill", "fill", ElementRef(request.Messages, "Record"), "AC-1042", out events);
             case 5:
+                events = ToolTurn("p9-find-search", ToolCatalog.BrowserFind, JsonSerializer.Serialize(new { role = "button", name = "Search" })); return true;
+            case 6:
                 return TryInteraction("search", "click", ElementRef(request.Messages, "Search"), null, out events);
             case 7:
+                events = ToolTurn("p9-find-open", ToolCatalog.BrowserFind, JsonSerializer.Serialize(new { role = "link", name = "AC-1042" })); return true;
+            case 8:
                 return TryInteraction("open", "click", ElementRef(request.Messages, "AC-1042"), null, out events);
+            case 9:
+                events = ToolTurn("p9-observe-result", ToolCatalog.BrowserSnapshot, "{}"); return true;
             default:
-                events =
-                [
-                    new ModelTextDelta(BrowserRecordAnswer),
-                    new ModelCompleted(ModelStopReason.Completed)
-                ];
-                return true;
+                events = [new ModelTextDelta(BrowserRecordAnswer), new ModelCompleted(ModelStopReason.Completed)]; return true;
         }
     }
 
@@ -1705,7 +1691,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             try
             {
                 using var document = JsonDocument.Parse(message.Text);
-                if (!document.RootElement.TryGetProperty("elements", out var elements)
+                if (!document.RootElement.TryGetProperty("matches", out var elements)
                     || elements.ValueKind != JsonValueKind.Array)
                 {
                     continue;

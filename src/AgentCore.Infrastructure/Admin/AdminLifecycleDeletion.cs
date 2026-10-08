@@ -21,6 +21,9 @@ public sealed class InMemoryAdminLifecycleDeletion(
     IAgentInstanceWorkspaceStore? workspace = null,
     IAgentCredentialBindingStore? credentialBindings = null, IBrowser? browser = null) : IAdminLifecycleDeletion
 {
+    private IBrowserProfileReset BrowserProfiles() => browser as IBrowserProfileReset
+        ?? throw new AgentCoreException("UnsupportedOperation", "The browser provider does not support owner profile reset.", 503);
+
     internal Func<CancellationToken, ValueTask>? BeforeCommit { get; set; }
 
     public async ValueTask DeleteInstanceAsync(
@@ -35,7 +38,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
             if (await instances.FindAsync(command.InstanceId, cancellationToken) is not null)
                 throw AgentCoreErrors.Conflict("Deleted instance id is already in use.");
             if (credentialBindings is not null) await credentialBindings.DeleteBindingsAsync(command.InstanceId, cancellationToken);
-            if (browser is not null) await browser.ResetPersistentProfileAsync(command.InstanceId, cancellationToken);
+            if (browser is not null) await BrowserProfiles().ResetPersistentProfileAsync(command.InstanceId, cancellationToken);
             if (workspace is not null) await workspace.DeleteInstanceAsync(command.InstanceId, cancellationToken);
             return;
         }
@@ -74,7 +77,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
         experience?.Purge(command.InstanceId);
         triggers.PurgeDeletedAutomations(command.InstanceId);
         if (credentialBindings is not null) await credentialBindings.DeleteBindingsAsync(command.InstanceId, cancellationToken);
-        if (browser is not null) await browser.ResetPersistentProfileAsync(command.InstanceId, cancellationToken);
+        if (browser is not null) await BrowserProfiles().ResetPersistentProfileAsync(command.InstanceId, cancellationToken);
         if (workspace is not null) await workspace.DeleteInstanceAsync(command.InstanceId, cancellationToken);
     }
 
@@ -84,7 +87,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
             if (await instances.FindAsync(owner, ct) is null)
             {
                 if (credentialBindings is not null) await credentialBindings.DeleteBindingsAsync(owner, ct);
-                if (browser is not null) await browser.ResetPersistentProfileAsync(owner, ct);
+                if (browser is not null) await BrowserProfiles().ResetPersistentProfileAsync(owner, ct);
                 if (workspace is not null) await workspace.DeleteInstanceAsync(owner, ct);
             }
         }, cancellationToken);
@@ -163,6 +166,9 @@ public sealed class SqliteAdminLifecycleDeletion(
     IIdGenerator ids,
     IAgentInstanceWorkspaceStore? workspace = null, IBrowser? browser = null) : IAdminLifecycleDeletion
 {
+    private IBrowserProfileReset BrowserProfiles() => browser as IBrowserProfileReset
+        ?? throw new AgentCoreException("UnsupportedOperation", "The browser provider does not support owner profile reset.", 503);
+
     public async ValueTask DeleteInstanceAsync(
         AdminInstanceDeleteCommand command,
         CancellationToken cancellationToken = default)
@@ -176,7 +182,7 @@ public sealed class SqliteAdminLifecycleDeletion(
                 receipt.TargetId, receipt.Revision, receipt.ActorKind);
             if (await db.AgentInstances.AnyAsync(i => i.InstanceId == receipt.TargetId, cancellationToken))
                 throw AgentCoreErrors.Conflict("Deleted instance id is already in use.");
-            if (browser is not null) await browser.ResetPersistentProfileAsync(command.InstanceId, cancellationToken);
+            if (browser is not null) await BrowserProfiles().ResetPersistentProfileAsync(command.InstanceId, cancellationToken);
             if (workspace is not null) await workspace.DeleteInstanceContentAsync(command.InstanceId, cancellationToken);
             return;
         }
@@ -225,7 +231,7 @@ public sealed class SqliteAdminLifecycleDeletion(
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         // The committed receipt is also the recovery marker if physical cleanup fails or the host exits.
-        if (browser is not null) await browser.ResetPersistentProfileAsync(command.InstanceId, cancellationToken);
+        if (browser is not null) await BrowserProfiles().ResetPersistentProfileAsync(command.InstanceId, cancellationToken);
         if (workspace is not null) await workspace.DeleteInstanceContentAsync(command.InstanceId, cancellationToken);
     }
 
@@ -240,7 +246,7 @@ public sealed class SqliteAdminLifecycleDeletion(
         {
             if (!await db.AgentInstances.AnyAsync(i => i.InstanceId == owner.ToString("D"), ct))
             {
-                if (browser is not null) await browser.ResetPersistentProfileAsync(owner, ct);
+                if (browser is not null) await BrowserProfiles().ResetPersistentProfileAsync(owner, ct);
                 if (workspace is not null) await workspace.DeleteInstanceContentAsync(owner, ct);
             }
         }, cancellationToken);

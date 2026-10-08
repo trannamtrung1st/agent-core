@@ -1,3 +1,4 @@
+using AgentCore.Tests.Shared;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using AgentCore.Application.Agents;
@@ -184,6 +185,7 @@ public sealed class ProductPublishWorkflowTests
             [
                 ToolCatalog.BrowserNavigate,
                 ToolCatalog.BrowserSnapshot,
+                ToolCatalog.BrowserFind,
                 ToolCatalog.BrowserClick,
                 ToolCatalog.BrowserUpload
             ]),
@@ -274,7 +276,7 @@ public sealed class ProductPublishWorkflowTests
 
     private sealed class ProductBrowser : IBrowser
     {
-        public BrowserProviderDescriptor Provider { get; } = new("fixture", "Test browser", new HashSet<BrowserFeature> { BrowserFeature.Navigate, BrowserFeature.Snapshot, BrowserFeature.Click, BrowserFeature.Type, BrowserFeature.Hover, BrowserFeature.Drag, BrowserFeature.FillForm, BrowserFeature.SelectOption, BrowserFeature.PressKey, BrowserFeature.Upload, BrowserFeature.FillCredential, BrowserFeature.Wait, BrowserFeature.Tabs, BrowserFeature.Screenshot, BrowserFeature.Close });
+        public BrowserProviderDescriptor Provider { get; } = new("fixture", "Test browser", new HashSet<BrowserFeature> { BrowserFeature.Navigate, BrowserFeature.Snapshot, BrowserFeature.Find, BrowserFeature.Click, BrowserFeature.Type, BrowserFeature.Hover, BrowserFeature.Drag, BrowserFeature.FillForm, BrowserFeature.SelectOption, BrowserFeature.PressKey, BrowserFeature.Upload, BrowserFeature.FillCredential, BrowserFeature.Wait, BrowserFeature.Tabs, BrowserFeature.Screenshot, BrowserFeature.Close });
         private readonly Dictionary<string, string> _refs = new(StringComparer.Ordinal);
         private string _page = "none";
         private int _mint;
@@ -296,19 +298,19 @@ public sealed class ProductPublishWorkflowTests
         public ValueTask<Uri?> GetCurrentUrlAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             new(_page == "none" ? null : PageUri());
 
-        public ValueTask<BrowserOperationResult> NavigateAsync(
-            BrowserNavigateRequest request,
+        public ValueTask<BrowserResult> NavigateAsync(
+            BrowserRequest request,
             CancellationToken cancellationToken = default)
         {
-            NavigatedUrls.Add(request.Url!.AbsoluteUri);
-            Steps.Add(new ProductPublishStep(ToolCatalog.BrowserNavigate, request.Url!.AbsoluteUri));
-            if (!string.Equals(request.Url!.GetLeftPart(UriPartial.Authority), Origin, StringComparison.Ordinal)
-                || request.Url.AbsolutePath is not ("/" or "" or "/storefront" or "/login"))
+            NavigatedUrls.Add(request.Options.Url!);
+            Steps.Add(new ProductPublishStep(ToolCatalog.BrowserNavigate, request.Options.Url!));
+            if (!string.Equals(new Uri(request.Options.Url!)!.GetLeftPart(UriPartial.Authority), Origin, StringComparison.Ordinal)
+                || new Uri(request.Options.Url!).AbsolutePath is not ("/" or "" or "/storefront" or "/login"))
             {
-                return new(new BrowserOperationResult("target_denied", null));
+                return new(new BrowserResult("target_denied", null));
             }
 
-            _page = request.Url!.AbsolutePath switch
+            _page = new Uri(request.Options.Url!)!.AbsolutePath switch
             {
                 "/storefront" => "storefront",
                 "/login" => "login",
@@ -317,27 +319,27 @@ public sealed class ProductPublishWorkflowTests
             return new(Ok(Capture()));
         }
 
-        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        public ValueTask<BrowserResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             if (_page == "none")
             {
-                return new(new BrowserOperationResult("provider_unavailable", null));
+                return new(new BrowserResult("provider_unavailable", null));
             }
 
             var observation = Capture();
-            Steps.Add(new ProductPublishStep(ToolCatalog.BrowserSnapshot, observation.VisibleText));
+            Steps.Add(new ProductPublishStep(ToolCatalog.BrowserSnapshot, observation.Content));
             return new(Ok(observation));
         }
 
-        public ValueTask<BrowserOperationResult> InteractAsync(
-            BrowserInteractionRequest request,
+        public ValueTask<BrowserResult> InteractAsync(
+            BrowserRequest request,
             CancellationToken cancellationToken = default)
         {
             ActCalls++;
-            Steps.Add(new ProductPublishStep(ToolCatalog.BrowserClick, request.Operation));
-            if (!_refs.TryGetValue(request.Ref, out var name) || name != "Publish" || request.Operation != "click")
+            Steps.Add(new ProductPublishStep(ToolCatalog.BrowserClick, AgentCore.Application.Tools.BrowserToolArguments.ToolName(request.Operation)[8..]));
+            if (!_refs.TryGetValue(request.Options.Ref!, out var name) || name != "Publish" || AgentCore.Application.Tools.BrowserToolArguments.ToolName(request.Operation)[8..] != "click")
             {
-                return new(new BrowserOperationResult("unsupported_operation", null));
+                return new(new BrowserResult("unsupported_operation", null));
             }
 
             return new(Ok(Capture()));
@@ -350,7 +352,7 @@ public sealed class ProductPublishWorkflowTests
             _ => new Uri(Origin + "/")
         };
 
-        private BrowserOperationResult Ok(BrowserSnapshot observation) => new(null, observation);
+        private BrowserResult Ok(BrowserSnapshot observation) => new(null, observation);
 
         private BrowserSnapshot Capture()
         {
@@ -386,11 +388,20 @@ public sealed class ProductPublishWorkflowTests
                 false,
                 [new BrowserElement(reference, "button", "Publish", ["click"])]);
         }
-    }
+
+        public ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default) => request.Operation switch
+        {
+            BrowserOperation.Find => new(BrowserFixtureResults.Find(request, Capture())),
+            BrowserOperation.Navigate => NavigateAsync(request, ct),
+            BrowserOperation.Snapshot or BrowserOperation.WaitFor => SnapshotAsync(request.SessionId, ct),
+            BrowserOperation.Click or BrowserOperation.Type or BrowserOperation.Hover or BrowserOperation.Drag or BrowserOperation.Upload or BrowserOperation.FillForm => InteractAsync(request, ct),
+            _ => new(new BrowserResult("unsupported_operation")),
+        };
+}
 
     private sealed class UploadBrowser : IBrowser
     {
-        public BrowserProviderDescriptor Provider { get; } = new("fixture", "Test browser", new HashSet<BrowserFeature> { BrowserFeature.Navigate, BrowserFeature.Snapshot, BrowserFeature.Click, BrowserFeature.Type, BrowserFeature.Hover, BrowserFeature.Drag, BrowserFeature.FillForm, BrowserFeature.SelectOption, BrowserFeature.PressKey, BrowserFeature.Upload, BrowserFeature.FillCredential, BrowserFeature.Wait, BrowserFeature.Tabs, BrowserFeature.Screenshot, BrowserFeature.Close });
+        public BrowserProviderDescriptor Provider { get; } = new("fixture", "Test browser", new HashSet<BrowserFeature> { BrowserFeature.Navigate, BrowserFeature.Snapshot, BrowserFeature.Find, BrowserFeature.Click, BrowserFeature.Type, BrowserFeature.Hover, BrowserFeature.Drag, BrowserFeature.FillForm, BrowserFeature.SelectOption, BrowserFeature.PressKey, BrowserFeature.Upload, BrowserFeature.FillCredential, BrowserFeature.Wait, BrowserFeature.Tabs, BrowserFeature.Screenshot, BrowserFeature.Close });
         public int ActCalls { get; private set; }
 
         public BrowserUpload? LastUpload { get; private set; }
@@ -406,26 +417,35 @@ public sealed class ProductPublishWorkflowTests
         public ValueTask<Uri?> GetCurrentUrlAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             new(new Uri("http://127.0.0.1:5091/"));
 
-        public ValueTask<BrowserOperationResult> NavigateAsync(
-            BrowserNavigateRequest request,
+        public ValueTask<BrowserResult> NavigateAsync(
+            BrowserRequest request,
             CancellationToken cancellationToken = default) =>
-            new(new BrowserOperationResult(null, Page()));
+            new(new BrowserResult(null, Page()));
 
-        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
-            new(new BrowserOperationResult(null, Page()));
+        public ValueTask<BrowserResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+            new(new BrowserResult(null, Page()));
 
-        public ValueTask<BrowserOperationResult> InteractAsync(
-            BrowserInteractionRequest request,
+        public ValueTask<BrowserResult> InteractAsync(
+            BrowserRequest request,
             CancellationToken cancellationToken = default)
         {
             ActCalls++;
-            LastUpload = request.Uploads?.FirstOrDefault() ?? request.Upload;
-            return new(new BrowserOperationResult(null, Page()));
+            LastUpload = request.Options.Uploads?.FirstOrDefault() ?? request.Options.Uploads?.FirstOrDefault();
+            return new(new BrowserResult(null, Page()));
         }
 
         private static BrowserSnapshot Page() =>
             new("http://127.0.0.1:5091/", "Upload", "chosen", false, []);
-    }
+
+        public ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default) => request.Operation switch
+        {
+            BrowserOperation.Find => new(BrowserFixtureResults.Find(request, Page())),
+            BrowserOperation.Navigate => NavigateAsync(request, ct),
+            BrowserOperation.Snapshot or BrowserOperation.WaitFor => SnapshotAsync(request.SessionId, ct),
+            BrowserOperation.Click or BrowserOperation.Type or BrowserOperation.Hover or BrowserOperation.Drag or BrowserOperation.Upload or BrowserOperation.FillForm => InteractAsync(request, ct),
+            _ => new(new BrowserResult("unsupported_operation")),
+        };
+}
 
     private sealed class PublicationResource(Guid resourceId, byte[] content) : IAgentDefinitionResourceAdminStore
     {

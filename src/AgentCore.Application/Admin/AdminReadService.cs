@@ -129,7 +129,7 @@ public sealed class AdminReadService(
             browser.Provider.ProviderId, browser.Provider.DisplayName, browser.HostPolicy.Enabled,
             configurationGate.IsConfigured(ToolCatalog.BrowserNavigate), browser.HostPolicy.ProfileMode.ToString(),
             browser.HostPolicy.PolicyMode.ToString(), browser.Provider.SupportedFeatures.Select(f => f.ToString()).Order(StringComparer.Ordinal).ToArray(),
-            BrowserToolLimits.MaxSnapshotChars, BrowserToolLimits.MaxCaptureBytes, BrowserToolLimits.MaxDownloadBytes, browser.Provider.Engine) };
+            BrowserToolLimits.MaxSnapshotBytes, BrowserToolLimits.MaxCaptureBytes, BrowserToolLimits.MaxDownloadBytes, browser.Provider.Engine) };
         OperationalDiagnostics.RecordAdmin(
             "resolve",
             "completed",
@@ -275,4 +275,4 @@ public sealed record AdminEffectiveConfiguration(
     string? UnattendedReasoningEffort = null,
     BrowserEffectiveConfiguration? Browser = null);
 
-public sealed record BrowserEffectiveConfiguration(string ProviderId, string DisplayName, bool Enabled, bool Ready, string ProfileMode, string PolicyMode, IReadOnlyList<string> SupportedFeatures, int MaxSnapshotChars, int MaxCaptureBytes, int MaxDownloadBytes, string Engine = "unknown");
+public sealed record BrowserEffectiveConfiguration(string ProviderId, string DisplayName, bool Enabled, bool Ready, string ProfileMode, string PolicyMode, IReadOnlyList<string> SupportedFeatures, int MaxSnapshotBytes, int MaxCaptureBytes, int MaxDownloadBytes, string Engine = "unknown");

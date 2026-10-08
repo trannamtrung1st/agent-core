@@ -69,9 +69,9 @@ public static class AgentRunActionHash
         or "browser.fill_form" or "browser.select_option" or "browser.press_key" or "browser.upload"
         or "browser.fill_credential" or "browser.tabs" or "browser.dialog" or "browser.resize"
         or "browser.route" or "browser.unroute" or "browser.network_state" or "browser.cookies"
-        or "browser.local_storage" or "browser.session_storage" or "browser.storage_state"
-        or "browser.mouse" or "browser.trace" or "browser.highlight"
-        or "browser.emulate_media" or "browser.video" or "browser.set_geolocation" or "browser.evaluate";
+        or "browser.local_storage" or "browser.session_storage"
+        or "browser.scroll" or "browser.mouse" or "browser.highlight"
+        or "browser.emulate_media" or "browser.set_geolocation";
 
     public static string MarkObservationRequired(string payloadJson, string actionHash)
     {

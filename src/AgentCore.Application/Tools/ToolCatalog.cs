@@ -62,14 +62,9 @@ public static class ToolCatalog
     public const string BrowserDialog = "browser.dialog";
     public const string BrowserResize = "browser.resize";
     public const string BrowserConsole = "browser.console_messages";
-    public const string BrowserStorageState = "browser.storage_state";
     public const string BrowserVisionMouse = "browser.mouse";
-    public const string BrowserPdf = "browser.pdf";
-    public const string BrowserTrace = "browser.trace";
     public const string BrowserHighlight = "browser.highlight";
     public const string BrowserMedia = "browser.emulate_media";
-    public const string BrowserVideo = "browser.video";
-    public const string BrowserEvaluate = "browser.evaluate";
     public const string BrowserConfiguration = "browser.get_config";
     public const string BrowserGeolocation = "browser.set_geolocation";
     public const string ContinuitySearch = "continuity.search";

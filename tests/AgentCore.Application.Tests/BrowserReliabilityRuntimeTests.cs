@@ -23,7 +23,7 @@ public sealed class BrowserReliabilityRuntimeTests
     [InlineData("browser-custom-tree.html", "generic")]
     public async Task Synthetic_dense_tool_loop_discovers_loads_updates_verifies_and_closes_across_turns(string fixture, string targetRole)
     {
-        var browser = new PlaywrightBrowser(new BrowserOptions { Enabled = true, Headless = true, FixtureEnabled = true,
+        var browser = new NativePlaywrightBrowser(new BrowserOptions { Enabled = true, Headless = true, FixtureEnabled = true,
             FixturePort = 0, InteractionMode = "InteractiveDemo", NavigationOrigins = ["http://127.0.0.1:5091"], InteractionOrigins = ["http://127.0.0.1:5091"] }, loggerFactory: null);
         await browser.StartAsync(CancellationToken.None);
         try
@@ -109,11 +109,20 @@ public sealed class BrowserReliabilityRuntimeTests
         public bool IsAvailable => false;
         public BrowserHostPolicy HostPolicy { get; } = new(true, true, BrowserInteractionMode.InteractiveDemo, ["http://127.0.0.1"]);
         public ValueTask<Uri?> GetCurrentUrlAsync(Guid id, CancellationToken ct = default) => new((Uri?)null);
-        public ValueTask<BrowserOperationResult> NavigateAsync(BrowserNavigateRequest request, CancellationToken ct = default) => new(new BrowserOperationResult("provider_unavailable", null));
-        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid id, CancellationToken ct = default) => new(new BrowserOperationResult("provider_unavailable", null));
-        public ValueTask<BrowserOperationResult> InteractAsync(BrowserInteractionRequest request, CancellationToken ct = default) => new(new BrowserOperationResult("provider_unavailable", null));
-        public ValueTask<BrowserCloseResult> CloseAsync(Guid id, CancellationToken ct = default) { CloseCalls++; return new(new BrowserCloseResult("provider_unavailable")); }
-    }
+        public ValueTask<BrowserResult> NavigateAsync(BrowserRequest request, CancellationToken ct = default) => new(new BrowserResult("provider_unavailable", null));
+        public ValueTask<BrowserResult> SnapshotAsync(Guid id, CancellationToken ct = default) => new(new BrowserResult("provider_unavailable", null));
+        public ValueTask<BrowserResult> InteractAsync(BrowserRequest request, CancellationToken ct = default) => new(new BrowserResult("provider_unavailable", null));
+        public ValueTask<BrowserResult> CloseAsync(Guid id, CancellationToken ct = default) { CloseCalls++; return new(new BrowserResult(null, Status: "provider_unavailable", DataJson: System.Text.Json.JsonSerializer.Serialize(new { status = "provider_unavailable" }))); }
+
+        public ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default) => request.Operation switch
+        {
+            BrowserOperation.Navigate => NavigateAsync(request, ct),
+            BrowserOperation.Snapshot or BrowserOperation.WaitFor => SnapshotAsync(request.SessionId, ct),
+            BrowserOperation.Close => CloseAsync(request.SessionId, ct),
+            BrowserOperation.Click or BrowserOperation.Type or BrowserOperation.Hover or BrowserOperation.Drag or BrowserOperation.Upload or BrowserOperation.FillForm => InteractAsync(request, ct),
+            _ => new(new BrowserResult("unsupported_operation")),
+        };
+}
 
     private sealed class DenseModel(string url, string targetRole = "treeitem") : ILanguageModel
     {
@@ -164,12 +173,12 @@ public sealed class BrowserReliabilityRuntimeTests
                 (string Tool, object Args) planned = step switch
                 {
                     0 => (ToolCatalog.BrowserNavigate, new { url }),
-                    1 => (ToolCatalog.BrowserFind, new { text = "Entry 1999", role = targetRole, ancestor = "Collection 19" }),
+                    1 => (ToolCatalog.BrowserFind, targetRole == "generic" ? (object)new { text = "Entry 1999" } : new { role = targetRole, name = "Entry 1999" }),
                     2 => (ToolCatalog.BrowserClick, new { @ref = Reference() }),
                     3 => (ToolCatalog.CapabilitiesLoad, new { query = "browser.fill_form", limit = 1 }),
-                    4 => (ToolCatalog.BrowserFind, new { text = "Summary", role = "textbox" }),
+                    4 => (ToolCatalog.BrowserFind, new { role = "textbox", name = "Summary" }),
                     5 => (ToolCatalog.BrowserFillForm, new { fields = new[] { new { @ref = Reference(), value = "Verified change" } } }),
-                    6 => (ToolCatalog.BrowserFind, new { text = "Summary", role = "textbox" }),
+                    6 => (ToolCatalog.BrowserFind, new { role = "textbox", name = "Summary" }),
                     _ => ("", new { })
                 };
                 (tool, args) = planned;

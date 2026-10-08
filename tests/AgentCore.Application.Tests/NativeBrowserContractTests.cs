@@ -1,3 +1,4 @@
+using AgentCore.Tests.Shared;
 using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Definitions;
@@ -5,7 +6,7 @@ using AgentCore.Application.Tools;
 using AgentCore.Infrastructure.Browser;
 using AgentCore.Infrastructure.Tools;
 namespace AgentCore.Application.Tests;
-public sealed class BrowserV2ContractTests
+public sealed class NativeBrowserContractTests
 {
     [Fact]
     public void Focused_catalog_preserves_authority_and_feature_metadata()
@@ -29,17 +30,17 @@ public sealed class BrowserV2ContractTests
     public async Task Subset_provider_filters_unsupported_tools_without_losing_navigation()
     {
         var subset=new Subset();var gate=new ToolConfigurationGate(null,null,null,subset,true);
-        Assert.True(gate.IsConfigured("browser.navigate"));Assert.False(gate.IsConfigured("browser.trace"));
-        var result=await subset.ExecuteAsync(new(Guid.NewGuid(),"browser.trace",JsonSerializer.SerializeToElement(new{operation="start"})));
+        Assert.True(gate.IsConfigured("browser.navigate"));Assert.False(gate.IsConfigured("browser.hover"));
+        var result=await subset.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(Guid.NewGuid(),"browser.hover",JsonSerializer.SerializeToElement(new { @ref = "el_0123456789abcdefghijkl" })));
         Assert.Equal("unsupported_operation",result.ErrorCode);
-        Assert.Null((await subset.NavigateAsync(new(Guid.NewGuid(),new Uri("http://127.0.0.1/")))).ErrorCode);
-        var definition = Definition("browser.navigate", "browser.trace");
+        Assert.Null((await subset.ExecuteAsync(BrowserTestRequests.Navigate(Guid.NewGuid(),new Uri("http://127.0.0.1/")))).ErrorCode);
+        var definition = Definition("browser.navigate", "browser.hover");
         var executor = new SessionToolExecutor(browser: subset, configurationGate: gate);
-        var forced = await executor.ExecuteAsync(definition, Guid.NewGuid(), new("trace", "browser.trace", "{\"operation\":\"start\"}"),
+        var forced = await executor.ExecuteAsync(definition, Guid.NewGuid(), new("trace", "browser.hover", "{\"ref\":\"el_0123456789abcdefghijkl\"}"),
             ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn));
         Assert.Contains("unsupported_operation", forced.Text);
         var unauthorized = await executor.ExecuteAsync(definition with { Environment = new RoleEnvironment(ToolAllowlist: ["browser.navigate"]) },
-            Guid.NewGuid(), new("trace", "browser.trace", "{\"operation\":\"start\"}"), ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn));
+            Guid.NewGuid(), new("trace", "browser.hover", "{\"ref\":\"el_0123456789abcdefghijkl\"}"), ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn));
         Assert.Contains("forbidden", unauthorized.Text);
     }
     [Fact]
@@ -108,13 +109,13 @@ public sealed class BrowserV2ContractTests
         public BrowserProviderDescriptor Provider{get;}=new("subset","Subset", advanced ? new HashSet<BrowserFeature>{BrowserFeature.Navigate,BrowserFeature.NetworkControl,BrowserFeature.VisionMouse,BrowserFeature.Configuration,BrowserFeature.Geolocation,BrowserFeature.Media,BrowserFeature.Type} : new HashSet<BrowserFeature>{BrowserFeature.Navigate,BrowserFeature.Snapshot,BrowserFeature.Click});
         public BrowserHostPolicy HostPolicy{get;}=new(true,true,BrowserInteractionMode.InteractiveDemo,["http://127.0.0.1"]);
         public ValueTask<Uri?> GetCurrentUrlAsync(Guid id,CancellationToken ct=default)=>new(new Uri("http://127.0.0.1/"));
-        public ValueTask<BrowserOperationResult> NavigateAsync(BrowserNavigateRequest r,CancellationToken ct=default)=>new(new BrowserOperationResult(null,new("http://127.0.0.1/","Subset","Ready",false,[])));
-        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid id,CancellationToken ct=default)=>new(new BrowserOperationResult(null,new("http://127.0.0.1/","Subset","Ready",false,[])));
-        public ValueTask<BrowserOperationResult> InteractAsync(BrowserInteractionRequest r,CancellationToken ct=default)=>new(new BrowserOperationResult(null,new("http://127.0.0.1/","Subset","Ready",false,[])));
-        public ValueTask<BrowserCommandResult> ExecuteAsync(BrowserCommand c,CancellationToken ct=default)
+        public ValueTask<BrowserResult> NavigateAsync(BrowserRequest r,CancellationToken ct=default)=>new(new BrowserResult(null,new("http://127.0.0.1/","Subset","Ready",false,[])));
+        public ValueTask<BrowserResult> SnapshotAsync(Guid id,CancellationToken ct=default)=>new(new BrowserResult(null,new("http://127.0.0.1/","Subset","Ready",false,[])));
+        public ValueTask<BrowserResult> InteractAsync(BrowserRequest r,CancellationToken ct=default)=>new(new BrowserResult(null,new("http://127.0.0.1/","Subset","Ready",false,[])));
+        public ValueTask<BrowserResult> ExecuteAsync(BrowserRequest c,CancellationToken ct=default)
         {
-            if (!BrowserToolCatalog.TryGet(c.Tool, out var metadata) || !Provider.Supports(metadata.Feature)) return new(new BrowserCommandResult("unsupported_operation"));
-            Commands++; return new(new BrowserCommandResult(null, DataJson: "{\"status\":\"ok\"}"));
+            if (!BrowserToolCatalog.TryGet(AgentCore.Application.Tools.BrowserToolArguments.ToolName(c.Operation), out var metadata) || !Provider.Supports(metadata.Feature)) return new(new BrowserResult("unsupported_operation"));
+            Commands++; return new(new BrowserResult(null, DataJson: "{\"status\":\"ok\"}"));
         }
     }
 }

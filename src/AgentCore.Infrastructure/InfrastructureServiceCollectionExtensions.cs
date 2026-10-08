@@ -364,12 +364,12 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IOwnerCapabilityService, OwnerCapabilityService>();
         WebSearchProviderRegistration.AddPublicWeb(services, profile);
         EmailProviderRegistration.AddEmail(services, profile);
-        services.TryAddSingleton(sp => new PlaywrightBrowser(
+        services.TryAddSingleton(sp => new NativePlaywrightBrowser(
             sp.GetRequiredService<BrowserOptions>(),
-            sp.GetService<ILoggerFactory>()));
-        services.TryAddSingleton<IBrowser>(sp => sp.GetRequiredService<PlaywrightBrowser>());
-        services.TryAddSingleton<IBrowserLease>(sp => sp.GetRequiredService<PlaywrightBrowser>());
-        services.AddHostedService(sp => sp.GetRequiredService<PlaywrightBrowser>());
+            sp.GetService<ILoggerFactory>(), timeProvider: sp.GetRequiredService<TimeProvider>()));
+        services.TryAddSingleton<IBrowser>(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
+        services.TryAddSingleton<IBrowserLease>(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
+        services.AddHostedService(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
         services.TryAddSingleton<AgentInstanceSkillService>();
         services.TryAddSingleton<SessionToolExecutor>(provider => new SessionToolExecutor(
             provider.GetService<RoleKnowledgeService>(),

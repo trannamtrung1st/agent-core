@@ -22,7 +22,7 @@ internal static class BrowserSnapshotCompaction
 
         if (full.Count > 0)
         {
-            // A newer snapshot invalidates refs in older discovery receipts too.
+            // Compact earlier discovery evidence in history; the provider retains live semantic Locators.
             for (var index = 0; index < full[^1]; index++)
                 if (messages[index] is { Role: ModelRole.Tool, Name: "browser.find" } found)
                     messages[index] = found with { Text = Receipt(found.Text, false), Parts = null };
@@ -68,7 +68,7 @@ internal static class BrowserSnapshotCompaction
             var root = document.RootElement;
             return root.TryGetProperty("untrustedBrowserContent", out var marker)
                 && marker.ValueKind == JsonValueKind.True
-                && root.TryGetProperty("elements", out var elements)
+                && root.TryGetProperty("targets", out var elements)
                 && elements.ValueKind == JsonValueKind.Array;
         }
         catch (JsonException)
@@ -103,8 +103,7 @@ internal static class BrowserSnapshotCompaction
             var root = document.RootElement;
             url = Read(root, "url");
             title = Read(root, "title");
-            visible = Read(root, "visibleText");
-            if (visible.Length == 0) visible = System.Text.RegularExpressions.Regex.Replace(Read(root, "content"), @"\s*\[ref=[^\]]+\]", "");
+            visible = Read(root, "content");
             if (root.TryGetProperty("settled", out var settledProperty)
                 && settledProperty.ValueKind is JsonValueKind.True or JsonValueKind.False)
             {
@@ -124,7 +123,7 @@ internal static class BrowserSnapshotCompaction
                 url,
                 title,
                 settled = settledValue,
-                visibleTextExcerpt = excerpt
+                contentExcerpt = excerpt
             })
             : JsonSerializer.Serialize(new
             {
@@ -132,7 +131,7 @@ internal static class BrowserSnapshotCompaction
                 compacted = true,
                 url,
                 title,
-                visibleTextExcerpt = excerpt
+                contentExcerpt = excerpt
             });
     }
 

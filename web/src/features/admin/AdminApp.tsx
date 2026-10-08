@@ -3047,7 +3047,7 @@ export function EffectiveConfigView({
             <Descriptions.Item label="Profile mode">{config.browser.profileMode}</Descriptions.Item>
             <Descriptions.Item label="Policy mode">{config.browser.policyMode}</Descriptions.Item>
             <Descriptions.Item label="Supported features">{config.browser.supportedFeatures.join(", ") || "None"}</Descriptions.Item>
-            <Descriptions.Item label="Output limits">Snapshot {config.browser.maxSnapshotChars} characters; screenshot {config.browser.maxCaptureBytes} bytes; download {config.browser.maxDownloadBytes} bytes</Descriptions.Item>
+            <Descriptions.Item label="Output limits">Snapshot {config.browser.maxSnapshotBytes} UTF-8 bytes; screenshot {config.browser.maxCaptureBytes} bytes; download {config.browser.maxDownloadBytes} bytes</Descriptions.Item>
           </Descriptions>
         </section>
       ) : null}

@@ -24,7 +24,7 @@ public sealed class AgentDefinitionStoreTests
         Assert.NotNull(general);
         Assert.Equal("Riley", general!.Identity.Name);
         var latest = await store.GetAsync("general-assistant");
-        Assert.Equal(17, latest!.Version);
+        Assert.Equal(18, latest!.Version);
         Assert.DoesNotContain("workspace.retain", latest.Environment!.ToolList);
         Assert.DoesNotContain("workspace.checkout", latest.Environment.ToolList);
         Assert.True(latest.Environment.ToolList.Count > 40);
@@ -49,7 +49,7 @@ public sealed class AgentDefinitionStoreTests
         Assert.Contains(ToolCatalog.BrowserSnapshot, environment.ToolList);
         Assert.Contains(ToolCatalog.BrowserClick, environment.ToolList);
         Assert.Contains(ToolCatalog.BrowserClose, environment.ToolList);
-        Assert.Equal(69, environment.ToolList.Count);
+        Assert.Equal(71, environment.ToolList.Count);
         Assert.Contains(ToolCatalog.WorkspaceCwd, environment.ToolList);
         Assert.Equal("browser.record.lookup", Assert.Single(latest.SkillList).Id);
         Assert.Equal(SkillProjection.OnDemand, latest.SkillList[0].Projection);

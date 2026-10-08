@@ -440,7 +440,7 @@ public sealed partial class SessionToolExecutor(
                 ToolCatalog.HttpRequest => FitResult(
                     remainingOutputBytes,
                     await ExecuteHttpRequestAsync(args, approvalGrant, cancellationToken).ConfigureAwait(false)),
-                _ when ToolCatalog.IsBrowserTool(call.Name) => await ExecuteBrowserV2Async(
+                _ when ToolCatalog.IsBrowserTool(call.Name) => await ExecuteBrowserAsync(
                     definition, sessionId, call.Name, args, admission, remainingOutputBytes, cancellationToken).ConfigureAwait(false),
                 ToolCatalog.DemoSensitiveAction => TextResult(
                     ExecuteDemoSensitiveAction(sessionId, args, approvalGrant)),

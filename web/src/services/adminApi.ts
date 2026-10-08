@@ -49,7 +49,7 @@ export type AdminEffectiveConfiguration = {
     policyMode: string;
     supportedFeatures: string[];
     engine?: string;
-    maxSnapshotChars: number;
+    maxSnapshotBytes: number;
     maxCaptureBytes: number;
     maxDownloadBytes: number;
   } | null;

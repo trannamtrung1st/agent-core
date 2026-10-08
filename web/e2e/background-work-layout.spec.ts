@@ -25,8 +25,12 @@ test('long run outcomes scroll independently and remain usable across drawer wid
     const automation = (await list.getByRole('link', { name: 'View Automation', exact: true }).boundingBox())!;
     expect(Math.abs(history.y + history.height / 2 - continueChat.y - continueChat.height / 2)).toBeLessThan(1);
     if (width >= 768) expect(Math.abs(history.y + history.height / 2 - automation.y - automation.height / 2)).toBeLessThan(1);
-    const bounds = (await list.boundingBox())!;
-    expect(automation.x + automation.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+    // The drawer slides as viewport changes; wait for its geometry, not only its width.
+    await expect.poll(async () => {
+      const bounds = (await list.boundingBox())!;
+      const action = (await list.getByRole('link', { name: 'View Automation', exact: true }).boundingBox())!;
+      return action.x + action.width <= bounds.x + bounds.width;
+    }).toBe(true);
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
   await list.getByRole('button', { name: 'View original result', exact: true }).click();

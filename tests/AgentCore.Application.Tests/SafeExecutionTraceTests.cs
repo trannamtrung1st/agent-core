@@ -61,10 +61,8 @@ public sealed class SafeExecutionTraceTests
             """;
 
         var detail = SafeExecutionTrace.BuildToolDetail(ToolCatalog.BrowserSnapshot, args, result);
-        Assert.Contains("waitFor=stable", detail, StringComparison.Ordinal);
-        Assert.Contains("timeoutMs=3000", detail, StringComparison.Ordinal);
+        Assert.Contains("feature=Snapshot", detail, StringComparison.Ordinal);
         Assert.Contains("settled=false", detail, StringComparison.Ordinal);
-        Assert.Contains("elementCount=1", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("Order 1001", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("el_secretrefsecretrefsec", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("Processing", detail, StringComparison.Ordinal);
@@ -80,31 +78,20 @@ public sealed class SafeExecutionTraceTests
         Assert.DoesNotContain("private-", detail, StringComparison.Ordinal);
         if (url.StartsWith("https:", StringComparison.Ordinal))
         {
-            Assert.Contains("origin=https://example.test", detail, StringComparison.Ordinal);
+            Assert.DoesNotContain("example.test", detail, StringComparison.Ordinal);
         }
     }
 
     [Fact]
-    public void BuildActDetail_records_operation_and_safe_target_metadata()
+    public void Invalid_browser_arguments_do_not_expose_secret_values_in_error_or_trace()
     {
-        var args = """{"operation":"fill","ref":"e12","value":"AC Keyboard"}""";
-        var result = """
-            {
-              "untrustedBrowserContent": true,
-              "url": "http://127.0.0.1:5088/Admin/Product/Create",
-              "elements": [
-                {"ref":"e12","role":"textbox","name":"Product name","actions":["fill"]}
-              ]
-            }
-            """;
-
-        var detail = SafeExecutionTrace.BuildToolDetail(ToolCatalog.BrowserClick, args, result);
-        Assert.Contains("operation=fill", detail, StringComparison.Ordinal);
-        Assert.Contains("targetRole=textbox", detail, StringComparison.Ordinal);
-        Assert.DoesNotContain("Product name", detail, StringComparison.Ordinal);
-        Assert.DoesNotContain("targetName=", detail, StringComparison.Ordinal);
-        Assert.DoesNotContain("AC Keyboard", detail, StringComparison.Ordinal);
-        Assert.DoesNotContain("e12", detail, StringComparison.Ordinal);
+        const string reference = "el_0123456789abcdefghijkl";
+        const string secret = "do-not-log-fill-value";
+        var json = System.Text.Json.JsonSerializer.Serialize(new { @ref = reference, selector = secret });
+        using var args = JsonDocument.Parse(json);
+        Assert.False(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserClick, args.RootElement, out _, out var error));
+        var detail = SafeExecutionTrace.BuildToolDetail(ToolCatalog.BrowserClick, json, "{\"error\":\"" + error + "\"}");
+        Assert.DoesNotContain(secret, detail); Assert.DoesNotContain(reference, detail);
     }
 
     [Fact]
@@ -128,8 +115,8 @@ public sealed class SafeExecutionTraceTests
               ]
             }
             """;
-        var detail = SafeExecutionTrace.BuildToolDetail(ToolCatalog.BrowserClick, args, result);
-        Assert.Contains("operation=upload", detail, StringComparison.Ordinal);
+        var detail = SafeExecutionTrace.BuildToolDetail(ToolCatalog.BrowserUpload, args, result);
+        Assert.Contains("feature=Upload", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("targetName=", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("11111111", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("artifactId", detail, StringComparison.Ordinal);
@@ -149,37 +136,9 @@ public sealed class SafeExecutionTraceTests
             }
             """;
         var detail = SafeExecutionTrace.BuildToolDetail(ToolCatalog.BrowserClick, args, result);
-        Assert.Contains("targetRole=textbox", detail, StringComparison.Ordinal);
+        Assert.Contains("feature=Click", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("API token", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("targetName=", detail, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void BuildActDetail_records_closed_argument_reason_without_value_ref_or_artifact()
-    {
-        const string reference = "el_0123456789abcdefghijkl";
-        const string secret = "do-not-log-fill-value";
-        var missing = $$"""{"operation":"fill","ref":"{{reference}}","value":"{{secret}}"}""";
-        using var missingDocument = JsonDocument.Parse($$"""{"operation":"fill","ref":"{{reference}}"}""");
-        Assert.False(BrowserToolArguments.TryInteraction(
-            missingDocument.RootElement,
-            out _,
-            out _,
-            out _,
-            out var error));
-        var detail = SafeExecutionTrace.BuildToolDetail(ToolCatalog.BrowserClick, missing, error);
-        Assert.Contains("operation=fill", detail, StringComparison.Ordinal);
-        Assert.Contains("argumentReason=missing_value", detail, StringComparison.Ordinal);
-        Assert.DoesNotContain(secret, detail, StringComparison.Ordinal);
-        Assert.DoesNotContain(reference, detail, StringComparison.Ordinal);
-
-        var uploadArgs = $$"""{"operation":"upload","ref":"{{reference}}","artifactId":"/tmp/ac-keyboard.png"}""";
-        using var upload = JsonDocument.Parse(uploadArgs);
-        Assert.False(BrowserToolArguments.TryInteraction(upload.RootElement, out _, out _, out _, out var uploadError));
-        var uploadDetail = SafeExecutionTrace.BuildToolDetail(ToolCatalog.BrowserClick, uploadArgs, uploadError);
-        Assert.Contains("argumentReason=invalid_artifact_id", uploadDetail, StringComparison.Ordinal);
-        Assert.DoesNotContain("/tmp/ac-keyboard.png", uploadDetail, StringComparison.Ordinal);
-        Assert.DoesNotContain(reference, uploadDetail, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -534,7 +534,7 @@ The current source implements the new routes above; full backend/browser accepta
 
 ## Browser provider inspection projection
 
-The existing owner-authorized Admin effective-configuration response includes additive `browser.engine` (first-party `chromium`, default `unknown` for an unspecified provider). Existing readiness, feature names, profile/policy modes and limits retain their meaning. They report support, not role grants. No protocol event or public debug endpoint is added. Model inspection and environment tool arguments/results are owned by [the Browser port contract](04-backend-interfaces.md#browser-v2-contract); provider handles, private paths and secrets never cross the HTTP boundary.
+The existing owner-authorized Admin effective-configuration response includes additive `browser.engine` (first-party `chromium`, default `unknown` for an unspecified provider). Existing readiness, feature names, profile/policy modes and limits retain their meaning. They report support, not role grants. No protocol event or public debug endpoint is added. Model inspection and environment tool arguments/results are owned by [the Browser port contract](04-backend-interfaces.md#native-browser-contract); provider handles, private paths and secrets never cross the HTTP boundary.
 
 ## Automation destination JSON example
 

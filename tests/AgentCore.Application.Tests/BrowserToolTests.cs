@@ -276,7 +276,7 @@ public sealed class BrowserToolTests
             Call(ToolCatalog.BrowserWait, """{"condition":"stable","timeoutMs":3000}"""),
             ToolLimits.MaxOutputBytes,
             admission: UserTurn());
-        Assert.Equal("stable", fake.LastObserve?.WaitFor);
+        Assert.Equal("stable", fake.LastObserve?.Condition);
         Assert.Equal(3000, fake.LastObserve?.TimeoutMs);
         Assert.Contains("\"settled\":true", stable.Text, StringComparison.Ordinal);
 
@@ -301,7 +301,7 @@ public sealed class BrowserToolTests
             Observation = new BrowserSnapshot(
                 "http://127.0.0.1:5091/",
                 new string('t', BrowserToolLimits.MaxTitleLength + 20),
-                hostile + new string('v', BrowserToolLimits.MaxVisibleTextLength),
+                hostile + new string('v', BrowserToolLimits.MaxSnapshotBytes),
                 false,
                 Enumerable.Range(0, 50)
                     .Select(index => new BrowserElement(OpaqueRef(index), "button", new string('n', 240)))
@@ -319,13 +319,13 @@ public sealed class BrowserToolTests
         var root = document.RootElement;
         Assert.True(root.GetProperty("untrustedBrowserContent").GetBoolean());
         Assert.Equal(BrowserToolLimits.MaxTitleLength, root.GetProperty("title").GetString()!.Length);
-        Assert.True(root.GetProperty("textTruncated").GetBoolean());
-        Assert.Equal(BrowserToolLimits.MaxVisibleTextLength, root.GetProperty("visibleText").GetString()!.Length);
-        Assert.StartsWith(hostile, root.GetProperty("visibleText").GetString(), StringComparison.Ordinal);
-        Assert.InRange(root.GetProperty("elements").GetArrayLength(), 1, BrowserToolLimits.MaxSnapshotChars);
+        Assert.True(root.GetProperty("truncated").GetBoolean());
+        Assert.Equal(BrowserToolLimits.MaxSnapshotBytes, root.GetProperty("content").GetString()!.Length);
+        Assert.StartsWith(hostile, root.GetProperty("content").GetString(), StringComparison.Ordinal);
+        Assert.InRange(root.GetProperty("targets").GetArrayLength(), 1, BrowserToolLimits.MaxSnapshotBytes);
         Assert.Equal(
             BrowserToolLimits.MaxAccessibleNameLength,
-            root.GetProperty("elements")[0].GetProperty("name").GetString()!.Length);
+            root.GetProperty("targets")[0].GetProperty("name").GetString()!.Length);
         Assert.DoesNotContain("cookie", result.Text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("localStorage", result.Text, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(FixtureOrigin, fake.HostPolicy.TargetOrigins);
@@ -365,15 +365,15 @@ public sealed class BrowserToolTests
             ToolLimits.MaxOutputBytes,
             admission: UserTurn());
         using var document = JsonDocument.Parse(serialized.Text);
-        var elements = document.RootElement.GetProperty("elements").EnumerateArray().ToDictionary(e => e.GetProperty("ref").GetString()!);
-        Assert.Equal("AC Probe", elements["el_name"].GetProperty("state").GetProperty("value").GetString());
-        Assert.False(elements["el_name"].GetProperty("state").TryGetProperty("checked", out _));
-        Assert.False(elements["el_name"].GetProperty("state").TryGetProperty("selectedText", out _));
-        Assert.True(elements["el_published"].GetProperty("state").GetProperty("checked").GetBoolean());
-        Assert.False(elements["el_published"].GetProperty("state").TryGetProperty("value", out _));
-        Assert.Equal("Simple", elements["el_category"].GetProperty("state").GetProperty("selectedText").GetString());
-        Assert.False(elements["el_picture"].TryGetProperty("state", out _));
-        Assert.Equal(BrowserToolLimits.MaxFillLength, elements["el_long"].GetProperty("state").GetProperty("value").GetString()!.Length);
+        var targets = document.RootElement.GetProperty("targets").EnumerateArray().ToDictionary(e => e.GetProperty("ref").GetString()!);
+        Assert.Equal("AC Probe", targets["el_name"].GetProperty("state").GetProperty("value").GetString());
+        Assert.False(targets["el_name"].GetProperty("state").TryGetProperty("checked", out _));
+        Assert.False(targets["el_name"].GetProperty("state").TryGetProperty("selectedText", out _));
+        Assert.True(targets["el_published"].GetProperty("state").GetProperty("checked").GetBoolean());
+        Assert.False(targets["el_published"].GetProperty("state").TryGetProperty("value", out _));
+        Assert.Equal("Simple", targets["el_category"].GetProperty("state").GetProperty("selectedText").GetString());
+        Assert.False(targets["el_picture"].TryGetProperty("state", out _));
+        Assert.Equal(BrowserToolLimits.MaxFillLength, targets["el_long"].GetProperty("state").GetProperty("value").GetString()!.Length);
         Assert.DoesNotContain("selector", serialized.Text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("playwright", serialized.Text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("\"html\"", serialized.Text, StringComparison.OrdinalIgnoreCase);
@@ -729,7 +729,7 @@ public sealed class BrowserToolTests
     [InlineData("already_closed")]
     public async Task Close_routes_to_the_browser_port_and_serializes_status(string status)
     {
-        var fake = new FakeBrowser { CloseResult = new BrowserCloseResult(status) };
+        var fake = new FakeBrowser { CloseResult = new BrowserResult(status is "closed" or "already_closed" ? null : status, Status: status) };
         var sessionId = Guid.NewGuid();
         var result = await Executor(fake).ExecuteAsync(
             BrowserDefinitionV12(),
@@ -747,7 +747,6 @@ public sealed class BrowserToolTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("null")]
-    [InlineData("""{"browser":"current"}""")]
     public async Task Close_canonicalizes_harmless_argument_shapes(string arguments)
     {
         var fake = new FakeBrowser();
@@ -796,7 +795,7 @@ public sealed class BrowserToolTests
     [Fact]
     public async Task Close_maps_port_provider_unavailable_to_tool_failure()
     {
-        var fake = new FakeBrowser { CloseResult = new BrowserCloseResult("provider_unavailable") };
+        var fake = new FakeBrowser { CloseResult = new BrowserResult(null, Status: "provider_unavailable", DataJson: System.Text.Json.JsonSerializer.Serialize(new { status = "provider_unavailable" })) };
         var result = await Executor(fake).ExecuteAsync(
             BrowserDefinitionV12(),
             Guid.NewGuid(),
@@ -1107,7 +1106,7 @@ public sealed class BrowserToolTests
 
         public int ObserveCalls { get; private set; }
 
-        public BrowserWaitOptions? LastObserve { get; private set; }
+        public BrowserOptionsData? LastObserve { get; private set; }
 
         public int ActCalls { get; private set; }
 
@@ -1121,7 +1120,7 @@ public sealed class BrowserToolTests
 
         public Guid? LastActSession { get; private set; }
 
-        public BrowserCloseResult CloseResult { get; set; } = new("closed");
+        public BrowserResult CloseResult { get; set; } = new(null, Status: "closed", DataJson: "{\"status\":\"closed\"}");
 
         public int CloseCalls { get; private set; }
 
@@ -1133,8 +1132,8 @@ public sealed class BrowserToolTests
             return new(CurrentUrl);
         }
 
-        public ValueTask<BrowserOperationResult> NavigateAsync(
-            BrowserNavigateRequest request,
+        public ValueTask<BrowserResult> NavigateAsync(
+            BrowserRequest request,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1145,63 +1144,72 @@ public sealed class BrowserToolTests
 
             NavigateCalls++;
             LastSessionId = request.SessionId;
-            CurrentUrl = request.Url;
-            return new(new BrowserOperationResult(null, Observation with { Url = request.Url!.AbsoluteUri }));
+            CurrentUrl = new Uri(request.Options.Url!);
+            return new(new BrowserResult(null, Observation with { Url = request.Options.Url! }));
         }
 
-        public ValueTask<BrowserOperationResult> SnapshotAsync(
+        public ValueTask<BrowserResult> SnapshotAsync(
             Guid sessionId,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ObserveCalls++;
             LastSessionId = sessionId;
-            return new(new BrowserOperationResult(null, Observation));
+            return new(new BrowserResult(null, Observation));
         }
 
-        public ValueTask<BrowserOperationResult> SnapshotAsync(
+        public ValueTask<BrowserResult> SnapshotAsync(
             Guid sessionId,
-            BrowserWaitOptions options,
+            BrowserOptionsData options,
             CancellationToken cancellationToken = default)
         {
             LastObserve = options;
             return SnapshotAsync(sessionId, cancellationToken);
         }
 
-        public ValueTask<BrowserOperationResult> InteractAsync(
-            BrowserInteractionRequest request,
+        public ValueTask<BrowserResult> InteractAsync(
+            BrowserRequest request,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ActCalls++;
             LastActSession = request.SessionId;
-            LastUpload = request.Upload ?? request.Uploads?.FirstOrDefault();
+            LastUpload = request.Options.Uploads?.FirstOrDefault() ?? request.Options.Uploads?.FirstOrDefault();
             if (ForcedActError is not null)
             {
-                return new(new BrowserOperationResult(ForcedActError, null, ForcedAllowedActions));
+                return new(new BrowserResult(ForcedActError, null, ForcedAllowedActions));
             }
 
-            if (!Refs.TryGetValue(request.Ref, out var owner) || owner != request.SessionId)
+            if (!Refs.TryGetValue(request.Options.Ref!, out var owner) || owner != request.SessionId)
             {
-                return new(new BrowserOperationResult("forbidden", null));
+                return new(new BrowserResult("forbidden", null));
             }
 
-            if (string.Equals(request.Operation, "click", StringComparison.Ordinal))
+            if (string.Equals(AgentCore.Application.Tools.BrowserToolArguments.ToolName(request.Operation)[8..], "click", StringComparison.Ordinal))
             {
                 ClickCalls++;
             }
 
-            return new(new BrowserOperationResult(null, Observation));
+            return new(new BrowserResult(null, Observation));
         }
 
-        public ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        public ValueTask<BrowserResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             CloseCalls++;
             LastSessionId = sessionId;
             return new(CloseResult);
         }
-    }
+
+        public virtual ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default) => request.Operation switch
+        {
+            BrowserOperation.Navigate => NavigateAsync(request, ct),
+            BrowserOperation.Snapshot or BrowserOperation.WaitFor => SnapshotAsync(request.SessionId, request.Options, ct),
+            BrowserOperation.Close => CloseAsync(request.SessionId, ct),
+            BrowserOperation.Click or BrowserOperation.Type or BrowserOperation.Hover or BrowserOperation.Drag or BrowserOperation.Upload or BrowserOperation.FillForm => InteractAsync(request, ct),
+            _ => new(new BrowserResult("unsupported_operation")),
+        };
+}
 
     private sealed class CapturingBrowser : FakeBrowser, IBrowser
     {
@@ -1209,13 +1217,11 @@ public sealed class BrowserToolTests
 
         public byte[] Png { get; set; } = [0x89, 0x50, 0x4E, 0x47, 1, 2, 3];
 
-        ValueTask<BrowserScreenshotResult> IBrowser.CaptureViewportAsync(
-            BrowserScreenshotRequest request,
-            CancellationToken cancellationToken)
+        public override ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            Captures++;
-            return new(new BrowserScreenshotResult(null, Png, 1, 8, 8));
+            if (request.Operation != BrowserOperation.Screenshot) return base.ExecuteAsync(request, ct);
+            ct.ThrowIfCancellationRequested(); Captures++;
+            return new(new BrowserResult(null, Bytes: Png, ContentType: "image/png", RedactionCount: 1, Width: 8, Height: 8));
         }
     }
 

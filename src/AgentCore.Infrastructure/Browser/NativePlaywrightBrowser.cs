@@ -14,106 +14,34 @@ using SkiaSharp;
 
 namespace AgentCore.Infrastructure.Browser;
 
-public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBrowser, IBrowserPasswordSink, IBrowserLease, IBrowserProfileBinding, IBrowserContextUse, IBrowserRuntimeReadiness, IHostedService
+public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Ports.IBrowser, IBrowserPasswordSink, IBrowserLease, IBrowserProfileBinding, IBrowserContextUse, IBrowserRuntimeReadiness, IBrowserProfileReset, IHostedService
 {
+    // Fixed target-local classification only: native Locators own discovery, naming and actionability.
     private const string DescribeElement = """
         el => {
-          const tag = (el.tagName || "").toLowerCase();
-          const type = (el.getAttribute("type") || "").toLowerCase();
-          let role = el.getAttribute("role");
-          if (!role) {
-            if (tag === "a") role = "link";
-            else if (tag === "button" || type === "button" || type === "submit") role = "button";
-            else if (tag === "select") role = "combobox";
-            else if (type === "checkbox") role = "checkbox";
-            else if (type === "radio") role = "radio";
-            else if (type === "file") role = "button";
-            else if (tag === "textarea" || tag === "input") role = "textbox";
-            else role = tag || "generic";
-          }
-          let name = "";
-          const labelText = (label) => ((label && (label.innerText || label.textContent)) || "").trim();
-          if (el.labels && el.labels.length > 0) {
-            name = Array.from(el.labels).map(labelText).filter(Boolean).join(" ");
-          }
-          if (!name && el.id) {
-            const explicit = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
-            name = labelText(explicit);
-          }
-          if (!name) name = (el.getAttribute("aria-label") || "").trim();
-          if (!name && tag !== "input") name = (el.innerText || el.textContent || "").trim();
-          const humanize = (value) => (value || "")
-            .replace(/[-_]+/g, " ")
-            .replace(/([a-z])([A-Z])/g, "$1 $2")
-            .replace(/\s+/g, " ")
-            .trim();
-          if (!name && el.htmlFor) name = humanize(el.htmlFor);
-          if (!name && el.id) name = humanize(el.id);
-          if (tag === "input" && type === "hidden") return "null";
-          if (type === "file") {
-            let node = el.parentElement;
-            for (let depth = 0; depth < 5 && node && node !== document.body && node !== document.documentElement; depth += 1, node = node.parentElement) {
-              if (node.children.length > 4) continue;
-              for (const child of node.children) {
-                if (child.contains(el)) continue;
-                const caption = ((child.innerText || child.textContent) || "").replace(/\s+/g, " ").trim();
-                if (caption && caption.length <= 40 && !/upload|browse/i.test(caption)) {
-                  name = caption;
-                  depth = 5;
-                  break;
-                }
-              }
-            }
-          }
-          let actions = ["click"];
-          if (type === "file") actions = ["upload"];
-          else if (tag === "select") actions = ["select"];
-          else if (role === "checkbox" || role === "switch" || type === "checkbox") actions = ["check", "uncheck"];
-          else if (role === "textbox" || role === "searchbox" || tag === "textarea" || (tag === "input" && type !== "button" && type !== "submit" && type !== "checkbox" && type !== "radio" && type !== "file")) actions = ["fill", "press"];
-          else actions = ["button", "link", "radio", "option", "tab", "menuitem", "treeitem", "combobox"].includes(role) || el.hasAttribute("tabindex") || el.hasAttribute("onclick") ? ["click"] : [];
-          const source = (() => {
-            if (tag !== "label") return el;
-            const linkedId = el.htmlFor || el.getAttribute("for");
-            const linked = linkedId ? document.getElementById(linkedId) : null;
-            return linked || el.querySelector("input, select, textarea") || el;
-          })();
-          const sourceTag = (source.tagName || "").toLowerCase();
-          const sourceType = (source.getAttribute("type") || "").toLowerCase();
-          const sourceRole = (source.getAttribute("role") || role || "").toLowerCase();
-          const rawHaystack = [name, source.id, source.getAttribute("name"), source.getAttribute("autocomplete"), source.getAttribute("aria-label")]
-            .filter(Boolean).join(" ");
-          const haystack = rawHaystack.toLowerCase();
-          const words = rawHaystack.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[-_]+/g, " ").toLowerCase();
-          const sensitiveTerms = ["password", "passwd", "passcode", "secret", "token", "api key", "apikey", "access key", "private key", "client secret", "authorization", "one-time-code", "otp"];
-          const sensitive = sourceType === "password"
-            || sourceType === "hidden"
-            || (source.getAttribute("autocomplete") || "").toLowerCase().includes("one-time-code")
-            || sensitiveTerms.some(term => haystack.includes(term) || words.includes(term.replace(/[-_]+/g, " ")));
-          if (sourceType === "password") actions = ["fill_credential"];
-          else if (sensitive) return "null";
+          const source = el.control || el;
+          const tag = source.tagName.toLowerCase(), type = (source.getAttribute('type') || '').toLowerCase();
+          const bounded = value => value.length > 65536 ? '[redacted oversized value]' : value;
+          const name = (source.getAttribute('aria-label') || Array.from(source.labels || []).map(l=>l.textContent).join(' ') || source.textContent || '').trim();
+          const metadata = [source.id, source.getAttribute('name'), source.getAttribute('autocomplete'), name].filter(Boolean).join(' ');
+          const words = metadata.replace(/([a-z])([A-Z])/g,'$1 $2').replace(/[-_]+/g,' ').toLowerCase();
+          const sensitive = type === 'hidden' || /password|passwd|passcode|secret|token|api ?key|access ?key|private ?key|authorization|one time code|otp/i.test(metadata) || /password|passwd|passcode|secret|token|api ?key|access ?key|private ?key|authorization|one time code|otp/i.test(words);
+          if (type !== 'password' && sensitive) return 'null';
+          const role = source.getAttribute('role') || (type === 'password' || tag === 'textarea' || tag === 'input' && !['checkbox','radio','file','submit','button'].includes(type) ? 'textbox' : tag === 'button' ? 'button' : tag === 'a' ? 'link' : tag === 'select' ? 'combobox' : /^h[1-6]$/.test(tag) ? 'heading' : type === 'checkbox' || type === 'radio' ? type : 'generic');
+          const actions = type === 'password' ? ['fill_credential'] : type === 'file' ? ['upload'] : tag === 'select' ? ['select'] : ['checkbox','radio','switch'].includes(role) ? ['check','uncheck','click'] : role === 'textbox' || source.isContentEditable ? ['fill','press'] : ['heading','tree','grid','group','region','main','status'].includes(role) ? [] : ['click'];
           const state = {};
-          if (!sensitive && sourceType !== "file") {
-            if (sourceTag === "select") {
-              const option = source.selectedOptions && source.selectedOptions[0];
-              if (option) state.selectedText = ((option.label || option.textContent) || "").trim().slice(0, 500);
-            } else if (sourceType === "checkbox" || sourceType === "radio") {
-              state.checked = source.checked === true;
-            } else if (sourceRole === "checkbox" || sourceRole === "radio" || sourceRole === "switch") {
-              const ariaChecked = source.getAttribute("aria-checked");
-              if (ariaChecked === "true" || ariaChecked === "false") state.checked = ariaChecked === "true";
-              else if (typeof source.checked === "boolean") state.checked = source.checked === true;
-            } else if (sourceTag === "textarea" || (sourceTag === "input" && ["", "text", "search", "email", "url", "tel", "number"].includes(sourceType))) {
-              state.value = String(source.value || "").slice(0, 500);
-            }
+          if (type !== 'password' && !sensitive) {
+            if (tag === 'select') state.selectedText = Array.from(source.selectedOptions).map(o=>o.label).join(', ');
+            else if (type === 'checkbox' || type === 'radio') state.checked = source.checked;
+            else if (['checkbox','radio','switch'].includes(role)) state.checked = source.getAttribute('aria-checked') === 'true';
+            else if (role === 'textbox') state.value = String(source.value || '');
           }
-          const payload = { role, name: name.slice(0, 200), actions };
-          if (Object.keys(state).length > 0) payload.state = state;
-          return JSON.stringify(payload);
+          if (state.value !== undefined) state.value = bounded(state.value);
+          if (state.selectedText !== undefined) state.selectedText = bounded(state.selectedText);
+          return JSON.stringify({ role, name: bounded(name), actions, state });
         }
         """;
-
-    // Use the snapshot taxonomy again at execution time: SPA metadata can change after discovery.
-    private const string OrdinaryElement = "el => { if (!el || el.matches('iframe')) return false; if (el === el.ownerDocument.body || el === el.ownerDocument.documentElement) return true; const described = (" + DescribeElement + ")(el); return described !== 'null' && !JSON.parse(described).actions.includes('fill_credential'); }";
+    private const string OrdinaryElement = "el => { if (!el || el.matches('iframe')) return false; if (el===el.ownerDocument.body || el===el.ownerDocument.documentElement) return true; const d=(" + DescribeElement + ")(el);return d!=='null' && !JSON.parse(d).actions.includes('fill_credential'); }";
 
     private const string ReadSecrets = """
         () => {
@@ -131,7 +59,12 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
               push("storage", key, sessionStorage.getItem(key));
             }
           } catch { }
-          document.querySelectorAll('input[type="password"]').forEach(el => push("password", "", el.value || ""));
+          document.querySelectorAll('input,textarea,select,[contenteditable=true]').forEach(el => {
+            const metadata=[el.type,el.id,el.name,el.getAttribute('autocomplete'),el.getAttribute('aria-label'),...Array.from(el.labels||[]).map(l=>l.textContent)].join(' ');
+            const words=metadata.replace(/([a-z])([A-Z])/g,'$1 $2').replace(/[-_]+/g,' ');
+            if(/password|passwd|passcode|secret|token|api.?key|private.?key|access.?key|one.?time.?code|otp/i.test(metadata+' '+words))
+                push("password", "", el.value || el.textContent || "");
+          });
           return JSON.stringify(items);
         }
         """;
@@ -151,6 +84,7 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
     private readonly AsyncLocal<Guid?> _unattendedOwner = new();
     private readonly ConcurrentBag<IPlaywright> _retiredDrivers = [];
     private readonly ConcurrentDictionary<string, LiveElement> _refs = new();
+    private readonly TimeProvider _time;
     private IPlaywright? _playwright;
     private Microsoft.Playwright.IBrowser? _browser;
     private BrowserHostPolicy _policy;
@@ -161,14 +95,15 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
     internal Func<IPage, int, int, Task>? ResizeProbe { get; set; }
     internal Action? ActionStartedProbe { get; set; }
 
-    public PlaywrightBrowser(
+    public NativePlaywrightBrowser(
         BrowserOptions options,
         ILoggerFactory? loggerFactory,
-        Func<CancellationToken, Task<bool>>? chromiumProbe = null)
+        Func<CancellationToken, Task<bool>>? chromiumProbe = null, TimeProvider? timeProvider = null)
     {
         _options = options;
-        _logger = loggerFactory?.CreateLogger<PlaywrightBrowser>()
-            ?? NullLogger<PlaywrightBrowser>.Instance;
+        _time = timeProvider ?? TimeProvider.System;
+        _logger = loggerFactory?.CreateLogger<NativePlaywrightBrowser>()
+            ?? NullLogger<NativePlaywrightBrowser>.Instance;
         _fixture = new LoopbackBrowserFixtureHost(_logger);
         _chromiumProbe = chromiumProbe;
         _policy = options.ToHostPolicy();
@@ -277,19 +212,8 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
         await _fixture.DisposeAsync().ConfigureAwait(false);
     }
 
-    public ValueTask<Uri?> GetCurrentUrlAsync(Guid sessionId, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        if (!_sessions.TryGetValue(sessionId, out var session) || !IsAllowed(session, session.Page.Url))
-        {
-            return new ValueTask<Uri?>(result: null);
-        }
-
-        return new ValueTask<Uri?>(Uri.TryCreate(session.Page.Url, UriKind.Absolute, out var uri) ? uri : null);
-    }
-
-    public async ValueTask<BrowserOperationResult> NavigateAsync(
-        BrowserNavigateRequest request,
+    private async ValueTask<BrowserResult> NavigateAsync(
+        BrowserRequest request,
         CancellationToken cancellationToken = default)
     {
         await using var interactive = await EnterInteractiveAsync(request.SessionId, cancellationToken).ConfigureAwait(false);
@@ -298,10 +222,10 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
             return Unavailable();
         }
 
-        var operation = request.Operation is "back" or "forward" or "reload" ? request.Operation : "goto";
+        var operation = request.Options.Operation is "back" or "forward" or "reload" ? request.Options.Operation : "goto";
         if (operation == "goto")
         {
-            if (request.Url is null)
+            if (request.Options.Url is null)
             {
                 return Result("invalid");
             }
@@ -309,11 +233,11 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
             var leasedOrigins = LeaseOrigins(request.SessionId);
             var decision = leasedOrigins is null
                 ? BrowserTargetPolicy.EvaluateDestination(
-                    request.Url.AbsoluteUri,
+                    request.Options.Url,
                     _policy.NavigationOrigins,
                     _policy.PolicyMode)
                 : BrowserTargetPolicy.EvaluateDestination(
-                    request.Url.AbsoluteUri,
+                    request.Options.Url,
                     leasedOrigins,
                     BrowserPolicyMode.Restricted);
             if (!decision.Allowed)
@@ -369,7 +293,7 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
                 else
                 {
                     await session.Page.GotoAsync(
-                            request.Url!.AbsoluteUri,
+                            request.Options.Url!,
                             new PageGotoOptions
                             {
                                 Timeout = TimeoutMs(),
@@ -466,329 +390,7 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
         }
     }
 
-    public ValueTask<BrowserOperationResult> SnapshotAsync(
-        Guid sessionId,
-        CancellationToken cancellationToken = default) =>
-        SnapshotCoreAsync(sessionId, null, cancellationToken);
-
-    public ValueTask<BrowserOperationResult> SnapshotAsync(
-        Guid sessionId,
-        BrowserWaitOptions options,
-        CancellationToken cancellationToken = default) =>
-        SnapshotCoreAsync(sessionId, options, cancellationToken);
-
-    private async ValueTask<BrowserOperationResult> SnapshotCoreAsync(
-        Guid sessionId,
-        BrowserWaitOptions? options,
-        CancellationToken cancellationToken)
-    {
-        await using var interactive = await EnterInteractiveAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        if (!IsAvailable || !_sessions.TryGetValue(sessionId, out var session))
-        {
-            return Unavailable();
-        }
-
-        var entered = false;
-        try
-        {
-            await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-            entered = true;
-            await AdoptOpenWebPageAsync(session, cancellationToken).ConfigureAwait(false);
-            if (!IsAllowed(session, session.Page.Url))
-            {
-                return Result("target_denied");
-            }
-
-            if (options?.WaitFor is "navigation" or "role")
-            {
-                var budget = Math.Clamp(
-                    options.TimeoutMs ?? BrowserToolLimits.DefaultObserveTimeoutMs,
-                    BrowserToolLimits.MinObserveTimeoutMs,
-                    BrowserToolLimits.MaxObserveTimeoutMs);
-                if (options.WaitFor == "navigation")
-                {
-                    await session.Page.WaitForLoadStateAsync(
-                            LoadState.Load,
-                            new PageWaitForLoadStateOptions { Timeout = budget })
-                        .WaitAsync(cancellationToken)
-                        .ConfigureAwait(false);
-                }
-                else if (!Enum.TryParse<AriaRole>(options.Role, true, out var role))
-                {
-                    return Result("invalid");
-                }
-                else
-                {
-                    var locator = string.IsNullOrWhiteSpace(options.Name)
-                        ? session.Page.GetByRole(role)
-                        : session.Page.GetByRole(role, new PageGetByRoleOptions { Name = options.Name });
-                    await locator.First.WaitForAsync(new LocatorWaitForOptions
-                        {
-                            Timeout = budget,
-                            State = WaitForSelectorState.Visible
-                        })
-                        .WaitAsync(cancellationToken)
-                        .ConfigureAwait(false);
-                }
-            }
-
-            var settle = options is { WaitFor: "stable" }
-                ? BrowserSnapshotSettle.Stable
-                : BrowserSnapshotSettle.None;
-            return await CaptureWithRetryAsync(
-                session,
-                sessionId,
-                "observe",
-                settle,
-                options?.TimeoutMs,
-                cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex) when (IsCancel(ex, cancellationToken))
-        {
-            throw new OperationCanceledException(cancellationToken);
-        }
-        catch (Exception ex) when (IsTimeout(ex))
-        {
-            LogBrowserFailure("observe", "capture", "timeout");
-            return Result("timeout");
-        }
-        catch (PlaywrightException ex)
-        {
-            return await FailAsync(session, "observe", "capture", ex).ConfigureAwait(false);
-        }
-        finally
-        {
-            if (entered)
-            {
-                session.Gate.Release();
-            }
-        }
-    }
-
-    public async ValueTask<BrowserOperationResult> InteractAsync(
-        BrowserInteractionRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        await using var interactive = await EnterInteractiveAsync(request.SessionId, cancellationToken).ConfigureAwait(false);
-        if (!IsAvailable)
-        {
-            return Unavailable();
-        }
-
-        var pageScroll = request.Operation == "scroll" && string.IsNullOrEmpty(request.Ref);
-        LiveElement? live = null;
-        SessionBrowser? session;
-        if (pageScroll)
-        {
-            if (!_sessions.TryGetValue(request.SessionId, out session))
-            {
-                return Result("stale_reference");
-            }
-        }
-        else
-        {
-            var error = ReferenceError(request.Ref, request.SessionId, out live);
-            if (error is not null) return Result(error);
-            session = _sessions[request.SessionId];
-            if (live!.CustomTarget)
-            {
-                if (live.SemanticLocator is not null && await live.SemanticLocator.CountAsync().WaitAsync(cancellationToken) > live.ExpectedMatchCount) return Result("ambiguous_reference");
-                if (await live.Handle.CountAsync().WaitAsync(cancellationToken) == 0) return Result("target_missing");
-                if (!await live.Handle.EvaluateAsync<bool>(CustomTargetEligible).WaitAsync(cancellationToken)) return Result("non_actionable_target");
-            }
-        }
-
-        if (!IsAllowed(session, session.Page.Url))
-        {
-            return Result("target_denied");
-        }
-
-        var current = await GetCurrentUrlAsync(request.SessionId, cancellationToken).ConfigureAwait(false);
-        if (current is null)
-        {
-            return Unavailable();
-        }
-
-        var decision = BrowserTargetPolicy.EvaluateAct(
-            _policy.InteractionMode,
-            current.AbsoluteUri,
-            _policy.EffectiveInteractionOrigins,
-            _policy.PolicyMode);
-        if (!decision.Allowed)
-        {
-            return Result(decision.Code ?? "forbidden");
-        }
-
-        var entered = false;
-        try
-        {
-            await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-            entered = true;
-            if (session.Dialog is not null) return Result("dialog_pending");
-            if (live is not null && live.Generation != session.Generation)
-            {
-                return Result("stale_reference");
-            }
-
-            if (request.Operation is "fill" or "select" or "press" && request.Value is null)
-            {
-                return Result("invalid");
-            }
-
-            if (request.Operation == "upload" && request.Upload is not { Content.Length: > 0 } && request.Uploads is not { Count: > 0 })
-            {
-                return Result("invalid");
-            }
-
-            ILocator? dragTarget = null;
-            if (live is not null)
-            {
-                if (live.SemanticLocator is not null && await live.SemanticLocator.CountAsync().WaitAsync(cancellationToken) > live.ExpectedMatchCount)
-                    return Result("ambiguous_reference");
-                if (!await IsAttachedAsync(live.Handle).ConfigureAwait(false))
-                {
-                    return Result("target_missing");
-                }
-
-                var frameUrl = await live.Handle.EvaluateAsync<string>("el => el.ownerDocument.location.href").WaitAsync(cancellationToken);
-                if (!BrowserTargetPolicy.EvaluateAct(_policy.InteractionMode, frameUrl, LeaseOrigins(session) ?? _policy.EffectiveInteractionOrigins, _policy.PolicyMode).Allowed)
-                    return Result("target_denied");
-                if (!await live.Handle.EvaluateAsync<bool>(OrdinaryElement).WaitAsync(cancellationToken) || live.Actions.Contains("fill_credential"))
-                    return Result("unsupported_operation", live.Actions.Contains("fill_credential") ? ["fill_credential"] : []);
-
-                if (live.Actions.Count == 0 && request.Operation is "click" or "fill" or "check" or "uncheck" or "select" or "upload")
-                    return Result("non_actionable_target");
-                if (live.Actions.Count > 0 && !ActionOffered(live.Actions, request.Operation))
-                {
-                    LogBrowserFailure("act", "interaction", "actionNotOffered");
-                    return Result("unsupported_operation", live.Actions);
-                }
-            }
-
-            if (request.Operation == "drag")
-            {
-                if (live is null
-                    || string.IsNullOrEmpty(request.TargetRef)
-                    || !_refs.TryGetValue(request.TargetRef, out var target)
-                    || target.SessionId != request.SessionId
-                    || target.Generation != session.Generation
-                    || !await IsAttachedAsync(target.Handle).ConfigureAwait(false))
-                {
-                    return Result("stale_reference");
-                }
-
-                var targetUrl = await target.Handle.EvaluateAsync<string>("el => el.ownerDocument.location.href").WaitAsync(cancellationToken);
-                if (!BrowserTargetPolicy.EvaluateAct(_policy.InteractionMode, targetUrl, LeaseOrigins(session) ?? _policy.EffectiveInteractionOrigins, _policy.PolicyMode).Allowed)
-                    return Result("target_denied");
-                if (!await target.Handle.EvaluateAsync<bool>(OrdinaryElement).WaitAsync(cancellationToken))
-                    return Result("unsupported_operation", []);
-                dragTarget = target.Handle;
-            }
-
-            var before = session.Page.Url;
-            session.DeniedNavigation = false;
-            session.PopupCode = null;
-            session.TimedOut = false;
-            var call = BeginCall(session);
-            using var registration = cancellationToken.Register(() => CancelCall(session, call));
-            try
-            {
-                session.DialogSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
-                var action = PerformInteractionAsync(session.Page, live?.Handle, dragTarget, request, cancellationToken);
-                if (await Task.WhenAny(action, session.DialogSignal.Task).WaitAsync(cancellationToken) != action)
-                {
-                    session.PendingAction = action;
-                    _ = action.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
-                    return Result("dialog_pending");
-                }
-                await action.ConfigureAwait(false);
-            }
-            catch (PlaywrightException) when (session.PopupCode is not null || session.DeniedNavigation || session.TimedOut)
-            {
-            }
-
-            if (session.TimedOut)
-            {
-                LogBrowserFailure("act", "interaction", "timeout");
-                return Result("timeout");
-            }
-
-            if (session.PopupCode is not null)
-            {
-                return Result(session.PopupCode);
-            }
-
-            await AdoptOpenWebPageAsync(session, cancellationToken).ConfigureAwait(false);
-
-            if (session.DeniedNavigation || !IsAllowed(session, session.Page.Url))
-            {
-                await RestoreAllowedPageAsync(session, cancellationToken).ConfigureAwait(false);
-                return Result("target_denied");
-            }
-
-            if (!string.Equals(before, session.Page.Url, StringComparison.Ordinal))
-            {
-                session.Generation++;
-                session.LastAllowedUrl = session.Page.Url;
-            }
-
-            var settle = request.Operation is "click" or "doubleClick" or "drag" or "press" or "select" or "check" or "uncheck"
-                ? BrowserSnapshotSettle.Automatic
-                : BrowserSnapshotSettle.None;
-            var captured = await CaptureWithRetryAsync(
-                session,
-                request.SessionId,
-                "act",
-                settle,
-                timeoutMs: null,
-                cancellationToken).ConfigureAwait(false);
-            await SettlePopupsAsync(session).ConfigureAwait(false);
-            return session.PopupCode is { } popupCode ? Result(popupCode) : captured;
-        }
-        catch (OperationCanceledException)
-        {
-            if (entered) await FencePageAsync(session, request.SessionId).ConfigureAwait(false);
-            throw;
-        }
-        catch (Exception ex) when (IsCancel(ex, cancellationToken))
-        {
-            if (entered) await FencePageAsync(session, request.SessionId).ConfigureAwait(false);
-            throw new OperationCanceledException(cancellationToken);
-        }
-        catch (Exception ex) when (IsTimeout(ex))
-        {
-            LogBrowserFailure("act", "interaction", "timeout");
-            return Result("timeout");
-        }
-        catch (PlaywrightException ex)
-        {
-            return await FailAsync(session, "act", "interaction", ex).ConfigureAwait(false);
-        }
-        finally
-        {
-            await SettlePopupsAsync(session).ConfigureAwait(false);
-            if (entered)
-            {
-                session.Gate.Release();
-            }
-        }
-    }
-
-    public async ValueTask<BrowserTabsResult> TabsAsync(BrowserTabsRequest request, CancellationToken cancellationToken = default)
-    {
-        var result = await ExecuteAsync(new(request.SessionId, "browser.tabs", JsonSerializer.SerializeToElement(new
-        { operation = request.Operation, tabRef = request.PageId })), cancellationToken);
-        if (result.DataJson is null) return new(result.ErrorCode, [], result.Snapshot);
-        using var doc = JsonDocument.Parse(result.DataJson);
-        return new(null, doc.RootElement.GetProperty("tabs").EnumerateArray().Select(t => new BrowserPageInfo(
-            t.GetProperty("tabRef").GetString()!, t.GetProperty("url").GetString()!, t.GetProperty("active").GetBoolean())).ToArray(), result.Snapshot);
-    }
-
-    public async ValueTask<BrowserScreenshotResult> CaptureViewportAsync(
+    private async ValueTask<BrowserScreenshotResult> CaptureViewportAsync(
         BrowserScreenshotRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -816,7 +418,10 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
             {
                 var error = ReferenceError(request.TargetRef, request.SessionId, out var live);
                 if (error is not null) return new(error, null, 0);
-                if (!await IsAttachedAsync(live!.Handle)) return new("target_missing", null, 0);
+                var count = await live!.Handle.CountAsync().WaitAsync(cancellationToken);
+                if (count != 1) return new(count == 0 ? "target_missing" : "ambiguous_target", null, 0);
+                var frameUrl = await live.Handle.EvaluateAsync<string>("el=>el.ownerDocument.location.href").WaitAsync(cancellationToken);
+                if (!Allows(session, frameUrl, true)) return new("target_denied", null, 0);
                 target = live.Handle;
             }
             var secrets = await CollectSecretsAsync(session, cancellationToken);
@@ -927,7 +532,7 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
     internal IBrowserContext? ContextFor(Guid sessionId) =>
         _sessions.TryGetValue(sessionId, out var session) ? session.Context : null;
 
-    public async ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    private async ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         await using var interactive = await EnterInteractiveAsync(sessionId, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
@@ -1126,7 +731,7 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
     public void BindSession(Guid sessionId, Guid? agentInstanceId) =>
         _sessionOwners[sessionId] = agentInstanceId;
 
-    public async ValueTask<BrowserOperationResult> FillCredentialAsync(Guid sessionId, string reference,
+    public async ValueTask<BrowserResult> FillCredentialAsync(Guid sessionId, string reference,
         Func<string, CancellationToken, ValueTask<string>> resolve, CancellationToken ct = default)
     {
         await using var held = await EnterInteractiveAsync(sessionId, ct);
@@ -1136,7 +741,9 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
         await session.Gate.WaitAsync(ct);
         try
         {
-            if (live!.Generation != session.Generation) return Result("stale_reference");
+            var matchCount = await live!.Handle.CountAsync().WaitAsync(ct);
+            if (matchCount != 1) return Result(matchCount == 0 ? "target_missing" : "ambiguous_target");
+            if (live.Generation != session.Generation) return Result("stale_reference");
             if (!await IsAttachedAsync(live.Handle)) return Result("target_missing");
             if (!live.Actions.Contains("fill_credential") || !await live.Handle.EvaluateAsync<bool>("el => el.matches('input[type=password]')"))
                 return Result("unsupported_operation");
@@ -1907,165 +1514,8 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
         }
     }
 
-    private static bool ActionOffered(IReadOnlyList<string> actions, string operation) =>
-        actions.Contains(operation, StringComparer.Ordinal)
-        || (operation is "doubleClick" or "hover" or "drag" or "scroll"
-            && actions.Contains("click", StringComparer.Ordinal));
-
-    private async Task PerformInteractionAsync(
-        IPage page,
-        ILocator? handle,
-        ILocator? dragTarget,
-        BrowserInteractionRequest request,
-        CancellationToken cancellationToken)
-    {
-        var timeout = TimeoutMs();
-        var operation = request.Operation;
-        if (operation == "scroll")
-        {
-            var delta = request.Delta is > 0 and <= BrowserToolLimits.MaxScrollDelta
-                ? request.Delta
-                : BrowserToolLimits.DefaultScrollDelta;
-            var (dx, dy) = request.Direction switch
-            {
-                "up" => (0, -delta),
-                "left" => (-delta, 0),
-                "right" => (delta, 0),
-                _ => (0, delta)
-            };
-            if (handle is not null)
-            {
-                await handle.HoverAsync(new LocatorHoverOptions { Timeout = timeout })
-                    .WaitAsync(cancellationToken)
-                    .ConfigureAwait(false);
-            }
-
-            await page.Mouse.WheelAsync(dx, dy).WaitAsync(cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
-        if (handle is null)
-        {
-            return;
-        }
-
-        if (operation == "doubleClick")
-        {
-            await handle.DblClickAsync(new LocatorDblClickOptions { Timeout = timeout })
-                .WaitAsync(cancellationToken)
-                .ConfigureAwait(false);
-            return;
-        }
-
-        if (operation == "hover")
-        {
-            await handle.HoverAsync(new LocatorHoverOptions { Timeout = timeout })
-                .WaitAsync(cancellationToken)
-                .ConfigureAwait(false);
-            return;
-        }
-
-        if (operation == "drag" && dragTarget is not null)
-        {
-            await handle.DragToAsync(dragTarget, new LocatorDragToOptions { Timeout = timeout }).WaitAsync(cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
-        if (operation == "click")
-        {
-            await handle.ClickAsync(new LocatorClickOptions { Timeout = timeout })
-                .WaitAsync(cancellationToken)
-                .ConfigureAwait(false);
-            return;
-        }
-
-        if (operation == "check")
-        {
-            await handle.CheckAsync(new LocatorCheckOptions { Timeout = timeout, Force = false })
-                .WaitAsync(cancellationToken)
-                .ConfigureAwait(false);
-            return;
-        }
-
-        if (operation == "uncheck")
-        {
-            await handle.UncheckAsync(new LocatorUncheckOptions { Timeout = timeout, Force = false })
-                .WaitAsync(cancellationToken)
-                .ConfigureAwait(false);
-            return;
-        }
-
-        if (operation == "upload" && (request.Upload is not null || request.Uploads is { Count: > 0 }))
-        {
-            var uploads = request.Uploads ?? [request.Upload!];
-            await handle.SetInputFilesAsync(uploads.Select(upload => new FilePayload
-                { Name = upload.FileName, MimeType = upload.MediaType, Buffer = upload.Content.ToArray() }),
-                new LocatorSetInputFilesOptions { Timeout = timeout }).WaitAsync(cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
-        if (request.Value is null)
-        {
-            return;
-        }
-
-        if (operation == "fill")
-        {
-            await handle.FillAsync(request.Value, new LocatorFillOptions { Timeout = timeout })
-                .WaitAsync(cancellationToken)
-                .ConfigureAwait(false);
-            return;
-        }
-
-        if (operation == "select")
-        {
-            await handle.SelectOptionAsync(request.Value, new LocatorSelectOptionOptions { Timeout = timeout })
-                .WaitAsync(cancellationToken)
-                .ConfigureAwait(false);
-            return;
-        }
-
-        if (operation == "press")
-        {
-            await handle.PressAsync(request.Value, new LocatorPressOptions { Timeout = timeout })
-                .WaitAsync(cancellationToken)
-                .ConfigureAwait(false);
-        }
-    }
-
-    private async Task<BrowserSnapshot> CaptureAsync(
-        SessionBrowser session,
-        Guid sessionId,
-        CancellationToken cancellationToken)
-    {
-        var probe = CaptureProbe?.Invoke();
-        if (probe is not null)
-        {
-            throw probe;
-        }
-
-        RemoveRefs(sessionId);
-        var title = await session.Page.TitleAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
-        var text = await session.Page.Locator("body").InnerTextAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
-        var secrets = await CollectSecretsAsync(session, cancellationToken).ConfigureAwait(false);
-        title = Redact(title, secrets, session.ProtectedValues);
-        text = Redact(text, secrets, session.ProtectedValues);
-        var truncated = text.Length > BrowserToolLimits.MaxVisibleTextLength;
-        var elements = await CollectElementsAsync(session, sessionId, secrets, cancellationToken).ConfigureAwait(false);
-        var intervention = await ClassifyInterventionAsync(session.Page, cancellationToken).ConfigureAwait(false);
-        return new BrowserSnapshot(
-            SafeBrowserUrl(session.Page.Url, secrets, session.ProtectedValues),
-            Clip(title, BrowserToolLimits.MaxTitleLength),
-            Clip(text, BrowserToolLimits.MaxVisibleTextLength),
-            truncated,
-            elements,
-            intervention,
-            SnapshotId: session.SnapshotId,
-            TabRef: FindPageId(session),
-            Content: Clip(session.SnapshotContent, BrowserToolLimits.MaxSnapshotChars),
-            ContentTruncated: session.SnapshotContent.Length > BrowserToolLimits.MaxSnapshotChars,
-            IndexTruncated: session.IndexTruncated, IndexedCount: elements.Count, CapturedNodeCount: elements.Count);
-    }
+    private Task<BrowserSnapshot> CaptureAsync(SessionBrowser session, Guid sessionId, CancellationToken ct) =>
+        ObserveAsync(session, sessionId, session.Page.Locator("body"), 32, null, ct);
 
     private async Task<BrowserSnapshot> CaptureMarkedAsync(
         SessionBrowser session,
@@ -2162,49 +1612,6 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
         }
     }
 
-    private const int MaxIndexedNodes = 4096;
-
-    private async Task<IReadOnlyList<BrowserElement>> CollectElementsAsync(
-        SessionBrowser session, Guid sessionId, IReadOnlyList<string> secrets, CancellationToken ct)
-    {
-        var elements = new List<BrowserElement>();
-        var content = new StringBuilder();
-        session.IndexTruncated = false;
-        foreach (var frame in session.Page.Frames)
-        {
-            if (frame != session.Page.MainFrame && !Allows(session, frame.Url, true)) continue;
-            var root = frame.Locator("body");
-            var native = await root.AriaSnapshotAsync(new LocatorAriaSnapshotOptions
-                { Mode = AriaSnapshotMode.Default, Timeout = TimeoutMs() }).WaitAsync(ct).ConfigureAwait(false);
-            var parsed = await IndexNativeAsync(session, sessionId, root, native, secrets, 32, false,
-                MaxIndexedNodes - elements.Count, ct);
-            elements.AddRange(parsed.Elements);
-            content.AppendLine(frame == session.Page.MainFrame ? "- document" : "- frame");
-            content.Append(parsed.Content);
-            // File/password controls may be absent from ARIA. Keep their provider-local guarded refs.
-            var files = frame.Locator("input[type=file], input[type=password]");
-            var fileCount = await files.CountAsync().WaitAsync(ct);
-            for (var index = 0; index < fileCount && elements.Count < MaxIndexedNodes; index++)
-            {
-                var target = files.Nth(index); var token = MintToken();
-                var described = await target.EvaluateAsync<string>(DescribeElement).WaitAsync(ct);
-                if (described == "null") continue;
-                using var doc = JsonDocument.Parse(described);
-                var actions = doc.RootElement.GetProperty("actions").EnumerateArray().Select(a => a.GetString()!).ToArray();
-                var name = Redact(doc.RootElement.GetProperty("name").GetString() ?? "File upload", secrets, session.ProtectedValues);
-                if (elements.Any(e => e.Name == name && e.Actions.SequenceEqual(actions))) continue;
-                _refs[token] = new LiveElement(sessionId, session.Generation, target, actions);
-                var role = actions.Contains("upload") ? "button" : "textbox";
-                elements.Add(new BrowserElement(token, role, name, actions));
-                content.AppendLine("  - " + role + " " + JsonSerializer.Serialize(name) + " [ref=" + token + "]");
-            }
-        }
-        session.SnapshotIndex = elements;
-        session.SnapshotContent = content.ToString();
-        session.SnapshotId = "snap_" + Guid.NewGuid().ToString("N");
-        return elements;
-    }
-
     private async Task<IReadOnlyList<string>> CollectSecretsAsync(SessionBrowser session, CancellationToken cancellationToken, IPage? page = null)
     {
         var secrets = new List<string>(session.ProtectedValues);
@@ -2288,7 +1695,7 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
             _ = AbortQuietlyAsync(route);
         }
 
-        _ = StopPageLoadAsync(session);
+        _ = StopPageLoadAsync(session, session.Page);
     }
 
     private async Task FinishCancellationAsync(SessionBrowser session)
@@ -2300,14 +1707,14 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
             await AbortQuietlyAsync(route).ConfigureAwait(false);
         }
 
-        await StopPageLoadAsync(session).ConfigureAwait(false);
+        await StopPageLoadAsync(session, session.Page).ConfigureAwait(false);
     }
 
-    private async Task StopPageLoadAsync(SessionBrowser session)
+    private async Task StopPageLoadAsync(SessionBrowser session, IPage page)
     {
         try
         {
-            var client = await session.Context.NewCDPSessionAsync(session.Page).ConfigureAwait(false);
+            var client = await session.Context.NewCDPSessionAsync(page).ConfigureAwait(false);
             try
             {
                 await client.SendAsync("Page.stopLoading").ConfigureAwait(false);
@@ -2545,35 +1952,21 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
             : BrowserTargetPolicy.EvaluateDestination(url, lease, BrowserPolicyMode.Restricted).Allowed;
     }
 
-    private readonly ConcurrentDictionary<string, Guid> _retiredRefs = new(StringComparer.Ordinal);
-    private readonly ConcurrentQueue<string> _retiredRefOrder = new();
-
     private string? ReferenceError(string? reference, Guid sessionId, out LiveElement? live)
     {
         live = null;
         if (!BrowserToolArguments.IsOpaqueReference(reference)) return "invalid_reference";
-        if (!_refs.TryGetValue(reference!, out live))
-            return _retiredRefs.TryGetValue(reference!, out var owner)
-                ? owner == sessionId ? "stale_reference" : "wrong_session_reference" : "unknown_reference";
+        if (!_refs.TryGetValue(reference!, out live)) return "unknown_reference";
         if (live.SessionId != sessionId) return "wrong_session_reference";
-        if (!_sessions.TryGetValue(sessionId, out var session) || live.Generation != session.Generation) return "stale_reference";
+        if (!_sessions.TryGetValue(sessionId, out var session) || live.Generation != session.Generation
+            || live.ExpiresAt < _time.GetUtcNow()) return "stale_reference";
         return null;
     }
 
     private void RemoveRefs(Guid sessionId)
     {
         foreach (var pair in _refs)
-        {
-            if (pair.Value.SessionId == sessionId)
-            {
-                if (_refs.TryRemove(pair.Key, out _))
-                {
-                    _retiredRefs[pair.Key] = sessionId;
-                    _retiredRefOrder.Enqueue(pair.Key);
-                    while (_retiredRefs.Count > 8192 && _retiredRefOrder.TryDequeue(out var expired)) _retiredRefs.TryRemove(expired, out _);
-                }
-            }
-        }
+            if (pair.Value.SessionId == sessionId) _refs.TryRemove(pair.Key, out _);
     }
 
     private float TimeoutMs() => (float)OperationTimeout.TotalMilliseconds;
@@ -2890,8 +2283,9 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
 
         if (added)
         {
+            page.FrameNavigated += (_, frame) => { if (ReferenceEquals(session.Page, page)) { session.Generation++; session.Frames.Clear(); } };
             page.Dialog += (_, dialog) => { session.Dialog = dialog; session.DialogSignal.TrySetResult(); };
-            page.Console += (_, message) => { lock (session.PopupGate) { session.Console.Add(message.Type + ": " + Clip(message.Text, 1000)); if (session.Console.Count > 50) session.Console.RemoveAt(0); } };
+            page.Console += (_, message) => { lock (session.PopupGate) { session.Console.Add(message.Type + ": " + (message.Text.Length > 1000 ? "[redacted oversized console message]" : message.Text)); if (session.Console.Count > 50) session.Console.RemoveAt(0); } };
             page.Request += (_, request) => { lock (session.PopupGate) { session.Network["req_" + Guid.NewGuid().ToString("N")] = request; if (session.Network.Count > 50) session.Network.Remove(session.Network.Keys.First()); } };
             page.Download += (_, download) =>
             {
@@ -2961,7 +2355,7 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
         Stable
     }
 
-    private async Task<BrowserOperationResult> CaptureWithRetryAsync(
+    private async Task<BrowserResult> CaptureWithRetryAsync(
         SessionBrowser session,
         Guid sessionId,
         string operation,
@@ -2993,7 +2387,7 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
 
             return await AttachDownloadsAsync(
                 session,
-                new BrowserOperationResult(null, await CaptureMarkedAsync(session, sessionId, settled, cancellationToken).ConfigureAwait(false)),
+                new BrowserResult(null, await CaptureMarkedAsync(session, sessionId, settled, cancellationToken).ConfigureAwait(false)),
                 cancellationToken).ConfigureAwait(false);
         }
         catch (PlaywrightException ex) when (BrowserFailureClassifier.IsTransientCapture(ex.Message))
@@ -3004,7 +2398,7 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
                 await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken).ConfigureAwait(false);
                 return await AttachDownloadsAsync(
                     session,
-                    new BrowserOperationResult(
+                    new BrowserResult(
                         null,
                         await CaptureMarkedAsync(session, sessionId, settled, cancellationToken).ConfigureAwait(false)),
                     cancellationToken).ConfigureAwait(false);
@@ -3026,9 +2420,9 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
         }
     }
 
-    private async Task<BrowserOperationResult> AttachDownloadsAsync(
+    private async Task<BrowserResult> AttachDownloadsAsync(
         SessionBrowser session,
-        BrowserOperationResult result,
+        BrowserResult result,
         CancellationToken cancellationToken)
     {
         var downloads = await DrainDownloadsAsync(session, cancellationToken).ConfigureAwait(false);
@@ -3119,7 +2513,7 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
         }
     }
 
-    private async Task<BrowserOperationResult> FailAsync(
+    private async Task<BrowserResult> FailAsync(
         SessionBrowser? session,
         string operation,
         string stage,
@@ -3158,9 +2552,9 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
             stage,
             reason);
 
-    private static BrowserOperationResult Unavailable() => Result("provider_unavailable");
+    private static BrowserResult Unavailable() => Result("provider_unavailable");
 
-    private static BrowserOperationResult Result(string code, IReadOnlyList<string>? allowedActions = null) =>
+    private static BrowserResult Result(string code, IReadOnlyList<string>? allowedActions = null) =>
         new(code, null, allowedActions);
 
     private static bool IsTimeout(Exception exception) =>
@@ -3222,6 +2616,7 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
     private sealed class SessionBrowser(IBrowserContext context, IPage page)
     {
         public BrowserEnvironment Environment { get; init; } = new(null, "en-US", TimeZoneInfo.Local.Id, false, false, 1);
+        public Dictionary<string, IFrame> Frames { get; } = new();
         public Dictionary<IPage, PageEmulateMediaOptions> Media { get; } = new();
         public string? GeolocationOrigin { get; set; }
         public bool Offline { get; set; }
@@ -3231,10 +2626,6 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
         public List<BrowserRouteRule> Rules { get; } = [];
         public List<string> Console { get; } = [];
         public Dictionary<string, IRequest> Network { get; } = new();
-        public string SnapshotId { get; set; } = "";
-        public string SnapshotContent { get; set; } = "";
-        public IReadOnlyList<BrowserElement> SnapshotIndex { get; set; } = [];
-        public bool IndexTruncated { get; set; }
         public ProtectedBrowserValues ProtectedValues { get; } = new();
 
         public IBrowserContext Context { get; } = context;
@@ -3291,14 +2682,13 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
         public IPage Page { get; } = page;
     }
 
-    private sealed record LiveElement(
-        Guid SessionId,
-        int Generation,
-        ILocator Handle,
-        IReadOnlyList<string> Actions,
-        ILocator? SemanticLocator = null,
-        int ExpectedMatchCount = 1,
-        bool CustomTarget = false);
+    private sealed record LiveElement(Guid SessionId, int Generation, ILocator Handle,
+        IReadOnlyList<string> Actions, DateTimeOffset ExpiresAt);
+
+    private sealed record BrowserScreenshotRequest(Guid SessionId, string Format = "png", bool FullPage = false, string? TargetRef = null);
+    private sealed record BrowserScreenshotResult(string? ErrorCode, byte[]? Png, int RedactionCount,
+        int Width = 0, int Height = 0, string ContentType = "image/png");
+    private sealed record BrowserCloseResult(string Status);
 
     private sealed record BrowserSecretItem(string? Kind, string? Key, string? Value);
 
@@ -3318,7 +2708,7 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
         }
     }
 
-    private sealed class UnattendedLease(PlaywrightBrowser owner, Guid agentInstanceId, SemaphoreSlim gate)
+    private sealed class UnattendedLease(NativePlaywrightBrowser owner, Guid agentInstanceId, SemaphoreSlim gate)
         : IAsyncDisposable
     {
         private int _disposed;

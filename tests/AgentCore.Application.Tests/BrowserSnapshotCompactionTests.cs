@@ -38,22 +38,22 @@ public sealed class BrowserSnapshotCompactionTests
         Assert.True(after < before / 2);
         Assert.Equal(8, messages.Count(message => message.Role == ModelRole.Tool));
         var observations = messages.Where(message => message.Role == ModelRole.Tool).ToArray();
-        Assert.Equal(1, observations.Count(message => message.Text.Contains("\"elements\"", StringComparison.Ordinal)));
+        Assert.Equal(1, observations.Count(message => message.Text.Contains("\"targets\"", StringComparison.Ordinal)));
         for (var index = 0; index < 7; index++)
         {
             var message = observations[index];
             using var document = JsonDocument.Parse(message.Text);
             Assert.True(document.RootElement.GetProperty("untrustedBrowserContent").GetBoolean());
             Assert.True(document.RootElement.GetProperty("compacted").GetBoolean());
-            Assert.False(document.RootElement.TryGetProperty("elements", out _));
-            Assert.Contains($"TAIL-{index}", document.RootElement.GetProperty("visibleTextExcerpt").GetString(), StringComparison.Ordinal);
+            Assert.False(document.RootElement.TryGetProperty("targets", out _));
+            Assert.Contains($"TAIL-{index}", document.RootElement.GetProperty("contentExcerpt").GetString(), StringComparison.Ordinal);
             Assert.DoesNotContain("el_round_", message.Text, StringComparison.Ordinal);
             Assert.DoesNotContain("\"ref\"", message.Text, StringComparison.Ordinal);
             Assert.DoesNotContain("\"state\"", message.Text, StringComparison.Ordinal);
         }
         Assert.Contains("el_round_7", observations[7].Text, StringComparison.Ordinal);
         Assert.Contains("\"state\"", observations[7].Text, StringComparison.Ordinal);
-        Assert.Contains("\"elements\"", observations[7].Text, StringComparison.Ordinal);
+        Assert.Contains("\"targets\"", observations[7].Text, StringComparison.Ordinal);
         Assert.DoesNotContain("el_round_6", observations[6].Text, StringComparison.Ordinal);
         Assert.Equal("obs-7", observations[7].ToolCallId);
         Assert.Contains(messages, message => message.ToolCalls?.Any(call => call.Id == "call-7") == true);
@@ -82,13 +82,13 @@ public sealed class BrowserSnapshotCompactionTests
         Assert.DoesNotContain("el_old", messages[0].Text, StringComparison.Ordinal);
         Assert.DoesNotContain("el_mid", messages[4].Text, StringComparison.Ordinal);
         Assert.DoesNotContain("el_new", messages[5].Text, StringComparison.Ordinal);
-        Assert.False(JsonDocument.Parse(messages[4].Text).RootElement.TryGetProperty("elements", out _));
+        Assert.False(JsonDocument.Parse(messages[4].Text).RootElement.TryGetProperty("targets", out _));
         Assert.Equal(error, messages[1].Text);
         Assert.Equal(intervention, messages[2].Text);
         Assert.Equal(note, messages[3].Text);
         var latest = JsonDocument.Parse(messages[6].Text).RootElement;
-        Assert.True(latest.TryGetProperty("elements", out var elements));
-        Assert.Contains("el_latest", elements[0].GetProperty("ref").GetString(), StringComparison.Ordinal);
+        Assert.True(latest.TryGetProperty("targets", out var targets));
+        Assert.Contains("el_latest", targets[0].GetProperty("ref").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -107,16 +107,16 @@ public sealed class BrowserSnapshotCompactionTests
         var late = JsonDocument.Parse(messages[1].Text).RootElement;
         var products = JsonDocument.Parse(messages[2].Text).RootElement;
         Assert.True(early.GetProperty("compacted").GetBoolean());
-        Assert.DoesNotContain("ORDER-EARLY", early.GetProperty("visibleTextExcerpt").GetString(), StringComparison.Ordinal);
-        Assert.Equal(BrowserSnapshotCompaction.DuplicateReceiptChars, early.GetProperty("visibleTextExcerpt").GetString()!.Length);
-        var lateExcerpt = late.GetProperty("visibleTextExcerpt").GetString();
+        Assert.DoesNotContain("ORDER-EARLY", early.GetProperty("contentExcerpt").GetString(), StringComparison.Ordinal);
+        Assert.Equal(BrowserSnapshotCompaction.DuplicateReceiptChars, early.GetProperty("contentExcerpt").GetString()!.Length);
+        var lateExcerpt = late.GetProperty("contentExcerpt").GetString();
         Assert.Contains("ORDER-LATE", lateExcerpt, StringComparison.Ordinal);
         Assert.True(lateExcerpt!.Length <= BrowserSnapshotCompaction.PageEvidenceChars);
-        Assert.Contains("HEADER", late.GetProperty("visibleTextExcerpt").GetString(), StringComparison.Ordinal);
+        Assert.Contains("HEADER", late.GetProperty("contentExcerpt").GetString(), StringComparison.Ordinal);
         Assert.True(late.GetProperty("settled").GetBoolean());
-        Assert.False(late.TryGetProperty("elements", out _));
-        Assert.True(products.TryGetProperty("elements", out _));
-        Assert.Contains("PRODUCT-GRID", products.GetProperty("visibleText").GetString(), StringComparison.Ordinal);
+        Assert.False(late.TryGetProperty("targets", out _));
+        Assert.True(products.TryGetProperty("targets", out _));
+        Assert.Contains("PRODUCT-GRID", products.GetProperty("content").GetString(), StringComparison.Ordinal);
     }
 
     private static ModelMessage Page(string url, string marker, bool? settled)
@@ -128,24 +128,24 @@ public sealed class BrowserSnapshotCompactionTests
                 untrustedBrowserContent = true,
                 url,
                 title = "Store",
-                visibleText = visible,
+                content = visible,
                 settled = settledValue,
-                elements = new[] { new { @ref = "el_aaaaaaaaaaaaaaaaaaaaaa", role = "link", name = "Row" } }
+                targets = new[] { new { @ref = "el_aaaaaaaaaaaaaaaaaaaaaa", role = "link", name = "Row" } }
             })
             : JsonSerializer.Serialize(new
             {
                 untrustedBrowserContent = true,
                 url,
                 title = "Store",
-                visibleText = visible,
-                elements = new[] { new { @ref = "el_aaaaaaaaaaaaaaaaaaaaaa", role = "link", name = "Row" } }
+                content = visible,
+                targets = new[] { new { @ref = "el_aaaaaaaaaaaaaaaaaaaaaa", role = "link", name = "Row" } }
             });
         return new ModelMessage(ModelRole.Tool, json, ToolCallId: marker, Name: "browser.snapshot");
     }
 
     private static ModelMessage Observation(int round, string reference)
     {
-        var elements = Enumerable.Range(0, 40)
+        var targets = Enumerable.Range(0, 40)
             .Select(index => index == 0
                 ? (object)new { @ref = reference, role = "textbox", name = "SKU", actions = new[] { "fill" }, state = new { value = $"SKU-{reference}" } }
                 : new { @ref = $"el_{round}_{index}", role = "button", name = new string('n', 80), actions = new[] { "click" } })
@@ -155,9 +155,9 @@ public sealed class BrowserSnapshotCompactionTests
             untrustedBrowserContent = true,
             url = $"http://127.0.0.1:5088/Admin/Product/Create?round={round}",
             title = "Create product",
-            visibleText = new string('v', 4000) + $"TAIL-{round}",
-            textTruncated = false,
-            elements
+            content = new string('v', 4000) + $"TAIL-{round}",
+            truncated = false,
+            targets
         });
         return new ModelMessage(ModelRole.Tool, json, ToolCallId: $"obs-{round}", Name: "browser.snapshot");
     }

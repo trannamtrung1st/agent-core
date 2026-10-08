@@ -13,20 +13,6 @@ public static class SafeExecutionTrace
     private const int MaxOutcomeLength = 80;
     private const int MaxDetailLength = 480;
 
-    private static readonly HashSet<string> ArgumentReasons = new(StringComparer.Ordinal)
-    {
-        "missing_ref",
-        "invalid_ref",
-        "missing_value",
-        "value_too_long",
-        "missing_key",
-        "unsupported_key",
-        "missing_artifact_id",
-        "invalid_artifact_id",
-        "unsupported_property"
-    };
-    private const int MaxRoleLength = 40;
-
     public static string NormalizeToolOutcome(string? resultJson)
     {
         if (string.IsNullOrWhiteSpace(resultJson))
@@ -67,14 +53,12 @@ public static class SafeExecutionTrace
             return ScheduleFailureDetail(resultJson);
         }
 
-        return toolName switch
-        {
-            ToolCatalog.BrowserNavigate => BuildNavigateDetail(argumentsJson, resultJson),
-            ToolCatalog.BrowserSnapshot => BuildObserveDetail(argumentsJson, resultJson),
-            _ when BrowserToolCatalog.IsInteraction(toolName) => BuildActDetail(argumentsJson, resultJson),
-            ToolCatalog.BrowserClose => BuildCloseDetail(resultJson),
-            _ => string.Empty
-        };
+        if (!BrowserToolCatalog.TryGet(toolName, out var feature)) return string.Empty;
+        var parts = new List<string> { $"feature={feature.Feature}" };
+        if (TryReadBoolProperty(resultJson, "settled", out var settled)) parts.Add($"settled={settled.ToString().ToLowerInvariant()}");
+        if (TryReadBoolProperty(resultJson, "truncated", out var truncated)) parts.Add($"truncated={truncated.ToString().ToLowerInvariant()}");
+        if (TryReadIntProperty(resultJson, "returnedCount", out var count)) parts.Add($"returnedCount={count}");
+        return string.Join(';', parts);
     }
 
     public static void RecordToolStep(
@@ -208,206 +192,6 @@ public static class SafeExecutionTrace
         }
     }
 
-    private static string BuildNavigateDetail(string? argumentsJson, string? resultJson)
-    {
-        var parts = new List<string>();
-        if (TryReadStringProperty(argumentsJson, "url", out var url))
-        {
-            parts.Add($"origin={SafeUrlOrigin(url)}");
-        }
-
-        if (TryReadStringProperty(resultJson, "url", out var observed))
-        {
-            parts.Add($"resultOrigin={SafeUrlOrigin(observed)}");
-        }
-
-        AppendSettled(parts, resultJson);
-        return string.Join(';', parts);
-    }
-
-    private static string BuildObserveDetail(string? argumentsJson, string? resultJson)
-    {
-        if (string.IsNullOrWhiteSpace(resultJson) && string.IsNullOrWhiteSpace(argumentsJson))
-        {
-            return string.Empty;
-        }
-
-        var parts = new List<string>();
-        if (TryReadStringProperty(argumentsJson, "waitFor", out var waitFor)
-            && string.Equals(waitFor, "stable", StringComparison.Ordinal))
-        {
-            parts.Add("waitFor=stable");
-        }
-
-        if (TryReadIntProperty(argumentsJson, "timeoutMs", out var timeoutMs)
-            && timeoutMs is >= BrowserToolLimits.MinObserveTimeoutMs and <= BrowserToolLimits.MaxObserveTimeoutMs)
-        {
-            parts.Add($"timeoutMs={timeoutMs}");
-        }
-
-        if (TryReadStringProperty(resultJson, "url", out var url))
-        {
-            parts.Add($"origin={SafeUrlOrigin(url)}");
-        }
-
-        if (TryReadStringProperty(resultJson, "error", out var error) && error == "user_intervention_required")
-        {
-            parts.Add("intervention=true");
-        }
-        else if (!string.IsNullOrWhiteSpace(resultJson))
-        {
-            parts.Add("intervention=false");
-        }
-
-        AppendSettled(parts, resultJson);
-        if (!string.IsNullOrWhiteSpace(resultJson))
-        {
-            parts.Add($"elementCount={CountElements(resultJson)}");
-        }
-
-        return string.Join(';', parts);
-    }
-
-    private static void AppendSettled(List<string> parts, string? resultJson)
-    {
-        if (TryReadBoolProperty(resultJson, "settled", out var settled))
-        {
-            parts.Add(settled ? "settled=true" : "settled=false");
-        }
-    }
-
-    private static string BuildActDetail(string? argumentsJson, string? resultJson)
-    {
-        if (!TryReadStringProperty(argumentsJson, "operation", out var operation)
-            || !BrowserToolLimits.Operations.Contains(operation, StringComparer.Ordinal))
-        {
-            return string.Empty;
-        }
-
-        var parts = new List<string> { $"operation={Clip(operation, 20)}" };
-        if (TryReadStringProperty(resultJson, "reason", out var argumentReason)
-            && ArgumentReasons.Contains(argumentReason))
-        {
-            parts.Add($"argumentReason={argumentReason}");
-        }
-        if (TryReadStringProperty(resultJson, "url", out var url))
-        {
-            parts.Add($"origin={SafeUrlOrigin(url)}");
-        }
-
-        AppendSettled(parts, resultJson);
-        if (string.Equals(operation, "upload", StringComparison.Ordinal))
-        {
-            if (TryResolveActTarget(argumentsJson, resultJson, out var role))
-            {
-                parts.Add($"targetRole={role}");
-            }
-
-            return string.Join(';', parts);
-        }
-
-        if (TryResolveActTarget(argumentsJson, resultJson, out var actRole))
-        {
-            parts.Add($"targetRole={actRole}");
-        }
-
-        return string.Join(';', parts);
-    }
-
-    private static string BuildCloseDetail(string? resultJson)
-    {
-        return TryReadStringProperty(resultJson, "status", out var status)
-            ? $"status={Clip(status, 40)}"
-            : string.Empty;
-    }
-
-    private static bool TryResolveActTarget(
-        string? argumentsJson,
-        string? resultJson,
-        out string role)
-    {
-        role = string.Empty;
-        if (!TryReadStringProperty(argumentsJson, "ref", out var reference)
-            || string.IsNullOrWhiteSpace(reference))
-        {
-            return false;
-        }
-
-        if (!TryFindElement(resultJson, reference, out var elementRole))
-        {
-            return false;
-        }
-
-        role = Clip(elementRole, MaxRoleLength);
-        return !string.IsNullOrEmpty(role);
-    }
-
-    private static bool TryFindElement(string? json, string reference, out string role)
-    {
-        role = string.Empty;
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return false;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(json);
-            if (!document.RootElement.TryGetProperty("elements", out var elements)
-                || elements.ValueKind != JsonValueKind.Array)
-            {
-                return false;
-            }
-
-            foreach (var element in elements.EnumerateArray())
-            {
-                if (!element.TryGetProperty("ref", out var refProperty)
-                    || refProperty.ValueKind != JsonValueKind.String
-                    || !string.Equals(refProperty.GetString(), reference, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                if (element.TryGetProperty("role", out var roleProperty) && roleProperty.ValueKind == JsonValueKind.String)
-                {
-                    role = roleProperty.GetString() ?? string.Empty;
-                }
-
-                return true;
-            }
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-
-        return false;
-    }
-
-    private static int CountElements(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return 0;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(json);
-            if (!document.RootElement.TryGetProperty("elements", out var elements)
-                || elements.ValueKind != JsonValueKind.Array)
-            {
-                return 0;
-            }
-
-            return elements.GetArrayLength();
-        }
-        catch (JsonException)
-        {
-            return 0;
-        }
-    }
-
     private static bool TryReadBoolProperty(string? json, string propertyName, out bool value)
     {
         value = false;
@@ -459,50 +243,6 @@ public static class SafeExecutionTrace
         {
             return false;
         }
-    }
-
-    private static bool TryReadStringProperty(string? json, string propertyName, out string value)
-    {
-        value = string.Empty;
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return false;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(json);
-            if (document.RootElement.TryGetProperty(propertyName, out var property)
-                && property.ValueKind == JsonValueKind.String
-                && property.GetString() is { } text)
-            {
-                value = text;
-                return true;
-            }
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-
-        return false;
-    }
-
-    private static string SafeUrlOrigin(string? url)
-    {
-        if (string.IsNullOrWhiteSpace(url))
-        {
-            return string.Empty;
-        }
-
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
-            || uri.Scheme is not ("http" or "https"))
-        {
-            return string.Empty;
-        }
-
-        var origin = uri.GetComponents(UriComponents.SchemeAndServer, UriFormat.UriEscaped);
-        return Clip(origin, MaxDetailLength);
     }
 
     private static string Clip(string? value, int max)

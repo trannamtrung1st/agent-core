@@ -35,14 +35,14 @@ public sealed class HarnessChatAuthoringTests
         var inspection = await executor.ExecuteAsync(current.Definition, current.SessionId, new("inspect", "harness.inspect", "{}"), 100000, admission: admission);
         using var json = JsonDocument.Parse(inspection.Text);
         var root = json.RootElement;
-        Assert.Equal(18, root.GetProperty("activeDefinitionVersion").GetInt32());
+        Assert.Equal(19, root.GetProperty("activeDefinitionVersion").GetInt32());
         Assert.Equal(17, root.GetProperty("currentSessionPinnedDefinitionVersion").GetInt32());
         Assert.True(root.GetProperty("changesApplyToFutureSessions").GetBoolean());
         Assert.True(root.TryGetProperty("authoringEligibleTools", out _));
         Assert.DoesNotContain(ToolCatalog.WorkspaceMove, root.GetProperty("activeDefinitionAuthorizedCapabilities").EnumerateArray().Select(v => v.GetString()));
         Assert.Contains(ToolCatalog.WorkspaceMove, RoleEnvironments.Of((await sessions.GetAsync(current.SessionId)).Definition).ToolList);
         var fresh = await sessions.CreateForInstanceAsync(instance.InstanceId, AgentCore.Domain.Conversation.SessionMode.Text);
-        Assert.Equal(18, fresh.Definition.Version);
+        Assert.Equal(19, fresh.Definition.Version);
         Assert.DoesNotContain(ToolCatalog.WorkspaceMove, RoleEnvironments.Of(fresh.Definition).ToolList);
     }
 

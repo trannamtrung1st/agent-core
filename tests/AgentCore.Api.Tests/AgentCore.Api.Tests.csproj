@@ -22,6 +22,8 @@
     <Using Include="Xunit" />
     <Using Include="AgentCore.Application.Execution" />
     <Using Include="AgentCore.Tests.Shared" />
+    <Compile Include="../Shared/BrowserTestRequests.cs" Link="BrowserTestRequests.cs" />
+    <Compile Include="../Shared/BrowserTestQueries.cs" Link="BrowserTestQueries.cs" />
     <Compile Include="../Shared/AgentRunTestFixtures.cs" Link="AgentRunTestFixtures.cs" />
   </ItemGroup>
 

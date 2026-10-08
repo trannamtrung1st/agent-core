@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace AgentCore.Application.Tools;
 
@@ -35,7 +34,7 @@ internal sealed class BrowserEvidenceProgress
                 if (!found.RootElement.TryGetProperty("error", out _) && found.RootElement.TryGetProperty("matches", out var matches)
                     && matches.ValueKind == JsonValueKind.Array && matches.GetArrayLength() > 0)
                 {
-                    var evidence = string.Join("\n", matches.EnumerateArray().Select(e => string.Join("|", Read(e, "role"), Read(e, "name"), Read(e, "ancestors"), Actions(e), State(e, "value"), State(e, "checked"), State(e, "selectedText"))));
+                    var evidence = string.Join("\n", matches.EnumerateArray().Select(e => string.Join("|", Read(e, "role"), Read(e, "name"), Actions(e), State(e, "value"), State(e, "checked"), State(e, "selectedText"))));
                     if (_searchEvidence.Add(evidence)) Reset();
                 }
             }
@@ -105,12 +104,11 @@ internal sealed class BrowserEvidenceProgress
                 && settledProperty.ValueKind is JsonValueKind.True or JsonValueKind.False
                     ? settledProperty.GetBoolean() ? "true" : "false"
                     : string.Empty;
-            var visible = Read(root, "visibleText");
-            var content = Regex.Replace(Read(root, "content"), @"\s*\[ref=[^\]]+\]", "");
+            var content = Read(root, "content");
             var builder = new StringBuilder();
             builder.Append(content).Append('\n');
-            builder.Append(urlProperty.GetString()).Append('\n').Append(settled).Append('\n').Append(visible).Append('\n');
-            if (root.TryGetProperty("elements", out var elements) && elements.ValueKind == JsonValueKind.Array)
+            builder.Append(urlProperty.GetString()).Append('\n').Append(settled).Append('\n');
+            if (root.TryGetProperty("targets", out var elements) && elements.ValueKind == JsonValueKind.Array)
             {
                 var lines = new List<string>();
                 foreach (var element in elements.EnumerateArray())

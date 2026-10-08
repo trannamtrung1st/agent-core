@@ -1,148 +1,173 @@
 using System.Text.Json;
+using System.Diagnostics;
+using Xunit.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using AgentCore.Application.Ports;
 using AgentCore.Infrastructure.Browser;
+using AgentCore.Tests.Shared;
 using Microsoft.Playwright;
 
 namespace AgentCore.Infrastructure.Tests;
 
 [Collection(BrowserChromiumCollection.Name)]
-public sealed class BrowserReliabilityJourneyTests
+public sealed class BrowserReliabilityJourneyTests(ITestOutputHelper output)
 {
     [Fact]
-    public async Task Malformed_unknown_foreign_invalidated_and_detached_targets_are_distinct()
+    public async Task Semantic_registry_bounds_authority_and_reclaims_expired_locators()
     {
-        var browser = Create(); await browser.StartAsync(CancellationToken.None);
-        var id = Guid.NewGuid();
+        var time = new FakeTimeProvider();
+        var browser = new NativePlaywrightBrowser(new() { Enabled = true, Headless = true, FixturePort = 0 }, null, timeProvider: time);
+        await browser.StartAsync(default); var id = Guid.NewGuid();
         try
         {
-            var initial = await browser.NavigateAsync(new(id, new Uri(browser.HostPolicy.NavigationOrigins.Single() + "/browser-v2.html?compact=1")));
-            Assert.Null(initial.ErrorCode);
-            async Task<BrowserCommandResult> Click(string reference, Guid? session = null) => await browser.ExecuteAsync(new(session ?? id, "browser.click", JsonSerializer.SerializeToElement(new { @ref = reference, clickCount = 1 })));
+            await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new(browser.HostPolicy.NavigationOrigins.Single() + "/")));
+            string? first = null;
+            first = await Find(browser, id, new(Role: "button", Name: "Search"));
+            // Fill the remaining slots; each successful find grants a distinct native Locator token.
+            for (var i = 1; i < 256; i++)
+                await Find(browser, id, new(Role: "button", Name: "Search"));
+            Assert.Equal("reference_limit", (await browser.ExecuteAsync(new(id, BrowserOperation.Find,
+                new() { Query = new(Role: "button", Name: "Search") }))).ErrorCode);
+            time.Advance(TimeSpan.FromMinutes(11));
+            Assert.Equal("stale_reference", (await browser.ExecuteAsync(new(id, BrowserOperation.Click, new() { Ref = first }))).ErrorCode);
+            Assert.NotEmpty(await Find(browser, id, new(Role: "button", Name: "Search")));
+        }
+        finally { await browser.StopAsync(default); }
+    }
+
+    [Fact]
+    public async Task Malformed_foreign_missing_ambiguous_and_navigation_refs_are_distinct()
+    {
+        var browser = Create(); await browser.StartAsync(CancellationToken.None);
+        var id = Guid.NewGuid(); var other = Guid.NewGuid();
+        try
+        {
+            var url = new Uri(browser.HostPolicy.NavigationOrigins.Single() + "/browser-native.html?compact=1");
+            Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, url))).ErrorCode);
+            async Task<BrowserResult> Click(string reference, Guid? session = null) => await browser.ExecuteAsync(new(session ?? id, BrowserOperation.Click, new() { Ref = reference }));
             Assert.Equal("invalid_reference", (await Click("main")).ErrorCode);
             Assert.Equal("unknown_reference", (await Click("el_0000000000000000000000")).ErrorCode);
-            var reference = initial.Observation!.Elements.Single(e => e.Name == "Asset 2").Ref;
-            var other = Guid.NewGuid();
-            await browser.NavigateAsync(new(other, new Uri(browser.HostPolicy.NavigationOrigins.Single() + "/browser-v2.html?compact=1")));
+            var reference = await Find(browser, id, new(Role: "treeitem", Name: "Asset 2"));
+            await browser.ExecuteAsync(BrowserTestRequests.Navigate(other, url));
             Assert.Equal("wrong_session_reference", (await Click(reference, other)).ErrorCode);
             var page = browser.ContextFor(id)!.Pages[0];
             await page.GetByRole(AriaRole.Treeitem, new() { Name = "Asset 2", Exact = true }).EvaluateAsync("el=>el.remove()");
             Assert.Equal("target_missing", (await Click(reference)).ErrorCode);
-            var unique = initial.Observation.Elements.Single(e => e.Name == "Asset 1").Ref;
+            var unique = await Find(browser, id, new(Role: "treeitem", Name: "Asset 1"));
             await page.GetByRole(AriaRole.Treeitem, new() { Name = "Asset 1", Exact = true }).EvaluateAsync("el=>el.after(el.cloneNode(true))");
-            Assert.Equal("ambiguous_reference", (await Click(unique)).ErrorCode);
+            Assert.Equal("ambiguous_target", (await Click(unique)).ErrorCode);
             await page.GetByRole(AriaRole.Treeitem, new() { Name = "Asset 1", Exact = true }).Last.EvaluateAsync("el=>el.remove()");
-            var heading = initial.Observation.Elements.Single(e => e.Role == "heading").Ref;
-            Assert.Equal("non_actionable_target", (await Click(heading)).ErrorCode);
-            var fresh = await browser.SnapshotAsync(id);
-            var valid = fresh.Observation!.Elements.Single(e => e.Name == "Asset 1").Ref;
-            await browser.SnapshotAsync(id);
-            Assert.Equal("stale_reference", (await Click(valid)).ErrorCode);
+            await browser.ExecuteAsync(BrowserTestRequests.Inspect(id));
+            Assert.Null((await Click(unique)).ErrorCode);
+            Assert.Equal("Selected Asset 1", await page.GetByRole(AriaRole.Status).InnerTextAsync());
+            await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, url));
+            Assert.Equal("stale_reference", (await Click(unique)).ErrorCode);
         }
         finally { await browser.StopAsync(CancellationToken.None); }
     }
 
     [Fact]
-    public async Task Dense_nested_spa_discovery_scoping_pagination_rerender_and_closure()
+    public async Task Dense_spa_find_is_independent_of_snapshot_and_survives_rerender_and_scoped_reads()
     {
-        var browser = Create(); await browser.StartAsync(CancellationToken.None);
-        var id = Guid.NewGuid();
+        var browser = Create(); await browser.StartAsync(CancellationToken.None); var id = Guid.NewGuid();
         try
         {
-            var opened = await browser.NavigateAsync(new(id, new Uri(browser.HostPolicy.NavigationOrigins.Single() + "/browser-dense.html")));
-            Assert.Null(opened.ErrorCode);
-            var full = opened.Observation!;
-            Assert.InRange(full.Elements.Count, 2000, 4096);
-            Assert.True(full.ContentTruncated);
-            Assert.DoesNotContain("Entry 1999", full.Content);
-            async Task<BrowserCommandResult> Run(string tool, object args) => await browser.ExecuteAsync(new(id, tool, JsonSerializer.SerializeToElement(args)));
-            async Task<string> Find(object args)
-            {
-                var found = await Run("browser.find", args); Assert.Null(found.ErrorCode);
-                using var json = JsonDocument.Parse(found.DataJson!);
-                return Assert.Single(json.RootElement.GetProperty("matches").EnumerateArray()).GetProperty("ref").GetString()!;
-            }
-            var last = await Find(new { text = "Entry 1999", role = "treeitem", ancestor = "Collection 19" });
+            var clock = Stopwatch.StartNew();
+            var opened = await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new(browser.HostPolicy.NavigationOrigins.Single() + "/browser-dense.html")));
+            output.WriteLine($"DENSE navigate_observe_ms={clock.Elapsed.TotalMilliseconds:F1}");
+            Assert.Null(opened.ErrorCode); Assert.Empty(opened.Observation!.Targets);
+            Assert.True(opened.Observation.ContentTruncated); Assert.DoesNotContain("Entry 1999", opened.Observation.Content);
+            // Make any snapshot attempt fail: find must still succeed directly through the live Locator.
+            browser.CaptureProbe = () => new InvalidOperationException("find must not snapshot");
+            clock.Restart();
+            var last = await Find(browser, id, new(Role: "treeitem", Name: "Entry 1999"));
+            output.WriteLine($"DENSE find_ms={clock.Elapsed.TotalMilliseconds:F1}");
+            browser.CaptureProbe = null;
             var page = browser.ContextFor(id)!.Pages[0];
-            // Replace all nodes like a React rerender, preserving semantics but no element handles.
             await page.GetByRole(AriaRole.Tree, new() { Name = "Catalog" }).EvaluateAsync("el=>render()");
-            var click = await Run("browser.click", new { @ref = last }); Assert.Null(click.ErrorCode);
+            clock.Restart();
+            Assert.Null((await browser.ExecuteAsync(new(id, BrowserOperation.Click, new() { Ref = last }))).ErrorCode);
+            output.WriteLine($"DENSE click_observe_ms={clock.Elapsed.TotalMilliseconds:F1}");
             Assert.Equal("Opened Entry 1999", await page.GetByRole(AriaRole.Status).InnerTextAsync());
-            Assert.Equal("stale_reference", (await Run("browser.click", new { @ref = last })).ErrorCode);
-            var paged = await Run("browser.find", new { text = "Entry", role = "treeitem", limit = 3, offset = 1990 });
-            using (var json = JsonDocument.Parse(paged.DataJson!))
-            {
-                Assert.Equal(2000, json.RootElement.GetProperty("matchCount").GetInt32());
-                Assert.Equal(3, json.RootElement.GetProperty("returnedCount").GetInt32());
-                Assert.Equal(1993, json.RootElement.GetProperty("nextOffset").GetInt32());
-            }
-            var review = await Find(new { text = "Open review", role = "button", ancestor = "Review queue" });
-            Assert.Null((await Run("browser.click", new { @ref = review })).ErrorCode);
+            var queue = await Find(browser, id, new(Role: "grid", Name: "Review queue"));
+            var scoped = await browser.ExecuteAsync(new(id, BrowserOperation.Snapshot, new() { TargetRef = queue, Depth = 2 }));
+            Assert.Null(scoped.ErrorCode); Assert.True(scoped.Observation!.Content!.Length < opened.Observation.Content!.Length / 10);
+            Assert.DoesNotContain("Entry 1999", scoped.Observation.Content);
+            var review = await Find(browser, id, new(Role: "button", Name: "Open review", ScopeRef: queue));
+            Assert.Null((await browser.ExecuteAsync(new(id, BrowserOperation.Click, new() { Ref = review }))).ErrorCode);
             Assert.Equal("Review entry opened", await page.GetByRole(AriaRole.Status).InnerTextAsync());
-            for (var i = 0; i < 2; i++)
-            {
-                var region = await Find(new { text = "Review queue", role = "grid" });
-                var scoped = await Run("browser.snapshot", new { targetRef = region, depth = 2 }); Assert.Null(scoped.ErrorCode);
-                Assert.True(scoped.Snapshot!.CapturedNodeCount < full.CapturedNodeCount / 100);
-                Assert.True(scoped.Snapshot.Content!.Length < full.Content!.Length / 10);
-                Assert.DoesNotContain("Entry 1999", scoped.Snapshot.VisibleText);
-                Assert.NotEmpty(await Find(new { text = "Entry 1999", role = "treeitem" }));
-            }
-            var queue = await Find(new { text = "Review queue", role = "grid" });
-            var targeted = await Run("browser.find", new { text = "Open review", role = "button", targetRef = queue });
-            using (var json = JsonDocument.Parse(targeted.DataJson!)) Assert.Single(json.RootElement.GetProperty("matches").EnumerateArray());
-            for (var i = 0; i < 2; i++)
-            {
-                var collection = await Find(new { text = "Collection 19", name = "Collection 19", role = "treeitem", ancestor = "Catalog" });
-                var limited = await Run("browser.snapshot", new { targetRef = collection, depth = 1 });
-                Assert.Null(limited.ErrorCode);
-                Assert.DoesNotContain("Entry 1999", limited.Snapshot!.VisibleText);
-                Assert.DoesNotContain("Entry 1999", limited.Snapshot.Content);
-                Assert.NotEmpty(await Find(new { text = "Entry 1999", role = "treeitem", ancestor = "Catalog" }));
-                collection = await Find(new { text = "Collection 19", name = "Collection 19", role = "treeitem", ancestor = "Catalog" });
-                Assert.Null((await Run("browser.snapshot", new { targetRef = collection, depth = 3 })).ErrorCode);
-                var catalog = await Find(new { text = "Catalog", role = "tree" });
-                Assert.NotEmpty(await Find(new { text = "Entry 1999", role = "treeitem", ancestor = "Catalog", targetRef = catalog }));
-                var entries = await Find(new { text = "Entries 19", role = "group", ancestor = "Collection 19" });
-                Assert.Null((await Run("browser.snapshot", new { targetRef = entries, depth = 2 })).ErrorCode);
-                Assert.NotEmpty(await Find(new { text = "Entry 1999", role = "treeitem", ancestor = "Catalog" }));
-            }
-            var refreshedCollection = await Find(new { text = "Collection 19", name = "Collection 19", role = "treeitem", ancestor = "Catalog" });
-            var collectionLocator = page.GetByRole(AriaRole.Treeitem, new() { Name = "Collection 19", Exact = true });
-            await collectionLocator.EvaluateAsync("el=>el.after(el.cloneNode(false))");
-            Assert.Equal("ambiguous_reference", (await Run("browser.click", new { @ref = refreshedCollection })).ErrorCode);
-            await collectionLocator.Last.EvaluateAsync("el=>el.remove()");
-            var shallow = await Run("browser.snapshot", new { depth = 1 }); Assert.Null(shallow.ErrorCode);
-            Assert.True(shallow.Snapshot!.Elements.Count < full.Elements.Count / 100);
-            Assert.NotEmpty(await Find(new { text = "Entry 1999", role = "treeitem" }));
-            Assert.Equal("closed", (await browser.CloseAsync(id)).Status);
+            Assert.Equal("closed", (await browser.ExecuteAsync(BrowserTestRequests.Close(id))).Status);
             Assert.Null(browser.ContextFor(id));
-            Assert.Equal("already_closed", (await browser.CloseAsync(id)).Status);
+            Assert.Equal("already_closed", (await browser.ExecuteAsync(BrowserTestRequests.Close(id))).Status);
+            Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new(browser.HostPolicy.NavigationOrigins.Single() + "/")))).ErrorCode);
         }
         finally { await browser.StopAsync(CancellationToken.None); }
     }
 
     [Fact]
-    public async Task Depth_omitted_existing_duplicate_is_not_new_ambiguity()
+    public async Task Shallow_inspection_never_grants_ordinal_authority_for_existing_duplicates()
     {
-        var browser = Create(); await browser.StartAsync(CancellationToken.None);
-        var id = Guid.NewGuid();
+        var browser = Create(); await browser.StartAsync(CancellationToken.None); var id = Guid.NewGuid();
         try
         {
-            await browser.NavigateAsync(new(id, new Uri(browser.HostPolicy.NavigationOrigins.Single() + "/browser-v2.html?compact=1")));
+            await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new(browser.HostPolicy.NavigationOrigins.Single() + "/browser-native.html?compact=1")));
             var page = browser.ContextFor(id)!.Pages[0];
-            await page.GetByRole(AriaRole.Tree, new() { Name = "Assets", Exact = true }).EvaluateAsync("el=>{el.innerHTML='<button aria-label=Choose onclick=\"this.textContent=String(1)\">Choose</button><div role=group aria-label=Nested><button aria-label=Choose>Choose</button></div>'}");
-            var full = await browser.SnapshotAsync(id);
-            var root = full.Observation!.Elements.Single(e => e.Role == "tree").Ref;
-            var scoped = await browser.ExecuteAsync(new(id, "browser.snapshot", JsonSerializer.SerializeToElement(new { targetRef = root, depth = 2 })));
-            Assert.Null(scoped.ErrorCode);
-            var button = Assert.Single(scoped.Snapshot!.Elements, e => e.Name == "Choose");
-            var clicked = await browser.ExecuteAsync(new(id, "browser.click", JsonSerializer.SerializeToElement(new { @ref = button.Ref })));
-            Assert.Null(clicked.ErrorCode);
-            Assert.Equal("1", await page.GetByRole(AriaRole.Button, new() { Name = "Choose", Exact = true }).First.InnerTextAsync());
+            await page.GetByRole(AriaRole.Tree).EvaluateAsync("el=>{el.innerHTML='<button>Choose</button><div role=group aria-label=Nested><button onclick=\"this.textContent=String(1)\">Choose</button></div>'}");
+            var root = await Find(browser, id, new(Role: "tree", Name: "Assets"));
+            Assert.Null((await browser.ExecuteAsync(new(id, BrowserOperation.Snapshot, new() { TargetRef = root, Depth = 2 }))).ErrorCode);
+            Assert.Equal("ambiguous_target", (await browser.ExecuteAsync(new(id, BrowserOperation.Find, new() { Query = new(Role: "button", Name: "Choose", ScopeRef: root) }))).ErrorCode);
+            var group = await Find(browser, id, new(Role: "group", Name: "Nested", ScopeRef: root));
+            var chosen = await Find(browser, id, new(Role: "button", Name: "Choose", ScopeRef: group));
+            Assert.Null((await browser.ExecuteAsync(new(id, BrowserOperation.Click, new() { Ref = chosen }))).ErrorCode);
+            Assert.Equal("1", await page.GetByRole(AriaRole.Group, new() { Name = "Nested" }).GetByRole(AriaRole.Button).InnerTextAsync());
         }
         finally { await browser.StopAsync(CancellationToken.None); }
     }
 
-    internal static PlaywrightBrowser Create() => new(new BrowserOptions { Enabled = true, Headless = true, FixtureEnabled = true,
+    [Fact]
+    public async Task Virtualized_content_open_shadow_and_missing_target_wait_use_native_semantics()
+    {
+        var browser = Create(); await browser.StartAsync(default); var id = Guid.NewGuid();
+        try
+        {
+            await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new(browser.HostPolicy.NavigationOrigins.Single() + "/")));
+            var page = browser.ContextFor(id)!.Pages[0];
+            await page.SetContentAsync("""
+                <div role="region" aria-label="Records" style="height:150px;overflow:auto;width:400px">
+                  <button>Row 1</button><div style="height:2000px"></div>
+                </div><output role="status">Ready</output><div id="open"></div><div id="closed"></div>
+                <script>
+                  const panel=document.querySelector('[role=region]');
+                  panel.onscroll=()=>{panel.querySelector('button').textContent='Row 200';};
+                  const open=document.getElementById('open').attachShadow({mode:'open'});
+                  open.innerHTML='<button>Shadow action</button>';
+                  open.querySelector('button').onclick=()=>document.querySelector('output').textContent='Shadow changed';
+                  document.getElementById('closed').attachShadow({mode:'closed'}).innerHTML='<button>Closed action</button>';
+                </script>
+                """);
+            async Task<BrowserResult> Query(string name) => await browser.ExecuteAsync(new(id, BrowserOperation.Find, new() { Query = new(Role: "button", Name: name) }));
+            Assert.Equal("not_found", (await Query("Row 200")).ErrorCode);
+            var region = await Find(browser, id, new(Role: "region", Name: "Records"));
+            Assert.Null((await browser.ExecuteAsync(new(id, BrowserOperation.Scroll, new() { Ref = region, DeltaY = 400 }))).ErrorCode);
+            Assert.Null((await Query("Row 200")).ErrorCode);
+            var shadow = await Find(browser, id, new(Role: "button", Name: "Shadow action"));
+            Assert.Null((await browser.ExecuteAsync(new(id, BrowserOperation.Click, new() { Ref = shadow }))).ErrorCode);
+            Assert.Equal("Shadow changed", await page.GetByRole(AriaRole.Status).InnerTextAsync());
+            Assert.Equal("not_found", (await Query("Closed action")).ErrorCode);
+            await page.GetByRole(AriaRole.Button, new() { Name = "Shadow action" }).EvaluateAsync("el=>el.remove()");
+            Assert.Null((await browser.ExecuteAsync(new(id, BrowserOperation.WaitFor, new() { Ref = shadow, Condition = "target", State = "detached", TimeoutMs = 500 }))).ErrorCode);
+        }
+        finally { await browser.StopAsync(default); }
+    }
+
+    internal static async Task<string> Find(NativePlaywrightBrowser browser, Guid id, BrowserTargetQuery query)
+    {
+        var result = await browser.ExecuteAsync(new(id, BrowserOperation.Find, new() { Query = query }));
+        Assert.Null(result.ErrorCode);
+        using var doc = JsonDocument.Parse(result.DataJson!);
+        return Assert.Single(doc.RootElement.GetProperty("matches").EnumerateArray()).GetProperty("ref").GetString()!;
+    }
+
+    internal static NativePlaywrightBrowser Create() => new(new BrowserOptions { Enabled = true, Headless = true, FixtureEnabled = true,
         FixturePort = 0, InteractionMode = "InteractiveDemo", NavigationOrigins = ["http://127.0.0.1:5091"], InteractionOrigins = ["http://127.0.0.1:5091"] }, loggerFactory: null);
 }

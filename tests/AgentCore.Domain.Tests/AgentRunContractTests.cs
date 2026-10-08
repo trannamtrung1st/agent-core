@@ -306,7 +306,7 @@ public sealed class AgentRunContractTests
         Assert.Equal("checkpoint-capacity", capacity.Failure!.Code);
         Assert.Equal(AgentRunSideEffectDisposition.Indeterminate, capacity.SideEffect.Disposition);
 
-        foreach (var readOnlyTool in new[] { "browser.navigate", "browser.pdf" })
+        foreach (var readOnlyTool in new[] { "browser.navigate", "browser.get_config" })
         {
             var navigation = AgentRunActionHash.Compute(readOnlyTool, JsonDocument.Parse(arguments).RootElement);
             var navigatePayload = payload.Replace(toolName, readOnlyTool, StringComparison.Ordinal);

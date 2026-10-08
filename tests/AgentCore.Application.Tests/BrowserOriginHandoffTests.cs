@@ -514,24 +514,24 @@ public sealed class BrowserOriginHandoffTests
         public ValueTask<Uri?> GetCurrentUrlAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             new(new Uri("https://store.test/orders"));
 
-        public ValueTask<BrowserOperationResult> NavigateAsync(
-            BrowserNavigateRequest request,
+        public ValueTask<BrowserResult> NavigateAsync(
+            BrowserRequest request,
             CancellationToken cancellationToken = default) =>
-            new(Page($"el_nav_{request.Url!.AbsoluteUri.Length}"));
+            new(Page($"el_nav_{request.Options.Url!.Length}"));
 
-        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        public ValueTask<BrowserResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             ObserveCalls++;
             return new(Page($"el_obs_{ObserveCalls}"));
         }
 
-        public ValueTask<BrowserOperationResult> InteractAsync(BrowserInteractionRequest request, CancellationToken cancellationToken = default) =>
+        public ValueTask<BrowserResult> InteractAsync(BrowserRequest request, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+        public ValueTask<BrowserResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        private static BrowserOperationResult Page(string reference) =>
+        private static BrowserResult Page(string reference) =>
             new(
                 null,
                 new BrowserSnapshot(
@@ -541,7 +541,16 @@ public sealed class BrowserOriginHandoffTests
                     false,
                     [new BrowserElement(reference, "link", "Order")],
                     Settled: true));
-    }
+
+        public ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default) => request.Operation switch
+        {
+            BrowserOperation.Navigate => NavigateAsync(request, ct),
+            BrowserOperation.Snapshot or BrowserOperation.WaitFor => SnapshotAsync(request.SessionId, ct),
+            BrowserOperation.Close => CloseAsync(request.SessionId, ct),
+            BrowserOperation.Click or BrowserOperation.Type or BrowserOperation.Hover or BrowserOperation.Drag or BrowserOperation.Upload or BrowserOperation.FillForm => InteractAsync(request, ct),
+            _ => new(new BrowserResult("unsupported_operation")),
+        };
+}
 
     private sealed class TwoSiteBrowser(string closeStatus = "closed") : IBrowser
     {
@@ -565,38 +574,38 @@ public sealed class BrowserOriginHandoffTests
         public ValueTask<Uri?> GetCurrentUrlAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             new(Navigated.Count == 0 ? null : new Uri(Navigated[^1]));
 
-        public ValueTask<BrowserOperationResult> NavigateAsync(
-            BrowserNavigateRequest request,
+        public ValueTask<BrowserResult> NavigateAsync(
+            BrowserRequest request,
             CancellationToken cancellationToken = default)
         {
-            Navigated.Add(request.Url!.AbsoluteUri);
-            return new(Page(request.Url));
+            Navigated.Add(request.Options.Url!);
+            return new(Page(new Uri(request.Options.Url!)));
         }
 
-        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        public ValueTask<BrowserResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             ObserveCalls++;
             return new(Page(new Uri(Navigated[^1])));
         }
 
-        public ValueTask<BrowserOperationResult> InteractAsync(
-            BrowserInteractionRequest request,
+        public ValueTask<BrowserResult> InteractAsync(
+            BrowserRequest request,
             CancellationToken cancellationToken = default)
         {
             ActCalls++;
             return new(Page(new Uri(Navigated[^1])));
         }
 
-        public ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        public ValueTask<BrowserResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             CloseCalls++;
-            return new(new BrowserCloseResult(closeStatus));
+            return new(new BrowserResult(null, Status: closeStatus, DataJson: System.Text.Json.JsonSerializer.Serialize(new { status = closeStatus })));
         }
 
-        private static BrowserOperationResult Page(Uri url)
+        private static BrowserResult Page(Uri url)
         {
             var challenged = string.Equals(url.Host, "a.test", StringComparison.OrdinalIgnoreCase);
-            return new BrowserOperationResult(
+            return new BrowserResult(
                 null,
                 new BrowserSnapshot(
                     url.AbsoluteUri,
@@ -606,7 +615,16 @@ public sealed class BrowserOriginHandoffTests
                     challenged ? [] : [new BrowserElement("el_bbbbbbbbbbbbbbbbbbbbbb", "link", "Specs")],
                     challenged ? BrowserInterventionKind.HumanVerificationRequired : BrowserInterventionKind.None));
         }
-    }
+
+        public ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default) => request.Operation switch
+        {
+            BrowserOperation.Navigate => NavigateAsync(request, ct),
+            BrowserOperation.Snapshot or BrowserOperation.WaitFor => SnapshotAsync(request.SessionId, ct),
+            BrowserOperation.Close => CloseAsync(request.SessionId, ct),
+            BrowserOperation.Click or BrowserOperation.Type or BrowserOperation.Hover or BrowserOperation.Drag or BrowserOperation.Upload or BrowserOperation.FillForm => InteractAsync(request, ct),
+            _ => new(new BrowserResult("unsupported_operation")),
+        };
+}
 
     private sealed class RedirectingBrowser : IBrowser
     {
@@ -624,16 +642,16 @@ public sealed class BrowserOriginHandoffTests
         public ValueTask<Uri?> GetCurrentUrlAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             new(Navigated.Count == 0 ? null : new Uri(Navigated[^1]));
 
-        public ValueTask<BrowserOperationResult> NavigateAsync(
-            BrowserNavigateRequest request,
+        public ValueTask<BrowserResult> NavigateAsync(
+            BrowserRequest request,
             CancellationToken cancellationToken = default)
         {
-            Navigated.Add(request.Url!.AbsoluteUri);
-            var challenged = request.Url!.Host is "cars.test" or "www.cars.test";
+            Navigated.Add(request.Options.Url!);
+            var challenged = new Uri(request.Options.Url!)!.Host is "cars.test" or "www.cars.test";
             var final = challenged
                 ? new Uri("https://www.cars.test/page")
-                : request.Url;
-            return new(new BrowserOperationResult(
+                : new Uri(request.Options.Url!);
+            return new(new BrowserResult(
                 null,
                 new BrowserSnapshot(
                     final.AbsoluteUri,
@@ -644,10 +662,18 @@ public sealed class BrowserOriginHandoffTests
                     challenged ? BrowserInterventionKind.HumanVerificationRequired : BrowserInterventionKind.None)));
         }
 
-        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+        public ValueTask<BrowserResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public ValueTask<BrowserOperationResult> InteractAsync(BrowserInteractionRequest request, CancellationToken cancellationToken = default) =>
+        public ValueTask<BrowserResult> InteractAsync(BrowserRequest request, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
-    }
+
+        public ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default) => request.Operation switch
+        {
+            BrowserOperation.Navigate => NavigateAsync(request, ct),
+            BrowserOperation.Snapshot or BrowserOperation.WaitFor => SnapshotAsync(request.SessionId, ct),
+            BrowserOperation.Click or BrowserOperation.Type or BrowserOperation.Hover or BrowserOperation.Drag or BrowserOperation.Upload or BrowserOperation.FillForm => InteractAsync(request, ct),
+            _ => new(new BrowserResult("unsupported_operation")),
+        };
+}
 }

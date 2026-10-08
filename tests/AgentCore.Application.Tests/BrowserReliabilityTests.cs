@@ -18,8 +18,8 @@ public sealed class BrowserReliabilityTests
         var json = JsonSerializer.Serialize(new {
             status = "ok", untrustedBrowserContent = true, snapshotId = "snap_test", tabRef = "pg_test",
             url = "https://example.test/catalog", title = "Dense catalog", content = new string('界', 8000),
-            visibleText = new string('界', 3000), textTruncated = true,
-            elements = Enumerable.Range(0, 2000).Select(i => new { @ref = "el_" + i, role = "button", name = "Open item " + i, actions = new[] { "click" } })
+            truncated = true,
+            targets = Enumerable.Range(0, 2000).Select(i => new { @ref = "el_" + i, role = "button", name = "Open item " + i, actions = new[] { "click" } })
         });
         var fitted = ToolJsonResults.FitToBudget(budget, json);
         Assert.InRange(Encoding.UTF8.GetByteCount(fitted), 1, budget);
@@ -30,7 +30,6 @@ public sealed class BrowserReliabilityTests
         Assert.Equal("pg_test", root.GetProperty("tabRef").GetString());
         Assert.True(root.GetProperty("truncated").GetBoolean());
         Assert.True(root.GetProperty("hasMore").GetBoolean());
-        Assert.True(root.GetProperty("indexAvailable").GetBoolean());
         Assert.Contains("browser.find", root.GetProperty("guidance").GetString());
         Assert.False(root.TryGetProperty("error", out _));
     }
@@ -50,10 +49,9 @@ public sealed class BrowserReliabilityTests
         using var json = JsonDocument.Parse(result.Text);
         Assert.Equal("ok", json.RootElement.GetProperty("status").GetString());
         Assert.Equal("snap_dense", json.RootElement.GetProperty("snapshotId").GetString());
-        Assert.True(json.RootElement.GetProperty("indexAvailable").GetBoolean());
         Assert.True(json.RootElement.GetProperty("hasMore").GetBoolean());
         Assert.False(json.RootElement.TryGetProperty("error", out _));
-        Assert.Equal(2000, browser.Snapshot.Elements.Count);
+        Assert.Equal(2000, browser.Snapshot.Targets.Count);
     }
 
     [Fact]
@@ -75,15 +73,23 @@ public sealed class BrowserReliabilityTests
     {
         public BrowserSnapshot Snapshot { get; } = new("https://example.test/", "Dense", new string('界', 3000), true,
             Enumerable.Range(0, 2000).Select(i => new BrowserElement("el_" + i, "button", "Entry " + i, ["click"])).ToArray(),
-            SnapshotId: "snap_dense", TabRef: "pg_dense", Content: new string('界', 8000), ContentTruncated: true, IndexedCount: 2000, CapturedNodeCount: 2000);
+            SnapshotId: "snap_dense", TabRef: "pg_dense");
         public bool IsAvailable => true;
         public BrowserProviderDescriptor Provider { get; } = new("dense", "Dense", new HashSet<BrowserFeature> { BrowserFeature.Snapshot });
         public BrowserHostPolicy HostPolicy { get; } = new(true, true, BrowserInteractionMode.InteractiveDemo, ["https://example.test"]);
         public ValueTask<Uri?> GetCurrentUrlAsync(Guid id, CancellationToken ct = default) => new(new Uri("https://example.test/"));
-        public ValueTask<BrowserOperationResult> NavigateAsync(BrowserNavigateRequest request, CancellationToken ct = default) => new(new BrowserOperationResult(null, Snapshot));
-        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid id, CancellationToken ct = default) => new(new BrowserOperationResult(null, Snapshot));
-        public ValueTask<BrowserOperationResult> InteractAsync(BrowserInteractionRequest request, CancellationToken ct = default) => new(new BrowserOperationResult(null, Snapshot));
-    }
+        public ValueTask<BrowserResult> NavigateAsync(BrowserRequest request, CancellationToken ct = default) => new(new BrowserResult(null, Snapshot));
+        public ValueTask<BrowserResult> SnapshotAsync(Guid id, CancellationToken ct = default) => new(new BrowserResult(null, Snapshot));
+        public ValueTask<BrowserResult> InteractAsync(BrowserRequest request, CancellationToken ct = default) => new(new BrowserResult(null, Snapshot));
+
+        public ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default) => request.Operation switch
+        {
+            BrowserOperation.Navigate => NavigateAsync(request, ct),
+            BrowserOperation.Snapshot or BrowserOperation.WaitFor => SnapshotAsync(request.SessionId, ct),
+            BrowserOperation.Click or BrowserOperation.Type or BrowserOperation.Hover or BrowserOperation.Drag or BrowserOperation.Upload or BrowserOperation.FillForm => InteractAsync(request, ct),
+            _ => new(new BrowserResult("unsupported_operation")),
+        };
+}
 
     [Fact]
     public async Task Nondefault_browser_definition_gets_only_authorized_supported_bootstrap()

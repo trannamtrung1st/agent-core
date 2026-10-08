@@ -86,7 +86,7 @@ public sealed class SecretaryIdentityTests
         var current = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         for (var version = 1; version <= 16; version++)
             Assert.Null(await current.GetAsync("general-assistant", version));
-        Assert.Equal(17, (await current.GetAsync("general-assistant"))!.Version);
+        Assert.Equal(18, (await current.GetAsync("general-assistant"))!.Version);
     }
 
     [Fact]

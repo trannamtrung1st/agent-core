@@ -400,4 +400,4 @@ public sealed record AdminEventResponse(
     int? Version,
     JsonElement Summary);
 
-public sealed record AdminBrowserConfigurationResponse(string ProviderId, string DisplayName, bool Enabled, bool Ready, string ProfileMode, string PolicyMode, IReadOnlyList<string> SupportedFeatures, int MaxSnapshotChars, int MaxCaptureBytes, int MaxDownloadBytes, string Engine = "unknown");
+public sealed record AdminBrowserConfigurationResponse(string ProviderId, string DisplayName, bool Enabled, bool Ready, string ProfileMode, string PolicyMode, IReadOnlyList<string> SupportedFeatures, int MaxSnapshotBytes, int MaxCaptureBytes, int MaxDownloadBytes, string Engine = "unknown");
