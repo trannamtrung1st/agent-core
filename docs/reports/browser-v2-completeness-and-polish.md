@@ -128,7 +128,7 @@ There is no new subsystem, browser runtime, selector authority, compatibility la
 
 ## Verification ledger
 
-Local operational results are recorded below; hosted CI will be appended for the final behavior commit. Historical full-cutover acceptance and its separately authorized live-model journey remain in [the original ledger](browser-v2-full-cutover-verification.md). This audit does not rerun or claim that pending hosted-model journey, and does not reopen P10/P11.
+Local operational results and completed hosted CI are recorded below. Historical full-cutover acceptance and its separately authorized live-model journey remain in [the original ledger](browser-v2-full-cutover-verification.md). This audit does not rerun or claim that pending hosted-model journey, and does not reopen P10/P11.
 
 ### Operational scenarios
 
@@ -156,3 +156,19 @@ Local operational results are recorded below; hosted CI will be appended for the
 | Documentation links/fences and `git diff --check` | Passed for changed canonical documents and the 72-operation report. |
 
 The initial parallel frontend run had 738 passes and one 30-second timeout in the existing fractional-recurrence editor test under concurrent heavy Admin/.NET load. The fresh serial run using unchanged CI `--maxWorkers=1` passed all 739 tests across 96 files (632.94 seconds). No test assertions or timeouts were weakened. Live-provider tests remain explicit opt-in and were not run.
+
+### Hosted required gates
+
+All five jobs in [Synthetic run 37729115112](https://github.com/trannamtrung1st/agent-core/actions/runs/37729115112) **passed** on the exact implementation commit **`c5bc6143322559e818e290bd87934c2391bd32a4`**. The workflow checked out that PR head, not a generated merge commit. Subsequent evidence-note edits change documentation only; browser source, tests, shared settings and workflow remain identical to the verified behavior commit.
+
+| Hosted job | Actual result |
+| --- | --- |
+| Synthetic backend | Domain 152, Infrastructure 831, Application 1318, API 371 passed (2672 total); 20 explicit skips: 14 live opt-ins and six absent-image Docker cases. Native browser cases executed. Local Docker rerun passed all eight cases, closing those prerequisite skips. Infrastructure build: zero warnings/errors. |
+| Synthetic frontend | 96 files / 739 tests passed with the unchanged one-worker gate; production build passed. |
+| Synthetic Playwright core | 116 passed across Synthetic, Browser STT and Browser STT/TTS projects; API host build zero warnings/errors. |
+| Synthetic Playwright acceptance | 16 passed: Manual-A 1, Admin lifecycle 1, P7.6 Admin 1, P9.7 Harness 6, continuity 2, identity maintenance 1, Secretary 4. |
+| Synthetic Compose smoke | `compose sqlite volume check passed`: owner-capability path and durable SQLite/keyring/profile/workspace/Skill-copy survival through recreation. |
+
+### Closure and remaining scope
+
+The targeted completeness/polish work is verified operationally and meets its key-free gates. The 72-operation matrix deliberately does not claim unrestricted MCP parity: bounded diagnostics/storage/input, host-only context creation settings and protected advanced capture/code boundaries remain explicit. Existing immutable Definition versions are retained; operators publish a new authorized version to grant new tools, and geolocation still requires exact attached-turn approval. The historical full-cutover real-model Journey L remains separately unrun; this audit does not declare that migration behavior-frozen or reopen P10/P11.
