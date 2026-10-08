@@ -239,9 +239,10 @@ test("a detached reminder completes in Background work and cancel survives reloa
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Background work" }).click();
   await expect(page.getByRole("dialog", { name: "Background work", exact: true }).getByText("Retrying").first()).toBeVisible({ timeout: 15_000 });
-  await page.getByRole('dialog', { name: 'Background work', exact: true })
-    .getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'Retry fixture', exact: true }) })
-    .getByRole('button', { name: 'View original result', exact: true }).click();
+  const retryRow = page.getByRole('dialog', { name: 'Background work', exact: true })
+    .getByRole('listitem').filter({ has: page.getByText('Retrying', { exact: true }) });
+  await expect(retryRow).toHaveCount(1);
+  await retryRow.getByRole('button', { name: 'View original result', exact: true }).click();
   await drawer.getByRole('button', { name: 'Cancel run', exact: true }).click();
   await page.getByRole('dialog', { name: 'Cancel this run?', exact: true }).getByRole('button', { name: 'Cancel run', exact: true }).click();
   await expect(drawer.getByText("Cancelled").first()).toBeVisible({ timeout: 15_000 });
