@@ -16,6 +16,12 @@ public sealed partial class SessionToolExecutor
         "invalid",
         "target_denied",
         "stale_reference",
+        "invalid_reference",
+        "unknown_reference",
+        "wrong_session_reference",
+        "target_missing",
+        "ambiguous_reference",
+        "non_actionable_target",
         "timeout",
         "provider_unavailable",
         "unsupported_operation",
@@ -675,7 +681,7 @@ public sealed partial class SessionToolExecutor
         }
 
         var record = await artifacts
-            .CreateAsync(sessionId, fileName, contentType, bytes, null, null, cancellationToken)
+            .CreateAsync(sessionId, fileName, contentType, bytes, null, null, cancellationToken, admission?.AgentRunId)
             .ConfigureAwait(false);
         return (record.ArtifactId.ToString("D"), null);
     }
@@ -759,6 +765,7 @@ public sealed partial class SessionToolExecutor
     private static string SerializeBrowserSnapshot(BrowserSnapshot observation)
     {
         var elements = (observation.Elements ?? [])
+            .OrderByDescending(e => e.State is not null ? 3 : e.Role is "button" or "link" or "textbox" or "searchbox" or "combobox" ? 2 : e.Actions.Count > 0 ? 1 : 0)
             .Select(element =>
             {
                 var item = new Dictionary<string, object?>
@@ -806,6 +813,14 @@ public sealed partial class SessionToolExecutor
                 title,
                 visibleText,
                 textTruncated = truncated,
+                truncated = truncated || observation.ContentTruncated || observation.IndexTruncated || elements.Length < (observation.Elements?.Count ?? 0),
+                hasMore = truncated || observation.ContentTruncated || observation.IndexTruncated || elements.Length < (observation.Elements?.Count ?? 0),
+                indexAvailable = observation.SnapshotId is not null,
+                indexTruncated = observation.IndexTruncated,
+                indexedCount = observation.IndexedCount ?? (observation.Elements?.Count ?? 0),
+                capturedNodeCount = observation.CapturedNodeCount,
+                scope = observation.Scope,
+                guidance = "Use browser.find for targets beyond this projection; depth and targetRef narrow inspection.",
                 settled,
                 elements
             })
@@ -821,6 +836,14 @@ public sealed partial class SessionToolExecutor
                 title,
                 visibleText,
                 textTruncated = truncated,
+                truncated = truncated || observation.ContentTruncated || observation.IndexTruncated || elements.Length < (observation.Elements?.Count ?? 0),
+                hasMore = truncated || observation.ContentTruncated || observation.IndexTruncated || elements.Length < (observation.Elements?.Count ?? 0),
+                indexAvailable = observation.SnapshotId is not null,
+                indexTruncated = observation.IndexTruncated,
+                indexedCount = observation.IndexedCount ?? (observation.Elements?.Count ?? 0),
+                capturedNodeCount = observation.CapturedNodeCount,
+                scope = observation.Scope,
+                guidance = "Use browser.find for targets beyond this projection; depth and targetRef narrow inspection.",
                 elements
             });
     }
@@ -881,7 +904,13 @@ public sealed partial class SessionToolExecutor
             "forbidden" => "Browser operation is not permitted.",
             "invalid" => "Browser arguments are invalid.",
             "target_denied" => "Browser target is not allowed.",
-            "stale_reference" => "Element reference is stale.",
+            "stale_reference" => "The snapshot was invalidated. Refresh and use browser.find to rediscover; do not replay an uncertain effect.",
+            "invalid_reference" => "Use an opaque el_ reference returned by browser.find or browser.snapshot; selectors and invented strings are invalid.",
+            "unknown_reference" => "This opaque reference is unknown. Obtain a current reference with browser.find or browser.snapshot.",
+            "wrong_session_reference" => "This reference belongs to a different Session. Discover a target in this Session.",
+            "target_missing" => "The locator no longer resolves. Refresh and rediscover with browser.find before acting.",
+            "ambiguous_reference" => "The target is ambiguous. Narrow browser.find by role, name or targetRef.",
+            "non_actionable_target" => "The target has no actions. Search for its actionable descendant with browser.find.",
             "target_unreachable" => "The host refused the connection. Do not retry that host.",
             "timeout" => "Browser operation timed out.",
             "unsupported_operation" => "Browser operation is not supported.",

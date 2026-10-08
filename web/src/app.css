@@ -411,6 +411,33 @@ body,
   min-width: 0;
 }
 
+.chat-message-completion {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.chat-message-completion .ant-typography {
+  font-size: inherit;
+  white-space: nowrap;
+}
+
+.chat-message-meta time { white-space: nowrap; }
+
+.chat-message-completion-separator {
+  margin-inline-end: var(--ac-space-compact);
+}
+
+.chat-message-meta .chat-message-speaker {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+  .chat-message-completion-separator { display: none; }
+}
+
 .chat-message-user .chat-message-meta {
   justify-content: flex-end;
 }
@@ -623,23 +650,11 @@ body,
   color: var(--ac-color-text-secondary);
 }
 
-.background-work-item-title {
+/* Work names are content headings; history has one explicit action. */
+.background-work-item-title.ant-typography {
   flex: 1 1 12rem;
   min-width: 0;
-}
-
-.background-work-item-title.ant-btn {
-  height: auto;
-  min-height: 32px;
-  max-width: 100%;
-  justify-content: flex-start;
-  padding: var(--ac-space-compact);
-  white-space: normal;
-  text-align: start;
-  font-weight: 600;
-}
-
-.background-work-item-title > span {
+  margin: 0;
   overflow-wrap: anywhere;
 }
 
@@ -676,7 +691,6 @@ body,
   padding-block: var(--ac-space-section);
 }
 
-.background-work-item:first-child,
 .schedule-item:first-child {
   padding-block-start: var(--ac-space-compact);
 }
@@ -2306,6 +2320,41 @@ body,
 .admin-config-form .admin-form-row { margin-block-end: var(--ac-space-section); }
 .admin-config-form .admin-form-row > .ant-form-item { margin-block-end: 0; }
 .admin-config-form .ant-typography { max-width: 72ch; }
+/* Automation sections own vertical rhythm; field grids own sibling alignment. */
+.automation-editor-form .ant-form-item { margin-block-end: 0; min-width: 0; }
+.automation-editor-section + .automation-editor-section {
+  border-block-start: 1px solid var(--ac-color-border);
+  padding-block-start: var(--ac-space-section);
+}
+.automation-timing-fields,
+.automation-limit-fields {
+  display: grid;
+  gap: var(--ac-space-section);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.automation-limit-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.automation-timing-wide { grid-column: span 2; }
+.automation-timing-zone { grid-column: 1 / -1; }
+.automation-editor-form .ant-picker,
+.automation-editor-form .ant-input-number { width: 100%; min-width: 0; }
+@media (max-width: 767px) {
+  .automation-timing-fields,
+  .automation-limit-fields { grid-template-columns: minmax(0, 1fr); }
+  .automation-timing-wide { grid-column: auto; }
+  .automation-date-picker-popup .ant-picker-datetime-panel { flex-direction: column; }
+  .automation-date-picker-popup .ant-picker-time-panel {
+    width: 100%;
+    border-inline-start: 0;
+    border-block-start: 1px solid var(--ac-color-border);
+  }
+  .automation-date-picker-popup .ant-picker-panel-container {
+    position: fixed;
+    inset-block-start: var(--ac-space-section);
+    inset-inline-start: var(--ac-space-section);
+    max-height: calc(100dvh - 2 * var(--ac-space-section));
+    overflow-y: auto;
+  }
+}
 .admin-source-choice { flex: 1 1 20rem; width: 100%; max-width: 48rem; min-width: 0; }
 .admin-memory-scope { flex: 0 1 12rem; min-width: 0; max-width: 100%; }
 .admin-memory-scope .ant-select { width: 100%; }
@@ -2406,14 +2455,13 @@ body,
   .admin-credential-dialog .ant-modal-close { width: 40px; height: 40px; }
 }
 
-/* Admin collections share search insets; Ant Design owns table cell spacing. */
+/* Collection layouts own outer spacing; only inventory cards need a search inset. */
 .admin-collection-toolbar {
-  padding: var(--ac-space-default) var(--ac-space-section);
+  min-width: 0;
 }
 
-.admin-definition-panel-body .admin-collection-toolbar,
-.admin-versions-section > .admin-collection-toolbar {
-  padding: 0;
+.admin-inventory-section > .admin-collection-toolbar {
+  padding: var(--ac-space-default) var(--ac-space-section);
 }
 
 .admin-collection-toolbar .ant-input-affix-wrapper {
@@ -2435,6 +2483,13 @@ body,
 .admin-collection-table .ant-table-cell:not(.ant-table-cell-ellipsis) {
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+/* Inline actions share the content edge of nearby text and table cells.
+   Keep AntD's button semantics, vertical hit area and focus/disabled states. */
+.ant-btn.ant-btn-link {
+  padding-inline: 0;
+  border-inline-width: 0;
 }
 
 .admin-collection-table .ant-table-cell .ant-btn-link:not(.admin-collection-name) {
@@ -2540,8 +2595,8 @@ body,
 }
 
 .background-work-item { padding-inline: var(--ac-space-default); border-block-end: 1px solid var(--ac-color-border); }
-.background-work-item:last-child { border-block-end: 0; }
 .background-work-list { list-style: none; padding: 0; margin: 0; }
+.background-work-list:not(:empty) { border-block-start: 1px solid var(--ac-color-border); }
 .background-work-selected { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
 .admin-run-source { align-self: flex-start; }
 
@@ -2560,6 +2615,7 @@ body,
 }
 
 /* Product text controls keep one visible keyboard focus policy. */
+.ant-btn.ant-btn-link:focus-visible:not(:disabled),
 .model-picker-model.ant-btn:focus-visible:not(:disabled),
 .model-picker-option.ant-btn:focus-visible:not(:disabled),
 .session-new-chat.ant-btn:focus-visible:not(:disabled),

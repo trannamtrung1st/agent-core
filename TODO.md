@@ -1,3 +1,14 @@
+## Stable original Background Work results (2026-10-09)
+
+- [x] Resolve immutable initial Run; retain original title in origin, preserving same-Session Chat and dynamic completion accounting.
+- [x] Add nullable trusted Artifact Run provenance and filter original files before bounded paging, preserving unknown history and downloads.
+- [x] Continue/Open chat distinction, original details, conversation history, truthful unavailable/files copy and shared wrapping.
+- [x] Focused HTTP InMemory/SQLite reopen, Artifact parity and frontend checks.
+- [x] Final expanded Synthetic A/B/C/browser regressions: 12 passed; final frontend build and full frontend suite (757 tests) passed.
+- [x] Full local regression checks passed after documented reruns; final Infrastructure 897 passed/9 optional skips.
+- [x] Follow-up consistency review: fix same-Session artifact Run-filter race; synchronize Impeccable preview/brief; repeat focused storage/API/frontend and live Synthetic review.
+- [ ] Exact-behavior-SHA hosted CI; publication scope remains pending for the shared checkout. See [verification ledger](docs/reports/background-original-result-verification.md); no closure claim until required gates pass.
+
 # TODO
 
 ## Durable completion inbox, result handoff and wait — closed successor

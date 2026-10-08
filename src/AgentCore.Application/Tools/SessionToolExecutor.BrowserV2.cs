@@ -12,11 +12,12 @@ public sealed partial class SessionToolExecutor
         string name, JsonElement args, ToolExecutionAdmission? admission, int remainingOutputBytes, CancellationToken ct)
     {
         var started = Stopwatch.GetTimestamp();
-        ToolExecutionResult Fail(string code, string message) => TextResult(FinishBrowser(name, started, Error(code, message)));
+        ToolExecutionResult Fail(string code, string message) => FitResult(remainingOutputBytes, FinishBrowser(name, started, Error(code, message)));
         if (!BrowserToolCatalog.TryGet(name, out var metadata)) return Fail("unsupported_operation", "Unknown browser feature.");
         using var schema = JsonDocument.Parse(metadata.ParametersJson);
         if (args.ValueKind == JsonValueKind.Object && args.EnumerateObject().Any(p => p.Name is "targetOrigins" or "origins" or "headless" or "enabled" or "interactionMode")) return Fail("forbidden", "Browser arguments cannot change host policy.");
         if (!ValidateBrowserShape(args, schema.RootElement)) return Fail("invalid", "Browser arguments do not match the bounded tool schema.");
+        if (!ValidReferences(args)) return Fail("invalid_reference", BrowserFailureMessage("invalid_reference"));
         var denied = await BindBrowserAsync(sessionId, admission, ct).ConfigureAwait(false);
         if (denied is not null) return TextResult(FinishBrowser(name, started, denied));
         if (browser is null || !browser.IsAvailable && metadata.Feature != BrowserFeature.Configuration) return Fail("provider_unavailable", "Browser is unavailable.");
@@ -75,7 +76,7 @@ public sealed partial class SessionToolExecutor
                 RecordBrowser(name, started, "canceled");
                 throw;
             }
-            if (result.ErrorCode is not null) return Fail(result.ErrorCode, "Browser operation did not complete.");
+            if (result.ErrorCode is not null) return Fail(result.ErrorCode, BrowserFailureMessage(result.ErrorCode));
             if (result.Bytes is { Length: > 0 } bytes)
             {
                 if (bytes.Length > BrowserToolLimits.MaxDownloadBytes) return Fail("capture_too_large", "Browser output exceeds the byte budget.");
@@ -89,6 +90,19 @@ public sealed partial class SessionToolExecutor
                 return FitResult(remainingOutputBytes, FinishBrowser(name, started, await PresentBrowserAsync(sessionId, admission, new BrowserOperationResult(null, result.Snapshot, Downloads: result.Downloads), ct)));
             return FitResult(remainingOutputBytes, FinishBrowser(name, started, result.DataJson ?? "{\"status\":\"ok\"}"));
         }
+    }
+
+    private static bool ValidReferences(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Object)
+            foreach (var property in value.EnumerateObject())
+            {
+                if (property.Name is "ref" or "targetRef" && !BrowserToolArguments.IsOpaqueReference(property.Value.GetString())) return false;
+                if (!ValidReferences(property.Value)) return false;
+            }
+        if (value.ValueKind == JsonValueKind.Array)
+            foreach (var item in value.EnumerateArray()) if (!ValidReferences(item)) return false;
+        return true;
     }
 
     private static bool ValidateBrowserShape(JsonElement value, JsonElement schema)

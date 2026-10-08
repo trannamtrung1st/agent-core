@@ -986,8 +986,9 @@ describe("ChatApp tablet session rail", () => {
   });
 
   it("keeps background work available for live, paused, and ended sessions without a transcript result", async () => {
-    vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [fixtureBackground], nextCursor: null, hasMore: false });
-    vi.mocked(listAgentRuns).mockResolvedValue({ items: [{ ...fixtureRun, outcome: { kind: "Result", summary: "Oven timer finished.", outcomeEntryId: "result", attentionRequired: true } }], nextCursor: null, hasMore: false });
+    const completedRun = { ...fixtureRun, outcome: { ...fixtureRun.outcome!, summary: "Oven timer finished.", attentionRequired: true } };
+    vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [{ ...fixtureBackground, latestRun: completedRun }], nextCursor: null, hasMore: false });
+    vi.mocked(listAgentRuns).mockResolvedValue({ items: [completedRun], nextCursor: null, hasMore: false });
 
     for (const status of ["active", "paused", "ended"] as const) {
       await act(async () => {
@@ -1018,9 +1019,9 @@ describe("ChatApp tablet session rail", () => {
         });
       });
       const view = await act(async () => renderChat());
-      expect(screen.getByRole("button", { name: "Background work" })).toBeInTheDocument();
-      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Background work" })));
-      fireEvent.click(await screen.findByRole("button", { name: "View history" }));
+      const backgroundWork = await screen.findByRole("button", { name: /^Background work/ });
+      await act(async () => fireEvent.click(backgroundWork));
+      fireEvent.click(await screen.findByRole("button", { name: "View original result" }));
       expect(await screen.findByText("Oven timer finished.")).toBeInTheDocument();
       const conversation = screen.getByRole("region", { name: "Conversation" });
       expect(within(conversation).getByText("Hello from the conversation.")).toBeInTheDocument();

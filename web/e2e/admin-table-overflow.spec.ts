@@ -105,10 +105,10 @@ test("Skill and event-source action buttons stay together across table widths", 
   await expect(confirmation).toContainText("independent Instance Skill");
   await confirmation.getByRole("button", { name: "Cancel", exact: true }).click();
   const sourceName = `Action row ${Date.now()}`;
-  const source = await page.request.post("/api/v2/admin/event-sources", { headers, data: { displayName: sourceName } });
+  const source = await page.request.post("/api/v2/admin/connections/events", { headers, data: { displayName: sourceName, eventKey: `overflow.${Date.now()}` } });
   expect(source.ok()).toBe(true);
-  await page.goto("/admin/event-sources");
-  const copy = page.getByRole("button", { name: `Copy webhook URL for ${sourceName}`, exact: true });
+  await page.goto("/admin/connections/events");
+  const copy = page.getByRole("button", { name: `Rotate credential for ${sourceName}`, exact: true });
   await expect(copy).toBeVisible();
   await checkActions(copy.locator("xpath=ancestor::td"));
 });

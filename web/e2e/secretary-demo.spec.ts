@@ -115,7 +115,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await editor.getByRole('tab', { name: 'Capabilities', exact: true }).click();
     for (const tool of ['knowledge.retrieve', 'automation.create', 'automation.inspect', 'automation.disable', 'automation.run', 'automation.list', 'automation.update', 'automation.delete',
       'browser.navigate', 'browser.snapshot', 'browser.click', 'browser.type']) {
-      const select = editor.getByRole('combobox', { name: 'Tool allowlist', exact: true });
+      const select = editor.getByRole('combobox', { name: 'Authorized capabilities', exact: true });
       await select.click(); await select.fill(tool);
       await page.locator('.ant-select-item-option').filter({ hasText: tool }).last().click();
       await page.keyboard.press('Escape');

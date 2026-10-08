@@ -320,27 +320,9 @@ internal static class AdminHttpMapping
             document.RootElement.Clone());
     }
 
-    public static AdminEventSourceResponse ToEventSource(ExternalEventSource source) =>
-        new(
-            source.SourceId.ToString("D"),
-            source.DisplayName,
-            source.Kind.ToString(),
-            source.SourceKey.ToString("D"),
-            source.Status.ToString(),
-            source.Revision);
-
-    public static AdminEventSourceCredentialResponse ToEventSourceCredential(ExternalEventCredential credential) =>
-        new(
-            credential.SourceId.ToString("D"),
-            credential.SourceKey.ToString("D"),
-            credential.Token,
-            credential.Status.ToString());
-
-    public static AdminEventSubscriptionResponse ToEventSubscription(Automation registration) =>
-        new(
-            registration.AutomationId.ToString("D"),
-            registration.EventSourceId?.ToString("D") ?? "",
-            registration.EventType ?? "",
-            registration.Status.ToString(),
-            registration.Revision);
+    public static AdminWebhookEventResponse ToWebhookEvent(WebhookEvent source, int subscriberCount = 0, DateTimeOffset? lastReceived = null) =>
+        new(source.ResourceId.ToString("D"), source.DisplayName, source.EventKey, source.Status.ToString(), source.Revision,
+            source.CreatedAtUtc.ToString("O"), source.UpdatedAtUtc.ToString("O"), subscriberCount, lastReceived?.ToString("O"));
+    public static AdminWebhookEventCredentialResponse ToWebhookEventCredential(ExternalEventCredential credential) =>
+        new(credential.ResourceId.ToString("D"), credential.EventKey, credential.Token, credential.Status.ToString());
 }

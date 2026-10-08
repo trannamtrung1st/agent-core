@@ -76,7 +76,7 @@ describe("Managed instance information architecture", () => {
   it("groups retained context, automation and runs and retains exact selection in both directions", () => {
     render(<App><InstanceDetail instanceId={config.instanceId} instances={{ kind: "ready", data: [] }}
       effective={{ kind: "ready", data: config }} onBack={vi.fn()} onRetryEffective={vi.fn()} onInstanceChanged={vi.fn()} onInstanceDeleted={vi.fn()} /></App>);
-    for (const name of ["Identity & version", "Continuity", "Automation", "Runs", "Connections", "Effective configuration"]) expect(screen.getByRole("tab", { name })).toBeVisible();
+    for (const name of ["Identity & version", "Continuity", "Automation", "Runs", "Credentials", "Effective configuration"]) expect(screen.getByRole("tab", { name })).toBeVisible();
     expect(screen.queryByRole("tab", { name: "Behavior & continuity" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Continuity" }));
     expect(screen.getByText("Memory controls")).toBeVisible();

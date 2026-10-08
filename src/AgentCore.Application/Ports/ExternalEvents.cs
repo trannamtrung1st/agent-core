@@ -10,25 +10,29 @@ public enum ExternalEventAdmitKind
 
 public sealed record ExternalEventAdmit(ExternalEventAdmitKind Kind, ExternalEvent Event);
 
+public sealed record ExternalEventActivity(IReadOnlyList<ExternalEvent> Receipts, IReadOnlyList<ExternalEventDelivery> Deliveries);
+
 public interface IExternalEventStore
 {
-    ValueTask<ExternalEventSource> CreateAsync(
-        ExternalEventSource source,
+    ValueTask<ExternalEventActivity> ReadActivityAsync(Guid resourceId, CancellationToken ct = default);
+
+    ValueTask<WebhookEvent> CreateAsync(
+        WebhookEvent source,
         CancellationToken cancellationToken = default);
 
-    ValueTask<ExternalEventSource?> GetAsync(
-        Guid sourceId,
+    ValueTask<WebhookEvent?> GetAsync(
+        Guid resourceId,
         CancellationToken cancellationToken = default);
 
-    ValueTask<ExternalEventSource?> GetByKeyAsync(
-        Guid sourceKey,
+    ValueTask<WebhookEvent?> GetByKeyAsync(
+        string eventKey,
         CancellationToken cancellationToken = default);
 
-    ValueTask<IReadOnlyList<ExternalEventSource>> ListAsync(
+    ValueTask<IReadOnlyList<WebhookEvent>> ListAsync(
         CancellationToken cancellationToken = default);
 
-    ValueTask<ExternalEventSource> SaveAsync(
-        ExternalEventSource source,
+    ValueTask<WebhookEvent> SaveAsync(
+        WebhookEvent source,
         long expectedRevision,
         CancellationToken cancellationToken = default);
 
@@ -53,7 +57,7 @@ public interface IExternalEventStore
         CancellationToken cancellationToken = default);
 
     ValueTask<ExternalEvent?> GetEventAsync(
-        Guid sourceId,
+        Guid resourceId,
         string sourceEventId,
         CancellationToken cancellationToken = default);
 }

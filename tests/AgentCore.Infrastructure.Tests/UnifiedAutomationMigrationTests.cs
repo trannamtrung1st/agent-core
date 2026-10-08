@@ -55,6 +55,7 @@ public sealed class UnifiedAutomationMigrationTests
         {
             var name = reader.GetName(i);
             Assert.NotEqual(oldSchema ? "TriggerRevision" : "ScheduleRevision", name);
+            if (name == "EventType") continue;
             if (name is "ExecutionTargetKind" or "TargetSessionId" or "ReportToSessionId" or "RequiresTools")
             {
                 Assert.True(name is "ExecutionTargetKind" or "RequiresTools" ? reader.GetInt32(i) == 0 : reader.IsDBNull(i));
@@ -66,7 +67,7 @@ public sealed class UnifiedAutomationMigrationTests
                 Assert.True(reader.IsDBNull(i));
                 continue;
             }
-            values[oldSchema && name == "ScheduleRevision" ? "TriggerRevision" : name] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+            values[oldSchema && name == "ScheduleRevision" ? "TriggerRevision" : name == "EventSourceId" ? "EventId" : name] = reader.IsDBNull(i) ? null : reader.GetValue(i);
         }
         Assert.Equal(7L, values["TriggerRevision"]);
         Assert.Equal(11L, values[table == "Automations" ? "Revision" : "RoutingRevision"]);

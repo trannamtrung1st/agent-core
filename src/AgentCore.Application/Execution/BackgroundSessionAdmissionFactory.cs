@@ -19,7 +19,8 @@ public static class BackgroundSessionAdmissionFactory
             source.PinnedPersona, responseId, AgentRunOutputContract.BackgroundOutcome), source.PinnedModel, AgentRunLimits.DefaultMaxAttempts, now,
             source.PinnedSkillCatalog, source.PinnedSkillCatalog.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
         var origin = new SessionOrigin(SessionOriginKind.ImmediateBackground, parent.SessionId, source.AgentRunId,
-            runId, reportCompletionToOrigin: reportCompletion);
+            runId, reportCompletionToOrigin: reportCompletion,
+            initialTitle: string.IsNullOrWhiteSpace(title) ? objective[..Math.Min(objective.Length, 80)] : title.Trim());
         var session = new SessionSnapshot(1, sessionId, 1, parent.Definition, SessionMode.Text, null, SessionStatus.Created,
             [entry], "", 0, null, source.ProfileId, now, now, source.AgentInstanceId,
             Title: string.IsNullOrWhiteSpace(title) ? objective[..Math.Min(objective.Length, 80)] : title.Trim(),
@@ -42,7 +43,7 @@ public static class BackgroundSessionAdmissionFactory
         var session = new SessionSnapshot(1, sessionId, 1, definition, SessionMode.Text, null, SessionStatus.Created, [entry], "", 0, null,
             profileId, now, now, instance.InstanceId, Title: title, LastEntrySequence: 1, PinnedPersona: persona,
             PinnedPersonaRevision: instance.PersonaRevision, ModelSelection: new(model.CatalogKey, model.ProviderAlias, model.ModelId, ModelSelectionSource.Host, model.ReasoningEffort),
-            Origin: new(SessionOriginKind.ManualBackground, initialBackgroundAgentRunId: runId), Surfaces: SessionSurface.BackgroundWork);
+            Origin: new(SessionOriginKind.ManualBackground, initialBackgroundAgentRunId: runId, initialTitle: title), Surfaces: SessionSurface.BackgroundWork);
         return (session, run);
     }
 
@@ -78,9 +79,9 @@ public static class BackgroundSessionAdmissionFactory
         var origin = occurrence.AutomationId is { } automationId
             ? new SessionOrigin(SessionOriginKind.AutomationOccurrence, initialBackgroundAgentRunId: agentRunId,
                 automationId: automationId, triggerOccurrenceId: occurrence.OccurrenceId,
-                originatingSessionId: occurrence.CompletionDelivery.SessionId, reportCompletionToOrigin: occurrence.CompletionDelivery.SessionId is not null)
+                originatingSessionId: occurrence.CompletionDelivery.SessionId, reportCompletionToOrigin: occurrence.CompletionDelivery.SessionId is not null, initialTitle: string.IsNullOrWhiteSpace(title) ? "Background task" : title.Trim()[..Math.Min(title.Trim().Length, 80)])
             : new SessionOrigin(SessionOriginKind.SourceOccurrence, initialBackgroundAgentRunId: agentRunId,
-                triggerOccurrenceId: occurrence.OccurrenceId);
+                triggerOccurrenceId: occurrence.OccurrenceId, initialTitle: string.IsNullOrWhiteSpace(title) ? "Background task" : title.Trim()[..Math.Min(title.Trim().Length, 80)]);
         var session = new SessionSnapshot(1, sessionId, 1, definition, SessionMode.Text, null,
             SessionStatus.Created, [entry], string.Empty, 0, null, occurrence.Owner.ProfileId,
             admittedAtUtc, admittedAtUtc, occurrence.Owner.AgentInstanceId,

@@ -24,6 +24,47 @@ namespace AgentCore.Api.Tests;
 
 public sealed class SqliteHostRecoveryTests
 {
+    [Fact(Timeout = 60_000)]
+    public async Task Event_automation_does_not_block_chat_attach_or_text_after_sqlite_restart()
+    {
+        var db = Path.Combine(Path.GetTempPath(), $"agent-core-event-attach-{Guid.NewGuid():N}.db");
+        string sessionId;
+        await using (var first = new DurableSqliteHostFactory(db, runScheduler: false))
+        {
+            using var client = TestOwnerCapability.CreateOwnerClient(first);
+            var instanceId = TestInstances.Create(client, "secretary", 3);
+            var sourceResponse = await client.PostAsJsonAsync("/api/v2/admin/connections/events",
+                new { displayName = "Orders", eventKey = "order.placed" });
+            sourceResponse.EnsureSuccessStatusCode();
+            var source = (await sourceResponse.Content.ReadFromJsonAsync<AdminWebhookEventCredentialResponse>())!;
+            var automationResponse = await client.PostAsJsonAsync($"/api/v2/admin/agent-instances/{instanceId}/automations",
+                new AutomationRequest(0, true, "Review orders", "Inspect new orders",
+                    new("event", EventId: source.EventId), ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none")));
+            automationResponse.EnsureSuccessStatusCode();
+            var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(instanceId, "text"));
+            created.EnsureSuccessStatusCode();
+            sessionId = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!.SessionId;
+        }
+
+        await using var restarted = new DurableSqliteHostFactory(db, runScheduler: false);
+        using var retryClient = TestOwnerCapability.CreateOwnerClient(restarted);
+        await using var hub = await ConnectFactoryAsync(restarted);
+        var ready = ReadyWaiter(hub);
+        var attached = await hub.InvokeAsync<CommandAck>("Attach", Attach(sessionId));
+        Assert.True(attached.Accepted, attached.Error?.Message);
+        var attachment = await ready;
+        var completed = EventWaiter(hub, "agent.response.completed");
+        var send = await hub.InvokeAsync<CommandAck>("SendText", Text(sessionId, 1, attachment, "hi", Guid.NewGuid().ToString()));
+        Assert.True(send.Accepted, send.Error?.Message);
+        await completed;
+        var snapshot = await restarted.Services.GetRequiredService<IMemoryStore>().LoadAsync(Guid.Parse(sessionId));
+        Assert.NotNull(snapshot);
+        Assert.Equal("hi", Assert.Single(snapshot.Entries, entry => entry.Role == ConversationRole.User).Text);
+        var answer = Assert.Single(snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Completed, answer.Status);
+        Assert.False(string.IsNullOrWhiteSpace(answer.Text));
+    }
+
     [Fact(Timeout = 30_000)]
     public async Task Lost_text_ack_retry_with_changed_payload_after_host_reconstruction_is_rejected()
     {

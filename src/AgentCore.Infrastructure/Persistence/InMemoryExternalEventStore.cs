@@ -7,64 +7,76 @@ namespace AgentCore.Infrastructure.Persistence;
 public sealed class InMemoryExternalEventStore : IExternalEventStore
 {
     private readonly Lock _gate = new();
-    private readonly Dictionary<Guid, ExternalEventSource> _sources = [];
-    private readonly Dictionary<(Guid SourceId, string SourceEventId), ExternalEvent> _events = [];
+    private readonly Dictionary<Guid, WebhookEvent> _sources = [];
+    private readonly Dictionary<(Guid ResourceId, string SourceEventId), ExternalEvent> _events = [];
     private readonly Dictionary<(Guid EventId, Guid AutomationId), ExternalEventDelivery> _deliveries = [];
 
-    public ValueTask<ExternalEventSource> CreateAsync(
-        ExternalEventSource source,
+    public ValueTask<ExternalEventActivity> ReadActivityAsync(Guid resourceId, CancellationToken ct = default)
+    {
+        lock (_gate)
+        {
+            var receipts = _events.Values.Where(e => e.ResourceId == resourceId).OrderByDescending(e => e.AdmittedAtUtc).Take(20).ToArray();
+            var ids = receipts.Select(e => e.EventId).ToHashSet();
+            return ValueTask.FromResult(new ExternalEventActivity(receipts, _deliveries.Values.Where(d => ids.Contains(d.EventId)).ToArray()));
+        }
+    }
+
+    public ValueTask<WebhookEvent> CreateAsync(
+        WebhookEvent source,
         CancellationToken cancellationToken = default)
     {
         lock (_gate)
         {
-            if (_sources.Values.Any(item => item.SourceKey == source.SourceKey))
+            if (_sources.ContainsKey(source.ResourceId) || _sources.Values.Any(item => item.EventKey == source.EventKey))
             {
-                throw AgentCoreErrors.Conflict("Event source key is already in use.");
+                throw AgentCoreErrors.Conflict("Event key is already in use.");
             }
 
-            _sources[source.SourceId] = source;
+            _sources[source.ResourceId] = source;
             return ValueTask.FromResult(source);
         }
     }
 
-    public ValueTask<ExternalEventSource?> GetAsync(Guid sourceId, CancellationToken cancellationToken = default)
+    public ValueTask<WebhookEvent?> GetAsync(Guid resourceId, CancellationToken cancellationToken = default)
     {
         lock (_gate)
         {
-            return ValueTask.FromResult(_sources.GetValueOrDefault(sourceId));
+            return ValueTask.FromResult(_sources.GetValueOrDefault(resourceId));
         }
     }
 
-    public ValueTask<ExternalEventSource?> GetByKeyAsync(Guid sourceKey, CancellationToken cancellationToken = default)
+    public ValueTask<WebhookEvent?> GetByKeyAsync(string eventKey, CancellationToken cancellationToken = default)
     {
         lock (_gate)
         {
-            return ValueTask.FromResult(_sources.Values.FirstOrDefault(item => item.SourceKey == sourceKey));
+            return ValueTask.FromResult(_sources.Values.FirstOrDefault(item => item.EventKey == eventKey));
         }
     }
 
-    public ValueTask<IReadOnlyList<ExternalEventSource>> ListAsync(CancellationToken cancellationToken = default)
+    public ValueTask<IReadOnlyList<WebhookEvent>> ListAsync(CancellationToken cancellationToken = default)
     {
         lock (_gate)
         {
-            return ValueTask.FromResult<IReadOnlyList<ExternalEventSource>>(
-                _sources.Values.OrderBy(item => item.DisplayName).ThenBy(item => item.SourceId).ToArray());
+            return ValueTask.FromResult<IReadOnlyList<WebhookEvent>>(
+                _sources.Values.OrderBy(item => item.DisplayName).ThenBy(item => item.ResourceId).ToArray());
         }
     }
 
-    public ValueTask<ExternalEventSource> SaveAsync(
-        ExternalEventSource source,
+    public ValueTask<WebhookEvent> SaveAsync(
+        WebhookEvent source,
         long expectedRevision,
         CancellationToken cancellationToken = default)
     {
         lock (_gate)
         {
-            if (!_sources.TryGetValue(source.SourceId, out var current) || current.Revision != expectedRevision)
+            if (!_sources.TryGetValue(source.ResourceId, out var current) || current.Revision != expectedRevision)
             {
-                throw AgentCoreErrors.Conflict("Event source revision is stale.");
+                throw AgentCoreErrors.Conflict("Event revision is stale.");
             }
 
-            _sources[source.SourceId] = source;
+            if (source.EventKey != current.EventKey || source.CreatedAtUtc != current.CreatedAtUtc || source.Revision != expectedRevision + 1)
+                throw AgentCoreErrors.Validation("Event identity and key are immutable and revisions must advance by one.");
+            _sources[source.ResourceId] = source;
             return ValueTask.FromResult(source);
         }
     }
@@ -76,7 +88,7 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
     {
         lock (_gate)
         {
-            var key = (candidate.SourceId, candidate.SourceEventId);
+            var key = (candidate.ResourceId, candidate.SourceEventId);
             if (_events.TryGetValue(key, out var existing))
             {
                 return ValueTask.FromResult(new ExternalEventAdmit(ExternalEventAdmitKind.Duplicate, existing));
@@ -143,13 +155,13 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
     }
 
     public ValueTask<ExternalEvent?> GetEventAsync(
-        Guid sourceId,
+        Guid resourceId,
         string sourceEventId,
         CancellationToken cancellationToken = default)
     {
         lock (_gate)
         {
-            return ValueTask.FromResult(_events.GetValueOrDefault((sourceId, sourceEventId)));
+            return ValueTask.FromResult(_events.GetValueOrDefault((resourceId, sourceEventId)));
         }
     }
 }

@@ -99,11 +99,11 @@ vi.mock("../../services/adminApi", () => ({
     policy: { mode: "Disabled", scopes: [], sources: [], eligibleTools: [], frozen: false }, preparation: null,
     draftRevision: null, instructions: null, skills: [], knowledge: [], selectedTools: [], diff: null, resources: [] }),
   updateHarness: vi.fn(),
-  listEventSources: vi.fn().mockResolvedValue([]),
+  listWebhookEvents: vi.fn().mockResolvedValue([]),
   listEventSubscriptions: vi.fn().mockResolvedValue([]),
-  createEventSource: vi.fn(),
-  rotateEventSource: vi.fn(),
-  revokeEventSource: vi.fn(),
+  createWebhookEvent: vi.fn(),
+  rotateWebhookEvent: vi.fn(),
+  revokeWebhookEvent: vi.fn(),
   createEventSubscription: vi.fn(),
   connectApplication: vi.fn(),
   reauthenticateApplication: vi.fn(),
@@ -541,7 +541,7 @@ describe("AdminApp", () => {
       sourceVersion: 1,
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-02T00:00:00Z",
-      candidate: { systemInstructions: "Visible publish body", definitionId: "examiner" }
+      candidate: { systemInstructions: "Visible publish body", definitionId: "examiner", environment: { harness: [], knowledgeSources: [], workspace: {}, attachments: { allowUnreadUnsupportedTypes: false }, capabilities: { mode: "Selected", resolvedCapabilities: [] }, projection: { alwaysCapabilities: [] } } }
     });
     vi.mocked(publishAdminDefinitionDraft).mockResolvedValue({
       definitionId: "examiner",
@@ -607,7 +607,7 @@ describe("AdminApp", () => {
       sourceVersion: 1,
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-02T00:00:00Z",
-      candidate: { systemInstructions: "Visible publish body", definitionId: "examiner" }
+      candidate: { systemInstructions: "Visible publish body", definitionId: "examiner", environment: { harness: [], knowledgeSources: [], workspace: {}, attachments: { allowUnreadUnsupportedTypes: false }, capabilities: { mode: "Selected", resolvedCapabilities: [] }, projection: { alwaysCapabilities: [] } } }
     });
     fireEvent.click(screen.getByRole("tab", { name: "Test & Publish" }));
     await waitFor(() => {

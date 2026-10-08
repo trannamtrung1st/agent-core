@@ -38,7 +38,8 @@ public sealed class InMemoryArtifactStore : IArtifactStore
         ReadOnlyMemory<byte> bytes,
         Guid? sourceAttachmentId,
         string? workspaceLogicalPath,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Guid? agentRunId = null)
     {
         ThrowIfDeleted(sessionId);
         if (bytes.Length > _maxEach)
@@ -72,7 +73,7 @@ public sealed class InMemoryArtifactStore : IArtifactStore
                 hash,
                 sourceAttachmentId,
                 workspaceLogicalPath,
-                _time.GetUtcNow());
+                _time.GetUtcNow(), agentRunId);
             _items[id] = record;
             _blobs[id] = bytes.ToArray();
             return record;
@@ -114,11 +115,11 @@ public sealed class InMemoryArtifactStore : IArtifactStore
         return ValueTask.FromResult(items);
     }
 
-    public ValueTask<ArtifactPage> ListPageAsync(Guid sessionId, Guid? before, int limit, CancellationToken cancellationToken = default)
+    public ValueTask<ArtifactPage> ListPageAsync(Guid sessionId, Guid? before, int limit, CancellationToken cancellationToken = default, Guid? agentRunId = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (limit is < 1 or > 100) throw AgentCoreErrors.Validation("Artifact limit must be between 1 and 100.");
-        var ordered = _items.Values.Where(item => item.SessionId == sessionId && !_deleted.ContainsKey(sessionId))
+        var ordered = _items.Values.Where(item => item.SessionId == sessionId && !_deleted.ContainsKey(sessionId) && (agentRunId == null || item.AgentRunId == agentRunId))
             .OrderByDescending(item => item.CreatedAt).ThenByDescending(item => item.ArtifactId.ToString("D"), StringComparer.Ordinal).ToArray();
         var offset = before is null ? 0 : Array.FindIndex(ordered, item => item.ArtifactId == before) + 1;
         if (before is not null && offset == 0) throw AgentCoreErrors.Validation("Artifact cursor does not belong to this Session.");

@@ -75,9 +75,9 @@ export function AgentRunDetails({ run, onChange }: { run: AgentRun; onChange: (r
       {run.outcome?.attentionRequired ? <Typography.Text><ExclamationCircleOutlined /> Needs attention</Typography.Text> : null}
     </Flex>
     {run.sourceBackgroundSessionId ? <Typography.Text type="secondary">Background result from <ConversationDestination sessionId={run.sourceBackgroundSessionId} /></Typography.Text> : null}
-    {run.progress ? <Typography.Paragraph style={{ marginBottom: 0 }}>{run.progress}</Typography.Paragraph> : null}
+    {run.progress ? <Typography.Paragraph className="background-work-progress" style={{ marginBottom: 0 }}>{run.progress}</Typography.Paragraph> : null}
     <Descriptions size="small" column={1} items={[
-      { key: "model", label: "Model", children: run.modelCatalogKey },
+      { key: "model", label: "Model", children: <Typography.Text className="background-work-progress">{run.modelCatalogKey}</Typography.Text> },
       { key: "attempt", label: "Attempt", children: `${run.attemptCount} of ${run.maxAttempts}` },
       { key: "updated", label: "Updated", children: <time dateTime={run.updatedAt}>{formatChatTime(run.updatedAt) ?? "Unknown time"}</time> }
     ]} />

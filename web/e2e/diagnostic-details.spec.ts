@@ -43,7 +43,7 @@ test("background work shows a seeded terminal diagnostic", async ({ page }) => {
     failureCode: 'model-timeout', failureSummary: 'The model timed out.', diagnosticId: '019944af-0008-7000-8000-0000000000d9'
   })]);
   await page.getByRole('button', { name: 'Background work', exact: true }).click();
-  await page.getByRole('dialog', { name: 'Background work', exact: true }).getByRole('button', { name: 'View history', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Background work', exact: true }).getByRole('button', { name: 'View original result', exact: true }).click();
   const drawer = page.getByRole('dialog', { name: 'Failed check', exact: true });
   await expect(drawer.getByText('The model timed out.')).toBeVisible();
   await drawer.getByRole("button", { name: "Error details" }).click();

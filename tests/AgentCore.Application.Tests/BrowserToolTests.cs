@@ -365,15 +365,15 @@ public sealed class BrowserToolTests
             ToolLimits.MaxOutputBytes,
             admission: UserTurn());
         using var document = JsonDocument.Parse(serialized.Text);
-        var elements = document.RootElement.GetProperty("elements");
-        Assert.Equal("AC Probe", elements[0].GetProperty("state").GetProperty("value").GetString());
-        Assert.False(elements[0].GetProperty("state").TryGetProperty("checked", out _));
-        Assert.False(elements[0].GetProperty("state").TryGetProperty("selectedText", out _));
-        Assert.True(elements[1].GetProperty("state").GetProperty("checked").GetBoolean());
-        Assert.False(elements[1].GetProperty("state").TryGetProperty("value", out _));
-        Assert.Equal("Simple", elements[2].GetProperty("state").GetProperty("selectedText").GetString());
-        Assert.False(elements[3].TryGetProperty("state", out _));
-        Assert.Equal(BrowserToolLimits.MaxFillLength, elements[4].GetProperty("state").GetProperty("value").GetString()!.Length);
+        var elements = document.RootElement.GetProperty("elements").EnumerateArray().ToDictionary(e => e.GetProperty("ref").GetString()!);
+        Assert.Equal("AC Probe", elements["el_name"].GetProperty("state").GetProperty("value").GetString());
+        Assert.False(elements["el_name"].GetProperty("state").TryGetProperty("checked", out _));
+        Assert.False(elements["el_name"].GetProperty("state").TryGetProperty("selectedText", out _));
+        Assert.True(elements["el_published"].GetProperty("state").GetProperty("checked").GetBoolean());
+        Assert.False(elements["el_published"].GetProperty("state").TryGetProperty("value", out _));
+        Assert.Equal("Simple", elements["el_category"].GetProperty("state").GetProperty("selectedText").GetString());
+        Assert.False(elements["el_picture"].TryGetProperty("state", out _));
+        Assert.Equal(BrowserToolLimits.MaxFillLength, elements["el_long"].GetProperty("state").GetProperty("value").GetString()!.Length);
         Assert.DoesNotContain("selector", serialized.Text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("playwright", serialized.Text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("\"html\"", serialized.Text, StringComparison.OrdinalIgnoreCase);
@@ -951,16 +951,18 @@ public sealed class BrowserToolTests
             Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.BrowserScreenshot])
         };
         var sessionId = Guid.NewGuid();
+        var runId = Guid.NewGuid();
         var call = Call(ToolCatalog.BrowserScreenshot, "{}");
         var denied = await executor.ExecuteAsync(
             definition,
             sessionId,
             call,
             ToolLimits.MaxOutputBytes,
-            admission: UserTurn());
+            admission: UserTurn() with { AgentRunId = runId });
         Assert.Contains("artifactId", denied.Text, StringComparison.Ordinal);
         Assert.Empty(denied.Parts ?? []);
         Assert.Equal(1, browser.Captures);
+        Assert.Equal(runId, store.LastAgentRunId);
 
         var scope = "turn-1";
         for (var index = 0; index < 4; index++)
@@ -1219,8 +1221,9 @@ public sealed class BrowserToolTests
 
     private sealed class RecordingArtifacts : IArtifactStore
     {
-        public ValueTask<ArtifactPage> ListPageAsync(Guid sessionId, Guid? before, int limit, CancellationToken ct = default) => new(new ArtifactPage([], null, false));
+        public ValueTask<ArtifactPage> ListPageAsync(Guid sessionId, Guid? before, int limit, CancellationToken ct = default, Guid? agentRunId = null) => new(new ArtifactPage([], null, false));
         public int Created { get; private set; }
+        public Guid? LastAgentRunId { get; private set; }
 
         public bool Exists(Guid sessionId, Guid artifactId) => false;
 
@@ -1231,9 +1234,10 @@ public sealed class BrowserToolTests
             ReadOnlyMemory<byte> bytes,
             Guid? sourceAttachmentId,
             string? workspaceLogicalPath,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default, Guid? agentRunId = null)
         {
             Created++;
+            LastAgentRunId = agentRunId;
             return new(new ArtifactRecord(
                 Guid.CreateVersion7(),
                 sessionId,

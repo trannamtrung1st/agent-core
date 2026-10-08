@@ -5,7 +5,7 @@ import { fixtureBackground, fixtureRun } from '../../src/features/chat/agentRunF
 export function backgroundFixture(index: number, title: string, patch: Partial<AgentRun> = {}): BackgroundSession {
   const id = `90000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
   const run = { ...fixtureRun, agentRunId: id, sessionId: id, ...patch };
-  return { ...fixtureBackground, session: { ...fixtureBackground.session, sessionId: id, title },
+  return { ...fixtureBackground, originalTitle: title, session: { ...fixtureBackground.session, sessionId: id, title },
     origin: { ...fixtureBackground.origin, initialAgentRunId: run.agentRunId }, latestRun: run };
 }
 export function cursorPage<T>(items: T[], start: number, limit: number, key: (row: T) => string): CursorPage<T> {
@@ -29,7 +29,7 @@ export async function mockBackgroundSessions(page: Page, rows: BackgroundSession
     }
     return route.fulfill({ json: { items: row.latestRun ? [row.latestRun] : [], hasMore: false, nextCursor: null } });
   });
-  await page.route('**/sessions/*/artifacts?**', route => {
+  await page.route('**/sessions/*/artifacts/page?**', route => {
     const id = new URL(route.request().url()).pathname.split('/sessions/')[1].split('/')[0];
     return rows.some(row => row.session.sessionId === id) ? route.fulfill({ json: { items: [], hasMore: false, nextCursor: null } }) : route.continue();
   });

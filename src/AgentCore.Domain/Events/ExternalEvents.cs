@@ -1,71 +1,73 @@
 namespace AgentCore.Domain.Events;
 
-public static class ExternalEventTypes
+public static class EventKeys
 {
-    public const string OrderPlaced = "order.placed";
-
-    public static bool IsAllowed(string? eventType) =>
-        string.Equals(eventType, OrderPlaced, StringComparison.Ordinal);
+    public static bool IsValid(string? key) => key is { Length: > 0 and <= 64 }
+        && key[0] is >= 'a' and <= 'z'
+        && key.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '-' or '_')
+        && key[^1] is not '.' and not '-' and not '_';
+    public static string Require(string key) => IsValid(key) ? key
+        : throw new ArgumentException("Event key must be 1–64 lowercase letters, digits, dots, hyphens or underscores, starting with a letter and ending with a letter or digit.");
 }
 
-public enum ExternalEventSourceKind
+public enum WebhookEventKind
 {
     Webhook = 0
 }
 
-public enum ExternalEventSourceStatus
+public enum WebhookEventStatus
 {
     Active = 0,
     Revoked = 1
 }
 
-public sealed class ExternalEventSource
+public sealed class WebhookEvent
 {
-    public ExternalEventSource(
-        Guid sourceId,
+    public WebhookEvent(
+        Guid resourceId,
         string displayName,
-        ExternalEventSourceKind kind,
-        Guid sourceKey,
+        WebhookEventKind kind,
+        string eventKey,
         string? credentialHash,
-        ExternalEventSourceStatus status,
+        WebhookEventStatus status,
         long revision,
         DateTimeOffset createdAtUtc,
         DateTimeOffset updatedAtUtc)
     {
-        if (sourceId == Guid.Empty)
+        if (resourceId == Guid.Empty)
         {
-            throw new ArgumentException("Event source identifier is required.", nameof(sourceId));
+            throw new ArgumentException("Event identifier is required.", nameof(resourceId));
         }
 
-        if (sourceKey == Guid.Empty)
+        if (!EventKeys.IsValid(eventKey))
         {
-            throw new ArgumentException("Event source key is required.", nameof(sourceKey));
+            throw new ArgumentException("Event key is required.", nameof(eventKey));
         }
 
         if (!Enum.IsDefined(kind) || !Enum.IsDefined(status))
         {
-            throw new ArgumentException("Event source kind or status is not valid.");
+            throw new ArgumentException("Event kind or status is not valid.");
         }
 
         if (revision < 1)
         {
-            throw new ArgumentException("Event source revision starts at 1.");
+            throw new ArgumentException("Event revision starts at 1.");
         }
 
         DisplayName = RequireName(displayName);
         if (createdAtUtc.Offset != TimeSpan.Zero || updatedAtUtc.Offset != TimeSpan.Zero)
         {
-            throw new ArgumentException("Event source timestamps must be UTC.");
+            throw new ArgumentException("Event timestamps must be UTC.");
         }
 
-        if (status == ExternalEventSourceStatus.Active && string.IsNullOrWhiteSpace(credentialHash))
+        if (status == WebhookEventStatus.Active && string.IsNullOrWhiteSpace(credentialHash))
         {
-            throw new ArgumentException("An active event source requires a credential hash.");
+            throw new ArgumentException("An active event requires a credential hash.");
         }
 
-        SourceId = sourceId;
+        ResourceId = resourceId;
         Kind = kind;
-        SourceKey = sourceKey;
+        EventKey = eventKey;
         CredentialHash = string.IsNullOrWhiteSpace(credentialHash) ? null : credentialHash.Trim();
         Status = status;
         Revision = revision;
@@ -73,17 +75,17 @@ public sealed class ExternalEventSource
         UpdatedAtUtc = updatedAtUtc;
     }
 
-    public Guid SourceId { get; }
+    public Guid ResourceId { get; }
 
     public string DisplayName { get; }
 
-    public ExternalEventSourceKind Kind { get; }
+    public WebhookEventKind Kind { get; }
 
-    public Guid SourceKey { get; }
+    public string EventKey { get; }
 
     public string? CredentialHash { get; }
 
-    public ExternalEventSourceStatus Status { get; }
+    public WebhookEventStatus Status { get; }
 
     public long Revision { get; }
 
@@ -96,14 +98,14 @@ public sealed class ExternalEventSource
         var name = displayName?.Trim() ?? "";
         if (name.Length is < 1 or > 80)
         {
-            throw new ArgumentException("Event source name must be 1-80 characters.");
+            throw new ArgumentException("Event name must be 1-80 characters.");
         }
 
         foreach (var character in name)
         {
             if (char.IsControl(character))
             {
-                throw new ArgumentException("Event source name must not contain control characters.");
+                throw new ArgumentException("Event name must not contain control characters.");
             }
         }
 
@@ -131,21 +133,15 @@ public sealed class ExternalEvent
 {
     public ExternalEvent(
         Guid eventId,
-        Guid sourceId,
+        Guid resourceId,
         string sourceEventId,
-        string eventType,
-        DateTimeOffset occurredAtUtc,
+                DateTimeOffset occurredAtUtc,
         DateTimeOffset admittedAtUtc,
         string evidenceJson)
     {
-        if (eventId == Guid.Empty || sourceId == Guid.Empty)
+        if (eventId == Guid.Empty || resourceId == Guid.Empty)
         {
             throw new ArgumentException("External event identifiers are required.");
-        }
-
-        if (!ExternalEventTypes.IsAllowed(eventType))
-        {
-            throw new ArgumentException("Event type is not allowed.", nameof(eventType));
         }
 
         if (occurredAtUtc.Offset != TimeSpan.Zero || admittedAtUtc.Offset != TimeSpan.Zero)
@@ -159,9 +155,8 @@ public sealed class ExternalEvent
         }
 
         EventId = eventId;
-        SourceId = sourceId;
+        ResourceId = resourceId;
         SourceEventId = sourceEventId.Trim();
-        EventType = eventType;
         OccurredAtUtc = occurredAtUtc;
         AdmittedAtUtc = admittedAtUtc;
         EvidenceJson = evidenceJson;
@@ -169,11 +164,9 @@ public sealed class ExternalEvent
 
     public Guid EventId { get; }
 
-    public Guid SourceId { get; }
+    public Guid ResourceId { get; }
 
     public string SourceEventId { get; }
-
-    public string EventType { get; }
 
     public DateTimeOffset OccurredAtUtc { get; }
 

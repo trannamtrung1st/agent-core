@@ -42,7 +42,11 @@ public sealed record BrowserElement(
     string Role,
     string Name,
     IReadOnlyList<string> Actions,
-    BrowserControlState? State = null)
+    BrowserControlState? State = null,
+    string? Ancestors = null,
+    int Depth = 0,
+    IReadOnlyList<string>? AncestorRefs = null,
+    string? SearchText = null)
 {
     public BrowserElement(string Ref, string Role, string Name)
         : this(Ref, Role, Name, [])
@@ -61,7 +65,12 @@ public sealed record BrowserSnapshot(
     string? SnapshotId = null,
     string? TabRef = null,
     string? Content = null,
-    IReadOnlyList<BrowserTargetBox>? Boxes = null);
+    IReadOnlyList<BrowserTargetBox>? Boxes = null,
+    bool ContentTruncated = false,
+    bool IndexTruncated = false,
+    int? IndexedCount = null,
+    int CapturedNodeCount = 0,
+    string? Scope = null);
 
 public sealed record BrowserTargetBox(string Ref, float X, float Y, float Width, float Height);
 

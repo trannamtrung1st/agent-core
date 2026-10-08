@@ -63,7 +63,7 @@ export function ChatMessage({
             : "chat-message chat-message-assistant"
       }
     >
-      <Flex align="baseline" gap={8} wrap className="chat-message-meta">
+      <Flex align="baseline" gap={token.paddingXS} wrap className="chat-message-meta">
         {isUser ? null : (
           <Typography.Text type="secondary" className="chat-message-speaker">
             {speaker}
@@ -72,10 +72,15 @@ export function ChatMessage({
         {isApplication ? (
           <Typography.Text className="application-status">Still working</Typography.Text>
         ) : null}
-        {backgroundSource ? <Typography.Text type="secondary" className="chat-message-time">Background work completed · <ConversationDestination sessionId={backgroundSource} /></Typography.Text> : null}
         {timeLabel ? (
           <Typography.Text type="secondary" className="chat-message-time">
             <time dateTime={entry.createdAt}>{timeLabel}</time>
+          </Typography.Text>
+        ) : null}
+        {backgroundSource ? (
+          <Typography.Text type="secondary" className="chat-message-time chat-message-completion">
+            <span aria-hidden="true" className="chat-message-completion-separator">·</span>Background work completed{" "}
+            <ConversationDestination sessionId={backgroundSource} />
           </Typography.Text>
         ) : null}
       </Flex>

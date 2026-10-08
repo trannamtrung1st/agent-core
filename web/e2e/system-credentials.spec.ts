@@ -13,7 +13,7 @@ async function owner(page: Page, path: string, method = "GET", body?: unknown) {
 test("shared system credentials have safe CRUD, explicit bindings, profile reset and mobile navigation", async ({page}) => {
   test.setTimeout(120_000);
   const errors: string[] = []; page.on("pageerror", e => errors.push(e.message));
-  await page.goto("/admin/credentials");
+  await page.goto("/admin/connections/credentials");
   await page.waitForFunction(() => localStorage.getItem("agent-core.owner-capability"));
   const a = await owner(page, "agent-instances", "POST", { definitionId: "secretary", version: 3 });
   const b = await owner(page, "agent-instances", "POST", { definitionId: "secretary", version: 3 });
@@ -68,7 +68,7 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
   await input.fill("rotated-private-9546"); await replace.getByRole("button", {name:/Save credential/}).click(); await expect(replace).toBeHidden();
   await row.getByRole("button", {name:"Replace value"}).click(); await expect(input).toHaveValue(""); await replace.getByRole("button", {name:"Cancel"}).click();
   for (const [instance, alias] of [[a,"primary"],[b,"shared"]] as const) {
-    await page.goto(`/admin/instances/${instance.instanceId}/connections/credentials`);
+    await page.goto(`/admin/instances/${instance.instanceId}/credentials`);
     await page.getByRole("button", {name:"Bind credential",exact:true}).click();
     const bind = page.getByRole("dialog", {name:"Bind credential",exact:true});
     await bind.getByRole("combobox", {name:"System credential"}).fill(name);
@@ -85,7 +85,7 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
     await bind.getByRole("button", {name:"Bind credential",exact:true}).click();
     await expect(bind).toBeHidden(); await expect(page.getByRole("cell", {name:alias,exact:true})).toBeVisible();
   }
-  await page.goto("/admin/credentials");
+  await page.goto("/admin/connections/credentials");
   await page.getByRole("textbox", {name:"Search credentials",exact:true}).fill(name);
   await expect(row.getByRole("button",{name:"Delete",exact:true})).toBeDisabled();
   await row.getByRole("button",{name:"Edit",exact:true}).click();
@@ -96,7 +96,7 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
   await expect(edit.getByLabel("Metadata value 2")).toHaveValue("safe metadata value");
   await edit.getByRole("combobox", {name:"Status"}).click(); await page.getByTitle("Disabled", {exact:true}).click();
   await edit.getByRole("button", {name:/Save credential/}).click(); await expect(edit).toBeHidden(); await expect(row).toContainText("Disabled");
-  await page.goto(`/admin/instances/${a.instanceId}/connections`); await expect(page).toHaveURL(new RegExp(`/instances/${a.instanceId}/connections(?:/credentials)?$`));
+  await page.goto(`/admin/instances/${a.instanceId}/credentials`); await expect(page).toHaveURL(new RegExp(`/instances/${a.instanceId}/credentials$`));
   await expect(page.getByText("Password · Disabled")).toBeVisible();
   await page.getByRole("button",{name:"Reset browser profile",exact:true}).click();
   await page.getByRole("dialog",{name:"Reset browser profile?"}).getByRole("button",{name:"Cancel",exact:true}).click();
@@ -109,12 +109,12 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
   await page.getByRole("dialog",{name:"Unbind primary?"}).getByRole("button",{name:"Unbind",exact:true}).click();
   await expect(page.getByText("No credentials bound")).toBeVisible();
   await owner(page, `agent-instances/${b.instanceId}/lifecycle`, "PATCH", {expectedRevision:1,lifecycle:"Archived"});
-  await page.goto(`/admin/instances/${b.instanceId}/connections/credentials`); await expect(page.getByRole("button",{name:"Bind credential",exact:true})).toBeDisabled(); await expect(page.getByRole("button",{name:"Unbind",exact:true})).toBeDisabled();
+  await page.goto(`/admin/instances/${b.instanceId}/credentials`); await expect(page.getByRole("button",{name:"Bind credential",exact:true})).toBeDisabled(); await expect(page.getByRole("button",{name:"Unbind",exact:true})).toBeDisabled();
   for (const width of [1440,768,390]) {
     await page.setViewportSize({width,height:900}); await expect(page.getByRole("heading",{name:"Credential bindings"})).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
   }
-  await page.goto(`/admin/instances/${a.instanceId}/connections/event-sources`); await expect(page.getByRole("tab",{name:"Event sources",exact:true})).toHaveAttribute("aria-selected","true");
-  await expect(page.getByRole("region",{name:"Event sources"})).toBeVisible();
+  await page.goto("/admin/connections/events"); await expect(page.getByRole("tab",{name:"Events",exact:true})).toHaveAttribute("aria-selected","true");
+  await expect(page.getByRole("region",{name:"Events"})).toBeVisible();
   expect(errors).toEqual([]);
 });

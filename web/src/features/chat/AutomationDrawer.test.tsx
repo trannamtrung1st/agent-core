@@ -47,7 +47,7 @@ describe("AutomationDrawer", () => {
     expect(screen.getByText("Loading more…")).toBeInTheDocument();
     release([{ ...active, automationId: "schedule-20", instructions: "Reminder 20", status: "completed" }]);
     expect(await screen.findByText("Reminder 20")).toBeInTheDocument();
-    expect(screen.getByText("You’re all caught up")).toBeInTheDocument();
+    expect(screen.getByText("All items loaded")).toBeInTheDocument();
     expect(load).toHaveBeenLastCalledWith("session-1", { limit: 21, before: "schedule-19" });
   });
 

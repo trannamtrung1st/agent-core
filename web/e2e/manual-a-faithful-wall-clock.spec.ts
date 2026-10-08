@@ -190,7 +190,7 @@ test("MANUAL_A faithful wall-clock detached reminder", async ({ page }) => {
 
   await page.getByRole("button", { name: "Background work" }).click();
   const drawer = page.getByRole("dialog", { name: "Background work" });
-  await drawer.getByRole("button", { name: "View history", exact: true }).first().click();
+  await drawer.getByRole("button", { name: "View original result", exact: true }).first().click();
   await expect(page.getByRole("dialog").getByText(resultText).first()).toBeVisible({ timeout: 30_000 });
 
   const transcriptAfter = await page.locator(".conversation-scroll").innerText();
@@ -200,7 +200,7 @@ test("MANUAL_A faithful wall-clock detached reminder", async ({ page }) => {
   await page.reload();
   await expect(page.getByText("This conversation has ended.")).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Background work" }).click();
-  await drawer.getByRole("button", { name: "View history", exact: true }).first().click();
+  await drawer.getByRole("button", { name: "View original result", exact: true }).first().click();
   await expect(page.getByRole("dialog").getByText(resultText).first()).toBeVisible({ timeout: 15_000 });
   await expect(page.locator(".conversation-scroll")).not.toContainText(resultText);
 });

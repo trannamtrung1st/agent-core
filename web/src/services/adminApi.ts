@@ -98,7 +98,7 @@ export type AdminEffectiveConfiguration = {
     allowDaily: boolean;
     allowWeekly: boolean;
     allowIndefiniteRecurrence: boolean;
-    maxActiveRegistrations: number;
+    maxActiveRegistrations: number; allowEvents?: boolean;
     oneShotHorizonDays: number;
     minRecurrenceDays: number;
     allowedSourceKinds: string[];
@@ -959,59 +959,27 @@ export const unbindCredential = (id: string, b: CredentialBinding, instanceRevis
 export const resetBrowserProfile = (id: string, expectedInstanceRevision: number) =>
   credentialRequest<void>(`agent-instances/${id}/browser-profile/reset`, "POST", { expectedInstanceRevision, confirm: true });
 
-export type AdminEventSource = {
-  sourceId: string;
-  displayName: string;
-  kind: string;
-  sourceKey: string;
-  status: string;
-  revision: number;
+export type AdminWebhookEvent = {
+  eventId: string; displayName: string; eventKey: string; status: string; revision: number;
+  createdAt: string; updatedAt: string; subscriberCount: number; lastReceivedAt: string | null;
 };
-
-export type AdminEventSourceCredential = {
-  sourceId: string;
-  sourceKey: string;
-  token: string;
-  status: string;
+export type AdminWebhookEventCredential = { eventId: string; eventKey: string; token: string; status: string };
+export type AdminWebhookEventDetails = {
+  event: AdminWebhookEvent;
+  subscribers: { automationId: string; name: string; agentInstanceId: string; status: string }[];
+  deliveries: { receiptId: string; sourceEventId: string; receivedAt: string; automationId: string; agentInstanceId: string; status: string }[];
 };
-
-
-export async function listEventSources(): Promise<AdminEventSource[]> {
-  const response = await ownerFetch("/api/v2/admin/event-sources");
-  if (!response.ok) {
-    throw await adminProblemMessage(response, `Event sources failed (${response.status})`);
-  }
-  const payload = (await response.json()) as { items: AdminEventSource[] };
-  return payload.items;
+const eventResourcePath = "connections/events";
+export async function listWebhookEvents(): Promise<AdminWebhookEvent[]> {
+  return (await credentialRequest<{ items: AdminWebhookEvent[] }>(eventResourcePath)).items;
 }
-
-export async function createEventSource(displayName: string): Promise<AdminEventSourceCredential> {
-  const response = await ownerFetch("/api/v2/admin/event-sources", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ displayName })
-  });
-  if (!response.ok) {
-    throw await adminProblemMessage(response, `Event source create failed (${response.status})`);
-  }
-  return (await response.json()) as AdminEventSourceCredential;
-}
-
-export async function rotateEventSource(sourceId: string): Promise<AdminEventSourceCredential> {
-  const response = await ownerFetch(`/api/v2/admin/event-sources/${sourceId}/rotate`, { method: "POST" });
-  if (!response.ok) {
-    throw await adminProblemMessage(response, `Event source rotate failed (${response.status})`);
-  }
-  return (await response.json()) as AdminEventSourceCredential;
-}
-
-export async function revokeEventSource(sourceId: string): Promise<AdminEventSource> {
-  const response = await ownerFetch(`/api/v2/admin/event-sources/${sourceId}/revoke`, { method: "POST" });
-  if (!response.ok) {
-    throw await adminProblemMessage(response, `Event source revoke failed (${response.status})`);
-  }
-  return (await response.json()) as AdminEventSource;
-}
+export const getWebhookEvent = (eventId: string) => credentialRequest<AdminWebhookEventDetails>(`${eventResourcePath}/${eventId}`);
+export const createWebhookEvent = (displayName: string, eventKey: string) =>
+  credentialRequest<AdminWebhookEventCredential>(eventResourcePath, "POST", { displayName, eventKey });
+export const renameWebhookEvent = (eventId: string, displayName: string, expectedRevision: number) =>
+  credentialRequest<AdminWebhookEvent>(`${eventResourcePath}/${eventId}`, "PUT", { displayName, expectedRevision });
+export const rotateWebhookEvent = (eventId: string) => credentialRequest<AdminWebhookEventCredential>(`${eventResourcePath}/${eventId}/rotate`, "POST");
+export const revokeWebhookEvent = (eventId: string) => credentialRequest<AdminWebhookEvent>(`${eventResourcePath}/${eventId}/revoke`, "POST");
 
 export async function setAdminUnattendedModel(
   instanceId: string,
@@ -1087,7 +1055,7 @@ export type ScheduleTiming = {
   interval: number; localTime?: string | null; weekdays?: number[] | null; anchorAtUtc?: string | null;
   endAtUtc?: string | null; startDate?: string | null; endDate?: string | null; maxOccurrences?: number | null;
 };
-export type AutomationTrigger = { kind: "schedule"; schedule: ScheduleTiming } | { kind: "event"; eventSourceId: string; eventType: "order.placed" };
+export type AutomationTrigger = { kind: "schedule"; schedule: ScheduleTiming } | { kind: "event"; eventId: string };
 export type AutomationDraft = { requiresTools?: boolean; requiresVision?: boolean; executionTarget: AutomationTarget; completionDelivery: AutomationDelivery; expectedRevision: number; enabled: boolean; name: string; instructions: string; trigger: AutomationTrigger;
   modelKey: string | null; reasoningEffort: string | null };
 export type Automation = { requiresTools?: boolean; requiresVision?: boolean; executionTarget: AutomationTarget; completionDelivery: AutomationDelivery; suspensionReason?: string | null; automationId: string; revision: number; name: string; instructions: string; enabled: boolean; status: string;
@@ -1095,5 +1063,5 @@ export type Automation = { requiresTools?: boolean; requiresVision?: boolean; ex
   createdAt: string; nextRunAt: string | null; modelKey: string | null; reasoningEffort: string | null;
   effectiveModelKey: string | null; lastAgentRunId: string | null; executionStatus: string | null; outcome: string | null };
 export type AutomationPolicy = { allowOneShot: boolean; allowDaily: boolean; allowWeekly: boolean; allowFixedInterval: boolean;
-  allowIndefiniteRecurrence: boolean; oneShotHorizonDays: number; minRecurrenceDays: number; minFixedIntervalSeconds: number; maxActiveRegistrations: number };
+  allowIndefiniteRecurrence: boolean; oneShotHorizonDays: number; minRecurrenceDays: number; minFixedIntervalSeconds: number; maxActiveRegistrations: number; allowEvents?: boolean };
 export type AutomationReview = { items: Automation[]; policy?: AutomationPolicy | null };

@@ -44,7 +44,7 @@ public static class AutomationRules
 
     public static string Describe(AutomationTrigger trigger) => trigger switch
     {
-        EventTrigger e => $"{e.EventType} · Event Source {e.EventSourceId:D}",
+        EventTrigger e => $"Event {e.EventId:D}",
         ScheduleTrigger { Schedule: OneShotSchedule s } => $"Once · {s.AtUtc:O}",
         ScheduleTrigger { Schedule: FixedIntervalSchedule s } => $"Every {s.IntervalSeconds} seconds",
         ScheduleTrigger { Schedule: DailySchedule s } => $"Every {s.IntervalDays} day(s) · {s.LocalTime:HH:mm} · {s.TimeZoneId}",

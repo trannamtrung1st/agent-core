@@ -223,7 +223,7 @@ test("a detached reminder completes in Background work and cancel survives reloa
   makeReminderDue(sessionId);
   await page.getByRole("button", { name: "Background work" }).click();
   const drawer = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "All background Sessions", exact: true }) });
-  await page.getByRole("dialog", { name: "Background work", exact: true }).getByRole("button", { name: "View history", exact: true }).first().click();
+  await page.getByRole("dialog", { name: "Background work", exact: true }).getByRole("button", { name: "View original result", exact: true }).first().click();
   await expect(page.getByRole("dialog").getByText("Reminder: Call John.").first()).toBeVisible({ timeout: 25_000 });
   await expect(transcript).toContainText(/Scheduled/i);
   await expect(transcript).not.toContainText("Reminder: Call John.");
@@ -231,7 +231,7 @@ test("a detached reminder completes in Background work and cancel survives reloa
   await page.reload();
   await expect(page.getByText("This conversation has ended.")).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Background work" }).click();
-  await page.getByRole("dialog", { name: "Background work", exact: true }).getByRole("button", { name: "View history", exact: true }).first().click();
+  await page.getByRole("dialog", { name: "Background work", exact: true }).getByRole("button", { name: "View original result", exact: true }).first().click();
   await expect(page.getByRole("dialog").getByText("Reminder: Call John.").first()).toBeVisible({ timeout: 15_000 });
   await expect(page.locator(".conversation-scroll")).not.toContainText("Reminder: Call John.");
 
@@ -247,7 +247,7 @@ test("a detached reminder completes in Background work and cancel survives reloa
   await page.reload();
   await page.getByRole("button", { name: "Background work" }).click();
   await expect(page.getByRole("dialog", { name: "Background work", exact: true }).getByText("Cancelled").first()).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("dialog", { name: "Background work", exact: true }).getByRole("button", { name: "View history", exact: true }).last().click();
+  await page.getByRole("dialog", { name: "Background work", exact: true }).getByRole("button", { name: "View original result", exact: true }).last().click();
   await expect(page.getByRole("dialog").getByText("Reminder: Call John.").first()).toBeVisible();
   await expect(page.locator(".conversation-scroll")).not.toContainText("Reminder: Call John.");
 

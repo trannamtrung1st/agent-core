@@ -66,6 +66,25 @@ public sealed class BrowserEvidenceProgressTests
         Assert.Equal(1, progress.Repeated);
     }
 
+    [Fact]
+    public void Alternative_semantic_search_resets_streak_but_repeating_the_same_matches_does_not()
+    {
+        var progress = new BrowserEvidenceProgress();
+        var page = Page("http://store.test/", "Catalog", "el_1");
+        var search = """{"snapshotId":"snap_1","matches":[{"ref":"el_2","role":"button","name":"Open review","actions":["click"]}]}""";
+        progress.Note(ToolCatalog.BrowserSnapshot, page);
+        progress.Note(ToolCatalog.BrowserSnapshot, page);
+        Assert.Equal(1, progress.Repeated);
+        progress.Note(ToolCatalog.BrowserFind, search);
+        Assert.Equal(0, progress.Repeated);
+        progress.Note(ToolCatalog.BrowserSnapshot, page);
+        progress.Note(ToolCatalog.BrowserSnapshot, page);
+        progress.Note(ToolCatalog.BrowserFind, search.Replace("el_2", "el_3"));
+        Assert.Equal(1, progress.Repeated);
+        progress.Note(ToolCatalog.BrowserSnapshot, page);
+        Assert.True(progress.ShouldStop);
+    }
+
     private static string Page(string url, string visible, string reference, string value = "", bool? settled = null)
     {
         var settledJson = settled is bool flag ? $",\"settled\":{(flag ? "true" : "false")}" : string.Empty;

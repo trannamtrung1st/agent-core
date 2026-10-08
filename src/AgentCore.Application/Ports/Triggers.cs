@@ -145,8 +145,8 @@ public interface ITriggerStore
         CancellationToken cancellationToken = default);
 
     ValueTask<IReadOnlyList<Automation>> ListEventSubscriptionsAsync(
-        Guid eventSourceId,
-        string eventType,
+        Guid eventId,
+        bool activeOnly = true,
         CancellationToken cancellationToken = default);
 
     ValueTask<Automation> UpdateAsync(

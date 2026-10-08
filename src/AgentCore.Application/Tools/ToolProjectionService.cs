@@ -5,6 +5,9 @@ namespace AgentCore.Application.Tools;
 
 public static class ToolProjectionService
 {
+    private static readonly HashSet<string> BrowserBootstrap = new(StringComparer.Ordinal)
+    { ToolCatalog.BrowserNavigate, ToolCatalog.BrowserSnapshot, ToolCatalog.BrowserFind, ToolCatalog.BrowserClick, ToolCatalog.BrowserType, ToolCatalog.BrowserWait, ToolCatalog.BrowserClose };
+
     public static IReadOnlyList<ModelToolDefinition> Project(AgentDefinition definition, AgentContext? context, IToolConfigurationGate gate)
     {
         var eligible = ToolCatalog.Eligible(definition, context, gate);
@@ -14,6 +17,7 @@ public static class ToolProjectionService
             .SelectMany(s => s.RequiredCapabilities ?? []).ToHashSet(StringComparer.Ordinal);
         var loaded = context?.LoadedCapabilityIds ?? [];
         return eligible.Where(t => t.Name == ToolCatalog.CapabilitiesLoad
+            || BrowserBootstrap.Contains(t.Name)
             || always.Contains(t.Name, StringComparer.Ordinal) || skill.Contains(t.Name)
             || loaded.Contains(t.Name, StringComparer.Ordinal)
             || !ToolRegistry.Get(t.Name).Discoverable)

@@ -5,12 +5,12 @@ namespace AgentCore.Domain.Tests;
 public sealed class AutomationTests
 {
     [Fact]
-    public void EventTrigger_HasSourceAndType_WithoutTiming()
+    public void EventTrigger_HasStableEventId_WithoutTiming()
     {
-        var trigger = new EventTrigger(Guid.NewGuid(), "order.placed");
+        var trigger = new EventTrigger(Guid.NewGuid());
         Assert.Equal(AutomationTriggerKind.Event, trigger.Kind);
-        Assert.Throws<ArgumentException>(() => new EventTrigger(Guid.Empty, "order.placed"));
-        Assert.Throws<ArgumentException>(() => new EventTrigger(Guid.NewGuid(), "unknown"));
+        Assert.Throws<ArgumentException>(() => new EventTrigger(Guid.Empty));
+        Assert.True(trigger.SemanticEquals(new EventTrigger(trigger.EventId)));
     }
 
     [Fact]

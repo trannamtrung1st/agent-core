@@ -24,6 +24,6 @@ export function DrawerListFooter({ loadingMore, hasMore, error, count, onLoadMor
     {loadingMore ? <Flex align="center" gap={token.paddingXS} role="status"><Spin size="small" />Loading more…</Flex>
       : error ? <Button onClick={onRetry}>Try again</Button>
       : hasMore ? <Button onClick={onLoadMore}>Load more</Button>
-      : count > 0 ? <Typography.Text type="secondary">You’re all caught up</Typography.Text> : null}
+      : count > 0 ? <Typography.Text type="secondary">All items loaded</Typography.Text> : null}
   </Flex>;
 }

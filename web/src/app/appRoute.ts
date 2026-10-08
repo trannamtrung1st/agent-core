@@ -1,15 +1,14 @@
 export type AppArea = "chat" | "admin";
-export type AdminCollection = "definitions" | "instances" | "event-sources" | "credentials";
+export type AdminCollection = "definitions" | "instances" | "events" | "credentials";
 
 export const ADMIN_DEFINITION_TABS = ["versions", "drafts"] as const;
 export type AdminDefinitionTab = (typeof ADMIN_DEFINITION_TABS)[number];
-export const ADMIN_INSTANCE_TABS = ["identity", "skills", "continuity", "automation", "runs", "connections", "effective"] as const;
+export const ADMIN_INSTANCE_TABS = ["identity", "skills", "continuity", "automation", "runs", "credentials", "effective"] as const;
 export type AdminInstanceTab = (typeof ADMIN_INSTANCE_TABS)[number];
 export const ADMIN_CONTINUITY_TABS = ["memory", "experience"] as const;
 export const ADMIN_AUTOMATION_TABS = ["automations", "controls"] as const;
 export const ADMIN_IDENTITY_TABS = ["profile", "workspace"] as const;
-export const ADMIN_CONNECTION_TABS = ["credentials", "event-sources"] as const;
-export type AdminInstanceSection = (typeof ADMIN_IDENTITY_TABS)[number] | (typeof ADMIN_CONNECTION_TABS)[number] | (typeof ADMIN_CONTINUITY_TABS)[number] | (typeof ADMIN_AUTOMATION_TABS)[number];
+export type AdminInstanceSection = (typeof ADMIN_IDENTITY_TABS)[number] | (typeof ADMIN_CONTINUITY_TABS)[number] | (typeof ADMIN_AUTOMATION_TABS)[number];
 
 export type AdminRoute =
   | { area: "admin"; view: "home"; collection?: AdminCollection }
@@ -26,11 +25,13 @@ export function parseAppRoute(pathname: string): AppRoute {
   if (pathname === ADMIN_HOME || pathname === `${ADMIN_HOME}/`) {
     return { area: "admin", view: "home" };
   }
-  const collectionMatch = /^\/admin\/(definitions|instances|event-sources|credentials)\/?$/i.exec(pathname);
+  const collectionMatch = /^\/admin\/(definitions|instances)\/?$/i.exec(pathname);
   if (collectionMatch) {
     return { area: "admin", view: "home", collection: collectionMatch[1].toLowerCase() as AdminCollection };
   }
 
+  const connectionMatch = /^\/admin\/connections(?:\/(credentials|events))?\/?$/i.exec(pathname);
+  if (connectionMatch) return { area: "admin", view: "home", collection: connectionMatch[1] === "events" ? "events" : "credentials" };
   const definitionMatch = ADMIN_DEFINITION_PATTERN.exec(pathname);
   if (definitionMatch) {
     let definitionId: string;
@@ -54,7 +55,7 @@ export function parseAppRoute(pathname: string): AppRoute {
 }
 
 export function adminHomePath(collection: AdminCollection = "definitions"): string {
-  return collection === "definitions" ? ADMIN_HOME : `${ADMIN_HOME}/${collection}`;
+  return collection === "definitions" ? ADMIN_HOME : collection === "instances" ? `${ADMIN_HOME}/instances` : `${ADMIN_HOME}/connections/${collection}`;
 }
 
 export function adminDefinitionPath(definitionId: string, tab?: AdminDefinitionTab): string {
@@ -65,7 +66,6 @@ function isInstanceSection(tab: string | undefined, section: string | undefined)
   return section !== undefined && (tab === "continuity"
     ? ADMIN_CONTINUITY_TABS.some(value => value === section)
     : tab === "identity" ? ADMIN_IDENTITY_TABS.some(value => value === section)
-    : tab === "connections" ? ADMIN_CONNECTION_TABS.some(value => value === section)
     : tab === "automation" && ADMIN_AUTOMATION_TABS.some(value => value === section));
 }
 

@@ -20,7 +20,7 @@ public sealed class OrderPlacedEmitterTests
         Assert.Equal(first, retry);
         using var document = JsonDocument.Parse(first);
         Assert.Equal("order-105-placed", document.RootElement.GetProperty("eventId").GetString());
-        Assert.Equal("order.placed", document.RootElement.GetProperty("type").GetString());
+        Assert.False(document.RootElement.TryGetProperty("type", out _));
         Assert.Equal("105", document.RootElement.GetProperty("data").GetProperty("orderReference").GetString());
         Assert.False(document.RootElement.TryGetProperty("instructions", out _));
     }

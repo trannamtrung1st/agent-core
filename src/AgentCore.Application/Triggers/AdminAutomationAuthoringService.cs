@@ -56,8 +56,8 @@ public sealed class AdminAutomationAuthoringService(ITriggerStore store, Experie
         }
         else if (trigger is EventTrigger reaction && (enabled || current is null || !current.Trigger.SemanticEquals(trigger)))
         {
-            var source = await events.GetAsync(reaction.EventSourceId, ct) ?? throw AgentCoreErrors.NotFound("Event Source was not found.");
-            if (source.Status != ExternalEventSourceStatus.Active) throw AgentCoreErrors.Validation("Event Source is revoked.");
+            var source = await events.GetAsync(reaction.EventId, ct) ?? throw AgentCoreErrors.NotFound("Event was not found.");
+            if (source.Status != WebhookEventStatus.Active) throw AgentCoreErrors.Validation("Event is revoked.");
         }
         var changed = current is null || !current.Trigger.SemanticEquals(trigger) || current.Status != (enabled ? AutomationStatus.Active : AutomationStatus.Disabled);
         var proposed = new Automation(current?.AutomationId ?? ids.NewId(), owner,
@@ -93,8 +93,8 @@ public sealed class AdminAutomationAuthoringService(ITriggerStore store, Experie
         if (decision.Kind != TriggerAdmissionDecisionKind.Allow) throw AgentCoreErrors.Forbidden(decision.Reason ?? "Automation is disabled by policy.");
         if (automation.Trigger is EventTrigger reaction)
         {
-            var ingress = await events.GetAsync(reaction.EventSourceId, ct) ?? throw AgentCoreErrors.NotFound("Event Source was not found.");
-            if (ingress.Status != ExternalEventSourceStatus.Active) throw AgentCoreErrors.Validation("Event Source is revoked.");
+            var ingress = await events.GetAsync(reaction.EventId, ct) ?? throw AgentCoreErrors.NotFound("Event was not found.");
+            if (ingress.Status != WebhookEventStatus.Active) throw AgentCoreErrors.Validation("Event is revoked.");
         }
         var definition = await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct) ?? throw AgentCoreErrors.NotFound("Definition was not found.");
         var model = automation.ExecutionTarget.SessionId is { } targetId

@@ -49,8 +49,7 @@ for (const width of [1440, 390]) {
       ["Automation", "Automations", "automation/automations"],
       ["Automation", "Policies & models", "automation/controls"],
       ["Runs", undefined, "runs"],
-      ["Connections", "Credentials", "connections/credentials"],
-      ["Connections", "Event sources", "connections/event-sources"],
+      ["Credentials", undefined, "credentials"],
       ["Effective configuration", undefined, "effective"]
     ] as const) {
       await page.getByRole("tab", { name: tab, exact: true }).click();

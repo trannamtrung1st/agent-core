@@ -6,17 +6,17 @@ public static class HookEndpoints
 {
     public static void Map(WebApplication app)
     {
-        app.MapPost("/api/v1/hooks/{sourceKey:guid}", ReceiveAsync);
+        app.MapPost("/api/v1/hooks/{eventKey}", ReceiveAsync);
     }
 
     private static async Task<IResult> ReceiveAsync(
-        Guid sourceKey,
+        string eventKey,
         HttpRequest request,
         ExternalEventIngress ingress,
         CancellationToken cancellationToken)
     {
         if (!TryBearer(request, out var token)
-            || !await ingress.CredentialsMatchAsync(sourceKey, token, cancellationToken).ConfigureAwait(false))
+            || !await ingress.CredentialsMatchAsync(eventKey, token, cancellationToken).ConfigureAwait(false))
         {
             return Error(StatusCodes.Status401Unauthorized, "unauthorized");
         }
@@ -32,7 +32,7 @@ public static class HookEndpoints
             return Error(StatusCodes.Status400BadRequest, "payload_too_large");
         }
 
-        var result = await ingress.AdmitAsync(sourceKey, token, body, cancellationToken).ConfigureAwait(false);
+        var result = await ingress.AdmitAsync(eventKey, token, body, cancellationToken).ConfigureAwait(false);
         return result.Kind switch
         {
             ExternalEventIngressKind.Admitted => Accepted(StatusCodes.Status202Accepted, result.EventId),

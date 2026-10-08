@@ -32,7 +32,12 @@ public sealed record ScheduleConversationContext(
         {
             using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
-            if (!root.TryGetProperty("automationId", out var idElement)
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("scheduleKind", out var kindElement)
+                || kindElement.ValueKind != JsonValueKind.String
+                || !Enum.TryParse<TriggerScheduleKind>(kindElement.GetString(), ignoreCase: true, out var scheduleKind)
+                || !Enum.IsDefined(scheduleKind)
+                || !root.TryGetProperty("automationId", out var idElement)
                 || !Guid.TryParse(idElement.GetString(), out var automationId)
                 || automationId == Guid.Empty)
             {
@@ -48,12 +53,6 @@ public sealed record ScheduleConversationContext(
             var timeZone = root.TryGetProperty("timeZone", out var zoneElement)
                 ? zoneElement.GetString() ?? string.Empty
                 : string.Empty;
-            var kindText = root.TryGetProperty("scheduleKind", out var kindElement)
-                ? kindElement.GetString()
-                : null;
-            var scheduleKind = Enum.TryParse<TriggerScheduleKind>(kindText, ignoreCase: true, out var parsedKind)
-                ? parsedKind
-                : TriggerScheduleKind.OneShot;
             var statusText = root.TryGetProperty("status", out var statusElement)
                 ? statusElement.GetString()
                 : null;
@@ -97,13 +96,47 @@ public sealed record ScheduleConversationContext(
             registration.Status,
             registration.NextOccurrenceAtUtc);
 
+    public static ScheduleConversationContext? RefreshFromRegistrationJson(
+        ScheduleConversationContext? current,
+        string json,
+        TriggerCommandAction action)
+    {
+        var refreshed = TryFromRegistrationJson(json, action);
+        if (refreshed is not null || current is null)
+        {
+            return refreshed;
+        }
+
+        // A schedule changed into an event is no longer a valid schedule referent.
+        // Results for other Automations must not replace the current schedule.
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            if (root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty("automationId", out var id)
+                && id.ValueKind == JsonValueKind.String
+                && Guid.TryParse(id.GetString(), out var automationId)
+                && automationId == current.AutomationId)
+            {
+                return null;
+            }
+        }
+        catch (JsonException)
+        {
+            // An unrelated malformed result cannot revise a trusted referent.
+        }
+
+        return current;
+    }
+
     public static async ValueTask<ScheduleConversationContext?> TryReconstructLatestReferentAsync(
         IAutomationService registrations,
         TriggerOwner owner,
         CancellationToken cancellationToken = default)
     {
         var rows = await registrations.ListAsync(owner, null, cancellationToken).ConfigureAwait(false);
-        var latest = rows.FirstOrDefault(row => row.Status == AutomationStatus.Active);
+        var latest = rows.FirstOrDefault(row => row.Status == AutomationStatus.Active && row.Trigger is ScheduleTrigger);
         return latest is null ? null : FromRegistration(latest, TriggerCommandAction.Create);
     }
 
@@ -112,6 +145,7 @@ public sealed record ScheduleConversationContext(
         OneShotSchedule oneShot => oneShot.TimeZoneId,
         DailySchedule daily => daily.TimeZoneId,
         WeeklySchedule weekly => weekly.TimeZoneId,
+        FixedIntervalSchedule => "UTC",
         _ => string.Empty
     };
 

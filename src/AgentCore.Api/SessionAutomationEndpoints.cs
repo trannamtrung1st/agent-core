@@ -88,7 +88,7 @@ public static class SessionAutomationEndpoints
     {
         var (kind, zone, summary) = registration.Trigger is ScheduleTrigger scheduled
             ? Describe(scheduled.Schedule)
-            : ("event", (string?)null, $"{registration.EventType} · Event Source {registration.EventSourceId}");
+            : ("event", (string?)null, $"Event {registration.EventId}");
         return new SessionAutomationResponse(
             registration.AutomationId.ToString(),
             registration.Instructions,

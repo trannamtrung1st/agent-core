@@ -164,7 +164,7 @@ public sealed class ContinuityReviewJourneyTests
         var owner = new TriggerOwner(instance.InstanceId, LocalUserProfile.Id);
         for (var i = 0; i < 2; i++)
             await triggers.CreateAsync(new(Guid.NewGuid(), owner, AutomationStatus.Active, "Existing event subscription",
-                new EventTrigger(Guid.NewGuid(), "order.placed"), null, null, 0, 1, 1,
+                new EventTrigger(Guid.NewGuid()), null, null, 0, 1, 1,
                 new(TriggerAuthorizationOrigin.ApplicationEvent, null, null, now, now), null));
         Assert.Equal(2, await triggers.CountActiveAsync(owner));
         var finite = Draft(daily with { Interval = policy.MinRecurrenceDays, MaxOccurrences = 2 });

@@ -233,11 +233,9 @@ public static class TriggerScheduleCommands
         var policyDefinition = definition;
         var existing = required == TriggerCommandAction.Update
             ? await registrations.GetAsync(owner, RequireId(effectiveArguments), cancellationToken) : null;
-        var eventTrigger = effectiveArguments.TryGetProperty("eventSourceId", out _) || existing?.Trigger is EventTrigger && !HasScheduleFields(effectiveArguments);
+        var eventTrigger = effectiveArguments.TryGetProperty("eventId", out _) || existing?.Trigger is EventTrigger && !HasScheduleFields(effectiveArguments);
         var sourceKind = eventTrigger ? TriggerSourceKind.ApplicationEvent : TriggerSourceKind.Schedule;
-        if (effectiveName == ToolCatalog.AutomationCreate && effectiveArguments.TryGetProperty("eventType", out _) && !effectiveArguments.TryGetProperty("eventSourceId", out _))
-            return Result("validation", "An Event Source is required for an Event trigger.", clearProposal: false);
-        if (effectiveArguments.TryGetProperty("eventSourceId", out _) && HasScheduleFields(effectiveArguments))
+        if (effectiveArguments.TryGetProperty("eventId", out _) && HasScheduleFields(effectiveArguments))
             return Result("validation", "Choose exactly one Schedule or Event trigger.", clearProposal: false);
         var durablePolicyConfigured = instances is not null && definitions is not null && profiles is not null;
         if (durablePolicyConfigured)
@@ -277,12 +275,11 @@ public static class TriggerScheduleCommands
         {
             var json = effectiveName switch
             {
-                ToolCatalog.AutomationCreate when effectiveArguments.TryGetProperty("eventSourceId", out _) => automationAuthoring is null
+                ToolCatalog.AutomationCreate when effectiveArguments.TryGetProperty("eventId", out _) => automationAuthoring is null
                     ? Error("unavailable", "Automation authoring is unavailable.")
                     : RegistrationJson(await automationAuthoring.SaveAsync(owner.AgentInstanceId, null, 0, true,
                         TryString(effectiveArguments, "name", out var eventName) ? eventName : RequireInstructions(effectiveArguments)[..Math.Min(80, RequireInstructions(effectiveArguments).Length)],
-                        RequireInstructions(effectiveArguments), new EventTrigger(Guid.Parse(effectiveArguments.GetProperty("eventSourceId").GetString() ?? ""),
-                            effectiveArguments.GetProperty("eventType").GetString() ?? ""),
+                        RequireInstructions(effectiveArguments), new EventTrigger(Guid.Parse(effectiveArguments.GetProperty("eventId").GetString() ?? "")),
                         TryString(effectiveArguments, "modelKey", out var eventModel) ? eventModel : null,
                         TryString(effectiveArguments, "reasoningEffort", out var eventEffort) ? eventEffort : null, cancellationToken,
                         new(TriggerAuthorizationOrigin.CurrentUserTurn, context.SessionId, context.SourceEventId, context.UtcNow, context.UtcNow),
@@ -451,8 +448,8 @@ public static class TriggerScheduleCommands
         if (authoring is not null)
         {
             var trigger = current.Trigger;
-            if (arguments.TryGetProperty("eventSourceId", out var eventId))
-                trigger = new EventTrigger(Guid.Parse(eventId.GetString() ?? ""), arguments.GetProperty("eventType").GetString() ?? "");
+            if (arguments.TryGetProperty("eventId", out var eventId))
+                trigger = new EventTrigger(Guid.Parse(eventId.GetString() ?? ""));
             else if (hasSchedule)
             {
                 TriggerSchedule schedule;
@@ -1142,11 +1139,10 @@ public static class TriggerScheduleCommands
             sourceSessionId = registration.Provenance.SourceSessionId, sourceEventId = registration.Provenance.SourceEventId,
             createdAt = registration.Provenance.CreatedAt, updatedAt = registration.Provenance.UpdatedAt },
         trigger = registration.Trigger is EventTrigger eventTrigger
-            ? (object)new { kind = "event", eventSourceId = eventTrigger.EventSourceId, eventType = eventTrigger.EventType }
+            ? (object)new { kind = "event", eventId = eventTrigger.EventId }
             : new { kind = "schedule", schedule = InspectSchedule(((ScheduleTrigger)registration.Trigger).Schedule) },
         triggerKind = registration.Trigger.Kind.ToString(),
-        eventSourceId = registration.EventSourceId,
-        eventType = registration.EventType,
+        eventId = registration.EventId,
         scheduleKind = registration.Trigger is ScheduleTrigger scheduled ? scheduled.Schedule.Kind.ToString() : null,
         timeZone = registration.Trigger is ScheduleTrigger timing ? TimeZoneOf(timing.Schedule) : null,
         nextOccurrenceAtUtc = registration.NextOccurrenceAtUtc,

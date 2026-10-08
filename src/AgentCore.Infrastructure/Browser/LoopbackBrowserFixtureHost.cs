@@ -303,7 +303,7 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
                 return;
             }
 
-            if (path is "/browser-v2.html" or "/browser-v2-frame.html")
+            if (path is "/browser-v2.html" or "/browser-v2-frame.html" or "/browser-dense.html" or "/browser-custom-tree.html")
             {
                 await WriteResourceAsync(context, "AgentCore.Infrastructure.Browser.Fixture." + path[1..], 200).ConfigureAwait(false);
                 return;

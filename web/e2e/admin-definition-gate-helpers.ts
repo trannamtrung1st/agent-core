@@ -15,22 +15,23 @@ export async function ensureToolAllowlisted(
   toolName: string
 ) {
   await draftEditor.getByRole("tab", { name: "Capabilities" }).click();
-  const allowlist = draftEditor.getByLabel("Tool allowlist");
+  const allowlist = draftEditor.getByLabel("Authorized capabilities");
   await expect(allowlist).toBeVisible();
-  // Responsive Select hides tags, so inspect the option's selected state.
-  await page.keyboard.press("Escape");
-  await allowlist.click();
-  await allowlist.fill(toolName);
-  const option = page.locator(`.ant-select-item-option[title="${toolName}"]`).last();
-  await expect(option).toBeVisible();
-  if (await option.getAttribute("aria-selected") === "true"
-      || (await option.getAttribute("class"))?.includes("ant-select-item-option-selected")) {
+  // The tool-offered fixture requires immediate projection as well as authority.
+  // Responsive Select hides tags, so inspect each option's selected state.
+  for (const selector of [allowlist, draftEditor.getByLabel("Always projected capabilities")]) {
     await page.keyboard.press("Escape");
-    return;
+    await selector.click();
+    await selector.fill(toolName);
+    const option = page.locator(`.ant-select-dropdown:visible .ant-select-item-option[title="${toolName}"]`);
+    await expect(option).toBeVisible();
+    if (await option.getAttribute("aria-selected") !== "true"
+        && !(await option.getAttribute("class"))?.includes("ant-select-item-option-selected")) await option.click();
+    await page.keyboard.press("Escape");
   }
-  await option.click();
-  await page.keyboard.press("Escape");
+
   const saveDraft = draftEditor.getByRole("button", { name: "Save draft" });
+  if (await saveDraft.isDisabled()) return;
   await Promise.all([
     page.waitForResponse(
       (response) =>

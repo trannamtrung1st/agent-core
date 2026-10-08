@@ -32,9 +32,10 @@ internal static class AdminAutomationEndpoints
                     : definition is null ? null : ExecutionModelPolicy.Resolve(catalog, definition, instance, registration).Pin?.CatalogKey;
                 items.Add(Project(registration, effective, last));
             }
+            var schedulesAllowed = definition is not null && OccurrenceCompatibility.Allows(definition, TriggerSourceKind.Schedule);
             return new AutomationReview(items,
-                definition?.TriggerPolicy is { } p ? new AutomationPolicy(p.AllowOneShot, p.AllowDaily, p.AllowWeekly, p.AllowFixedInterval,
-                    p.AllowIndefiniteRecurrence, p.OneShotHorizonDays, p.MinRecurrenceDays, p.MinFixedIntervalSeconds, p.MaxActiveRegistrations) : null);
+                definition?.TriggerPolicy is { } p ? new AutomationPolicy(schedulesAllowed && p.AllowOneShot, schedulesAllowed && p.AllowDaily, schedulesAllowed && p.AllowWeekly, schedulesAllowed && p.AllowFixedInterval,
+                    p.AllowIndefiniteRecurrence, p.OneShotHorizonDays, p.MinRecurrenceDays, p.MinFixedIntervalSeconds, p.MaxActiveRegistrations, p.Enabled && p.AllowedSourceKinds.Contains("applicationEvent", StringComparer.Ordinal)) : null);
         }));
         group.MapPost("", (Guid instanceId, AutomationRequest request, AdminAutomationAuthoringService service, CancellationToken ct) => Respond(async () =>
             Project(await service.SaveAsync(instanceId, null, request.ExpectedRevision, request.Enabled, request.Name, request.Instructions, ParseTrigger(request.Trigger), request.ModelKey, request.ReasoningEffort, ct, executionTarget: ParseTarget(request.ExecutionTarget), completionDelivery: ParseDelivery(request.CompletionDelivery), requiresTools: request.RequiresTools, requiresVision: request.RequiresVision))));
@@ -62,15 +63,15 @@ internal static class AdminAutomationEndpoints
         if (trigger is null) throw AgentCoreErrors.Validation("Trigger is required.");
         return trigger.Kind switch
         {
-            "schedule" when trigger.EventSourceId is null && trigger.EventType is null => new ScheduleTrigger(Parse(trigger.Schedule)),
-            "event" when trigger.Schedule is null && Guid.TryParse(trigger.EventSourceId, out var source) => new EventTrigger(source, trigger.EventType ?? ""),
-            _ => throw AgentCoreErrors.Validation("Trigger must contain either Schedule timing or Event Source and type.")
+            "schedule" when trigger.EventId is null => new ScheduleTrigger(Parse(trigger.Schedule)),
+            "event" when trigger.Schedule is null && Guid.TryParse(trigger.EventId, out var source) => new EventTrigger(source),
+            _ => throw AgentCoreErrors.Validation("Trigger must contain either Schedule timing or an Event ID.")
         };
     }
     private static AutomationTriggerDto Trigger(AutomationTrigger trigger) => trigger switch
     {
         ScheduleTrigger s => new("schedule", Timing(s.Schedule)),
-        EventTrigger e => new("event", EventSourceId: e.EventSourceId.ToString("D"), EventType: e.EventType),
+        EventTrigger e => new("event", EventId: e.EventId.ToString("D")),
         _ => throw AgentCoreErrors.Validation("Trigger is unavailable.")
     };
     private static TriggerSchedule Parse(AutomationTiming? t)

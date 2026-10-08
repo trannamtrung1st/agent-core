@@ -56,6 +56,63 @@ public sealed class TriggerScheduleContinuationTests
                 TriggerCommandAction.Create));
     }
 
+    [Theory]
+    [InlineData("null")]
+    [InlineData("\"Event\"")]
+    [InlineData("\"Unknown\"")]
+    [InlineData("\"999\"")]
+    [InlineData("42")]
+    public void Event_or_invalid_tool_results_cannot_become_schedule_referents(string scheduleKind)
+    {
+        var json = $$"""{"automationId":"{{RegistrationA}}","instructions":"Review orders","triggerKind":"Event","scheduleKind":{{scheduleKind}},"timeZone":null,"status":"Active"}""";
+        Assert.Null(ScheduleConversationContext.TryFromRegistrationJson(json, TriggerCommandAction.Create));
+        Assert.Null(ScheduleConversationContext.TryFromRegistrationJson(
+            $$"""{"automationId":"{{RegistrationA}}","instructions":"Review orders","triggerKind":"Event"}""",
+            TriggerCommandAction.Update));
+    }
+
+    [Theory]
+    [InlineData(TriggerScheduleKind.OneShot)]
+    [InlineData(TriggerScheduleKind.Daily)]
+    [InlineData(TriggerScheduleKind.Weekly)]
+    [InlineData(TriggerScheduleKind.FixedInterval)]
+    public void Schedule_tool_results_preserve_kind_and_cancellation_state(TriggerScheduleKind kind)
+    {
+        var json = $$"""{"automationId":"{{RegistrationA}}","revision":2,"instructions":"Hello","scheduleKind":"{{kind}}","timeZone":"UTC","status":"Cancelled"}""";
+        var referent = ScheduleConversationContext.TryFromRegistrationJson(json, TriggerCommandAction.Cancel);
+        Assert.NotNull(referent);
+        Assert.Equal(kind, referent.ScheduleKind);
+        Assert.Equal("UTC", referent.TimeZoneId);
+        Assert.Equal(TriggerCommandAction.Cancel, referent.LastAction);
+        Assert.False(referent.IsReferentAvailable);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Event_tool_result_invalidates_only_the_same_schedule_referent(bool sameAutomation)
+    {
+        var id = sameAutomation ? RegistrationA : RegistrationB;
+        var json = $$"""{"automationId":"{{id}}","instructions":"Review orders","triggerKind":"Event","scheduleKind":null,"timeZone":null,"status":"Active"}""";
+        var referent = ScheduleConversationContext.RefreshFromRegistrationJson(
+            HelloVietnam, json, TriggerCommandAction.Update);
+        if (sameAutomation) Assert.Null(referent);
+        else Assert.Equal(HelloVietnam, referent);
+    }
+
+    [Fact]
+    public void Fixed_interval_reconstruction_uses_the_same_utc_timezone_as_tool_results()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var registration = new Automation(RegistrationA, new TriggerOwner(InstanceId, ProfileId),
+            AutomationStatus.Active, "Hello", new FixedIntervalSchedule(3600, now, null, null),
+            now, null, 0, 1, 1,
+            new TriggerProvenance(TriggerAuthorizationOrigin.CurrentUserTurn, null, null, now, now), null);
+        var referent = ScheduleConversationContext.FromRegistration(registration, TriggerCommandAction.Create);
+        Assert.Equal("UTC", referent.TimeZoneId);
+        Assert.Equal(TriggerScheduleKind.FixedInterval, referent.ScheduleKind);
+    }
+
     [Fact]
     public async Task Referent_update_and_cancel_authorize_with_context()
     {
@@ -155,6 +212,46 @@ public sealed class TriggerScheduleContinuationTests
 
         await using var reattached = await harness.ReattachRuntimeAsync();
         Assert.NotNull(await harness.Tools.TryReconstructScheduleConversationContextAsync(InstanceId, ProfileId));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Reattach_with_latest_event_automation_keeps_chat_usable_and_only_restores_schedule_referents(bool hasSchedule)
+    {
+        var harness = await TriggerScheduleRuntimeTests.StartHarnessForContinuationAsync();
+        var owner = new TriggerOwner(InstanceId, ProfileId);
+        Guid? scheduleId = null;
+        await using (var runtime = harness.Runtime)
+        {
+            if (hasSchedule)
+            {
+                Assert.True(await runtime.SubmitUserTextAsync("schedule Hello at 8:49 Vietnam time"));
+                await runtime.WaitUntilIdleAsync();
+                scheduleId = Assert.Single(await harness.Store.ListAsync(owner, null)).AutomationId;
+            }
+        }
+
+        var now = harness.Time.GetUtcNow().AddMinutes(1);
+        var eventAutomation = new Automation(
+            Guid.NewGuid(), owner, AutomationStatus.Active, "Review new orders",
+            new EventTrigger(Guid.NewGuid()), null, null, 0, 1, 1,
+            new TriggerProvenance(TriggerAuthorizationOrigin.CurrentUserTurn, null, null, now, now), null);
+        await harness.Store.CreateAsync(eventAutomation);
+        Assert.Equal(eventAutomation.AutomationId, (await harness.Store.ListAsync(owner, null))[0].AutomationId);
+
+        var referent = await harness.Tools.TryReconstructScheduleConversationContextAsync(InstanceId, ProfileId);
+        Assert.Equal(scheduleId, referent?.AutomationId);
+
+        await using var reattached = await harness.ReattachRuntimeAsync();
+        Assert.Equal(SessionStatus.Attached, reattached.Snapshot.Status);
+        Assert.True(await reattached.SubmitUserTextAsync("hi"));
+        await reattached.WaitUntilIdleAsync();
+        Assert.Contains(reattached.Snapshot.Entries, entry => entry.Role == ConversationRole.User && entry.Text == "hi");
+        var answer = reattached.Snapshot.Entries[^1];
+        Assert.Equal(ConversationRole.Assistant, answer.Role);
+        Assert.Equal(EntryStatus.Completed, answer.Status);
+        Assert.False(string.IsNullOrWhiteSpace(answer.Text));
     }
 
     [Fact]

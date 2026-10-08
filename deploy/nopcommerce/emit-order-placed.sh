@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Emit one allowlisted order.placed webhook payload.
+# Emit one bounded webhook signal for a configured Event.
 # This script only POSTs that JSON. It does not call an agent API, open a browser, or run SQL.
 set -euo pipefail
 
@@ -20,7 +20,6 @@ fi
 payload="$(python3 -c 'import json, os, sys
 body = {
     "eventId": os.environ["SOURCE_EVENT_ID"],
-    "type": "order.placed",
     "data": {"orderReference": os.environ["ORDER_REFERENCE"]},
 }
 occurred = os.environ.get("OCCURRED_AT_UTC", "").strip()

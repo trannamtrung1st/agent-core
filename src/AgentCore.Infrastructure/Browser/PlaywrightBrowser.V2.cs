@@ -68,10 +68,19 @@ public sealed partial class PlaywrightBrowser
                             scope = await Target(targetRef);
                             if (scope is null) return new("stale_reference");
                         }
-                        var snapshot = await CaptureAsync(session, command.SessionId, ct).ConfigureAwait(false);
-                        if (scope is not null) snapshot = await ScopeSnapshotAsync(session, command.SessionId, snapshot, scope, ct);
                         var depth = Int(args, "depth", 32);
-                        var content = string.Join('\n', snapshot.Content!.Split('\n').Where(line => line.TakeWhile(char.IsWhiteSpace).Count() / 2 < depth));
+                        var snapshot = scope is not null
+                            ? await ScopeSnapshotAsync(session, command.SessionId, scope, depth, String(args, "targetRef")!, ct)
+                            : await CaptureAsync(session, command.SessionId, ct).ConfigureAwait(false);
+                        var lines = snapshot.Content!.Split('\n');
+                        var included = lines.Where(line => line.TakeWhile(char.IsWhiteSpace).Count() / 2 < depth).ToArray();
+                        var content = string.Join('\n', included);
+                        if (scope is null && depth < 32)
+                        {
+                            var references = Regex.Matches(content, @"\[ref=([^\]]+)\]").Select(m => m.Groups[1].Value).ToHashSet();
+                            snapshot = snapshot with { Elements = snapshot.Elements.Where(e => references.Contains(e.Ref)).ToArray(),
+                                VisibleText = "", TextTruncated = true, ContentTruncated = snapshot.ContentTruncated || included.Length < lines.Length };
+                        }
                         var boxes = new List<BrowserTargetBox>();
                         if (args.TryGetProperty("boxes", out var showBoxes) && showBoxes.GetBoolean())
                             foreach (var element in snapshot.Elements.Take(20))
@@ -90,9 +99,26 @@ public sealed partial class PlaywrightBrowser
                             try { regex = new Regex(pattern, RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(50)); }
                             catch (ArgumentException) { return new("invalid"); }
                         }
-                        var matches = session.SnapshotIndex.Where(e => regex?.IsMatch(e.Name + " " + e.Role) ?? (e.Name + " " + e.Role).Contains(text!, StringComparison.OrdinalIgnoreCase))
-                            .Take(Int(args, "limit", 10)).Select(e => new { @ref = e.Ref, role = e.Role, name = e.Name, actions = e.Actions, state = e.State }).ToArray();
-                        return Data(new { snapshotId = session.SnapshotId, tabRef = FindPageId(session), matches, untrustedBrowserContent = true });
+                        var role = String(args, "role"); var name = String(args, "name"); var ancestor = String(args, "ancestor");
+                        var offset = Int(args, "offset", 0); var limit = Int(args, "limit", 10);
+                        IEnumerable<BrowserElement> source = session.SnapshotIndex;
+                        if (String(args, "targetRef") is { } scopeRef)
+                        {
+                            _ = await Target(scopeRef);
+                            source = source.Where(e => e.Ref == scopeRef || e.AncestorRefs?.Contains(scopeRef) == true);
+                        }
+                        var all = source.Where(e => (regex?.IsMatch((e.SearchText ?? "") + " " + e.Name + " " + e.Role + " " + e.Ancestors)
+                                ?? ((e.SearchText ?? "") + " " + e.Name + " " + e.Role + " " + e.Ancestors).Contains(text!, StringComparison.OrdinalIgnoreCase))
+                            && (role is null || e.Role.Equals(role, StringComparison.OrdinalIgnoreCase))
+                            && (name is null || e.Name.Contains(name, StringComparison.OrdinalIgnoreCase))
+                            && (ancestor is null || e.Ancestors?.Contains(ancestor, StringComparison.OrdinalIgnoreCase) == true)).ToArray();
+                        var matches = all.Skip(offset).Take(limit).Select(e => new { @ref = e.Ref, role = e.Role, name = e.Name, actions = e.Actions, state = e.State is null ? null : new { value = e.State.Value, @checked = e.State.Checked, selectedText = e.State.SelectedText }, ancestors = e.Ancestors }).ToArray();
+                        return Data(new { snapshotId = session.SnapshotId, tabRef = FindPageId(session), matches,
+                            matchCount = all.Length, returnedCount = matches.Length, offset,
+                            hasMore = offset + matches.Length < all.Length, truncated = offset + matches.Length < all.Length || session.IndexTruncated,
+                            nextOffset = offset + matches.Length < all.Length ? (int?)(offset + matches.Length) : null,
+                            indexAvailable = true, indexTruncated = session.IndexTruncated,
+                            untrustedBrowserContent = true });
                     }
                 case "browser.tabs":
                     {
@@ -327,6 +353,7 @@ public sealed partial class PlaywrightBrowser
             return new(null, await CaptureAsync(session, command.SessionId, ct), Downloads: await DrainDownloadsAsync(session, ct));
         }
         catch (BrowserDialogPendingException) { return new("dialog_pending"); }
+        catch (BrowserReferenceException ex) { return new(ex.Code); }
         catch (BrowserTargetDeniedException) { return new("target_denied"); }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -362,7 +389,17 @@ public sealed partial class PlaywrightBrowser
         }
         async Task<ILocator?> Target(string? reference)
         {
-            if (reference is null || !_refs.TryGetValue(reference, out var live) || live.SessionId != command.SessionId || live.Generation != session.Generation) return null;
+            var error = ReferenceError(reference, command.SessionId, out var live);
+            if (error is not null) throw new BrowserReferenceException(error);
+            if (live!.SemanticLocator is not null && await live.SemanticLocator.CountAsync().WaitAsync(ct) > live.ExpectedMatchCount)
+                throw new BrowserReferenceException("ambiguous_reference");
+            var count = await live.Handle.CountAsync().WaitAsync(ct);
+            if (count == 0) throw new BrowserReferenceException("target_missing");
+            if (count > 1) throw new BrowserReferenceException("ambiguous_reference");
+            if (live.CustomTarget && metadata.Effect != ToolEffect.ReadOnly && !await live.Handle.EvaluateAsync<bool>(CustomTargetEligible).WaitAsync(ct))
+                throw new BrowserReferenceException("non_actionable_target");
+            if (metadata.Feature is BrowserFeature.Click or BrowserFeature.Type or BrowserFeature.FillForm or BrowserFeature.SelectOption
+                && live.Actions.Count == 0) throw new BrowserReferenceException("non_actionable_target");
             var frameUrl = await live.Handle.EvaluateAsync<string>("el => el.ownerDocument.location.href").WaitAsync(ct);
             if (metadata.Effect == ToolEffect.ReadOnly ? !Allows(session, frameUrl, true)
                 : !BrowserTargetPolicy.EvaluateAct(_policy.InteractionMode, frameUrl, LeaseOrigins(session) ?? _policy.EffectiveInteractionOrigins, _policy.PolicyMode).Allowed) throw new BrowserTargetDeniedException();
@@ -370,6 +407,8 @@ public sealed partial class PlaywrightBrowser
         }
         async Task<bool> Ordinary(ILocator target) => await target.EvaluateAsync<bool>(OrdinaryElement).WaitAsync(ct);
     }
+
+    private sealed class BrowserReferenceException(string code) : Exception { public string Code { get; } = code; }
 
     private sealed class BrowserDialogPendingException : Exception;
     private sealed class BrowserTargetDeniedException : Exception;

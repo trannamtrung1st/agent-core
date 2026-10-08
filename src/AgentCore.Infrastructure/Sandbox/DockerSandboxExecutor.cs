@@ -111,7 +111,7 @@ public sealed class DockerSandboxExecutor(
                         content.Bytes,
                         sourceAttachmentId: null,
                         export,
-                        cancellationToken)
+                        cancellationToken, request.AgentRunId)
                     .ConfigureAwait(false);
                 artifactId = created.ArtifactId;
             }

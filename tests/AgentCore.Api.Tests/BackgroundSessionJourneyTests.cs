@@ -11,6 +11,10 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.EntityFrameworkCore;
+using AgentCore.Infrastructure.Persistence;
 
 namespace AgentCore.Api.Tests;
 
@@ -39,7 +43,7 @@ public sealed class BackgroundSessionJourneyTests
         await runs.AdmitImmediateAsync(child.Session, child.Run, source.Claim!.Generation);
         var artifacts = services.GetRequiredService<IArtifactStore>();
         for (var index = 0; index < 51; index++)
-            await artifacts.CreateAsync(child.Session.SessionId, $"result-{index}.txt", "text/plain", "result"u8.ToArray(), null, null);
+            await artifacts.CreateAsync(child.Session.SessionId, $"result-{index}.txt", "text/plain", "result"u8.ToArray(), null, null, agentRunId: child.Run.AgentRunId);
         var backgroundPath = $"/api/v2/agent-instances/{instanceId}/background-sessions";
         var listed = await client.GetFromJsonAsync<BackgroundSessionPageResponse>(backgroundPath);
         var row = Assert.Single(listed!.Items);
@@ -77,6 +81,95 @@ public sealed class BackgroundSessionJourneyTests
         var cancelled = await client.PostAsJsonAsync(path + $"/agent-runs/{child.Run.AgentRunId}/cancel", new CancelAgentRunRequest(child.Run.Revision));
         cancelled.EnsureSuccessStatusCode();
         Assert.Equal("cancelled", (await cancelled.Content.ReadFromJsonAsync<AgentRunResponse>())!.Status);
+    }
+
+    [Theory(Timeout = 60000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Original_result_and_files_survive_followups_rename_and_sqlite_reopen(bool sqlite)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"background-result-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var db = Path.Combine(root, "state.db");
+        await using WebApplicationFactory<Program> factory = sqlite ? new StableSqliteHost(db, root) : new PausedDispatchHost();
+        using var client = TestOwnerCapability.CreateOwnerClient(factory);
+        var services = factory.Services;
+        var instanceId = TestInstances.Create(client, "examiner", 1);
+        var memory = services.GetRequiredService<IMemoryStore>();
+        var runs = services.GetRequiredService<IAgentRunStore>();
+        var parent = await services.GetRequiredService<SessionManager>().CreateForInstanceAsync(instanceId, SessionMode.Text);
+        var now = DateTimeOffset.UtcNow;
+        var input = new ConversationEntry(Guid.NewGuid(), 1, Guid.NewGuid(), ConversationRole.User, "Delegate A", null, EntryStatus.Completed, SessionMode.Text, 0, 10, now);
+        var proposed = parent with { Entries = [input], LastEntrySequence = 1, Revision = parent.Revision + 1 };
+        var source = (await runs.AdmitAsync(proposed, parent.Revision, AgentRunAdmissionFactory.ForAcceptedUserBatch(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), proposed, [input], now, []))).Run;
+        source = await runs.ApplyAsync(source.Owner, source.AgentRunId, new AgentRunCommand.Claim(source.Revision, now, Guid.NewGuid(), now.AddMinutes(5)));
+        var child = BackgroundSessionAdmissionFactory.ForImmediate(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), proposed, source, "stable-result", "Original objective", "Original title", true, now);
+        await runs.AdmitImmediateAsync(child.Session, child.Run, source.Claim!.Generation);
+        var original = await Complete(child.Run, "Result A", true);
+        var artifacts = services.GetRequiredService<IArtifactStore>();
+        var fileA = await artifacts.CreateAsync(child.Session.SessionId, "A.txt", "text/plain", "A"u8.ToArray(), null, null, agentRunId: original.AgentRunId);
+        var path = $"/api/v2/sessions/{child.Session.SessionId}";
+        var before = (await client.GetFromJsonAsync<BackgroundSessionResponse>(path + "/background"))!;
+        (await client.PostAsJsonAsync(path + "/continue-in-chat", new { })).EnsureSuccessStatusCode();
+        foreach (var summary in new[] { "Result B", "Result C" })
+        {
+            var current = (await memory.LoadAsync(child.Session.SessionId))!;
+            var turn = new ConversationEntry(Guid.NewGuid(), current.DurableLastEntrySequence + 1, Guid.NewGuid(), ConversationRole.User, summary, null, EntryStatus.Completed, SessionMode.Text, 0, summary.Length, now.AddSeconds(1));
+            var updated = current with { Revision = current.Revision + 1, Entries = current.Entries.Append(turn).ToArray(), LastEntrySequence = turn.Sequence, Title = "Ongoing chat title" };
+            var followup = (await runs.AdmitAsync(updated, current.Revision, AgentRunAdmissionFactory.ForAcceptedUserBatch(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), updated, [turn], now.AddSeconds(1), []))).Run;
+            await Complete(followup, summary, false);
+            await artifacts.CreateAsync(child.Session.SessionId, summary + ".txt", "text/plain", "later"u8.ToArray(), null, null, agentRunId: followup.AgentRunId);
+        }
+        await artifacts.CreateAsync(child.Session.SessionId, "legacy.txt", "text/plain", "unknown"u8.ToArray(), null, null);
+        await Check(client);
+        if (sqlite)
+        {
+            await factory.DisposeAsync();
+            await using var reopened = new StableSqliteHost(db, root);
+            using var reopenedClient = TestOwnerCapability.CreateOwnerClient(reopened);
+            await Check(reopenedClient);
+        }
+
+        async Task<AgentRun> Complete(AgentRun run, string summary, bool attention)
+        {
+            run = await runs.ApplyAsync(run.Owner, run.AgentRunId, new AgentRunCommand.Claim(run.Revision, now.AddSeconds(2), Guid.NewGuid(), now.AddMinutes(5)));
+            var snapshot = (await memory.LoadAsync(run.SessionId))!;
+            var answer = new ConversationEntry(Guid.NewGuid(), snapshot.DurableLastEntrySequence + 1, null, ConversationRole.Assistant, summary, run.ResponseId, EntryStatus.Completed, SessionMode.Text, 0, summary.Length, now.AddSeconds(2));
+            return await runs.CommitOutcomeAsync(snapshot with { Revision = snapshot.Revision + 1, Entries = snapshot.Entries.Append(answer).ToArray(), LastEntrySequence = answer.Sequence }, snapshot.Revision, run.Owner, run.AgentRunId,
+                new AgentRunCommand.Complete(run.Revision, now.AddSeconds(2), run.Claim!.Generation, summary, attention ? AgentRunOutcomeKind.NeedsAttention : AgentRunOutcomeKind.Response, answer.EntryId), null);
+        }
+        async Task Check(HttpClient checkClient)
+        {
+            var after = (await checkClient.GetFromJsonAsync<BackgroundSessionResponse>(path + "/background"))!;
+            Assert.Equal(before.LatestRun, after.LatestRun);
+            Assert.Equal("Original title", after.OriginalTitle);
+            Assert.Equal(before.Origin, after.Origin);
+            Assert.Contains("ChatList", after.Surfaces);
+            Assert.Equal(1, after.ArtifactCount); Assert.False(after.ArtifactCountHasMore);
+            var list = (await checkClient.GetFromJsonAsync<BackgroundSessionPageResponse>($"/api/v2/agent-instances/{instanceId}/background-sessions"))!;
+            Assert.Equal(after.LatestRun, Assert.Single(list.Items).LatestRun);
+            var page = (await checkClient.GetFromJsonAsync<ArtifactPageResponse>(path + $"/artifacts/page?agentRunId={original.AgentRunId}"))!;
+            Assert.Equal(fileA.ArtifactId.ToString(), Assert.Single(page.Items).ArtifactId);
+            Assert.Equal(4, (await checkClient.GetFromJsonAsync<ArtifactPageResponse>(path + "/artifacts/page"))!.Items.Count);
+            Assert.Equal(HttpStatusCode.NotFound, (await checkClient.GetAsync(path + $"/artifacts/page?agentRunId={source.AgentRunId}")).StatusCode);
+            var history = (await checkClient.GetFromJsonAsync<AgentRunPageResponse>(path + "/agent-runs"))!;
+            Assert.Equal(3, history.Items.Count);
+            Assert.Equal(original.AgentRunId.ToString(), (await checkClient.GetFromJsonAsync<AgentRunResponse>(path + $"/agent-runs/{original.AgentRunId}"))!.AgentRunId);
+            (await checkClient.PostAsJsonAsync(path + "/continue-in-chat", new { })).EnsureSuccessStatusCode();
+            Assert.Equal(3, (await checkClient.GetFromJsonAsync<AgentRunPageResponse>(path + "/agent-runs"))!.Items.Count);
+        }
+    }
+
+    private sealed class StableSqliteHost(string db, string root) : DurableSqliteHostFactory(db, runScheduler: false)
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.ConfigureTestServices(services => {
+                services.RemoveAll<IArtifactStore>();
+                services.AddSingleton<IArtifactStore>(provider => new SqliteArtifactStore(provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(), TimeProvider.System, Path.Combine(root, "artifacts")));
+            });
+        }
     }
 
     private sealed class PausedDispatchHost : AgentCoreApiFactory

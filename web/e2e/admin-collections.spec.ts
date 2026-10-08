@@ -32,6 +32,7 @@ test("Definition tabs keep draft creation compact and return to the draft list",
   }
   await forkBuiltInV1Draft(page);
   await page.getByRole("button", { name: "Back to drafts", exact: true }).click();
+  await page.getByRole("dialog", { name: "Discard unsaved changes?", exact: true }).getByRole("button", { name: "Discard changes", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Drafts", exact: true })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("table", { name: "Definition drafts table", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Versions", exact: true }).click();
@@ -50,7 +51,7 @@ test("Admin collections paginate, sort, filter and recover from an empty search"
     const name = `${prefix}-${String(index).padStart(2, "0")}`;
     for (const [url, data] of [
       ["/api/v2/admin/definition-drafts/new", { definitionId: name }],
-      ["/api/v2/admin/event-sources", { displayName: name }],
+      ["/api/v2/admin/connections/events", { displayName: name, eventKey: name }],
       ["/api/v2/admin/agent-instances", { definitionId: "examiner", version: 1,
         persona: { name, role: "Inspector", description: "A disposable collection fixture.", tone: "Clear" } }]
     ] as const) {
@@ -60,8 +61,9 @@ test("Admin collections paginate, sort, filter and recover from an empty search"
   }
   await page.goto("/admin");
   for (const [sectionName, searchName] of [
-    ["Definitions", "Search definitions"], ["Instances", "Search instances"], ["Event sources", "Search event sources"]
+    ["Definitions", "Search definitions"], ["Instances", "Search instances"], ["Events", "Search events"]
   ]) {
+    if (sectionName === "Events") await page.getByRole("tab", { name: "Connections", exact: true }).click();
     await page.getByRole("tab", { name: sectionName, exact: true }).click();
     const section = page.getByRole("region", { name: sectionName, exact: true });
     await section.getByLabel(searchName).fill(prefix);
@@ -91,9 +93,10 @@ test("Admin collections paginate, sort, filter and recover from an empty search"
   await filter.getByRole("button", { name: "Reset", exact: true }).click();
   await filter.getByRole("button", { name: "OK", exact: true }).click();
   await expect(definitions.locator("tbody tr[data-row-key]")).toHaveCount(10);
-  await page.getByRole("tab", { name: "Event sources", exact: true }).click();
-  const sources = page.getByRole("region", { name: "Event sources", exact: true });
-  await sources.getByLabel("Search event sources").fill("");
+  await page.getByRole("tab", { name: "Connections", exact: true }).click();
+  await page.getByRole("tab", { name: "Events", exact: true }).click();
+  const sources = page.getByRole("region", { name: "Events", exact: true });
+  await sources.getByLabel("Search events").fill("");
   await sources.getByRole("button", { name: "filter", exact: true }).click();
   await filter.getByRole("menuitem").filter({ hasText: "Revoked" }).click();
   await filter.getByRole("button", { name: "OK", exact: true }).click();
@@ -328,7 +331,7 @@ test("Version inspection creates no draft and the shared actions publish from Te
   await instanceDialog.getByRole("button", { name: "Create instance", exact: true }).click();
   const persona = page.getByLabel("Persona name", { exact: true });
   await persona.fill("Unsaved inspector");
-  for (const name of ["Continuity", "Automation", "Runs", "Connections", "Effective configuration"]) {
+  for (const name of ["Continuity", "Automation", "Runs", "Credentials", "Effective configuration"]) {
     await page.getByRole("tab", { name, exact: true }).click();
     await expect(page.getByRole("tabpanel", { name, exact: true })).toBeVisible();
   }
@@ -336,7 +339,7 @@ test("Version inspection creates no draft and the shared actions publish from Te
   await expect(persona).toHaveValue("Unsaved inspector");
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
-  for (const name of ["Continuity", "Automation", "Runs", "Connections", "Effective configuration"]) {
+  for (const name of ["Continuity", "Automation", "Runs", "Credentials", "Effective configuration"]) {
     await expect(page.getByRole("tab", { name, exact: true })).toBeInViewport();
   }
   expect(errors).toEqual([]);
@@ -385,10 +388,10 @@ test("Collection navigation and version drawer preserve context and keyboard foc
   expect((await drawer.boundingBox())!.width).toBe(390);
   await drawer.getByRole("button", { name: "Close", exact: true }).click();
   await expect(trigger).toBeFocused();
-  await page.goto("/admin/event-sources");
-  await expect(page.getByRole("tab", { name: "Event sources", exact: true })).toHaveAttribute("aria-selected", "true");
+  await page.goto("/admin/connections/events");
+  await expect(page.getByRole("tab", { name: "Events", exact: true })).toHaveAttribute("aria-selected", "true");
   await page.reload();
-  await expect(page.getByRole("region", { name: "Event sources", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Events", exact: true })).toBeVisible();
   await page.goto("/admin/instances");
   await page.locator(".admin-collection-name").first().click();
   await page.getByRole("button", { name: /Back to inventory/ }).click();

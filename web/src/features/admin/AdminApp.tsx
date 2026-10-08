@@ -1,3 +1,4 @@
+import { groupedCapabilityOptions, reconcileAlwaysCapabilities } from "./capabilityOptions";
 import { InstanceSkillsSection } from "./InstanceSkillsSection";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { updateHarness } from "../../services/adminApi";
@@ -47,7 +48,7 @@ import {
 import { DefinitionCandidateEditor, type DefinitionEditorView } from "./definitionCandidateEditor";
 import { HarnessManagementSection, HarnessPolicyModeScopes } from "./HarnessManagementSection";
 import { CredentialsSection, InstanceCredentialsSection } from "./CredentialsSection";
-import { EventSourcesSection } from "./EventSourcesSection";
+import { EventsSection } from "./EventsSection";
 import { DefinitionDraftPublishGatePanel } from "./definitionDraftPublishGatePanel";
 import { ResourceImportPanel } from "./resourceImportPanel";
 import {
@@ -289,8 +290,12 @@ export function groupDefinitionInventory(
 
 export function AdminApp({ route }: { route: AdminRoute }) {
   const [collection, setCollection] = useState<AdminCollection>(route.view === "home" ? route.collection ?? "definitions" : "definitions");
+  const [connectionCollection, setConnectionCollection] = useState<"events" | "credentials">(route.view === "home" && route.collection === "events" ? "events" : "credentials");
   useEffect(() => {
-    if (route.view === "home") setCollection(route.collection ?? "definitions");
+    if (route.view === "home") {
+      setCollection(route.collection ?? "definitions");
+      if (route.collection === "events" || route.collection === "credentials") setConnectionCollection(route.collection);
+    }
   }, [route]);
   const [definitions, setDefinitions] = useState<LoadState<AdminDefinitionInventoryItem[]>>({ kind: "loading" });
   const [instances, setInstances] = useState<LoadState<AdminInstanceInventoryItem[]>>({ kind: "loading" });
@@ -405,11 +410,11 @@ export function AdminApp({ route }: { route: AdminRoute }) {
           <div className="admin-home">
             <Flex align="start" justify="space-between" gap={12} wrap="wrap" className="admin-home-intro">
               <div>
-                <Typography.Title level={2} className="admin-home-title">Agent inventory</Typography.Title>
+                <Typography.Title level={2} className="admin-home-title">{collection === "events" || collection === "credentials" ? "Connections" : "Agent inventory"}</Typography.Title>
                 <Typography.Paragraph type="secondary" className="admin-home-subtitle">
                   {collection === "definitions" ? "Inspect published definitions and drafts, then open a version or continue editing."
                     : collection === "instances" ? "Manage agent identities, continuity, automation, and their pinned definition versions."
-                    : collection === "credentials" ? "Manage reusable protected credentials and their explicit agent bindings." : "Manage Event Sources. Configure agent reactions under Automation."}
+                    : "Manage shared credentials and Events. Grant credential access and configure reactions on each Instance."}
                 </Typography.Paragraph>
               </div>
               <Flex gap={8} wrap="wrap">
@@ -417,10 +422,11 @@ export function AdminApp({ route }: { route: AdminRoute }) {
                 {collection === "instances" ? <NewInstanceButton groups={definitionGroups.filter((group) => group.versions.length > 0)} /> : null}
               </Flex>
             </Flex>
-            <Tabs className="admin-collection-tabs" activeKey={collection}
+            <Tabs className="admin-collection-tabs" activeKey={collection === "events" || collection === "credentials" ? "connections" : collection}
               onChange={(key) => {
-                setCollection(key as AdminCollection);
-                navigateToAppPath(adminHomePath(key as AdminCollection));
+                const next = key === "connections" ? connectionCollection : key as AdminCollection;
+                setCollection(next);
+                navigateToAppPath(adminHomePath(next));
               }}
               items={[
               { key: "definitions", label: "Definitions", children: <InventorySection
@@ -482,8 +488,11 @@ export function AdminApp({ route }: { route: AdminRoute }) {
                     : []
                 }
               /> },
-              { key: "event-sources", label: "Event sources", children: <EventSourcesSection /> },
-              { key: "credentials", label: "Credentials", children: <CredentialsSection /> }
+              { key: "connections", label: "Connections", children: <Tabs aria-label="Global connection resources" activeKey={connectionCollection}
+                onChange={key => { setConnectionCollection(key as "events" | "credentials"); setCollection(key as AdminCollection); navigateToAppPath(adminHomePath(key as AdminCollection)); }} items={[
+                  { key: "credentials", label: "Credentials", children: <CredentialsSection /> },
+                  { key: "events", label: "Events", children: <EventsSection /> }
+                ]} /> }
               ]}
             />
           </div>
@@ -867,7 +876,6 @@ function InventorySection({
     onClick: () => void;
   }>;
 }) {
-  const { token } = theme.useToken();
   const { search, setSearch, pagination } = useAdminCollectionSearch();
   const query = search.trim().toLowerCase();
   const filteredItems = items.filter(item =>
@@ -900,7 +908,6 @@ function InventorySection({
             { title: title === "Definitions" ? "Definition" : "Instance", key: "name", width: 240, ellipsis: true,
               sorter: (a, b) => a.title.localeCompare(b.title),
               render: (_, item) => <Button type="link" size="small" className="admin-collection-name"
-                style={{ paddingInline: token.paddingXS }}
                 title={item.name ?? item.title}
                 aria-label={title === "Definitions" ? `${item.title} · ${item.secondary}` : item.title} onClick={item.onClick}>
                 <span>{item.name ?? item.title}</span>
@@ -1011,13 +1018,13 @@ function DefinitionDetail({
     setEditorView("form");
   }, []);
 
-  const editCandidate = useCallback((next: DefinitionCandidate) => {
+  const editCandidate = useCallback((next: DefinitionCandidate | ((current: DefinitionCandidate) => DefinitionCandidate)) => {
     if (jsonError) {
       return;
     }
     setCandidate(next);
     setJsonError(null);
-    if (editorView === "json") {
+    if (editorView === "json" && typeof next !== "function") {
       setJsonText(candidateToJson(next));
     }
   }, [editorView, jsonError]);
@@ -1643,7 +1650,7 @@ function DraftEditor({
   editorView: DefinitionEditorView;
   dirty: boolean;
   busy: boolean;
-  onCandidateChange: (candidate: DefinitionCandidate) => void;
+  onCandidateChange: (candidate: DefinitionCandidate | ((current: DefinitionCandidate) => DefinitionCandidate)) => void;
   onJsonTextChange: (text: string) => void;
   onEditorViewChange: (view: DefinitionEditorView) => void;
   onSave: () => void;
@@ -1661,7 +1668,8 @@ function DraftEditor({
     if (candidateLocked) {
       return;
     }
-    onCandidateChange(applyDraftEnvironmentToCandidate(candidate, next));
+    onCandidateChange(applyDraftEnvironmentToCandidate(candidate, { ...next, capabilityMode: next.capabilityMode ?? "Selected",
+      alwaysCapabilities: reconcileAlwaysCapabilities(next.alwaysCapabilities ?? authorizedNames, next.toolAllowlist, capabilityCatalog) }));
   };
 
   const { message } = App.useApp();
@@ -1670,11 +1678,23 @@ function DraftEditor({
   const [toolNames, setToolNames] = useState<string[]>([]);
   const [capabilityCatalog, setCapabilityCatalog] = useState<import("../../services/adminApi").AdminCapabilityDescriptor[]>([]);
   const [catalogReady, setCatalogReady] = useState(false);
-  const selectableCatalog = capabilities.capabilityMode ? capabilityCatalog : capabilityCatalog.filter(c => toolNames.includes(c.name));
+  const selectableCatalog = capabilityCatalog;
   const allCapabilityNames = capabilityCatalog.map(c => c.name);
   const authorizedNames = capabilities.capabilityMode === "All"
     ? allCapabilityNames
     : capabilities.toolAllowlist;
+  const alwaysNames = reconcileAlwaysCapabilities(capabilities.alwaysCapabilities ?? authorizedNames, authorizedNames, capabilityCatalog);
+  // Migrate an editable legacy candidate using its exact grants and fixed discoverable projection.
+  // Published versions remain immutable; Core still owns context-only projection.
+  useEffect(() => {
+    if (catalogReady && !candidateLocked && editorView === "form" && !capabilities.capabilityMode) {
+      onCandidateChange(current => {
+        const environment = readDraftEnvironment(current);
+        return environment.capabilityMode ? current : applyDraftEnvironmentToCandidate(current, { ...environment, capabilityMode: "Selected",
+          alwaysCapabilities: reconcileAlwaysCapabilities(environment.toolAllowlist, environment.toolAllowlist, capabilityCatalog) });
+      });
+    }
+  }, [catalogReady, candidateLocked, editorView, capabilities.capabilityMode, capabilityCatalog, onCandidateChange]);
   const numberErrors = automationNumberErrors(candidate);
   const saveBlocked = candidateLocked || numberErrors.length > 0 || (editorView === "form" && !catalogReady);
   const saveBlockedMessage = candidateLocked
@@ -1916,34 +1936,36 @@ function DraftEditor({
                 ) : null}
                   <label className="admin-draft-field">
                     <Typography.Text strong>Capability access</Typography.Text>
-                    <Select aria-label="Capability access" value={capabilities.capabilityMode ?? "Legacy"}
+                    <Select aria-label="Capability access" value={capabilities.capabilityMode ?? "Selected"}
                       disabled={busy || candidateLocked || !catalogReady || toolRegistryLoading}
-                      options={[{ value: "Legacy", label: "Tool allowlist projection" }, { value: "Selected", label: "Selected capabilities" }, { value: "All", label: "All current capabilities" }]}
-                      onChange={mode => onCapabilitiesChange({ ...capabilities, capabilityMode: mode === "Legacy" ? undefined : mode as "Selected" | "All",
+                      options={[{ value: "Selected", label: "Selected capabilities" }, { value: "All", label: "All current capabilities" }]}
+                      onChange={mode => onCapabilitiesChange({ ...capabilities, capabilityMode: mode as "Selected" | "All",
                         toolAllowlist: mode === "All" ? allCapabilityNames : capabilities.toolAllowlist,
-                        alwaysCapabilities: capabilities.alwaysCapabilities ?? [] })} />
+                        alwaysCapabilities: alwaysNames })} />
                   </label>
                   {capabilities.capabilityMode === "All" ? <Typography.Text type="secondary">All capabilities currently known to Core are included in the next publication as an immutable snapshot. Later capabilities are not automatically granted.</Typography.Text> : null}
                   <label className="admin-draft-field">
-                    <Typography.Text strong>{capabilities.capabilityMode ? "Authorized capabilities" : "Tool allowlist"}</Typography.Text>
-                    <Select aria-label="Tool allowlist" mode="multiple" maxTagCount="responsive" value={authorizedNames}
+                    <Typography.Text strong>Authorized capabilities</Typography.Text>
+                    <Typography.Text type="secondary">What the agent is permitted to use.</Typography.Text>
+                    <Select aria-label="Authorized capabilities" mode="multiple" maxTagCount="responsive" value={authorizedNames}
                       disabled={busy || candidateLocked || !catalogReady || capabilities.capabilityMode === "All"}
                       onChange={values => onCapabilitiesChange({ ...capabilities, toolAllowlist: values,
-                        alwaysCapabilities: capabilities.alwaysCapabilities?.filter(n => values.includes(n)) })}
-                      options={[...new Set(selectableCatalog.map(c => c.category))].sort().map(category => ({ label: category, options: selectableCatalog.filter(c => c.category === category).map(c => ({ value: c.name, label: `${c.name}${c.configured ? "" : " · unavailable"}` })) }))}
+                        alwaysCapabilities: reconcileAlwaysCapabilities(alwaysNames, values, capabilityCatalog) })}
+                      options={groupedCapabilityOptions(selectableCatalog)} optionFilterProp="label" showSearch
                       placeholder="Select registered capabilities" />
                   </label>
-                  {capabilities.capabilityMode ? <>
+                  {<>
                     <label className="admin-draft-field">
                       <Typography.Text strong>Always available to the model</Typography.Text>
+                      <Typography.Text type="secondary">Immediately includes these capability details in the model context. Other authorized capabilities are loaded on demand.</Typography.Text>
                       <Select aria-label="Always projected capabilities" mode="multiple" maxTagCount="responsive"
-                        value={capabilities.alwaysCapabilities ?? []} disabled={busy || candidateLocked || !catalogReady || toolRegistryLoading}
+                        value={alwaysNames} disabled={busy || candidateLocked || !catalogReady || toolRegistryLoading}
                         onChange={values => onCapabilitiesChange({ ...capabilities, alwaysCapabilities: values })}
-                        options={capabilityCatalog.filter(c => authorizedNames.includes(c.name) && c.discoverable).map(c => ({ value: c.name, label: `${c.name}${c.configured ? "" : " · unavailable"}` }))} />
+                        options={groupedCapabilityOptions(capabilityCatalog, authorizedNames)} optionFilterProp="label" showSearch />
                     </label>
-                    <Typography.Text aria-live="polite">Authorized: {authorizedNames.length} · Always projected: {capabilities.alwaysCapabilities?.length ?? 0}</Typography.Text>
-                    <Typography.Text type="secondary">Available on demand when configured and eligible: {capabilityCatalog.filter(c => authorizedNames.includes(c.name) && c.discoverable && !(capabilities.alwaysCapabilities ?? []).includes(c.name)).map(c => c.name).join(", ") || "None"}. Context-only capabilities remain controlled by Core.</Typography.Text>
-                  </> : <Typography.Text type="secondary">{authorizedNames.length} authorized tools. Switch capability access to configure projection and discovery.</Typography.Text>}
+                    <Typography.Text aria-live="polite">Authorized: {authorizedNames.length} · Always projected: {alwaysNames.length}</Typography.Text>
+                    <Typography.Text type="secondary">Available on demand when configured and eligible: {capabilityCatalog.filter(c => authorizedNames.includes(c.name) && c.discoverable && !alwaysNames.includes(c.name)).map(c => c.name).join(", ") || "None"}. Context-only capabilities remain controlled by Core.</Typography.Text>
+                  </>}
 
                 </section>
                 <section className="admin-draft-form-section" aria-label="Workspace behavior">
@@ -2379,7 +2401,6 @@ export function InstanceDetail({
   const [continuityTab, setContinuityTab] = useState("memory");
   const [automationTab, setAutomationTab] = useState("automations");
   const [identityTab, setIdentityTab] = useState("profile");
-  const [connectionsTab, setConnectionsTab] = useState("credentials");
   const [sourceSelection, setSourceSelection] = useState<AutomationSelection>();
   const [experienceSelection, setExperienceSelection] = useState<ExperienceSelection>();
   const [selectedAgentRunId, setSelectedAgentRunId] = useState<string>();
@@ -2391,7 +2412,6 @@ export function InstanceDetail({
     if (tab === "continuity") setContinuityTab(section ?? "memory");
     if (tab === "automation") setAutomationTab(section ?? "automations");
     if (tab === "identity") setIdentityTab(section ?? "profile");
-    if (tab === "connections") setConnectionsTab(section ?? "credentials");
   }, [instanceId, tab, section]);
   useEffect(() => {
     const source = new URLSearchParams(window.location.search).get("automation");
@@ -2399,12 +2419,11 @@ export function InstanceDetail({
     setExperienceSelection(undefined); setSelectedAgentRunId(undefined); setRunDetailsOpen(false);
   }, [instanceId]);
   const setActiveTab = (next: AdminInstanceTab, selectedSection?: AdminInstanceSection) => {
-    const nextSection = selectedSection ?? (next === "continuity" ? continuityTab : next === "automation" ? automationTab : next === "identity" ? identityTab === "profile" ? undefined : identityTab : next === "connections" ? connectionsTab : undefined);
+    const nextSection = selectedSection ?? (next === "continuity" ? continuityTab : next === "automation" ? automationTab : next === "identity" ? identityTab === "profile" ? undefined : identityTab : undefined);
     updateActiveTab(next);
     if (next === "continuity" && nextSection) setContinuityTab(nextSection);
     if (next === "automation" && nextSection) setAutomationTab(nextSection);
     if (next === "identity") setIdentityTab(nextSection ?? "profile");
-    if (next === "connections" && nextSection) setConnectionsTab(nextSection);
     navigateToAppPath(adminInstancePath(instanceId, next, nextSection as AdminInstanceSection | undefined));
   };
   const viewRun = (workId?: string) => {
@@ -2520,12 +2539,8 @@ export function InstanceDetail({
                 resolved.instanceLifecycle === "Active" ? <InstanceRunsSection instanceId={instanceId} open={activeTab === "runs"} inline onRun={viewRun} onClose={() => setActiveTab("automation")} /> : <Alert type="info" showIcon title="Runs are available when this instance is active" description="Unarchive the instance from Identity & version to inspect execution history." />
               }]),
               {
-                key: "connections",
-                label: "Connections",
-                children: <Tabs activeKey={connectionsTab} onChange={key => setActiveTab("connections", key as AdminInstanceSection)} aria-label="Connection sections" items={[
-                  { key: "credentials", label: "Credentials", children: <InstanceCredentialsSection instanceId={instanceId} revision={resolved.instanceRevision} archived={resolved.instanceLifecycle !== "Active"} /> },
-                  { key: "event-sources", label: "Event sources", children: <EventSourcesSection onAutomations={() => setActiveTab("automation", "automations")} /> }
-                ]} />
+                key: "credentials", label: "Credentials",
+                children: <InstanceCredentialsSection instanceId={instanceId} revision={resolved.instanceRevision} archived={resolved.instanceLifecycle !== "Active"} />
               },
             {
               key: "effective",

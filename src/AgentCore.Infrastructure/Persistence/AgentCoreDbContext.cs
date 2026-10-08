@@ -199,7 +199,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<StructuredMemoryRecord> StructuredMemories => Set<StructuredMemoryRecord>();
     public DbSet<AgentInstanceRecord> AgentInstances => Set<AgentInstanceRecord>();
     public DbSet<AutomationRecord> Automations => Set<AutomationRecord>();
-    public DbSet<ExternalEventSourceRecord> ExternalEventSources => Set<ExternalEventSourceRecord>();
+    public DbSet<WebhookEventRecord> WebhookEvents => Set<WebhookEventRecord>();
     public DbSet<ExternalEventRecord> ExternalEvents => Set<ExternalEventRecord>();
     public DbSet<ExternalEventDeliveryRecord> ExternalEventDeliveries => Set<ExternalEventDeliveryRecord>();
     public DbSet<TriggerOccurrenceRecord> TriggerOccurrences => Set<TriggerOccurrenceRecord>();
@@ -386,6 +386,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.DisplayName).HasMaxLength(200).IsRequired();
             entity.Property(row => row.Sha256Hex).HasMaxLength(64).IsRequired();
             entity.HasIndex(row => row.SessionId);
+            entity.Property(row => row.AgentRunId).HasMaxLength(36);
+            entity.HasIndex(row => new { row.SessionId, row.AgentRunId });
         });
         modelBuilder.Entity<StructuredMemoryRecord>(entity =>
         {
@@ -448,33 +450,31 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.SuspensionReason).HasMaxLength(200);
             entity.Property(row => row.ModelOverrideCatalogKey).HasMaxLength(128);
             entity.Property(row => row.ModelOverrideReasoningEffort).HasMaxLength(64);
-            entity.Property(row => row.EventSourceId).HasMaxLength(36);
-            entity.Property(row => row.EventType).HasMaxLength(64);
-            entity.HasIndex(row => new { row.EventSourceId, row.EventType, row.Status });
+            entity.Property(row => row.EventId).HasMaxLength(36);
+            entity.HasIndex(row => new { row.EventId, row.Status });
             entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.Status });
             entity.HasIndex(row => new { row.Status, row.NextOccurrenceAtUtc, row.AutomationId });
         });
-        modelBuilder.Entity<ExternalEventSourceRecord>(entity =>
+        modelBuilder.Entity<WebhookEventRecord>(entity =>
         {
-            entity.ToTable("ExternalEventSources");
-            entity.HasKey(row => row.SourceId);
-            entity.Property(row => row.SourceId).HasMaxLength(36);
+            entity.ToTable("WebhookEvents");
+            entity.HasKey(row => row.ResourceId);
+            entity.Property(row => row.ResourceId).HasMaxLength(36);
             entity.Property(row => row.DisplayName).HasMaxLength(80).IsRequired();
-            entity.Property(row => row.SourceKey).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.EventKey).HasMaxLength(64).IsRequired();
             entity.Property(row => row.CredentialHash).HasMaxLength(64);
             entity.Property(row => row.Revision).IsConcurrencyToken();
-            entity.HasIndex(row => row.SourceKey).IsUnique();
+            entity.HasIndex(row => row.EventKey).IsUnique();
         });
         modelBuilder.Entity<ExternalEventRecord>(entity =>
         {
             entity.ToTable("ExternalEvents");
             entity.HasKey(row => row.EventId);
             entity.Property(row => row.EventId).HasMaxLength(36);
-            entity.Property(row => row.SourceId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.ResourceId).HasMaxLength(36).IsRequired();
             entity.Property(row => row.SourceEventId).HasMaxLength(64).IsRequired();
-            entity.Property(row => row.EventType).HasMaxLength(64).IsRequired();
             entity.Property(row => row.EvidenceJson).HasMaxLength(4096).IsRequired();
-            entity.HasIndex(row => new { row.SourceId, row.SourceEventId }).IsUnique();
+            entity.HasIndex(row => new { row.ResourceId, row.SourceEventId }).IsUnique();
         });
         modelBuilder.Entity<ExternalEventDeliveryRecord>(entity =>
         {

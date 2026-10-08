@@ -1,0 +1,10 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Independent dense workspace</title>
+<style>body{font:16px system-ui}[role=treeitem]{padding:2px}[role=row]{display:flex;gap:12px}</style>
+<h1>Workspace catalog</h1><div role="tree" aria-label="Catalog" id="catalog"></div>
+<section aria-label="Review region"><div role="grid" aria-label="Review queue"><div role="rowgroup"><div role="row" aria-label="Review entry"><div role="gridcell"><button onclick="document.querySelector('[role=status]').textContent='Review entry opened'">Open review</button></div></div></div></div></section>
+<label>Summary <input aria-label="Summary"></label><p role="status">No item opened</p>
+<script>
+const catalog=document.querySelector('#catalog');
+function render(){catalog.replaceChildren();for(let g=0;g<20;g++){const group=document.createElement('div');group.setAttribute('role','treeitem');group.setAttribute('aria-label','Collection '+g);const children=document.createElement('div');children.setAttribute('role','group');children.setAttribute('aria-label','Entries '+g);for(let i=0;i<100;i++){const item=document.createElement('div');item.setAttribute('role','treeitem');item.setAttribute('aria-label','Entry '+(g*100+i));item.tabIndex=0;item.textContent='Entry '+(g*100+i);item.onclick=()=>{document.querySelector('[role=status]').textContent='Opened Entry '+(g*100+i);render()};children.append(item)}group.append(children);catalog.append(group)}}render();
+localStorage.setItem('access_token','dense-private-token');
+</script></html>

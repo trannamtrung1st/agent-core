@@ -30,7 +30,7 @@ public sealed class TriggerStoreContractTests
         {
             var owner = new TriggerOwner(InstanceA, ProfileA);
             Automation Row(Guid id, AutomationStatus status, long revision = 1, Guid? source = null) =>
-                new(id, owner, status, "Known task", source is Guid sourceId ? new EventTrigger(sourceId, "order.placed") : new ScheduleTrigger(OneShot()), source is null && status == AutomationStatus.Active ? Now.AddDays(1) : null,
+                new(id, owner, status, "Known task", source is Guid sourceId ? new EventTrigger(sourceId) : new ScheduleTrigger(OneShot()), source is null && status == AutomationStatus.Active ? Now.AddDays(1) : null,
                     null, 0, revision, revision, new(TriggerAuthorizationOrigin.AdminOwner, null, null, Now, Now), null);
             AgentCore.Application.Admin.AdminEventAppend Audit() => new(Guid.NewGuid(), Now,
                 AgentCore.Application.Admin.AdminEventActorKind.LocalOwner, AgentCore.Application.Admin.AdminEventOperationKind.AutomationChanged,

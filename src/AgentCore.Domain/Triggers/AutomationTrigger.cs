@@ -19,17 +19,14 @@ public sealed record ScheduleTrigger : AutomationTrigger
 
 public sealed record EventTrigger : AutomationTrigger
 {
-    public EventTrigger(Guid eventSourceId, string eventType)
+    public EventTrigger(Guid eventId)
     {
-        if (eventSourceId == Guid.Empty) throw new ArgumentException("Event source is required.");
-        if (eventType != "order.placed") throw new ArgumentException("Event type is not supported.");
-        EventSourceId = eventSourceId;
-        EventType = eventType;
+        if (eventId == Guid.Empty) throw new ArgumentException("Event is required.");
+        EventId = eventId;
     }
-    public Guid EventSourceId { get; }
-    public string EventType { get; }
+    public Guid EventId { get; }
     public override AutomationTriggerKind Kind => AutomationTriggerKind.Event;
-    public override bool SemanticEquals(AutomationTrigger other) => other is EventTrigger e && e.EventSourceId == EventSourceId && e.EventType == EventType;
+    public override bool SemanticEquals(AutomationTrigger other) => other is EventTrigger e && e.EventId == EventId;
 }
 
 public static class AutomationText

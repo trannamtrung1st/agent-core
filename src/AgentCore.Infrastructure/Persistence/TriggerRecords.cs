@@ -28,8 +28,7 @@ public sealed class AutomationRecord
     public string? ModelOverrideReasoningEffort { get; set; }
     public bool RequiresVision { get; set; }
     public bool RequiresTools { get; set; }
-    public string? EventSourceId { get; set; }
-    public string? EventType { get; set; }
+    public string? EventId { get; set; }
 }
 
 public sealed class TriggerOccurrenceRecord

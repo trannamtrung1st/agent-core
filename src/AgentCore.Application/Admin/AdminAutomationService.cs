@@ -44,7 +44,7 @@ public sealed class AdminAutomationService(
         var owner = new TriggerOwner(instanceId, profile.ProfileId);
         var rows = await triggers.ListAsync(owner, status: null, cancellationToken).ConfigureAwait(false);
         return rows
-            .Where(row => row.EventSourceId is null)
+            .Where(row => row.EventId is null)
             .Where(row => row.Status is AutomationStatus.Active or AutomationStatus.SuspendedPolicy)
             .OrderByDescending(row => row.Provenance.CreatedAt)
             .ThenByDescending(row => row.AutomationId)

@@ -38,6 +38,9 @@ public static class ToolJsonResults
             return json;
         }
 
+        var browser = BrowserResultProjection.Fit(maxBytes, json);
+        if (browser is not null) return browser;
+
         if (Encoding.UTF8.GetByteCount(TruncatedFallback) <= maxBytes)
         {
             return TruncatedFallback;

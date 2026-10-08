@@ -24,7 +24,7 @@ public sealed record SessionOrigin
 
     public SessionOrigin(SessionOriginKind kind, Guid? originatingSessionId = null,
         Guid? originatingAgentRunId = null, Guid? initialBackgroundAgentRunId = null,
-        Guid? automationId = null, Guid? triggerOccurrenceId = null, bool reportCompletionToOrigin = false)
+        Guid? automationId = null, Guid? triggerOccurrenceId = null, bool reportCompletionToOrigin = false, string? initialTitle = null)
     {
         if (!Enum.IsDefined(kind)) throw new ArgumentException("Session origin kind is invalid.");
         AgentRunText.RequireOptionalId(originatingSessionId, "Originating Session");
@@ -57,6 +57,7 @@ public sealed record SessionOrigin
         AutomationId = automationId;
         TriggerOccurrenceId = triggerOccurrenceId;
         ReportCompletionToOrigin = reportCompletionToOrigin;
+        InitialTitle = initialTitle is null ? null : AgentRunText.RequireUtf8(initialTitle.Trim(), 800, "Initial title");
     }
 
     public SessionOriginKind Kind { get; }
@@ -66,6 +67,7 @@ public sealed record SessionOrigin
     public Guid? AutomationId { get; }
     public Guid? TriggerOccurrenceId { get; }
     public bool ReportCompletionToOrigin { get; }
+    public string? InitialTitle { get; }
     public SessionSurface InitialSurface => Kind == SessionOriginKind.UserChat ? SessionSurface.ChatList : SessionSurface.BackgroundWork;
 
     public bool MayReportCompletion(Guid agentRunId) => ReportCompletionToOrigin && InitialBackgroundAgentRunId == agentRunId;

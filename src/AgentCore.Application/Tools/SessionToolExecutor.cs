@@ -423,14 +423,14 @@ public sealed partial class SessionToolExecutor(
                 ToolCatalog.WorkspaceMkdir or ToolCatalog.WorkspaceCopy or ToolCatalog.WorkspaceMove or ToolCatalog.WorkspaceDelete or ToolCatalog.WorkspaceBatch => TextResult(
                     await StructureWorkspaceAsync(definition, sessionId, call.Name, args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.ArtifactsCreate => TextResult(
-                    await CreateArtifactAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
+                    await CreateArtifactAsync(sessionId, args, admission?.AgentRunId, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.ArtifactsCreateFromWorkspace => TextResult(
-                    await CreateArtifactFromWorkspaceAsync(definition, sessionId, args, cancellationToken).ConfigureAwait(false)),
+                    await CreateArtifactFromWorkspaceAsync(definition, sessionId, args, admission?.AgentRunId, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.ArtifactsVerify => TextResult(
                     await VerifyArtifactAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.SandboxRun => FitResult(
                     remainingOutputBytes,
-                    await RunSandboxAsync(definition, sessionId, args, remainingOutputBytes, cancellationToken).ConfigureAwait(false)),
+                    await RunSandboxAsync(definition, sessionId, args, remainingOutputBytes, admission?.AgentRunId, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.WebSearch => FitResult(
                     remainingOutputBytes,
                     await SearchWebAsync(args, remainingOutputBytes, cancellationToken).ConfigureAwait(false)),
@@ -885,6 +885,7 @@ public sealed partial class SessionToolExecutor(
     private async Task<string> CreateArtifactAsync(
         Guid sessionId,
         JsonElement args,
+        Guid? agentRunId,
         CancellationToken cancellationToken)
     {
         if (artifacts is null || !TryString(args, "displayName", out var displayName) || !TryString(args, "content", out var content))
@@ -901,7 +902,7 @@ public sealed partial class SessionToolExecutor(
                 Encoding.UTF8.GetBytes(content),
                 sourceAttachmentId: null,
                 workspaceLogicalPath: null,
-                cancellationToken)
+                cancellationToken, agentRunId)
             .ConfigureAwait(false);
         return JsonSerializer.Serialize(new
         {
@@ -945,6 +946,7 @@ public sealed partial class SessionToolExecutor(
         AgentDefinition definition,
         Guid sessionId,
         JsonElement args,
+        Guid? agentRunId,
         CancellationToken cancellationToken)
     {
         if (workspace is null || artifacts is null || !TryString(args, "path", out var path) || !TryString(args, "displayName", out var displayName))
@@ -973,7 +975,7 @@ public sealed partial class SessionToolExecutor(
                 content.Bytes,
                 sourceAttachmentId: null,
                 workspaceLogicalPath: AgentWorkspacePaths.Public(content.LogicalPath),
-                cancellationToken)
+                cancellationToken, agentRunId)
             .ConfigureAwait(false);
         return JsonSerializer.Serialize(new
         {
@@ -1093,6 +1095,7 @@ public sealed partial class SessionToolExecutor(
         Guid sessionId,
         JsonElement args,
         int remainingOutputBytes,
+        Guid? agentRunId,
         CancellationToken cancellationToken)
     {
         if (sandbox is null)
@@ -1146,7 +1149,7 @@ public sealed partial class SessionToolExecutor(
                     definition,
                     verb,
                     arguments,
-                    string.IsNullOrWhiteSpace(export) ? null : export),
+                    string.IsNullOrWhiteSpace(export) ? null : export, agentRunId),
                 cancellationToken)
             .ConfigureAwait(false);
         RuntimeTelemetry.Record("sandbox", RuntimeTelemetry.ElapsedMs(started), verb);

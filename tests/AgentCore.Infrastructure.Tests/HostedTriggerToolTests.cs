@@ -82,15 +82,15 @@ public sealed class HostedTriggerToolTests
         await provider.GetRequiredService<IMemoryStore>().SaveProfileAsync(new UserProfile(LocalUserProfile.Id, 1,
             new Dictionary<string, UserProfileValue> { ["timeZone"] = new("UTC", UserProfileValueSource.UserSet, now) }, now), 0);
         var sourceId = Guid.NewGuid();
-        await provider.GetRequiredService<IExternalEventStore>().CreateAsync(new ExternalEventSource(sourceId, "Orders",
-            ExternalEventSourceKind.Webhook, Guid.NewGuid(), "synthetic-hash", ExternalEventSourceStatus.Active, 1, now, now));
+        await provider.GetRequiredService<IExternalEventStore>().CreateAsync(new WebhookEvent(sourceId, "Orders",
+            WebhookEventKind.Webhook, "order.placed", "synthetic-hash", WebhookEventStatus.Active, 1, now, now));
         var command = new TriggerCommandContext(new TriggerOwner(instanceId, LocalUserProfile.Id), sessionId, "UTC",
             "Create an automation to review incoming orders.", "en", TriggerAuthorizationClassification.CurrentUserTurn,
             TriggerCommandAction.Create, false, null, null, now);
         async Task<ToolExecutionResult> Execute(string tool, object args, TriggerCommandContext? context = null, ToolExecutionAdmission? admission = null) =>
             await tools.ExecuteAsync(definition, sessionId, new ModelToolCall(Guid.NewGuid().ToString(), tool, JsonSerializer.Serialize(args)),
                 ToolLimits.MaxOutputBytes, triggerCommand: context, admission: admission);
-        var created = await Execute(ToolCatalog.AutomationCreate, new { executionTarget = "backgroundSession", reportBack = false, name = "Review orders", instructions = "Review the order reference.", eventSourceId = sourceId, eventType = "order.placed" }, command);
+        var created = await Execute(ToolCatalog.AutomationCreate, new { executionTarget = "backgroundSession", reportBack = false, name = "Review orders", instructions = "Review the order reference.", eventId = sourceId, eventType = "order.placed" }, command);
         Assert.Contains("\"status\":\"Active\"", created.Text);
         using var document = JsonDocument.Parse(created.Text);
         Assert.Equal("Active", document.RootElement.GetProperty("status").GetString());

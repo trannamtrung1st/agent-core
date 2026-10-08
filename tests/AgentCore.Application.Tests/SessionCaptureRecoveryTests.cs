@@ -49,7 +49,7 @@ public sealed class SessionCaptureRecoveryTests
 
     private sealed class Captures(ArtifactRecord artifact, byte[] bytes, bool missing) : IArtifactStore
     {
-        public ValueTask<ArtifactPage> ListPageAsync(Guid sessionId, Guid? before, int limit, CancellationToken ct = default) => new(new ArtifactPage([artifact], null, false));
+        public ValueTask<ArtifactPage> ListPageAsync(Guid sessionId, Guid? before, int limit, CancellationToken ct = default, Guid? agentRunId = null) => new(new ArtifactPage([artifact], null, false));
         public bool Exists(Guid sessionId, Guid artifactId) => artifact.SessionId == sessionId && artifact.ArtifactId == artifactId;
         public ValueTask<ArtifactRecord?> GetAsync(Guid sessionId, Guid artifactId, CancellationToken ct = default) =>
             ValueTask.FromResult<ArtifactRecord?>(Exists(sessionId, artifactId) ? artifact : null);
@@ -58,6 +58,6 @@ public sealed class SessionCaptureRecoveryTests
         public ValueTask<IReadOnlyList<ArtifactRecord>> ListAsync(Guid sessionId, CancellationToken ct = default) => ValueTask.FromResult<IReadOnlyList<ArtifactRecord>>([artifact]);
         public ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken ct = default) => ValueTask.CompletedTask;
         public ValueTask<ArtifactRecord> CreateAsync(Guid sessionId, string displayName, string contentType, ReadOnlyMemory<byte> content,
-            Guid? sourceAttachmentId, string? workspaceLogicalPath, CancellationToken ct = default) => throw new NotSupportedException();
+            Guid? sourceAttachmentId, string? workspaceLogicalPath, CancellationToken ct = default, Guid? agentRunId = null) => throw new NotSupportedException();
     }
 }

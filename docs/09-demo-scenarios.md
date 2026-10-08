@@ -199,7 +199,7 @@ Pause the completed Chat (or end it) to exercise automatic checkpoint admission,
 
 In Automation → Automations, create “Review recent experience” with Schedule timing and `synthetic-automation-improve: review recent experience and improve only when useful. Otherwise do nothing.` Use Run now and inspect the normal Run details. The authorized Automation creates an independent Instance Skill through ordinary capability tools; verify it under Instance → Skills. Harness mode and approval do not govern this Skill write. Enable Experience and supply a manual reviewed source first.
 
-Run the same Automation again: successful No action creates no owner alert. `synthetic-automation-attention` exercises ordinary AttentionRequested. For Event reaction, create an Event Source under Connections and an Automation with order.placed and configured instructions; duplicate envelopes create one Run per matching Automation. Event data is untrusted evidence.
+Run the same Automation again: successful No action creates no owner alert. `synthetic-automation-attention` exercises ordinary AttentionRequested. For Event reaction, create a shared Event under global Connections → Events (for example key `order.placed`) and an Automation subscribed by Event ID with configured instructions; duplicate envelopes create one Run per matching Automation. Event data is untrusted evidence.
 
 These marker prompts are deterministic Synthetic fixtures using production contracts, not claims about hosted model judgement or actual external store improvement. Hosted smoke uses a normal unmarked thinking prompt, explicit provider opt-in and operator credentials. [Acceptance/evidence](reports/p9.8-p9.9-freeze-candidate.md).
 

@@ -1,11 +1,11 @@
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class ExternalEventSourceRecord
+public sealed class WebhookEventRecord
 {
-    public string SourceId { get; set; } = "";
+    public string ResourceId { get; set; } = "";
     public string DisplayName { get; set; } = "";
     public int Kind { get; set; }
-    public string SourceKey { get; set; } = "";
+    public string EventKey { get; set; } = "";
     public string? CredentialHash { get; set; }
     public int Status { get; set; }
     public long Revision { get; set; }
@@ -16,9 +16,8 @@ public sealed class ExternalEventSourceRecord
 public sealed class ExternalEventRecord
 {
     public string EventId { get; set; } = "";
-    public string SourceId { get; set; } = "";
+    public string ResourceId { get; set; } = "";
     public string SourceEventId { get; set; } = "";
-    public string EventType { get; set; } = "";
     public long OccurredAtUtc { get; set; }
     public long AdmittedAtUtc { get; set; }
     public string EvidenceJson { get; set; } = "";

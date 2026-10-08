@@ -1,6 +1,7 @@
 using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Ports;
 using AgentCore.Contracts.Http;
 
 namespace AgentCore.Api;
@@ -29,11 +30,15 @@ public static class ArtifactEndpoints
             }
         });
 
-        group.MapGet("page", async (Guid sessionId, Guid? before, int? limit, SessionManager sessions, CancellationToken ct) =>
+        group.MapGet("page", async (Guid sessionId, Guid? before, int? limit, Guid? agentRunId, SessionManager sessions,
+            IAgentRunStore runs, IArtifactStore artifacts, ILocalUserProfileService profiles, CancellationToken ct) =>
         {
             try
             {
-                var page = await sessions.ListArtifactPageAsync(sessionId, before, limit ?? 20, ct).ConfigureAwait(false);
+                var session = await BackgroundSessionEndpoints.RequireSession(sessions, profiles, sessionId, ct);
+                if (agentRunId is { } id && (await runs.GetAsync(new(session.AgentInstanceId, session.ProfileId!.Value), id, ct))?.SessionId != sessionId)
+                    throw AgentCoreErrors.NotFound("AgentRun was not found.");
+                var page = await artifacts.ListPageAsync(sessionId, before, limit ?? 20, ct, agentRunId).ConfigureAwait(false);
                 return Results.Json(new ArtifactPageResponse(page.Items.Select(HttpMapping.ToArtifact).ToArray(), page.NextCursor?.ToString("D"), page.HasMore));
             }
             catch (AgentCoreException ex) { return ProblemResults.From(ex); }

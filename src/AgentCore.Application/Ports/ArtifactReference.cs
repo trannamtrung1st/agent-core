@@ -9,13 +9,14 @@ public sealed record ArtifactRecord(
     string Sha256Hex,
     Guid? SourceAttachmentId,
     string? WorkspaceLogicalPath,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    Guid? AgentRunId = null);
 
 public sealed record ArtifactPage(IReadOnlyList<ArtifactRecord> Items, Guid? NextCursor, bool HasMore);
 
 public interface IArtifactStore
 {
-    ValueTask<ArtifactPage> ListPageAsync(Guid sessionId, Guid? before, int limit, CancellationToken cancellationToken = default);
+    ValueTask<ArtifactPage> ListPageAsync(Guid sessionId, Guid? before, int limit, CancellationToken cancellationToken = default, Guid? agentRunId = null);
     bool Exists(Guid sessionId, Guid artifactId);
 
     ValueTask<ArtifactRecord> CreateAsync(
@@ -25,7 +26,8 @@ public interface IArtifactStore
         ReadOnlyMemory<byte> bytes,
         Guid? sourceAttachmentId,
         string? workspaceLogicalPath,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        Guid? agentRunId = null);
 
     ValueTask<ArtifactRecord?> GetAsync(
         Guid sessionId,

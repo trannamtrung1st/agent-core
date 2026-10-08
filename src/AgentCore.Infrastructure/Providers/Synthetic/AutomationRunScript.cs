@@ -13,6 +13,14 @@ internal static class AutomationRunScript
         var prompt = request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text ?? "";
         bool Offers(string name) => request.Tools?.Any(t => t.Name == name) == true;
         var results = request.Messages.Where(m => m.Role == ModelRole.Tool).ToArray();
+        if (prompt.Contains("synthetic-background-files", StringComparison.Ordinal))
+        {
+            var file = results.LastOrDefault(m => m.Name == ToolCatalog.ArtifactsCreateFromWorkspace);
+            if (file is not null) return Complete("NeedsAttention", "Result A: the original task report is ready.", true);
+            return results.Any(m => m.Name == ToolCatalog.WorkspaceWrite)
+                ? Call(ToolCatalog.ArtifactsCreateFromWorkspace, new { path = "/working/original-A.md", displayName = "original-A.md" })
+                : Call(ToolCatalog.WorkspaceWrite, new { path = "/working/original-A.md", content = "Original task Result A" });
+        }
         var selectedSession = System.Text.RegularExpressions.Regex.Match(prompt,
             @"synthetic-automation-review-session:\s*([0-9a-fA-F-]{36})");
         if (selectedSession.Success)

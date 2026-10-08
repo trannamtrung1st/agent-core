@@ -32,24 +32,24 @@ public sealed class ExternalEventIngress(
     ILogger<ExternalEventIngress>? logger = null)
 {
     public async ValueTask<bool> CredentialsMatchAsync(
-        Guid sourceKey,
+        string eventKey,
         string presentedToken,
         CancellationToken cancellationToken = default)
     {
-        var source = await events.GetByKeyAsync(sourceKey, cancellationToken).ConfigureAwait(false);
+        var source = await events.GetByKeyAsync(eventKey, cancellationToken).ConfigureAwait(false);
         return Authorized(source, presentedToken);
     }
 
     public async ValueTask<ExternalEventIngressResult> AdmitAsync(
-        Guid sourceKey,
+        string eventKey,
         string presentedToken,
         ReadOnlyMemory<byte> body,
         CancellationToken cancellationToken = default)
     {
-        var source = await events.GetByKeyAsync(sourceKey, cancellationToken).ConfigureAwait(false);
+        var source = await events.GetByKeyAsync(eventKey, cancellationToken).ConfigureAwait(false);
         if (!Authorized(source, presentedToken))
         {
-            Log(ExternalEventIngressKind.Unauthorized, sourceKey, null, 0);
+            Log(ExternalEventIngressKind.Unauthorized, eventKey, null, 0);
             return new ExternalEventIngressResult(ExternalEventIngressKind.Unauthorized, null, "unauthorized");
         }
 
@@ -57,11 +57,10 @@ public sealed class ExternalEventIngress(
                 body.Span,
                 out var evidence,
                 out var sourceEventId,
-                out var eventType,
                 out var occurredAt,
                 out var error))
         {
-            Log(ExternalEventIngressKind.Invalid, sourceKey, null, 0);
+            Log(ExternalEventIngressKind.Invalid, eventKey, null, 0);
             return new ExternalEventIngressResult(ExternalEventIngressKind.Invalid, null, error);
         }
 
@@ -69,13 +68,12 @@ public sealed class ExternalEventIngress(
         var occurred = occurredAt == DateTimeOffset.UnixEpoch ? now : TriggerScheduleCalculator.Truncate(occurredAt);
         var candidate = new ExternalEvent(
             ids.NewId(),
-            source!.SourceId,
+            source!.ResourceId,
             sourceEventId,
-            eventType,
             occurred,
             now,
             evidence);
-        var subscribers = await triggers.ListEventSubscriptionsAsync(source.SourceId, eventType, cancellationToken)
+        var subscribers = await triggers.ListEventSubscriptionsAsync(source.ResourceId, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         var targets = subscribers
             .Select(item => new ExternalEventTarget(item.AutomationId, item.Owner.AgentInstanceId, item.Owner.ProfileId))
@@ -85,7 +83,7 @@ public sealed class ExternalEventIngress(
         var kind = admitted.Kind == ExternalEventAdmitKind.Duplicate
             ? ExternalEventIngressKind.Duplicate
             : ExternalEventIngressKind.Admitted;
-        Log(kind, sourceKey, admitted.Event.EventId, created);
+        Log(kind, eventKey, admitted.Event.EventId, created);
         return new ExternalEventIngressResult(kind, admitted.Event.EventId, null);
     }
 
@@ -108,8 +106,8 @@ public sealed class ExternalEventIngress(
         return created;
     }
 
-    internal static string OccurrenceDedupeKey(Guid sourceId, string sourceEventId) =>
-        $"order.placed:{sourceId:D}:{sourceEventId}";
+    internal static string OccurrenceDedupeKey(Guid resourceId, string sourceEventId) =>
+        $"event:{resourceId:D}:{sourceEventId}";
 
     private async ValueTask<int> ResumeEventAsync(
         ExternalEvent stored,
@@ -137,9 +135,9 @@ public sealed class ExternalEventIngress(
     {
         var owner = new TriggerOwner(delivery.AgentInstanceId, delivery.ProfileId);
         var registration = await triggers.GetAsync(owner, delivery.AutomationId, cancellationToken).ConfigureAwait(false);
-        var source = await events.GetAsync(stored.SourceId, cancellationToken).ConfigureAwait(false);
-        if (source?.Status != ExternalEventSourceStatus.Active || registration is null || registration.Status != AutomationStatus.Active
-            || registration.EventSourceId != stored.SourceId || registration.EventType != stored.EventType)
+        var source = await events.GetAsync(stored.ResourceId, cancellationToken).ConfigureAwait(false);
+        if (source?.Status != WebhookEventStatus.Active || registration is null || registration.Status != AutomationStatus.Active
+            || registration.EventId != stored.ResourceId)
         {
             await events.MarkDeliveryAsync(stored.EventId, delivery.AutomationId, ExternalEventDeliveryStatus.Skipped, cancellationToken)
                 .ConfigureAwait(false);
@@ -148,7 +146,7 @@ public sealed class ExternalEventIngress(
 
         var outcome = await TryCreateOccurrenceAsync(
             registration,
-            stored.SourceId,
+            stored.ResourceId,
             stored.SourceEventId,
             stored.EvidenceJson,
             stored.EventId,
@@ -163,7 +161,7 @@ public sealed class ExternalEventIngress(
 
     private async ValueTask<DeliveryOutcome> TryCreateOccurrenceAsync(
         Automation registration,
-        Guid sourceId,
+        Guid resourceId,
         string sourceEventId,
         string evidence,
         Guid eventId,
@@ -190,16 +188,26 @@ public sealed class ExternalEventIngress(
             return new DeliveryOutcome(ExternalEventDeliveryStatus.Skipped, false);
         }
 
+        string occurrenceEvidence;
+        try
+        {
+            occurrenceEvidence = AutomationRules.Evidence(registration, new { sourceEventId, receiptId = eventId, eventId = resourceId, payload = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(evidence) });
+        }
+        catch (ArgumentException)
+        {
+            logger?.LogWarning("Event delivery {EventId} to Automation {AutomationId} exceeds the occurrence evidence budget.", eventId, registration.AutomationId);
+            return new DeliveryOutcome(ExternalEventDeliveryStatus.Skipped, false);
+        }
         var occurrence = new TriggerOccurrence(
             ids.NewId(),
-            OccurrenceDedupeKey(sourceId, sourceEventId) + ":" + registration.AutomationId.ToString("D"),
+            OccurrenceDedupeKey(resourceId, sourceEventId) + ":" + registration.AutomationId.ToString("D"),
             registration.AutomationId,
             registration.Owner,
             TriggerSourceKind.ApplicationEvent,
             null,
             now,
             now,
-            AutomationRules.Evidence(registration, new { sourceEventId, eventId, sourceId, payload = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(evidence) }),
+            occurrenceEvidence,
             eventId,
             registration.TriggerRevision,
             OccurrenceRoutingDisposition.Pending,
@@ -213,15 +221,15 @@ public sealed class ExternalEventIngress(
         return new DeliveryOutcome(ExternalEventDeliveryStatus.Admitted, admitted.Kind == TriggerOccurrenceAdmitKind.Admitted);
     }
 
-    private static bool Authorized(ExternalEventSource? source, string presentedToken) =>
-        source is { Status: ExternalEventSourceStatus.Active }
+    private static bool Authorized(WebhookEvent? source, string presentedToken) =>
+        source is { Status: WebhookEventStatus.Active }
         && WebhookTokens.Matches(source.CredentialHash, presentedToken);
 
-    private void Log(ExternalEventIngressKind kind, Guid sourceKey, Guid? eventId, int subscribers) =>
+    private void Log(ExternalEventIngressKind kind, string eventKey, Guid? eventId, int subscribers) =>
         logger?.LogInformation(
-            "External event {Admission} for source {SourceKey} event {EventId} new subscribers {SubscriberCount}.",
+            "External event {Admission} for source {EventKey} event {EventId} new subscribers {SubscriberCount}.",
             kind,
-            sourceKey,
+            eventKey,
             eventId,
             subscribers);
 }

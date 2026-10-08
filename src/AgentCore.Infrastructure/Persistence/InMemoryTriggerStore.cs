@@ -225,17 +225,16 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     }
 
     public ValueTask<IReadOnlyList<Automation>> ListEventSubscriptionsAsync(
-        Guid eventSourceId,
-        string eventType,
+        Guid eventId,
+        bool activeOnly = true,
         CancellationToken cancellationToken = default)
     {
         lock (_state.Gate)
         {
             var items = _state.Registrations.Values
                 .Where(item =>
-                    item.Status == AutomationStatus.Active
-                    && item.EventSourceId == eventSourceId
-                    && string.Equals(item.EventType, eventType, StringComparison.Ordinal))
+                    (!activeOnly || item.Status == AutomationStatus.Active)
+                    && item.Status != AutomationStatus.Cancelled && item.EventId == eventId)
                 .ToArray();
             return ValueTask.FromResult<IReadOnlyList<Automation>>(items);
         }

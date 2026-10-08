@@ -13,6 +13,7 @@ internal sealed class BrowserEvidenceProgress
     internal const int StopAfterRepeatedEvidence = 2;
 
     private string? _fingerprint;
+    private readonly HashSet<string> _searchEvidence = new(StringComparer.Ordinal);
 
     internal int Repeated { get; private set; }
 
@@ -26,6 +27,22 @@ internal sealed class BrowserEvidenceProgress
 
     internal void Note(string tool, string? json)
     {
+        if (tool == ToolCatalog.BrowserFind && json is not null)
+        {
+            try
+            {
+                using var found = JsonDocument.Parse(json);
+                if (!found.RootElement.TryGetProperty("error", out _) && found.RootElement.TryGetProperty("matches", out var matches)
+                    && matches.ValueKind == JsonValueKind.Array && matches.GetArrayLength() > 0)
+                {
+                    var evidence = string.Join("\n", matches.EnumerateArray().Select(e => string.Join("|", Read(e, "role"), Read(e, "name"), Read(e, "ancestors"), Actions(e), State(e, "value"), State(e, "checked"), State(e, "selectedText"))));
+                    if (_searchEvidence.Add(evidence)) Reset();
+                }
+            }
+            catch (JsonException) { }
+            return;
+        }
+
         if ((tool == ToolCatalog.BrowserNavigate || BrowserToolCatalog.IsInteraction(tool)))
         {
             if (IsSuccess(json))

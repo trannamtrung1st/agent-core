@@ -401,7 +401,7 @@ Migration `20261007045013_SystemCredentials` drops `ApplicationConnections` and 
 
 Display names are 1–120 characters. Metadata has at most 32 keys, 1–64 characters per trimmed case-insensitive unique key, 2048 characters per value, and 16 KiB total UTF-8 JSON. References normalize to lower case and contain 1–64 ASCII letters/digits/hyphens with an alphanumeric first character. Up to 32 exact HTTP(S) origins are accepted without paths, userinfo, query, fragment or wildcards. Protected input contains 1–65536 UTF-8 bytes and is never implicitly trimmed. Metadata is intentionally visible to agents; operators must keep protected material out of it.
 
-Event Source bearer credentials remain source-owned, shown once and stored as hashes. Host/provider keys stay in operator configuration. Neither is imported into this inventory.
+Event bearer credentials remain Event-owned, shown once and stored as hashes. Host/provider keys stay in operator configuration. Neither is imported into this inventory.
 
 The P9.5 nopCommerce Application Connection was a bounded proving slice and is retired by System Credentials. Historical P9.5/P9.6 freeze evidence remains unchanged; current behavior uses explicit credential grants, generic capabilities, and Agent-Instance-owned browser profiles.
 
@@ -423,7 +423,7 @@ Instance mode/scopes/freeze, derived eligible configured tools, policy revision,
 
 ## Unified Automation persistence and cutover
 
-`Automations` is the final schema: AutomationId, trusted instance/profile, Name, Instructions, TriggerKind, nullable ScheduleJson or EventSourceId/EventType, lifecycle/timing/count, `Revision`/`TriggerRevision`, immutable provenance and optional model/vision fields. Event rows have null ScheduleJson. Migration `20261007101836_AutomationTriggerRevision` renames the existing `ScheduleRevision` column to `TriggerRevision` in Automations and TriggerOccurrences, preserving configured rows, admitted occurrences, revision values and dedupe identity. This terminology migration performs no reset. Occurrences and deliveries use AutomationId; background Session origin retains it. InMemory locking and SQLite transactions preserve parity, atomic CAS/history, capacity, overlap, dedupe, frozen admission and restart/effect fences.
+`Automations` is the final schema: AutomationId, trusted instance/profile, Name, Instructions, TriggerKind, nullable ScheduleJson or EventId, lifecycle/timing/count, `Revision`/`TriggerRevision`, immutable provenance and optional model/vision fields. Event rows have null ScheduleJson. Migration `20261007101836_AutomationTriggerRevision` renames the existing `ScheduleRevision` column to `TriggerRevision` in Automations and TriggerOccurrences, preserving configured rows, admitted occurrences, revision values and dedupe identity. This terminology migration performs no reset. Occurrences and deliveries use AutomationId; background Session origin retains it. InMemory locking and SQLite transactions preserve parity, atomic CAS/history, capacity, overlap, dedupe, frozen admission and restart/effect fences.
 
 Migration `20261007072939_UnifiedAutomation` destructively deletes disposable old WorkItems/approvals/attention/captures/occurrences/event deliveries/events/Experiences, drops TriggerRegistrations and ContinuityMaintenanceSettings, and creates Automations directly. It preserves profiles, instances, Definitions, knowledge, Memory, identity settings, credentials, Event Sources and workspace data. There are no legacy readers, aliases, DTO fallbacks or dual writes. Migration history remains append-only; downgrade is structural and cannot restore deleted demo data.
 
@@ -432,6 +432,16 @@ Experience retains separate enable/revision settings, immutable bounded structur
 Name <=120; Instructions/summary <=2000; shared fixed interval minimum 60 seconds with Definition policy; existing step/time/attempt/64KiB checkpoint budgets remain authoritative. Exact last-run lookup is owned by instance/profile/Automation and is independent of the 100-row history page.
 
 For a stale disposable demo database, stop its known host and use the explicit [reset workflow](17-observability-and-operations.md#unified-automation-demo-reset). Never preserve obsolete rows with compatibility adapters.
+
+## Shared Event resource upgrade
+
+Migration `20261008161708_SharedWebhookEvents` replaces `ExternalEventSources` with `WebhookEvents` and removes the retired Event Type subscription fields. It preserves internal resource IDs, hashed secrets, status, revisions, timestamps, Automation subscriptions, receipts and delivery history. Existing public GUID keys become immutable `event.` plus the old key without hyphens; new Events use owner-supplied validated keys. Existing webhook clients must update the URL and generic envelope. Stored old payload evidence stays historical data. Event-linked occurrence dedupe keys are migrated to `event:{resourceId}:{sourceEventId}:{automationId}` so pending-delivery recovery retains prior admission identity.
+
+Automations now persist EventId only; received `ExternalEvents` retain receipt EventId and ResourceId, uniquely indexed with producer SourceEventId. `ExternalEventDeliveries` remains the durable subscriber snapshot. `WebhookEvents.EventKey` has a unique index. Name mutation advances revision with CAS; key and creation identity are immutable. Safe operational reads expose the latest 20 receipt/delivery metadata records without payloads or hashes.
+
+Subscriber evidence exceeding the occurrence budget terminalizes only that delivery as Skipped. It leaves no pending delivery to retry indefinitely and preserves normal admission for eligible subscribers. Duplicate receipts retain the original snapshot and terminal statuses.
+
+Back up SQLite before applying this migration. It performs no demo reset and does not delete non-demo rows. Downgrade is intentionally unsupported because arbitrary new keys/payloads cannot be faithfully mapped back; restore the pre-upgrade backup and matching application version. Historical destructive demo migrations above remain historical and must not be rerun as an upgrade procedure.
 
 ## P9.10 identity maintenance durability
 
@@ -490,3 +500,7 @@ SQLite transactions and the InMemory shared gate implement exact-target current-
 DurableCompletionInbox (20261008134257) evolves BackgroundCompletionReceipts into canonical accounting instead of adding a second queue. InboxJson retains immutable owner/parent/initial-child references, revision, claim/token/generation/expiry, bounded acknowledgment intent, handling Run, report Activation and skip reason. Result content remains on the child Run. Indexed scalar owner/parent/status/claim columns support bounded reads and dispatch. Revision is a concurrency token. ParentActivationId is nonunique so one report can reserve two source rows; the foreign key remains intact.
 
 The forward migration translates existing delivered/queued/skipped receipts and preserves Session, Run and response identity. It does not reset user data. The active execution partial unique index becomes Status IN (1, 2, 7), including WaitingForSignal alongside Running and approval. AgentRun payload persists the typed wait, suspended generation and cumulative count/seconds. Recovery validates the descriptor and pending tool checkpoint. Parent lease renewal updates unexpired inbox consumption claims in the same transaction, preserving token and acknowledgment intent; expiration still releases them for recovery. Wait recovery treats missing or durably deleted admitted children as unavailable and appends one bounded normal result instead of repeatedly failing target lookup. A populated previous-schema upgrade and reopen test is required alongside fresh migration/store parity.
+
+## Original background result provenance
+
+The additive ArtifactAgentRunOwnership migration adds nullable `Artifacts.AgentRunId` and a `(SessionId, AgentRunId)` index after SharedWebhookEvents. Existing rows remain null; no inferred ownership or blob relocation occurs. InMemory carries the same optional identity. The existing Session origin JSON gains optional `initialTitle` at new background admission; historical JSON remains readable with null. Mutable Chat renames do not revise origin. The initial AgentRun and source entries remain authoritative for results/objectives; no redundant result snapshot is stored.

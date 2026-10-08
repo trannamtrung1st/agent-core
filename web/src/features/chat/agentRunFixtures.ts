@@ -7,6 +7,7 @@ export const fixtureRun: AgentRun = {
   failureCode: null, failureSummary: null, diagnosticId: null, knownEffectSummary: null, modelCatalogKey: "synthetic-default", responseId: "response-1", automationId: null, experienceId: null, sourceOccurrenceId: null
 };
 export const fixtureBackground: BackgroundSession = {
+  originalTitle: "Progress check",
   session: { sessionId: "background-1", title: "Progress check", agentId: "examiner", agentVersion: 1, status: "active", archived: false, ended: false,
     workspaceOwned: true, runtimeEpoch: 1, revision: 3, createdAt: fixtureRun.createdAt, updatedAt: fixtureRun.updatedAt },
   origin: { kind: "ImmediateBackground", initialAgentRunId: "run-1", parentSessionId: "parent-1", parentAgentRunId: "parent-run",

@@ -28,6 +28,16 @@ internal static class BackgroundSessionScript
         // Background work never fans out, even when the original objective contains this fixture marker.
         if (request.Messages.Any(message => message.Role == ModelRole.System && message.Text.StartsWith("Bounded background Session task.", StringComparison.Ordinal))) return null;
         var prompt = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? "";
+        if (prompt.Contains("[test:followup-file]", StringComparison.Ordinal))
+        {
+            var userIndex = request.Messages.ToList().FindLastIndex(m => m.Role == ModelRole.User);
+            var results = request.Messages.Skip(userIndex + 1).Where(m => m.Role == ModelRole.Tool).ToArray();
+            var file = results.LastOrDefault(m => m.Name == ToolCatalog.ArtifactsCreateFromWorkspace);
+            if (file is not null) return [new ModelTextDelta("Follow-up report created: " + prompt), new ModelCompleted(ModelStopReason.Completed)];
+            return results.Any(m => m.Name == ToolCatalog.WorkspaceWrite)
+                ? Call(ToolCatalog.ArtifactsCreateFromWorkspace, new { path = "/working/followup.md", displayName = "followup.md" })
+                : Call(ToolCatalog.WorkspaceWrite, new { path = "/working/followup.md", content = prompt });
+        }
         if (!prompt.Contains("[test:background-start]", StringComparison.Ordinal)) return null;
         var result = request.Messages.LastOrDefault(message => message.Role == ModelRole.Tool && message.Name == ToolCatalog.BackgroundStart);
         if (result is not null)
@@ -42,7 +52,7 @@ internal static class BackgroundSessionScript
                 return Call(ToolCatalog.CapabilitiesLoad, new { query = "start an immediate background task", limit = 1 });
             return [new ModelTextDelta("This Agent is not authorized to start background tasks."), new ModelCompleted(ModelStopReason.Completed)];
         }
-        return Call(ToolCatalog.BackgroundStart, new { objective = "synthetic-automation-attention: check the requested progress and report the outcome", title = "Background progress check", reportCompletion = true });
+        return Call(ToolCatalog.BackgroundStart, new { objective = prompt.Contains("[test:background-files]", StringComparison.Ordinal) ? "synthetic-background-files: create the original task report" : "synthetic-automation-attention: check the requested progress and report the outcome", title = "Background progress check", reportCompletion = true });
     }
     private static IReadOnlyList<ModelGenerationEvent> Call(string name, object arguments) =>
         [new ModelToolCallEvent(new("background-fixture-" + name, name, JsonSerializer.Serialize(arguments))), new ModelCompleted(ModelStopReason.ToolCalls)];

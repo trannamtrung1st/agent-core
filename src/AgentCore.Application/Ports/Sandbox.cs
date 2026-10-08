@@ -8,7 +8,8 @@ public sealed record SandboxRequest(
     AgentDefinition Definition,
     string Verb,
     IReadOnlyList<string> Arguments,
-    string? ExportLogicalPath = null);
+    string? ExportLogicalPath = null,
+    Guid? AgentRunId = null);
 
 public sealed record SandboxResult(
     bool Succeeded,

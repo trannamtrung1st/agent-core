@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { Input, Typography } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 
-/** Shared search inset and pagination for the Admin inventory collections. */
+/** Shared collection search; the enclosing collection owns outer insets and gaps. */
 export function AdminCollectionToolbar({ label, value, onChange }: {
   label: string;
   value: string;

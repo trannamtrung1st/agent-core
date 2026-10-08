@@ -40,6 +40,8 @@ public static class BrowserToolArguments
         "command"
     };
 
+    public static bool IsOpaqueReference(string? value) => value is not null && OpaqueRef.IsMatch(value);
+
     public static bool TryNavigate(JsonElement args, out string url, out string errorJson)
     {
         if (!TryNavigate(args, out var operation, out var parsed, out errorJson)

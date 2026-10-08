@@ -14,7 +14,7 @@ describe("appRoute", () => {
     expect(parseAppRoute("/c/019944af-00d1-7000-8000-000000000001")).toEqual({ area: "chat" });
     expect(parseAppRoute("/admin")).toEqual({ area: "admin", view: "home" });
     expect(parseAppRoute("/admin/instances")).toEqual({ area: "admin", view: "home", collection: "instances" });
-    expect(parseAppRoute("/admin/event-sources/")).toEqual({ area: "admin", view: "home", collection: "event-sources" });
+    expect(parseAppRoute("/admin/connections/events/")).toEqual({ area: "admin", view: "home", collection: "events" });
     expect(parseAppRoute("/admin/definitions")).toEqual({ area: "admin", view: "home", collection: "definitions" });
     expect(parseAppRoute("/admin/definitions/examiner")).toEqual({
       area: "admin",
@@ -31,7 +31,7 @@ describe("appRoute", () => {
   it("builds admin paths", () => {
     expect(adminHomePath()).toBe("/admin");
     expect(adminHomePath("instances")).toBe("/admin/instances");
-    expect(adminHomePath("event-sources")).toBe("/admin/event-sources");
+    expect(adminHomePath("events")).toBe("/admin/connections/events");
     expect(adminDefinitionPath("examiner")).toBe("/admin/definitions/examiner");
     expect(adminInstancePath("019944AF-00D1-7000-8000-000000000001")).toBe(
       "/admin/instances/019944af-00d1-7000-8000-000000000001"
@@ -45,7 +45,7 @@ describe("appRoute", () => {
       });
     }
     const instanceId = "019944af-00d1-7000-8000-000000000001";
-    for (const tab of ["identity", "runs", "connections", "effective"] as const) {
+    for (const tab of ["identity", "runs", "credentials", "effective"] as const) {
       expect(parseAppRoute(adminInstancePath(instanceId, tab))).toEqual({
         area: "admin", view: "instance", instanceId, tab
       });
@@ -62,10 +62,10 @@ describe("appRoute", () => {
     }
   });
 
-  it("uses Connections as the instance ingress and credential tab", () => {
+  it("separates global Connections from Instance Credentials", () => {
     const instanceId = "019944af-00d1-7000-8000-000000000001";
-    expect(parseAppRoute(`/admin/instances/${instanceId}/connections`)).toEqual({ area: "admin", view: "instance", instanceId, tab: "connections" });
-    expect(adminHomePath("credentials")).toBe("/admin/credentials");
+    expect(parseAppRoute(`/admin/instances/${instanceId}/credentials`)).toEqual({ area: "admin", view: "instance", instanceId, tab: "credentials" });
+    expect(adminHomePath("credentials")).toBe("/admin/connections/credentials");
   });
 
   it("ignores unknown tabs and sections and handles malformed escaped identifiers", () => {

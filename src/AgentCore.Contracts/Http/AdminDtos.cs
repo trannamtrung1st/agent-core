@@ -376,34 +376,17 @@ public sealed record AdminCancelAutomationRegistrationRequest(long ExpectedRevis
 
 public sealed record AdminEventListResponse(IReadOnlyList<AdminEventResponse> Items);
 
-public sealed record AdminEventSourceResponse(
-    string SourceId,
-    string DisplayName,
-    string Kind,
-    string SourceKey,
-    string Status,
-    long Revision);
-
-public sealed record AdminEventSourceListResponse(IReadOnlyList<AdminEventSourceResponse> Items);
-
-public sealed record AdminCreateEventSourceRequest(string DisplayName);
-
-public sealed record AdminEventSourceCredentialResponse(
-    string SourceId,
-    string SourceKey,
-    string Token,
-    string Status);
-
-public sealed record AdminEventSubscriptionResponse(
-    string AutomationId,
-    string SourceId,
-    string EventType,
-    string Status,
-    long Revision);
-
-public sealed record AdminEventSubscriptionListResponse(IReadOnlyList<AdminEventSubscriptionResponse> Items);
-
-public sealed record AdminCreateEventSubscriptionRequest(string SourceId, string EventType);
+public sealed record AdminWebhookEventResponse(string EventId, string DisplayName, string EventKey,
+    string Status, long Revision, string CreatedAt, string UpdatedAt, int SubscriberCount, string? LastReceivedAt);
+public sealed record AdminWebhookEventListResponse(IReadOnlyList<AdminWebhookEventResponse> Items);
+public sealed record AdminCreateWebhookEventRequest(string DisplayName, string EventKey);
+public sealed record AdminRenameWebhookEventRequest(string DisplayName, long ExpectedRevision);
+public sealed record AdminWebhookEventCredentialResponse(string EventId, string EventKey, string Token, string Status);
+public sealed record AdminWebhookEventSubscriber(string AutomationId, string Name, string AgentInstanceId, string Status);
+public sealed record AdminWebhookEventDelivery(string ReceiptId, string SourceEventId, string ReceivedAt,
+    string AutomationId, string AgentInstanceId, string Status);
+public sealed record AdminWebhookEventDetailsResponse(AdminWebhookEventResponse Event,
+    IReadOnlyList<AdminWebhookEventSubscriber> Subscribers, IReadOnlyList<AdminWebhookEventDelivery> Deliveries);
 
 public sealed record AdminEventResponse(
     string EventId,

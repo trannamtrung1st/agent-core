@@ -34,7 +34,7 @@ public sealed class UnifiedAutomationJourneyTests
             var schedule = (await create.Content.ReadFromJsonAsync<AutomationResponse>())!;
             scheduleId = schedule.AutomationId;
             Assert.Equal(HttpStatusCode.Conflict, (await client.PutAsJsonAsync(path + "/" + scheduleId, draft)).StatusCode);
-            var mixed = draft with { Trigger = new("event", draft.Trigger.Schedule, Guid.NewGuid().ToString(), "order.placed") };
+            var mixed = draft with { Trigger = new("event", draft.Trigger.Schedule, Guid.NewGuid().ToString()) };
             Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path, mixed)).StatusCode);
             var run = await client.PostAsJsonAsync(path + "/" + scheduleId + "/run", new ContinuityRevisionRequest(schedule.Revision));
             run.EnsureSuccessStatusCode();
@@ -48,17 +48,17 @@ public sealed class UnifiedAutomationJourneyTests
             Assert.Equal(Guid.Parse(scheduleId), (await s.SessionAsync(manual)).Origin.AutomationId);
             Assert.Equal(SessionOriginKind.AutomationOccurrence, (await s.SessionAsync(manual)).Origin.Kind);
             Assert.False(manual.Result?.AttentionRequired ?? false);
-            var sourceResponse = await client.PostAsJsonAsync("/api/v2/admin/event-sources", new { displayName = "Orders" }); sourceResponse.EnsureSuccessStatusCode();
-            var source = (await sourceResponse.Content.ReadFromJsonAsync<AdminEventSourceCredentialResponse>())!;
-            var reaction = draft with { Name = "Review new order", Trigger = new("event", EventSourceId: source.SourceId, EventType: "order.placed") };
+            var sourceResponse = await client.PostAsJsonAsync("/api/v2/admin/connections/events", new { displayName = "Orders", eventKey = "order.placed" }); sourceResponse.EnsureSuccessStatusCode();
+            var source = (await sourceResponse.Content.ReadFromJsonAsync<AdminWebhookEventCredentialResponse>())!;
+            var reaction = draft with { Name = "Review new order", Trigger = new("event", EventId: source.EventId) };
             var eventResponse = await client.PostAsJsonAsync(path, reaction); eventResponse.EnsureSuccessStatusCode();
             var eventAutomation = (await eventResponse.Content.ReadFromJsonAsync<AutomationResponse>())!;
             eventAutomationId = eventAutomation.AutomationId;
             Assert.Null(eventAutomation.Trigger.Schedule);
             var ingress = s.GetRequiredService<ExternalEventIngress>();
             var body = Encoding.UTF8.GetBytes(ExternalEventEnvelope.Build("order-1", "1001"));
-            Assert.Equal(ExternalEventIngressKind.Admitted, (await ingress.AdmitAsync(Guid.Parse(source.SourceKey), source.Token, body)).Kind);
-            Assert.Equal(ExternalEventIngressKind.Duplicate, (await ingress.AdmitAsync(Guid.Parse(source.SourceKey), source.Token, body)).Kind);
+            Assert.Equal(ExternalEventIngressKind.Admitted, (await ingress.AdmitAsync(source.EventKey, source.Token, body)).Kind);
+            Assert.Equal(ExternalEventIngressKind.Duplicate, (await ingress.AdmitAsync(source.EventKey, source.Token, body)).Kind);
             Assert.Single(await s.GetRequiredService<ITriggerStore>().ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 20));
             await Drain(s);
             var items = await work.ListAsync(owner, 20);
@@ -126,10 +126,10 @@ public sealed class UnifiedAutomationJourneyTests
     public void Correlated_events_are_bounded_and_preserve_the_root()
     {
         var root = Guid.NewGuid();
-        string Payload(int depth) => $$$"""{"eventId":"new","type":"order.placed","rootAgentRunId":"{{{root}}}","triggerDepth":{{{depth}}},"data":{"orderReference":"1001"}}""";
-        Assert.True(ExternalEventEnvelope.TryNormalize(Encoding.UTF8.GetBytes(Payload(4)), out var evidence, out _, out _, out _, out _));
+        string Payload(int depth) => $$$"""{"eventId":"new","rootAgentRunId":"{{{root}}}","triggerDepth":{{{depth}}},"data":{"orderReference":"1001"}}""";
+        Assert.True(ExternalEventEnvelope.TryNormalize(Encoding.UTF8.GetBytes(Payload(4)), out var evidence, out _, out _, out _));
         Assert.Contains(root.ToString(), evidence);
-        Assert.False(ExternalEventEnvelope.TryNormalize(Encoding.UTF8.GetBytes(Payload(5)), out _, out _, out _, out _, out var reason));
+        Assert.False(ExternalEventEnvelope.TryNormalize(Encoding.UTF8.GetBytes(Payload(5)), out _, out _, out _, out var reason));
         Assert.Equal("trigger_depth_exceeded", reason);
     }
 

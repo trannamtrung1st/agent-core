@@ -1,0 +1,12 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Custom asset catalog</title>
+<style>.caption{cursor:pointer;display:inline-block}.hidden{display:none}</style>
+<h1>Custom workspace</h1><div role="tree" aria-label="Assets" id="catalog"></div>
+<label>Summary <input aria-label="Summary"></label><h2 id="detail">No detail opened</h2><p role="status">No item opened</p>
+<span class="caption hidden">Hidden entry</span><span>Static caption</span>
+<label for="password"><span class="caption">Protected caption</span></label><input id="password" type="password">
+<script>
+const catalog=document.querySelector('#catalog');
+function render(){catalog.replaceChildren();for(let g=0;g<20;g++){const group=document.createElement('div');group.setAttribute('role','group');group.setAttribute('aria-label','Collection '+g);for(let i=0;i<100;i++){const row=document.createElement('div');const icon=document.createElement('span');icon.setAttribute('role','img');icon.setAttribute('aria-label','plus-square');const caption=document.createElement('span');caption.className='caption';caption.textContent='Entry '+(g*100+i);row.append(icon,caption);group.append(row)}catalog.append(group)}}
+catalog.addEventListener('click',event=>{if(!event.target.classList.contains('caption'))return;const name=event.target.textContent;document.querySelector('[role=status]').textContent='Opened '+name;document.querySelector('#detail').textContent=name+' detail';render()});render();
+localStorage.setItem('access_token','custom-private-token');
+</script></html>

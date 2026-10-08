@@ -31,8 +31,8 @@ test("admin unattended model and event sources stay operable at wide and narrow 
     return body.instanceId;
   });
 
-  const sourceKey = "11111111-1111-4111-8111-111111111111";
-  const sourceId = "22222222-2222-4222-8222-222222222222";
+  const eventKey = "order.placed";
+  const eventId = "22222222-2222-4222-8222-222222222222";
   let sourceStatus = "Active";
   let sources: Array<Record<string, unknown>> = [];
   await page.goto(`/admin/instances/${instanceId}`);
@@ -71,7 +71,7 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   await page.getByRole("tab", { name: "Policies & models", exact: true }).click();
   await expect(automation.getByText("Effective source: Unattended default (Scripted Alpha)")).toBeVisible({ timeout: 15_000 });
 
-  await page.route("**/api/v2/admin/event-sources**", async (route) => {
+  await page.route("**/api/v2/admin/connections/events**", async (route) => {
     const url = route.request().url();
     const method = route.request().method();
     if (method === "GET") {
@@ -79,17 +79,17 @@ test("admin unattended model and event sources stay operable at wide and narrow 
       return;
     }
 
-    if (method === "POST" && url.endsWith("/event-sources")) {
+    if (method === "POST" && url.endsWith("/connections/events")) {
       sources = [{
-        sourceId,
+        eventId,
         displayName: "Demo Store",
-        kind: "Webhook",
-        sourceKey,
+        subscriberCount: 0, createdAt: "2026-10-08T00:00:00Z", updatedAt: "2026-10-08T00:00:00Z", lastReceivedAt: null,
+        eventKey,
         status: sourceStatus,
         revision: 1
       }];
       await route.fulfill({
-        json: { sourceId, sourceKey, token: "once-secret-credential", status: "Active" }
+        json: { eventId, eventKey, token: "once-secret-credential", status: "Active" }
       });
       return;
     }
@@ -105,29 +105,31 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   });
 
   await page.goto("/admin");
-  await page.getByRole("tab", { name: "Event sources", exact: true }).click();
-  const sourcesRegion = page.getByRole("region", { name: "Event sources" });
-  await expect(sourcesRegion.getByText("No event sources yet.")).toBeVisible();
-  await sourcesRegion.getByRole("button", { name: "New event source" }).click();
-  await page.getByLabel("Event source name").fill("Demo Store");
-  const create = page.getByRole("button", { name: "Create event source" });
+  await page.getByRole("tab", { name: "Connections", exact: true }).click();
+  await page.getByRole("tab", { name: "Events", exact: true }).click();
+  const sourcesRegion = page.getByRole("region", { name: "Events" });
+  await expect(sourcesRegion.getByText("No Events yet. Create an Event, then subscribe an Automation to it.")).toBeVisible();
+  await sourcesRegion.getByRole("button", { name: "New Event" }).click();
+  await page.getByLabel("Event name").fill("Demo Store");
+  await page.getByLabel("Event key").fill(eventKey);
+  const create = page.getByRole("button", { name: "Create Event" });
   await create.focus();
   await expect(create).toBeFocused();
   await page.keyboard.press("Enter");
   const credential = page.getByRole("dialog", { name: "Copy this credential" });
-  await expect(credential.getByRole("textbox", { name: "Event source credential" })).toHaveValue("once-secret-credential");
+  await expect(credential.getByRole("textbox", { name: "Event credential" })).toHaveValue("once-secret-credential");
   await page.keyboard.press("Escape");
   await expect(credential).toBeHidden();
   await expect(page.getByText("once-secret-credential")).toHaveCount(0);
-  await expect(sourcesRegion.getByLabel("Source key")).toHaveText(sourceKey);
+  await expect(sourcesRegion.getByText(eventKey, { exact: true })).toHaveText(eventKey);
 
   await page.setViewportSize({ width: 390, height: 800 });
   await expect(sourcesRegion.getByRole("button", { name: "Rotate credential for Demo Store" })).toBeVisible();
   await sourcesRegion.getByRole("button", { name: "Revoke Demo Store" }).click();
-  const confirm = page.getByRole("dialog", { name: "Revoke this event source?" });
-  await confirm.getByRole("button", { name: "Revoke source" }).click();
+  const confirm = page.getByRole("dialog", { name: "Revoke this Event?" });
+  await confirm.getByRole("button", { name: "Revoke Event" }).click();
   await expect(sourcesRegion.getByText("Revoked", { exact: true })).toBeVisible();
-  await expect(sourcesRegion.getByRole("cell", { name: "Webhook", exact: true })).toBeVisible();
+  await expect(sourcesRegion.getByRole("cell", { name: eventKey, exact: true })).toBeVisible();
   await expect(page.getByText("once-secret-credential")).toHaveCount(0);
 
   expect(consoleErrors.filter((line) => !line.includes("[antd: List]"))).toEqual([]);
@@ -148,8 +150,8 @@ test("background work lists scheduled and order-placed sources", async ({ page }
   await opener.focus();
   await page.keyboard.press("Enter");
   const drawer = page.getByRole("dialog", { name: "Background work" });
-  await expect(drawer.getByRole("button", { name: "Scheduled review", exact: true })).toBeVisible();
-  await expect(drawer.getByRole("button", { name: "Order-placed review", exact: true })).toBeVisible();
+  await expect(drawer.getByRole("heading", { name: "Scheduled review", exact: true })).toBeVisible();
+  await expect(drawer.getByRole("heading", { name: "Order-placed review", exact: true })).toBeVisible();
   await expect(drawer.getByText("Needs approval")).toBeVisible();
   await expect(drawer.getByText(/sourceEventId|orderReference/)).toHaveCount(0);
   await drawer.getByRole("button", { name: "Close", exact: true }).focus();
@@ -159,7 +161,7 @@ test("background work lists scheduled and order-placed sources", async ({ page }
 
   await page.setViewportSize({ width: 390, height: 800 });
   await opener.click();
-  await expect(drawer.getByRole("button", { name: "Order-placed review", exact: true })).toBeVisible();
+  await expect(drawer.getByRole("heading", { name: "Order-placed review", exact: true })).toBeVisible();
   await drawer.getByRole("button", { name: "Close" }).click();
   await expect(drawer).toBeHidden();
 });

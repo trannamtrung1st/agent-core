@@ -205,7 +205,7 @@ public sealed class CapabilityProjectionTests
         var c = Context(d) with { SessionAttachments = [new(Guid.NewGuid(), "invoice.txt", "text/plain", 1)], AgentInstanceId = Guid.NewGuid() };
         var projected = ToolCatalog.For(d, c, ToolConfigurationGates.AllowAll).Select(t => t.Name).ToArray();
         Assert.Contains(ToolCatalog.AttachmentsRead, projected);
-        Assert.DoesNotContain(ToolCatalog.BrowserSnapshot, projected);
+        Assert.Contains(ToolCatalog.BrowserSnapshot, projected);
         Assert.Contains(ToolCatalog.BrowserSnapshot, ToolCatalog.For(d, c with { LoadedCapabilityIds = [ToolCatalog.BrowserSnapshot] }, ToolConfigurationGates.AllowAll).Select(t => t.Name));
         Assert.DoesNotContain(ToolCatalog.BrowserNavigate, projected);
         Assert.DoesNotContain(ToolCatalog.AttachmentsRead, ToolCatalog.For(d, Context(d), ToolConfigurationGates.AllowAll).Select(t => t.Name));

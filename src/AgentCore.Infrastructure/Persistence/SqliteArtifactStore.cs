@@ -18,6 +18,7 @@ public sealed class ArtifactRecordRow
     public long ByteSize { get; set; }
     public string Sha256Hex { get; set; } = "";
     public string? SourceAttachmentId { get; set; }
+    public string? AgentRunId { get; set; }
     public string? WorkspaceLogicalPath { get; set; }
     public long CreatedAtUtc { get; set; }
 }
@@ -53,7 +54,8 @@ public sealed class SqliteArtifactStore(
         ReadOnlyMemory<byte> bytes,
         Guid? sourceAttachmentId,
         string? workspaceLogicalPath,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Guid? agentRunId = null)
     {
         AttachmentBlobKeys.EnsureSafeRoot(blobRoot);
         Directory.CreateDirectory(blobRoot);
@@ -100,7 +102,7 @@ public sealed class SqliteArtifactStore(
                 Convert.ToHexString(SHA256.HashData(bytes.Span)).ToLowerInvariant(),
                 sourceAttachmentId,
                 workspaceLogicalPath,
-                time.GetUtcNow());
+                time.GetUtcNow(), agentRunId);
             try
             {
                 db.Artifacts.Add(ToRow(record, key));
@@ -166,11 +168,12 @@ public sealed class SqliteArtifactStore(
         return rows.Select(FromRow).ToArray();
     }
 
-    public async ValueTask<ArtifactPage> ListPageAsync(Guid sessionId, Guid? before, int limit, CancellationToken cancellationToken = default)
+    public async ValueTask<ArtifactPage> ListPageAsync(Guid sessionId, Guid? before, int limit, CancellationToken cancellationToken = default, Guid? agentRunId = null)
     {
         if (limit is < 1 or > 100) throw AgentCoreErrors.Validation("Artifact limit must be between 1 and 100.");
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var query = db.Artifacts.AsNoTracking().Where(row => row.SessionId == sessionId.ToString("D"));
+        if (agentRunId is not null) query = query.Where(row => row.AgentRunId == agentRunId.Value.ToString("D"));
         if (_deleted.ContainsKey(sessionId)) query = query.Where(_ => false);
         if (before is { } cursor)
         {
@@ -296,6 +299,7 @@ public sealed class SqliteArtifactStore(
             ByteSize = record.ByteSize,
             Sha256Hex = record.Sha256Hex,
             SourceAttachmentId = record.SourceAttachmentId?.ToString("D"),
+            AgentRunId = record.AgentRunId?.ToString("D"),
             WorkspaceLogicalPath = record.WorkspaceLogicalPath,
             CreatedAtUtc = record.CreatedAt.ToUnixTimeMilliseconds()
         };
@@ -310,5 +314,6 @@ public sealed class SqliteArtifactStore(
             row.Sha256Hex,
             string.IsNullOrEmpty(row.SourceAttachmentId) ? null : Guid.Parse(row.SourceAttachmentId),
             row.WorkspaceLogicalPath,
-            DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc));
+            DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc),
+            row.AgentRunId is null ? null : Guid.Parse(row.AgentRunId));
 }

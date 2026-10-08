@@ -1108,10 +1108,10 @@ public sealed class TriggerOccurrenceRoutingTests
             inner.CountActiveAsync(owner, cancellationToken);
 
         public ValueTask<IReadOnlyList<Automation>> ListEventSubscriptionsAsync(
-            Guid eventSourceId,
-            string eventType,
+            Guid eventId,
+            bool activeOnly = true,
             CancellationToken cancellationToken = default) =>
-            inner.ListEventSubscriptionsAsync(eventSourceId, eventType, cancellationToken);
+            inner.ListEventSubscriptionsAsync(eventId, activeOnly, cancellationToken);
 
         public ValueTask<Automation> UpdateAsync(TriggerOwner owner, Guid automationId, long expectedRevision, string intent, TriggerSchedule schedule, DateTimeOffset? nextOccurrenceAtUtc, DateTimeOffset? expiresAtUtc, DateTimeOffset updatedAt, CancellationToken cancellationToken = default) =>
             inner.UpdateAsync(owner, automationId, expectedRevision, intent, schedule, nextOccurrenceAtUtc, expiresAtUtc, updatedAt, cancellationToken);
@@ -1271,10 +1271,10 @@ public sealed class TriggerOccurrenceRoutingTests
             inner.CountActiveAsync(owner, cancellationToken);
 
         public ValueTask<IReadOnlyList<Automation>> ListEventSubscriptionsAsync(
-            Guid eventSourceId,
-            string eventType,
+            Guid eventId,
+            bool activeOnly = true,
             CancellationToken cancellationToken = default) =>
-            inner.ListEventSubscriptionsAsync(eventSourceId, eventType, cancellationToken);
+            inner.ListEventSubscriptionsAsync(eventId, activeOnly, cancellationToken);
 
         public ValueTask<Automation> UpdateAsync(TriggerOwner owner, Guid automationId, long expectedRevision, string intent, TriggerSchedule schedule, DateTimeOffset? nextOccurrenceAtUtc, DateTimeOffset? expiresAtUtc, DateTimeOffset updatedAt, CancellationToken cancellationToken = default) =>
             inner.UpdateAsync(owner, automationId, expectedRevision, intent, schedule, nextOccurrenceAtUtc, expiresAtUtc, updatedAt, cancellationToken);

@@ -7,71 +7,85 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContext> contexts) : IExternalEventStore
 {
-    public async ValueTask<ExternalEventSource> CreateAsync(
-        ExternalEventSource source,
+    public async ValueTask<ExternalEventActivity> ReadActivityAsync(Guid resourceId, CancellationToken ct = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(ct);
+        var key = resourceId.ToString("D");
+        var rows = await db.ExternalEvents.AsNoTracking().Where(e => e.ResourceId == key)
+            .OrderByDescending(e => e.AdmittedAtUtc).Take(20).ToArrayAsync(ct);
+        var ids = rows.Select(e => e.EventId).ToArray();
+        var deliveries = await db.ExternalEventDeliveries.AsNoTracking().Where(d => ids.Contains(d.EventId)).ToArrayAsync(ct);
+        return new(rows.Select(ToEvent).ToArray(), deliveries.Select(ToDelivery).ToArray());
+    }
+
+    public async ValueTask<WebhookEvent> CreateAsync(
+        WebhookEvent source,
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        db.ExternalEventSources.Add(ToRecord(source));
+        db.WebhookEvents.Add(ToRecord(source));
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (DbUpdateException)
         {
-            throw AgentCoreErrors.Conflict("Event source key is already in use.");
+            throw AgentCoreErrors.Conflict("Event key is already in use.");
         }
 
         return source;
     }
 
-    public async ValueTask<ExternalEventSource?> GetAsync(Guid sourceId, CancellationToken cancellationToken = default)
+    public async ValueTask<WebhookEvent?> GetAsync(Guid resourceId, CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var row = await db.ExternalEventSources.AsNoTracking()
-            .FirstOrDefaultAsync(item => item.SourceId == sourceId.ToString("D"), cancellationToken)
+        var row = await db.WebhookEvents.AsNoTracking()
+            .FirstOrDefaultAsync(item => item.ResourceId == resourceId.ToString("D"), cancellationToken)
             .ConfigureAwait(false);
         return row is null ? null : ToSource(row);
     }
 
-    public async ValueTask<ExternalEventSource?> GetByKeyAsync(Guid sourceKey, CancellationToken cancellationToken = default)
+    public async ValueTask<WebhookEvent?> GetByKeyAsync(string eventKey, CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var key = sourceKey.ToString("D");
-        var row = await db.ExternalEventSources.AsNoTracking()
-            .FirstOrDefaultAsync(item => item.SourceKey == key, cancellationToken)
+        var key = eventKey;
+        var row = await db.WebhookEvents.AsNoTracking()
+            .FirstOrDefaultAsync(item => item.EventKey == key, cancellationToken)
             .ConfigureAwait(false);
         return row is null ? null : ToSource(row);
     }
 
-    public async ValueTask<IReadOnlyList<ExternalEventSource>> ListAsync(CancellationToken cancellationToken = default)
+    public async ValueTask<IReadOnlyList<WebhookEvent>> ListAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var rows = await db.ExternalEventSources.AsNoTracking()
+        var rows = await db.WebhookEvents.AsNoTracking()
             .OrderBy(item => item.DisplayName)
-            .ThenBy(item => item.SourceId)
+            .ThenBy(item => item.ResourceId)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         return rows.Select(ToSource).ToArray();
     }
 
-    public async ValueTask<ExternalEventSource> SaveAsync(
-        ExternalEventSource source,
+    public async ValueTask<WebhookEvent> SaveAsync(
+        WebhookEvent source,
         long expectedRevision,
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var id = source.SourceId.ToString("D");
-        var row = await db.ExternalEventSources
-            .FirstOrDefaultAsync(item => item.SourceId == id, cancellationToken)
+        var id = source.ResourceId.ToString("D");
+        var row = await db.WebhookEvents
+            .FirstOrDefaultAsync(item => item.ResourceId == id, cancellationToken)
             .ConfigureAwait(false);
         if (row is null || row.Revision != expectedRevision)
         {
-            throw AgentCoreErrors.Conflict("Event source revision is stale.");
+            throw AgentCoreErrors.Conflict("Event revision is stale.");
         }
 
+        if (source.EventKey != row.EventKey || source.CreatedAtUtc.ToUnixTimeMilliseconds() != row.CreatedAtUtc || source.Revision != expectedRevision + 1)
+            throw AgentCoreErrors.Validation("Event identity and key are immutable and revisions must advance by one.");
         Copy(row, source);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        try { await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false); }
+        catch (DbUpdateConcurrencyException) { throw AgentCoreErrors.Conflict("Event revision is stale."); }
         return source;
     }
 
@@ -81,10 +95,10 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var sourceId = candidate.SourceId.ToString("D");
+        var resourceId = candidate.ResourceId.ToString("D");
         var existing = await db.ExternalEvents.AsNoTracking()
             .FirstOrDefaultAsync(
-                item => item.SourceId == sourceId && item.SourceEventId == candidate.SourceEventId,
+                item => item.ResourceId == resourceId && item.SourceEventId == candidate.SourceEventId,
                 cancellationToken)
             .ConfigureAwait(false);
         if (existing is not null)
@@ -108,7 +122,7 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
             db.ChangeTracker.Clear();
             var raced = await db.ExternalEvents.AsNoTracking()
                 .FirstAsync(
-                    item => item.SourceId == sourceId && item.SourceEventId == candidate.SourceEventId,
+                    item => item.ResourceId == resourceId && item.SourceEventId == candidate.SourceEventId,
                     cancellationToken)
                 .ConfigureAwait(false);
             return new ExternalEventAdmit(ExternalEventAdmitKind.Duplicate, ToEvent(raced));
@@ -171,25 +185,25 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
     }
 
     public async ValueTask<ExternalEvent?> GetEventAsync(
-        Guid sourceId,
+        Guid resourceId,
         string sourceEventId,
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var row = await db.ExternalEvents.AsNoTracking()
             .FirstOrDefaultAsync(
-                item => item.SourceId == sourceId.ToString("D") && item.SourceEventId == sourceEventId,
+                item => item.ResourceId == resourceId.ToString("D") && item.SourceEventId == sourceEventId,
                 cancellationToken)
             .ConfigureAwait(false);
         return row is null ? null : ToEvent(row);
     }
 
-    private static ExternalEventSourceRecord ToRecord(ExternalEventSource source) => new()
+    private static WebhookEventRecord ToRecord(WebhookEvent source) => new()
     {
-        SourceId = source.SourceId.ToString("D"),
+        ResourceId = source.ResourceId.ToString("D"),
         DisplayName = source.DisplayName,
         Kind = (int)source.Kind,
-        SourceKey = source.SourceKey.ToString("D"),
+        EventKey = source.EventKey,
         CredentialHash = source.CredentialHash,
         Status = (int)source.Status,
         Revision = source.Revision,
@@ -197,7 +211,7 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         UpdatedAtUtc = source.UpdatedAtUtc.ToUnixTimeMilliseconds()
     };
 
-    private static void Copy(ExternalEventSourceRecord row, ExternalEventSource source)
+    private static void Copy(WebhookEventRecord row, WebhookEvent source)
     {
         row.DisplayName = source.DisplayName;
         row.CredentialHash = source.CredentialHash;
@@ -206,13 +220,13 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         row.UpdatedAtUtc = source.UpdatedAtUtc.ToUnixTimeMilliseconds();
     }
 
-    private static ExternalEventSource ToSource(ExternalEventSourceRecord row) => new(
-        Guid.Parse(row.SourceId),
+    private static WebhookEvent ToSource(WebhookEventRecord row) => new(
+        Guid.Parse(row.ResourceId),
         row.DisplayName,
-        (ExternalEventSourceKind)row.Kind,
-        Guid.Parse(row.SourceKey),
+        (WebhookEventKind)row.Kind,
+        row.EventKey,
         row.CredentialHash,
-        (ExternalEventSourceStatus)row.Status,
+        (WebhookEventStatus)row.Status,
         row.Revision,
         DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc),
         DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc));
@@ -220,9 +234,8 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
     private static ExternalEventRecord ToRecord(ExternalEvent item) => new()
     {
         EventId = item.EventId.ToString("D"),
-        SourceId = item.SourceId.ToString("D"),
+        ResourceId = item.ResourceId.ToString("D"),
         SourceEventId = item.SourceEventId,
-        EventType = item.EventType,
         OccurredAtUtc = item.OccurredAtUtc.ToUnixTimeMilliseconds(),
         AdmittedAtUtc = item.AdmittedAtUtc.ToUnixTimeMilliseconds(),
         EvidenceJson = item.EvidenceJson
@@ -246,9 +259,8 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
 
     private static ExternalEvent ToEvent(ExternalEventRecord row) => new(
         Guid.Parse(row.EventId),
-        Guid.Parse(row.SourceId),
+        Guid.Parse(row.ResourceId),
         row.SourceEventId,
-        row.EventType,
         DateTimeOffset.FromUnixTimeMilliseconds(row.OccurredAtUtc),
         DateTimeOffset.FromUnixTimeMilliseconds(row.AdmittedAtUtc),
         row.EvidenceJson);

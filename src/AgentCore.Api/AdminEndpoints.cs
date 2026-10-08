@@ -102,6 +102,7 @@ internal static class AdminEndpoints
         HarnessManagementEndpoints.Map(group);
         AgentInstanceSkillEndpoints.Map(group);
         ContinuityEndpoints.Map(group);
+        AdminWebhookEventEndpoints.Map(group);
 
         group.MapGet("/definitions", async (
             AdminReadService admin,
@@ -385,63 +386,6 @@ internal static class AdminEndpoints
                         cancellationToken)
                     .ConfigureAwait(false);
                 return Results.Json(AdminHttpMapping.ToAgentInstance(instance));
-            }
-            catch (AgentCoreException ex)
-            {
-                return ProblemResults.From(ex);
-            }
-        });
-
-        group.MapGet("/event-sources", async (
-            ExternalEventSourceService sources,
-            CancellationToken cancellationToken) =>
-            Results.Json(new AdminEventSourceListResponse(
-                (await sources.ListAsync(cancellationToken).ConfigureAwait(false))
-                .Select(AdminHttpMapping.ToEventSource)
-                .ToArray())));
-
-        group.MapPost("/event-sources", async (
-            AdminCreateEventSourceRequest? request,
-            ExternalEventSourceService sources,
-            CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                var credential = await sources.CreateAsync(request?.DisplayName ?? "", cancellationToken)
-                    .ConfigureAwait(false);
-                return Results.Json(AdminHttpMapping.ToEventSourceCredential(credential));
-            }
-            catch (AgentCoreException ex)
-            {
-                return ProblemResults.From(ex);
-            }
-        });
-
-        group.MapPost("/event-sources/{sourceId:guid}/rotate", async (
-            Guid sourceId,
-            ExternalEventSourceService sources,
-            CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                var credential = await sources.RotateAsync(sourceId, cancellationToken).ConfigureAwait(false);
-                return Results.Json(AdminHttpMapping.ToEventSourceCredential(credential));
-            }
-            catch (AgentCoreException ex)
-            {
-                return ProblemResults.From(ex);
-            }
-        });
-
-        group.MapPost("/event-sources/{sourceId:guid}/revoke", async (
-            Guid sourceId,
-            ExternalEventSourceService sources,
-            CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                var source = await sources.RevokeAsync(sourceId, cancellationToken).ConfigureAwait(false);
-                return Results.Json(AdminHttpMapping.ToEventSource(source));
             }
             catch (AgentCoreException ex)
             {

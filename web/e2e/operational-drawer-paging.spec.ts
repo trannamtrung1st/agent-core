@@ -28,7 +28,7 @@ test('background Session pages retry, retain read state and remain usable on mob
   await expect(drawer.locator('.background-work-item')).toHaveCount(40);
   await drawer.locator('.ant-drawer-body').evaluate(element => { element.scrollTop = element.scrollHeight; });
   await expect(drawer.locator('.background-work-item')).toHaveCount(45);
-  await drawer.getByRole('button', { name: 'Review 44', exact: true }).click();
+  await drawer.locator('[data-background-session-id]').filter({ hasText: 'Review 44' }).getByRole('button', { name: 'View original result', exact: true }).click();
   drawer = page.getByRole('dialog', { name: 'Review 44', exact: true });
   await expect(drawer.getByRole('region', { name: 'Needs attention', exact: true })).toHaveText('Result 44');
   await expect(page.getByRole('button', { name: 'Background work, 2 need attention', exact: true })).toBeVisible();
@@ -59,5 +59,5 @@ test('Admin AgentRun pages survive resizing and refresh', async ({ page }) => {
   await expect(tableRows).toHaveCount(40); const before = heads;
   await page.setViewportSize({ width: 390, height: 800 }); expect(heads).toBe(before);
   await expect(tableRows).toHaveCount(40); await region.getByRole('button', { name: 'Load more', exact: true }).click();
-  await expect(tableRows).toHaveCount(45); await expect(region.getByText('You’re all caught up')).toBeVisible();
+  await expect(tableRows).toHaveCount(45); await expect(region.getByText('All items loaded')).toBeVisible();
 });

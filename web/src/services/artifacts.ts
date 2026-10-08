@@ -16,8 +16,8 @@ function artifactPath(sessionId: string, artifactId: string): string {
   return `/api/v2/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}`;
 }
 
-export async function listArtifactPage(sessionId: string, before?: string): Promise<CursorPage<ArtifactMetadata>> {
-  const query = new URLSearchParams({ limit: "20", ...(before ? { before } : {}) });
+export async function listArtifactPage(sessionId: string, before?: string, agentRunId?: string): Promise<CursorPage<ArtifactMetadata>> {
+  const query = new URLSearchParams({ limit: "20", ...(before ? { before } : {}), ...(agentRunId ? { agentRunId } : {}) });
   const response = await ownerFetch(`/api/v2/sessions/${encodeURIComponent(sessionId)}/artifacts/page?${query}`);
   if (!response.ok) throw new Error("Files could not be loaded. Try again.");
   const page = await response.json() as CursorPage<ArtifactMetadata>;

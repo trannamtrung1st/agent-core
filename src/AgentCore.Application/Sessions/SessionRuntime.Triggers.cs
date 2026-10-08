@@ -22,11 +22,8 @@ public sealed partial class SessionRuntime
 
         _scheduleDraftContext = null;
         _scheduleDraftEligibleForNextUserTurn = false;
-        var refreshed = ScheduleConversationContext.TryFromRegistrationJson(resultText, action);
-        if (refreshed is not null)
-        {
-            _scheduleConversationContext = refreshed;
-        }
+        _scheduleConversationContext = ScheduleConversationContext.RefreshFromRegistrationJson(
+            _scheduleConversationContext, resultText, action);
     }
 
     private void RefreshScheduleDraftForUserTurn(string? text, string? language)

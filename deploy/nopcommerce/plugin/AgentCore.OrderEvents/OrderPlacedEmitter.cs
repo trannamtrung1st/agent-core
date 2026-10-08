@@ -6,7 +6,6 @@ namespace AgentCore.OrderEvents;
 
 public static class OrderPlacedEmitter
 {
-    public const string EventType = "order.placed";
 
     public const int MaxAttempts = 3;
 
@@ -29,7 +28,6 @@ public static class OrderPlacedEmitter
         {
             writer.WriteStartObject();
             writer.WriteString("eventId", eventId);
-            writer.WriteString("type", EventType);
             writer.WriteString("occurredAt", occurredAt.ToUniversalTime().ToString("o"));
             writer.WriteStartObject("data");
             writer.WriteString("orderReference", orderReference);

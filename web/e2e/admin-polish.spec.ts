@@ -13,12 +13,12 @@ async function createInstance(page: import("@playwright/test").Page) {
 }
 
 test("Admin read recovery and one-time clipboard guidance stay on the affected surface", async ({ page }) => {
-  await page.goto("/admin/event-sources");
-  await expect(page.getByRole("button", { name: "New event source", exact: true })).toBeVisible();
+  await page.goto("/admin/connections/events");
+  await expect(page.getByRole("button", { name: "New Event", exact: true })).toBeVisible();
   expect(await page.getByRole("button", { name: "New definition", exact: true }).count()).toBe(0);
   expect(await page.getByRole("button", { name: "New instance", exact: true }).count()).toBe(0);
   let fail = true;
-  await page.route("**/api/v2/admin/event-sources", route => fail
+  await page.route("**/api/v2/admin/connections/events", route => fail
     ? route.fulfill({ status: 503, contentType: "application/problem+json", body: JSON.stringify({ title: "Sources unavailable", status: 503 }) })
     : route.continue());
   await page.reload();
@@ -26,34 +26,35 @@ test("Admin read recovery and one-time clipboard guidance stay on the affected s
   await expect(page.getByText("No event sources yet.", { exact: true })).toHaveCount(0);
   fail = false;
   await page.getByRole("button", { name: "Retry", exact: true }).click();
-  await expect(page.getByRole("button", { name: "New event source", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New Event", exact: true })).toBeVisible();
   await page.unrouteAll({ behavior: "wait" });
-  await page.getByRole("button", { name: "New event source", exact: true }).click();
-  await page.getByLabel("Event source name", { exact: true }).fill(`Polish fixture ${Date.now()}`);
-  await page.getByRole("button", { name: "Create event source", exact: true }).click();
+  await page.getByRole("button", { name: "New Event", exact: true }).click();
+  await page.getByLabel("Event name", { exact: true }).fill(`Polish fixture ${Date.now()}`);
+  await page.getByLabel("Event key", { exact: true }).fill(`polish.${Date.now()}`);
+  await page.getByRole("button", { name: "Create Event", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Copy this credential", exact: true });
   await expect(dialog).toBeVisible();
   await page.evaluate(() => Object.defineProperty(navigator.clipboard, "writeText", {
     configurable: true, value: () => Promise.reject(new Error("Clipboard unavailable"))
   }));
-  await dialog.getByRole("button", { name: "Copy event source credential", exact: true }).click();
+  await dialog.getByRole("button", { name: "Copy credential", exact: true }).click();
   await expect(dialog.getByRole("alert")).toContainText("Select the value and copy it manually");
-  await expect(dialog.getByLabel("Event source credential", { exact: true })).not.toHaveValue("");
+  await expect(dialog.getByLabel("Event credential", { exact: true })).not.toHaveValue("");
   await dialog.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(page.getByLabel("Event source credential", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Event credential", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/Copy failed/)).toHaveCount(0);
 });
 
-test("Event source drawer retains failed drafts, locks saving and reveals created sources through filters", async ({ page }) => {
-  await page.goto("/admin/event-sources");
-  const opener = page.getByRole("button", { name: "New event source", exact: true });
+test("Event drawer retains failed drafts, locks saving and reveals created sources through filters", async ({ page }) => {
+  await page.goto("/admin/connections/events");
+  const opener = page.getByRole("button", { name: "New Event", exact: true });
   await expect(opener).toBeVisible();
   await page.getByRole("columnheader", { name: /Status/ }).getByRole("button").click();
   await page.getByRole("menuitem").filter({ hasText: "Revoked" }).getByRole("checkbox").check();
   await page.getByRole("button", { name: "OK", exact: true }).click();
   await opener.click();
-  const drawer = page.getByRole("dialog", { name: "New event source", exact: true });
-  const input = drawer.getByLabel("Event source name", { exact: true });
+  const drawer = page.getByRole("dialog", { name: "New Event", exact: true });
+  const input = drawer.getByLabel("Event name", { exact: true });
   await input.fill("x".repeat(81));
   await expect(input).toHaveValue("x".repeat(80));
   await page.keyboard.press("Escape");
@@ -63,26 +64,29 @@ test("Event source drawer retains failed drafts, locks saving and reveals create
   await expect(input).toHaveValue("");
   const sourceName = `Drawer recovery ${Date.now()}`;
   await input.fill(sourceName);
+  await drawer.getByLabel("Event key", { exact: true }).fill(`recovery.${Date.now()}`);
   let fail = true;
+  let secondPost!: () => void;
+  const secondObserved = new Promise<void>(resolve => { secondPost = resolve; });
   let release!: () => void;
   const savingGate = new Promise<void>(resolve => { release = resolve; });
-  await page.route("**/api/v2/admin/event-sources", async route => {
+  await page.route("**/api/v2/admin/connections/events", async route => {
     if (route.request().method() !== "POST") return route.continue();
     if (fail) return route.fulfill({ status: 503, contentType: "application/problem+json",
       body: JSON.stringify({ title: "Temporary creation failure", status: 503, diagnosticId: "drawer-recovery" }) });
+    secondPost();
     await savingGate;
     await route.continue();
   });
-  const create = drawer.getByRole("button", { name: "Create event source", exact: true });
+  const create = drawer.getByRole("button", { name: "Create Event", exact: true });
   await create.click();
   await expect(drawer.getByRole("alert")).toContainText("Temporary creation failure");
   await expect(drawer.getByRole("button", { name: "Error details", exact: true })).toBeVisible();
   await expect(input).toHaveValue(sourceName);
   fail = false;
   try {
-    const posted = page.waitForRequest(request => request.method() === "POST" && request.url().endsWith("/event-sources"));
     await create.click();
-    await posted;
+    await secondObserved;
     await expect(create).toHaveAttribute("aria-busy", "true");
     await expect(drawer.getByRole("button", { name: "Cancel", exact: true })).toBeDisabled();
     await page.keyboard.press("Escape");

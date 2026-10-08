@@ -351,7 +351,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<ITriggerInstancePolicyReconciliationService, TriggerInstancePolicyReconciliationService>();
         services.TryAddSingleton<IDurableApplicationEventIngress, DurableOrderEventIngress>();
         services.TryAddSingleton<ExternalEventIngress>();
-        services.TryAddSingleton<ExternalEventSourceService>();
+        services.TryAddSingleton<WebhookEventService>();
         services.TryAddSingleton<TriggerOccurrenceRouter>();
         services.TryAddSingleton<IAgentInstanceService>(provider => new AgentInstanceService(
             provider.GetRequiredService<IAgentInstanceStore>(),

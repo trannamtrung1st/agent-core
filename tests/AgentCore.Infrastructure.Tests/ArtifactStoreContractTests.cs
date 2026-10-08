@@ -4,6 +4,9 @@ using AgentCore.Domain.Conversation;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Infrastructure.Tests;
@@ -34,6 +37,55 @@ public sealed class ArtifactStoreContractTests
         Assert.Equal(expected, seen);
         Assert.Equal("ValidationError", (await Assert.ThrowsAsync<AgentCoreException>(() =>
             store.ListPageAsync(Guid.NewGuid(), files[0].ArtifactId, 2).AsTask())).Code);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Run_owned_pages_exclude_followups_and_unattributed_files_after_reopen(bool sqlite)
+    {
+        await using var harness = sqlite ? await SqliteAsync() : null;
+        IArtifactStore store = harness is null ? new InMemoryArtifactStore(TimeProvider.System) : harness.Store;
+        var sessionId = harness?.SessionId ?? Guid.NewGuid();
+        var initial = Guid.NewGuid(); var later = Guid.NewGuid();
+        var originals = new List<ArtifactRecord>();
+        for (var i = 0; i < 3; i++) originals.Add(await store.CreateAsync(sessionId, $"A-{i}.txt", "text/plain", new byte[] { 1 }, null, null, agentRunId: initial));
+        var followup = await store.CreateAsync(sessionId, "B.txt", "text/plain", new byte[] { 2 }, null, null, agentRunId: later);
+        await store.CreateAsync(sessionId, "legacy.txt", "text/plain", new byte[] { 3 }, null, null);
+        if (harness is not null) store = new SqliteArtifactStore(harness.Factory, TimeProvider.System, harness.Root);
+        var first = await store.ListPageAsync(sessionId, null, 2, agentRunId: initial);
+        Assert.True(first.HasMore); Assert.All(first.Items, file => Assert.Equal(initial, file.AgentRunId));
+        var last = await store.ListPageAsync(sessionId, first.NextCursor, 2, agentRunId: initial);
+        Assert.False(last.HasMore); Assert.Single(last.Items);
+        Assert.Equal(3, first.Items.Concat(last.Items).Select(file => file.ArtifactId).Distinct().Count());
+        Assert.Equal(5, (await store.ListAsync(sessionId)).Count);
+        Assert.Equal("ValidationError", (await Assert.ThrowsAsync<AgentCoreException>(() => store.ListPageAsync(sessionId, followup.ArtifactId, 2, agentRunId: initial).AsTask())).Code);
+        await using var bytes = await store.OpenContentAsync(sessionId, originals[0].ArtifactId);
+        Assert.Equal(1, bytes.ReadByte());
+    }
+
+    [Fact]
+    public async Task Ownership_migration_preserves_historical_artifacts_without_inventing_a_run()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"artifact-owner-{Guid.NewGuid():N}.db");
+        var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
+        var artifactId = Guid.NewGuid().ToString("D"); var sessionId = Guid.NewGuid().ToString("D");
+        try
+        {
+            await using (var db = new AgentCoreDbContext(options))
+            {
+                await db.GetService<IMigrator>().MigrateAsync("20261008161708_SharedWebhookEvents");
+                await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO Artifacts (ArtifactId, SessionId, BlobKey, DisplayName, ContentType, ByteSize, Sha256Hex, CreatedAtUtc) VALUES ({artifactId}, {sessionId}, 'unchanged/blob', 'legacy.md', 'text/markdown', 7, 'hash', 1234)");
+                await db.Database.MigrateAsync();
+                Assert.False(db.Database.HasPendingModelChanges());
+            }
+            await using var reopened = new AgentCoreDbContext(options);
+            var row = await reopened.Artifacts.SingleAsync();
+            Assert.Equal(artifactId, row.ArtifactId); Assert.Equal(sessionId, row.SessionId);
+            Assert.Null(row.AgentRunId); Assert.Equal("unchanged/blob", row.BlobKey);
+            Assert.Equal(1234, row.CreatedAtUtc); Assert.Equal(7, row.ByteSize);
+        }
+        finally { SqliteConnection.ClearAllPools(); File.Delete(path); }
     }
 
     [Fact]
@@ -168,6 +220,7 @@ public sealed class ArtifactStoreContractTests
     {
         public IDbContextFactory<AgentCoreDbContext> Factory { get; } = factory;
         public SqliteArtifactStore Store { get; } = store;
+        public string Root => root;
         public Guid SessionId { get; } = sessionId;
 
         public async ValueTask DisposeAsync()

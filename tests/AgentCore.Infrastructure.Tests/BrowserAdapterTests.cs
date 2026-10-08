@@ -494,7 +494,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
                 "beta",
                 await first.ContextFor(sessionB)!.Pages.First().EvaluateAsync<string?>("() => localStorage.getItem('persistKey')"));
             var stale = await first.InteractAsync(new BrowserInteractionRequest(sessionB, "click", button.Ref, null));
-            Assert.Equal("stale_reference", stale.ErrorCode);
+            Assert.Equal("wrong_session_reference", stale.ErrorCode);
 
             var sessionOther = Guid.NewGuid();
             first.BindSession(sessionOther, other);
@@ -1170,7 +1170,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         var stolen = await session.InteractAsync(new BrowserInteractionRequest(second, "click", Ref(
             (await session.SnapshotAsync(first)).Observation!,
             "Password"), null));
-        Assert.Equal("forbidden", stolen.ErrorCode);
+        Assert.Equal("wrong_session_reference", stolen.ErrorCode);
         var firstUrl = await session.GetCurrentUrlAsync(first);
         Assert.EndsWith("/isolate", firstUrl!.AbsolutePath, StringComparison.Ordinal);
     }

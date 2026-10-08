@@ -35,4 +35,16 @@ describe("background Session files", () => {
     await act(() => finish({ items: [file], nextCursor: null, hasMore: false }));
     expect(screen.queryByText("report.md")).not.toBeInTheDocument();
   });
+  it("resets ownership and ignores a late page when the Run filter changes in the same Session", async () => {
+    let finish!: (value: { items: typeof file[]; nextCursor: null; hasMore: boolean }) => void;
+    vi.mocked(listArtifactPage).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }))
+      .mockResolvedValueOnce({ items: [], nextCursor: null, hasMore: false });
+    const view = render(<SessionArtifacts sessionId="child-1" agentRunId="run-1" open />);
+    await waitFor(() => expect(listArtifactPage).toHaveBeenCalledWith("child-1", undefined, "run-1"));
+    view.rerender(<SessionArtifacts sessionId="child-1" agentRunId="run-2" open />);
+    await act(() => finish({ items: [file], nextCursor: null, hasMore: false }));
+    await screen.findByText("No files yet");
+    expect(listArtifactPage).toHaveBeenCalledWith("child-1", undefined, "run-2");
+    expect(screen.queryByText("report.md")).not.toBeInTheDocument();
+  });
 });

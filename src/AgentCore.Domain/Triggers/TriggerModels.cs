@@ -633,9 +633,8 @@ public sealed class Automation
     public bool RequiresVision { get; }
     public bool RequiresTools { get; }
 
-    public Guid? EventSourceId => (Trigger as EventTrigger)?.EventSourceId;
+    public Guid? EventId => (Trigger as EventTrigger)?.EventId;
 
-    public string? EventType => (Trigger as EventTrigger)?.EventType;
 
     public Automation WithUpdate(
         string instructions,

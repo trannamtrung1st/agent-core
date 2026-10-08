@@ -117,7 +117,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         var instanceId = owner.AgentInstanceId.ToString("D");
         var profileId = owner.ProfileId.ToString("D");
         var query = db.Automations.AsNoTracking()
-            .Where(item => item.AgentInstanceId == instanceId && item.ProfileId == profileId && item.EventSourceId == null);
+            .Where(item => item.AgentInstanceId == instanceId && item.ProfileId == profileId && item.EventId == null);
         if (before is Guid id)
         {
             var anchorId = id.ToString("D");
@@ -183,16 +183,15 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
     }
 
     public async ValueTask<IReadOnlyList<Automation>> ListEventSubscriptionsAsync(
-        Guid eventSourceId,
-        string eventType,
+        Guid eventId,
+        bool activeOnly = true,
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var sourceId = eventSourceId.ToString("D");
+        var sourceId = eventId.ToString("D");
         var rows = await db.Automations.AsNoTracking()
-            .Where(row => row.Status == (int)AutomationStatus.Active
-                && row.EventSourceId == sourceId
-                && row.EventType == eventType)
+            .Where(row => (!activeOnly || row.Status == (int)AutomationStatus.Active)
+                && row.Status != (int)AutomationStatus.Cancelled && row.EventId == sourceId)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         return rows.Select(TriggerStoreMapping.ToRegistration).ToArray();
@@ -1099,8 +1098,7 @@ internal static class TriggerStoreMapping
         ModelOverrideReasoningEffort = registration.ModelOverrideReasoningEffort,
         RequiresVision = registration.RequiresVision,
         RequiresTools = registration.RequiresTools,
-        EventSourceId = registration.EventSourceId?.ToString("D"),
-        EventType = registration.EventType
+        EventId = registration.EventId?.ToString("D"),
     };
 
     public static Automation ToRegistration(AutomationRecord row) => new(
@@ -1108,7 +1106,7 @@ internal static class TriggerStoreMapping
         new TriggerOwner(Guid.Parse(row.AgentInstanceId), Guid.Parse(row.ProfileId)),
         (AutomationStatus)row.Status,
         row.Instructions,
-        row.TriggerKind == (int)AutomationTriggerKind.Schedule ? new ScheduleTrigger(TriggerScheduleCodec.Deserialize(row.ScheduleJson!)) : new EventTrigger(Guid.Parse(row.EventSourceId!), row.EventType!),
+        row.TriggerKind == (int)AutomationTriggerKind.Schedule ? new ScheduleTrigger(TriggerScheduleCodec.Deserialize(row.ScheduleJson!)) : new EventTrigger(Guid.Parse(row.EventId!)),
         FromUnix(row.NextOccurrenceAtUtc),
         FromUnix(row.ExpiresAtUtc),
         row.OccurrenceCount,

@@ -425,7 +425,7 @@ describe("definition candidate editor", () => {
     fireEvent.mouseDown(harness);
     fireEvent.change(harness, { target: { value: "lab-harness" } });
     fireEvent.keyDown(harness, { key: "Enter", code: "Enter", keyCode: 13 });
-    await chooseOption("Tool allowlist", "workspace.read");
+    await chooseOption("Authorized capabilities", "workspace.read");
     fireEvent.click(screen.getByRole("button", { name: "Add knowledge source" }));
     setText("Knowledge identity 1", "refund-policy");
     setText("Knowledge title 1", "Refund Policy");
@@ -470,7 +470,8 @@ describe("definition candidate editor", () => {
       metadata: { team: string };
       environment: {
         harness: string[];
-        toolAllowlist: string[];
+        toolAllowlist?: string[];
+        capabilities: { mode: string; resolvedCapabilities: string[] };
         knowledgeSources: Array<{ identity: string; title: string; citation: string }>;
         workspace: { templateId: string };
         attachments: { allowUnreadUnsupportedTypes: boolean };
@@ -542,7 +543,8 @@ describe("definition candidate editor", () => {
     );
     expect(parsed.metadata).toEqual({ team: "platform" });
     expect(parsed.environment.harness).toEqual(expect.arrayContaining(["examiner-turn-taking", "lab-harness"]));
-    expect(parsed.environment.toolAllowlist).toEqual(["workspace.read"]);
+    expect(parsed.environment.toolAllowlist).toBeUndefined();
+    expect(parsed.environment.capabilities).toEqual({ mode: "Selected", resolvedCapabilities: ["workspace.read"] });
     expect(parsed.environment.knowledgeSources).toEqual([
       { identity: "refund-policy", title: "Refund Policy", citation: "refund-policy@v3" }
     ]);
@@ -683,11 +685,11 @@ describe("definition candidate editor", () => {
     await openDraft();
     setText("System instructions", "Keep this edit");
     await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Capabilities" })); });
-    expect(await screen.findByText("33 authorized tools. Switch capability access to configure projection and discovery.")).toBeInTheDocument();
-    fireEvent.mouseDown(screen.getByLabelText("Tool allowlist"));
-    fireEvent.change(screen.getByLabelText("Tool allowlist"), { target: { value: tools[33] } });
+    expect(await screen.findByText("Authorized: 33 · Always projected: 33")).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByLabelText("Authorized capabilities"));
+    fireEvent.change(screen.getByLabelText("Authorized capabilities"), { target: { value: tools[33] } });
     await act(async () => { fireEvent.click(await screen.findByTitle(tools[33])); });
-    expect(screen.getByText("34 authorized tools. Switch capability access to configure projection and discovery.")).toBeInTheDocument();
+    expect(screen.getByText("Authorized: 34 · Always projected: 33")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save draft" })).toBeEnabled();
   });
 
