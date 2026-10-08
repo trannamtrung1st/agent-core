@@ -2,6 +2,8 @@
 
 Audit date: 2026-10-08. Repository starting point: `8d845972`. This is a targeted follow-on to the implemented Browser v2; historical migration evidence remains unchanged.
 
+The subsequent [consistency review](browser-v2-consistency-review.md) records operationally reproduced protected-field, redaction, cookie-scope and cancellation corrections. This report's capability decisions remain valid; its verification ledger describes the enhancement checkpoint named below.
+
 ## Reference inventory
 
 The comparison uses the official [Playwright MCP inventory at `a6d7678b7bc10d9fb2ae828a103e9872cf75e483`](https://github.com/microsoft/playwright-mcp/blob/a6d7678b7bc10d9fb2ae828a103e9872cf75e483/README.md#tools), package `0.0.83`: all **72 named operations** are accounted for below. Native controls were checked against [Playwright .NET emulation](https://playwright.dev/dotnet/docs/emulation), [Browser context options](https://playwright.dev/dotnet/docs/api/class-browser#browser-new-context), [permissions](https://playwright.dev/dotnet/docs/api/class-browsercontext#browser-context-grant-permissions), [media emulation](https://playwright.dev/dotnet/docs/api/class-page#page-emulate-media) and the [installed 1.63.0 SDK definitions](https://github.com/microsoft/playwright-dotnet/tree/v1.63.0/src/Playwright/API/Generated). Upstream inventory is an audit reference, not a dependency or Core authorization policy.
@@ -159,7 +161,7 @@ The initial parallel frontend run had 738 passes and one 30-second timeout in th
 
 ### Hosted required gates
 
-All five jobs in [Synthetic run 37729115112](https://github.com/trannamtrung1st/agent-core/actions/runs/37729115112) **passed** on the exact implementation commit **`c5bc6143322559e818e290bd87934c2391bd32a4`**. The workflow checked out that PR head, not a generated merge commit. Subsequent evidence-note edits change documentation only; browser source, tests, shared settings and workflow remain identical to the verified behavior commit.
+All five jobs in [Synthetic run 37729115112](https://github.com/trannamtrung1st/agent-core/actions/runs/37729115112) **passed** on the exact implementation commit **`c5bc6143322559e818e290bd87934c2391bd32a4`**. The workflow checked out that PR head, not a generated merge commit. The subsequent evidence commit `885f759e` changed documentation only; browser source, tests, shared settings and workflow at that checkpoint remained identical to the verified behavior commit. Later consistency corrections have their own linked ledger.
 
 | Hosted job | Actual result |
 | --- | --- |

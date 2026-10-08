@@ -197,7 +197,7 @@ public sealed partial class PlaywrightBrowser
                         { var target = await Target(reference); if (target is null) return new("stale_reference"); if (!await Ordinary(target)) return new("unsupported_operation"); await Action(target.PressAsync(key, new LocatorPressOptions { Timeout = TimeoutMs() })); }
                         else
                         {
-                            if (await session.Page.EvaluateAsync<bool>("() => { const e = document.activeElement; return e && (e.matches('input[type=password], input[type=hidden], iframe') || /password|token|secret|one-time-code/i.test([e.name,e.id,e.getAttribute('autocomplete')].join(' '))); }").WaitAsync(ct)) return new("forbidden");
+                            if (!await session.Page.EvaluateAsync<bool>("() => (" + OrdinaryElement + ")(document.activeElement)").WaitAsync(ct)) return new("forbidden");
                             await Action(session.Page.Keyboard.PressAsync(key));
                         }
                         break;
@@ -258,7 +258,7 @@ public sealed partial class PlaywrightBrowser
                         var x = args.GetProperty("x").GetSingle(); var y = args.GetProperty("y").GetSingle(); var viewport = session.Page.ViewportSize;
                         if (viewport is null || x > viewport.Width || y > viewport.Height) return new("invalid");
                         async Task<bool> SafePoint(float px, float py) => await session.Page.EvaluateAsync<bool>(
-                            "p => { const e = document.elementFromPoint(p.x,p.y); return !!e && !e.closest('iframe,input[type=password],input[type=hidden]'); }", new { x = (double)px, y = (double)py }).WaitAsync(ct);
+                            "p => { const e = document.elementFromPoint(p.x,p.y); return !!e && (" + OrdinaryElement + ")(e.closest('iframe,input,textarea,select,[contenteditable],label,button,a,[role]') || e); }", new { x = (double)px, y = (double)py }).WaitAsync(ct);
                         if (!await SafePoint(x, y)) return new("target_denied");
                         switch (String(args, "operation"))
                         {
@@ -306,7 +306,7 @@ public sealed partial class PlaywrightBrowser
                 case "browser.cookies":
                 case "browser.local_storage":
                 case "browser.session_storage":
-                    return await StateCommandAsync(session, command, ct);
+                    return await StateCommandAsync(session, command, ct, Action);
                 default: return new("unsupported_operation");
             }
             if (session.Dialog is not null) return new("dialog_pending");
@@ -353,7 +353,7 @@ public sealed partial class PlaywrightBrowser
                 : !BrowserTargetPolicy.EvaluateAct(_policy.InteractionMode, frameUrl, LeaseOrigins(session) ?? _policy.EffectiveInteractionOrigins, _policy.PolicyMode).Allowed) throw new BrowserTargetDeniedException();
             return live.Handle;
         }
-        async Task<bool> Ordinary(ILocator target) => !await target.EvaluateAsync<bool>("el => el.matches('input[type=password], input[type=hidden]') || /password|token|secret|one-time-code/i.test([el.name,el.id,el.getAttribute('autocomplete')].join(' '))").WaitAsync(ct);
+        async Task<bool> Ordinary(ILocator target) => await target.EvaluateAsync<bool>(OrdinaryElement).WaitAsync(ct);
     }
 
     private sealed class BrowserDialogPendingException : Exception;

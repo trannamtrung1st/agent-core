@@ -276,6 +276,8 @@ Observed container sandbox: `ISandboxExecutor` registered as `DockerSandboxExecu
 
 `general-assistant` v17 and `secretary` v5 authorize exact capabilities with a small always-on Browser bootstrap; advanced groups are loaded only when needed through `capabilities.load`. Procedures remain pinned immutable execution catalogs; loading does not grant authority. Network/storage mutations retain exact approval and effect fences. Browser content remains untrusted and credential values remain internal to the secure sink.
 
+The provider reuses its snapshot protected-field taxonomy for execution-time typed/native actions, focused keyboard and coordinate targets, including labels and drag destinations. Storage serialization masks decoded values before applying output limits; cookie metadata uses the same ordering. Cookie operations enumerate all paths for the current host and applicable parent domains, then clear only exact native domain/name matches. Cookie context mutations use the context cancellation fence; local/session storage mutations use the existing tracked page-action fence. No capability, grant or provider-neutral port is added by these consistency fixes. See [the consistency review](reports/browser-v2-consistency-review.md).
+
 ### Historical P9 milestones
 
 P9, P9.5 and P9.6 retain their original freeze SHAs and reports. Their narrow browser schemas and flat discovery mechanics are superseded by Browser v2; no persisted-data translator or dual runtime is shipped. Loop budgets remain 24/180 seconds ordinarily, 48/300 for direct authorized browser turns, and 32/240 for eligible unattended leased work. P10/P11 remain unopened.

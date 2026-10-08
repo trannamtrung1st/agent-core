@@ -110,6 +110,9 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
         }
         """;
 
+    // Use the snapshot taxonomy again at execution time: SPA metadata can change after discovery.
+    private const string OrdinaryElement = "el => { if (!el || el.matches('iframe')) return false; if (el === el.ownerDocument.body || el === el.ownerDocument.documentElement) return true; const described = (" + DescribeElement + ")(el); return described !== 'null' && !JSON.parse(described).actions.includes('fill_credential'); }";
+
     private const string ReadSecrets = """
         () => {
           const items = [];
@@ -654,8 +657,8 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
                 var frameUrl = await live.Handle.EvaluateAsync<string>("el => el.ownerDocument.location.href").WaitAsync(cancellationToken);
                 if (!BrowserTargetPolicy.EvaluateAct(_policy.InteractionMode, frameUrl, LeaseOrigins(session) ?? _policy.EffectiveInteractionOrigins, _policy.PolicyMode).Allowed)
                     return Result("target_denied");
-                var passwordField = await live.Handle.EvaluateAsync<bool>("el => el.matches('input[type=password]')");
-                if (passwordField || live.Actions.Contains("fill_credential")) return Result("unsupported_operation", ["fill_credential"]);
+                if (!await live.Handle.EvaluateAsync<bool>(OrdinaryElement).WaitAsync(cancellationToken) || live.Actions.Contains("fill_credential"))
+                    return Result("unsupported_operation", live.Actions.Contains("fill_credential") ? ["fill_credential"] : []);
 
                 if (live.Actions.Count > 0 && !ActionOffered(live.Actions, request.Operation))
                 {
@@ -679,6 +682,8 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
                 var targetUrl = await target.Handle.EvaluateAsync<string>("el => el.ownerDocument.location.href").WaitAsync(cancellationToken);
                 if (!BrowserTargetPolicy.EvaluateAct(_policy.InteractionMode, targetUrl, LeaseOrigins(session) ?? _policy.EffectiveInteractionOrigins, _policy.PolicyMode).Allowed)
                     return Result("target_denied");
+                if (!await target.Handle.EvaluateAsync<bool>(OrdinaryElement).WaitAsync(cancellationToken))
+                    return Result("unsupported_operation", []);
                 dragTarget = target.Handle;
             }
 
