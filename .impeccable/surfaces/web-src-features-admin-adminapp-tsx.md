@@ -41,4 +41,4 @@ DETAILS: New/Edit automation uses the 640px maximum drawer, full viewport below 
 
 FINISH: Bounded desktop/768/390 verification includes long summaries, table containment, inline button alignment, search/no-match recovery, expansion, Run/source inspection, drawer dismissal, confirmation cancellation and retained error drafts. Compare shared spacing and detail edges; preserve product contracts. Documentation-only sync uses source and link checks, without rerunning the application.
 
-EVIDENCE: Chat/Admin shared detail edges and long content were checked through actual component fixtures at 1440/768/390px. Local shared runtime and component regressions pass; final hosted cutover acceptance remains pending; see docs/reports/activation-agent-run-background-sessions-verification.md.
+EVIDENCE: Chat/Admin shared detail edges and long content were checked through actual component fixtures at 1440/768/390px. Local shared runtime and component regressions pass; final hosted cutover acceptance passes on 8cec78c5d47a43e0236a5c38f2e312f4e36ce283; see docs/reports/activation-agent-run-background-sessions-verification.md.

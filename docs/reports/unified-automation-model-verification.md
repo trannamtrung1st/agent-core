@@ -1,6 +1,6 @@
 # Unified Automation model verification
 
-Status: final follow-up closure pending hosted CI on its final behavior SHA. The original cutover passed all five hosted Synthetic/Compose jobs on `60dda1dff150e1f13134ec53881e9a31548b9d73` (2026-10-07); those results do not establish closure of later functional changes. P10/P11 remain unopened. Historical reports and freeze SHAs are unchanged.
+Status: follow-up closure covered by final Activation/AgentRun behavior `8cec78c5d47a43e0236a5c38f2e312f4e36ce283` and all five [green hosted jobs](https://github.com/trannamtrung1st/agent-core/actions/runs/37756244306). Original cutover evidence below records `60dda1df` and its former execution storage; the current canonical contract is owned by [Activation/AgentRun verification](activation-agent-run-background-sessions-verification.md). P10/P11 remain unopened. Historical freeze SHAs and original evidence remain unchanged.
 
 Starting baseline: `fcd2090e65a4bbcdc08b4fdaf1f5cce8ef9d187c`. Original verified cutover behavior commit: `60dda1dff150e1f13134ec53881e9a31548b9d73`. Implementation was committed directly to `main` and pushed after explicit owner approval. This report is updated separately as documentation-only closure evidence.
 
@@ -85,7 +85,7 @@ Playwright MCP against an isolated native Synthetic/SQLite host exercised a real
 
 Changed-document hygiene passed for five Markdown files and 66 local links/anchors, with balanced fences and no complete JSON examples in these changed files. `git diff --check` and design-sidecar JSON/unchanged token-component checks passed.
 
-Hosted verification for this follow-up is pending the committed candidate. The original five-job green workflow does not prove this later behavior change.
+Historical status at that review: hosted verification for the follow-up was pending the committed candidate; the original five-job green workflow did not prove that later behavior change. The final hosted closure below supersedes this pending status.
 
 
 ## Chat scheduling semantics and terminology follow-up — 2026-10-07
@@ -113,3 +113,7 @@ Final local verification:
 - Changed-document hygiene: seven Markdown files, 225 local links/anchors and 13 complete JSON examples passed; `git diff --check` passed. Local browser hosts terminated after the successful journey. No user database was reset.
 
  Hosted exact-SHA verification remains pending: the owner explicitly requested commit/push without waiting for CI. This report does not claim final hosted closure.
+
+## Subsequent execution cutover
+
+The final Activation/AgentRun revision `8cec78c5d47a43e0236a5c38f2e312f4e36ce283` retires WorkItem execution and replaces the older completion labels with Response, NoAction and NeedsAttention in real background Sessions. The Automation resource, future-authority boundaries, occurrence dedupe and semantic Experience tools remain covered by the final backend/browser/acceptance/Compose gates. All five required jobs passed in [workflow 37756244306](https://github.com/trannamtrung1st/agent-core/actions/runs/37756244306); no pending Automation follow-up remains.

@@ -510,4 +510,4 @@ Background Session DTOs include `artifactCount` and `artifactCountHasMore`: coun
 
 `session.entry.removed` carries `{entryId}` under the existing response envelope. The browser removes only the matching assistant entry for that response; unrelated history remains. This accompanies a committed NoAction outcome and does not change Session identity or lifecycle. Run-backed response diagnostics and Ready projection use `agentRunId`; there is no old execution-ID alias.
 
-The current source implements the new routes above, but full backend/browser/hosted acceptance is pending. Old WorkItem routes are removed from registration and are not compatibility aliases. Historical closure reports retain the contracts they originally verified.
+The current source implements the new routes above; full backend/browser acceptance and all five hosted jobs pass on `8cec78c5d47a43e0236a5c38f2e312f4e36ce283` ([workflow](https://github.com/trannamtrung1st/agent-core/actions/runs/37756244306)). Old WorkItem routes are removed from registration and are not compatibility aliases. Historical closure reports retain the contracts they originally verified.

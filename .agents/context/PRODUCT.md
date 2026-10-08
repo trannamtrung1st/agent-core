@@ -76,7 +76,7 @@ Stack (existing codebase, not a greenfield choice): React SPA, Vite, pnpm, stric
 - Official docs under `/docs` (source of truth).
 - Implemented SPA in `web/` uses Ant Design v6 plus the presentation policy in DESIGN.md (composer Model chip with in-button reasoning level, Spoken inset (first in assistant turn when it differs from display; TTS uses that projection only), compact 8px composer/overlay shells, 8/12/16px rhythm, 8px control inner padding matching session rows). `/docs` still owns behavior.
 - Demo narratives in `docs/09-demo-scenarios.md`.
-- Current Background Work is Session-first, with shared Run history/details, Files, focus-preserving navigation and inline Continue recovery; see [docs/13](../../docs/13-frontend-implementation-spec.md#background-work-drawer). Component/fixture checks cover 1440/768/390px; the [verification report](../../docs/reports/activation-agent-run-background-sessions-verification.md) records passing backend/Compose and phase journeys plus pending final browser/hosted acceptance. Do not describe this migration as accepted or frozen.
+- Current Background Work is Session-first, with shared Run history/details, Files, focus-preserving navigation and inline Continue recovery; see [docs/13](../../docs/13-frontend-implementation-spec.md#background-work-drawer). Component/fixture checks cover 1440/768/390px; the [verification report](../../docs/reports/activation-agent-run-background-sessions-verification.md) records complete backend/browser/Compose and all five hosted gates on `8cec78c5d47a43e0236a5c38f2e312f4e36ce283`. The cutover is closed/frozen.
 - No brand illustration pack, logo lockup, or photography set. Do not invent them.
 
 ## Product Principles
