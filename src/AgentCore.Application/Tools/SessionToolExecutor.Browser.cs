@@ -965,15 +965,15 @@ public sealed partial class SessionToolExecutor
             RuntimeTelemetry.ElapsedMs(started),
             $"{toolName}:{outcome}");
 
-    public async ValueTask<OccurrenceBrowserScope> OpenOccurrenceBrowserAsync(Guid workItemId, Guid agentInstanceId, CancellationToken ct)
+    public async ValueTask<OccurrenceBrowserScope> OpenOccurrenceBrowserAsync(Guid sessionId, Guid agentInstanceId, CancellationToken ct)
     {
-        if (workItemId != Guid.Empty && agentInstanceId != Guid.Empty && browser is IBrowserProfileBinding binding)
-            binding.BindSession(workItemId, agentInstanceId);
+        if (sessionId != Guid.Empty && agentInstanceId != Guid.Empty && browser is IBrowserProfileBinding binding)
+            binding.BindSession(sessionId, agentInstanceId);
         IAsyncDisposable? lease = null;
-        if (workItemId != Guid.Empty && agentInstanceId != Guid.Empty && browser is { IsAvailable: true }
+        if (sessionId != Guid.Empty && agentInstanceId != Guid.Empty && browser is { IsAvailable: true }
             && _configurationGate.IsConfigured(ToolCatalog.BrowserNavigate) && browser is IBrowserContextUse use)
             lease = await use.EnterUnattendedAsync(agentInstanceId, [], ct);
-        return new OccurrenceBrowserScope(browser, workItemId, lease);
+        return new OccurrenceBrowserScope(browser, sessionId, lease);
     }
 
     public void AdoptOccurrenceBrowser(Guid agentInstanceId)
@@ -988,13 +988,13 @@ public sealed partial class SessionToolExecutor
 public sealed class OccurrenceBrowserScope : IAsyncDisposable
 {
     private readonly IBrowserSession? _browser;
-    private readonly Guid _workItemId;
+    private readonly Guid _sessionId;
     private readonly IAsyncDisposable? _lease;
 
-    public OccurrenceBrowserScope(IBrowserSession? browser, Guid workItemId, IAsyncDisposable? lease)
+    public OccurrenceBrowserScope(IBrowserSession? browser, Guid sessionId, IAsyncDisposable? lease)
     {
         _browser = browser;
-        _workItemId = workItemId;
+        _sessionId = sessionId;
         _lease = lease;
         PersistentBrowserLease = lease is not null;
     }
@@ -1008,9 +1008,9 @@ public sealed class OccurrenceBrowserScope : IAsyncDisposable
             await _lease.DisposeAsync().ConfigureAwait(false);
         }
 
-        if (_workItemId != Guid.Empty && _browser is IBrowserSessionLease sessionLease)
+        if (_sessionId != Guid.Empty && _browser is IBrowserSessionLease sessionLease)
         {
-            await sessionLease.ReleaseAsync(_workItemId).ConfigureAwait(false);
+            await sessionLease.ReleaseAsync(_sessionId).ConfigureAwait(false);
         }
     }
 }
