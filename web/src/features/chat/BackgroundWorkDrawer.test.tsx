@@ -26,6 +26,14 @@ beforeEach(() => {
 });
 const show = (instanceId = "instance-1") => render(<App><BackgroundWorkDrawer instanceId={instanceId} open wide onClose={() => undefined} /></App>);
 describe("Background Sessions", () => {
+  it("dismisses with Escape inside the drawer without reaching its parent", async () => {
+    const close = vi.fn(); const parentKeyDown = vi.fn();
+    render(<div onKeyDown={parentKeyDown}><App><BackgroundWorkDrawer instanceId="instance-1" open wide onClose={close} /></App></div>);
+    const history = await screen.findByRole("button", { name: "View history" });
+    history.focus(); fireEvent.keyDown(history, { key: "Escape" });
+    expect(close).toHaveBeenCalledOnce();
+    expect(parentKeyDown).not.toHaveBeenCalled();
+  });
   it("opens a Session's run history and preserves bounded reading regions", async () => {
     show(); fireEvent.click(await screen.findByRole("button", { name: "View history" }));
     expect(await screen.findByText("The background check finished.")).toBeInTheDocument();

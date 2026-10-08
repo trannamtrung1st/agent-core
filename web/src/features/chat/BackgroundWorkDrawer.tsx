@@ -71,6 +71,11 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
   }
   const active = selected ? page.items.find(row => row.session.sessionId === selected.session.sessionId) ?? selected : null;
   return <Drawer title={active ? active.session.title : "Background work"} open={open} onClose={onClose}
+    onKeyDown={event => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      onClose();
+    }}
     size={wide ? "min(640px, 100vw)" : "100vw"} className="background-work-drawer">
     <Flex vertical gap={token.padding}>
       {active ? <>
