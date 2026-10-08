@@ -152,8 +152,10 @@ test("background work lists scheduled and order-placed sources", async ({ page }
   await expect(drawer.getByRole("button", { name: "Order-placed review", exact: true })).toBeVisible();
   await expect(drawer.getByText("Needs approval")).toBeVisible();
   await expect(drawer.getByText(/sourceEventId|orderReference/)).toHaveCount(0);
+  await drawer.getByRole("button", { name: "Close", exact: true }).focus();
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
+  await expect(opener).toBeFocused();
 
   await page.setViewportSize({ width: 390, height: 800 });
   await opener.click();

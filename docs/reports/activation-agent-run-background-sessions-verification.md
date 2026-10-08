@@ -20,6 +20,17 @@ Legacy WorkItem/ConversationTurnExecution production models, stores, workers, ex
 
 Packaging exposed an ImageSharp audit/license blocker. At the user's request, Infrastructure now uses MIT-licensed SkiaSharp 4.153.1 plus matching minimal Linux native assets. Metadata stripping, PNG/JPEG output, first-frame GIF/WebP normalization and pixel bounds remain verified. Cache version advances to `/3`; vulnerability auditing remains enabled.
 
+## Implementation owners
+
+| Phase | Current owner |
+| --- | --- |
+| A — domain and storage | `src/AgentCore.Domain/Conversation/Activation.cs`, `AgentRun.cs`; `src/AgentCore.Infrastructure/Persistence/SqliteAgentRunStore.cs`, `InMemoryAgentRunStore.cs`, `AgentRunStoreMapping.cs` |
+| B/C — shared dispatch and recovery | `src/AgentCore.Application/Execution/AgentRunCoordinator.cs`; `src/AgentCore.Application/Sessions/SessionRuntime.AgentRuns.cs`, `SessionRuntime.RunCheckpoint.cs`, `SessionRuntime.RunControl.cs`; `src/AgentCore.Api/Realtime/SessionHost.AgentRuns.cs` |
+| D — background admission | `src/AgentCore.Application/Execution/BackgroundOccurrenceIntake.cs`, `BackgroundSessionAdmissionFactory.cs`; `src/AgentCore.Application/Sessions/SessionRuntime.BackgroundStart.cs`, `SessionRuntime.RunOutcomes.cs` |
+| E — initial completion reports | `src/AgentCore.Application/Execution/BackgroundCompletionReporter.cs`, `BackgroundCompletionProjection.cs`; `SessionRuntime.BackgroundCompletion.cs`; store completion partials |
+| F — foreground and inspection | `src/AgentCore.Application/Sessions/SessionRuntime.Foreground.cs`; `src/AgentCore.Api/BackgroundSessionEndpoints.cs`; `web/src/features/chat/BackgroundWorkDrawer.tsx`, `AgentRunDetails.tsx`, `SessionArtifacts.tsx`; `web/src/features/admin/InstanceContinuitySection.tsx` |
+| G — retirement and packaging | `RetireLegacyExecution` migration, canonical DbContext snapshot, strict `SqliteMemoryStore` startup, SkiaSharp `AttachmentProcessor`, current protocol/design/docs and exact-SHA gates |
+
 ## Acceptance and scenario coverage
 
 The coverage below identifies current tests, not historical execution engines. Final milestone acceptance additionally requires every mandatory local and hosted gate below.
@@ -68,5 +79,7 @@ Canonical architecture, interfaces, event routing, implementation, frontend, pro
 | Browser | Prior primary 111/117 passed; all six failures corrected and focused batch 10 passed with paging setup corrected. All 16 phase journeys passed across corrected reruns, including all four secretary cases. Final full primary rerun in progress; automatic-scroll cursor error/retry and Admin paging both pass in the isolated two-case rerun |
 | Compose/SQLite volume | Final Release image and SQLite restart passed locally; exact-SHA hosted Compose passed |
 | Exact-SHA hosted | Candidate pushed; workflow 37742655032 running all five jobs |
+
+Exact local backend commands were `DOTNET_PROCESSOR_COUNT=4 dotnet test tests/AgentCore.{Application,Api,Infrastructure}.Tests/AgentCore.{Application,Api,Infrastructure}.Tests.csproj --nologo` (each project run separately). Domain and order-event plugin gates used their corresponding `dotnet test` projects. The final full browser invocation uses `CI=1 pnpm exec playwright test --project=synthetic --project=browser-stt --project=browser-browser --workers=1`, with every API/web port and SQLite path isolated. Phase projects are faithful-manual, admin-lifecycle, p76-admin, p97-harness, p9899-continuity, p910-continuity-maintenance and secretary-demo. Packaging uses `COMPOSE_PROJECT_NAME=agent-core-cutover-verification AGENTCORE_COMPOSE_PORT=5780 bash scripts/compose-sqlite-volume.sh`; its disposable resources were cleaned afterward.
 
 Opt-in hosted provider/nopCommerce checks are not part of default key-free acceptance. Default Synthetic makes no paid provider calls. Manual audible headset quality is outside this cutover's automated evidence. Until the full browser/backend/phase and exact-SHA gates pass, this report remains an in-progress acceptance record.
