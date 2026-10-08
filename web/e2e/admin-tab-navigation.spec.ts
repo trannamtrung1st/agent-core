@@ -46,7 +46,7 @@ for (const width of [1440, 390]) {
       ["Identity & version", undefined, "identity"],
       ["Continuity", "Memory", "continuity/memory"],
       ["Continuity", "Experience", "continuity/experience"],
-      ["Automation", "Automations", "automation/automations"],
+      ["Automation", "Triggers", "automation/automations"],
       ["Automation", "Policies & models", "automation/controls"],
       ["Runs", undefined, "runs"],
       ["Credentials", undefined, "credentials"],
@@ -61,7 +61,7 @@ for (const width of [1440, 390]) {
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
     }
     await page.goto(`${base}/automation/unknown-section`);
-    await expect(page.getByRole("tab", { name: "Automations", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "Triggers", exact: true })).toHaveAttribute("aria-selected", "true");
     await page.getByRole("tab", { name: "Policies & models", exact: true }).click();
     await page.getByRole("tab", { name: "Continuity", exact: true }).click();
     await page.getByRole("tab", { name: "Experience", exact: true }).click();

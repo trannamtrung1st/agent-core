@@ -84,20 +84,20 @@ describe("Managed instance information architecture", () => {
     expect(screen.getByText("Experience controls")).toBeVisible();
     fireEvent.click(screen.getByRole("tab", { name: "Automation" }));
     expect(screen.getByText("Automation controls")).toBeVisible();
-    fireEvent.click(screen.getByRole("tab", { name: "Automations" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Triggers" }));
     fireEvent.click(screen.getByRole("button", { name: "Inspect automation fixture" }));
     // Current Runs baseline opens shared details without switching the source tab.
     expect(screen.getByRole("tab", { name: "Automation" })).toHaveAttribute("aria-selected", "true");
     expect(within(screen.getByRole("dialog", { name: "Run details" })).getByText(/Run history automation-run/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Back to thought fixture" }));
     expect(screen.getByRole("tab", { name: "Automation" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: "Automations" })).toHaveAttribute("aria-selected", "true");
-    expect(within(screen.getByRole("tabpanel", { name: "Automations" })).getByText(/original-thought/)).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Triggers" })).toHaveAttribute("aria-selected", "true");
+    expect(within(screen.getByRole("tabpanel", { name: "Triggers" })).getByText(/original-thought/)).toBeVisible();
     fireEvent.click(screen.getByRole("tab", { name: "Runs" }));
     fireEvent.click(screen.getByRole("button", { name: "Inspect run fixture" }));
     expect(within(screen.getByRole("dialog", { name: "Run details" })).getByText(/Run history event-run/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Back to event fixture" }));
-    expect(screen.getByRole("tab", { name: "Automations" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Triggers" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText(/Automation controls event-source/)).toBeVisible();
   });
   it("keeps inactive instances inside the existing active-instance API boundary", () => {

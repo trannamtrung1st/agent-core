@@ -199,7 +199,7 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
   });
 
   await page.getByRole("tab", { name: "Automation", exact: true }).click();
-  await page.getByRole("tab", { name: "Automations", exact: true }).click();
+  await page.getByRole("tab", { name: "Triggers", exact: true }).click();
   const automations = page.getByRole("region", { name: "Automations", exact: true });
   await automations.getByRole("button", { name: `View automation: ${scheduleIntent}`, exact: true }).click();
   await automations.getByRole("button", { name: "Delete automation", exact: true }).click();

@@ -1684,6 +1684,8 @@ function DraftEditor({
     ? allCapabilityNames
     : capabilities.toolAllowlist;
   const alwaysNames = reconcileAlwaysCapabilities(capabilities.alwaysCapabilities ?? authorizedNames, authorizedNames, capabilityCatalog);
+  const onDemandCapabilities = capabilityCatalog.filter(c => authorizedNames.includes(c.name) && c.discoverable && !alwaysNames.includes(c.name));
+  const { token } = theme.useToken();
   // Migrate an editable legacy candidate using its exact grants and fixed discoverable projection.
   // Published versions remain immutable; Core still owns context-only projection.
   useEffect(() => {
@@ -1964,7 +1966,10 @@ function DraftEditor({
                         options={groupedCapabilityOptions(capabilityCatalog, authorizedNames)} optionFilterProp="label" showSearch />
                     </label>
                     <Typography.Text aria-live="polite">Authorized: {authorizedNames.length} · Always projected: {alwaysNames.length}</Typography.Text>
-                    <Typography.Text type="secondary">Available on demand when configured and eligible: {capabilityCatalog.filter(c => authorizedNames.includes(c.name) && c.discoverable && !alwaysNames.includes(c.name)).map(c => c.name).join(", ") || "None"}. Context-only capabilities remain controlled by Core.</Typography.Text>
+                    <Typography.Text type="secondary">{onDemandCapabilities.length} available on demand when configured and eligible. Context-only capabilities remain controlled by Core.</Typography.Text>
+                    {onDemandCapabilities.length ? <Collapse ghost items={[{ key: "on-demand", label: "View on-demand capabilities", children: <Flex wrap gap={token.paddingXS}>
+                      {onDemandCapabilities.map(capability => <Tag key={capability.name} title={capability.summary}>{capability.name}</Tag>)}
+                    </Flex> }]} /> : null}
                   </>}
 
                 </section>
@@ -2508,7 +2513,7 @@ export function InstanceDetail({
                 key: "identity",
                 label: "Identity & version",
                 children: <Tabs activeKey={identityTab} onChange={key => setActiveTab("identity", key as AdminInstanceSection)} aria-label="Identity sections" items={[
-                  { key: "profile", label: "Profile & version", children: <InstanceManagedControls config={resolved} onUpdated={onInstanceChanged} onDeleted={onInstanceDeleted} /> },
+                  { key: "profile", label: "Profile", children: <InstanceManagedControls config={resolved} onUpdated={onInstanceChanged} onDeleted={onInstanceDeleted} /> },
                   { key: "workspace", label: "Workspace", children: <InstanceWorkspaceSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} /> }
                 ]} />
               }]),
@@ -2527,7 +2532,7 @@ export function InstanceDetail({
                 children: <Flex vertical gap={16}>
                   <Typography.Text type="secondary">An Automation produces a Run when its trigger fires or you choose Run now.</Typography.Text>
                   <Tabs activeKey={automationTab} onChange={key => setActiveTab("automation", key as AdminInstanceSection)} aria-label="Automation sections" items={[
-                    { key: "automations", label: "Automations", children: <InstanceAutomationsSection instanceId={instanceId} active={activeTab === "automation" && automationTab === "automations"} onWork={viewRun} selection={activeTab === "automation" ? sourceSelection : undefined} /> },
+                    { key: "automations", label: "Triggers", children: <InstanceAutomationsSection instanceId={instanceId} active={activeTab === "automation" && automationTab === "automations"} onWork={viewRun} selection={activeTab === "automation" ? sourceSelection : undefined} /> },
                     { key: "controls", label: "Policies & models", children: <Flex vertical gap={16}>
                       <HarnessManagementSection instanceId={instanceId} eligibleTools={resolved.effectiveToolAllowlist} onUpdated={onInstanceChanged} />
                       <InstanceMemoryAutomationPanel config={resolved} section="automation" />

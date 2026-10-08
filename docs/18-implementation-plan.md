@@ -454,7 +454,9 @@ Closure: all five required hosted Synthetic/Compose jobs [passed](https://github
 
 ## Admin shared Events and authoring enhancement
 
-The requested enhancement converges global Connections resources on Credentials and Events, Instance grants on Credentials, and Schedule/Event behavior on Automation. Shared Events replace the retired Event Source + Event Type authoring model with stable Event-ID subscriptions and bounded generic webhook evidence. Capability Form authoring uses canonical Selected/All and grouped authorized always projection. The data-preserving upgrade and client URL/envelope transition are owned by [Persistence](15-persistence-and-configuration.md#shared-event-resource-upgrade). [Verification report](reports/admin-events-ux-verification.md) records this working-tree change separately from historical freeze evidence. It does not open P10/P11 or establish hosted milestone acceptance.
+The requested enhancement converges global Connections resources on Credentials and Events, Instance grants on Credentials, and Schedule/Event behavior on Automation. Shared Events replace the retired Event Source + Event Type authoring model with stable Event-ID subscriptions and bounded generic webhook evidence. Capability Form authoring uses canonical Selected/All and grouped authorized always projection. The data-preserving upgrade and client URL/envelope transition are owned by [Persistence](15-persistence-and-configuration.md#shared-event-resource-upgrade). [Verification report](reports/admin-events-ux-verification.md) records the published enhancement separately from historical freeze evidence. It does not open P10/P11 or establish hosted milestone acceptance.
+
+The October 9 [Admin UI feedback follow-up](reports/admin-ui-feedback-verification.md) is a bounded usability correction on this enhancement: no new phase, execution change or hosted freeze is claimed.
 
 ## Browser v2 reliability follow-up
 

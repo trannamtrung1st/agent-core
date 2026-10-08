@@ -703,6 +703,11 @@ describe("definition candidate editor", () => {
     await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Capabilities" })); });
     expect(await screen.findByText("Authorized: 2 · Always projected: 1")).toBeInTheDocument();
     expect(screen.getByLabelText("Always projected capabilities")).toBeInTheDocument();
+    expect(screen.getByText("1 available on demand when configured and eligible. Context-only capabilities remain controlled by Core.")).toBeVisible();
+    const disclosure = screen.getByRole("button", { name: "View on-demand capabilities" });
+    expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(disclosure);
+    expect(disclosure).toHaveAttribute("aria-expanded", "true");
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save draft" })); });
     expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(draftId, 2, expect.objectContaining({ environment: expect.objectContaining({
       capabilities: { mode: "Selected", resolvedCapabilities: ["workspace.read", "knowledge.retrieve"] },

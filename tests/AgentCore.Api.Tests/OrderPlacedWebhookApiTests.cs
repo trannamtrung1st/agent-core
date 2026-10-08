@@ -113,7 +113,11 @@ public sealed class OrderPlacedWebhookApiTests
             Assert.Equal(HttpStatusCode.Accepted, posted.StatusCode);
             Assert.Single(await host.Services.GetRequiredService<ITriggerStore>().ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
             var details = (await owner.GetFromJsonAsync<AdminWebhookEventDetailsResponse>(path + "/" + credential.EventId))!;
-            Assert.Equal(2, details.Event.SubscriberCount); Assert.NotNull(details.Event.LastReceivedAt);
+            Assert.Equal(2, details.Event.SubscriberCount); Assert.Equal(1, details.Event.ActiveSubscriberCount); Assert.NotNull(details.Event.LastReceivedAt);
+            Assert.Equal("invoice-1", Assert.Single(details.Signals).SourceEventId);
+            var listed = (await owner.GetFromJsonAsync<AdminWebhookEventListResponse>(path))!;
+            Assert.Equal(1, Assert.Single(listed.Items).ActiveSubscriberCount);
+            Assert.Equal(2, Assert.Single(listed.Items).SubscriberCount);
             Assert.Equal(2, details.Subscribers.Count); Assert.Equal("Disabled", details.Subscribers.Single(s => s.AgentInstanceId == second.ToString()).Status);
             Assert.Equal("Admitted", Assert.Single(details.Deliveries).Status);
             Assert.Equal(HttpStatusCode.BadRequest, (await PostAsync(host.CreateClient(), credential.EventKey, credential.Token, """{"eventId":"bad","data":{"x":1,"x":2}}""")).StatusCode);
@@ -128,6 +132,31 @@ public sealed class OrderPlacedWebhookApiTests
             Assert.DoesNotContain(credential.Token, read); Assert.DoesNotContain(WebhookTokens.Hash(credential.Token), read);
         }
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); File.Delete(db); }
+    }
+
+    [Fact]
+    public async Task Signals_without_subscribers_remain_visible_once_in_admin_activity()
+    {
+        var db = TempDb();
+        try
+        {
+            await using var host = new DurableSqliteHostFactory(db, runScheduler: false);
+            using var owner = OwnerClient(host);
+            var (resourceId, key, token) = await CreateSourceAsync(owner, "No subscribers");
+            const string payload = """{"eventId":"unsubscribed-1","data":{"reference":"example"}}""";
+            Assert.Equal(HttpStatusCode.Accepted, (await PostAsync(host.CreateClient(), key, token, payload)).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await PostAsync(host.CreateClient(), key, token, payload)).StatusCode);
+            var details = (await owner.GetFromJsonAsync<AdminWebhookEventDetailsResponse>($"/api/v2/admin/connections/events/{resourceId}"))!;
+            Assert.Equal(0, details.Event.ActiveSubscriberCount);
+            Assert.Equal(0, details.Event.SubscriberCount);
+            Assert.Empty(details.Deliveries);
+            Assert.Equal("unsubscribed-1", Assert.Single(details.Signals).SourceEventId);
+            Assert.NotNull(details.Event.LastReceivedAt);
+            var read = await owner.GetStringAsync($"/api/v2/admin/connections/events/{resourceId}");
+            Assert.DoesNotContain(token, read);
+            Assert.DoesNotContain("reference", read);
+        }
+        finally { DeleteDb(db); }
     }
 
     [Fact]

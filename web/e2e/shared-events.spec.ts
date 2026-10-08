@@ -1,5 +1,61 @@
 import { expect, test } from "@playwright/test";
 
+test("cancelling Event rename returns focus to its overflow trigger", async ({ page }) => {
+  await page.goto("/admin/connections/events");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("agent-core.owner-capability"))).not.toBeNull();
+  const headers = { "X-AgentCore-Owner-Capability": (await page.evaluate(() => localStorage.getItem("agent-core.owner-capability")))! };
+  const name = "Rename focus " + Date.now();
+  const created = await page.request.post("/api/v2/admin/connections/events", { headers, data: { displayName: name, eventKey: "focus." + Date.now() } });
+  expect(created.ok()).toBe(true);
+  await page.reload();
+  const trigger = page.getByRole("button", { name: "More actions for " + name, exact: true });
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+  await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "Edit Event name", exact: true });
+  await expect(editor.getByLabel("Event name", { exact: true })).toHaveValue(name);
+  await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(editor).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
+
+test("Event activity retains unsubscribed signals and reactivation requires explicit confirmation", async ({ page }) => {
+  await page.goto("/admin/connections/events");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("agent-core.owner-capability"))).not.toBeNull();
+  const headers = { "X-AgentCore-Owner-Capability": (await page.evaluate(() => localStorage.getItem("agent-core.owner-capability")))! };
+  const name = "Signal activity " + Date.now();
+  const created = await page.request.post("/api/v2/admin/connections/events", { headers, data: { displayName: name, eventKey: "signals." + Date.now() } });
+  expect(created.ok()).toBe(true);
+  const event = await created.json();
+  const hook = "/api/v1/hooks/" + event.eventKey;
+  const request = { headers: { Authorization: "Bearer " + event.token }, data: { eventId: "no-subscribers", data: { reference: "example" } } };
+  expect((await page.request.post(hook, request)).status()).toBe(202);
+  expect((await page.request.post(hook, request)).status()).toBe(200);
+  await page.reload();
+  await page.getByRole("button", { name: "View details for " + name, exact: true }).click();
+  const details = page.getByRole("dialog", { name, exact: true });
+  await expect(details.getByRole("region", { name: "Received signals", exact: true }).getByText("no-subscribers", { exact: true })).toHaveCount(1);
+  await expect(details.getByRole("region", { name: "Automation deliveries", exact: true })).toContainText("No Automation deliveries");
+  expect(JSON.parse(await details.getByLabel("Example JSON body", { exact: true }).inputValue()).data).toEqual({ reference: "EXAMPLE-42" });
+  await details.getByRole("tab", { name: "cURL request", exact: true }).click();
+  await expect(details.getByLabel("Example cURL request", { exact: true })).toHaveValue(/Authorization: Bearer <secret>/);
+  await details.getByRole("button", { name: "Revoke " + name, exact: true }).click();
+  await page.getByRole("dialog", { name: "Revoke this Event?", exact: true }).getByRole("button", { name: "Revoke Event", exact: true }).click();
+  const reactivate = details.getByRole("button", { name: "Reactivate Event for " + name, exact: true });
+  await reactivate.click();
+  const confirmation = page.getByRole("dialog", { name: "Reactivate this Event?", exact: true });
+  await expect(confirmation).toContainText("accept new signals again");
+  await confirmation.getByRole("button", { name: "Cancel", exact: true }).click();
+  expect((await (await page.request.get("/api/v2/admin/connections/events/" + event.eventId, { headers })).json()).event.status).toBe("Revoked");
+  await reactivate.click();
+  await confirmation.getByRole("button", { name: "Reactivate Event", exact: true }).click();
+  const credential = page.getByRole("dialog", { name: "Copy this credential", exact: true });
+  const token = await credential.getByLabel("Event credential", { exact: true }).inputValue();
+  await credential.getByRole("button", { name: "Done", exact: true }).click();
+  expect((await page.request.post(hook, { ...request, data: { eventId: "old-secret", data: {} } })).status()).toBe(401);
+  expect((await page.request.post(hook, { headers: { Authorization: "Bearer " + token }, data: { eventId: "new-secret", data: {} } })).status()).toBe(202);
+});
+
 test("nested shared Event creation preserves Automation draft and lifecycle links", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
@@ -55,7 +111,7 @@ test("nested shared Event creation preserves Automation draft and lifecycle link
   expect((await page.request.post(hook, { headers: { Authorization: `Bearer ${event.token}` }, data: generic })).status()).toBe(202);
   expect((await page.request.post(hook, { headers: { Authorization: `Bearer ${event.token}` }, data: generic })).status()).toBe(200);
   await page.reload();
-  await expect(eventDetails.getByText(generic.eventId, { exact: true })).toBeVisible();
+  await expect(eventDetails.getByRole("region", { name: "Received signals", exact: true }).getByText(generic.eventId, { exact: true })).toBeVisible();
   await eventDetails.getByRole("button", { name, exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/admin/instances/${instanceId}/automation/automations\\?automation=`));
   await expect(page.getByRole("button", { name: `View automation: ${name}`, exact: true })).toHaveAttribute("aria-expanded", "true");
