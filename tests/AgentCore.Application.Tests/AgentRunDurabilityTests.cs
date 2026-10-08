@@ -236,18 +236,21 @@ public sealed class AgentRunDurabilityTests
         Assert.Empty(await turns.OpenAsync(runtime.SessionId));
     }
 
-    [Fact]
-    public async Task Background_start_returns_committed_child_promptly_and_repeated_tool_call_returns_same_child()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Background_start_returns_committed_child_promptly_and_repeated_tool_call_returns_same_child(bool reportCompletion)
     {
         var memory = new InMemoryMemoryStore();
         var runs = new RuntimeAgentRunStore();
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 8, 0, 0, 0, TimeSpan.Zero));
         var definition = SampleDefinitions.Examiner with
-        { Environment = new AgentCore.Domain.Definitions.RoleEnvironment(ToolAllowlist: [AgentCore.Application.Tools.ToolCatalog.BackgroundStart]) };
+        { InitiativePolicy = SampleDefinitions.Examiner.InitiativePolicy with { Enabled = false },
+            Environment = new AgentCore.Domain.Definitions.RoleEnvironment(ToolAllowlist: [AgentCore.Application.Tools.ToolCatalog.BackgroundStart]) };
         var snapshot = RuntimeAgentRunStore.WithPins(new SessionSnapshot(1, Guid.NewGuid(), 1, definition, SessionMode.Text, null,
             SessionStatus.Created, [], "", 0, null, null, time.GetUtcNow(), time.GetUtcNow(), AgentInstanceId: Guid.NewGuid(),
             ModelSelection: new("synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.Host, null)));
-        var model = new ImmediateBackgroundModel();
+        var model = new ImmediateBackgroundModel(reportCompletion);
         await using var runtime = CreateRuntime(new CapturingSessionOutput(), model, time, runs, memory, snapshot);
         await runtime.AttachAsync();
         await runtime.SubmitPersistedUserTextAsync("Do this in the background", Guid.NewGuid());
@@ -274,6 +277,14 @@ public sealed class AgentRunDurabilityTests
         await using var childRuntime = CreateRuntime(new CapturingSessionOutput(), new BackgroundCompletionModel("Response", false), time, runs, memory, child);
         Assert.True(await childRuntime.DispatchAgentRunAsync(childRun.AgentRunId, headless: true));
         await childRuntime.WaitUntilIdleAsync();
+        if (!reportCompletion)
+        {
+            Assert.Empty(await runs.ListUnreportedCompletionsAsync(8));
+            Assert.Equal("notRequested", (await runs.GetCompletionDeliveryAsync(owner, childRun.AgentRunId)).Status);
+            Assert.Equal(AgentRunStatus.Completed, (await runs.GetAsync(owner, childRun.AgentRunId))!.Status);
+            Assert.Single(await runs.ListForSessionAsync(owner, runtime.SessionId));
+            return;
+        }
         var candidate = Assert.Single(await runs.ListUnreportedCompletionsAsync(8));
         Assert.True(await runtime.AdmitBackgroundCompletionAsync(candidate));
         Assert.True(await runtime.AdmitBackgroundCompletionAsync(candidate));
@@ -293,7 +304,7 @@ public sealed class AgentRunDurabilityTests
         Assert.Equal(2, (await runs.ListForSessionAsync(owner, runtime.SessionId)).Count);
     }
 
-    private sealed class ImmediateBackgroundModel : ILanguageModel
+    private sealed class ImmediateBackgroundModel(bool reportCompletion) : ILanguageModel
     {
         public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true);
         public List<System.Text.Json.JsonElement> Results { get; } = [];
@@ -309,7 +320,7 @@ public sealed class AgentRunDurabilityTests
             if (_requests <= 2)
             {
                 yield return new ModelToolCallEvent(new("same-start", AgentCore.Application.Tools.ToolCatalog.BackgroundStart,
-                    "{\"objective\":\"Inspect the bounded task\",\"title\":\"Task inspection\",\"reportCompletion\":true}"));
+                    System.Text.Json.JsonSerializer.Serialize(new { objective = "Inspect the bounded task", title = "Task inspection", reportCompletion })));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls);
             }
             else
@@ -345,7 +356,7 @@ public sealed class AgentRunDurabilityTests
         var activation = new Activation(Guid.NewGuid(), sessionId, ActivationKind.ManualBackground, [input.EntryId],
             input.SourceEventId, null, null, null, "manual:test", now);
         var run = AgentRun.Create(runId, new(snapshot.AgentInstanceId, snapshot.ProfileId!.Value),
-            new(activation, snapshot.Definition.Id, snapshot.Definition.Version, snapshot.PinnedPersona!, responseId),
+            new(activation, snapshot.Definition.Id, snapshot.Definition.Version, snapshot.PinnedPersona!, responseId, AgentRunOutputContract.BackgroundOutcome),
             new("synthetic-offline/scripted", "primary-llm", "scripted", null), 3, now);
         await runs.AdmitAsync(snapshot, 0, run);
         run = await runs.ApplyAsync(run.Owner, runId, new AgentCore.Application.Execution.AgentRunCommand.Claim(
@@ -392,7 +403,7 @@ public sealed class AgentRunDurabilityTests
         var activation = new Activation(Guid.NewGuid(), sessionId, ActivationKind.ManualBackground, [input.EntryId],
             input.SourceEventId, null, null, null, "manual:test", now);
         var run = AgentRun.Create(runId, new(snapshot.AgentInstanceId, snapshot.ProfileId!.Value),
-            new(activation, snapshot.Definition.Id, snapshot.Definition.Version, snapshot.PinnedPersona!, responseId),
+            new(activation, snapshot.Definition.Id, snapshot.Definition.Version, snapshot.PinnedPersona!, responseId, AgentRunOutputContract.BackgroundOutcome),
             new("synthetic-offline/scripted", "primary-llm", "scripted", null), 3, now);
         await runs.AdmitAsync(snapshot, 0, run);
         run = await runs.ApplyAsync(run.Owner, runId, new AgentCore.Application.Execution.AgentRunCommand.Claim(

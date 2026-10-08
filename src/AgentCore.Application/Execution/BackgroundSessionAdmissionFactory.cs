@@ -16,7 +16,7 @@ public static class BackgroundSessionAdmissionFactory
         var activation = new Activation(activationId, sessionId, ActivationKind.ImmediateBackground, [entryId],
             entry.SourceEventId, null, parent.SessionId, source.AgentRunId, key, now);
         var run = AgentRun.Create(runId, source.Owner, new(activation, source.DefinitionId, source.DefinitionVersion,
-            source.PinnedPersona, responseId), source.PinnedModel, AgentRunLimits.DefaultMaxAttempts, now,
+            source.PinnedPersona, responseId, AgentRunOutputContract.BackgroundOutcome), source.PinnedModel, AgentRunLimits.DefaultMaxAttempts, now,
             source.PinnedSkillCatalog, source.PinnedSkillCatalog.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
         var origin = new SessionOrigin(SessionOriginKind.ImmediateBackground, parent.SessionId, source.AgentRunId,
             runId, reportCompletionToOrigin: reportCompletion);
@@ -37,7 +37,7 @@ public static class BackgroundSessionAdmissionFactory
     {
         var entry = new ConversationEntry(entryId, 1, activationId, ConversationRole.User, objective, null, EntryStatus.Completed, SessionMode.Text, 0, objective.Length, now);
         var activation = new Activation(activationId, sessionId, ActivationKind.ManualBackground, [entryId], activationId, null, null, null, key, now);
-        var run = AgentRun.Create(runId, new(instance.InstanceId, profileId), new(activation, definition.Id, definition.Version, persona, responseId),
+        var run = AgentRun.Create(runId, new(instance.InstanceId, profileId), new(activation, definition.Id, definition.Version, persona, responseId, AgentRunOutputContract.BackgroundOutcome),
             model, AgentRunLimits.DefaultMaxAttempts, now, skills, skills.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
         var session = new SessionSnapshot(1, sessionId, 1, definition, SessionMode.Text, null, SessionStatus.Created, [entry], "", 0, null,
             profileId, now, now, instance.InstanceId, Title: title, LastEntrySequence: 1, PinnedPersona: persona,
@@ -70,14 +70,15 @@ public static class BackgroundSessionAdmissionFactory
             occurrence.OccurrenceId, null, null, occurrence.DedupeKey, admittedAtUtc);
         var run = AgentRun.Create(agentRunId,
             new AgentRunOwner(occurrence.Owner.AgentInstanceId, occurrence.Owner.ProfileId),
-            new AgentRunAdmission(activation, definition.Id, definition.Version, persona, responseId),
+            new AgentRunAdmission(activation, definition.Id, definition.Version, persona, responseId, AgentRunOutputContract.BackgroundOutcome),
             new AgentRunModelPin(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort),
             AgentRunLimits.DefaultMaxAttempts, admittedAtUtc, pinnedSkillCatalog: skills,
             activeSkillKeys: skills.Where(skill => skill.Projection == SkillProjection.Always)
                 .Select(skill => skill.Key).ToArray());
         var origin = occurrence.AutomationId is { } automationId
             ? new SessionOrigin(SessionOriginKind.AutomationOccurrence, initialBackgroundAgentRunId: agentRunId,
-                automationId: automationId, triggerOccurrenceId: occurrence.OccurrenceId)
+                automationId: automationId, triggerOccurrenceId: occurrence.OccurrenceId,
+                originatingSessionId: occurrence.CompletionDelivery.SessionId, reportCompletionToOrigin: occurrence.CompletionDelivery.SessionId is not null)
             : new SessionOrigin(SessionOriginKind.SourceOccurrence, initialBackgroundAgentRunId: agentRunId,
                 triggerOccurrenceId: occurrence.OccurrenceId);
         var session = new SessionSnapshot(1, sessionId, 1, definition, SessionMode.Text, null,

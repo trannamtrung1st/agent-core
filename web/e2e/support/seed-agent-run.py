@@ -27,7 +27,7 @@ entry(input_id,1,'User','Review observable completed work')
 a=dict(activationId=activation_id,sessionId=session_id,kind=5,sourceEntryIds=[input_id],sourceEventId=input_id,
     triggerOccurrenceId=None,sourceSessionId=None,sourceAgentRunId=None,dedupeKey='browser-fixture:'+run_id,admittedAtUtc=utc(now),evidenceJson=None)
 p=dict(admission=dict(activation=a,definitionId=source['AgentId'],definitionVersion=source['AgentVersion'],
-    pinnedPersona=json.loads(source['PinnedPersonaJson'] or source['DefinitionJson']) if source['PinnedPersonaJson'] else json.loads(source['DefinitionJson'])['identity'],responseId=response_id),
+    pinnedPersona=json.loads(source['PinnedPersonaJson'] or source['DefinitionJson']) if source['PinnedPersonaJson'] else json.loads(source['DefinitionJson'])['identity'],responseId=response_id,outputContract=1),
     pinnedModel=dict(catalogKey='scripted-alpha',providerAlias='primary-llm',modelId='scripted-alpha',reasoningEffort='medium'),attemptCount=1,maxAttempts=3,
     claim=None,cancellationRequested=False,cancellationRequestedAtUtc=None,knownEffectSummary=None,progress=None,checkpoint=None,result=None,failure=None,
     sideEffect=dict(disposition=0,toolCallId=None,actionHash=None,updatedAtUtc=None),approval=None,pinnedSkillCatalog=[],activeSkillKeys=[],skillLoadCount=0,loadedCapabilityIds=[],capabilityLoadCount=0)

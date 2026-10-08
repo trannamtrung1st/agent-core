@@ -204,7 +204,7 @@ public sealed class AgentRunAdmissionStoreTests
         Assert.Equal(1, (await intake.AcceptAwaitingAsync()).Accepted);
         Assert.Equal(0, (await intake.AcceptAwaitingAsync()).Accepted);
         var receipt = (await f.Triggers.GetOccurrenceAsync(automation.Owner, first.OccurrenceId))!;
-        var session = (await f.Memory.LoadAsync(receipt.BackgroundSessionId!.Value))!;
+        var session = (await f.Memory.LoadAsync(receipt.ExecutionSessionId!.Value))!;
         var run = (await f.Runs.GetAsync(Owner, receipt.AcceptedAgentRunId!.Value))!;
         Assert.Equal(SessionSurface.BackgroundWork, session.Surfaces);
         Assert.Equal(SessionOriginKind.AutomationOccurrence, session.Origin.Kind);
@@ -222,7 +222,7 @@ public sealed class AgentRunAdmissionStoreTests
         var second = await AwaitingOccurrence(f, automation);
         Assert.Equal(1, (await intake.AcceptAwaitingAsync()).Accepted);
         var secondReceipt = (await f.Triggers.GetOccurrenceAsync(automation.Owner, second.OccurrenceId))!;
-        Assert.NotEqual(receipt.BackgroundSessionId, secondReceipt.BackgroundSessionId);
+        Assert.NotEqual(receipt.ExecutionSessionId, secondReceipt.ExecutionSessionId);
         await f.ReopenAsync();
         Assert.Equal(first.EvidenceJson, (await f.Triggers.GetOccurrenceAsync(automation.Owner, first.OccurrenceId))!.EvidenceJson);
         Assert.Equal(run.AgentRunId, (await f.Runs.GetAsync(Owner, run.AgentRunId))!.AgentRunId);
@@ -249,7 +249,7 @@ public sealed class AgentRunAdmissionStoreTests
             current.Revision, Lifecycle: AgentInstanceLifecycle.Archived), Now);
         Assert.Equal(2, (await intake.AcceptAwaitingAsync()).Skipped);
         Assert.Empty(await f.Runs.ListRunnableAsync(Now, 10));
-        Assert.Null((await f.Triggers.GetOccurrenceAsync(native.Owner, native.OccurrenceId))!.BackgroundSessionId);
+        Assert.Null((await f.Triggers.GetOccurrenceAsync(native.Owner, native.OccurrenceId))!.ExecutionSessionId);
     }
 
     [Theory]
@@ -262,7 +262,7 @@ public sealed class AgentRunAdmissionStoreTests
         var occurrence = await AwaitingOccurrence(f, automation: null);
         Assert.Equal(1, (await intake.AcceptAwaitingAsync()).Accepted);
         var receipt = (await f.Triggers.GetOccurrenceAsync(occurrence.Owner, occurrence.OccurrenceId))!;
-        var session = (await f.Memory.LoadAsync(receipt.BackgroundSessionId!.Value))!;
+        var session = (await f.Memory.LoadAsync(receipt.ExecutionSessionId!.Value))!;
         Assert.Equal(SessionOriginKind.SourceOccurrence, session.Origin.Kind);
         Assert.Equal(occurrence.OccurrenceId, session.Origin.TriggerOccurrenceId);
         Assert.Null(session.Origin.AutomationId);
@@ -318,7 +318,7 @@ public sealed class AgentRunAdmissionStoreTests
         foreach (var candidate in candidates) Assert.Null(await f.Memory.LoadAsync(candidate.Snapshot.SessionId));
         var accepted = (await f.Triggers.GetOccurrenceAsync(occurrence.Owner, occurrence.OccurrenceId))!;
         Assert.Equal(OccurrenceRoutingDisposition.AcceptedDurable, accepted.Disposition);
-        Assert.Equal(first.Run.SessionId, accepted.BackgroundSessionId);
+        Assert.Equal(first.Run.SessionId, accepted.ExecutionSessionId);
         Assert.Equal(first.Run.AgentRunId, accepted.AcceptedAgentRunId);
         Assert.Null(accepted.ClaimId);
         await f.ReopenAsync();
@@ -359,6 +359,39 @@ public sealed class AgentRunAdmissionStoreTests
         Assert.True((await f.Runs.AdmitOccurrenceAsync(proposed.Snapshot, proposed.Run, occurrence.RoutingRevision)).Created);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Exact_target_admission_preserves_transcript_replays_receipt_and_serializes_same_session(bool sqlite)
+    {
+        await using var f = await Fixture.CreateAsync(sqlite);
+        var user = UserTurn();
+        await f.Runs.AdmitAsync(user.Snapshot, 0, user.Run);
+        var busy = await f.Runs.ApplyAsync(Owner, user.Run.AgentRunId, new AgentRunCommand.Claim(user.Run.Revision, Now, Guid.NewGuid(), Now.AddMinutes(1)));
+        var automation = await f.Triggers.CreateAsync(new Automation(Guid.NewGuid(), new(Owner.AgentInstanceId, Owner.ProfileId),
+            AutomationStatus.Active, "Say hello", new FixedIntervalSchedule(60, Now), Now.AddMinutes(1), null, 0, 1, 1,
+            new(TriggerAuthorizationOrigin.AdminOwner, null, null, Now, Now), null,
+            executionTarget: AutomationExecutionTarget.Existing(user.Snapshot.SessionId), completionDelivery: AutomationCompletionDelivery.None));
+        var occurrence = await AwaitingOccurrence(f, automation);
+        var activation = new Activation(Guid.NewGuid(), user.Snapshot.SessionId, ActivationKind.ScheduledWork, [],
+            occurrence.SourceEventId, occurrence.OccurrenceId, null, null, $"automation:{occurrence.OccurrenceId:D}", Now, "{}");
+        var first = NewRun(activation);
+        var metadata = user.Snapshot with { Entries = [] };
+        Assert.True((await f.Runs.AdmitOccurrenceAsync(metadata, first, occurrence.RoutingRevision)).Created);
+        Assert.Equal(user.Snapshot.Entries, (await f.Memory.LoadAsync(user.Snapshot.SessionId))!.Entries);
+        Assert.Equal(user.Snapshot.Revision, (await f.Memory.LoadAsync(user.Snapshot.SessionId))!.Revision);
+        Assert.Empty(await f.Runs.ListRunnableAsync(Now, 8));
+        Assert.Equal("Conflict", (await Assert.ThrowsAsync<AgentCoreException>(() => f.Runs.ApplyAsync(Owner, first.AgentRunId,
+            new AgentRunCommand.Claim(first.Revision, Now, Guid.NewGuid(), Now.AddMinutes(1))).AsTask())).Code);
+        await f.Runs.ApplyAsync(Owner, busy.AgentRunId, new AgentRunCommand.Fail(busy.Revision, Now, busy.Claim!.Generation, "fixture-ended", "Prior response ended", false, null));
+        Assert.Equal(first.AgentRunId, Assert.Single(await f.Runs.ListRunnableAsync(Now, 8)).AgentRunId);
+        await f.ReopenAsync();
+        var replay = await f.Runs.AdmitOccurrenceAsync(metadata, NewRun(activation), occurrence.RoutingRevision);
+        Assert.False(replay.Created); Assert.Equal(first.AgentRunId, replay.Run.AgentRunId);
+        Assert.Equal(first.SessionId, (await f.Triggers.GetOccurrenceAsync(automation.Owner, occurrence.OccurrenceId))!.ExecutionSessionId);
+        Assert.Empty((await f.Memory.ListBackgroundSessionsAsync(Owner, null, 50, false)).Items);
+    }
+
     private static Task<TriggerOccurrence> AwaitingOccurrence(Fixture f) => AwaitingOccurrence(f, null, true);
 
     private static async Task<TriggerOccurrence> AwaitingOccurrence(Fixture f, Automation? automation, bool rawAutomation = false)
@@ -370,7 +403,7 @@ public sealed class AgentRunAdmissionStoreTests
             Now, Now, Now, automation is null ? "{}" : AgentCore.Application.Triggers.AutomationRules.Evidence(automation),
             null, 1, OccurrenceRoutingDisposition.Pending, null, 0, null,
             null, null, modelPin: new ExecutionModelPin("synthetic", "synthetic", "synthetic", null,
-                ExecutionModelSource.ConversationDefault));
+                ExecutionModelSource.ConversationDefault), executionTarget: automation?.ExecutionTarget, completionDelivery: automation?.CompletionDelivery);
         await f.Triggers.AdmitOccurrenceAsync(occurrence);
         var claim = Guid.NewGuid();
         await f.Triggers.TryClaimOccurrenceAsync(occurrence.OccurrenceId, claim, Now.AddMinutes(1), Now);
@@ -493,6 +526,29 @@ public sealed class AgentRunAdmissionStoreTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task An_expired_active_run_is_recoverable_even_when_an_older_run_is_queued(bool sqlite)
+    {
+        await using var f = await Fixture.CreateAsync(sqlite);
+        var first = UserTurn();
+        await f.Runs.AdmitAsync(first.Snapshot, 0, first.Run);
+        var input = new ConversationEntry(Guid.NewGuid(), 3, null, ConversationRole.User, "A later turn", null,
+            EntryStatus.Completed, SessionMode.Text, 0, 12, Now.AddSeconds(1));
+        var activation = new Activation(Guid.NewGuid(), first.Snapshot.SessionId, ActivationKind.UserTurn,
+            [input.EntryId], null, null, null, null, "later-turn", Now.AddSeconds(1));
+        var later = AgentRun.Create(Guid.NewGuid(), Owner,
+            new(activation, Definition.Id, Definition.Version, Definition.Identity, Guid.NewGuid(), AgentRunOutputContract.ConversationResponse),
+            first.Run.PinnedModel, 3, Now.AddSeconds(1));
+        await f.Runs.AdmitAsync(first.Snapshot with { Revision = 2, Entries = first.Snapshot.Entries.Append(input).ToArray() }, 1, later);
+        later = await f.Runs.ApplyAsync(Owner, later.AgentRunId, new AgentRunCommand.Claim(later.Revision,
+            Now.AddSeconds(1), Guid.NewGuid(), Now.AddMinutes(1)));
+        Assert.Empty(await f.Runs.ListRunnableAsync(Now.AddSeconds(2), 1));
+        await f.ReopenAsync();
+        Assert.Equal(later.AgentRunId, Assert.Single(await f.Runs.ListRunnableAsync(Now.AddMinutes(2), 1)).AgentRunId);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task Concurrent_claims_have_one_winner_and_expired_worker_cannot_commit_an_effect(bool sqlite)
     {
         await using var f = await Fixture.CreateAsync(sqlite);
@@ -572,7 +628,7 @@ public sealed class AgentRunAdmissionStoreTests
         var nextActivation = new Activation(Guid.NewGuid(), child.SessionId, ActivationKind.UserTurn, [user.EntryId],
             null, null, null, null, "user:next", Now.AddSeconds(3));
         var nextRun = AgentRun.Create(Guid.NewGuid(), Owner,
-            new AgentRunAdmission(nextActivation, Definition.Id, Definition.Version, Definition.Identity, Guid.NewGuid()),
+            new AgentRunAdmission(nextActivation, Definition.Id, Definition.Version, Definition.Identity, Guid.NewGuid(), AgentRunOutputContract.ConversationResponse),
             run.PinnedModel, 3, Now.AddSeconds(3));
         await f.Runs.AdmitAsync(reopened with { Revision = 3, Entries = [.. reopened.Entries, user], UpdatedAt = Now.AddSeconds(3) }, 2, nextRun);
         Assert.Equal(2, (await f.Runs.ListForSessionAsync(Owner, child.SessionId)).Count);
@@ -648,7 +704,7 @@ public sealed class AgentRunAdmissionStoreTests
         var a = new Activation(Guid.NewGuid(), turn.Snapshot.SessionId, ActivationKind.UserTurn,
             turn.Run.Admission.Activation.SourceEntryIds, null, null, null, null, "precise:batch", precise);
         var run = AgentRun.Create(Guid.NewGuid(), Owner,
-            new AgentRunAdmission(a, Definition.Id, Definition.Version, Definition.Identity, Guid.NewGuid()),
+            new AgentRunAdmission(a, Definition.Id, Definition.Version, Definition.Identity, Guid.NewGuid(), AgentRunOutputContract.ConversationResponse),
             turn.Run.PinnedModel, 3, precise);
         await f.Runs.AdmitAsync(turn.Snapshot with { CreatedAt = precise, UpdatedAt = precise }, 0, run);
         await f.ReopenAsync();
@@ -759,6 +815,39 @@ public sealed class AgentRunAdmissionStoreTests
         await f.Runs.ApplyAsync(Owner, parent.AgentRunId, new AgentRunCommand.RequestCancellation(parent.Revision, Now, null));
         Assert.Equal("ValidationError", (await Assert.ThrowsAsync<AgentCoreException>(() => f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation).AsTask())).Code);
         Assert.Null(await f.Memory.LoadAsync(child.Snapshot.SessionId));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Continued_child_runs_cannot_starve_the_bounded_initial_completion_query(bool sqlite)
+    {
+        await using var f = await Fixture.CreateAsync(sqlite);
+        var parent = await ParentTurn(f);
+        var first = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        await f.Runs.AdmitImmediateAsync(first.Snapshot, first.Run, parent.Claim!.Generation);
+        await CompleteChild(f, first, quiet: false);
+        await f.Runs.SkipCompletionReportAsync(Owner, first.Run.AgentRunId, "parent-unavailable", Now);
+
+        var snapshot = (await f.Memory.LoadAsync(first.Snapshot.SessionId))!;
+        var input = new ConversationEntry(Guid.NewGuid(), 3, null, ConversationRole.User, "Continue", null,
+            EntryStatus.Completed, SessionMode.Text, 0, 8, Now);
+        var continuation = NewRun(new Activation(Guid.NewGuid(), snapshot.SessionId, ActivationKind.UserTurn,
+            [input.EntryId], null, null, null, null, "continued-child", Now));
+        await f.Runs.AdmitAsync(snapshot with { Revision = snapshot.Revision + 1, Entries = snapshot.Entries.Append(input).ToArray() },
+            snapshot.Revision, continuation);
+        continuation = await Claim(f, continuation);
+        await f.Runs.ApplyAsync(Owner, continuation.AgentRunId, new AgentRunCommand.Fail(continuation.Revision,
+            Now.AddSeconds(1), continuation.Claim!.Generation, "fixture-failure", "Continuation failed", false, null));
+
+        var secondParent = await ParentTurn(f);
+        var second = BackgroundTurn(secondParent.SessionId, secondParent.AgentRunId, "Another independent task");
+        await f.Runs.AdmitImmediateAsync(second.Snapshot, second.Run, secondParent.Claim!.Generation);
+        var running = await Claim(f, second.Run);
+        await f.Runs.ApplyAsync(Owner, running.AgentRunId, new AgentRunCommand.Fail(running.Revision,
+            Now.AddSeconds(2), running.Claim!.Generation, "fixture-failure", "Initial task failed", false, null));
+        await f.ReopenAsync();
+        Assert.Equal(second.Run.AgentRunId, Assert.Single(await f.Runs.ListUnreportedCompletionsAsync(1)).Run.AgentRunId);
     }
 
     [Theory]
@@ -912,7 +1001,8 @@ public sealed class AgentRunAdmissionStoreTests
             Owner.ProfileId, Now, Now, Owner.AgentInstanceId, PinnedPersona: Definition.Identity);
 
     private static AgentRun NewRun(Activation activation) => AgentRun.Create(Guid.NewGuid(), Owner,
-        new AgentRunAdmission(activation, Definition.Id, Definition.Version, Definition.Identity, Guid.NewGuid()),
+        new AgentRunAdmission(activation, Definition.Id, Definition.Version, Definition.Identity, Guid.NewGuid(), activation.Kind == ActivationKind.BackgroundCompleted ? AgentRunOutputContract.CompletionReport
+            : activation.SourceEntryIds.Count > 0 && activation.Kind != ActivationKind.UserTurn ? AgentRunOutputContract.BackgroundOutcome : AgentRunOutputContract.ConversationResponse),
         new AgentRunModelPin("synthetic", "synthetic", "synthetic", null), 3, Now);
 
     private sealed class Diagnostics : IDiagnosticIdSource { public Guid NewId() => Guid.NewGuid(); }

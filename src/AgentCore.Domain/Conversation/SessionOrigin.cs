@@ -48,8 +48,8 @@ public sealed record SessionOrigin
         if (kind is not (SessionOriginKind.AutomationOccurrence or SessionOriginKind.SourceOccurrence)
             && (automationId is not null || triggerOccurrenceId is not null))
             throw new ArgumentException("Only occurrence origins carry occurrence provenance.");
-        if (reportCompletionToOrigin && kind != SessionOriginKind.ImmediateBackground)
-            throw new ArgumentException("Only explicitly parent-linked immediate work can report back.");
+        if (reportCompletionToOrigin && (kind is not (SessionOriginKind.ImmediateBackground or SessionOriginKind.AutomationOccurrence) || originatingSessionId is null))
+            throw new ArgumentException("Only explicitly parent-linked work can report back.");
         Kind = kind;
         OriginatingSessionId = originatingSessionId;
         OriginatingAgentRunId = originatingAgentRunId;

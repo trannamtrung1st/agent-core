@@ -1353,7 +1353,7 @@ Orientation for what later work can build on. Detail and gate history are in `/d
 
 **Workspace and resources.** Unified durable `/home` plus working-context `/working`, guarded revision/tree operations, session attachments/artifacts, historical images and immutable Definition resources. The older explicit retain/checkout surface is superseded by direct unified workspace operations.
 
-**Triggers and background work.** Authored Automations retain durable Trigger registrations, Occurrences and subscriber-snapshot ingress ledgers. Every accepted detached occurrence atomically creates an owned background Session, Activation, pinned AgentRun and admission receipt. Immediate `background.start` creates a child without an Automation. All admitted conversation and background work uses one SessionRuntime/SessionHost claim, retry, approval and effect-fencing path. Initial eligible child completion reports at most once to its original parent; quiet outcomes stay quiet. Continue in chat preserves the same Session, history, workspace and artifacts. Historical WorkItem engines and current-schema compatibility surfaces are retired.
+**Triggers and background work.** Authored Automations retain durable Trigger registrations, Occurrences and subscriber-snapshot ingress ledgers. An accepted occurrence atomically admits its frozen exact existing Session or new background child target, Activation, pinned AgentRun and receipt. Immediate background.start creates an independent child without an Automation. Both use one SessionRuntime/SessionHost claim, retry, approval and effect-fencing path. Requested meaningful initial completion reports once to its bound parent regardless of spontaneous Initiative; quiet outcomes stay quiet. Reporting admission and delivered output are distinct. Continue in chat preserves Session/history/workspace/artifacts. Historical WorkItem engines and current-schema compatibility surfaces remain retired.
 
 **Admin.** Draft, Form and JSON authoring, validation, evaluation, immutable publish, instances, persona, memory and automation administration, effective configuration, and history. P7.6 authoring closure is frozen.
 
@@ -1392,3 +1392,12 @@ The original unified Automation cutover passed all five hosted Synthetic/Compose
 ## Agent Instance Skills migration (2026-10-07)
 
 Full architectural cutover is closed/frozen on `9c2d40e0`; all five [exact-SHA hosted jobs](https://github.com/trannamtrung1st/agent-core/actions/runs/37649033738) passed: stable-id Definition enabled state, independent owner-local procedures, explicit projection/defaults, immutable execution catalogs, ordinary authorized management tools, Admin UI and atomic persistence. Keyword activation and Harness Skill authoring are retired. Historical milestones keep their original evidence; current verification and closure evidence are tracked in [migration report](docs/reports/instance-skills-migration-verification.md).
+
+## Automation destinations and background report-back closure
+
+- [x] A–F: explicit immutable destination/delivery and output contracts, transactional target admission, headless execution, serialized claims, shared reporting, trusted authoring and shared UI.
+- [x] G: canonical architecture/API/persistence and product/design documentation synchronized; new deterministic API/parity tests and bounded real-browser review.
+- [x] Complete full local Synthetic/Compose and frontend gates and record results in [verification](docs/reports/automation-targets-background-reportback-verification.md). Final Compose rebuild/recreation passed after disk-pressure recovery; final prompt/tool checks passed 73 Application, 24 API, 12 Infrastructure and 3 browser cases.
+- [ ] Commit/push the final behavior candidate only after local gates pass; record all five exact-SHA hosted jobs before freezing.
+
+Historical AgentRun/Browser v2 freezes remain unchanged; P10/P11 remain unopened.

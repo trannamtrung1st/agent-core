@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Execution;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
@@ -17,12 +18,25 @@ public sealed partial class InMemoryAgentRunStore
         if (limit is < 1 or > AgentRunLimits.MaxListLimit) throw AgentCoreErrors.Validation("Completion query requires a bounded limit.");
         lock (sessions.AdmissionGate)
         {
-            var result = State.Runs.Values.Where(run => run.IsTerminal && run.Admission.Activation.Kind == ActivationKind.ImmediateBackground
+            var result = State.Runs.Values.Where(run => run.IsTerminal
                 && !State.CompletionReceipts.ContainsKey(run.AgentRunId)).OrderBy(run => run.UpdatedAtUtc).ThenBy(run => run.AgentRunId)
                 .Select(run => new BackgroundCompletionCandidate(run, sessions.LoadMetadataAsync(run.SessionId, ct).GetAwaiter().GetResult()!))
                 .Where(candidate => candidate.Session is not null && candidate.Session.Origin.MayReportCompletion(candidate.Run.AgentRunId))
                 .Take(limit).ToArray();
             return ValueTask.FromResult<IReadOnlyList<BackgroundCompletionCandidate>>(result);
+        }
+    }
+
+    public ValueTask<CompletionDeliveryState> GetCompletionDeliveryAsync(AgentRunOwner owner, Guid childRunId, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        lock (sessions.AdmissionGate)
+        {
+            if (!State.Runs.TryGetValue(childRunId, out var child) || child.Owner != owner) throw AgentCoreErrors.NotFound("Child run was not found.");
+            var session = sessions.LoadMetadataAsync(child.SessionId, ct).GetAwaiter().GetResult() ?? throw AgentCoreErrors.NotFound("Child Session was not found.");
+            State.CompletionReceipts.TryGetValue(childRunId, out var receipt);
+            var report = receipt?.ParentActivationId is { } id ? State.Runs.Values.SingleOrDefault(r => r.ActivationId.ToString("D") == id && r.Owner == owner) : null;
+            return ValueTask.FromResult(CompletionDeliveryProjection.Build(session, report, receipt is not null, receipt?.SkipReason));
         }
     }
 

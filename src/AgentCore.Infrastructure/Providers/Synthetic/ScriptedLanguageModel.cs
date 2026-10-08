@@ -107,6 +107,12 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield return new ModelCompleted(ModelStopReason.ToolCalls);
             yield break;
         }
+        if (request.Messages.Any(m => m.Role == ModelRole.System && m.Text.StartsWith("Execute the previously authorized Automation instructions", StringComparison.Ordinal)))
+        {
+            yield return new ModelTextDelta(RequestsNativeJson(request) ? ToNativeJson("Say hello", ["Hello!"], []) : "Hello!");
+            yield return new ModelCompleted(ModelStopReason.Completed);
+            yield break;
+        }
         if (BackgroundSessionScript.Generate(request) is { } backgroundEvents)
         {
             foreach (var item in backgroundEvents) yield return item;
@@ -656,6 +662,12 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             return true;
         }
 
+        if (lastUser.Contains("say hello to me in 30 seconds", StringComparison.OrdinalIgnoreCase))
+        {
+            toolEvent = ScheduleCall(toolRounds, ToolCatalog.AutomationCreate,
+                """{"instructions":"Say hello once in this conversation","relativeDelaySeconds":30,"executionTarget":"currentSession"}""");
+            return true;
+        }
         if (lastUser.Contains("say hello to me", StringComparison.OrdinalIgnoreCase)
             && lastUser.Contains("30", StringComparison.OrdinalIgnoreCase))
         {
@@ -930,8 +942,17 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         return text.Contains("to 11", StringComparison.OrdinalIgnoreCase) ? "11:00" : "10:00";
     }
 
-    private static ModelToolCallEvent ScheduleCall(int toolRounds, string name, string arguments) =>
-        new(new ModelToolCall($"call-schedule-{toolRounds + 1}", name, arguments));
+    private static ModelToolCallEvent ScheduleCall(int toolRounds, string name, string arguments)
+    {
+        if (name == ToolCatalog.AutomationCreate)
+        {
+            var data = System.Text.Json.Nodes.JsonNode.Parse(arguments)!.AsObject();
+            if (!data.ContainsKey("executionTarget")) data["executionTarget"] = "backgroundSession";
+            if (data["executionTarget"]?.GetValue<string>() == "backgroundSession" && !data.ContainsKey("reportBack")) data["reportBack"] = false;
+            arguments = data.ToJsonString();
+        }
+        return new(new ModelToolCall($"call-schedule-{toolRounds + 1}", name, arguments));
+    }
 
     private static string ScheduleMutationArgs(string lastTool, string localTime, bool includeTime)
     {
@@ -986,6 +1007,8 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             return "Moved the reminder.";
         }
 
+        if (lastUser.Contains("say hello to me in 30 seconds", StringComparison.OrdinalIgnoreCase))
+            return "I'll say hello in this chat in 30 seconds.";
         return lastUser.Contains("every monday", StringComparison.OrdinalIgnoreCase)
             ? "Scheduled the Monday call."
             : "Scheduled Call John.";

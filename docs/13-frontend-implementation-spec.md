@@ -273,3 +273,11 @@ Skill authoring accepts an optional readable ID in both Definition and Instance 
 ## Browser provider configuration display
 
 Admin Effective configuration reuses the existing Browser provider Descriptions section and shared responsive detail layout. It shows provider, engine, readiness, advertised features, profile/policy modes and output limits. Long feature lists wrap within the panel; labels remain aligned on desktop and stack on mobile. Provider support does not imply a Definition grant. Browser interaction remains on the existing conversation activity row; no browser panel, environment editor or drawing/dashboard surface is introduced.
+
+## Automation destinations and truthful reporting
+
+Reuse `AutomationDestination` and `CompletionDeliveryStatus` across Chat Automations, Admin and Background Work. Destination says This conversation, an exact Conversation link, or Background work; requested reporting appears separately. Immutable Originally created from is provenance. Chat Automation details deep-link to the exact Admin Automation record.
+
+Admin New/Edit uses the existing 640px maximum/full-mobile drawer with persistent footer. Run in selects Separate background Session or Selected conversation. The existing `AdminSessionPicker` filters owned eligible Sessions and validates selection through the API. Missing exact selection disables save. Existing-target work explains its pinned Session model and hides unrelated unattended controls. Background work defaults to None reporting; selecting a conversation exposes a separate report picker. Tools/Vision requirements remain explicit. Saving restores the expanded source row and focus; errors preserve drafts.
+
+Automations is 400px on wide layout and full viewport below 768px. Background Work/Run details retain 640px maximum, 16px body inset and 40px narrow buttons. Admin adds a Destination column with table-local overflow. Completion statuses are Pending, Pending · message queued, Reported, Could not report, Not reported or Not requested; skipped/failed results remain in Background work. A parent report stays an ordinary assistant message with modest Background work completed metadata and an exact owned child link. Reload derives provenance from bounded Run reads without changing transcript contents.

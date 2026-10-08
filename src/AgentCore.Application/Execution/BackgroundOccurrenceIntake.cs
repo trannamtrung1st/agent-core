@@ -47,6 +47,8 @@ public sealed class BackgroundOccurrenceIntake(
             }
             catch (AgentCoreException exception) when (exception.Code == "Conflict")
             {
+                if (exception.Message.Contains("queue is full", StringComparison.Ordinal))
+                    await RejectTargetAsync(occurrence, "target-queue-overflow", cancellationToken).ConfigureAwait(false);
                 // Another intake/router changed this receipt. Re-read on the next bounded pass.
                 skipped++;
             }
@@ -76,6 +78,36 @@ public sealed class BackgroundOccurrenceIntake(
                 return null;
         }
 
+        if (occurrence.ExecutionTarget.SessionId is { } targetId)
+        {
+            var target = await memory.LoadMetadataAsync(targetId, cancellationToken).ConfigureAwait(false);
+            if (!AutomationDestinationPolicy.Eligible(target, occurrence.Owner))
+            {
+                await RejectTargetAsync(occurrence, "target-unavailable", cancellationToken).ConfigureAwait(false);
+                return null;
+            }
+            ExecutionModelPin selected;
+            try { selected = AutomationDestinationPolicy.Pin(target!, models, requiresVision: automation?.RequiresVision == true, requiresTools: automation?.RequiresTools == true); }
+            catch (AgentCoreException)
+            { await RejectTargetAsync(occurrence, "target-model-unavailable", cancellationToken).ConfigureAwait(false); return null; }
+            var catalog = await new EffectiveSkillCatalogResolver(instances).ResolveAsync(instance.InstanceId,
+                target!.Definition, cancellationToken).ConfigureAwait(false);
+            var triggerKind = occurrence.SourceKind switch { TriggerSourceKind.Schedule => TriggerKind.ScheduledOccurrence,
+                TriggerSourceKind.ApplicationEvent => TriggerKind.ApplicationEvent, _ => TriggerKind.ManualInvocation };
+            var activationKind = occurrence.SourceKind switch { TriggerSourceKind.Schedule => ActivationKind.ScheduledWork,
+                TriggerSourceKind.ApplicationEvent => ActivationKind.ApplicationEvent, _ => ActivationKind.ManualBackground };
+            var evidence = System.Text.Json.JsonSerializer.Serialize(new AgentRunAdmissionFactory.SignalInput(triggerKind,
+                occurrence.EvidenceJson, null));
+            var activation = new Activation(ids.NewId(), targetId, activationKind, [], occurrence.SourceEventId,
+                occurrence.OccurrenceId, null, null, $"automation:{occurrence.OccurrenceId:D}", time.GetUtcNow(), evidence);
+            var run = AgentRun.Create(ids.NewId(), new(occurrence.Owner.AgentInstanceId, occurrence.Owner.ProfileId),
+                new(activation, target.Definition.Id, target.Definition.Version, target.PinnedPersona ?? target.Definition.Identity,
+                    ids.NewId(), AgentRunOutputContract.ConversationResponse),
+                new(selected.CatalogKey, selected.ProviderAlias, selected.ModelId, selected.ReasoningEffort),
+                AgentRunLimits.DefaultMaxAttempts, time.GetUtcNow(), catalog,
+                catalog.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
+            return (target, run);
+        }
         var pin = occurrence.ModelPin;
         if (pin is null)
         {
@@ -92,5 +124,9 @@ public sealed class BackgroundOccurrenceIntake(
         return BackgroundSessionAdmissionFactory.ForOccurrence(ids.NewSessionId(), ids.NewId(), ids.NewId(),
             ids.NewId(), ids.NewId(), occurrence, definition, instance.Persona, instance.PersonaRevision,
             pin, skills, time.GetUtcNow(), automation?.Name);
+    }
+    private async ValueTask RejectTargetAsync(TriggerOccurrence occurrence, string reason, CancellationToken ct)
+    {
+        await triggers.RejectAwaitingDurableWorkAsync(occurrence.OccurrenceId, occurrence.RoutingRevision, reason, time.GetUtcNow(), ct).ConfigureAwait(false);
     }
 }

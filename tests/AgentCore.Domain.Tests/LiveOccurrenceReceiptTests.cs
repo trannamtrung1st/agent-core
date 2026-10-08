@@ -16,7 +16,7 @@ public sealed class LiveOccurrenceReceiptTests
         Assert.Equal(sessionId, quiet.LiveSessionId);
         Assert.Equal(Now, quiet.LiveEvaluationCompletedAtUtc);
         Assert.Null(quiet.AcceptedAgentRunId);
-        Assert.Null(quiet.BackgroundSessionId);
+        Assert.Null(quiet.ExecutionSessionId);
         Assert.Throws<ArgumentException>(() => quiet.WithLiveEvaluation(sessionId, Guid.NewGuid(), Now));
     }
 

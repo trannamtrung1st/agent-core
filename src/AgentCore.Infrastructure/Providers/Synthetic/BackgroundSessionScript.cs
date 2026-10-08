@@ -13,10 +13,11 @@ internal static class BackgroundSessionScript
         var report = request.Messages.LastOrDefault(message => message.Role == ModelRole.System && message.Text.StartsWith(ReportPrefix, StringComparison.Ordinal));
         if (report is not null)
         {
-            var jsonStart = report.Text.IndexOf('{');
+            var evidence = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? "";
+            var jsonStart = evidence.IndexOf('{');
             try
             {
-                using var data = JsonDocument.Parse(report.Text[jsonStart..]);
+                using var data = JsonDocument.Parse(evidence[jsonStart..]);
                 var summary = data.RootElement.GetProperty("summary").GetString() ?? "Background work ended.";
                 return [new ModelTextDelta("Background work: " + summary), new ModelCompleted(ModelStopReason.Completed)];
             }

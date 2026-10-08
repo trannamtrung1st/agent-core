@@ -3,10 +3,12 @@ using AgentCore.Domain.Definitions;
 namespace AgentCore.Domain.Conversation;
 
 /// <summary>Frozen execution identity. Provenance carries no execution permission.</summary>
+public enum AgentRunOutputContract { ConversationResponse, BackgroundOutcome, CompletionReport }
+
 public sealed class AgentRunAdmission
 {
     public AgentRunAdmission(Activation activation, string definitionId, int definitionVersion,
-        AgentIdentity pinnedPersona, Guid? responseId)
+        AgentIdentity pinnedPersona, Guid? responseId, AgentRunOutputContract outputContract)
     {
         ArgumentNullException.ThrowIfNull(activation);
         ArgumentNullException.ThrowIfNull(pinnedPersona);
@@ -15,6 +17,8 @@ public sealed class AgentRunAdmission
         AgentRunText.RequireOptionalId(responseId, "Response");
         if (activation.Kind == ActivationKind.UserTurn && responseId is null)
             throw new ArgumentException("A user turn requires stable response identity.");
+        if (!Enum.IsDefined(outputContract)) throw new ArgumentException("Output contract is invalid.");
+        OutputContract = outputContract;
         Activation = activation;
         DefinitionId = AgentRunText.RequireToken(definitionId, AgentRunLimits.MaxDefinitionIdCharacters, "Definition");
         DefinitionVersion = definitionVersion;
@@ -22,6 +26,7 @@ public sealed class AgentRunAdmission
         ResponseId = responseId;
     }
 
+    public AgentRunOutputContract OutputContract { get; }
     public Activation Activation { get; }
     public string DefinitionId { get; }
     public int DefinitionVersion { get; }

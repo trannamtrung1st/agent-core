@@ -1,6 +1,8 @@
+import { AdminSessionPicker } from "./AdminSessionPicker";
+import { AutomationDestination, ConversationDestination } from "../chat/AutomationDestination";
 import { AdminErrorNotice } from "./adminFailure";
 import { useCallback, useEffect, useId, useRef, useState, type Key } from "react";
-import { Alert, App, Button, DatePicker, Descriptions, Drawer, Empty, Flex, Form, Grid, Input, InputNumber, Select, Spin, Switch, Table, Tag, Typography, theme } from "antd";
+import { Alert, App, Button, Checkbox, DatePicker, Descriptions, Drawer, Empty, Flex, Form, Grid, Input, InputNumber, Select, Spin, Switch, Table, Tag, Typography, theme } from "antd";
 import dayjs from "dayjs";
 import { confirmAction } from "../../app/confirmAction";
 import { listModels, type ModelDescriptor } from "../../services/api";
@@ -17,7 +19,7 @@ const activeWork = ["Queued", "Running", "WaitingForApproval", "WaitingToRetry"]
 const terminal = ["Completed", "Cancelled", "Expired"];
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : "Not scheduled";
 const defaultTiming = (): ScheduleTiming => ({ kind: "daily", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", interval: 1, localTime: "09:00" });
-const blank = (): AutomationDraft => ({ expectedRevision: 0, enabled: true, name: "", instructions: "", modelKey: null, reasoningEffort: null,
+const blank = (): AutomationDraft => ({ executionTarget: { kind: "backgroundSession" }, completionDelivery: { kind: "none" }, expectedRevision: 0, enabled: true, name: "", instructions: "", modelKey: null, reasoningEffort: null,
   trigger: { kind: "schedule", schedule: defaultTiming() } });
 
 export function InstanceAutomationsSection({ instanceId, onWork, selection, active = true }: { instanceId: string; active?: boolean; onWork: (workId?: string) => void; selection?: AutomationSelection }) {
@@ -128,11 +130,13 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
     (timing.kind === "oneShot" ? !!timing.atUtc && Number.isFinite(Date.parse(timing.atUtc)) :
       timing.interval >= minimum && timing.interval <= maximum && (timing.kind === "fixedInterval" ||
         /^\d{2}:\d{2}$/.test(timing.localTime ?? "") && !!timing.timeZone.trim() && (timing.kind !== "weekly" || !!timing.weekdays?.length)));
-  const valid = draft.name.trim().length > 0 && draft.name.trim().length <= 120 && draft.instructions.trim().length > 0 && draft.instructions.trim().length <= 2000
+  const destinationValid = (draft.executionTarget.kind !== "existingSession" || !!draft.executionTarget.sessionId)
+    && (draft.completionDelivery.kind !== "toSession" || !!draft.completionDelivery.sessionId);
+  const valid = destinationValid && draft.name.trim().length > 0 && draft.name.trim().length <= 120 && draft.instructions.trim().length > 0 && draft.instructions.trim().length <= 2000
     && (isSchedule ? scheduleValid : draft.trigger.kind === "event" && sources.some(source => source.sourceId === (draft.trigger.kind === "event" ? draft.trigger.eventSourceId : "") && source.status === "Active"));
   function setTiming(change: Partial<ScheduleTiming>) { setDraft({ ...draft, trigger: { kind: "schedule", schedule: { ...timing, ...change } } }); }
   function edit(item: Automation) { editorOpener.current = document.activeElement as HTMLElement; setEditorError(null); setEditor(item.automationId); setDraft({ expectedRevision: item.revision, enabled: item.enabled, name: item.name, instructions: item.instructions,
-    trigger: item.trigger, modelKey: item.modelKey, reasoningEffort: item.reasoningEffort }); }
+    trigger: item.trigger, modelKey: item.modelKey, reasoningEffort: item.reasoningEffort, executionTarget: item.executionTarget, completionDelivery: item.completionDelivery, requiresTools: item.requiresTools, requiresVision: item.requiresVision }); }
   return <section className="admin-definition-panel" aria-label="Automations">
     <div className="admin-definition-panel-heading"><Typography.Title level={4}>Automations</Typography.Title>
       <Typography.Text type="secondary">Choose when the agent follows your instructions. Each Run uses its authorized capabilities and normal approvals.</Typography.Text></div>
@@ -172,6 +176,27 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
       }}>
         <Form.Item label="Name"><Input ref={nameInput} aria-label="Automation name" maxLength={120} value={draft.name} disabled={busy} onChange={e => setDraft({ ...draft, name: e.target.value })} /></Form.Item>
         <Form.Item label="Instructions" extra={`${draft.instructions.length} / 2000 characters`}><Input.TextArea aria-label="Automation instructions" rows={4} maxLength={2000} value={draft.instructions} disabled={busy} onChange={e => setDraft({ ...draft, instructions: e.target.value })} /></Form.Item>
+        <Form.Item label="Run in" extra={draft.executionTarget.kind === "existingSession" ? "Replies in this conversation, even when you are away. Uses its pinned model." : "Runs independently. Results stay in Background work unless you request a report."}>
+          <Select aria-label="Automation destination" disabled={busy} value={draft.executionTarget.kind}
+            options={[{ value: "backgroundSession", label: "Separate background Session" }, { value: "existingSession", label: "Selected conversation" }]}
+            onChange={kind => setDraft({ ...draft, executionTarget: { kind }, completionDelivery: { kind: "none" }, modelKey: null, reasoningEffort: null })} />
+        </Form.Item>
+        {draft.executionTarget.kind === "existingSession" ? <Form.Item label="Destination conversation">
+          <AdminSessionPicker instanceId={instanceId} value={draft.executionTarget.sessionId ?? ""} disabled={busy} eligibleOnly label="Destination conversation"
+            onChange={sessionId => setDraft({ ...draft, executionTarget: { kind: "existingSession", sessionId } })} />
+        </Form.Item> : <>
+          <Form.Item label="Report completion to"><Select aria-label="Automation completion report" disabled={busy} value={draft.completionDelivery.kind}
+            options={[{ value: "none", label: "None" }, { value: "toSession", label: "Selected conversation" }]}
+            onChange={kind => setDraft({ ...draft, completionDelivery: { kind } })} /></Form.Item>
+          {draft.completionDelivery.kind === "toSession" ? <Form.Item label="Report destination">
+            <AdminSessionPicker instanceId={instanceId} value={draft.completionDelivery.sessionId ?? ""} disabled={busy} eligibleOnly label="Report destination"
+              onChange={sessionId => setDraft({ ...draft, completionDelivery: { kind: "toSession", sessionId } })} />
+          </Form.Item> : null}
+        </>}
+        <Flex wrap gap={token.padding} style={{ marginBlockEnd: token.padding }}>
+          <Checkbox checked={draft.requiresTools ?? false} disabled={busy} onChange={e => setDraft({ ...draft, requiresTools: e.target.checked })}>Task requires tools</Checkbox>
+          <Checkbox checked={draft.requiresVision ?? false} disabled={busy} onChange={e => setDraft({ ...draft, requiresVision: e.target.checked })}>Task requires vision</Checkbox>
+        </Flex>
         <Form.Item label="When"><Select aria-label="Automation trigger" value={draft.trigger.kind} disabled={busy} options={[{ value: "schedule", label: "Schedule" }, { value: "event", label: "Event" }]}
           onChange={kind => setDraft({ ...draft, trigger: kind === "schedule" ? { kind, schedule: defaultTiming() } : { kind: "event", eventSourceId: "", eventType: "order.placed" } })} /></Form.Item>
         {draft.trigger.kind === "event" ? <>
@@ -222,9 +247,9 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
         </Typography.Paragraph> : null}
         </>}
         <Form.Item label="Enabled"><Switch aria-label="Enable automation" checked={draft.enabled} disabled={busy} onChange={enabled => setDraft({ ...draft, enabled })} /></Form.Item>
-        <Form.Item label="Execution model" extra="Uses the instance unattended default unless you select a model. Each admitted run keeps its model."><ExecutionModelFields models={models}
+        {draft.executionTarget.kind === "backgroundSession" ? <Form.Item label="Execution model" extra="Uses the instance unattended default unless you select a model. Each admitted run keeps its model."><ExecutionModelFields models={models}
           modelKey={draft.modelKey ?? ""} reasoningEffort={draft.reasoningEffort ?? ""} disabled={busy} modelLabel="Automation execution model" effortLabel="Automation reasoning effort" defaultLabel="Unattended default"
-          onChange={(modelKey, reasoningEffort) => setDraft({ ...draft, modelKey: modelKey || null, reasoningEffort: reasoningEffort || null })} /></Form.Item>
+          onChange={(modelKey, reasoningEffort) => setDraft({ ...draft, modelKey: modelKey || null, reasoningEffort: reasoningEffort || null })} /></Form.Item> : null}
       </Form> : null}
       </Drawer>
       {review ? review.items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No automations yet. Create one here or ask the agent in Chat to do something later." /> :
@@ -235,13 +260,14 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
             item.authorizationOrigin === "CurrentUserTurn" ? "Chat user request" : "Admin owner", item.sourceSessionId ?? "",
             item.effectiveModelKey ?? item.modelKey ?? "Unattended default", item.executionStatus ?? ""]
             .some(value => value.toLowerCase().includes(search.trim().toLowerCase()))).sort((a, b) => Number(b.automationId === selection?.automationId) - Number(a.automationId === selection?.automationId))}
-          scroll={{ x: 1530 }} pagination={pagination}
+          scroll={{ x: 1770 }} pagination={pagination}
           locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No matches. Clear search or filters to see all results." /> }}
           columns={[
             { title: "Name", key: "task", width: 350, ellipsis: true,
               render: (_, item) => <Button type="link" size="small" className="admin-collection-name" title={item.name}
                 data-automation-id={item.automationId} aria-label={`View automation: ${item.name}`} aria-expanded={expanded.includes(item.automationId)}
                 onClick={() => setExpanded(expanded.includes(item.automationId) ? [] : [item.automationId])}>{item.name}</Button> },
+            { title: "Destination", key: "destination", width: 240, render: (_, item) => <Flex vertical gap={token.paddingXS}><AutomationDestination target={item.executionTarget} delivery={item.completionDelivery} /></Flex> },
             { title: "When", key: "timing", width: 240, ellipsis: true, render: (_, item) => <span title={automationWhen(item, sources)}>{automationWhen(item, sources)}</span> },
             { title: "Status", dataIndex: "status", width: 120,
               filters: [...new Set(review.items.map(item => item.status))].map(value => ({ text: value, value })),
@@ -263,7 +289,9 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
             expandedRowRender: item => <Flex vertical gap={token.padding} style={{ whiteSpace: "normal" }} role="region" aria-label="Automation details">
             <Descriptions bordered column={1} size="small" {...detailLayout}>
             <Descriptions.Item label="Instructions"><span style={{ whiteSpace: "pre-wrap" }}>{item.instructions}</span></Descriptions.Item>
-            <Descriptions.Item label="Originally created from">{item.authorizationOrigin === "CurrentUserTurn" ? "Chat user request" : "Admin owner"}{item.sourceSessionId ? ` · Session ${item.sourceSessionId}` : ""}</Descriptions.Item>
+            <Descriptions.Item label="Originally created from">{item.authorizationOrigin === "CurrentUserTurn" ? "Chat user request" : "Admin owner"}{item.sourceSessionId ? <> · <ConversationDestination sessionId={item.sourceSessionId} /></> : null}</Descriptions.Item>
+            <Descriptions.Item label="Destination"><Flex vertical gap={token.paddingXS}><AutomationDestination target={item.executionTarget} delivery={item.completionDelivery} /></Flex></Descriptions.Item>
+            {item.suspensionReason ? <Descriptions.Item label="Unavailable">{item.suspensionReason}</Descriptions.Item> : null}
             <Descriptions.Item label="When">{automationWhen(item, sources)}</Descriptions.Item>
             <Descriptions.Item label="Model">{item.effectiveModelKey ?? item.modelKey ?? "Unattended default"}</Descriptions.Item>
             <Descriptions.Item label="Last run">{runStatusLabel(item.executionStatus)}{item.outcome ? ` · ${runOutcomeLabel(item.outcome)}` : ""}</Descriptions.Item></Descriptions>
@@ -272,7 +300,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
               onClick={() => void mutate(`automations/${item.automationId}/run`, { expectedRevision: item.revision })}>{item.automationId in pending ? "Starting…" : "Run now"}</Button>
               <Button disabled={busy || terminal.includes(item.status)} onClick={() => edit(item)}>Edit automation</Button>
               <Button disabled={busy || terminal.includes(item.status)} onClick={() => void mutate(`automations/${item.automationId}`, {
-                expectedRevision: item.revision, enabled: !item.enabled, name: item.name, instructions: item.instructions, trigger: item.trigger, modelKey: item.modelKey, reasoningEffort: item.reasoningEffort
+                expectedRevision: item.revision, enabled: !item.enabled, name: item.name, instructions: item.instructions, trigger: item.trigger, modelKey: item.modelKey, reasoningEffort: item.reasoningEffort, executionTarget: item.executionTarget, completionDelivery: item.completionDelivery, requiresTools: item.requiresTools, requiresVision: item.requiresVision
               }, "PUT")}>{item.enabled ? "Disable automation" : "Enable automation"}</Button>
               <Button danger disabled={busy || item.status === "Cancelled"} onClick={() => {
                 let confirmed = false;

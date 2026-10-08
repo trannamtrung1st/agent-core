@@ -232,7 +232,8 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await endChat(page);
     await openInstance(page, true);
     await automations.getByRole('button', { name: 'View automation: Call John', exact: true }).click();
-    await expect(automations.getByText(new RegExp(`Chat user request.*${chatId}`))).toBeVisible();
+    await expect(automations.getByRole("region", { name: "Automation details", exact: true })).toContainText("Chat user request");
+    await expect(automations.getByRole("link", { name: `Conversation ${chatId.slice(0, 8)}`, exact: true })).toHaveAttribute("href", `/c/${chatId}`);
     await automations.getByRole('button', { name: 'Edit automation', exact: true }).click();
     await page.setViewportSize({ width: 390, height: 844 });
     await automations.getByLabel('Automation instructions', { exact: true }).fill('synthetic-automation-attention: review unresolved Atlas decisions.');

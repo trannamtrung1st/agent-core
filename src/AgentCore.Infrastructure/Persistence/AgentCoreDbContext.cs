@@ -299,6 +299,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         });
         modelBuilder.Entity<AgentRunRecord>(entity =>
         {
+            entity.HasIndex(row => row.SessionId).IsUnique().HasFilter("Status IN (1, 2)").HasDatabaseName("IX_AgentRuns_SessionExecution");
             entity.ToTable("AgentRuns");
             entity.HasKey(row => row.AgentRunId);
             entity.HasIndex(row => row.ActivationId).IsUnique();
@@ -429,7 +430,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         });
         modelBuilder.Entity<AutomationRecord>(entity =>
         {
-            entity.ToTable("Automations");
+            entity.ToTable("Automations", table => table.HasCheckConstraint("CK_Automations_Destination", "(ExecutionTargetKind = 0 AND TargetSessionId IS NULL) OR (ExecutionTargetKind = 1 AND TargetSessionId IS NOT NULL AND ReportToSessionId IS NULL)"));
             entity.HasKey(row => row.AutomationId);
             entity.Property(row => row.AutomationId).HasMaxLength(36);
             entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();
@@ -483,8 +484,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         });
         modelBuilder.Entity<TriggerOccurrenceRecord>(entity =>
         {
-            entity.ToTable("TriggerOccurrences", table => table.HasCheckConstraint("CK_TriggerOccurrences_BackgroundLink",
-                "(BackgroundSessionId IS NULL AND AcceptedAgentRunId IS NULL) OR (BackgroundSessionId IS NOT NULL AND LiveSessionId IS NULL AND AcceptedAgentRunId IS NOT NULL) OR (BackgroundSessionId IS NULL AND LiveSessionId IS NOT NULL AND AcceptedAgentRunId IS NOT NULL AND LiveEvaluationCompletedAtUtc IS NOT NULL)"));
+            entity.ToTable("TriggerOccurrences", table => { table.HasCheckConstraint("CK_TriggerOccurrences_Destination", "(ExecutionTargetKind = 0 AND TargetSessionId IS NULL) OR (ExecutionTargetKind = 1 AND TargetSessionId IS NOT NULL AND ReportToSessionId IS NULL)"); table.HasCheckConstraint("CK_TriggerOccurrences_ExecutionLink",
+                "(ExecutionSessionId IS NULL AND AcceptedAgentRunId IS NULL) OR (ExecutionSessionId IS NOT NULL AND LiveSessionId IS NULL AND AcceptedAgentRunId IS NOT NULL) OR (ExecutionSessionId IS NULL AND LiveSessionId IS NOT NULL AND AcceptedAgentRunId IS NOT NULL AND LiveEvaluationCompletedAtUtc IS NOT NULL)"); });
             entity.HasKey(row => row.OccurrenceId);
             entity.Property(row => row.OccurrenceId).HasMaxLength(36);
             entity.Property(row => row.DedupeKey).HasMaxLength(200).IsRequired();
@@ -495,13 +496,13 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.SourceEventId).HasMaxLength(36);
             entity.Property(row => row.DispositionReason).HasMaxLength(200);
             entity.Property(row => row.ClaimId).HasMaxLength(36);
-            entity.Property(row => row.BackgroundSessionId).HasMaxLength(36);
+            entity.Property(row => row.ExecutionSessionId).HasMaxLength(36);
             entity.Property(row => row.AcceptedAgentRunId).HasMaxLength(36);
             entity.Property(row => row.LiveSessionId).HasMaxLength(36);
-            entity.HasIndex(row => row.BackgroundSessionId).IsUnique().HasFilter("BackgroundSessionId IS NOT NULL");
+            entity.HasIndex(row => row.ExecutionSessionId);
             entity.HasIndex(row => row.AcceptedAgentRunId).IsUnique().HasFilter("AcceptedAgentRunId IS NOT NULL");
             entity.Property(row => row.RoutingRevision).IsConcurrencyToken();
-            entity.HasOne<SessionRecord>().WithMany().HasForeignKey(row => row.BackgroundSessionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<SessionRecord>().WithMany().HasForeignKey(row => row.ExecutionSessionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<SessionRecord>().WithMany().HasForeignKey(row => row.LiveSessionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<AgentRunRecord>().WithMany().HasForeignKey(row => row.AcceptedAgentRunId).OnDelete(DeleteBehavior.Restrict);
             entity.Property(row => row.ModelCatalogKey).HasMaxLength(128);

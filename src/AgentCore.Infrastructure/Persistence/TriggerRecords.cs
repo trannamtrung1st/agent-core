@@ -2,6 +2,9 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class AutomationRecord
 {
+    public int ExecutionTargetKind { get; set; }
+    public string? TargetSessionId { get; set; }
+    public string? ReportToSessionId { get; set; }
     public string AutomationId { get; set; } = "";
     public string AgentInstanceId { get; set; } = "";
     public string ProfileId { get; set; } = "";
@@ -24,12 +27,16 @@ public sealed class AutomationRecord
     public string? ModelOverrideCatalogKey { get; set; }
     public string? ModelOverrideReasoningEffort { get; set; }
     public bool RequiresVision { get; set; }
+    public bool RequiresTools { get; set; }
     public string? EventSourceId { get; set; }
     public string? EventType { get; set; }
 }
 
 public sealed class TriggerOccurrenceRecord
 {
+    public int ExecutionTargetKind { get; set; }
+    public string? TargetSessionId { get; set; }
+    public string? ReportToSessionId { get; set; }
     public string OccurrenceId { get; set; } = "";
     public string DedupeKey { get; set; } = "";
     public string? AutomationId { get; set; }
@@ -48,7 +55,7 @@ public sealed class TriggerOccurrenceRecord
     public long? RoutingUpdatedAtUtc { get; set; }
     public string? ClaimId { get; set; }
     public long? ClaimLeaseExpiresAtUtc { get; set; }
-    public string? BackgroundSessionId { get; set; }
+    public string? ExecutionSessionId { get; set; }
     public string? AcceptedAgentRunId { get; set; }
     public string? LiveSessionId { get; set; }
     public long? LiveEvaluationCompletedAtUtc { get; set; }

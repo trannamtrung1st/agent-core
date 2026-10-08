@@ -1925,7 +1925,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             ReasoningEffort = ReasoningEffortFor(input.Trigger.Kind),
             ResponseContract = new ModelResponseContract(
                 SpeechWillBeUsed: _snapshot.Mode == SessionMode.Voice,
-                RequireChatResponse: input.Trigger.Kind is TriggerKind.UserTurn or TriggerKind.BackgroundCompleted)
+                RequireChatResponse: _boundAgentRun?.Admission.OutputContract is AgentRunOutputContract.ConversationResponse or AgentRunOutputContract.CompletionReport)
         };
         var model = ResolveTurnModel(input.Trigger.Kind);
         _structuredOutput = model.Capabilities.StructuredOutput;
@@ -2391,6 +2391,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ScheduleConversation: _scheduleConversationContext,
                     ScheduleDraft: _scheduleDraftContext,
                     DetachedExecution: IsInitialBackgroundRun,
+                    OutputContract: _boundAgentRun?.Admission.OutputContract ?? AgentRunOutputContract.ConversationResponse,
+                    AuthoredAutomation: _boundAgentRun?.Admission.Activation.DedupeKey.StartsWith("automation:", StringComparison.Ordinal) == true,
                     OwnedSessionId: SessionId,
                     ActiveSkillKeys: skillCatalog.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray(),
                     PinnedSkillCatalog: skillCatalog,

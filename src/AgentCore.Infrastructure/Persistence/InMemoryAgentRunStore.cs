@@ -74,10 +74,20 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
                 ?? throw AgentCoreErrors.NotFound("Occurrence was not found.");
             AgentRunStoreMapping.ValidateOccurrenceAdmission(snapshot, run, occurrence, expectedRoutingRevision);
             var next = occurrence.Disposition == AgentCore.Domain.Triggers.OccurrenceRoutingDisposition.AcceptedDurable
-                ? occurrence : occurrence.WithBackgroundAcceptance(snapshot.SessionId, run.AgentRunId,
+                ? occurrence : occurrence.WithExecutionAcceptance(snapshot.SessionId, run.AgentRunId,
                     expectedRoutingRevision, run.CreatedAtUtc);
-            var result = AdmitCore(snapshot, 0, run, cancellationToken, occurrenceValidated: true);
-            if (result.Run.SessionId != next.BackgroundSessionId || result.Run.AgentRunId != next.AcceptedAgentRunId)
+            var existingTarget = occurrence.ExecutionTarget.Kind == AgentCore.Domain.Triggers.AutomationExecutionTargetKind.ExistingSession;
+            if (existingTarget)
+            {
+                var current = sessions.LoadMetadataAsync(snapshot.SessionId, cancellationToken).GetAwaiter().GetResult()
+                    ?? throw AgentCoreErrors.NotFound("Target Session was not found.");
+                AgentRunStoreMapping.ValidateAdmission(current, run);
+                if (current.Revision != snapshot.Revision) throw AgentCoreErrors.Conflict("Target Session revision is stale.");
+                if (State.Runs.Values.Count(item => item.SessionId == run.SessionId && !item.IsTerminal) >= 100)
+                    throw AgentCoreErrors.Conflict("Target Session queue is full.");
+            }
+            var result = AdmitCore(snapshot, 0, run, cancellationToken, occurrenceValidated: true, preserveSession: existingTarget);
+            if (result.Run.SessionId != next.ExecutionSessionId || result.Run.AgentRunId != next.AcceptedAgentRunId)
                 throw AgentCoreErrors.Persistence("Occurrence receipt disagrees with its execution graph.");
             triggers.CommitAdmissionOccurrence(next);
             return ValueTask.FromResult(result);
@@ -116,7 +126,7 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
     }
 
     private AgentRunAdmissionResult AdmitCore(SessionSnapshot snapshot, long expectedSessionRevision,
-        AgentRun run, CancellationToken cancellationToken, bool occurrenceValidated = false, Guid? expectedParentGeneration = null, Guid? completionSourceRunId = null)
+        AgentRun run, CancellationToken cancellationToken, bool occurrenceValidated = false, Guid? expectedParentGeneration = null, Guid? completionSourceRunId = null, bool preserveSession = false)
     {
         cancellationToken.ThrowIfCancellationRequested();
         AgentRunStoreMapping.ValidateAdmission(snapshot, run);
@@ -165,7 +175,7 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
                 var childSession = child is null ? null : sessions.LoadMetadataAsync(child.SessionId, cancellationToken).GetAwaiter().GetResult();
                 AgentRunStoreMapping.ValidateCompletionSource(snapshot, run, child, childSession);
             }
-            sessions.SaveAsync(snapshot, expectedSessionRevision, cancellationToken).GetAwaiter().GetResult();
+            if (!preserveSession) sessions.SaveAsync(snapshot, expectedSessionRevision, cancellationToken).GetAwaiter().GetResult();
             State.Runs.Add(run.AgentRunId, run);
             State.Activations.Add(run.ActivationId, activation);
             State.ByAdmission.Add(key, run.AgentRunId);
@@ -213,7 +223,8 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
                 .Where(run =>
                 {
                     var origin = sessions.LoadMetadataAsync(run.SessionId, cancellationToken).GetAwaiter().GetResult()?.Origin;
-                    return origin?.AutomationId == automationId && origin.InitialBackgroundAgentRunId == run.AgentRunId;
+                    return run.Admission.Activation.TriggerOccurrenceId is { } id
+                        && triggers?.FindAdmissionOccurrence(id)?.AutomationId == automationId;
                 })
                 .OrderByDescending(run => run.CreatedAtUtc).ThenByDescending(run => run.AgentRunId).FirstOrDefault());
     }
@@ -248,7 +259,7 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
                 .Where(run => run.Status is AgentRunStatus.Running or AgentRunStatus.WaitingForApproval
                     || !State.Runs.Values.Any(other => other.SessionId == run.SessionId && other.AgentRunId != run.AgentRunId
                         && other.Status is AgentRunStatus.Running or AgentRunStatus.WaitingForApproval))
-                .OrderBy(run => run.CreatedAtUtc).ThenBy(run => run.AgentRunId).Take(limit).ToArray());
+                .OrderBy(run => run.CreatedAtUtc).ThenBy(run => run.AgentRunId).GroupBy(run => run.SessionId).Select(group => group.First()).Take(limit).ToArray());
     }
 
     public ValueTask<IReadOnlyList<Guid>> ListPendingInputSessionsAsync(int limit, CancellationToken cancellationToken = default)
@@ -266,6 +277,9 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
         {
             if (!State.Runs.TryGetValue(agentRunId, out var run) || run.Owner != owner)
                 throw AgentCoreErrors.NotFound("AgentRun was not found.");
+            if (command is AgentRunCommand.Claim && State.Runs.Values.Any(other => other.SessionId == run.SessionId
+                && other.AgentRunId != run.AgentRunId && other.Status is AgentRunStatus.Running or AgentRunStatus.WaitingForApproval))
+                throw AgentCoreErrors.Conflict("Session already owns an active execution.");
             if (command is AgentRunCommand.Complete { OutcomeEntryId: { } entryId })
             {
                 var entry = sessions.FindEntry(run.SessionId, entryId);

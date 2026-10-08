@@ -227,7 +227,7 @@ public sealed class BrowserLifecycleTests
         var activation = new Activation(Guid.NewGuid(), snapshot.SessionId, ActivationKind.ManualBackground, [input.EntryId],
             input.SourceEventId, null, null, null, "manual:browser-budget", now);
         var run = AgentRun.Create(runId, owner, new(activation, snapshot.Definition.Id, snapshot.Definition.Version,
-            snapshot.PinnedPersona!, Guid.NewGuid()), new("scripted-alpha", "primary-llm", "scripted-alpha", null), 3, now);
+            snapshot.PinnedPersona!, Guid.NewGuid(), AgentRunOutputContract.BackgroundOutcome), new("scripted-alpha", "primary-llm", "scripted-alpha", null), 3, now);
         run = (await runs.AdmitAsync(snapshot, 0, run)).Run;
         run = await runs.ApplyAsync(owner, runId, new AgentRunCommand.Claim(run.Revision, now, Guid.NewGuid(), now.AddMinutes(5)));
         var browser = new HoldingBrowser { SuccessfulSnapshot = true };

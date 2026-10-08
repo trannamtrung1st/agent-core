@@ -1,3 +1,4 @@
+using AgentCore.Domain.Conversation;
 using AgentCore.Application.Triggers;
 using AgentCore.Domain.Definitions;
 
@@ -62,7 +63,7 @@ public sealed record AgentContext(
     string? ContinuityContext = null,
     bool AllowAgentConsolidation = false,
     bool AgentWorkspaceAvailable = false,
-    IReadOnlyList<string>? LoadedCapabilityIds = null, IReadOnlyList<EffectiveSkill>? PinnedSkillCatalog = null, Guid? OwnedSessionId = null)
+    IReadOnlyList<string>? LoadedCapabilityIds = null, IReadOnlyList<EffectiveSkill>? PinnedSkillCatalog = null, Guid? OwnedSessionId = null, AgentRunOutputContract OutputContract = AgentRunOutputContract.ConversationResponse, bool AuthoredAutomation = false)
 {
     public AgentIdentity EffectiveIdentity => Persona ?? Definition.Identity;
 }

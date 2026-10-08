@@ -165,6 +165,6 @@ public sealed class ActivationAdmissionTests
     private static AgentRun NewRun(Activation activation, IReadOnlyList<EffectiveSkill>? catalog = null) =>
         AgentRun.Create(Guid.NewGuid(), new AgentRunOwner(Guid.NewGuid(), Guid.NewGuid()),
             new AgentRunAdmission(activation, "general-assistant", 16,
-                new AgentIdentity("Alex", "Assistant", "Help", "Calm"), Guid.NewGuid()),
+                new AgentIdentity("Alex", "Assistant", "Help", "Calm"), Guid.NewGuid(), AgentRunOutputContract.ConversationResponse),
             new AgentRunModelPin("synthetic", "synthetic", "synthetic", null), 3, Now, catalog);
 }

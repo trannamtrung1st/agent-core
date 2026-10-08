@@ -1,4 +1,5 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { listAgentRuns } from "../../services/api";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Empty, Flex, Typography } from "antd";
 import type { HistoryEntry } from "../../state/sessionStore";
 import { AgentActivity } from "./AgentActivity";
@@ -43,6 +44,26 @@ export function Conversation({
   olderLoading?: boolean;
   onLoadOlder?: () => void;
 }) {
+  const [completionSources, setCompletionSources] = useState<Record<string, string>>({});
+  const settledHistoryKey = entries.filter(entry => entry.role === "assistant" && entry.status !== "streaming").map(entry => entry.responseId).join(",");
+  useEffect(() => {
+    let current = true;
+    setCompletionSources({});
+    if (!sessionId || !settledHistoryKey) return;
+    const oldest = entries[0]?.createdAt;
+    void (async () => {
+      const sources: Record<string, string> = {};
+      let cursor: string | undefined;
+      do {
+        const page = await listAgentRuns(sessionId, cursor, 100);
+        for (const run of page.items) if (run.responseId && run.sourceBackgroundSessionId) sources[run.responseId] = run.sourceBackgroundSessionId;
+        cursor = page.hasMore && page.nextCursor ? page.nextCursor : undefined;
+        if (oldest && page.items.at(-1)?.createdAt && page.items.at(-1)!.createdAt < oldest) break;
+      } while (cursor && current);
+      if (current) setCompletionSources(sources);
+    })().catch(() => { /* Optional provenance must not prevent reading durable history. */ });
+    return () => { current = false; };
+  }, [sessionId, settledHistoryKey]);
   const windowRef = useRef<HTMLElement>(null);
   const spacerRef = useRef<HTMLDivElement>(null);
   const scrolledFor = useRef<string | null>(null);
@@ -225,6 +246,7 @@ export function Conversation({
             <ChatMessage
               key={entry.entryId}
               entry={entry}
+              backgroundSource={entry.responseId ? completionSources[entry.responseId] : null}
               agentName={agentName}
               sessionId={sessionId}
               turnAnchor={index === lastUserIndex && !liveUserTranscript}

@@ -96,3 +96,7 @@ Historical P9.6 operator behavior, not a current cutover claim: Admin Memory & a
 ## Accessibility & Inclusion
 
 Labeled controls, keyboard access, visible focus, and actionable errors are required ([docs/13-frontend-implementation-spec.md](../../docs/13-frontend-implementation-spec.md)). Status must not rely on color or animation alone. Honor `prefers-reduced-motion`. Contrast follows Ant Design defaults and DESIGN.md. Primary supported demo browser is Chromium desktop; do not depend on Chromium-only APIs when standard APIs suffice.
+
+## Automation destinations and requested completion
+
+An Automation chooses when to act and where its work belongs. Conversational reminders and follow-ups can return directly to their exact conversation even when it is closed in the browser. Independent background tasks retain their own history. Reporting to a conversation is a separate explicit choice; quiet recurring work stays in Background Work. Immediate background work reports by default, including with spontaneous Initiative off. An unavailable conversation produces an inspectable reason rather than moving the task elsewhere. Destination, originally created from and completion status have distinct labels; pending is not reported. Behavior stays authoritative in [docs/03](../../docs/03-system-architecture.md#automation-destinations-and-completion-obligations).

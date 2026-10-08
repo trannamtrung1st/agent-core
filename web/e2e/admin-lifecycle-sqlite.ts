@@ -77,11 +77,11 @@ con.execute(
     """INSERT INTO Automations (
         AutomationId, AgentInstanceId, ProfileId, Status, Name, Instructions, TriggerKind, ScheduleJson,
         TriggerRevision, NextOccurrenceAtUtc, OccurrenceCount, Revision, AuthorizationOrigin,
-        SourceSessionId, CreatedAtUtc, UpdatedAtUtc, RequiresVision
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        SourceSessionId, CreatedAtUtc, UpdatedAtUtc, RequiresVision, RequiresTools, ExecutionTargetKind
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
     (
         registration_id, instance_id, profile_id, 0, intent, intent, 0, schedule_json,
-        1, now + 86_400_000, 0, 1, 0, session_id, now, now, 0,
+        1, now + 86_400_000, 0, 1, 0, session_id, now, now, 0, 0, 0,
     ),
 )
 con.commit()

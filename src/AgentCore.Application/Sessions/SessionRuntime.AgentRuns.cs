@@ -171,7 +171,7 @@ public sealed partial class SessionRuntime
             var signal = JsonSerializer.Deserialize<AgentRunAdmissionFactory.SignalInput>(evidence)
                 ?? throw AgentCoreErrors.Persistence("AgentRun signal evidence is missing.");
             _outputActivity = OutputActivity.WaitingForAgent;
-            LaunchBrain(cause, new AgentTrigger(run.Admission.Activation.SourceEventId!.Value,
+            LaunchBrain(cause, new AgentTrigger(run.Admission.Activation.SourceEventId ?? run.Admission.Activation.TriggerOccurrenceId ?? run.ActivationId,
                 signal.TriggerKind, signal.Text, signal.EnvironmentKind), run.ResponseId!.Value, ++_turnGeneration);
             return Task.CompletedTask;
         }

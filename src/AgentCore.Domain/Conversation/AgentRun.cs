@@ -604,6 +604,17 @@ public sealed class AgentRun
         return AsCancelled(cancelledAtUtc, knownEffectSummary ?? KnownEffectSummary);
     }
 
+    public AgentRun DeferUnstartedDispatch(long expectedRevision, Guid generation, DateTimeOffset atUtc, DateTimeOffset retryAtUtc)
+    {
+        RequireOperational(expectedRevision, generation);
+        AgentRunTime.RequireUtc(atUtc, "Dispatch deferral");
+        AgentRunTime.RequireUtc(retryAtUtc, "Dispatch retry");
+        if (Checkpoint is not null || SideEffect.Disposition != AgentRunSideEffectDisposition.None || retryAtUtc <= atUtc)
+            throw new AgentRunTransitionException(AgentRunTransitionFailure.Illegal, "Only an unstarted refused dispatch can be deferred.");
+        return Copy(AgentRunStatus.WaitingToRetry, Revision + 1, AttemptCount - 1, retryAtUtc, null,
+            CancellationRequested, CancellationRequestedAtUtc, KnownEffectSummary, Progress, null, Result, Failure, SideEffect, Approval, atUtc);
+    }
+
     public AgentRun RecoverExpiredClaim(DateTimeOffset asOfUtc, Func<Guid>? allocateDiagnosticId = null)
     {
         AgentRunTime.RequireUtc(asOfUtc, "Recovery");

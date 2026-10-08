@@ -156,7 +156,7 @@ public sealed class ChatAutomationJourneyTests
                 {
                     ChatRequests.Enqueue(request);
                     yield return new ModelToolCallEvent(new("create-recurring-action", ToolCatalog.AutomationCreate,
-                        """{"kind":"fixed_interval","intervalSeconds":3600,"instructions":"Review recent experience and consolidate it when useful."}"""));
+                        """{"kind":"fixed_interval","intervalSeconds":3600,"instructions":"Review recent experience and consolidate it when useful.","executionTarget":"backgroundSession","reportBack":false}"""));
                     yield return new ModelCompleted(ModelStopReason.ToolCalls);
                 }
                 else

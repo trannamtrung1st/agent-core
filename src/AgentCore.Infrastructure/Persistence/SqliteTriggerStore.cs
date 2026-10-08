@@ -925,6 +925,33 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
                 : null,
             cancellationToken);
 
+    public async ValueTask<TriggerOccurrence?> RejectAwaitingDurableWorkAsync(Guid occurrenceId, long expectedRevision, string reason, DateTimeOffset atUtc, CancellationToken ct = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        var row = await db.TriggerOccurrences.SingleOrDefaultAsync(r => r.OccurrenceId == occurrenceId.ToString("D"), ct).ConfigureAwait(false);
+        if (row is null || row.Disposition != (int)OccurrenceRoutingDisposition.AwaitingDurableWork || row.RoutingRevision != expectedRevision) return null;
+        var occurrence = TriggerStoreMapping.ToOccurrence(row);
+        var rejected = occurrence.WithRouting(OccurrenceRoutingDisposition.Rejected, reason, occurrence.RoutingRevision + 1, atUtc, null, null);
+        TriggerStoreMapping.CopyRouting(row, rejected);
+        if (row.AutomationId is { } id && await db.Automations.SingleOrDefaultAsync(a => a.AutomationId == id, ct).ConfigureAwait(false) is { } automation)
+        {
+            var current = TriggerStoreMapping.ToRegistration(automation);
+            if (current.ExecutionTarget == occurrence.ExecutionTarget && current.Status is not (AutomationStatus.Disabled or AutomationStatus.Cancelled))
+            {
+                var recurring = current.Trigger is not ScheduleTrigger { Schedule: OneShotSchedule };
+                automation.Status = recurring ? (int)AutomationStatus.SuspendedPolicy : automation.Status;
+                automation.NextOccurrenceAtUtc = recurring ? null : automation.NextOccurrenceAtUtc;
+                automation.SuspensionReason = reason;
+                automation.Revision++;
+                automation.UpdatedAtUtc = atUtc.ToUnixTimeMilliseconds();
+            }
+        }
+        try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); }
+        catch (DbUpdateConcurrencyException) { return null; }
+        return rejected;
+    }
+
     public ValueTask<TriggerOccurrence?> TryRejectPendingAsync(
         Guid occurrenceId,
         string reason,
@@ -1046,6 +1073,9 @@ internal static class TriggerStoreMapping
 {
     public static AutomationRecord ToRecord(Automation registration) => new()
     {
+        ExecutionTargetKind = (int)registration.ExecutionTarget.Kind,
+        TargetSessionId = registration.ExecutionTarget.SessionId?.ToString("D"),
+        ReportToSessionId = registration.CompletionDelivery.SessionId?.ToString("D"),
         AutomationId = registration.AutomationId.ToString("D"),
         AgentInstanceId = registration.Owner.AgentInstanceId.ToString("D"),
         ProfileId = registration.Owner.ProfileId.ToString("D"),
@@ -1068,6 +1098,7 @@ internal static class TriggerStoreMapping
         ModelOverrideCatalogKey = registration.ModelOverrideCatalogKey,
         ModelOverrideReasoningEffort = registration.ModelOverrideReasoningEffort,
         RequiresVision = registration.RequiresVision,
+        RequiresTools = registration.RequiresTools,
         EventSourceId = registration.EventSourceId?.ToString("D"),
         EventType = registration.EventType
     };
@@ -1093,10 +1124,14 @@ internal static class TriggerStoreMapping
         row.ModelOverrideCatalogKey,
         row.ModelOverrideReasoningEffort,
         row.RequiresVision,
-        row.Name);
+        row.Name, new((AutomationExecutionTargetKind)row.ExecutionTargetKind, ParseOptional(row.TargetSessionId)),
+        new(ParseOptional(row.ReportToSessionId)), row.RequiresTools);
 
     public static TriggerOccurrenceRecord ToRecord(TriggerOccurrence occurrence) => new()
     {
+        ExecutionTargetKind = (int)occurrence.ExecutionTarget.Kind,
+        TargetSessionId = occurrence.ExecutionTarget.SessionId?.ToString("D"),
+        ReportToSessionId = occurrence.CompletionDelivery.SessionId?.ToString("D"),
         OccurrenceId = occurrence.OccurrenceId.ToString("D"),
         DedupeKey = occurrence.DedupeKey,
         AutomationId = occurrence.AutomationId?.ToString("D"),
@@ -1115,7 +1150,7 @@ internal static class TriggerStoreMapping
         RoutingUpdatedAtUtc = occurrence.RoutingUpdatedAtUtc?.ToUnixTimeMilliseconds(),
         ClaimId = occurrence.ClaimId?.ToString("D"),
         ClaimLeaseExpiresAtUtc = occurrence.ClaimLeaseExpiresAtUtc?.ToUnixTimeMilliseconds(),
-        BackgroundSessionId = occurrence.BackgroundSessionId?.ToString("D"),
+        ExecutionSessionId = occurrence.ExecutionSessionId?.ToString("D"),
         AcceptedAgentRunId = occurrence.AcceptedAgentRunId?.ToString("D"),
         LiveSessionId = occurrence.LiveSessionId?.ToString("D"),
         LiveEvaluationCompletedAtUtc = occurrence.LiveEvaluationCompletedAtUtc?.ToUnixTimeMilliseconds(),
@@ -1134,7 +1169,7 @@ internal static class TriggerStoreMapping
         row.RoutingUpdatedAtUtc = next.RoutingUpdatedAtUtc?.ToUnixTimeMilliseconds();
         row.ClaimId = next.ClaimId?.ToString("D");
         row.ClaimLeaseExpiresAtUtc = next.ClaimLeaseExpiresAtUtc?.ToUnixTimeMilliseconds();
-        row.BackgroundSessionId = next.BackgroundSessionId?.ToString("D");
+        row.ExecutionSessionId = next.ExecutionSessionId?.ToString("D");
         row.AcceptedAgentRunId = next.AcceptedAgentRunId?.ToString("D");
         row.LiveSessionId = next.LiveSessionId?.ToString("D");
         row.LiveEvaluationCompletedAtUtc = next.LiveEvaluationCompletedAtUtc?.ToUnixTimeMilliseconds();
@@ -1158,7 +1193,8 @@ internal static class TriggerStoreMapping
         FromUnix(row.RoutingUpdatedAtUtc),
         ParseOptional(row.ClaimId),
         FromUnix(row.ClaimLeaseExpiresAtUtc),
-        ReadModelPin(row), ParseOptional(row.BackgroundSessionId), ParseOptional(row.AcceptedAgentRunId), ParseOptional(row.LiveSessionId), FromUnix(row.LiveEvaluationCompletedAtUtc));
+        ReadModelPin(row), ParseOptional(row.ExecutionSessionId), ParseOptional(row.AcceptedAgentRunId), ParseOptional(row.LiveSessionId), FromUnix(row.LiveEvaluationCompletedAtUtc),
+        new((AutomationExecutionTargetKind)row.ExecutionTargetKind, ParseOptional(row.TargetSessionId)), new(ParseOptional(row.ReportToSessionId)));
 
     private static ExecutionModelPin? ReadModelPin(TriggerOccurrenceRecord row)
     {

@@ -55,7 +55,12 @@ public sealed class UnifiedAutomationMigrationTests
         {
             var name = reader.GetName(i);
             Assert.NotEqual(oldSchema ? "TriggerRevision" : "ScheduleRevision", name);
-            if (name is "BackgroundSessionId" or "AcceptedAgentRunId" or "LiveSessionId" or "LiveEvaluationCompletedAtUtc" or "DurableWorkItemId")
+            if (name is "ExecutionTargetKind" or "TargetSessionId" or "ReportToSessionId" or "RequiresTools")
+            {
+                Assert.True(name is "ExecutionTargetKind" or "RequiresTools" ? reader.GetInt32(i) == 0 : reader.IsDBNull(i));
+                continue;
+            }
+            if (name is "ExecutionSessionId" or "AcceptedAgentRunId" or "LiveSessionId" or "LiveEvaluationCompletedAtUtc" or "DurableWorkItemId")
             {
                 // The later admission schema adds nullable links without converting old receipts.
                 Assert.True(reader.IsDBNull(i));

@@ -1,3 +1,5 @@
+export type AutomationTarget = { kind: "backgroundSession" | "existingSession"; sessionId?: string | null };
+export type AutomationDelivery = { kind: "none" | "toSession"; sessionId?: string | null };
 export type AgentDescriptor = {
   id: string;
   version: number;
@@ -71,13 +73,14 @@ export type AgentRun = {
   outcome: { kind: string; summary: string; outcomeEntryId: string | null; attentionRequired: boolean } | null;
   failureCode: string | null; failureSummary: string | null; diagnosticId: string | null;
   knownEffectSummary: string | null; modelCatalogKey: string; responseId: string | null;
-  automationId: string | null; experienceId: string | null; sourceOccurrenceId: string | null;
+  automationId: string | null; experienceId: string | null; sourceOccurrenceId: string | null; sourceBackgroundSessionId?: string | null;
 };
 export type CursorPage<T> = { items: T[]; nextCursor: string | null; hasMore: boolean };
 export type BackgroundSession = {
   session: CatalogItem;
   origin: { kind: string; initialAgentRunId: string; parentSessionId: string | null; parentAgentRunId: string | null;
     automationId: string | null; occurrenceId: string | null; reportCompletion: boolean };
+  completionDelivery?: { status: string; targetSessionId: string | null; parentAgentRunId: string | null; reason: string | null };
   surfaces: string[]; latestRun: AgentRun | null; canContinueInChat: boolean; artifactCount: number; artifactCountHasMore: boolean;
 };
 
@@ -90,6 +93,9 @@ export type SessionAutomation = {
   when: string;
   nextOccurrenceAt: string | null;
   revision: number;
+  executionTarget?: AutomationTarget;
+  completionDelivery?: AutomationDelivery;
+  agentInstanceId?: string;
   suspensionReason?: string | null;
 };
 
@@ -109,6 +115,7 @@ export type SessionHistoryQuery = {
 };
 
 export type CatalogItem = {
+  agentInstanceId?: string;
   sessionId: string;
   title: string;
   agentId: string;

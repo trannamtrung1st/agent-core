@@ -72,7 +72,17 @@ public sealed class AgentRunCoordinator(IAgentRunStore store, IAgentRunDispatche
         // treating them as replay-safe or immediately releasing the claim could duplicate model/tool work.
         try
         {
-            return await dispatcher.DispatchAsync(run, cancellationToken).ConfigureAwait(false);
+            var accepted = await dispatcher.DispatchAsync(run, cancellationToken).ConfigureAwait(false);
+            if (!accepted && run.Checkpoint is null && run.SideEffect.Disposition == AgentRunSideEffectDisposition.None)
+            {
+                try
+                {
+                    await store.ApplyAsync(run.Owner, run.AgentRunId, new AgentRunCommand.DeferDispatch(run.Revision,
+                        time.GetUtcNow(), run.Claim!.Generation, time.GetUtcNow().AddSeconds(5)), cancellationToken).ConfigureAwait(false);
+                }
+                catch (AgentCoreException conflict) when (conflict.Code is "Conflict" or "NotFound") { }
+            }
+            return accepted;
         }
         catch (AgentCoreException exception) when (exception.Code == "NotFound"
             && exception.Message.Contains("Session was not found", StringComparison.Ordinal))

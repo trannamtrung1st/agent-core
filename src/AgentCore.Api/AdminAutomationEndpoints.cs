@@ -18,7 +18,7 @@ internal static class AdminAutomationEndpoints
     {
         var group = admin.MapGroup("/agent-instances/{instanceId:guid}/automations");
         group.MapGet("", (Guid instanceId, ExperienceService instances, ITriggerStore store, IAgentRunStore runs,
-            IAgentDefinitionStore definitions, IModelCatalog catalog, CancellationToken ct) => Respond(async () =>
+            IAgentDefinitionStore definitions, IModelCatalog catalog, IMemoryStore memory, CancellationToken ct) => Respond(async () =>
         {
             var instance = await instances.RequireInstanceAsync(instanceId, ct);
             var definition = await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct);
@@ -27,21 +27,36 @@ internal static class AdminAutomationEndpoints
             foreach (var registration in rows.Where(r => r.Status != AutomationStatus.Cancelled))
             {
                 var last = await runs.GetLatestForAutomationAsync(new(instanceId, LocalUserProfile.Id), registration.AutomationId, ct);
-                items.Add(Project(registration, definition is null ? null : ExecutionModelPolicy.Resolve(catalog, definition, instance, registration).Pin?.CatalogKey, last));
+                var effective = registration.ExecutionTarget.SessionId is { } targetId
+                    ? (await memory.LoadMetadataAsync(targetId, ct))?.ModelSelection?.CatalogKey
+                    : definition is null ? null : ExecutionModelPolicy.Resolve(catalog, definition, instance, registration).Pin?.CatalogKey;
+                items.Add(Project(registration, effective, last));
             }
             return new AutomationReview(items,
                 definition?.TriggerPolicy is { } p ? new AutomationPolicy(p.AllowOneShot, p.AllowDaily, p.AllowWeekly, p.AllowFixedInterval,
                     p.AllowIndefiniteRecurrence, p.OneShotHorizonDays, p.MinRecurrenceDays, p.MinFixedIntervalSeconds, p.MaxActiveRegistrations) : null);
         }));
         group.MapPost("", (Guid instanceId, AutomationRequest request, AdminAutomationAuthoringService service, CancellationToken ct) => Respond(async () =>
-            Project(await service.SaveAsync(instanceId, null, request.ExpectedRevision, request.Enabled, request.Name, request.Instructions, ParseTrigger(request.Trigger), request.ModelKey, request.ReasoningEffort, ct))));
+            Project(await service.SaveAsync(instanceId, null, request.ExpectedRevision, request.Enabled, request.Name, request.Instructions, ParseTrigger(request.Trigger), request.ModelKey, request.ReasoningEffort, ct, executionTarget: ParseTarget(request.ExecutionTarget), completionDelivery: ParseDelivery(request.CompletionDelivery), requiresTools: request.RequiresTools, requiresVision: request.RequiresVision))));
         group.MapPut("/{automationId:guid}", (Guid instanceId, Guid automationId, AutomationRequest request, AdminAutomationAuthoringService service, CancellationToken ct) => Respond(async () =>
-            Project(await service.SaveAsync(instanceId, automationId, request.ExpectedRevision, request.Enabled, request.Name, request.Instructions, ParseTrigger(request.Trigger), request.ModelKey, request.ReasoningEffort, ct))));
+            Project(await service.SaveAsync(instanceId, automationId, request.ExpectedRevision, request.Enabled, request.Name, request.Instructions, ParseTrigger(request.Trigger), request.ModelKey, request.ReasoningEffort, ct, executionTarget: ParseTarget(request.ExecutionTarget), completionDelivery: ParseDelivery(request.CompletionDelivery), requiresTools: request.RequiresTools, requiresVision: request.RequiresVision))));
         group.MapDelete("/{automationId:guid}", (Guid instanceId, Guid automationId, [Microsoft.AspNetCore.Mvc.FromBody] ContinuityRevisionRequest request, AdminAutomationAuthoringService service, CancellationToken ct) => Respond(async () =>
         { await service.DeleteAsync(instanceId, automationId, request.ExpectedRevision, ct); return new { cancelled = true }; }));
         group.MapPost("/{automationId:guid}/run", (Guid instanceId, Guid automationId, ContinuityRevisionRequest request, AdminAutomationAuthoringService service, CancellationToken ct) => Respond(async () =>
         { var occurrence = await service.RunNowAsync(instanceId, automationId, request.ExpectedRevision, ct); return new { occurrenceId = occurrence.OccurrenceId }; }));
     }
+    private static AutomationExecutionTarget ParseTarget(AutomationExecutionTargetDto? target) => target?.Kind switch
+    {
+        "backgroundSession" when target.SessionId is null => AutomationExecutionTarget.Background,
+        "existingSession" when Guid.TryParse(target.SessionId, out var id) => AutomationExecutionTarget.Existing(id),
+        _ => throw AgentCoreErrors.Validation("An explicit executionTarget is required.")
+    };
+    private static AutomationCompletionDelivery ParseDelivery(AutomationCompletionDeliveryDto? delivery) => delivery?.Kind switch
+    {
+        "none" when delivery.SessionId is null => AutomationCompletionDelivery.None,
+        "toSession" when Guid.TryParse(delivery.SessionId, out var id) => AutomationCompletionDelivery.ToSession(id),
+        _ => throw AgentCoreErrors.Validation("An explicit completionDelivery is required.")
+    };
     private static AutomationTrigger ParseTrigger(AutomationTriggerDto? trigger)
     {
         if (trigger is null) throw AgentCoreErrors.Validation("Trigger is required.");
@@ -77,7 +92,9 @@ internal static class AdminAutomationEndpoints
         new(r.AutomationId.ToString("D"), r.Revision, r.Name, r.Instructions, r.Status == AutomationStatus.Active, r.Status.ToString(), Trigger(r.Trigger),
             r.Provenance.AuthorizationOrigin.ToString(), r.Provenance.SourceSessionId?.ToString("D"), r.Provenance.SourceEventId?.ToString("D"),
             HttpMapping.Format(r.Provenance.CreatedAt), r.NextOccurrenceAtUtc is { } next ? HttpMapping.Format(next) : null,
-            r.ModelOverrideCatalogKey, r.ModelOverrideReasoningEffort, effective, run?.AgentRunId.ToString("D"), run?.Status.ToString(), run?.Result is { } result ? result.OutcomeKind.ToString() : null);
+            r.ModelOverrideCatalogKey, r.ModelOverrideReasoningEffort, effective, run?.AgentRunId.ToString("D"), run?.Status.ToString(), run?.Result is { } result ? result.OutcomeKind.ToString() : null,
+            new(r.ExecutionTarget.SessionId is null ? "backgroundSession" : "existingSession", r.ExecutionTarget.SessionId?.ToString("D")),
+            new(r.CompletionDelivery.SessionId is null ? "none" : "toSession", r.CompletionDelivery.SessionId?.ToString("D")), r.SuspensionReason, r.RequiresTools, r.RequiresVision);
     private static AutomationTiming Timing(TriggerSchedule s) => s switch
     {
         OneShotSchedule t => new("oneShot", t.TimeZoneId, HttpMapping.Format(t.AtUtc)),

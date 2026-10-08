@@ -129,3 +129,7 @@ The current runtime uses Application-owned `IBrowser`, native accessibility snap
 
 
 [Browser v2 completeness and polish](docs/reports/browser-v2-completeness-and-polish.md) accounts for the current official MCP operations, targeted environment/inspection enhancements and deliberate advanced exclusions. New catalog features preserve exact Definition authorization; existing immutable seeds and local settings are unchanged.
+
+## Automation destinations and completion reporting
+
+Automations now choose an exact existing conversation or independent Background work. Conversational follow-ups run in the same Session even when detached; background results return only when explicitly requested. Immediate background.start reporting works with the default General Assistant’s Initiative setting off. Admin/Chat expose destination separately from authorship and reporting, with truthful pending/delivered/skipped status. See [architecture](docs/03-system-architecture.md#automation-destinations-and-completion-obligations), [contracts](docs/14-api-and-realtime-protocol.md#automation-destination-json-example), and [verification](docs/reports/automation-targets-background-reportback-verification.md). TODO records final hosted closure; prior freezes remain unchanged.

@@ -121,15 +121,15 @@ public sealed class TriggerContractTests
             .WithRouting(OccurrenceRoutingDisposition.Claimed, null, 1, Now, claim, Now.AddMinutes(1))
             .WithRouting(OccurrenceRoutingDisposition.AwaitingDurableWork, "No compatible runtime", 2, Now, null, null);
         var sessionId = Guid.NewGuid();
-        var accepted = awaiting.WithBackgroundAcceptance(sessionId, workItemId, 2, Now);
+        var accepted = awaiting.WithExecutionAcceptance(sessionId, workItemId, 2, Now);
         Assert.Equal(OccurrenceRoutingDisposition.AcceptedDurable, accepted.Disposition);
         Assert.Equal(workItemId, accepted.AcceptedAgentRunId);
-        Assert.Equal(sessionId, accepted.BackgroundSessionId);
+        Assert.Equal(sessionId, accepted.ExecutionSessionId);
         Assert.Null(accepted.ClaimId);
         Assert.Null(accepted.ClaimLeaseExpiresAtUtc);
         Assert.Equal(3, accepted.RoutingRevision);
-        Assert.Throws<ArgumentException>(() => awaiting.WithBackgroundAcceptance(sessionId, workItemId, 1, Now));
-        Assert.Throws<ArgumentException>(() => accepted.WithBackgroundAcceptance(sessionId, workItemId, 3, Now));
+        Assert.Throws<ArgumentException>(() => awaiting.WithExecutionAcceptance(sessionId, workItemId, 1, Now));
+        Assert.Throws<ArgumentException>(() => accepted.WithExecutionAcceptance(sessionId, workItemId, 3, Now));
     }
 
     [Fact]

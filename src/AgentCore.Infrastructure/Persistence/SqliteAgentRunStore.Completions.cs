@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Execution;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
@@ -19,9 +20,8 @@ public sealed partial class SqliteAgentRunStore
         var rows = await db.AgentRuns.AsNoTracking().Where(row => (row.Status == (int)AgentRunStatus.Completed
                 || row.Status == (int)AgentRunStatus.Cancelled || row.Status == (int)AgentRunStatus.Failed)
                 && !db.BackgroundCompletionReceipts.Any(receipt => receipt.ChildAgentRunId == row.AgentRunId)
-                && db.Sessions.Any(session => session.SessionId == row.SessionId && session.OriginJson.Contains("\"reportCompletionToOrigin\":true"))
-                && db.Activations.Any(activation => activation.ActivationId == row.ActivationId && activation.BackgroundSourceKey != null
-                    && activation.BackgroundSourceKey.StartsWith("immediate:")))
+                && db.Sessions.Any(session => session.SessionId == row.SessionId && session.OriginJson.Contains("\"reportCompletionToOrigin\":true")
+                    && session.OriginJson.Contains("\"initialBackgroundAgentRunId\":\"" + row.AgentRunId + "\"")))
             .OrderBy(row => row.UpdatedAtUtc).ThenBy(row => row.AgentRunId).Take(limit).ToArrayAsync(ct).ConfigureAwait(false);
         var result = new List<BackgroundCompletionCandidate>();
         foreach (var row in rows)
@@ -31,6 +31,17 @@ public sealed partial class SqliteAgentRunStore
             if (session is not null && session.Origin.MayReportCompletion(run.AgentRunId)) result.Add(new(run, session));
         }
         return result;
+    }
+
+    public async ValueTask<CompletionDeliveryState> GetCompletionDeliveryAsync(AgentRunOwner owner, Guid childRunId, CancellationToken ct = default)
+    {
+        var child = await GetAsync(owner, childRunId, ct).ConfigureAwait(false) ?? throw AgentCoreErrors.NotFound("Child run was not found.");
+        var session = await sessions.LoadMetadataAsync(child.SessionId, ct).ConfigureAwait(false) ?? throw AgentCoreErrors.NotFound("Child Session was not found.");
+        await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var receipt = await db.BackgroundCompletionReceipts.AsNoTracking().SingleOrDefaultAsync(r => r.ChildAgentRunId == childRunId.ToString("D")
+            && r.AgentInstanceId == owner.AgentInstanceId.ToString("D") && r.ProfileId == owner.ProfileId.ToString("D"), ct).ConfigureAwait(false);
+        var reportRow = receipt?.ParentActivationId is { } id ? await db.AgentRuns.AsNoTracking().SingleOrDefaultAsync(r => r.ActivationId == id, ct).ConfigureAwait(false) : null;
+        return CompletionDeliveryProjection.Build(session, reportRow is null ? null : AgentRunStoreMapping.ToDomain(reportRow), receipt is not null, receipt?.SkipReason);
     }
 
     public async ValueTask<bool> HasCompletionReceiptAsync(AgentRunOwner owner, Guid childRunId, CancellationToken ct = default)

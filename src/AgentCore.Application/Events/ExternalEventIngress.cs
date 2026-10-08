@@ -177,7 +177,7 @@ public sealed class ExternalEventIngress(
             return new DeliveryOutcome(ExternalEventDeliveryStatus.Skipped, false);
         }
 
-        var pin = await ExecutionModelAdmission.ResolveAsync(
+        var pin = registration.ExecutionTarget.Kind == AutomationExecutionTargetKind.ExistingSession ? null : await ExecutionModelAdmission.ResolveAsync(
             catalog,
             instances,
             definitions,
@@ -208,7 +208,7 @@ public sealed class ExternalEventIngress(
             null,
             null,
             null,
-            modelPin: pin?.Pin);
+            modelPin: pin?.Pin, executionTarget: registration.ExecutionTarget, completionDelivery: registration.CompletionDelivery);
         var admitted = await triggers.AdmitOccurrenceAsync(occurrence, cancellationToken).ConfigureAwait(false);
         return new DeliveryOutcome(ExternalEventDeliveryStatus.Admitted, admitted.Kind == TriggerOccurrenceAdmitKind.Admitted);
     }

@@ -1,3 +1,4 @@
+import type { AutomationTarget, AutomationDelivery } from "./api";
 import { ownerFetch } from "./api";
 
 export type AdminDefinitionInventoryItem = {
@@ -1087,9 +1088,9 @@ export type ScheduleTiming = {
   endAtUtc?: string | null; startDate?: string | null; endDate?: string | null; maxOccurrences?: number | null;
 };
 export type AutomationTrigger = { kind: "schedule"; schedule: ScheduleTiming } | { kind: "event"; eventSourceId: string; eventType: "order.placed" };
-export type AutomationDraft = { expectedRevision: number; enabled: boolean; name: string; instructions: string; trigger: AutomationTrigger;
+export type AutomationDraft = { requiresTools?: boolean; requiresVision?: boolean; executionTarget: AutomationTarget; completionDelivery: AutomationDelivery; expectedRevision: number; enabled: boolean; name: string; instructions: string; trigger: AutomationTrigger;
   modelKey: string | null; reasoningEffort: string | null };
-export type Automation = { automationId: string; revision: number; name: string; instructions: string; enabled: boolean; status: string;
+export type Automation = { requiresTools?: boolean; requiresVision?: boolean; executionTarget: AutomationTarget; completionDelivery: AutomationDelivery; suspensionReason?: string | null; automationId: string; revision: number; name: string; instructions: string; enabled: boolean; status: string;
   trigger: AutomationTrigger; authorizationOrigin: string; sourceSessionId: string | null; sourceEventId: string | null;
   createdAt: string; nextRunAt: string | null; modelKey: string | null; reasoningEffort: string | null;
   effectiveModelKey: string | null; lastAgentRunId: string | null; executionStatus: string | null; outcome: string | null };

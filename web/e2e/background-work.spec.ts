@@ -42,6 +42,7 @@ test('background summary previews files and navigates to the exact source Automa
   const session = await (await page.request.get(`/api/v2/sessions/${sessionId}`, { headers })).json();
   const instanceId = session.agentInstanceId;
   const created = await page.request.post(`/api/v2/admin/agent-instances/${instanceId}/automations`, { headers, data: {
+    executionTarget: { kind: "backgroundSession" }, completionDelivery: { kind: "none" },
     expectedRevision: 0, enabled: true, name: 'Exact background source', instructions: 'Review only, then finish quietly.',
     trigger: { kind: 'schedule', schedule: { kind: 'oneShot', timeZone: 'UTC', atUtc: new Date(Date.now() + 86400000).toISOString() } }
   } });

@@ -29,7 +29,7 @@ public sealed class UnifiedAutomationJourneyTests
             using var client = TestOwnerCapability.CreateOwnerClient(host);
             var path = $"/api/v2/admin/agent-instances/{instanceId}/automations";
             var draft = new AutomationRequest(0, true, "Quiet review", "Inspect current state; do nothing if no work needs action.",
-                new("schedule", new("fixedInterval", Interval: 3600, AnchorAtUtc: DateTimeOffset.UtcNow.AddHours(1).ToString("o"))));
+                new("schedule", new("fixedInterval", Interval: 3600, AnchorAtUtc: DateTimeOffset.UtcNow.AddHours(1).ToString("o"))), ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none"));
             var create = await client.PostAsJsonAsync(path, draft); create.EnsureSuccessStatusCode();
             var schedule = (await create.Content.ReadFromJsonAsync<AutomationResponse>())!;
             scheduleId = schedule.AutomationId;
@@ -94,7 +94,7 @@ public sealed class UnifiedAutomationJourneyTests
         using var client = TestOwnerCapability.CreateOwnerClient(host);
         var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/automations";
         var request = new AutomationRequest(0, true, "Review completed Session", $"synthetic-automation-review-session: {source.SessionId}",
-            new("schedule", new("daily", LocalTime: "09:00", MaxOccurrences: 3)));
+            new("schedule", new("daily", LocalTime: "09:00", MaxOccurrences: 3)), ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none"));
         var response = await client.PostAsJsonAsync(path, request); response.EnsureSuccessStatusCode();
         var automation = (await response.Content.ReadFromJsonAsync<AutomationResponse>())!;
         (await client.PostAsJsonAsync(path + "/" + automation.AutomationId + "/run", new ContinuityRevisionRequest(automation.Revision))).EnsureSuccessStatusCode();

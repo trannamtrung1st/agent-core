@@ -5,7 +5,7 @@ using AgentCore.Domain.Conversation;
 namespace AgentCore.Application.Execution;
 
 public sealed class BackgroundCompletionReporter(IAgentRunStore runs, IMemoryStore memory,
-    IAgentRunDispatcher dispatcher, TimeProvider time)
+    IAgentRunDispatcher dispatcher, TimeProvider time, IAgentRunAuthority? authority = null)
 {
     public async ValueTask ReportPendingAsync(int limit, CancellationToken ct = default)
     {
@@ -21,6 +21,11 @@ public sealed class BackgroundCompletionReporter(IAgentRunStore runs, IMemorySto
             {
                 await runs.SkipCompletionReportAsync(source.Run.Owner, source.Run.AgentRunId,
                     eligible ? "quiet-outcome" : "parent-unavailable", time.GetUtcNow(), ct).ConfigureAwait(false);
+                continue;
+            }
+            if (authority is not null && await authority.CurrentDefinitionAsync(source.Run, ct).ConfigureAwait(false) is null)
+            {
+                await runs.SkipCompletionReportAsync(source.Run.Owner, source.Run.AgentRunId, "policy-revoked", time.GetUtcNow(), ct).ConfigureAwait(false);
                 continue;
             }
             // Capacity and transport failures retain the source for a later bounded pass.

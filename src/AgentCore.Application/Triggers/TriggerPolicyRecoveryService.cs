@@ -37,6 +37,7 @@ public sealed class TriggerPolicyRecoveryService(
         foreach (var registration in suspended)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (registration.SuspensionReason?.StartsWith("target-", StringComparison.Ordinal) == true) continue;
             var updated = await store.TryReactivatePolicySuspensionAsync(
                 owner,
                 registration.AutomationId,
@@ -63,6 +64,7 @@ public sealed class TriggerPolicyRecoveryService(
         foreach (var registration in suspended)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (registration.SuspensionReason?.StartsWith("target-", StringComparison.Ordinal) == true) continue;
             var decision = await guard.EvaluateAsync(registration.Owner, TriggerSourceKind.Schedule, cancellationToken)
                 .ConfigureAwait(false);
             if (decision.Kind != TriggerAdmissionDecisionKind.Allow)

@@ -219,7 +219,8 @@ public sealed class TriggerOccurrenceRouter(
 
         }
 
-        var pinned = await EnsureModelAsync(occurrence, now, cancellationToken).ConfigureAwait(false);
+        var pinned = occurrence.ExecutionTarget.Kind == AutomationExecutionTargetKind.ExistingSession
+            ? occurrence : await EnsureModelAsync(occurrence, now, cancellationToken).ConfigureAwait(false);
         if (pinned is null)
         {
             return;

@@ -251,7 +251,7 @@ public sealed class TriggerScheduler
         DateTimeOffset asOf,
         CancellationToken cancellationToken)
     {
-        if (occurrence.ModelPin is not null || _catalog is null)
+        if (occurrence.ExecutionTarget.Kind == AutomationExecutionTargetKind.ExistingSession || occurrence.ModelPin is not null || _catalog is null)
         {
             return;
         }

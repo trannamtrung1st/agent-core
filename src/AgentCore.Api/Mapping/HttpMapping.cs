@@ -72,7 +72,7 @@ public static partial class HttpMapping
             snapshot.PauseReason,
             LifecycleTransition.ToWire(snapshot.LifecycleStatus),
             identity.Name,
-            identity.Role);
+            identity.Role, snapshot.AgentInstanceId.ToString("D"));
     }
 
     public static AttachmentResponse ToAttachment(AgentCore.Application.Ports.AttachmentRecord record) =>

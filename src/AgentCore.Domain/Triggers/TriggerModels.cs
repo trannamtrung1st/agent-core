@@ -537,8 +537,11 @@ public sealed class Automation
         string? modelOverrideCatalogKey = null,
         string? modelOverrideReasoningEffort = null,
         bool requiresVision = false,
-        string? name = null)
+        string? name = null,
+        AutomationExecutionTarget? executionTarget = null,
+        AutomationCompletionDelivery? completionDelivery = null, bool requiresTools = false)
     {
+        RequiresTools = requiresTools;
         if (automationId == Guid.Empty)
         {
             throw new ArgumentException("Registration identifier is required.", nameof(automationId));
@@ -584,6 +587,9 @@ public sealed class Automation
             AgentRunLimits.MaxReasoningEffortCharacters,
             "Model override reasoning effort");
         RequiresVision = requiresVision;
+        ExecutionTarget = executionTarget ?? AutomationExecutionTarget.Background;
+        CompletionDelivery = completionDelivery ?? AutomationCompletionDelivery.None;
+        CompletionDelivery.ValidateFor(ExecutionTarget);
 
     }
 
@@ -621,7 +627,11 @@ public sealed class Automation
 
     public string? ModelOverrideReasoningEffort { get; }
 
+    public AutomationExecutionTarget ExecutionTarget { get; }
+    public AutomationCompletionDelivery CompletionDelivery { get; }
+
     public bool RequiresVision { get; }
+    public bool RequiresTools { get; }
 
     public Guid? EventSourceId => (Trigger as EventTrigger)?.EventSourceId;
 
@@ -651,7 +661,7 @@ public sealed class Automation
             ModelOverrideCatalogKey,
             ModelOverrideReasoningEffort,
             RequiresVision,
-            Name);
+            Name, ExecutionTarget, CompletionDelivery, RequiresTools);
 
     public Automation WithScheduleAdvance(
         AutomationStatus status,
@@ -676,7 +686,7 @@ public sealed class Automation
             ModelOverrideCatalogKey,
             ModelOverrideReasoningEffort,
             RequiresVision,
-            Name);
+            Name, ExecutionTarget, CompletionDelivery, RequiresTools);
 
     public Automation WithCancellation(long revision, DateTimeOffset cancelledAt) =>
         new(
@@ -695,7 +705,7 @@ public sealed class Automation
             ModelOverrideCatalogKey,
             ModelOverrideReasoningEffort,
             RequiresVision,
-            Name);
+            Name, ExecutionTarget, CompletionDelivery, RequiresTools);
 
     public Automation WithModelOverride(
         string? catalogKey,
@@ -718,7 +728,7 @@ public sealed class Automation
             catalogKey,
             reasoningEffort,
             RequiresVision,
-            Name);
+            Name, ExecutionTarget, CompletionDelivery, RequiresTools);
 
     private static string? OptionalModelToken(string? value, int max, string name)
     {
@@ -760,10 +770,11 @@ public sealed class TriggerOccurrence
         Guid? claimId,
         DateTimeOffset? claimLeaseExpiresAtUtc,
         ExecutionModelPin? modelPin = null,
-        Guid? backgroundSessionId = null,
+        Guid? executionSessionId = null,
         Guid? acceptedAgentRunId = null,
         Guid? liveSessionId = null,
-        DateTimeOffset? liveEvaluationCompletedAtUtc = null)
+        DateTimeOffset? liveEvaluationCompletedAtUtc = null,
+        AutomationExecutionTarget? executionTarget = null, AutomationCompletionDelivery? completionDelivery = null)
     {
         if (occurrenceId == Guid.Empty)
         {
@@ -793,16 +804,16 @@ public sealed class TriggerOccurrence
         RequireOptionalId(automationId, "Registration");
         RequireOptionalId(sourceEventId, "Source event");
         RequireOptionalId(claimId, "Claim");
-        RequireOptionalId(backgroundSessionId, "Background Session");
+        RequireOptionalId(executionSessionId, "Execution Session");
         RequireOptionalId(acceptedAgentRunId, "Accepted AgentRun");
         RequireOptionalId(liveSessionId, "Live Session");
         RequireUtc(liveEvaluationCompletedAtUtc, "Live evaluation completion");
-        if (backgroundSessionId is not null && (acceptedAgentRunId is null || liveSessionId is not null)
-            || acceptedAgentRunId is not null && backgroundSessionId is null && liveSessionId is null)
+        if (executionSessionId is not null && (acceptedAgentRunId is null || liveSessionId is not null)
+            || acceptedAgentRunId is not null && executionSessionId is null && liveSessionId is null)
             throw new ArgumentException("An occurrence must have exactly one complete execution admission link.");
         if (disposition == OccurrenceRoutingDisposition.AcceptedDurable)
         {
-            if (backgroundSessionId is null || acceptedAgentRunId is null)
+            if (executionSessionId is null || acceptedAgentRunId is null)
             {
                 throw new ArgumentException("Accepted background work requires its Session and AgentRun.", nameof(acceptedAgentRunId));
             }
@@ -812,7 +823,7 @@ public sealed class TriggerOccurrence
                 throw new ArgumentException("Accepted durable work cannot hold a routing claim.", nameof(disposition));
             }
         }
-        else if (backgroundSessionId is not null
+        else if (executionSessionId is not null
             || acceptedAgentRunId is not null && disposition != OccurrenceRoutingDisposition.AcceptedLive)
         {
             throw new ArgumentException("Only accepted work can link a background Session or AgentRun.", nameof(acceptedAgentRunId));
@@ -829,6 +840,9 @@ public sealed class TriggerOccurrence
         RequireUtc(admittedAtUtc, "Admitted");
         RequireUtc(routingUpdatedAtUtc, "Routing");
         RequireUtc(claimLeaseExpiresAtUtc, "Claim lease");
+        ExecutionTarget = executionTarget ?? AutomationExecutionTarget.Background;
+        CompletionDelivery = completionDelivery ?? AutomationCompletionDelivery.None;
+        CompletionDelivery.ValidateFor(ExecutionTarget);
         OccurrenceId = occurrenceId;
         DedupeKey = TriggerText.RequireDedupeKey(dedupeKey);
         AutomationId = automationId;
@@ -847,12 +861,14 @@ public sealed class TriggerOccurrence
         ClaimId = claimId;
         ClaimLeaseExpiresAtUtc = claimLeaseExpiresAtUtc;
         ModelPin = modelPin;
-        BackgroundSessionId = backgroundSessionId;
+        ExecutionSessionId = executionSessionId;
         AcceptedAgentRunId = acceptedAgentRunId;
         LiveSessionId = liveSessionId;
         LiveEvaluationCompletedAtUtc = liveEvaluationCompletedAtUtc;
     }
 
+    public AutomationExecutionTarget ExecutionTarget { get; }
+    public AutomationCompletionDelivery CompletionDelivery { get; }
     public Guid OccurrenceId { get; }
 
     public string DedupeKey { get; }
@@ -889,7 +905,7 @@ public sealed class TriggerOccurrence
 
     public ExecutionModelPin? ModelPin { get; }
 
-    public Guid? BackgroundSessionId { get; }
+    public Guid? ExecutionSessionId { get; }
     public Guid? AcceptedAgentRunId { get; }
     public Guid? LiveSessionId { get; }
     public DateTimeOffset? LiveEvaluationCompletedAtUtc { get; }
@@ -914,7 +930,7 @@ public sealed class TriggerOccurrence
                 RoutingUpdatedAtUtc,
                 ClaimId,
                 ClaimLeaseExpiresAtUtc,
-                pin, BackgroundSessionId, AcceptedAgentRunId, LiveSessionId, LiveEvaluationCompletedAtUtc)
+                pin, ExecutionSessionId, AcceptedAgentRunId, LiveSessionId, LiveEvaluationCompletedAtUtc, ExecutionTarget, CompletionDelivery)
             : this;
 
     public TriggerOccurrence WithLiveSession(Guid sessionId, long expectedRevision, DateTimeOffset atUtc)
@@ -940,9 +956,9 @@ public sealed class TriggerOccurrence
             RoutingRevision + 1, atUtc, disposition == OccurrenceRoutingDisposition.LivePrepared ? ClaimId : null,
             disposition == OccurrenceRoutingDisposition.LivePrepared ? ClaimLeaseExpiresAtUtc : null,
             modelPin: ModelPin, acceptedAgentRunId: runId, liveSessionId: sessionId,
-            liveEvaluationCompletedAtUtc: completedAt);
+            liveEvaluationCompletedAtUtc: completedAt, executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery);
 
-    public TriggerOccurrence WithBackgroundAcceptance(Guid sessionId, Guid agentRunId, long expectedRevision,
+    public TriggerOccurrence WithExecutionAcceptance(Guid sessionId, Guid agentRunId, long expectedRevision,
         DateTimeOffset acceptedAtUtc)
     {
         if (Disposition != OccurrenceRoutingDisposition.AwaitingDurableWork || RoutingRevision != expectedRevision)
@@ -950,7 +966,7 @@ public sealed class TriggerOccurrence
         return new TriggerOccurrence(OccurrenceId, DedupeKey, AutomationId, Owner, SourceKind, ScheduledAtUtc,
             ObservedAtUtc, AdmittedAtUtc, EvidenceJson, SourceEventId, TriggerRevision,
             OccurrenceRoutingDisposition.AcceptedDurable, null, RoutingRevision + 1, acceptedAtUtc, null, null,
-            ModelPin, sessionId, agentRunId);
+            ModelPin, sessionId, agentRunId, executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery);
     }
 
     public TriggerOccurrence WithRouting(
@@ -981,7 +997,8 @@ public sealed class TriggerOccurrence
             modelPin: ModelPin,
             acceptedAgentRunId: disposition == OccurrenceRoutingDisposition.AcceptedLive ? AcceptedAgentRunId : null,
             liveSessionId: disposition == OccurrenceRoutingDisposition.AcceptedLive ? LiveSessionId : null,
-            liveEvaluationCompletedAtUtc: disposition == OccurrenceRoutingDisposition.AcceptedLive ? LiveEvaluationCompletedAtUtc : null);
+            liveEvaluationCompletedAtUtc: disposition == OccurrenceRoutingDisposition.AcceptedLive ? LiveEvaluationCompletedAtUtc : null,
+            executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery);
 
     private static void RequireUtc(DateTimeOffset value, string name)
     {

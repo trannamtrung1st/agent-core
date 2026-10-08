@@ -24,6 +24,7 @@ test("collection links wrap without overlapping adjacent cells at desktop and mo
   const path = `/api/v2/admin/agent-instances/${instanceId}`;
   const name = "Review pending orders and outstanding customer requests ".repeat(2).trim();
   const saved = await page.request.post(`${path}/automations`, { headers, data: {
+    executionTarget: { kind: "backgroundSession" }, completionDelivery: { kind: "none" },
     expectedRevision: 0, enabled: true, name,
     instructions: "Review only. Do nothing when nothing needs action.",
     trigger: { kind: "schedule", schedule: { kind: "oneShot", timeZone: "UTC", atUtc: new Date(Date.now() + 2000).toISOString() } }

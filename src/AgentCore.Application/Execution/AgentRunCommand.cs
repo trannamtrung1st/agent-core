@@ -5,6 +5,9 @@ namespace AgentCore.Application.Execution;
 /// <summary>Shared persisted transition vocabulary for attached and detached execution.</summary>
 public abstract record AgentRunCommand(long ExpectedRevision, DateTimeOffset AtUtc)
 {
+    public sealed record DeferDispatch(long Revision, DateTimeOffset At, Guid Generation, DateTimeOffset RetryAt)
+        : AgentRunCommand(Revision, At);
+
     public sealed record Claim(long Revision, DateTimeOffset At, Guid Generation, DateTimeOffset LeaseExpiresAt)
         : AgentRunCommand(Revision, At);
     public sealed record Renew(long Revision, DateTimeOffset At, Guid Generation, DateTimeOffset LeaseExpiresAt)
@@ -53,6 +56,7 @@ public abstract record AgentRunCommand(long ExpectedRevision, DateTimeOffset AtU
             throw new AgentRunTransitionException(AgentRunTransitionFailure.StaleGeneration, "AgentRun lease has expired.");
         return this switch
         {
+            DeferDispatch c => run.DeferUnstartedDispatch(c.ExpectedRevision, c.Generation, c.AtUtc, c.RetryAt),
             Claim c => run.TakeClaim(c.Generation, c.AtUtc, c.LeaseExpiresAt),
             Renew c => run.RenewClaim(c.ExpectedRevision, c.Generation, c.LeaseExpiresAt, c.AtUtc),
             Checkpoint c => run.SaveCheckpoint(c.ExpectedRevision, c.Generation, c.Value, c.Progress, c.AtUtc),

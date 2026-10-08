@@ -37,7 +37,7 @@ public static class AgentRunAdmissionFactory
         return AgentRun.Create(runId, new(snapshot.AgentInstanceId, snapshot.ProfileId
             ?? throw AgentCoreErrors.Validation("AgentRun requires a trusted profile.")),
             new(activation, snapshot.Definition.Id, snapshot.Definition.Version,
-                snapshot.PinnedPersona ?? throw AgentCoreErrors.Validation("AgentRun requires a pinned persona."), responseId),
+                snapshot.PinnedPersona ?? throw AgentCoreErrors.Validation("AgentRun requires a pinned persona."), responseId, AgentRunOutputContract.ConversationResponse),
             model, AgentRunLimits.DefaultMaxAttempts, atUtc, catalog,
             catalog.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
     }
@@ -73,7 +73,7 @@ public static class AgentRunAdmissionFactory
             users.Select(entry => entry.EntryId).ToArray(), users[0].SourceEventId ?? users[0].EntryId,
             null, null, null, $"user-batch:{batchKey}", admittedAtUtc);
         return AgentRun.Create(agentRunId, new AgentRunOwner(instanceId, profileId),
-            new AgentRunAdmission(activation, snapshot.Definition.Id, snapshot.Definition.Version, persona, responseId),
+            new AgentRunAdmission(activation, snapshot.Definition.Id, snapshot.Definition.Version, persona, responseId, AgentRunOutputContract.ConversationResponse),
             new AgentRunModelPin(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort),
             AgentRunLimits.DefaultMaxAttempts, admittedAtUtc,
             pinnedSkillCatalog: catalog,

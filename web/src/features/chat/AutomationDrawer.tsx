@@ -1,3 +1,5 @@
+import { adminInstancePath, navigateToAppPath } from "../../app/appRoute";
+import { AutomationDestination } from "./AutomationDestination";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -102,6 +104,7 @@ export function AutomationDrawer({
             </Tag>
           </Flex>
 
+          {item.executionTarget && item.completionDelivery ? <AutomationDestination target={item.executionTarget} delivery={item.completionDelivery} currentSessionId={sessionId} /> : null}
           <div className="schedule-detail">
             <Flex align="center" gap={token.paddingXS} className="schedule-detail-heading">
               <CalendarOutlined aria-hidden />
@@ -126,7 +129,7 @@ export function AutomationDrawer({
             ) : null}
           </Flex>
 
-          {item.status === "suspendedPolicy" && item.suspensionReason ? (
+          {item.suspensionReason ? (
             <Alert
               type="warning"
               showIcon
@@ -136,6 +139,7 @@ export function AutomationDrawer({
             />
           ) : null}
 
+          {item.agentInstanceId ? <Typography.Link href={`${adminInstancePath(item.agentInstanceId, "automation", "automations")}?automation=${item.automationId}`} onClick={event => { event.preventDefault(); navigateToAppPath(`${adminInstancePath(item.agentInstanceId!, "automation", "automations")}?automation=${item.automationId}`); }}>View automation settings</Typography.Link> : null}
           {item.status === "active" ? (
             <Flex gap={token.paddingXS} wrap="wrap" justify="flex-end" className="schedule-actions">
               <Button
@@ -176,7 +180,7 @@ export function AutomationDrawer({
       }
       aria-labelledby="schedule-drawer-title"
       placement="right"
-      size={wide ? 400 : 320}
+      size={wide ? 400 : "100vw"}
       open={open}
       onClose={onClose}
       onKeyDown={(event) => {

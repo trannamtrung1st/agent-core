@@ -58,6 +58,6 @@ public static class AutomationRules
         var key = $"manual:{automation.AutomationId:D}:{automation.Revision}:{now.ToUnixTimeMilliseconds()}";
         return new(TriggerScheduleAdmission.OccurrenceId(key), key, automation.AutomationId, automation.Owner,
             TriggerSourceKind.ManualInvocation, null, now, now, Evidence(automation), null, automation.TriggerRevision,
-            OccurrenceRoutingDisposition.Pending, null, 0, null, null, null, modelPin: pin);
+            OccurrenceRoutingDisposition.Pending, null, 0, null, null, null, modelPin: pin, executionTarget: automation.ExecutionTarget, completionDelivery: automation.CompletionDelivery);
     }
 }

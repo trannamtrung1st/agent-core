@@ -369,7 +369,7 @@ public sealed class TriggerStoreContractTests
                 Assert.Contains("TriggerOccurrences", tables);
                 Assert.DoesNotContain(tables, name => name.Contains("Timer", StringComparison.OrdinalIgnoreCase));
                 Assert.Equal(0, await ForeignKeyCountAsync(db, "Automations"));
-                Assert.Equal(new[] { "AcceptedAgentRunId", "BackgroundSessionId", "LiveSessionId" },
+                Assert.Equal(new[] { "AcceptedAgentRunId", "ExecutionSessionId", "LiveSessionId" },
                     await ForeignKeyColumnsAsync(db, "TriggerOccurrences"));
             }
 

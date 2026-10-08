@@ -98,7 +98,9 @@ public static class SessionAutomationEndpoints
             summary,
             registration.NextOccurrenceAtUtc is DateTimeOffset next ? HttpMapping.Format(next) : null,
             registration.Revision,
-            registration.SuspensionReason, registration.Name);
+            registration.SuspensionReason, registration.Name,
+            new(registration.ExecutionTarget.SessionId is null ? "backgroundSession" : "existingSession", registration.ExecutionTarget.SessionId?.ToString("D")),
+            new(registration.CompletionDelivery.SessionId is null ? "none" : "toSession", registration.CompletionDelivery.SessionId?.ToString("D")), registration.Owner.AgentInstanceId.ToString("D"));
     }
 
     private static string ToStatus(AutomationStatus status) => status switch

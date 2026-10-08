@@ -213,7 +213,7 @@ public static class AdminEventSummaryPolicy
             }
             if (append.Operation is AdminEventOperationKind.ExperienceChanged or AdminEventOperationKind.AutomationChanged)
             {
-                var allowed = new HashSet<string>(StringComparer.Ordinal) { "instanceId", "recordId", "operation", "revision", "enabled", "instructionsHash", "modelKey" };
+                var allowed = new HashSet<string>(StringComparer.Ordinal) { "instanceId", "recordId", "operation", "revision", "enabled", "instructionsHash", "executionTarget", "completionDelivery", "modelKey" };
                 foreach (var property in document.RootElement.EnumerateObject())
                     if (!allowed.Contains(property.Name)) throw AgentCoreErrors.Validation("Unsupported continuity history metadata.");
                 RequireString(document.RootElement, "instanceId");

@@ -85,7 +85,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         await using var constraint = connection.CreateCommand();
         constraint.CommandText = "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'TriggerOccurrences';";
         var definition = NormalizeSql(Convert.ToString(await constraint.ExecuteScalarAsync(ct).ConfigureAwait(false)) ?? "");
-        const string expected = "(BackgroundSessionId IS NULL AND AcceptedAgentRunId IS NULL) OR (BackgroundSessionId IS NOT NULL AND LiveSessionId IS NULL AND AcceptedAgentRunId IS NOT NULL) OR (BackgroundSessionId IS NULL AND LiveSessionId IS NOT NULL AND AcceptedAgentRunId IS NOT NULL AND LiveEvaluationCompletedAtUtc IS NOT NULL)";
+        const string expected = "(ExecutionSessionId IS NULL AND AcceptedAgentRunId IS NULL) OR (ExecutionSessionId IS NOT NULL AND LiveSessionId IS NULL AND AcceptedAgentRunId IS NOT NULL) OR (ExecutionSessionId IS NULL AND LiveSessionId IS NOT NULL AND AcceptedAgentRunId IS NOT NULL AND LiveEvaluationCompletedAtUtc IS NOT NULL)";
         if (!definition.Contains(NormalizeSql(expected), StringComparison.Ordinal))
             throw ResetRequired("Canonical occurrence admission constraint is missing or incompatible.");
     }
@@ -735,7 +735,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.CreatedAtUtc = entry.CreatedAt.ToUnixTimeMilliseconds();
     }
 
-    private static SessionSnapshot ToSnapshot(SessionRecord row, IReadOnlyList<EntryRecord> entryRows)
+    internal static SessionSnapshot ToSnapshot(SessionRecord row, IReadOnlyList<EntryRecord> entryRows)
     {
         var definition = JsonSerializer.Deserialize<AgentDefinition>(row.DefinitionJson, Json)
             ?? throw AgentCoreErrors.Persistence("Stored agent definition was empty.");

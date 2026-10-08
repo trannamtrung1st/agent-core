@@ -699,6 +699,24 @@ public sealed class InMemoryTriggerStore : ITriggerStore
                     null)
                 : null));
 
+    public ValueTask<TriggerOccurrence?> RejectAwaitingDurableWorkAsync(Guid occurrenceId, long expectedRevision, string reason, DateTimeOffset atUtc, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        lock (_state.Gate)
+        {
+            var rejected = Mutate(occurrenceId, current => current.Disposition == OccurrenceRoutingDisposition.AwaitingDurableWork && current.RoutingRevision == expectedRevision
+                ? current.WithRouting(OccurrenceRoutingDisposition.Rejected, reason, current.RoutingRevision + 1, atUtc, null, null) : null);
+            if (rejected?.AutomationId is { } id && Find(rejected.Owner, id) is { } registration
+                && registration.ExecutionTarget == rejected.ExecutionTarget && registration.Status is not (AutomationStatus.Disabled or AutomationStatus.Cancelled))
+            {
+                var recurring = registration.Trigger is not ScheduleTrigger { Schedule: OneShotSchedule };
+                _state.Registrations[id] = registration.WithScheduleAdvance(recurring ? AutomationStatus.SuspendedPolicy : registration.Status,
+                    recurring ? null : registration.NextOccurrenceAtUtc, registration.OccurrenceCount, registration.Revision + 1, atUtc, reason);
+            }
+            return ValueTask.FromResult(rejected);
+        }
+    }
+
     public ValueTask<TriggerOccurrence?> TryRejectPendingAsync(
         Guid occurrenceId,
         string reason,

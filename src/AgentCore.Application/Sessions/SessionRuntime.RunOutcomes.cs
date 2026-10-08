@@ -13,7 +13,7 @@ public sealed partial class SessionRuntime
         Guid Generation, AgentRunOutcomeKind Kind, string Summary, TaskCompletionSource<bool> Accepted) : SessionInput(Context);
 
     private bool IsInitialBackgroundRun => _boundAgentRun is { } run
-        && _snapshot.Origin.InitialBackgroundAgentRunId == run.AgentRunId;
+        && run.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome;
 
     private async Task<bool> RequestRunOutcomeAsync(EventContext cause, Guid responseId,
         AgentRunOutcomeKind kind, string summary, CancellationToken ct)

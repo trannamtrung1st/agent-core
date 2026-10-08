@@ -37,6 +37,7 @@ internal sealed class RuntimeAgentRunStore : IAgentRunStore
     }
     public ValueTask<AgentRunAdmissionResult> AdmitImmediateAsync(SessionSnapshot snapshot, AgentRun run, Guid generation, CancellationToken ct = default) => Store.AdmitImmediateAsync(snapshot, run, generation, ct);
     public ValueTask<IReadOnlyList<BackgroundCompletionCandidate>> ListUnreportedCompletionsAsync(int limit, CancellationToken ct = default) => Store.ListUnreportedCompletionsAsync(limit, ct);
+    public ValueTask<CompletionDeliveryState> GetCompletionDeliveryAsync(AgentRunOwner owner, Guid id, CancellationToken ct = default) => Store.GetCompletionDeliveryAsync(owner, id, ct);
     public ValueTask<bool> HasCompletionReceiptAsync(AgentRunOwner owner, Guid id, CancellationToken ct = default) => Store.HasCompletionReceiptAsync(owner, id, ct);
     public ValueTask SkipCompletionReportAsync(AgentRunOwner owner, Guid id, string reason, DateTimeOffset now, CancellationToken ct = default) => Store.SkipCompletionReportAsync(owner, id, reason, now, ct);
     public ValueTask<AgentRunAdmissionResult> AdmitCompletionReportAsync(SessionSnapshot parent, long revision, AgentRun report, Guid child, CancellationToken ct = default) => Store.AdmitCompletionReportAsync(parent, revision, report, child, ct);

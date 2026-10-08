@@ -1,6 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { completeDefinitionDraftPublishGate, publishDraftFromInstructions } from "./admin-definition-gate-helpers";
-import { draftEditorSection } from "./admin-draft-editor-helpers";
 import { expect, test } from "@playwright/test";
 import { selectInstanceIdentity } from "./support/instance-identity";
 import { waitForResponseSettled } from "./support/response-settled";
@@ -12,30 +9,7 @@ test("immediate child reports once, then continues as the same Session with a ne
   page.on("pageerror", error => errors.push(error.message));
   await page.goto("/");
   await expect.poll(() => page.evaluate(() => localStorage.getItem("agent-core.owner-capability"))).not.toBeNull();
-  const fixtureToken = await page.evaluate(() => localStorage.getItem("agent-core.owner-capability"));
-  const builtIn = JSON.parse(await readFile(new URL("../../agents/general-assistant-v17.json", import.meta.url), "utf8"));
-  const { id: _id, version: _version, ...candidate } = builtIn;
-  const definitionId = `background-journey-${Date.now()}`;
-  candidate.definitionId = definitionId;
-  candidate.environment.capabilities = { mode: "Selected", resolvedCapabilities: ["knowledge.retrieve", "background.start"] };
-  candidate.environment.projection = { alwaysCapabilities: ["knowledge.retrieve", "background.start"] };
-  candidate.environment.knowledgeSources = [];
-  candidate.skills = [];
-  // Report-back is autonomous. This fixture explicitly enables the parent policy
-  // instead of treating background.start as permission to bypass it.
-  candidate.initiativePolicy.enabled = true;
-  candidate.initiativePolicy.maxConsecutiveProactiveTurns = 1;
-  const created = await page.request.post("/api/v2/admin/definition-drafts", {
-    headers: { "X-AgentCore-Owner-Capability": fixtureToken! }, data: { definitionId, candidate }
-  });
-  expect(created.ok(), await created.text()).toBe(true);
-  await page.goto(`/admin/definitions/${definitionId}/drafts`);
-  await page.getByRole("button", { name: /^Draft rev / }).first().click();
-  const editor = draftEditorSection(page);
-  await completeDefinitionDraftPublishGate(page, editor, "knowledge.retrieve", { skipToolAllowlist: true });
-  await publishDraftFromInstructions(page, editor);
-  await page.goto("/");
-  await selectInstanceIdentity(page, { id: definitionId, version: 1 });
+  await selectInstanceIdentity(page, { id: "general-assistant", version: 17 });
   await expect(page.getByTestId("connection")).toHaveText("Ready");
   await page.getByLabel("Message", { exact: true }).fill("[test:background-start] Check the progress in the background.");
   await page.getByRole("button", { name: "Send", exact: true }).click();
@@ -52,6 +26,8 @@ test("immediate child reports once, then continues as the same Session with a ne
   expect(childPage.items).toHaveLength(1);
   const child = childPage.items[0];
   expect(child.origin.parentSessionId).toBe(parentId);
+  expect(child.completionDelivery?.status).toBe("delivered");
+  await expect(page.locator(".conversation-scroll")).toContainText("Background work completed");
   expect(child.latestRun?.outcome?.attentionRequired).toBe(true);
   expect(child.surfaces).toEqual(["BackgroundWork"]);
   const parentRuns = await (await page.request.get(`/api/v2/sessions/${parentId}/agent-runs`, { headers })).json() as CursorPage<AgentRun>;

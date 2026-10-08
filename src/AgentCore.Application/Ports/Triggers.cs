@@ -273,6 +273,8 @@ public interface ITriggerStore
         DateTimeOffset markedAt,
         CancellationToken cancellationToken = default);
 
+    ValueTask<TriggerOccurrence?> RejectAwaitingDurableWorkAsync(Guid occurrenceId, long expectedRevision, string reason, DateTimeOffset atUtc, CancellationToken ct = default) => throw new NotSupportedException();
+
     ValueTask<TriggerOccurrence?> TryRejectPendingAsync(
         Guid occurrenceId,
         string reason,

@@ -59,7 +59,7 @@ public sealed class HostedTriggerToolTests
         var result = await tools.ExecuteAsync(
             definition,
             sessionId,
-            new ModelToolCall("create", ToolCatalog.AutomationCreate, """{"instructions":"Call John","relativeDayOffset":1,"localTime":"09:00"}"""),
+            new ModelToolCall("create", ToolCatalog.AutomationCreate, """{"instructions":"Call John","relativeDayOffset":1,"localTime":"09:00","executionTarget":"backgroundSession","reportBack":false}"""),
             ToolLimits.MaxOutputBytes,
             triggerCommand: context);
 
@@ -90,7 +90,7 @@ public sealed class HostedTriggerToolTests
         async Task<ToolExecutionResult> Execute(string tool, object args, TriggerCommandContext? context = null, ToolExecutionAdmission? admission = null) =>
             await tools.ExecuteAsync(definition, sessionId, new ModelToolCall(Guid.NewGuid().ToString(), tool, JsonSerializer.Serialize(args)),
                 ToolLimits.MaxOutputBytes, triggerCommand: context, admission: admission);
-        var created = await Execute(ToolCatalog.AutomationCreate, new { name = "Review orders", instructions = "Review the order reference.", eventSourceId = sourceId, eventType = "order.placed" }, command);
+        var created = await Execute(ToolCatalog.AutomationCreate, new { executionTarget = "backgroundSession", reportBack = false, name = "Review orders", instructions = "Review the order reference.", eventSourceId = sourceId, eventType = "order.placed" }, command);
         Assert.Contains("\"status\":\"Active\"", created.Text);
         using var document = JsonDocument.Parse(created.Text);
         Assert.Equal("Active", document.RootElement.GetProperty("status").GetString());

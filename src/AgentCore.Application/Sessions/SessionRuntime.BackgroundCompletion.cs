@@ -31,7 +31,13 @@ public sealed partial class SessionRuntime
             if (await _agentRuns.HasCompletionReceiptAsync(child.Owner, child.AgentRunId, ct).ConfigureAwait(false))
             { input.Committed.TrySetResult(true); return; }
             var now = _time.GetUtcNow();
-            var model = _snapshot.ModelSelection ?? throw AgentCoreErrors.Validation("Completion report requires a parent model.");
+            var model = _snapshot.ModelSelection;
+            if (model is null)
+            {
+                await _agentRuns.SkipCompletionReportAsync(child.Owner, child.AgentRunId, "target-model-unavailable", now, ct).ConfigureAwait(false);
+                input.Committed.TrySetResult(true);
+                return;
+            }
             var initial = await _store.ReadHistoryAsync(child.SessionId, 0, 1, ct).ConfigureAwait(false);
             var objective = initial.FirstOrDefault()?.Text ?? input.Source.Session.Title;
             var artifacts = await _tools.CompletionArtifactsAsync(child.SessionId, ct).ConfigureAwait(false);
@@ -41,13 +47,13 @@ public sealed partial class SessionRuntime
                 evidence);
             var skills = await _tools.ResolveSkillCatalogAsync(_snapshot.AgentInstanceId, _snapshot.Definition, ct).ConfigureAwait(false);
             var report = AgentRun.Create(_ids.NewId(), RunOwner, new(activation, _snapshot.Definition.Id, _snapshot.Definition.Version,
-                _snapshot.PinnedPersona ?? _snapshot.Definition.Identity, _ids.NewId()), new(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort),
+                _snapshot.PinnedPersona ?? _snapshot.Definition.Identity, _ids.NewId(), AgentRunOutputContract.CompletionReport), new(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort),
                 AgentRunLimits.DefaultMaxAttempts, now, skills, skills.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
             var current = _runAuthority is null ? _snapshot.Definition : await _runAuthority.CurrentDefinitionAsync(report, ct).ConfigureAwait(false);
             if (_deactivated || _snapshot.ArchivedAt is not null || _snapshot.DurablyDeletedAt is not null || SessionLifecycle.IsTerminal(_snapshot.LifecycleStatus)
                 || _snapshot.Status is SessionStatus.Ended or SessionStatus.Ending
                 || _snapshot.Status == SessionStatus.Paused && !SessionPauseSemantics.IsTransportResumable(_snapshot.PauseReason)
-                || current?.InitiativePolicy.Enabled != true)
+                || current is null)
             {
                 await _agentRuns.SkipCompletionReportAsync(child.Owner, child.AgentRunId, "parent-policy-unavailable", now, ct).ConfigureAwait(false);
                 input.Committed.TrySetResult(true);

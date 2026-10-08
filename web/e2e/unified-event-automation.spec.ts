@@ -18,6 +18,7 @@ test('Completed Automation can be deleted while its quiet Run remains inspectabl
   const name = 'Completed source cleanup';
   const instructions = 'Review only. Do nothing when nothing needs action.';
   const saved = await page.request.post(path + '/automations', { headers, data: {
+    executionTarget: { kind: "backgroundSession" }, completionDelivery: { kind: "none" },
     expectedRevision: 0, enabled: true, name, instructions,
     trigger: { kind: 'schedule', schedule: { kind: 'oneShot', timeZone: 'UTC', atUtc: new Date(Date.now() + 4000).toISOString() } }
   } });

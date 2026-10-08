@@ -120,6 +120,8 @@ internal static class AgentRunStoreMapping
     {
         if (run.Admission.Activation.Kind == ActivationKind.BackgroundCompleted)
             return $"completion:{run.Admission.Activation.SourceSessionId:D}:{run.Admission.Activation.SourceAgentRunId:D}";
+        if (run.Admission.Activation.TriggerOccurrenceId is { } durableOccurrence && run.Admission.Activation.DedupeKey.StartsWith("automation:", StringComparison.Ordinal))
+            return $"occurrence:{durableOccurrence:D}";
         if (snapshot.Origin.InitialBackgroundAgentRunId != run.AgentRunId) return null;
         if (run.Admission.Activation.TriggerOccurrenceId is { } occurrenceId) return $"occurrence:{occurrenceId:D}";
         return snapshot.Origin.Kind switch
@@ -138,7 +140,7 @@ internal static class AgentRunStoreMapping
             .Select(entry => new { entry.Role, entry.Text, entry.SourceAdmissionFingerprint, entry.Attachments }).ToArray();
         var payload = JsonSerializer.Serialize(new
         {
-            run.Owner, a.Kind, a.EvidenceJson, a.SourceEventId, a.TriggerOccurrenceId, a.SourceSessionId, a.SourceAgentRunId,
+            run.Owner, run.Admission.OutputContract, a.Kind, a.EvidenceJson, a.SourceEventId, a.TriggerOccurrenceId, a.SourceSessionId, a.SourceAgentRunId,
             SourceFingerprint = BackgroundSourceKey(snapshot, run) is null ? a.SourceFingerprint : null,
             run.DefinitionId, run.DefinitionVersion, run.PinnedPersona, run.PinnedModel, run.PinnedSkillCatalog,
             run.ActiveSkillKeys, run.MaxAttempts, OriginKind = snapshot.Origin.Kind, snapshot.Origin.AutomationId,
@@ -170,6 +172,7 @@ internal static class AgentRunStoreMapping
             || snapshot.AgentInstanceId != run.AgentInstanceId || snapshot.ProfileId != run.ProfileId
             || snapshot.Definition.Id != run.DefinitionId || snapshot.Definition.Version != run.DefinitionVersion
             || snapshot.DurablyDeletedAt is not null || snapshot.ArchivedAt is not null
+            || snapshot.Status == SessionStatus.Paused && !SessionPauseSemantics.IsTransportResumable(snapshot.PauseReason)
             || snapshot.Status is SessionStatus.Ended or SessionStatus.Ending
             || snapshot.LifecycleStatus is SessionLifecycleStatus.Completed or SessionLifecycleStatus.Cancelled or SessionLifecycleStatus.Expired or SessionLifecycleStatus.Ended)
             throw AgentCoreErrors.Validation("AgentRun admission requires an eligible owned Session and initial queued run.");
@@ -241,10 +244,13 @@ internal static class AgentRunStoreMapping
         TriggerOccurrence occurrence, long expectedRoutingRevision)
     {
         var activation = run.Admission.Activation;
-        if (snapshot.Origin.InitialBackgroundAgentRunId != run.AgentRunId
+        var existing = occurrence.ExecutionTarget.Kind == AutomationExecutionTargetKind.ExistingSession;
+        if ((existing ? snapshot.SessionId != occurrence.ExecutionTarget.SessionId || run.Admission.OutputContract != AgentRunOutputContract.ConversationResponse
+                || activation.SourceEntryIds.Count != 0
+            : snapshot.Origin.InitialBackgroundAgentRunId != run.AgentRunId || run.Admission.OutputContract != AgentRunOutputContract.BackgroundOutcome)
             || occurrence.OccurrenceId != activation.TriggerOccurrenceId
             || occurrence.Owner.AgentInstanceId != run.AgentInstanceId || occurrence.Owner.ProfileId != run.ProfileId
-            || occurrence.AutomationId != snapshot.Origin.AutomationId
+            || !existing && occurrence.AutomationId != snapshot.Origin.AutomationId
             || occurrence.SourceEventId != activation.SourceEventId
             || occurrence.SourceKind == TriggerSourceKind.Schedule && activation.Kind != ActivationKind.ScheduledWork
             || occurrence.SourceKind == TriggerSourceKind.ApplicationEvent && activation.Kind != ActivationKind.ApplicationEvent
@@ -252,14 +258,15 @@ internal static class AgentRunStoreMapping
             throw AgentCoreErrors.Validation("Occurrence and child admission source/owner must match.");
         if (occurrence.Disposition == OccurrenceRoutingDisposition.AcceptedDurable)
         {
-            if (occurrence.BackgroundSessionId is null || occurrence.AcceptedAgentRunId is null)
+            if (occurrence.ExecutionSessionId is null || occurrence.AcceptedAgentRunId is null)
                 throw AgentCoreErrors.Conflict("Occurrence already belongs to a different execution admission.");
             return;
         }
         if (occurrence.Disposition != OccurrenceRoutingDisposition.AwaitingDurableWork)
-            throw AgentCoreErrors.Validation("Only an awaiting occurrence may create a background Session.");
+            throw AgentCoreErrors.Validation("Only an awaiting occurrence may admit durable execution.");
         if (occurrence.RoutingRevision != expectedRoutingRevision)
             throw AgentCoreErrors.Conflict("Occurrence routing revision is stale.");
+        if (existing) return;
         var pin = occurrence.ModelPin;
         if (pin is null || pin.CatalogKey != run.PinnedModel.CatalogKey || pin.ProviderAlias != run.PinnedModel.ProviderAlias
             || pin.ModelId != run.PinnedModel.ModelId || pin.ReasoningEffort != run.PinnedModel.ReasoningEffort)

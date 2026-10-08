@@ -52,7 +52,7 @@ test('Unified Automation authoring retains admitted instructions and source focu
   const updatedName = 'Updated order review';
   const update = await page.request.put(`${path}/${row.automationId}`, { headers, data: {
     expectedRevision: row.revision, enabled: true, name: updatedName, instructions: 'Future review instructions', trigger: row.trigger,
-    modelKey: row.modelKey, reasoningEffort: row.reasoningEffort
+    modelKey: row.modelKey, reasoningEffort: row.reasoningEffort, executionTarget: row.executionTarget, completionDelivery: row.completionDelivery
   } });
   expect(update.ok()).toBe(true);
   await details.getByRole('button', { name: 'View Automation', exact: true }).click();

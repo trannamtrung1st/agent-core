@@ -46,7 +46,7 @@ public sealed class OrderPlacedWebhookApiTests
                 var ineligible = await InsertInstanceAsync(host, "examiner", 1);
                 var blockedSubscribe = await owner.PostAsJsonAsync(
                     $"/api/v2/admin/agent-instances/{ineligible}/automations",
-                    new AutomationRequest(0, true, "Review new orders", "Review this order and report unusual details.", new("event", EventSourceId: sourceId.ToString("D"), EventType: "order.placed")));
+                    new AutomationRequest(0, true, "Review new orders", "Review this order and report unusual details.", new("event", EventSourceId: sourceId.ToString("D"), EventType: "order.placed"), ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none")));
                 Assert.Equal(HttpStatusCode.Forbidden, blockedSubscribe.StatusCode);
 
                 var anonymous = host.CreateClient();
@@ -226,7 +226,7 @@ public sealed class OrderPlacedWebhookApiTests
     {
         var response = await client.PostAsJsonAsync(
             $"/api/v2/admin/agent-instances/{instanceId}/automations",
-            new AutomationRequest(0, true, "Review new orders", "Review this order and report unusual details.", new("event", EventSourceId: sourceId.ToString("D"), EventType: "order.placed")));
+            new AutomationRequest(0, true, "Review new orders", "Review this order and report unusual details.", new("event", EventSourceId: sourceId.ToString("D"), EventType: "order.placed"), ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none")));
         response.EnsureSuccessStatusCode();
     }
 

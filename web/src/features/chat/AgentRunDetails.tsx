@@ -1,3 +1,4 @@
+import { ConversationDestination } from "./AutomationDestination";
 import { useEffect, useRef, useState } from "react";
 import { App, Alert, Button, Descriptions, Drawer, Empty, Flex, Spin, Tag, Typography, theme } from "antd";
 import { CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, LoadingOutlined, RedoOutlined, StopOutlined } from "@ant-design/icons";
@@ -73,6 +74,7 @@ export function AgentRunDetails({ run, onChange }: { run: AgentRun; onChange: (r
       <Typography.Text type="secondary">{runActivationLabel(run.activationKind)}</Typography.Text>
       {run.outcome?.attentionRequired ? <Typography.Text><ExclamationCircleOutlined /> Needs attention</Typography.Text> : null}
     </Flex>
+    {run.sourceBackgroundSessionId ? <Typography.Text type="secondary">Background result from <ConversationDestination sessionId={run.sourceBackgroundSessionId} /></Typography.Text> : null}
     {run.progress ? <Typography.Paragraph style={{ marginBottom: 0 }}>{run.progress}</Typography.Paragraph> : null}
     <Descriptions size="small" column={1} items={[
       { key: "model", label: "Model", children: run.modelCatalogKey },

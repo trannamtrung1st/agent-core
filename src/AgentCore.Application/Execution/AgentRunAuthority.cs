@@ -1,4 +1,6 @@
 using AgentCore.Application.Models;
+using AgentCore.Application.Agents;
+using AgentCore.Application.Tools;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Triggers;
 using AgentCore.Domain.Conversation;
@@ -22,7 +24,7 @@ public sealed class AgentRunAuthority(IAgentInstanceStore instances, IAgentDefin
             run.PinnedModel.ModelId, run.PinnedModel.ReasoningEffort, ExecutionModelSource.ConversationDefault);
         if (!ExecutionModelPolicy.Matches(models, model, out var descriptor)) return null;
         var activation = run.Admission.Activation;
-        if (activation.Kind == ActivationKind.ImmediateBackground && descriptor?.Tools != true) return null;
+        if (activation.Kind == ActivationKind.ImmediateBackground && (descriptor?.Tools != true || !RolePermissions.AllowsTool(definition, ToolCatalog.BackgroundStart))) return null;
         if (activation.TriggerOccurrenceId is { } occurrenceId)
         {
             var owner = new TriggerOwner(run.AgentInstanceId, run.ProfileId);
@@ -34,7 +36,10 @@ public sealed class AgentRunAuthority(IAgentInstanceStore instances, IAgentDefin
                 automation = await triggers.GetAsync(owner, id, ct).ConfigureAwait(false);
                 if (automation is null || automation.Status is AutomationStatus.Disabled or AutomationStatus.Cancelled or AutomationStatus.SuspendedPolicy) return null;
             }
-            if (!ExecutionModelPolicy.Validate(models, model, definition, automation).Accepted) return null;
+            if (run.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome
+                && !ExecutionModelPolicy.Validate(models, model, definition, automation).Accepted) return null;
+            if (automation?.RequiresTools == true && descriptor?.Tools != true) return null;
+            if (automation?.RequiresVision == true && descriptor?.Vision != true) return null;
         }
         return definition;
     }

@@ -285,7 +285,8 @@ public static class TriggerScheduleCommands
                             effectiveArguments.GetProperty("eventType").GetString() ?? ""),
                         TryString(effectiveArguments, "modelKey", out var eventModel) ? eventModel : null,
                         TryString(effectiveArguments, "reasoningEffort", out var eventEffort) ? eventEffort : null, cancellationToken,
-                        new(TriggerAuthorizationOrigin.CurrentUserTurn, context.SessionId, context.SourceEventId, context.UtcNow, context.UtcNow))),
+                        new(TriggerAuthorizationOrigin.CurrentUserTurn, context.SessionId, context.SourceEventId, context.UtcNow, context.UtcNow),
+                        executionTarget: ChatTarget(effectiveArguments, context), completionDelivery: ChatDelivery(effectiveArguments, context), requiresTools: OptionalRequirement(effectiveArguments, "requiresTools"), requiresVision: OptionalRequirement(effectiveArguments, "requiresVision"))),
                 ToolCatalog.AutomationCreate when automationAuthoring is not null => await CreateScheduleAutomationAsync(
                     policyDefinition, automationAuthoring, owner, context, effectiveArguments, cancellationToken),
                 ToolCatalog.AutomationCreate => effectiveArguments.TryGetProperty("kind", out var recurrence) && recurrence.GetString() is "daily" or "weekly" or "fixed_interval"
@@ -344,7 +345,8 @@ public static class TriggerScheduleCommands
             instructions, new ScheduleTrigger(schedule),
             TryString(arguments, "modelKey", out var model) ? model : null,
             TryString(arguments, "reasoningEffort", out var effort) ? effort : null, ct,
-            new(TriggerAuthorizationOrigin.CurrentUserTurn, context.SessionId, context.SourceEventId, context.UtcNow, context.UtcNow)));
+            new(TriggerAuthorizationOrigin.CurrentUserTurn, context.SessionId, context.SourceEventId, context.UtcNow, context.UtcNow),
+                        executionTarget: ChatTarget(arguments, context), completionDelivery: ChatDelivery(arguments, context), requiresTools: OptionalRequirement(arguments, "requiresTools"), requiresVision: OptionalRequirement(arguments, "requiresVision")));
     }
 
     private static async Task<string> CreateOnceAsync(
@@ -466,7 +468,8 @@ public static class TriggerScheduleCommands
             var model = arguments.TryGetProperty("modelKey", out var m) ? m.GetString() : current.ModelOverrideCatalogKey;
             var effort = arguments.TryGetProperty("reasoningEffort", out var e) ? e.GetString() : current.ModelOverrideReasoningEffort;
             return RegistrationJson(await authoring.SaveAsync(owner.AgentInstanceId, id, expected,
-                current.Status == AutomationStatus.Active, name, instructions, trigger, model, effort, cancellationToken));
+                current.Status == AutomationStatus.Active, name, instructions, trigger, model, effort, cancellationToken,
+                executionTarget: ChatTarget(arguments, context, current), completionDelivery: ChatDelivery(arguments, context, current), requiresTools: OptionalRequirement(arguments, "requiresTools"), requiresVision: OptionalRequirement(arguments, "requiresVision")));
         }
         AutomationChange change;
         if (!hasIntent && !hasSchedule)
@@ -1093,6 +1096,33 @@ public static class TriggerScheduleCommands
         return true;
     }
 
+    private static bool? OptionalRequirement(JsonElement args, string name)
+    {
+        if (!args.TryGetProperty(name, out var value)) return null;
+        if (value.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) throw AgentCoreErrors.Validation(name + " must be a boolean.");
+        return value.GetBoolean();
+    }
+
+    private static AutomationExecutionTarget ChatTarget(JsonElement args, TriggerCommandContext context, Automation? current = null)
+    {
+        if (args.EnumerateObject().Any(p => p.Name is "sessionId" or "targetSessionId" or "reportToSessionId" or "agentInstanceId" or "profileId"))
+            throw AgentCoreErrors.Validation("Core binds the destination; recipient identifiers are not permitted.");
+        if (!args.TryGetProperty("executionTarget", out var mode)) return current?.ExecutionTarget ?? throw AgentCoreErrors.Validation("An explicit executionTarget is required.");
+        return mode.GetString() switch { "currentSession" => AutomationExecutionTarget.Existing(context.SessionId),
+            "backgroundSession" => AutomationExecutionTarget.Background, _ => throw AgentCoreErrors.Validation("executionTarget must be currentSession or backgroundSession.") };
+    }
+    private static AutomationCompletionDelivery ChatDelivery(JsonElement args, TriggerCommandContext context, Automation? current = null)
+    {
+        var target = ChatTarget(args, context, current);
+        if (args.TryGetProperty("reportBack", out var report))
+        {
+            if (report.ValueKind is not (JsonValueKind.True or JsonValueKind.False) || target.Kind != AutomationExecutionTargetKind.BackgroundSession)
+                throw AgentCoreErrors.Validation("reportBack is only valid for backgroundSession.");
+            return report.GetBoolean() ? AutomationCompletionDelivery.ToSession(context.SessionId) : AutomationCompletionDelivery.None;
+        }
+        return target.Kind == AutomationExecutionTargetKind.ExistingSession ? AutomationCompletionDelivery.None : current?.CompletionDelivery ?? AutomationCompletionDelivery.None;
+    }
+
     internal static string RegistrationJson(Automation registration) =>
         JsonSerializer.Serialize(Projection(registration));
 
@@ -1104,6 +1134,8 @@ public static class TriggerScheduleCommands
         status = registration.Status.ToString(),
         name = registration.Name,
         instructions = registration.Instructions,
+        executionTarget = new { kind = registration.ExecutionTarget.Kind == AutomationExecutionTargetKind.ExistingSession ? "existingSession" : "backgroundSession", sessionId = registration.ExecutionTarget.SessionId },
+        completionDelivery = new { kind = registration.CompletionDelivery.SessionId is null ? "none" : "toSession", sessionId = registration.CompletionDelivery.SessionId },
         modelKey = registration.ModelOverrideCatalogKey,
         reasoningEffort = registration.ModelOverrideReasoningEffort,
         provenance = new { authorizationOrigin = registration.Provenance.AuthorizationOrigin.ToString(),

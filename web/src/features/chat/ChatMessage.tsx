@@ -1,3 +1,4 @@
+import { ConversationDestination } from "./AutomationDestination";
 import { Flex, Typography, theme } from "antd";
 import type { HistoryBlock, HistoryEntry, MemoryReceiptView } from "../../state/sessionStore";
 import { ArtifactView } from "./ArtifactView";
@@ -11,12 +12,14 @@ export function ChatMessage({
   entry,
   agentName,
   sessionId,
-  turnAnchor = false
+  turnAnchor = false,
+  backgroundSource = null
 }: {
   entry: HistoryEntry;
   agentName: string;
   sessionId: string | null;
   turnAnchor?: boolean;
+  backgroundSource?: string | null;
 }) {
   const { token } = theme.useToken();
   const isUser = entry.role === "user";
@@ -69,6 +72,7 @@ export function ChatMessage({
         {isApplication ? (
           <Typography.Text className="application-status">Still working</Typography.Text>
         ) : null}
+        {backgroundSource ? <Typography.Text type="secondary" className="chat-message-time">Background work completed · <ConversationDestination sessionId={backgroundSource} /></Typography.Text> : null}
         {timeLabel ? (
           <Typography.Text type="secondary" className="chat-message-time">
             <time dateTime={entry.createdAt}>{timeLabel}</time>

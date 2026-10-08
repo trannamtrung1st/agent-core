@@ -7,7 +7,7 @@ import { listModels } from "../../services/api";
 vi.mock("../../services/adminApi", () => ({ instanceContinuityRequest: vi.fn(), listEventSources: vi.fn(async () => []) }));
 vi.mock("../../services/api", () => ({ listModels: vi.fn() }));
 const request = vi.mocked(instanceContinuityRequest);
-const row: Automation = { automationId: "scheduled", revision: 2, name: "Review store orders", outcome: null, instructions: "Review store orders", enabled: true, status: "Active",
+const row: Automation = { executionTarget: { kind: "backgroundSession" }, completionDelivery: { kind: "none" }, automationId: "scheduled", revision: 2, name: "Review store orders", outcome: null, instructions: "Review store orders", enabled: true, status: "Active",
   trigger: { kind: "schedule", schedule: { kind: "daily", interval: 1, localTime: "09:00", timeZone: "UTC" } }, authorizationOrigin: "CurrentUserTurn",
   sourceSessionId: "source-session", sourceEventId: null, createdAt: "2026-10-05T00:00:00Z", nextRunAt: "2026-10-06T09:00:00Z",
   modelKey: null, reasoningEffort: null, effectiveModelKey: "scripted-alpha", lastAgentRunId: null, executionStatus: null };
@@ -76,7 +76,7 @@ describe("Owner schedule authoring", () => {
     fireEvent.change(within(section).getByRole("textbox", { name: "Search automations" }), { target: { value: "unique-chat-source" } });
     expect(await within(section).findByText("1 results")).toBeVisible();
     fireEvent.click(within(section).getByRole("button", { name: "View automation: Task 10" }));
-    expect(within(section).getByRole("region", { name: "Automation details" })).toHaveTextContent("unique-chat-source");
+    expect(within(section).getByRole("region", { name: "Automation details" })).toHaveTextContent("Conversation unique-c");
     fireEvent.click(within(section).getByRole("button", { name: "Disable automation" }));
     await waitFor(() => expect(request).toHaveBeenCalledWith("instance", "automations/schedule-10", "PUT",
       expect.objectContaining({ expectedRevision: 12, enabled: false })));
@@ -90,7 +90,7 @@ describe("Owner schedule authoring", () => {
     fireEvent.change(screen.getByLabelText("Schedule time zone"), { target: { value: "Asia/Ho_Chi_Minh" } });
     fireEvent.click(screen.getByRole("button", { name: "Create automation" }));
     await waitFor(() => expect(request).toHaveBeenCalledWith("instance", "automations", "POST", {
-      expectedRevision: 0, enabled: true, name: "Review orders", instructions: "Review pending orders", modelKey: null, reasoningEffort: null,
+      executionTarget: { kind: "backgroundSession" }, completionDelivery: { kind: "none" }, expectedRevision: 0, enabled: true, name: "Review orders", instructions: "Review pending orders", modelKey: null, reasoningEffort: null,
       trigger: { kind: "schedule", schedule: { kind: "daily", timeZone: "Asia/Ho_Chi_Minh", interval: 1, localTime: "09:00" } }
     }));
   });
@@ -112,7 +112,7 @@ describe("Owner schedule authoring", () => {
   it("preserves chat provenance and keeps accepted run locked across stale status until a new execution", async () => {
     let current = row; request.mockImplementation(async () => ({ items: [current] }));
     render(view()); fireEvent.click(await screen.findByText(row.name));
-    expect(screen.getByText(/Chat user request.*source-session/)).toBeVisible();
+    expect(screen.getByRole("link", { name: /Conversation source-s/ })).toBeVisible();
     expect(screen.getByText("Originally created from")).toBeVisible();
     const run = screen.getByRole("button", { name: "Run automation now" });
     await act(async () => { run.click(); run.click(); });
@@ -137,7 +137,7 @@ describe("Owner schedule authoring", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Enable automation" }));
     fireEvent.click(screen.getByRole("button", { name: "Save automation" }));
     await waitFor(() => expect(request).toHaveBeenCalledWith("instance", "automations/scheduled", "PUT", {
-      expectedRevision: 2, enabled: false, name: row.name, instructions: "Future orders", trigger: row.trigger, modelKey: null, reasoningEffort: null
+      executionTarget: row.executionTarget, completionDelivery: row.completionDelivery, requiresTools: undefined, requiresVision: undefined, expectedRevision: 2, enabled: false, name: row.name, instructions: "Future orders", trigger: row.trigger, modelKey: null, reasoningEffort: null
     }));
   });
   it("opens the exact source beyond pagination without discarding an editor draft", async () => {

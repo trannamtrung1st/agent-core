@@ -212,7 +212,7 @@ public sealed record SessionCatalogItemResponse(
     string? PauseReason = null,
     string? LifecycleStatus = null,
     string? AgentName = null,
-    string? AgentRole = null);
+    string? AgentRole = null, string? AgentInstanceId = null);
 
 public sealed record SessionCatalogPageResponse(
     IReadOnlyList<SessionCatalogItemResponse> Items,
@@ -266,7 +266,7 @@ public sealed record SessionAutomationResponse(
     string? NextOccurrenceAt,
     long Revision,
     string? SuspensionReason = null,
-    string Name = "");
+    string Name = "", AutomationExecutionTargetDto? ExecutionTarget = null, AutomationCompletionDeliveryDto? CompletionDelivery = null, string? AgentInstanceId = null);
 
 public sealed record SessionAutomationListResponse(IReadOnlyList<SessionAutomationResponse> Items);
 

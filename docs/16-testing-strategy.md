@@ -312,3 +312,11 @@ Native Infrastructure browser classes, including `LoopbackBrowserFixtureHostTest
 ## Browser v2 and AgentRun merge verification
 
 `BrowserLifecycleTests` recovers an expired in-flight browser mutation through AgentRun, requires a fresh snapshot, retains the blocked action hash after that snapshot and rejects the same action while allowing a different current ref. Its persistent-profile background scenario executes 26 snapshots and completes inside the 32-step/240-second budget. Domain recovery theories distinguish focused mutations from navigation. `BrowserScreenshotRecoveryTests` rehydrates owned screenshot artifacts for vision models, retains text-only receipts and rejects missing or foreign artifacts. Full local merge evidence and remaining hosted gates live in the [merge verification report](reports/branch-1-main-merge-verification.md).
+
+## Automation destination and report-back acceptance
+
+[The enhancement ledger](reports/automation-targets-background-reportback-verification.md) maps J01–J16 to executable tests and exact evidence. New API journeys inject a controllable clock for 30-second conversational scheduling, detach/reattach, unavailable destinations, recurring quiet/reporting children, foreign IDs, missing shapes and text-only model requirements. Store parity tests exercise exact-target transcript preservation, receipt replay and busy-Session serialization; coordinator tests cover refusal deferral without attempt consumption.
+
+Run full solution tests, frontend unit/build, core Synthetic/browser-stt/browser-browser and each isolated acceptance project, SQLite/Compose volume survival and current EF model checks. Playwright MCP verifies actual Chat authoring, exact-source Admin link, conditional destination/report controls, immediate report with Initiative off, truthful quiet status and report navigation. Batch representative 1440×900, 768×900 and 390×844 visual/keyboard review once, correct once and confirm once.
+
+Do not infer new acceptance from frozen milestone SHAs. All five hosted jobs must pass on the final behavior SHA. Optional live-provider/browser-service tests remain explicitly skipped without credentials; Synthetic/default acceptance requires none.

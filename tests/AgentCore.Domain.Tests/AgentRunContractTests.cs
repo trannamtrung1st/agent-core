@@ -543,6 +543,6 @@ public sealed class AgentRunContractTests
                 Guid.Parse("019944af-0008-7000-8000-000000000092"), kind, [], null,
                 sourceId ?? SourceId, null, null, "registration|1|1758600000000", Now),
                 "general-assistant", 10, new AgentIdentity("Alex", "Assistant", "Help", "Calm"),
-                Guid.Parse("019944af-0008-7000-8000-000000000093")),
+                Guid.Parse("019944af-0008-7000-8000-000000000093"), AgentRunOutputContract.BackgroundOutcome),
             new AgentRunModelPin("synthetic-default", "synthetic", "synthetic-small", null), maxAttempts, Now);
 }

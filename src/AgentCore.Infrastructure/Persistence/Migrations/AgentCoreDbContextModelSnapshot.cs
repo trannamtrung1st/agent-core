@@ -632,7 +632,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.HasIndex("ActivationId")
                         .IsUnique();
 
-                    b.HasIndex("SessionId");
+                    b.HasIndex("SessionId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_AgentRuns_SessionExecution")
+                        .HasFilter("Status IN (1, 2)");
 
                     b.HasIndex("Status", "NextRetryAtUtc", "CreatedAtUtc");
 
@@ -819,6 +822,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("ExecutionTargetKind")
+                        .HasColumnType("INTEGER");
+
                     b.Property<long?>("ExpiresAtUtc")
                         .HasColumnType("INTEGER");
 
@@ -851,6 +857,12 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ReportToSessionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("RequiresTools")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("RequiresVision")
                         .HasColumnType("INTEGER");
 
@@ -877,6 +889,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TargetSessionId")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("TriggerKind")
                         .HasColumnType("INTEGER");
 
@@ -894,7 +909,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Status", "NextOccurrenceAtUtc", "AutomationId");
 
-                    b.ToTable("Automations", (string)null);
+                    b.ToTable("Automations", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Automations_Destination", "(ExecutionTargetKind = 0 AND TargetSessionId IS NULL) OR (ExecutionTargetKind = 1 AND TargetSessionId IS NOT NULL AND ReportToSessionId IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.BackgroundCompletionReceiptRecord", b =>
@@ -1645,10 +1663,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("BackgroundSessionId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("ClaimId")
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
@@ -1672,6 +1686,13 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(4096)
                         .HasColumnType("TEXT");
+
+                    b.Property<string>("ExecutionSessionId")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ExecutionTargetKind")
+                        .HasColumnType("INTEGER");
 
                     b.Property<long?>("LiveEvaluationCompletedAtUtc")
                         .HasColumnType("INTEGER");
@@ -1707,6 +1728,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ReportToSessionId")
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("RoutingRevision")
                         .IsConcurrencyToken()
                         .HasColumnType("INTEGER");
@@ -1724,6 +1748,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<int>("SourceKind")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("TargetSessionId")
+                        .HasColumnType("TEXT");
+
                     b.Property<long?>("TriggerRevision")
                         .HasColumnType("INTEGER");
 
@@ -1733,9 +1760,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasFilter("AcceptedAgentRunId IS NOT NULL");
 
-                    b.HasIndex("BackgroundSessionId")
-                        .IsUnique()
-                        .HasFilter("BackgroundSessionId IS NOT NULL");
+                    b.HasIndex("ExecutionSessionId");
 
                     b.HasIndex("LiveSessionId");
 
@@ -1748,7 +1773,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.ToTable("TriggerOccurrences", null, t =>
                         {
-                            t.HasCheckConstraint("CK_TriggerOccurrences_BackgroundLink", "(BackgroundSessionId IS NULL AND AcceptedAgentRunId IS NULL) OR (BackgroundSessionId IS NOT NULL AND LiveSessionId IS NULL AND AcceptedAgentRunId IS NOT NULL) OR (BackgroundSessionId IS NULL AND LiveSessionId IS NOT NULL AND AcceptedAgentRunId IS NOT NULL AND LiveEvaluationCompletedAtUtc IS NOT NULL)");
+                            t.HasCheckConstraint("CK_TriggerOccurrences_Destination", "(ExecutionTargetKind = 0 AND TargetSessionId IS NULL) OR (ExecutionTargetKind = 1 AND TargetSessionId IS NOT NULL AND ReportToSessionId IS NULL)");
+
+                            t.HasCheckConstraint("CK_TriggerOccurrences_ExecutionLink", "(ExecutionSessionId IS NULL AND AcceptedAgentRunId IS NULL) OR (ExecutionSessionId IS NOT NULL AND LiveSessionId IS NULL AND AcceptedAgentRunId IS NOT NULL) OR (ExecutionSessionId IS NULL AND LiveSessionId IS NOT NULL AND AcceptedAgentRunId IS NOT NULL AND LiveEvaluationCompletedAtUtc IS NOT NULL)");
                         });
                 });
 
@@ -1869,7 +1896,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasOne("AgentCore.Infrastructure.Persistence.SessionRecord", null)
                         .WithMany()
-                        .HasForeignKey("BackgroundSessionId")
+                        .HasForeignKey("ExecutionSessionId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AgentCore.Infrastructure.Persistence.SessionRecord", null)

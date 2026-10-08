@@ -5,11 +5,13 @@ import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 import { AdminRetryAction } from "./adminFailure";
 
 /** Owner conversation browsing shared by session-scoped Memory and Experience. */
-export function AdminSessionPicker({ instanceId, value, onChange, disabled = false }: {
+export function AdminSessionPicker({ instanceId, value, onChange, disabled = false, eligibleOnly = false, label = "Source conversation" }: {
   instanceId: string;
   value: string;
   onChange: (sessionId: string) => void;
   disabled?: boolean;
+  eligibleOnly?: boolean;
+  label?: string;
 }) {
   const { token } = theme.useToken();
   const [manual, setManual] = useState(false);
@@ -52,6 +54,10 @@ export function AdminSessionPicker({ instanceId, value, onChange, disabled = fal
     try {
       const session = await getSession(sessionId);
       if (generation !== order.current) return;
+      if (eligibleOnly && (["ended", "ending"].includes(session.status.toLowerCase()) || ["completed", "cancelled", "expired", "ended"].includes((session.lifecycleStatus ?? "").toLowerCase())
+        || session.status.toLowerCase() === "paused" && !["disconnected", "recovered"].includes(session.pauseReason ?? ""))) {
+        setError({ message: "Choose an active conversation. Paused, ended and archived conversations cannot receive scheduled work." }); return;
+      }
       if (session.agentInstanceId !== instanceId) {
         setError({ message: "This conversation belongs to another instance. Choose a conversation for this instance or enter its Session ID." });
         return;
@@ -62,10 +68,12 @@ export function AdminSessionPicker({ instanceId, value, onChange, disabled = fal
     } finally { if (generation === order.current) { pending.current = false; setLoading(false); } }
   }
 
-  const labels = items.map(item => {
+  const labels = items.filter(item => !eligibleOnly || (item.agentInstanceId === instanceId && !item.archived && !item.ended
+    && !["completed", "cancelled", "expired", "ended"].includes((item.lifecycleStatus ?? "").toLowerCase())
+    && (item.status.toLowerCase() !== "paused" || ["disconnected", "recovered"].includes(item.pauseReason ?? "")))).map(item => {
     const timestamp = new Date(item.updatedAt);
     const date = Number.isFinite(timestamp.getTime()) ? timestamp.toLocaleString() : "Date unavailable";
-    const label = `${item.title || item.agentName || "Untitled conversation"} · ${date}`;
+    const label = `${item.title || item.agentName || "Untitled conversation"} · ${date}${eligibleOnly ? ` · ${item.sessionId.slice(0, 8)}` : ""}`;
     return { value: item.sessionId, label, title: `${label} · ${item.sessionId}`,
       searchText: `${label} ${item.agentName ?? ""} ${item.agentId} ${item.sessionId}` };
   });
@@ -73,7 +81,7 @@ export function AdminSessionPicker({ instanceId, value, onChange, disabled = fal
     {manual ? <Form.Item label="Session ID" style={{ marginBottom: 0 }}>
       <Input aria-label="Session ID" value={value} disabled={disabled}
         placeholder="Paste a conversation Session ID" onChange={event => onChange(event.target.value)} />
-    </Form.Item> : <Select aria-label="Source conversation" showSearch allowClear value={value || null}
+    </Form.Item> : <Select aria-label={label} showSearch allowClear value={value || null}
       placeholder="Choose a conversation by name or date" loading={loading} disabled={disabled}
       options={labels} optionFilterProp="searchText" style={{ width: "100%" }}
       onOpenChange={open => { if (open && !loaded) void load(); }} onChange={id => void choose(id)}

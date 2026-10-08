@@ -172,6 +172,24 @@ public sealed class AgentRunCoordinatorTests
         Assert.Equal(1, await f.Coordinator.ExecuteRunnableAsync(8));
     }
 
+    [Fact]
+    public async Task Refused_unstarted_dispatch_defers_without_consuming_attempts_or_spinning_until_the_lease()
+    {
+        var f = await Fixture.CreateAsync();
+        f.Dispatcher.Accept = false;
+        Assert.False(await f.Coordinator.DispatchAsync(Owner, f.Run.AgentRunId));
+        var deferred = (await f.Store.GetAsync(Owner, f.Run.AgentRunId))!;
+        Assert.Equal(AgentRunStatus.WaitingToRetry, deferred.Status);
+        Assert.Equal(0, deferred.AttemptCount);
+        Assert.Null(deferred.Claim);
+        Assert.Equal(Now.AddSeconds(5), deferred.NextRetryAtUtc);
+        Assert.Equal(0, await f.Coordinator.ExecuteRunnableAsync(8));
+        Assert.Single(f.Dispatcher.Dispatched);
+        f.Time.Advance(TimeSpan.FromSeconds(5)); f.Dispatcher.Accept = true;
+        Assert.Equal(1, await f.Coordinator.ExecuteRunnableAsync(8));
+        Assert.Equal(1, (await f.Store.GetAsync(Owner, f.Run.AgentRunId))!.AttemptCount);
+    }
+
     private static SessionSnapshot Snapshot()
     {
         var entries = new[] { "Check A", "Check B" }.Select((text, index) => new ConversationEntry(Guid.NewGuid(), index + 1,
@@ -191,13 +209,14 @@ public sealed class AgentRunCoordinatorTests
         public List<AgentRun> Dispatched { get; } = [];
         public Exception? Error { get; set; }
         public Guid? MissingSession { get; set; }
+        public bool Accept { get; set; } = true;
         public ValueTask<bool> RepairPendingInputsAsync(Guid sessionId, CancellationToken ct = default) => ValueTask.FromResult(false);
         public ValueTask<bool> DispatchAsync(AgentRun run, CancellationToken cancellationToken = default)
         {
             Dispatched.Add(run);
             if (run.SessionId == MissingSession) throw AgentCoreErrors.NotFound("Session was not found.");
             if (Error is { } exception) throw exception;
-            return ValueTask.FromResult(true);
+            return ValueTask.FromResult(Accept);
         }
     }
 
