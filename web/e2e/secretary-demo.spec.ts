@@ -114,8 +114,17 @@ test.describe('Morgan secretary Synthetic journey', () => {
     expect(names).not.toContain('experience.recent');
     await editor.getByRole('tab', { name: 'Capabilities', exact: true }).click();
     for (const tool of ['knowledge.retrieve', 'automation.create', 'automation.inspect', 'automation.disable', 'automation.run', 'automation.list', 'automation.update', 'automation.delete',
-      'browser.navigate', 'browser.snapshot', 'browser.click', 'browser.type']) {
+      'browser.navigate', 'browser.snapshot', 'browser.find', 'browser.click', 'browser.type']) {
       const select = editor.getByRole('combobox', { name: 'Authorized capabilities', exact: true });
+      await select.click(); await select.fill(tool);
+      await page.locator('.ant-select-item-option').filter({ hasText: tool }).last().click();
+      await page.keyboard.press('Escape');
+    }
+    // The deterministic schedule fixture requires its tool schema immediately;
+    // authorization alone intentionally does not project an advanced tool.
+    for (const tool of ['automation.create', 'automation.inspect', 'automation.disable', 'automation.run',
+      'automation.list', 'automation.update', 'automation.delete']) {
+      const select = editor.getByRole('combobox', { name: 'Always projected capabilities', exact: true });
       await select.click(); await select.fill(tool);
       await page.locator('.ant-select-item-option').filter({ hasText: tool }).last().click();
       await page.keyboard.press('Escape');
