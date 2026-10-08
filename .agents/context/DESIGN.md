@@ -125,7 +125,7 @@ components:
 
 # Design System: Agent Core
 
-This file is lightweight MVP **presentation** guidance only. Screens, copy, and behavior stay in [Frontend Implementation](../../docs/13-frontend-implementation-spec.md); `/docs` wins on conflicts. The current component source, `antdTheme`, `AppShell` and `app.css` supply the visual values recorded here. The [verification report](../../docs/reports/activation-agent-run-background-sessions-verification.md) distinguishes completed component/fixture checks from pending Synthetic backend and hosted acceptance.
+This file is lightweight MVP **presentation** guidance only. Screens, copy, and behavior stay in [Frontend Implementation](../../docs/13-frontend-implementation-spec.md); `/docs` wins on conflicts. The current component source, `antdTheme`, `AppShell` and `app.css` supply the visual values recorded here. The [verification report](../../docs/reports/activation-agent-run-background-sessions-verification.md) distinguishes completed component, runtime and backend checks from pending final hosted acceptance.
 
 ## Overview
 

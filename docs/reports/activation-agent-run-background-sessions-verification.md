@@ -4,7 +4,7 @@
 
 The user approved destructive legacy retirement and disposable demo reset on 2026-10-08. The implementation is complete enough to run the shared production path; final regression and exact-SHA hosted acceptance remain in progress. This report supersedes the earlier foundation-only and retirement-blocked status. No final freeze is claimed before the remaining gates pass.
 
-Reviewed starting main: `bd44046896df6f3e0fc2e7d15d60dd479a5349cd`. Foundation commit: `f98dbb6236ab976b5e2923e00a47ec90a140cf1e`. Final candidate SHA and hosted workflow are recorded after verification.
+Reviewed starting main: `bd44046896df6f3e0fc2e7d15d60dd479a5349cd`. Foundation commit: `f98dbb6236ab976b5e2923e00a47ec90a140cf1e`. Final behavior candidate: `ef5109ff955c477838084f0c3da0dccaaf68b38a`. Hosted workflow [37742655032](https://github.com/trannamtrung1st/agent-core/actions/runs/37742655032) verifies that exact SHA; all five jobs must succeed before closure.
 
 ## Implementation and retirement
 
@@ -54,7 +54,7 @@ Legacy test retirement preserves behavior under canonical owners: domain work tr
 
 The bounded Impeccable inspection and confirmation used the actual shared components at 1440×900, 768×900 and 390×844. Local evidence is under `local/verification/agent-run-layout-preview/`: `agent-run-catalog-final-{1440,768,390}.png`, `agent-run-history-final-{1440,768,390}.png` and `agent-run-admin-final-{1440,768,390}.png`. Shared Ant Design v6 tokens, operational drawer geometry, status text/icons, bounded reading regions, narrow-screen action targets and focus return were synchronized in the product design context. Functional browser fixtures cover approval expiry, cancelled/failed/retrying details, source navigation, pagination error/retry and same-Session Continue in chat. No second UI kit or composer context feature was introduced.
 
-Canonical architecture, interfaces, event routing, implementation, frontend, protocol, persistence, testing and operations documents now describe the same owners. Historical freeze reports and migration sources remain unchanged. Link/anchor/fence validation checked 22 changed Markdown documents with zero issues; `git diff --check` passed.
+Canonical architecture, interfaces, event routing, implementation, frontend, protocol, persistence, testing and operations documents now describe the same owners. Historical freeze reports and migration sources remain unchanged. Link/anchor/fence validation checked 22 changed Markdown documents with zero issues, and all 15 canonical JSON examples parsed; `git diff --check` passed.
 
 ## Gate ledger
 
@@ -63,10 +63,10 @@ Canonical architecture, interfaces, event routing, implementation, frontend, pro
 | Frontend unit | 98 files, 743 tests passed (`NODE_OPTIONS=--no-experimental-webstorage pnpm run test --run --maxWorkers=1`) |
 | Frontend build | TypeScript/Vite passed; existing chunk-size warning remains |
 | Focused current store/runtime | 65 store cases, 62 runtime cases, 26 receipt/retry cases and 12 fast-admission/durability cases passed before final instrumentation |
-| Full backend | Domain 161 and order-event plugin 4 passed; Infrastructure 809 passed, 15 opt-in/environment skips; Application 1,303 passed, one opt-in skip on the final cleanup fence; final API gate in progress |
-| API regression | Prior 360 passed, 3 opt-in skips; retry cleanup race corrected and 22 recovery/reattach cases passed; final full rerun in progress |
-| Browser | Prior primary 111/117 passed; all six failures corrected and focused batch 10 passed with paging setup corrected. Phase batch 14/16 passed; remaining secretary assertion corrected. Final primary/secretary reruns in progress |
-| Compose/SQLite volume | Passed on the current SkiaSharp Release image; final candidate also requires hosted Compose |
-| Exact-SHA hosted | Pending candidate commit/push and all five Synthetic jobs |
+| Full backend | Domain 161 and order-event plugin 4 passed; Infrastructure 809 passed, 15 opt-in/environment skips; Application 1,303 passed, one opt-in skip on the final cleanup fence; API 361 passed, three opt-in skips |
+| API regression | Final full suite 361 passed, three opt-in skips; retry cleanup race corrected and 22 focused recovery/reattach cases passed |
+| Browser | Prior primary 111/117 passed; all six failures corrected and focused batch 10 passed with paging setup corrected. All 16 phase journeys passed across corrected reruns, including all four secretary cases. Final full primary rerun in progress; automatic-scroll cursor error/retry and Admin paging both pass in the isolated two-case rerun |
+| Compose/SQLite volume | Final Release image and SQLite restart passed locally; exact-SHA hosted Compose passed |
+| Exact-SHA hosted | Candidate pushed; workflow 37742655032 running all five jobs |
 
 Opt-in hosted provider/nopCommerce checks are not part of default key-free acceptance. Default Synthetic makes no paid provider calls. Manual audible headset quality is outside this cutover's automated evidence. Until the full browser/backend/phase and exact-SHA gates pass, this report remains an in-progress acceptance record.

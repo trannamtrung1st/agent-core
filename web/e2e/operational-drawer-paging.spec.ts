@@ -22,11 +22,11 @@ test('background Session pages retry, retain read state and remain usable on mob
   await page.getByRole('button', { name: 'Background work, 3 need attention', exact: true }).click();
   let drawer = page.getByRole('dialog', { name: 'Background work', exact: true });
   await expect(drawer.locator('.background-work-item')).toHaveCount(20);
-  await drawer.getByRole('button', { name: 'Load more', exact: true }).click();
+  await drawer.locator('.ant-drawer-body').evaluate(element => { element.scrollTop = element.scrollHeight; });
   await expect(drawer.getByText('Unable to load older Sessions. Try again.')).toBeVisible();
   await drawer.getByRole('button', { name: 'Try again', exact: true }).click();
   await expect(drawer.locator('.background-work-item')).toHaveCount(40);
-  await drawer.getByRole('button', { name: 'Load more', exact: true }).click();
+  await drawer.locator('.ant-drawer-body').evaluate(element => { element.scrollTop = element.scrollHeight; });
   await expect(drawer.locator('.background-work-item')).toHaveCount(45);
   await drawer.getByRole('button', { name: 'Review 44', exact: true }).click();
   drawer = page.getByRole('dialog', { name: 'Review 44', exact: true });
