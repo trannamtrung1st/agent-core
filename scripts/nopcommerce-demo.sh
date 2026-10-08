@@ -7,7 +7,13 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 
 project="nopcommerce-demo"
-compose=(docker compose -p "$project" -f "$root/docker-compose.nopcommerce.yml")
+# Compose writes progress to stderr. Redraw it in terminals; avoid repeated
+# Starting/Waiting lines when output is captured by an IDE or redirected.
+progress=quiet
+if [[ -t 2 && "${TERM:-dumb}" != dumb ]]; then
+  progress=tty
+fi
+compose=(docker compose --progress "$progress" -p "$project" -f "$root/docker-compose.nopcommerce.yml")
 origin="http://127.0.0.1:5088"
 seed="$root/deploy/nopcommerce/seed/demo-conditions.sql"
 env_file="$root/.env"
@@ -310,6 +316,7 @@ PY
 
 bring_up() {
   prepare_env
+  echo "Starting nopCommerce demo containers..."
   "${compose[@]}" up -d
   # A previously running web process can cache a failed SQL/DNS connection
   # while the database is restarting. Restart it after Compose confirms SQL
