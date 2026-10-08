@@ -1398,6 +1398,16 @@ Full architectural cutover is closed/frozen on `9c2d40e0`; all five [exact-SHA h
 - [x] A–F: explicit immutable destination/delivery and output contracts, transactional target admission, headless execution, serialized claims, shared reporting, trusted authoring and shared UI.
 - [x] G: canonical architecture/API/persistence and product/design documentation synchronized; new deterministic API/parity tests and bounded real-browser review.
 - [x] Complete full local Synthetic/Compose and frontend gates and record results in [verification](docs/reports/automation-targets-background-reportback-verification.md). Final Compose rebuild/recreation passed after disk-pressure recovery; final prompt/tool checks passed 73 Application, 24 API, 12 Infrastructure and 3 browser cases.
-- [ ] Commit/push the final behavior candidate only after local gates pass; record all five exact-SHA hosted jobs before freezing.
+- [x] Commit/push the final behavior candidate only after local gates pass; record all five exact-SHA hosted jobs before freezing.
+
+**Closed/frozen on verified behavior `53c0c2fe9f87f28e866e80a2ff48127b5dbda3e8` (`53c0c2fe`), 2026-10-08.** [Hosted workflow `37781579245`](https://github.com/trannamtrung1st/agent-core/actions/runs/37781579245) passed all five jobs on that exact SHA in its first attempt. This closure bookkeeping changes TODO only and does not move the verified behavior freeze.
+
+- [Synthetic backend](https://github.com/trannamtrung1st/agent-core/actions/runs/37781579245/job/113325720392): passed.
+- [Synthetic frontend](https://github.com/trannamtrung1st/agent-core/actions/runs/37781579245/job/113325720142): passed.
+- [Synthetic Playwright core](https://github.com/trannamtrung1st/agent-core/actions/runs/37781579245/job/113325720674): passed.
+- [Synthetic Playwright acceptance](https://github.com/trannamtrung1st/agent-core/actions/runs/37781579245/job/113325720446): passed.
+- [Synthetic Compose smoke](https://github.com/trannamtrung1st/agent-core/actions/runs/37781579245/job/113325720633): passed.
+
+Hosted results: 2,718 backend cases passed with 20 optional live/store/sandbox probes skipped; 745 frontend tests and build passed; 120 core browser scenarios and all 16 phase-acceptance scenarios passed; Compose persisted destination/delivery, Sessions/Runs and durable assets through recreation. Local coverage additionally passed the sandbox probes and four plugin tests. Full local outcomes, resolved retries, J01–J16 mapping and 1440/768/390 screenshots remain in the [verification report](docs/reports/automation-targets-background-reportback-verification.md).
 
 Historical AgentRun/Browser v2 freezes remain unchanged; P10/P11 remain unopened.
