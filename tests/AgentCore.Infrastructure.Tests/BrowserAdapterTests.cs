@@ -47,6 +47,7 @@ public sealed class BrowserFailureClassifierTests
         Assert.Equal(interrupted, BrowserFailureClassifier.IsInterruptedNavigation(message));
 }
 
+[Collection(BrowserChromiumCollection.Name)]
 public sealed class LoopbackBrowserFixtureHostTests
 {
     [Fact]

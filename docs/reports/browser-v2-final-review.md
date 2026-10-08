@@ -59,3 +59,7 @@ All five jobs passed on exact source/test SHA `c9375843845ec08cc3bb596d02d7ba0fc
 | Synthetic Compose | Owner-capability, SQLite volume and durable resource survival passed. |
 
 The bounded five-finding follow-up and its CI corrections are verified. The subsequent report-only commit changes no source or tests; the verified behavior remains the SHA above. Journey L is explicitly unverified, the PR remains draft, and the broader migration freeze remains open.
+
+## Remaining fixture collection follow-up
+
+The next review identified `LoopbackBrowserFixtureHostTests` in `BrowserAdapterTests.cs` as one remaining native Chromium class outside `browser-chromium`. Add the existing collection annotation to this class. No production source, assertions, deadlines, grants or architecture change. Its focused six-test run passed with no skips, exercising assigned loopback ports, same-origin navigation, accepted/rejected/oversized downloads, denied navigation without launch and safe fixture bind/missing-page failures. Required exact-SHA CI is pending for this annotation; the `c9375843` green result above remains historical evidence.
