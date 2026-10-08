@@ -124,3 +124,6 @@ Definitions own immutable reusable Skills. Instances store enabled choices and i
 ## Browser v2 active cutover
 
 The current runtime uses Application-owned `IBrowser`, native accessibility snapshots/full-index search, focused tools and explicit provider feature support. New broad-assistant/secretary seeds use capability-aware Browser projection. Credentials and persistent profiles retain their owner and secret-sink boundaries. See [the current contract](docs/04-backend-interfaces.md#browser-v2-contract). Full local key-free gates pass. All five exact-candidate hosted jobs pass. The real-model generic-fixture proof still requires payload authorization and remains the closure gate; see [the verification ledger](docs/reports/browser-v2-full-cutover-verification.md). Historical browser freezes remain unchanged.
+
+
+[Browser v2 completeness and polish](docs/reports/browser-v2-completeness-and-polish.md) accounts for the current official MCP operations, targeted environment/inspection enhancements and deliberate advanced exclusions. New catalog features preserve exact Definition authorization; existing immutable seeds and local settings are unchanged.

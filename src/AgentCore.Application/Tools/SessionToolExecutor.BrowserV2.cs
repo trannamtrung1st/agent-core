@@ -19,10 +19,10 @@ public sealed partial class SessionToolExecutor
         if (!ValidateBrowserShape(args, schema.RootElement)) return Fail("invalid", "Browser arguments do not match the bounded tool schema.");
         var denied = await BindBrowserAsync(sessionId, admission, ct).ConfigureAwait(false);
         if (denied is not null) return TextResult(FinishBrowser(name, started, denied));
-        if (browser is not { IsAvailable: true }) return Fail("provider_unavailable", "Browser is unavailable.");
+        if (browser is null || !browser.IsAvailable && metadata.Feature != BrowserFeature.Configuration) return Fail("provider_unavailable", "Browser is unavailable.");
         if (!browser.Provider.Supports(metadata.Feature)) return Fail("unsupported_operation", "The active provider does not support this feature.");
         if (metadata.Feature == BrowserFeature.VisionMouse && admission?.SupportsVision != true) return Fail("forbidden", "Coordinate actions require a vision model.");
-        if (metadata.Feature is BrowserFeature.Evaluate or BrowserFeature.FillCredential
+        if (metadata.Feature is BrowserFeature.Evaluate or BrowserFeature.FillCredential or BrowserFeature.Geolocation
             && admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn }) return Fail("forbidden", "This feature requires a direct attached user turn.");
         if (name == ToolCatalog.BrowserNavigate) return FitResult(remainingOutputBytes, await NavigateBrowserAsync(sessionId, args, admission, ct));
         if (name == ToolCatalog.BrowserSnapshot && !args.EnumerateObject().Any()) return FitResult(remainingOutputBytes, await SnapshotBrowserAsync(sessionId, args, admission, ct));
@@ -41,11 +41,12 @@ public sealed partial class SessionToolExecutor
             if (name == ToolCatalog.BrowserType) { node["value"] = node["text"]!.DeepClone(); node.Remove("text"); }
             var submit = node["submit"]?.GetValue<bool>() == true;
             node.Remove("submit");
+            node.Remove("slowly");
             if (name == ToolCatalog.BrowserClick && node.Count > 1)
                 return await Command();
             node["operation"] = operation;
             using var translated = JsonDocument.Parse(node.ToJsonString());
-            if (submit) return await Command();
+            if (submit || args.TryGetProperty("slowly", out var slowly) && slowly.GetBoolean()) return await Command();
             return FitResult(remainingOutputBytes, await InteractBrowserAsync(name, definition, sessionId, translated.RootElement, admission, ct));
         }
         if (name == ToolCatalog.BrowserUpload)
@@ -92,7 +93,10 @@ public sealed partial class SessionToolExecutor
 
     private static bool ValidateBrowserShape(JsonElement value, JsonElement schema)
     {
-        var type = schema.GetProperty("type").GetString();
+        var types = schema.GetProperty("type");
+        if (types.ValueKind == JsonValueKind.Array && value.ValueKind == JsonValueKind.Null)
+            return types.EnumerateArray().Any(t => t.GetString() == "null");
+        var type = types.ValueKind == JsonValueKind.Array ? types.EnumerateArray().First(t => t.GetString() != "null").GetString() : types.GetString();
         if (type == "object")
         {
             if (value.ValueKind != JsonValueKind.Object) return false;

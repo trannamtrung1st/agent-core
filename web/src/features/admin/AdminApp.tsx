@@ -3023,6 +3023,7 @@ export function EffectiveConfigView({
           <Typography.Title level={5}>Browser provider</Typography.Title>
           <Descriptions {...detailLayout} bordered size="small" column={1}>
             <Descriptions.Item label="Provider">{config.browser.displayName} ({config.browser.providerId})</Descriptions.Item>
+            <Descriptions.Item label="Engine">{config.browser.engine || "Unknown"}</Descriptions.Item>
             <Descriptions.Item label="Readiness">{!config.browser.enabled ? "Disabled" : config.browser.ready ? "Ready" : "Unavailable"}</Descriptions.Item>
             <Descriptions.Item label="Profile mode">{config.browser.profileMode}</Descriptions.Item>
             <Descriptions.Item label="Policy mode">{config.browser.policyMode}</Descriptions.Item>

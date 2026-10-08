@@ -501,3 +501,7 @@ Ordinary `skills.list/inspect/create/update/set_enabled/delete/customize` use th
 ### Definition draft Automation policy number errors
 
 Draft create/update returns HTTP 400 for missing required, fractional, unreadable or out-of-range integer Automation policy limits. The optional minimum fixed interval retains its 60-second default when omitted. The existing validation problem includes `field` (for example `triggerPolicy.minRecurrenceDays`), `validationCode: "invalid_integer"` (or `"out_of_range"` for a whole number outside its bounds), and an actionable `detail`: “Minimum recurrence days must be a whole number from 1 to 365.” The same mapping applies to max active registrations, one-shot horizon days and minimum fixed interval seconds using their canonical bounds. Rejected draft updates do not change persisted candidate content or revision.
+
+## Browser provider inspection projection
+
+The existing owner-authorized Admin effective-configuration response includes additive `browser.engine` (first-party `chromium`, default `unknown` for an unspecified provider). Existing readiness, feature names, profile/policy modes and limits retain their meaning. They report support, not role grants. No protocol event or public debug endpoint is added. Model inspection and environment tool arguments/results are owned by [the Browser port contract](04-backend-interfaces.md#browser-v2-contract); provider handles, private paths and secrets never cross the HTTP boundary.

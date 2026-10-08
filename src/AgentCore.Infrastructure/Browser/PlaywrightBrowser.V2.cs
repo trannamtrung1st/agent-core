@@ -17,8 +17,8 @@ public sealed partial class PlaywrightBrowser
         BrowserFeature.SelectOption, BrowserFeature.PressKey, BrowserFeature.Upload, BrowserFeature.FillCredential,
         BrowserFeature.Wait, BrowserFeature.Tabs, BrowserFeature.Dialog, BrowserFeature.Close, BrowserFeature.Screenshot,
         BrowserFeature.NetworkControl, BrowserFeature.Storage, BrowserFeature.Resize, BrowserFeature.Console, BrowserFeature.NetworkInspect, BrowserFeature.Testing,
-        BrowserFeature.VisionMouse, BrowserFeature.Highlight, BrowserFeature.Media
-    });
+        BrowserFeature.VisionMouse, BrowserFeature.Highlight, BrowserFeature.Media, BrowserFeature.Configuration, BrowserFeature.Geolocation
+    }) { Engine = "chromium" };
 
     private static string? FindPageId(SessionBrowser session) => OpenPages(session).FirstOrDefault(x => ReferenceEquals(x.Page, session.Page))?.Id;
     private static string? String(JsonElement args, string key) => args.TryGetProperty(key, out var item) && item.ValueKind == JsonValueKind.String ? item.GetString() : null;
@@ -27,7 +27,10 @@ public sealed partial class PlaywrightBrowser
     public async ValueTask<BrowserCommandResult> ExecuteAsync(BrowserCommand command, CancellationToken cancellationToken = default)
     {
         if (!BrowserToolCatalog.TryGet(command.Tool, out var metadata) || !Provider.Supports(metadata.Feature)) return new("unsupported_operation");
-        if (!IsAvailable || !_sessions.TryGetValue(command.SessionId, out var session)) return new("provider_unavailable");
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!IsAvailable) return command.Tool == ToolCatalog.BrowserConfiguration ? Configuration(null) : new("provider_unavailable");
+        if (!_sessions.TryGetValue(command.SessionId, out var session))
+            return command.Tool == ToolCatalog.BrowserConfiguration ? Configuration(null) : new("provider_unavailable");
         if (command.Tool == "browser.screenshot")
         {
             var capture = await CaptureViewportAsync(new BrowserScreenshotRequest(command.SessionId, String(command.Arguments, "format") ?? "png",
@@ -46,6 +49,7 @@ public sealed partial class PlaywrightBrowser
         BrowserCommandResult Data(object value) => new(null, DataJson: JsonSerializer.Serialize(value));
         try
         {
+            if (command.Tool == ToolCatalog.BrowserConfiguration) return Configuration(session);
             if (session.Dialog is not null && command.Tool != "browser.dialog") return new("dialog_pending");
             if (!IsAllowed(session, session.Page.Url)) return new("target_denied");
             var readsOnly = metadata.Effect == ToolEffect.ReadOnly || command.Tool == "browser.tabs" && String(args, "operation") == "list"
@@ -54,6 +58,8 @@ public sealed partial class PlaywrightBrowser
                 session.Page.Url, _policy.EffectiveInteractionOrigins, _policy.PolicyMode).Allowed) return new("forbidden");
             switch (command.Tool)
             {
+                case "browser.set_geolocation":
+                    return await GeolocationAsync(session, args, ct);
                 case "browser.snapshot":
                     {
                         ILocator? scope = null;
@@ -205,7 +211,15 @@ public sealed partial class PlaywrightBrowser
                         await Action(target.ClickAsync(new LocatorClickOptions { Timeout = TimeoutMs(), ClickCount = Int(args, "clickCount", 1), Button = Enum.Parse<MouseButton>(String(args, "button") ?? "left", true), Modifiers = modifiers })); break;
                     }
                 case "browser.type":
-                    { var target = await Target(String(args, "ref")); if (target is null) return new("stale_reference"); if (!await Ordinary(target)) return new("unsupported_operation"); await Action(target.FillAsync(String(args, "text")!, new LocatorFillOptions { Timeout = TimeoutMs() })); if (args.TryGetProperty("submit", out var submit) && submit.GetBoolean()) await Action(target.PressAsync("Enter", new LocatorPressOptions { Timeout = TimeoutMs() })); break; }
+                    {
+                        var target = await Target(String(args, "ref")); if (target is null) return new("stale_reference");
+                        if (!await Ordinary(target)) return new("unsupported_operation");
+                        await Action(target.FillAsync(args.TryGetProperty("slowly", out var slowly) && slowly.GetBoolean() ? "" : String(args, "text")!, new LocatorFillOptions { Timeout = TimeoutMs() }));
+                        if (slowly.ValueKind == JsonValueKind.True)
+                            await Action(target.PressSequentiallyAsync(String(args, "text")!, new LocatorPressSequentiallyOptions { Timeout = TimeoutMs() }));
+                        if (args.TryGetProperty("submit", out var submit) && submit.GetBoolean()) await Action(target.PressAsync("Enter", new LocatorPressOptions { Timeout = TimeoutMs() }));
+                        break;
+                    }
                 case "browser.drop":
                     {
                         if (args.TryGetProperty("artifactId", out _)) return new("unsupported_operation");
@@ -214,7 +228,17 @@ public sealed partial class PlaywrightBrowser
                         await Action(target.EvaluateAsync("(el, data) => { const transfer = new DataTransfer(); transfer.setData(data.mime, data.text); el.dispatchEvent(new DragEvent('drop', {bubbles:true,dataTransfer:transfer})); }", new { mime = String(args, "mimeType") ?? "text/plain", text })); break;
                     }
                 case "browser.highlight":
-                    { var target = await Target(String(args, "ref")); if (target is null) return new("stale_reference"); await target.HighlightAsync().WaitAsync(ct); return Data(new { status = "ok" }); }
+                    {
+                        var operation = String(args, "operation") ?? "show";
+                        if (operation is not ("show" or "hide")) return new("invalid");
+                        if (operation == "hide" && String(args, "ref") is null) await session.Page.HideHighlightAsync().WaitAsync(ct);
+                        else
+                        {
+                            var target = await Target(String(args, "ref")); if (target is null) return new("stale_reference");
+                            await (operation == "hide" ? target.HideHighlightAsync() : target.HighlightAsync()).WaitAsync(ct);
+                        }
+                        return Data(new { status = "ok" });
+                    }
                 case "browser.generate_locator":
                     {
                         var target = await Target(String(args, "ref")); if (target is null) return new("stale_reference");
@@ -242,7 +266,13 @@ public sealed partial class PlaywrightBrowser
                             case "click": await Action(session.Page.Mouse.ClickAsync(x, y)); break;
                             case "down": await session.Page.Mouse.MoveAsync(x, y).WaitAsync(ct); await Action(session.Page.Mouse.DownAsync()); break;
                             case "up": await Action(session.Page.Mouse.UpAsync()); break;
-                            case "wheel": await session.Page.Mouse.WheelAsync(x, y).WaitAsync(ct); break;
+                            case "wheel":
+                                if (!args.TryGetProperty("deltaX", out var dx) && !args.TryGetProperty("deltaY", out _)) return new("invalid");
+                                var deltaX = dx.ValueKind == JsonValueKind.Number ? dx.GetSingle() : 0;
+                                var deltaY = args.TryGetProperty("deltaY", out var dy) ? dy.GetSingle() : 0;
+                                if (!float.IsFinite(deltaX) || !float.IsFinite(deltaY) || Math.Abs(deltaX) > 2000 || Math.Abs(deltaY) > 2000) return new("invalid");
+                                await session.Page.Mouse.MoveAsync(x, y).WaitAsync(ct);
+                                await Action(session.Page.Mouse.WheelAsync(deltaX, deltaY)); break;
                             case "drag":
                                 var tx = args.GetProperty("targetX").GetSingle(); var ty = args.GetProperty("targetY").GetSingle(); if (tx > viewport.Width || ty > viewport.Height) return new("invalid");
                                 if (!await SafePoint(tx, ty)) return new("target_denied");
@@ -252,12 +282,7 @@ public sealed partial class PlaywrightBrowser
                         break;
                     }
                 case "browser.emulate_media":
-                    await session.Page.EmulateMediaAsync(new PageEmulateMediaOptions
-                    {
-                        Media = String(args, "media") == "print" ? Media.Print : Media.Screen,
-                        ColorScheme = String(args, "colorScheme") == "dark" ? ColorScheme.Dark : ColorScheme.Light,
-                        ReducedMotion = String(args, "reducedMotion") == "reduce" ? ReducedMotion.Reduce : ReducedMotion.NoPreference
-                    }).WaitAsync(ct); break;
+                    await EmulateMediaAsync(session, args, ct, Action); break;
                 case "browser.console_messages":
                     {
                         var secrets = await CollectSecretsAsync(session, ct); string[] messages;

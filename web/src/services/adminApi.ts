@@ -47,6 +47,7 @@ export type AdminEffectiveConfiguration = {
     profileMode: string;
     policyMode: string;
     supportedFeatures: string[];
+    engine?: string;
     maxSnapshotChars: number;
     maxCaptureBytes: number;
     maxDownloadBytes: number;

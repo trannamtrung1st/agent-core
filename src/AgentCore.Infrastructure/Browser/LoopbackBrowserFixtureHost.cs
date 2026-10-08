@@ -315,6 +315,12 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
                 await context.Response.OutputStream.WriteAsync(bytes).ConfigureAwait(false);
                 return;
             }
+            if (path == "/browser-v2-worker.js")
+            {
+                context.Response.ContentType = "application/javascript";
+                await context.Response.OutputStream.WriteAsync(Encoding.UTF8.GetBytes("self.addEventListener('fetch', event => event.respondWith(new Response('worker intercepted')));"));
+                return;
+            }
             if (path == "/browser-v2-download")
             {
                 context.Response.ContentType = "text/plain";

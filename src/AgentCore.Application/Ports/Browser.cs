@@ -205,10 +205,11 @@ public sealed record BrowserScreenshotResult(
 
 public sealed record BrowserCloseResult(string Status);
 
-public enum BrowserFeature { Navigate, Snapshot, Find, Click, Hover, Drag, Drop, Type, FillForm, SelectOption, PressKey, Upload, FillCredential, Wait, Tabs, Dialog, Resize, Close, Screenshot, Console, NetworkInspect, NetworkControl, Storage, StorageState, Testing, VisionMouse, Pdf, Trace, Highlight, Media, Video, Evaluate }
+public enum BrowserFeature { Navigate, Snapshot, Find, Click, Hover, Drag, Drop, Type, FillForm, SelectOption, PressKey, Upload, FillCredential, Wait, Tabs, Dialog, Resize, Close, Screenshot, Console, NetworkInspect, NetworkControl, Storage, StorageState, Testing, VisionMouse, Pdf, Trace, Highlight, Media, Video, Evaluate, Configuration, Geolocation }
 
 public sealed record BrowserProviderDescriptor(string ProviderId, string DisplayName, IReadOnlySet<BrowserFeature> SupportedFeatures)
 {
+    public string Engine { get; init; } = "unknown";
     public bool Supports(BrowserFeature feature) => SupportedFeatures.Contains(feature);
 }
 

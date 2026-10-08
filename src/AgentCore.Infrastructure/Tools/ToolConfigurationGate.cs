@@ -11,7 +11,9 @@ public sealed class ToolConfigurationGate(
     IBrowser? browserSession = null,
     bool browserEnabled = false) : IToolConfigurationGate
 {
-    public bool IsExecutionConfigured(string toolName) => ToolCatalog.IsBrowserTool(toolName)
+    public bool IsExecutionConfigured(string toolName) => toolName == ToolCatalog.BrowserConfiguration
+        ? browserSession is not null
+        : ToolCatalog.IsBrowserTool(toolName)
         ? browserEnabled && browserSession is { IsAvailable: true }
             && browserSession is IBrowserRuntimeReadiness { IsRuntimeReady: true }
         : IsConfigured(toolName);
@@ -23,6 +25,7 @@ public sealed class ToolConfigurationGate(
             ToolCatalog.WebFetch => publicWebFetcher is not null,
             ToolCatalog.EmailSearch or ToolCatalog.EmailRead or ToolCatalog.EmailCreateDraft or ToolCatalog.EmailSend
                 => emailProvider?.IsAvailable == true,
+            ToolCatalog.BrowserConfiguration => browserSession?.Provider.Supports(BrowserFeature.Configuration) == true,
             _ when ToolCatalog.IsBrowserTool(toolName) =>
                 browserEnabled
                 && browserSession is { IsAvailable: true }

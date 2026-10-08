@@ -1247,18 +1247,20 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
         }
 
         var browser = await EnsureBrowserAsync(cancellationToken).ConfigureAwait(false);
-        var context = await browser.NewContextAsync(new BrowserNewContextOptions { AcceptDownloads = true })
+        var environmentOptions = ContextOptions(_playwright!);
+        var context = await browser.NewContextAsync(environmentOptions)
             .WaitAsync(cancellationToken)
             .ConfigureAwait(false);
         await context.AddInitScriptAsync(BrowserPageSettle.InitScript).WaitAsync(cancellationToken).ConfigureAwait(false);
         var page = await context.NewPageAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
         page.SetDefaultTimeout(TimeoutMs());
         page.SetDefaultNavigationTimeout(TimeoutMs());
-        var session = new SessionBrowser(context, page);
+        var session = new SessionBrowser(context, page) { Environment = DescribeEnvironment(environmentOptions) };
         RememberPage(session, page);
         context.Close += (_, _) => ForgetClosed(session);
         context.Page += (_, opened) => OnContextPage(session, opened);
         await context.RouteAsync("**/*", route => RouteAsync(session, route)).ConfigureAwait(false);
+        await context.RouteWebSocketAsync("**/*", socket => RouteWebSocket(session, socket)).ConfigureAwait(false);
         if (!_sessions.TryAdd(sessionId, session))
         {
             await CloseQuietlyAsync(context).ConfigureAwait(false);
@@ -1317,10 +1319,20 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
                 }
 
                 playwright = await Playwright.CreateAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+                var environmentOptions = ContextOptions(playwright);
                 var options = new BrowserTypeLaunchPersistentContextOptions
                 {
                     Headless = _options.Headless,
                     AcceptDownloads = true,
+                    ViewportSize = environmentOptions.ViewportSize,
+                    ScreenSize = environmentOptions.ScreenSize,
+                    Locale = environmentOptions.Locale,
+                    TimezoneId = environmentOptions.TimezoneId,
+                    IsMobile = environmentOptions.IsMobile,
+                    HasTouch = environmentOptions.HasTouch,
+                    DeviceScaleFactor = environmentOptions.DeviceScaleFactor,
+                    UserAgent = environmentOptions.UserAgent,
+                    ServiceWorkers = ServiceWorkerPolicy.Block,
                     Args = ["--disable-popup-blocking"]
                 };
                 if (!string.IsNullOrWhiteSpace(_options.Channel))
@@ -1354,12 +1366,14 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
                     Persistent = true,
                     ProfileLease = lease,
                     PlaywrightDriver = playwright,
-                    AgentInstanceId = agentInstanceId
+                    AgentInstanceId = agentInstanceId,
+                    Environment = DescribeEnvironment(environmentOptions)
                 };
                 RememberPage(session, page);
                 context.Close += (_, _) => ForgetClosed(session);
                 context.Page += (_, opened) => OnContextPage(session, opened);
                 await context.RouteAsync("**/*", route => RouteAsync(session, route)).ConfigureAwait(false);
+                await context.RouteWebSocketAsync("**/*", socket => RouteWebSocket(session, socket)).ConfigureAwait(false);
                 _persistent[agentInstanceId] = session;
                 lease = null;
                 playwright = null;
@@ -1415,6 +1429,7 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
                     Headless = _options.Headless,
                     Args = ["--disable-popup-blocking"]
                 };
+                if (!string.IsNullOrWhiteSpace(_options.Channel)) options.Channel = _options.Channel;
                 _browser = await _playwright.Chromium.LaunchAsync(options).WaitAsync(cancellationToken).ConfigureAwait(false);
                 LaunchedHeadless = options.Headless;
                 return _browser;
@@ -2852,6 +2867,7 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
         lock (session.PopupGate)
         {
             session.Pages.RemoveAll(item => ReferenceEquals(item.Page, page));
+            session.Media.Remove(page);
         }
     }
 
@@ -3164,6 +3180,10 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
 
     private sealed class SessionBrowser(IBrowserContext context, IPage page)
     {
+        public BrowserEnvironment Environment { get; init; } = new(null, "en-US", TimeZoneInfo.Local.Id, false, false, 1);
+        public Dictionary<IPage, PageEmulateMediaOptions> Media { get; } = new();
+        public string? GeolocationOrigin { get; set; }
+        public bool Offline { get; set; }
         public IDialog? Dialog { get; set; }
         public TaskCompletionSource DialogSignal { get; set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Task? PendingAction { get; set; }

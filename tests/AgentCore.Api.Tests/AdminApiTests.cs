@@ -158,6 +158,8 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         Assert.NotNull(config);
         Assert.Equal("scripted-alpha", config!.UnattendedModelCatalogKey);
         Assert.Equal("low", config.UnattendedReasoningEffort);
+        Assert.NotNull(config.Browser);
+        Assert.Equal("chromium", config.Browser.Engine);
     }
 
     [Fact]

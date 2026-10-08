@@ -25,7 +25,7 @@ public sealed partial class PlaywrightBrowser
         }
         if (command.Tool == "browser.routes") { lock (session.PopupGate) return Data(new { rules = session.Rules.Select(r => new { ruleRef = r.Id, origin = SafeNetworkUrl(r.Url), action = r.Action }) }); }
         if (command.Tool == "browser.unroute") { lock (session.PopupGate) { var removed = session.Rules.RemoveAll(r => r.Id == String(args, "ruleRef")); return removed == 0 ? new("invalid") : Data(new { status = "ok" }); } }
-        if (command.Tool == "browser.network_state") { await session.Context.SetOfflineAsync(args.GetProperty("online").GetBoolean() == false).WaitAsync(ct); return Data(new { status = "ok" }); }
+        if (command.Tool == "browser.network_state") { ct.ThrowIfCancellationRequested(); await MutateContextAsync(session, session.Context.SetOfflineAsync(args.GetProperty("online").GetBoolean() == false), ct); session.Offline = !args.GetProperty("online").GetBoolean(); ct.ThrowIfCancellationRequested(); return Data(new { status = "ok" }); }
         if (command.Tool == "browser.cookies")
         {
             var cookies = await session.Context.CookiesAsync([origin]).WaitAsync(ct);
