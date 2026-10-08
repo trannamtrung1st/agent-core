@@ -343,6 +343,7 @@ public sealed partial class PlaywrightBrowser
         async Task Action(Task action)
         {
             activeAction = action;
+            ActionStartedProbe?.Invoke();
             if (await Task.WhenAny(action, session.DialogSignal.Task).WaitAsync(ct) != action)
             {
                 session.PendingAction = action;

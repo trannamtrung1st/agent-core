@@ -39,3 +39,7 @@ One intermediate solution run, while another native suite was running, also expo
 | Documentation | Interface/backend behavior, capability matrix and testing strategy synchronized; relative links/fences in six changed documents and `git diff --check` passed. No local configuration/secret paths changed. |
 
 Historical full-cutover real-model Journey L remains an explicit open gate. No live-provider inference is authorized or executed by this review, and no full migration freeze is claimed. Previous enhancement/review evidence remains historical at its named SHA.
+
+## Exact-candidate CI follow-up
+
+The backend job on `59406e9406feebebf434f8c507924926b87bf6ba` in [run 37738079867](https://github.com/trannamtrung1st/agent-core/actions/runs/37738079867) failed the generic native-form cancellation recovery assertion. Its fixed 200 ms cancellation timer could expire during validation before a pending provider action existed; that boundary correctly invalidates refs without resetting the page. The test nevertheless expected a fresh page. Replace the timer with an internal action-entry acknowledgement, then cancel the genuinely pending disabled-button click. Keep the stale-ref and fresh-page assertions unchanged. This hook is test-visible only and adds no public debugger or execution capability. All four native Browser v2 journey tests passed locally after this correction; the replacement exact-SHA hosted run remains required.

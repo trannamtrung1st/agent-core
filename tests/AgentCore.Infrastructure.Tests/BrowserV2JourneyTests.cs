@@ -65,9 +65,15 @@ public sealed class BrowserV2JourneyTests
             Assert.Null(mouse.ErrorCode);
             Assert.Contains("Visual target clicked", mouse.Snapshot!.VisibleText);
             var waiting = await Find("Waiting action");
-            using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await browser.ExecuteAsync(
-                new(id, "browser.click", JsonSerializer.SerializeToElement(new { @ref = waiting, clickCount = 1 })), cancel.Token));
+            var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            browser.ActionStartedProbe = () => started.TrySetResult();
+            using var cancel = new CancellationTokenSource();
+            var pending = browser.ExecuteAsync(
+                new(id, "browser.click", JsonSerializer.SerializeToElement(new { @ref = waiting, clickCount = 1 })), cancel.Token).AsTask();
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            cancel.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+            browser.ActionStartedProbe = null;
             Assert.Equal("stale_reference", (await Run("browser.click", new { @ref = waiting, clickCount = 1 })).ErrorCode);
             var recovered = await Run("browser.snapshot", new { }); Assert.Null(recovered.ErrorCode);
             Assert.Contains("Nothing selected", recovered.Snapshot!.VisibleText);

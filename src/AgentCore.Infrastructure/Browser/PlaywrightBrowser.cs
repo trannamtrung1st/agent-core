@@ -159,6 +159,7 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
 
     internal Func<Exception?>? CaptureProbe { get; set; }
     internal Func<IPage, int, int, Task>? ResizeProbe { get; set; }
+    internal Action? ActionStartedProbe { get; set; }
 
     public PlaywrightBrowser(
         BrowserOptions options,
