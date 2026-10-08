@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { waitForSessionAttached } from "./support/session-attached";
 import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 
 test.describe.configure({ mode: "serial" });
@@ -33,7 +34,7 @@ test("approval survives refresh and resumes the same durable execution", async (
   expect(before?.executionId).toBeTruthy();
 
   await page.reload();
-  await expect.poll(() => page.evaluate(() => window.__agentCore?.sessionConnection?.()), { timeout: 15_000 }).toBe("ready");
+  await waitForSessionAttached(page);
   await expect(page.getByTestId("connection")).toHaveText("Running tools…");
   await expect(modal).toBeVisible({ timeout: 30_000 });
   const after = await page.evaluate(() => window.__agentCore?.conversationExecution?.());

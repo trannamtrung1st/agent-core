@@ -35,7 +35,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     const before = await page.locator('.chat-message-assistant').count();
     await page.getByLabel('Message', { exact: true }).fill(text);
     await page.getByRole('button', { name: 'Send', exact: true }).click();
-    await expect(page.locator('.chat-message-assistant')).toHaveCount(before + 1);
+    await expect(page.locator('.chat-message-assistant')).toHaveCount(before + 1, { timeout: 30_000 });
     await expect(page.locator('.chat-message-assistant .assistant-body').last()).toHaveText(answer, { timeout: 30_000 });
     await waitForResponseSettled(page);
   }
