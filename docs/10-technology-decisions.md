@@ -23,7 +23,7 @@ Use deterministic lexical discovery through one `capabilities.load` bootstrap. P
 
 ## Decision: one Agent Instance and workspace model
 
-Every Session requires a real active Agent Instance at creation and pins its active Definition/persona. Every instance owns durable `/home`; every Session owns temporary `/working`. The runtime catalog contains only current supported built-ins, including capability-aware General Assistant v17 with `background.start`. Unsupported historical versions remain in Git history. A fresh Chat with no instances directs the owner to Admin. No identity backfill, Definition-based Session creation, version fallback or workspace mode discriminator exists.
+Every Session requires a real active Agent Instance at creation and pins its active Definition/persona. Every instance owns durable `/home`; every Session owns temporary `/working`. The runtime catalog contains only current supported built-ins, including capability-aware General Assistant v18 with `background.start`. Unsupported historical versions remain in Git history. A fresh Chat with no instances directs the owner to Admin. No identity backfill, Definition-based Session creation, version fallback or workspace mode discriminator exists.
 
 Choose transient mailbox-owned Session cwd with `/home` initialization and deterministic reset on runtime reconstruction. Reject moving/deleting cwd or ancestors. Resolve relative model paths from cwd within an authorized logical root; `/agent` and `/attachments` are read-only. HTTP execution-view paths default to `/home`, independent of runtime cwd. Sandbox remains explicitly `/working`-oriented through its private adapter mount; a home sandbox mount remains deferred.
 

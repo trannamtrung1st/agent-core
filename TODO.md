@@ -10,7 +10,7 @@
 - [x] Full local regression checks passed after documented reruns; final Infrastructure 897 passed/9 optional skips.
 - [x] Follow-up consistency review: fix same-Session artifact Run-filter race; synchronize Impeccable preview/brief; repeat focused storage/API/frontend and live Synthetic review.
 - [x] Final local cleanup: scope Admin capability/evaluation options to their owning combobox, rename `latestRun` to `initialRun` without an alias, correct commit/workflow records and move this section below the main heading. Local checks: 3 API, 57 frontend, 8 browser journeys and build passed.
-- [ ] Exact-behavior-SHA hosted CI: original changes were committed/pushed as `afe01cef`; workflow [37824587611](https://github.com/trannamtrung1st/agent-core/actions/runs/37824587611) reported an Admin acceptance selector failure. Local final cleanup is tracked below; waiting for hosted results is outside the requested scope. See [verification ledger](docs/reports/background-original-result-verification.md); no closure claim until required gates pass.
+- [ ] Exact-behavior-SHA hosted CI: the original `afe01cef` run reported an Admin selector failure; all five later jobs passed on `20ae66f3` ([37839955829](https://github.com/trannamtrung1st/agent-core/actions/runs/37839955829)). The native-browser follow-up review fixed a direct-store/runtime checkpoint race in the SQLite verification fixture, so fresh exact-head CI is required. See [verification ledger](docs/reports/background-original-result-verification.md); no closure claim until required gates pass.
 
 
 ## Durable completion inbox, result handoff and wait — closed successor
@@ -47,7 +47,7 @@ This requirement does not reopen historical freezes or start P10/P11. The migrat
 
 User-authorized on `develop/branch-1` at baseline `75bf40aaaaba5a256d528d9e3feeb25c7a967b0d`. The implementation replaces indexed Browser v2 with one typed neutral port, direct native Locator discovery, native subtree observations, bounded opaque refs and unchanged owner/security/effect boundaries. General Assistant v18 and Secretary v6 publish the new guidance. P10/P11 remain unopened. Historical Browser v2 acceptance and freezes remain in their reports; they do not verify this cutover.
 
-Acceptance is **pending** until the full local backend/frontend, native Chromium/Synthetic Runtime, Admin/Chat, explicit real-model proof and all five hosted Synthetic jobs pass on the exact final behavior SHA. [The verification ledger](docs/reports/native-playwright-wrapper-verification.md) records current commands/results, exclusions, deletion audit and unrun gates. No owner data was reset.
+Local backend/frontend, native Chromium/Synthetic Runtime, Admin/Chat and all five hosted Synthetic jobs passed on behavior `20ae66f3` ([hosted evidence](https://github.com/trannamtrung1st/agent-core/actions/runs/37839955829)). The follow-up browser review requires fresh exact-head verification. Acceptance remains **pending** until that verification and the explicitly authorized configured-model proof pass; the paid-model journey remains unrun. [The verification ledger](docs/reports/native-playwright-wrapper-verification.md) records current commands/results, exclusions, deletion audit and unrun gates. No owner data was reset.
 
 ## Frozen phases
 

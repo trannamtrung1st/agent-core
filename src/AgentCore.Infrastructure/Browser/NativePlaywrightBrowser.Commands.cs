@@ -168,7 +168,10 @@ public sealed partial class NativePlaywrightBrowser
                         if (condition is "text" or "textGone")
                         {
                             if (text is null) return new("invalid");
-                            await session.Page.GetByText(text, new PageGetByTextOptions { Exact = false }).First.WaitForAsync(new LocatorWaitForOptions
+                            // A hidden first match must neither block an existing visible match
+                            // nor prove that every matching text has disappeared.
+                            await session.Page.GetByText(text, new PageGetByTextOptions { Exact = false })
+                                .Filter(new() { Visible = true }).First.WaitForAsync(new LocatorWaitForOptions
                             { State = condition == "text" ? WaitForSelectorState.Visible : WaitForSelectorState.Hidden, Timeout = (args.TimeoutMs ?? 2500) }).WaitAsync(ct);
                         }
                         else if (condition == "target")
@@ -209,18 +212,22 @@ public sealed partial class NativePlaywrightBrowser
                         : session.Page.SetViewportSizeAsync((args.Width ?? 1280), (args.Height ?? 800))); break;
                 case BrowserOperation.FillForm:
                     {
-                        var fields = new List<(ILocator Target, string? Value, bool? Checked)>();
+                        var fields = new List<(string Ref, string? Value, bool? Checked)>();
                         foreach (var field in args.Fields ?? [])
                         {
                             if ((field.Value is not null) == (field.Checked is not null)) return new("invalid");
                             var target = await Target(field.Ref); if (target is null) return new("stale_reference");
                             if (!await Ordinary(target)) return new("forbidden");
-                            fields.Add((target, field.Value, field.Checked));
+                            fields.Add((field.Ref, field.Value, field.Checked));
                         }
                         foreach (var field in fields)
                         {
-                            if (field.Checked is bool check) await Action(field.Target.SetCheckedAsync(check, new LocatorSetCheckedOptions { Timeout = TimeoutMs() }));
-                            else if (field.Value is { } value) await Action(field.Target.FillAsync(value, new LocatorFillOptions { Timeout = TimeoutMs() }));
+                            // Earlier input handlers may rerender, duplicate or protect a later field.
+                            // Retain all-field preflight and recheck the live authority before each effect.
+                            var target = await Target(field.Ref); if (target is null) return new("stale_reference");
+                            if (!await Ordinary(target)) return new("forbidden");
+                            if (field.Checked is bool check) await Action(target.SetCheckedAsync(check, new LocatorSetCheckedOptions { Timeout = TimeoutMs() }));
+                            else if (field.Value is { } value) await Action(target.FillAsync(value, new LocatorFillOptions { Timeout = TimeoutMs() }));
                             else return new("invalid");
                         }
                         break;
@@ -251,8 +258,17 @@ public sealed partial class NativePlaywrightBrowser
                         if (!await Ordinary(target)) return new("forbidden");
                         await Action(target.FillAsync(args.Slowly == true ? "" : args.Text!, new LocatorFillOptions { Timeout = TimeoutMs() }));
                         if (args.Slowly == true)
+                        {
+                            target = await Target(args.Ref); if (target is null) return new("stale_reference");
+                            if (!await Ordinary(target)) return new("forbidden");
                             await Action(target.PressSequentiallyAsync(args.Text!, new LocatorPressSequentiallyOptions { Timeout = TimeoutMs() }));
-                        if (args.Submit == true) await Action(target.PressAsync("Enter", new LocatorPressOptions { Timeout = TimeoutMs() }));
+                        }
+                        if (args.Submit == true)
+                        {
+                            target = await Target(args.Ref); if (target is null) return new("stale_reference");
+                            if (!await Ordinary(target)) return new("forbidden");
+                            await Action(target.PressAsync("Enter", new LocatorPressOptions { Timeout = TimeoutMs() }));
+                        }
                         break;
                     }
                 case BrowserOperation.Drop:

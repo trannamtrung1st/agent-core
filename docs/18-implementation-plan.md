@@ -16,7 +16,7 @@ The final behavior commit must have all required hosted Synthetic/Compose jobs g
 
 User-authorized on `develop/branch-1` at baseline `75bf40aaaaba5a256d528d9e3feeb25c7a967b0d`. The implementation replaces indexed Browser v2 with one typed neutral port, direct native Locator discovery, native subtree observations, bounded opaque refs and unchanged owner/security/effect boundaries. General Assistant v18 and Secretary v6 publish the new guidance. P10/P11 remain unopened. Historical Browser v2 acceptance and freezes remain in their reports; they do not verify this cutover.
 
-Acceptance is **pending** until the full local backend/frontend, native Chromium/Synthetic Runtime, Admin/Chat, explicit real-model proof and all five hosted Synthetic jobs pass on the exact final behavior SHA. [The verification ledger](reports/native-playwright-wrapper-verification.md) records current commands/results, exclusions, deletion audit and unrun gates. No owner data was reset.
+Local backend/frontend, native Chromium/Synthetic Runtime, Admin/Chat and all five hosted Synthetic jobs passed on behavior `20ae66f3` ([hosted evidence](https://github.com/trannamtrung1st/agent-core/actions/runs/37839955829)). The follow-up browser review requires fresh exact-head verification. Acceptance remains **pending** until that verification and the explicitly authorized configured-model proof pass; the paid-model journey remains unrun. [The verification ledger](reports/native-playwright-wrapper-verification.md) records current commands/results, exclusions, deletion audit and unrun gates. No owner data was reset.
 
 ## Historical Browser v2 completeness and polish
 
@@ -29,7 +29,7 @@ This user-authorized follow-on composes with the completed Agent Workspace refin
 
 ## Post-filesystem managed workspace refinement
 
-The workspace refinement is superseded by the authorized full migration: one real Agent Instance owner per Session, durable `/home`, temporary `/working`, transient mailbox cwd and canonical copy/move contracts. Runtime built-ins are current versions only; retired immutable files remain in Git. General Assistant v17 combines capability-aware Browser v2 projection with explicitly authorized `background.start`. Existing phase freezes remain historical; P10/P11 remain unopened.
+The workspace refinement is superseded by the authorized full migration: one real Agent Instance owner per Session, durable `/home`, temporary `/working`, transient mailbox cwd and canonical copy/move contracts. Runtime built-ins are current versions only; retired immutable files remain in Git. General Assistant v18 combines capability-aware native Browser projection with explicitly authorized `background.start`. Existing phase freezes remain historical; P10/P11 remain unopened.
 
 Full migration acceptance requires mandatory ownership and empty Chat guidance; exact file/tree cross-root copy, the four-file c#→csharp rename, CAS and lifecycle conflicts, Artifact delivery, Session deletion and owner deletion recovery; legacy-data rejection; full backend/frontend tests/build, Synthetic Playwright, Compose recreation, synchronized normative docs and hosted CI. See the migration verification report for the current measured gate status. Cwd persistence, cross-store batches and home sandbox mounts remain deferred.
 
