@@ -238,7 +238,7 @@ public sealed class ProductPublishWorkflowTests
         var agents = new InMemoryAgentInstanceStore();
         agents.InsertAsync(new AgentInstance(instanceId, definition.Id, definition.Version, definition.Identity,
             AgentInstanceLifecycle.Active, now, now), initialSkills: definition.SkillList).AsTask().GetAwaiter().GetResult();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder(ToolConfigurationGates.AllowAll, browser)),

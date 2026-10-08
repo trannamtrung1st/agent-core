@@ -179,7 +179,7 @@ public sealed class AgentStepUserTurnAdmissionTests
         snapshot = RuntimeAgentRunStore.WithPins(snapshot);
         turns.Bind(store);
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             brain ?? new DefaultAgentBrain(new PromptContextBuilder()),

@@ -798,7 +798,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
             Assert.NotEqual("provider_unavailable", popped.ErrorCode);
             var current = await session.GetCurrentUrlAsync(workSession);
             Assert.StartsWith(storeOrigin, current?.AbsoluteUri ?? string.Empty, StringComparison.Ordinal);
-            Assert.Single(session.ContextFor(workSession)!.Pages);
+            Assert.Single(session.ContextFor(workSession)!.Pages.ToArray());
 
             session.ExpectInteractive(agent);
             Task<BrowserOperationResult> waiting;

@@ -278,7 +278,7 @@ public sealed class QueuedAttachmentRuntimeTests
             store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         }
 
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),

@@ -25,7 +25,7 @@ public sealed class GenerationRetryTests
         await using var runtime = Create(model, browser: null);
         await runtime.AttachAsync();
         Assert.True(await runtime.SubmitUserTextAsync("hello"));
-        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        await SessionRuntimeFixture.SettleRetriesAsync(runtime);
 
         Assert.Equal(2, model.Calls);
         var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
@@ -42,7 +42,7 @@ public sealed class GenerationRetryTests
         await using var runtime = Create(model, browser: null);
         await runtime.AttachAsync();
         Assert.True(await runtime.SubmitUserTextAsync("hello"));
-        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        await SessionRuntimeFixture.SettleRetriesAsync(runtime);
 
         Assert.Equal(1, model.Calls);
         Assert.Equal(EntryStatus.Failed,
@@ -54,13 +54,14 @@ public sealed class GenerationRetryTests
     {
         var model = new ScriptedModel(
             [new ModelFailed(TimeoutFailure(ProviderFailureReason.SetupTimeout))],
+            [new ModelFailed(TimeoutFailure(ProviderFailureReason.SetupTimeout))],
             [new ModelFailed(TimeoutFailure(ProviderFailureReason.SetupTimeout))]);
         await using var runtime = Create(model, browser: null);
         await runtime.AttachAsync();
         Assert.True(await runtime.SubmitUserTextAsync("hello"));
-        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        await SessionRuntimeFixture.SettleRetriesAsync(runtime);
 
-        Assert.Equal(2, model.Calls);
+        Assert.Equal(3, model.Calls);
         var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
         Assert.Equal(EntryStatus.Failed, assistant.Status);
         Assert.Equal(ProviderFailureReason.SetupTimeout, assistant.Failure!.FailureReason);
@@ -87,7 +88,7 @@ public sealed class GenerationRetryTests
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("check zigwheels"));
-        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        await SessionRuntimeFixture.SettleRetriesAsync(runtime);
 
         Assert.Equal(3, model.Calls);
         Assert.Equal(["https://zigwheels.test/"], browser.Navigated);
@@ -97,7 +98,7 @@ public sealed class GenerationRetryTests
     }
 
     [Fact]
-    public async Task Each_follow_up_generation_can_retry_once()
+    public async Task Durable_attempts_preserve_completed_browser_rounds()
     {
         var browser = new CountingBrowser();
         var model = new ScriptedModel(
@@ -122,7 +123,7 @@ public sealed class GenerationRetryTests
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("check two pages"));
-        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        await SessionRuntimeFixture.SettleRetriesAsync(runtime);
 
         Assert.Equal(5, model.Calls);
         Assert.Equal(["https://zigwheels.test/a", "https://zigwheels.test/b"], browser.Navigated);
@@ -145,7 +146,7 @@ public sealed class GenerationRetryTests
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("close the browser"));
-        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        await SessionRuntimeFixture.SettleRetriesAsync(runtime);
 
         Assert.Equal(1, browser.CloseCalls);
         Assert.Equal(
@@ -154,18 +155,19 @@ public sealed class GenerationRetryTests
     }
 
     [Fact]
-    public async Task Second_transient_failure_is_terminal()
+    public async Task Attempt_bound_makes_repeated_transient_failure_terminal()
     {
         var model = new ScriptedModel(
             [new ModelFailed(Unavailable(ProviderFailureReason.Http5xx))],
+            [new ModelFailed(Unavailable(ProviderFailureReason.StreamIncomplete))],
             [new ModelFailed(Unavailable(ProviderFailureReason.StreamIncomplete))]);
         await using var runtime = Create(model, browser: null);
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("hello"));
-        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        await SessionRuntimeFixture.SettleRetriesAsync(runtime);
 
-        Assert.Equal(2, model.Calls);
+        Assert.Equal(3, model.Calls);
         var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
         Assert.Equal(EntryStatus.Failed, assistant.Status);
     }
@@ -184,7 +186,7 @@ public sealed class GenerationRetryTests
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("hello"));
-        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        await SessionRuntimeFixture.SettleRetriesAsync(runtime);
 
         Assert.Equal(1, model.Calls);
         Assert.Equal(
@@ -193,16 +195,19 @@ public sealed class GenerationRetryTests
     }
 
     [Fact]
-    public async Task Open_circuit_is_not_retried()
+    public async Task Open_circuit_uses_bounded_durable_retries()
     {
-        var model = new ScriptedModel([new ModelFailed(Unavailable(ProviderFailureReason.CircuitOpen))]);
+        var model = new ScriptedModel(
+            [new ModelFailed(Unavailable(ProviderFailureReason.CircuitOpen))],
+            [new ModelFailed(Unavailable(ProviderFailureReason.CircuitOpen))],
+            [new ModelFailed(Unavailable(ProviderFailureReason.CircuitOpen))]);
         await using var runtime = Create(model, browser: null);
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("hello"));
-        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        await SessionRuntimeFixture.SettleRetriesAsync(runtime);
 
-        Assert.Equal(1, model.Calls);
+        Assert.Equal(3, model.Calls);
     }
 
     [Theory]
@@ -223,7 +228,7 @@ public sealed class GenerationRetryTests
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("hello"));
-        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        await SessionRuntimeFixture.SettleRetriesAsync(runtime);
 
         Assert.Equal(1, model.Calls);
     }
@@ -233,7 +238,7 @@ public sealed class GenerationRetryTests
     [InlineData(ProviderErrorCode.Timeout, ProviderFailureReason.StreamIdle)]
     [InlineData(ProviderErrorCode.Timeout, ProviderFailureReason.SetupTimeout)]
     [InlineData(ProviderErrorCode.Unavailable, ProviderFailureReason.Http5xx)]
-    public async Task Failure_with_an_admitted_call_is_not_retried(ProviderErrorCode code, string reason)
+    public async Task Incomplete_tool_batch_has_no_effect_and_releases_the_run_for_retry(ProviderErrorCode code, string reason)
     {
         var browser = new CountingBrowser();
         var model = new ScriptedModel(
@@ -249,6 +254,7 @@ public sealed class GenerationRetryTests
 
         Assert.True(await runtime.SubmitUserTextAsync("check zigwheels"));
         await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(await runtime.HasOpenAgentRunsAsync());
 
         Assert.Equal(1, model.Calls);
         Assert.Empty(browser.Navigated);
@@ -262,9 +268,10 @@ public sealed class GenerationRetryTests
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("hello"));
+        Assert.True(await SessionRuntimeFixture.DispatchRetryAsync(runtime));
         await model.RetryStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await runtime.CancelActiveResponseAsync();
-        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        await SessionRuntimeFixture.SettleRetriesAsync(runtime);
 
         Assert.Equal(2, model.Calls);
         Assert.Equal(EntryStatus.Interrupted, Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
@@ -326,7 +333,7 @@ public sealed class GenerationRetryTests
                 null), AgentInstanceId: Guid.NewGuid());
         var store = new InMemoryMemoryStore();
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder(ToolConfigurationGates.AllowAll, browser)),

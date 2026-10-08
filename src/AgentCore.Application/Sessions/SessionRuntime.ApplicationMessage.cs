@@ -68,13 +68,6 @@ public sealed partial class SessionRuntime
         }
 
         var bound = _boundAgentRun!;
-        if (_agentRuns is null)
-        {
-            return ApplicationMessageMailboxResult.Failed(
-                ApplicationMessageAdmission.Error("forbidden", "Application message requires a conversation execution."),
-                "denied");
-        }
-
         var current = await _agentRuns.GetAsync(bound.Owner, bound.AgentRunId, cancellationToken).ConfigureAwait(false);
         if (current is null
             || current.Revision != bound.Revision

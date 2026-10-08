@@ -19,7 +19,7 @@ public sealed partial class SessionRuntime
         AgentRunOutcomeKind kind, string summary, CancellationToken ct)
     {
         var run = _boundAgentRun;
-        if (_agentRuns is null || run?.Claim is null) return false;
+        if (run?.Claim is null) return false;
         var accepted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         BeginWork();
         if (!Enqueue(new AgentRunOutcomeReceived(WorkerContext(cause), responseId, run.AgentRunId,
@@ -31,7 +31,7 @@ public sealed partial class SessionRuntime
     {
         try
         {
-            if (_agentRuns is null || _activeResponseId != input.ResponseId || _responseTerminal
+            if (_activeResponseId != input.ResponseId || _responseTerminal
                 || input.Context.Epoch != _epoch || _boundAgentRun?.AgentRunId != input.AgentRunId)
             { input.Accepted.TrySetResult(false); return; }
             var run = await _agentRuns.GetAsync(RunOwner, input.AgentRunId, ct).ConfigureAwait(false);

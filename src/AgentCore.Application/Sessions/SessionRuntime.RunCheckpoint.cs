@@ -14,7 +14,6 @@ public sealed partial class SessionRuntime
 
     private async Task RequireProviderRunAuthorityAsync(EventContext cause, Guid responseId, CancellationToken ct)
     {
-        if (_agentRuns is null) return;
         // Worker-side checks are read-only. Only mailbox handlers update the bound Run.
         var bound = _boundAgentRun;
         if (bound is null || bound.ResponseId != responseId || cause.Epoch != _epoch)
@@ -30,7 +29,6 @@ public sealed partial class SessionRuntime
 
     private async Task<bool> OwnsWorkerAsync(EventContext context, Guid responseId, CancellationToken ct)
     {
-        if (_agentRuns is null) return true;
         if (_boundAgentRun is not { Status: AgentRunStatus.Running, Claim: { } claim } bound
             || bound.ResponseId != responseId || context.AgentRunGeneration != claim.Generation) return false;
         var current = await _agentRuns.GetAsync(bound.Owner, bound.AgentRunId, ct).ConfigureAwait(false);
@@ -45,9 +43,8 @@ public sealed partial class SessionRuntime
     }
 
     private async Task SaveRunCheckpointAsync(EventContext cause, Guid responseId, IReadOnlyList<ModelMessage> messages,
-        int steps, int outputBytes, DateTimeOffset? deadline, CancellationToken ct)
+        int steps, int outputBytes, DateTimeOffset? deadline, CancellationToken ct, string? protocolRepairReason = null)
     {
-        if (_agentRuns is null) return;
         var run = _boundAgentRun ?? throw AgentCoreErrors.Conflict("AgentRun ownership is unavailable.");
         var observationRequired = run.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate
             && run.SideEffect.ActionHash is not null;
@@ -55,7 +52,7 @@ public sealed partial class SessionRuntime
             ? 0 : AgentRunToolCallCheckpoint.CompletionReserve(TriggerKind.UserTurn);
         if (!AgentRunToolCallCheckpoint.TryWriteWithReserve(messages, observationRequired,
             observationRequired ? run.SideEffect.ActionHash : null, reserve,
-            out var payload, run.LoadedCapabilityIds, run.CapabilityLoadCount))
+            out var payload, run.LoadedCapabilityIds, run.CapabilityLoadCount, protocolRepairReason: protocolRepairReason))
             throw AgentCoreErrors.Validation("AgentRun checkpoint capacity reached.");
         var remaining = deadline is null ? 0 : Math.Max(0, (int)Math.Min(int.MaxValue, (deadline.Value - _time.GetUtcNow()).TotalMilliseconds));
         await RequestAgentRunCommandAsync(cause, responseId, (current, now) => new AgentRunCommand.Checkpoint(

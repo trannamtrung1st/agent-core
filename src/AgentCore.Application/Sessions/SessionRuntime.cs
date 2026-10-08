@@ -196,6 +196,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IIdGenerator ids,
         TimeProvider time,
         ILogger logger,
+        IAgentRunStore agentRuns,
         IInterruptionClassifier? classifier = null,
         RecognitionCapabilities? recognition = null,
         InteractionPolicy? policy = null,
@@ -211,7 +212,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IModelCatalog? catalog = null,
         IUserTurnCapabilityValidator? turnCapabilities = null,
         IStructuredMemoryService? structuredMemory = null,
-        IAgentRunStore? agentRuns = null,
         IDiagnosticIdSource? diagnostics = null,
         IBrowserSessionLease? browserLease = null,
         IAgentRunAuthority? runAuthority = null,
@@ -237,7 +237,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _processor = processor;
         _turnCapabilities = turnCapabilities;
         _structuredMemory = structuredMemory;
-        _agentRuns = agentRuns;
+        _agentRuns = agentRuns ?? throw new ArgumentNullException(nameof(agentRuns));
         _artifacts = artifacts ?? new FixtureArtifactReferenceAuthorizer();
         _tools = tools ?? new SessionToolExecutor();
         _browserLease = browserLease;
@@ -819,7 +819,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var turn = ++_turnGeneration;
         var trigger = new AgentTrigger(delivery.OccurrenceId, kind, delivery.EvidenceJson);
         _activeOccurrencePin = delivery.Model;
-        _liveOccurrenceCapabilities = new(responseId, _epoch, [], 0);
         LaunchBrain(context, trigger, responseId, turn);
     }
 
@@ -1569,6 +1568,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             await ApplyPendingVoiceIfIdleAsync(cause, cancellationToken).ConfigureAwait(false);
         }
 
+        if (!queued && _activeResponseId is null)
+            await CancelUnstartedBoundAgentRunAsync(cancellationToken).ConfigureAwait(false);
+
         RetainProposalOnlyForConfirmingTurn([text]);
 
         try
@@ -1798,7 +1800,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private async Task StartSpeakPathAsync(BrainReturned input, Speak speakable, CancellationToken cancellationToken)
     {
-        if (_agentRuns is not null && _boundAgentRun?.ResponseId != input.ResponseId)
+        if (_boundAgentRun?.ResponseId != input.ResponseId)
         {
             if (_agentRunAdmissionPending || HasPendingUserBatch()) return;
             PinModelSelectionIfMissing();
@@ -2601,12 +2603,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var steps = checkpoint is null ? 0 : AgentRunToolCallCheckpoint.NormalizeResumedStepCount(checkpoint.StepCount, messages);
         var harnessSources = new List<HarnessSourceReceipt>();
         var outputBytes = checked((int)(checkpoint?.OutputBytes ?? 0));
-        var retryingGeneration = false;
-        var repairingTerminal = false;
-        var protocolRepairAttempted = false;
-        string? repairReason = null;
-        var repairPhase = "initial";
-        var repairOpen = false;
+        var repairReason = restored ? AgentRunToolCallCheckpoint.ReadProtocolRepairReason(checkpoint) : null;
+        var repairingTerminal = repairReason is not null;
+        var protocolRepairAttempted = repairingTerminal;
+        var repairPhase = steps == 0 ? "initial" : "follow-up";
+        var repairOpen = repairingTerminal;
+        if (repairingTerminal) _protocolRepair = "attempted";
         var blockedBrowserOrigins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string? browserPageOrigin = null;
         var blockedNoProgress = 0;
@@ -2641,19 +2643,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 var finished = false;
                 var publishedVisible = false;
                 var retryGeneration = false;
-                var transientGenerationRetryCount = retryingGeneration ? 1 : 0;
                 var inRepair = repairingTerminal;
                 string? repairOutcome = null;
                 var repairAnswerAccepted = false;
                 var repairDisplay = new StringBuilder();
                 var repairDisplayOverflow = false;
                 repairingTerminal = false;
-                if (!inRepair && !retryingGeneration)
+                if (!inRepair)
                 {
                     protocolRepairAttempted = false;
                 }
 
-                retryingGeneration = false;
                 BrowserObservationCompaction.Compact(messages);
                 messages = PromptContextBuilder.WithActiveSkillSystem(messages, pinnedCatalog, pinnedSkills).ToList();
                 AgentContext? projectionContext = null;
@@ -2808,23 +2808,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         continue;
                     }
 
-                    if (_agentRuns is null && evt is ModelFailed failed
-                        && TryRetryGeneration(failed, pending, publishedVisible, transientGenerationRetryCount, generateToken))
-                    {
-                        transientGenerationRetryCount++;
-                        retryingGeneration = true;
-                        if (inRepair)
-                        {
-                            repairingTerminal = true;
-                        }
-
-                        RuntimeTelemetry.RecordGenerationRetry(
-                            steps == 0 ? "initial" : "follow-up",
-                            failed.Failure.FailureReason!);
-                        retryGeneration = true;
-                        break;
-                    }
-
                     if (!inRepair
                         && evt is ModelFailed repairable
                         && !protocolRepairAttempted
@@ -2837,6 +2820,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         repairOpen = true;
                         _protocolRepair = "attempted";
                         RuntimeTelemetry.RecordResponseRepair(repairReason!, "started", repairPhase);
+                        await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes,
+                            overallDeadline, generateToken, repairReason).ConfigureAwait(false);
                         retryGeneration = true;
                         break;
                     }
@@ -2991,11 +2976,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.ClearSideEffect(run.Revision, now, run.Claim!.Generation, ToolCatalog.RecordsOwnerVisibleEffect(call.Name)), generateToken).ConfigureAwait(false);
                         continue;
                     }
-                    var checkpointBudget = _agentRuns is null ? ToolLimits.MaxOutputBytes - outputBytes
-                        : AgentRunToolCallCheckpoint.ToolResultBudget(CheckpointSuffix(), call,
+                    var checkpointBudget = AgentRunToolCallCheckpoint.ToolResultBudget(CheckpointSuffix(), call,
                             _boundAgentRun?.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate, _boundAgentRun?.SideEffect.ActionHash, trigger.Kind, _boundAgentRun?.LoadedCapabilityIds, _boundAgentRun?.CapabilityLoadCount ?? 0);
                     var resultBudget = Math.Min(ToolLimits.MaxOutputBytes - outputBytes, checkpointBudget);
-                    if (_agentRuns is not null && call.Name != ToolCatalog.WorkComplete && (resultBudget < 256 || checkpointCapacityReached))
+                    if (call.Name != ToolCatalog.WorkComplete && (resultBudget < 256 || checkpointCapacityReached))
                     {
                         // Refuse before dispatch: no effect can occur without room for its durable result.
                         checkpointCapacityReached = true;
@@ -3272,7 +3256,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     else
                                     {
                                     if (!await AdmitToolActivityAsync(cause, request.ResponseId, OutputActivity.RunningTools, true, overallCts.Token).ConfigureAwait(false)) return;
-                                    effectFenced = _agentRuns is not null && (policy == ToolPolicyDecision.RequireApproval || ToolCatalog.ReplaySafetyOf(call.Name) != ToolReplaySafety.ReplaySafe);
+                                    effectFenced = (policy == ToolPolicyDecision.RequireApproval || ToolCatalog.ReplaySafetyOf(call.Name) != ToolReplaySafety.ReplaySafe);
                                     effectHash = actionHash;
                                     var skipDispatch = false;
                                     if (_boundAgentRun is { SideEffect.Disposition: AgentRunSideEffectDisposition.Indeterminate or AgentRunSideEffectDisposition.InFlight })
@@ -3371,7 +3355,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     if (effectFenced)
                         await MarkRunEffectAsync(cause, request.ResponseId, call, effectHash!, RejectedEffect(executionResult.Text)
                             ? AgentRunSideEffectDisposition.DefinitelyFailed : AgentRunSideEffectDisposition.Succeeded, generateToken).ConfigureAwait(false);
-                    if (_agentRuns is not null && _boundAgentRun?.SideEffect.Disposition is AgentRunSideEffectDisposition.Indeterminate or AgentRunSideEffectDisposition.InFlight
+                    if (_boundAgentRun?.SideEffect.Disposition is AgentRunSideEffectDisposition.Indeterminate or AgentRunSideEffectDisposition.InFlight
                         && call.Name is ToolCatalog.BrowserObserve or ToolCatalog.BrowserNavigate && !RejectedEffect(executionResult.Text))
                         await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.AcceptBrowserObservation(run.Revision, now, run.Claim!.Generation), generateToken).ConfigureAwait(false);
                     var toolOutcome = SafeExecutionTrace.NormalizeToolOutcome(executionResult.Text);
@@ -3392,7 +3376,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                     harnessSources.AddRange(HarnessChatTools.Sources(call, executionResult.Text));
                     executionResult = ToolResultAdmission.AdmitForModel(model, executionResult);
-                    if (_agentRuns is not null && Encoding.UTF8.GetByteCount(executionResult.Text) > resultBudget)
+                    if (Encoding.UTF8.GetByteCount(executionResult.Text) > resultBudget)
                         executionResult = executionResult with { Text = ToolJsonResults.FitToBudget(resultBudget, executionResult.Text) };
                     var closedPage = false;
                     if (!refusedBlocked)
@@ -3807,8 +3791,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
             if (_activeResponseId == input.ResponseId)
             {
-                if (_agentRuns is not null
-                    && _boundAgentRun is { Claim: not null } bound
+                if (_boundAgentRun is { Claim: not null } bound
                     && bound.ResponseId == input.ResponseId)
                 {
                     _boundAgentRun = await _agentRuns.ApplyAsync(bound.Owner, bound.AgentRunId,
@@ -4706,7 +4689,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         AgentStepEffect effect,
         CancellationToken cancellationToken)
     {
-        if (_agentRuns is not null && _boundAgentRun is { Claim: not null } run && run.ResponseId == responseId)
+        if (_boundAgentRun is { Claim: not null } run && run.ResponseId == responseId)
         {
             await CommitRunOutcomeFromMailboxAsync(context, run, AgentRunOutcomeKind.NoAction, "", cancellationToken).ConfigureAwait(false);
             return;
@@ -5403,6 +5386,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             }
         }
 
+        if (_boundAgentRun is { Status: AgentRunStatus.Running, Claim: { } claim } bound
+            && claim.LeaseExpiresAtUtc > _time.GetUtcNow()
+            && !_snapshot.Entries.Any(entry => entry.Role == ConversationRole.Assistant && entry.ResponseId == bound.ResponseId))
+        {
+            await LaunchBoundAgentRunAsync(context, bound, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         if (!await TryStartPendingUserBatchAsync(context, cancellationToken).ConfigureAwait(false)
             && CanEvaluateIdle())
         {
@@ -5846,7 +5837,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     }
                 }
 
-                if (job.UserConversationTerminal && job.Then is null)
+                if (job.UserConversationTerminal)
                 {
                     if (_pendingTerminalAgentRunId is null && _boundAgentRun is not null)
                     {
@@ -6106,10 +6097,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         toSave = toSave with { PendingAgentInputIds = toSave.PendingAgentInputIds
             .Where(id => !_admittedAgentInputs.ContainsKey(id)).ToArray() };
-        if (job.RunOutcome is { } outcome && _agentRuns is not null)
+        if (job.RunOutcome is { } outcome)
             await _agentRuns.CommitOutcomeAsync(toSave, _durableRevision, outcome.Owner, outcome.AgentRunId,
                 outcome.Completion, outcome.DraftEntryId, cancellationToken).ConfigureAwait(false);
-        else if (job.AdmittedRun is { } run && _agentRuns is not null)
+        else if (job.AdmittedRun is { } run)
         {
             toSave = toSave with { PendingAgentInputIds = toSave.PendingAgentInputIds
                 .Except(run.Admission.Activation.SourceEntryIds).ToArray() };
@@ -6327,45 +6318,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         toolName.StartsWith("browser.", StringComparison.Ordinal)
             ? ResponseProgressMessages.UsingBrowser
             : ResponseProgressMessages.RunningTools;
-
-    private static bool TryRetryGeneration(
-        ModelFailed failed,
-        List<ModelToolCall> pending,
-        bool publishedVisible,
-        int generationRetries,
-        CancellationToken cancellationToken)
-    {
-        if (generationRetries >= 1
-            || publishedVisible
-            || cancellationToken.IsCancellationRequested
-            || pending.Count != 0)
-        {
-            return false;
-        }
-
-        var reason = failed.Failure.FailureReason;
-        if (failed.Failure.Code == ProviderErrorCode.Timeout)
-        {
-            return reason is ProviderFailureReason.SetupTimeout or ProviderFailureReason.StreamIdle;
-        }
-
-        if (failed.Failure.Code != ProviderErrorCode.Unavailable)
-        {
-            return false;
-        }
-
-        if (reason is ProviderFailureReason.TransportFailure
-            or ProviderFailureReason.Http5xx
-            or ProviderFailureReason.StreamIdle
-            or ProviderFailureReason.StreamMalformed
-            or ProviderFailureReason.StreamIncomplete
-            or ProviderFailureReason.ProviderStreamError)
-        {
-            return true;
-        }
-
-        return reason == ProviderFailureReason.IncompleteToolCall;
-    }
 
     private const string ChallengedBrowserInstruction =
         """

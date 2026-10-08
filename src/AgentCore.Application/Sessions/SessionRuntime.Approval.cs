@@ -72,7 +72,7 @@ public sealed partial class SessionRuntime
                 pending = _pendingApproval;
             }
 
-            if (pending is null && _agentRuns is not null && _boundAgentRun is { Status: AgentRunStatus.WaitingForApproval, Approval: { } recovered } run
+            if (pending is null && _boundAgentRun is { Status: AgentRunStatus.WaitingForApproval, Approval: { } recovered } run
                 && recovered.ApprovalId == input.ApprovalId && run.ResponseId == input.ResponseId && recovered.ExpiresAtUtc > _time.GetUtcNow())
             {
                 _boundAgentRun = await _agentRuns.ApplyAsync(run.Owner, run.AgentRunId, new AgentRunCommand.DecideApproval(run.Revision,
@@ -257,7 +257,7 @@ public sealed partial class SessionRuntime
             }
         }
 
-        if (waitResult == ApprovalWaitResult.Expired && _agentRuns is not null)
+        if (waitResult == ApprovalWaitResult.Expired)
         {
             var expired = await RequestAgentRunCommandAsync(cause, responseId,
                 (run, now) => new AgentRunCommand.ExpireApproval(run.Revision, now), CancellationToken.None).ConfigureAwait(false);

@@ -25,7 +25,6 @@ public sealed partial class SessionRuntime
     {
         try
         {
-            if (_agentRuns is null) throw AgentCoreErrors.Conflict("AgentRun store is unavailable.");
             var run = await _agentRuns.GetAsync(RunOwner, input.RunId, ct).ConfigureAwait(false)
                 ?? throw AgentCoreErrors.NotFound("AgentRun was not found.");
             if (run.SessionId != SessionId) throw AgentCoreErrors.NotFound("AgentRun was not found.");

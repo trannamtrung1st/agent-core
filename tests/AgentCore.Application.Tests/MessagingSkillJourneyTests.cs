@@ -153,7 +153,7 @@ public sealed class MessagingSkillJourneyTests
         var instances = new InMemoryAgentInstanceStore();
         instances.InsertAsync(new(snapshot.AgentInstanceId, definition.Id, definition.Version, definition.Identity,
             AgentInstanceLifecycle.Active, now, now), initialSkills: definition.SkillList).AsTask().GetAwaiter().GetResult();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),

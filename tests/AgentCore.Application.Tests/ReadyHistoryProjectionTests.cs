@@ -159,7 +159,7 @@ public sealed class ReadyHistoryProjectionTests
             store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         }
 
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model ?? new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),

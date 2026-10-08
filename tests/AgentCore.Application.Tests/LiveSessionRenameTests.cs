@@ -61,7 +61,7 @@ public sealed class LiveSessionRenameTests
             time.GetUtcNow(),
             time.GetUtcNow(), AgentInstanceId: Guid.NewGuid());
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),

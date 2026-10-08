@@ -114,7 +114,7 @@ Draft evaluation rows bind Synthetic scenario results to draft revision, configu
 
 ## P7G Admin events (observed)
 
-Migration adds append-only `AdminEvents` with unique `OperationId`, actor kind, operation name, target type/id, and bounded allowlisted summary JSON. No update/delete API. SQLite and InMemory `IAdminEventStore` implementations share idempotent append and list filters. Legacy SQLite reopen may repair empty malformed P7 tables before migration apply (`P7EnsureCreatedReopenMigrationTests`). See [P7G report](reports/p7g-history-rollback-final-gate.md).
+Migration adds append-only `AdminEvents` with unique `OperationId`, actor kind, operation name, target type/id, and bounded allowlisted summary JSON. No update/delete API. SQLite and InMemory `IAdminEventStore` implementations share idempotent append and list filters. Current startup rejects missing or malformed schema without repair or stamping; `P7EnsureCreatedReopenMigrationTests` now verifies those rejection cases. See [P7G report](reports/p7g-history-rollback-final-gate.md) for historical acceptance.
 
 ## P5 trigger store (observed)
 
@@ -145,7 +145,7 @@ The P7.5 audit is retained below with current execution owners and verification 
 | Check | Decision | Evidence |
 | --- | --- | --- |
 | SQLite SQL and locking | Keep | `sqlite_master` queries and `Microsoft.Data.Sqlite` stay in Infrastructure, including `SqliteMemoryStore`. `SqlitePragmaInterceptor` sets `journal_mode=WAL`, `busy_timeout`, and `foreign_keys`. `SqliteMemoryStore.BackupDatabaseWithRetryAsync` retries backup. |
-| Migration determinism | Keep | EF migrations stay under `src/AgentCore.Infrastructure/Persistence/Migrations`. `P7EnsureCreatedReopenMigrationTests` reopens a legacy database and refuses to stamp an incompatible shape. No non-repeatable migration was shown. |
+| Migration determinism | Keep | EF migrations stay under `src/AgentCore.Infrastructure/Persistence/Migrations`. `P7EnsureCreatedReopenMigrationTests` rejects missing/malformed current schema without stamping or repair. Historical migration source files remain immutable. |
 | Transactions | Keep | Explicit transactions cover `SqliteMemoryStore.SaveAsync`, definition `DeleteDraftAsync` and `PublishDraftAsync`, structured-memory writes, `SqliteTriggerStore.TryAdmitScheduledAsync`, atomic AgentRun admission/mutation, claim recovery, approval decisions and completion receipts, attachment `BindToEntryAsync`, and Admin history append plus memory-scope reset. Managed instance history stages the instance row and `AdminEvent` in one `SaveChanges`. |
 | Idempotency | Keep | Operation-id replay is covered by `AdminManagedInstanceHistoryTests`, `AdminInstanceDefinitionVersionHistoryTests`, `AdminInstancePersonaHistoryTests`, and `AdminInstanceLifecycleHistoryTests`. `AgentRunAdmissionStoreTests` atomic/replay cases and `TriggerStoreContractTests.Occurrence_admission_dedupes_and_hides_other_owners` cover duplicate source events. |
 | Process-local versus durable truth | Keep | The Session Runtime mailbox and the `SessionHost` connection table are process-local. Snapshots, Activations, AgentRuns, occurrence receipts, approvals and Admin events are durable. Accepted user text persists pending input intent; the mailbox admits one effective batch through the common store. `AcceptedTurnDetachDurabilityTests.Detach_after_ack_before_response_still_executes` covers work that continues after detach. |
@@ -411,7 +411,7 @@ The P9.5 nopCommerce Application Connection was a bounded proving slice and is r
 
 ## P9.7 instance preparation persistence
 
-Migration `20261004092058_P97HarnessManagement` adds nullable `AgentInstances.HarnessManagementJson`; null defaults to Disabled. Chat-first authoring reuses this field and existing lifecycle tables without another migration. Legacy EnsureCreated bootstrap still recognizes the column before stamping the migration. Synthetic needs no provider credentials.
+Migration `20261004092058_P97HarnessManagement` adds nullable `AgentInstances.HarnessManagementJson`; null defaults to Disabled. Chat-first authoring reuses this field and existing lifecycle tables without another migration. Exact current-schema validation requires this column before adopting an EnsureCreated database; unsupported older schemas are rejected. Synthetic needs no provider credentials.
 
 Instance mode/scopes/freeze, derived eligible configured tools, policy revision, internal candidate, exact approvals and revision-bound evidence/publication remain durable through existing CAS stores. Legacy source/budget fields remain compatible for advanced owner records; normal Chat uses ordinary tool authority and existing normal-generation budgets rather than a second preparation budget/runtime. Source receipts are execution-local and provenance persists on retained resources. Resource/draft mutation and history append remain atomic at each owner boundary. Adoption commits active version, completed result and actor-aware version-change event in one transaction. Failure can leave an unused immutable publication but preserves the prior instance version. Reopen preserves published content/evidence and pending legacy decisions. No uncertain approval is replayed; fresh authoring forks after failure. Freeze persists revocation while preserving adopted content and history.
 

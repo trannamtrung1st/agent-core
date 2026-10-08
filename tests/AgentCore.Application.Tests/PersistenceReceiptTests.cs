@@ -40,7 +40,7 @@ public sealed class PersistenceReceiptTests
             now,
             now, AgentInstanceId: Guid.NewGuid());
         await store.Inner.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -83,7 +83,7 @@ public sealed class PersistenceReceiptTests
             now,
             now, AgentInstanceId: Guid.NewGuid());
         await store.Inner.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -129,7 +129,7 @@ public sealed class PersistenceReceiptTests
             now,
             now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(),
             brain,
@@ -178,7 +178,7 @@ public sealed class PersistenceReceiptTests
             now,
             now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -228,7 +228,7 @@ public sealed class PersistenceReceiptTests
             now,
             now, AgentInstanceId: Guid.NewGuid());
         await harness.Store.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -273,7 +273,7 @@ public sealed class PersistenceReceiptTests
             now,
             now, AgentInstanceId: Guid.NewGuid());
         await inner.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -317,7 +317,7 @@ public sealed class PersistenceReceiptTests
             now,
             now, AgentInstanceId: Guid.NewGuid());
         await store.Inner.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -364,7 +364,7 @@ public sealed class PersistenceReceiptTests
             now, AgentInstanceId: Guid.NewGuid());
         await store.Inner.SaveAsync(snapshot, 0);
         var output = new CapturingSessionOutput();
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(),
             brain,
@@ -418,7 +418,7 @@ public sealed class PersistenceReceiptTests
             now,
             now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -465,7 +465,7 @@ public sealed class PersistenceReceiptTests
             now, AgentInstanceId: Guid.NewGuid());
         var store = new InMemoryMemoryStore();
         await store.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(["There are three points. "]),
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -516,7 +516,7 @@ public sealed class PersistenceReceiptTests
             now, AgentInstanceId: Guid.NewGuid());
         var store = new InMemoryMemoryStore();
         await store.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(["There are three points. "]),
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -573,7 +573,7 @@ public sealed class PersistenceReceiptTests
             now,
             now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -623,7 +623,7 @@ public sealed class PersistenceReceiptTests
             now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
         var output = new CapturingSessionOutput();
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(["There are three points."]),
             new DefaultAgentBrain(new PromptContextBuilder()),

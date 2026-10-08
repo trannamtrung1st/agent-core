@@ -62,13 +62,6 @@ public sealed partial class SessionRuntime
         }
 
         var bound = _boundAgentRun!;
-        if (_agentRuns is null)
-        {
-            return SkillLoadMailboxResult.Failed(
-                SkillLoadAdmission.Error("forbidden", "Skill load requires a conversation execution."),
-                "denied");
-        }
-
         var current = await _agentRuns.GetAsync(bound.Owner, bound.AgentRunId, cancellationToken).ConfigureAwait(false);
         if (current is null
             || current.Revision != bound.Revision

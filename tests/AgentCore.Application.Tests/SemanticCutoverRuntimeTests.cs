@@ -358,7 +358,7 @@ public sealed class SemanticCutoverRuntimeTests
         store ??= new InMemoryMemoryStore();
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         synthesizer ??= voice ? new RecordingSynthesizer() : null;
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),

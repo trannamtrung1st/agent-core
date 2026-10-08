@@ -35,6 +35,7 @@ test("credential bindings and quiet background work stay labeled", async ({ page
   await work.focus(); await page.keyboard.press('Enter');
   const drawer = page.getByRole('dialog', { name: 'Background work', exact: true });
   await expect(drawer.getByText('No background Sessions yet')).toBeVisible();
+  await drawer.getByRole('button', { name: 'Close', exact: true }).focus();
   await page.keyboard.press('Escape'); await expect(drawer).toBeHidden();
   await page.unroute('**/background-sessions?**');
   await mockBackgroundSessions(page, [backgroundFixture(161, 'Morning review', { outcome: { kind: 'NeedsAttention', summary: 'Low stock on AC Keyboard.', outcomeEntryId: null, attentionRequired: true } }),

@@ -333,7 +333,7 @@ public sealed class SessionMemoryPromptTests
             new MemoryWriteProposal(MemoryKind.Fact, "Other session fact", "hidden", []),
             Admission());
         var model = new RecordingLanguageModel(new ScriptedLanguageModel());
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),

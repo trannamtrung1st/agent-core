@@ -105,6 +105,8 @@ public sealed class TriggerOccurrenceRoutingTests
         await runtime.WaitUntilIdleAsync();
         var saved = await harness.Store.GetOccurrenceAsync(harness.Owner, first.Occurrence!.OccurrenceId);
         Assert.Equal(OccurrenceRoutingDisposition.AcceptedLive, saved!.Disposition);
+        Assert.Null(harness.Runs.LastAdmissionError);
+        Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
         Assert.Equal(OccurrenceAccept.Duplicate, await runtime.SubmitOccurrenceAsync(new OccurrenceDelivery(first.Occurrence.OccurrenceId, harness.Owner, TriggerSourceKind.ApplicationEvent, saved.EvidenceJson)));
         Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
 
@@ -676,7 +678,7 @@ public sealed class TriggerOccurrenceRoutingTests
             harness.Memory, catalog, new SystemIdGenerator(harness.Time), harness.Time);
         var admitted = await intake.AcceptAwaitingAsync();
         Assert.Equal(1, admitted.Accepted);
-        var proposed = Assert.Single(await runs.ListAsync(new(InstanceId, ProfileId), 50));
+        var proposed = Assert.Single(await runs.ListAsync(new(InstanceId, ProfileId), 50), run => run.Admission.Activation.TriggerOccurrenceId == waiting.Occurrence.OccurrenceId);
         Assert.Equal("scripted-vision", proposed.PinnedModel.CatalogKey);
         Assert.Equal("primary-llm", proposed.PinnedModel.ProviderAlias);
         Assert.Equal("scripted-vision", proposed.PinnedModel.ModelId);
@@ -839,7 +841,8 @@ public sealed class TriggerOccurrenceRoutingTests
     }
 
     private static DurableOrderEventIngress Ingress(Harness harness) =>
-        new(harness.Store, harness.Guard, new SystemIdGenerator(TimeProvider.System), harness.Time);
+        new(harness.Store, harness.Guard, new SystemIdGenerator(TimeProvider.System), harness.Time,
+            harness.Instances, new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default), JourneyCatalog());
 
     private static TriggerOccurrenceRouter Router(
         Harness harness,
@@ -855,8 +858,8 @@ public sealed class TriggerOccurrenceRoutingTests
             new SystemIdGenerator(TimeProvider.System),
             harness.Time,
             harness.Instances,
-            definitions,
-            catalog);
+            definitions ?? new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default),
+            catalog ?? JourneyCatalog());
 
     private static async ValueTask<AgentInstance> ReassociateActiveVersionAsync(
         IAgentInstanceStore instances,
@@ -946,10 +949,16 @@ public sealed class TriggerOccurrenceRoutingTests
             ModelSelection: capabilities ? new("scripted-alpha", "primary-llm", "scripted-alpha", ModelSelectionSource.SystemDefault, "medium") : null);
         var memory = guard.Memory;
         var runs = new RuntimeAgentRunStore();
-        if (capabilities) { snapshot = RuntimeAgentRunStore.WithPins(snapshot); runs.Bind(memory, store); }
+        snapshot = RuntimeAgentRunStore.WithPins(snapshot) with
+        {
+            ModelSelection = snapshot.ModelSelection ?? (catalog is null
+                ? new("synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.SystemDefault, null)
+                : AgentCore.Application.Models.SessionModelBinder.PinDefault(catalog, definition))
+        };
+        runs.Bind(memory, store);
         await memory.SaveAsync(snapshot, 0);
         var output = new CapturingSessionOutput();
-        var runtime = new SessionRuntime(
+        var runtime = SessionRuntimeFixture.Create(
             snapshot,
             model ?? new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -961,7 +970,7 @@ public sealed class TriggerOccurrenceRoutingTests
             modelResolver: resolver,
             catalog: catalog,
             tools: capabilities ? new SessionToolExecutor(configurationGate: ToolConfigurationGates.AllowAll) : null,
-            agentRuns: capabilities ? runs : null, triggerOccurrences: store);
+            agentRuns: runs, triggerOccurrences: store);
         await runtime.AttachAsync();
         return new Harness(runtime, store, guard.Guard, guard.Instances, time, new TriggerOwner(InstanceId, ProfileId), output, memory, runs);
     }

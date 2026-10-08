@@ -33,7 +33,7 @@ public sealed class CapabilityProjectionTests
         var model = new LoadQueryModel(query);
         try
         {
-            await using var runtime = new SessionRuntime(snapshot, model,
+            await using var runtime = SessionRuntimeFixture.Create(snapshot, model,
                 new AgentCore.Application.Agents.DefaultAgentBrain(new AgentCore.Application.Agents.PromptContextBuilder()), memory,
                 new AgentCore.Application.Testing.CapturingSessionOutput(), ids, time, Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionRuntime>.Instance,
                 tools: new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace)), agentRuns: turns);

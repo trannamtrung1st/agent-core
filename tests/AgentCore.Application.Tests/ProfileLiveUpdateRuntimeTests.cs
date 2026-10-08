@@ -146,7 +146,7 @@ public sealed class ProfileLiveUpdateRuntimeTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b848")]);
-        var runtime = new SessionRuntime(
+        var runtime = SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),

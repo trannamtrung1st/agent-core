@@ -20,17 +20,43 @@ namespace AgentCore.Application.Tests;
 
 public sealed class TerminalDisplayRepairTests
 {
+    [Fact]
+    public async Task Oversized_pending_write_is_rejected_before_any_workspace_effect()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"agent-core-checkpoint-write-{Guid.NewGuid():N}");
+        try
+        {
+            var workspace = new FileSessionWorkspace(Path.Combine(root, "ws"), Path.Combine(root, "templates"), sessions: new WorkspaceTestSessions());
+            var artifacts = new InMemoryArtifactStore(TimeProvider.System);
+            var document = new string('x', AgentRunLimits.MaxCheckpointBytes + 1);
+            var model = new SemanticResponseLanguageModel(new DocumentModel(document, structured: true));
+            var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace), artifacts: artifacts, configurationGate: ToolConfigurationGates.AllowAll);
+            await using var runtime = CreateCore(model, null, null,
+                [ToolCatalog.WorkspaceWrite, ToolCatalog.ArtifactsCreateFromWorkspace], executor, new SessionArtifactAuthorizer(artifacts));
+            await runtime.AttachAsync();
+            Assert.True(await runtime.SubmitUserTextAsync("Write the document"));
+            await runtime.WaitUntilIdleAsync();
+            Assert.Equal(EntryStatus.Failed, Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
+            Assert.Empty(await artifacts.ListAsync(runtime.SessionId));
+            var error = await Assert.ThrowsAsync<AgentCoreException>(() => workspace.ReadAsync(runtime.SessionId,
+                runtime.Snapshot.Definition, "/workspace/working/playbook.md").AsTask());
+            Assert.Equal("NotFound", error.Code);
+            Assert.Equal(AgentRunStatus.Failed, Assert.Single(await SessionRuntimeFixture.RunsForAsync(runtime)).Status);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task Substantial_workspace_document_materializes_and_follow_up_note_repairs_invalid_blocks(bool structured)
+    public async Task Bounded_workspace_document_materializes_and_follow_up_note_repairs_invalid_blocks(bool structured)
     {
         var root = Path.Combine(Path.GetTempPath(), $"agent-core-block-repair-{Guid.NewGuid():N}");
         try
         {
             var workspace = new FileSessionWorkspace(Path.Combine(root, "ws"), Path.Combine(root, "templates"), sessions: new WorkspaceTestSessions());
             var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-            var document = string.Concat(Enumerable.Repeat("# Scrum playbook\nObserve the current evidence before making changes.\n", 1_500));
+            var document = string.Concat(Enumerable.Repeat("# Scrum playbook\nObserve the current evidence before making changes.\n", 400));
             var inner = new DocumentModel(document, structured);
             var model = new SemanticResponseLanguageModel(inner);
             var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace), artifacts: artifacts, configurationGate: ToolConfigurationGates.AllowAll);
@@ -43,7 +69,7 @@ public sealed class TerminalDisplayRepairTests
             Assert.Equal(EntryStatus.Completed, first.Status);
             var artifact = Assert.Single(await artifacts.ListAsync(runtime.SessionId));
             Assert.Equal(artifact.ArtifactId.ToString(), Assert.Single(first.Envelope!.Blocks).ArtifactId);
-            Assert.True(artifact.ByteSize > 64 * 1024);
+            Assert.True(artifact.ByteSize > 16 * 1024);
             Assert.DoesNotContain("[[", first.Text, StringComparison.Ordinal);
             Assert.DoesNotContain("[Unavailable artifact]", first.Text, StringComparison.Ordinal);
             Assert.True(await runtime.SubmitUserTextAsync("Write this down as a note first."));
@@ -367,7 +393,7 @@ public sealed class TerminalDisplayRepairTests
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("close the browser"));
-        await runtime.WaitUntilIdleAsync();
+        await SessionRuntimeFixture.SettleRetriesAsync(runtime);
 
         Assert.Equal(4, model.Calls);
         Assert.Equal(1, browser.CloseCalls);
@@ -397,7 +423,7 @@ public sealed class TerminalDisplayRepairTests
         await runtime.AttachAsync();
 
         Assert.True(await runtime.SubmitUserTextAsync("check zigwheels"));
-        await runtime.WaitUntilIdleAsync();
+        await SessionRuntimeFixture.SettleRetriesAsync(runtime);
 
         Assert.Equal(4, model.Calls);
         Assert.Equal(["https://zigwheels.test/"], browser.Navigated);
@@ -540,7 +566,7 @@ public sealed class TerminalDisplayRepairTests
                 null), AgentInstanceId: Guid.NewGuid());
         var store = new InMemoryMemoryStore();
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder(ToolConfigurationGates.AllowAll, browser)),

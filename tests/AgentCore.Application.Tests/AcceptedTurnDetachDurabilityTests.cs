@@ -304,7 +304,7 @@ public sealed class AcceptedTurnDetachDurabilityTests
         }
 
         agentRuns ??= new RuntimeAgentRunStore();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             initial,
             model,
             brain,

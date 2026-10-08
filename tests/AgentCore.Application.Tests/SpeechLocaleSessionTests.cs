@@ -137,7 +137,7 @@ public sealed class SpeechLocaleSessionTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
             [snapshot.SessionId]);
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),

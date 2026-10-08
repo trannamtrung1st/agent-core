@@ -130,7 +130,7 @@ public sealed class EffectReceiptJourneyTests
         snapshot = RuntimeAgentRunStore.WithPins(snapshot);
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         var browser = new ClosingBrowser();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder(ToolConfigurationGates.AllowAll, browser)),

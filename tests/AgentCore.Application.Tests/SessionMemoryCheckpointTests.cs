@@ -33,6 +33,7 @@ public sealed class SessionMemoryCheckpointTests
         var clock = new FakeTimeProvider(Now);
         var factory = new SqliteFactory(options);
         var sessions = new SqliteMemoryStore(factory, clock);
+        SessionRuntimeFixture.Bind(sessions, new SqliteAgentRunStore(factory, sessions, new SystemDiagnosticIdSource()));
         try
         {
             await sessions.EnsureCreatedAsync();
@@ -99,6 +100,7 @@ public sealed class SessionMemoryCheckpointTests
             Assert.Empty(await service.SearchAsync(other, new MemorySearchQuery("Monday", null), admission));
 
             var reopenedSessions = new SqliteMemoryStore(factory, clock);
+            SessionRuntimeFixture.Bind(reopenedSessions, new SqliteAgentRunStore(factory, reopenedSessions, new SystemDiagnosticIdSource()));
             var reopened = Service(new SqliteStructuredMemoryStore(factory), clock, 4);
             var restored = await reopened.SearchAsync(owner, new MemorySearchQuery(null, null), admission);
             Assert.Equal(4, restored.Count);
@@ -163,7 +165,7 @@ public sealed class SessionMemoryCheckpointTests
         IStructuredMemoryService memories,
         ILanguageModel model,
         TimeProvider time) =>
-        new(
+        SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),

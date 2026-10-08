@@ -4,7 +4,7 @@
 
 The user approved destructive legacy retirement and disposable demo reset on 2026-10-08. The implementation is complete enough to run the shared production path; final regression and exact-SHA hosted acceptance remain in progress. This report supersedes the earlier foundation-only and retirement-blocked status. No final freeze is claimed before the remaining gates pass.
 
-Reviewed starting main: `bd44046896df6f3e0fc2e7d15d60dd479a5349cd`. Foundation commit: `f98dbb6236ab976b5e2923e00a47ec90a140cf1e`. The requirement-by-requirement audit supersedes the earlier `ef5109ff` candidate. Workflow [37746910839](https://github.com/trannamtrung1st/agent-core/actions/runs/37746910839) on `89f64abd` passed acceptance and Compose, but exposed API retry ownership, frontend fixture and core browser failures. Those failed gates are retained as evidence; the corrected final candidate still requires all five hosted jobs before closure.
+Reviewed starting main: `bd44046896df6f3e0fc2e7d15d60dd479a5349cd`. Foundation commit: `f98dbb6236ab976b5e2923e00a47ec90a140cf1e`. The requirement-by-requirement audit supersedes the earlier `ef5109ff` candidate. Workflow [37746910839](https://github.com/trannamtrung1st/agent-core/actions/runs/37746910839) on `89f64abd` passed acceptance and Compose, but exposed API retry ownership, frontend fixture and core browser failures. Those failed gates are retained as evidence; Workflow [37750577332](https://github.com/trannamtrung1st/agent-core/actions/runs/37750577332) on `1dd2b4b5` passed frontend, acceptance and Compose, but failed a browser popup collection-enumeration race and the drawer Escape fixture. The next candidate removes nullable Run-store execution and corrects both fixture races; all five hosted jobs remain required before closure.
 
 ## Implementation and retirement
 
@@ -71,12 +71,12 @@ Canonical architecture, interfaces, event routing, implementation, frontend, pro
 
 | Gate | Current result |
 | --- | --- |
-| Frontend unit | 98 files, 743 tests passed (`NODE_OPTIONS=--no-experimental-webstorage pnpm run test --run --maxWorkers=1`) |
+| Frontend unit | 98 files, 745 tests passed on `1dd2b4b5` (`NODE_OPTIONS=--no-experimental-webstorage pnpm run test --run --maxWorkers=1`) |
 | Frontend build | TypeScript/Vite passed; existing chunk-size warning remains |
 | Focused current store/runtime | 65 store cases, 62 runtime cases, 26 receipt/retry cases and 12 fast-admission/durability cases passed before final instrumentation |
-| Full backend | Domain 161 and order-event plugin 4 passed; Infrastructure 809 passed, 15 opt-in/environment skips; Application 1,303 passed, one opt-in skip on the final cleanup fence; API 361 passed, three opt-in skips |
+| Full backend | Domain 161 and order-event plugin 4 passed; Infrastructure 809 passed, 15 opt-in/environment skips; Application 1,305 passed, one opt-in skip with mandatory Run admission; API 361 passed, three opt-in skips |
 | API regression | Final full suite 361 passed, three opt-in skips; retry cleanup race corrected and 22 focused recovery/reattach cases passed |
-| Browser | Prior primary 111/117 passed; all six failures corrected and focused batch 10 passed with paging setup corrected. All 16 phase journeys passed across corrected reruns, including all four secretary cases. Final full primary rerun in progress; automatic-scroll cursor error/retry and Admin paging both pass in the isolated two-case rerun |
+| Browser | Full primary 118 passed on `1dd2b4b5`. All 16 phase journeys passed across corrected reruns, including all four secretary cases; hosted acceptance passed on `1dd2b4b5`. The final candidate additionally focuses Close before sending Escape after drawer animation |
 | Compose/SQLite volume | Final Release image and SQLite restart passed locally; exact-SHA hosted Compose passed |
 | Exact-SHA hosted | Corrected audit candidate pending push and all five successful jobs |
 
@@ -91,3 +91,6 @@ Opt-in hosted provider/nopCommerce checks are not part of default key-free accep
 - The hosted ChatApp fixture now awaits the drawer's async render inside `act`. The 43 ChatApp/background component cases pass. The workspace browser fixture now waits for a Session-only control before Ready, since the initial new-chat shell also presents Ready. One local repeated workspace case was invalidated by editing `index.html` during the run and triggering Vite reload; five unaffected cases passed. The corrected focused run and final full runner supply acceptance evidence.
 - Added a served SVG favicon rather than filtering resource failures. Verified HTTP 200 and SVG MIME through MCP. Fixture ports can be isolated with the API/web ports so independent Synthetic hosts do not share their browser fixture service.
 - Actual MCP: created an Automation, ran it, inspected its child result/file count, opened the exact Automation and refreshed with the same details expanded, continued the child Session, sent “Check B too” and observed “Hello from synthetic.” Browser console reported no errors on the final successful flow. Wrong-URL/selector exploratory tool calls are not acceptance evidence.
+
+- Final review removes nullable `IAgentRunStore` construction, all no-store dispatch/checkpoint/capability bypasses and the internal generation retry loop. Existing runtime fixtures now supply canonical stores, including real SQLite admission and reopen. Canonical admission exposed two real lifecycle gaps: pausing before generation now resumes the same admitted Run; durable terminal saves settle the Run even when their continuation callback is suppressed. Superseding an unstarted Run commits cancellation. Protocol-repair state survives a durable retry without repeating completed effects; oversized checkpoints reject before dispatch. Full Application: 1,305 passed and one opt-in skip; API: 361 passed and three opt-in skips.
+- `1dd2b4b5` hosted failure corrections snapshot the browser page collection before asserting and focus the drawer Close control before keyboard Escape. Provider/browser focused integration: 65 passed and five opt-in skips. SQLite summary/reopen: ten passed.

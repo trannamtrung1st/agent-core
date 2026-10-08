@@ -48,6 +48,7 @@ internal sealed class SqliteTestHarness : IAsyncDisposable
         var store = new SqliteMemoryStore(
             factory,
             new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero)));
+        SessionRuntimeFixture.Bind(store, new SqliteAgentRunStore(factory, store, new AgentCore.Infrastructure.Identity.SystemDiagnosticIdSource()));
         return new SqliteTestHarness(path, factory, store, deleteOnDispose);
     }
 

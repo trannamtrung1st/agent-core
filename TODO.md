@@ -114,7 +114,7 @@ These rules constrain P8 and later work. Do not rediscover them only by reading 
 - Provider reasoning stays off display, speech, history, and TTS input.
 - Runtime-local timers stay separate from durable scheduling.
 - Trigger registration, trigger execution, and later tool authorization stay separate.
-- Background work that must outlive Session Runtime uses durable WorkItems.
+- Background work uses owned Sessions and durable AgentRuns, dispatched through the same SessionRuntime/SessionHost path after detach or restart.
 
 ## Lifecycle
 
@@ -157,11 +157,14 @@ Capabilities / tools
 Authority / policy
 = what is allowed in this context
 
-Trigger registrations
-= durable future event state
+Automations
+= authored future Schedule/Event work
 
-WorkItems
-= durable execution state
+Activations / AgentRuns
+= immutable admitted inputs / durable execution state
+
+Background Sessions
+= conversation and workspace ownership for background work
 
 Session workspace
 = mutable session-owned files
@@ -340,7 +343,7 @@ P9.5 may introduce only the minimum durable application connection/binding seman
 
 ## Create, teach, and hire — future product surface
 
-Ordinary users should eventually see a simple surface: create a worker, teach it, start from a prepared worker, or hire one into an organization. They should not have to operate prompts, MCP, provider configuration, memory-scope ids, policy evaluators, or WorkItems directly.
+Ordinary users should eventually see a simple surface: create a worker, teach it, start from a prepared worker, or hire one into an organization. They should not have to operate prompts, MCP, provider configuration, memory-scope ids, policy evaluators, or AgentRun internals directly.
 
 “Teach” means configure and improve a worker through standing instructions, skills, knowledge, examples, policy, capabilities, memory, evaluations, and routines. It does not mean model fine-tuning. A simpler UI must not collapse those lifecycles internally.
 
@@ -1353,9 +1356,9 @@ Docker is the current sandbox. Keep it while it satisfies requirements. Keep the
 
 Start when Agent Core leaves trusted single-owner local development or begins a real external hosted pilot. Do not start the whole phase at once.
 
-**P11A — Authentication and ownership.** Authentication, user and Admin authorization, and a tenant or organization model only when required. Enforce ownership of definitions, versions, instances, sessions, memory, triggers, WorkItems, approvals, attachments, artifacts, resources, and integrations. Remove trusted-local assumptions from externally reachable paths. Separate browser and user credentials from host authority.
+**P11A — Authentication and ownership.** Authentication, user and Admin authorization, and a tenant or organization model only when required. Enforce ownership of definitions, versions, instances, sessions, memory, Automations, Activations, AgentRuns, approvals, attachments, artifacts, resources, and integrations. Remove trusted-local assumptions from externally reachable paths. Separate browser and user credentials from host authority.
 
-Future Chat authority must derive from authenticated principal/service identity + tenant/organization ownership + calling application + instance capability boundary + application delegation + caller permissions + session/execution grants + resource policy. User text never grants authority. Record owner/Admin/member/service/application principals; application-scoped delegation; session/execution capability grants; expiry/revocation; differing authority for the same instance by caller/application; effective tool offering and live execution recheck; background Trigger/Occurrence/WorkItem delegated authority/provenance; tenant-safe ownership of Definitions, instances, memory, Sessions, resources, approvals and integrations; audit principal/application/session; and authorization separate from exact-action approval.
+Future Chat authority must derive from authenticated principal/service identity + tenant/organization ownership + calling application + instance capability boundary + application delegation + caller permissions + session/execution grants + resource policy. User text never grants authority. Record owner/Admin/member/service/application principals; application-scoped delegation; session/execution capability grants; expiry/revocation; differing authority for the same instance by caller/application; effective tool offering and live execution recheck; background Automation/Occurrence/Activation/AgentRun delegated authority/provenance; tenant-safe ownership of Definitions, instances, memory, Sessions, resources, approvals and integrations; audit principal/application/session; and authorization separate from exact-action approval.
 
 Examples: owner Chat may manage knowledge/Skills; employee Chat gets operational tools without harness mutation; a customer application gets support tools without mutation; trusted onboarding may get a temporary Knowledge/Skill grant expiring with the Session. Current P9.7 explicitly uses trusted-local single owner → authorized for enabled instance self-management. This is the replacement seam, not implemented RBAC/ABAC/tenant infrastructure.
 

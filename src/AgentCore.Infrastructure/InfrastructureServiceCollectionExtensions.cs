@@ -421,11 +421,11 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IAttachmentProcessor>(),
                 provider.GetRequiredService<IArtifactReferenceAuthorizer>(),
                 provider.GetRequiredService<SessionToolExecutor>(),
+                provider.GetRequiredService<IAgentRunStore>(),
                 provider.GetRequiredService<ILanguageModelResolver>(),
                 provider.GetRequiredService<IModelCatalog>(),
                 provider.GetRequiredService<IUserTurnCapabilityValidator>(),
                 provider.GetRequiredService<IStructuredMemoryService>(),
-                provider.GetRequiredService<IAgentRunStore>(),
                 provider.GetRequiredService<IDiagnosticIdSource>(),
                 provider.GetService<IBrowserSessionLease>(), provider.GetRequiredService<IAgentRunAuthority>());
         });

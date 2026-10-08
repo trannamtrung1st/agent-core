@@ -529,7 +529,7 @@ public sealed class AgentRunDurabilityTests
             memory.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         }
 
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             brain ?? new DefaultAgentBrain(new PromptContextBuilder()),

@@ -10,7 +10,7 @@ namespace AgentCore.Application.Sessions;
 
 public sealed partial class SessionRuntime
 {
-    private readonly IAgentRunStore? _agentRuns;
+    private readonly IAgentRunStore _agentRuns;
     private readonly IAgentRunAuthority? _runAuthority;
     private AgentRun? _boundAgentRun;
     private ProviderFailure? _agentRunProviderFailure;
@@ -39,7 +39,6 @@ public sealed partial class SessionRuntime
     {
         try
         {
-            if (_agentRuns is null) { input.Completed.TrySetResult(false); return; }
             if (_snapshot.Status == SessionStatus.Paused)
             {
                 if (!SessionPauseSemantics.IsTransportResumable(_snapshot.PauseReason))
@@ -85,8 +84,8 @@ public sealed partial class SessionRuntime
         catch (Exception exception) { input.Completed.TrySetException(exception); throw; }
     }
 
-    public async Task<bool> HasOpenAgentRunsAsync(CancellationToken ct = default) => _agentRuns is not null
-        && (await _agentRuns.ListForSessionAsync(RunOwner, SessionId, ct).ConfigureAwait(false)).Any(run => !run.IsTerminal);
+    public async Task<bool> HasOpenAgentRunsAsync(CancellationToken ct = default) =>
+        (await _agentRuns.ListForSessionAsync(RunOwner, SessionId, ct).ConfigureAwait(false)).Any(run => !run.IsTerminal);
 
     public async Task RefreshDurableConversationProjectionAsync(CancellationToken ct = default)
     {
@@ -111,7 +110,6 @@ public sealed partial class SessionRuntime
 
     private async Task ReconcileAgentRunBeforeAttachAsync(CancellationToken ct)
     {
-        if (_agentRuns is null) return;
         var runs = await _agentRuns.ListForSessionAsync(RunOwner, SessionId, ct).ConfigureAwait(false);
         foreach (var id in runs.SelectMany(run => run.Admission.Activation.SourceEntryIds)) _admittedAgentInputs.TryAdd(id, 0);
         var active = runs.Where(run => !run.IsTerminal).OrderBy(run => run.CreatedAtUtc).ThenBy(run => run.AgentRunId).FirstOrDefault();
@@ -124,9 +122,7 @@ public sealed partial class SessionRuntime
         && (_snapshot.Status is SessionStatus.Attached or SessionStatus.Created
             || _headlessTransportDetached && _snapshot.Status is not (SessionStatus.Ended or SessionStatus.Ending));
 
-    private IReadOnlyList<ConversationEntry> PendingUserBatch() => _agentRuns is null
-        ? TrailingUserSuffix.Of(_snapshot.Entries)
-        : _snapshot.Entries.Where(entry => _snapshot.PendingAgentInputIds.Contains(entry.EntryId)
+    private IReadOnlyList<ConversationEntry> PendingUserBatch() => _snapshot.Entries.Where(entry => _snapshot.PendingAgentInputIds.Contains(entry.EntryId)
             && !_admittedAgentInputs.ContainsKey(entry.EntryId) && entry.Role == ConversationRole.User
             && entry.Status == EntryStatus.Completed).OrderBy(entry => entry.Sequence).ToArray();
 
@@ -135,11 +131,6 @@ public sealed partial class SessionRuntime
         if (!CanStartUserConversationBatch()) return false;
         var users = PendingUserBatch();
         if (users.Count == 0 || users.Any(entry => _undurableUserEntryIds.Contains(entry.EntryId))) return false;
-        if (_agentRuns is null)
-        {
-            await LaunchUserBatchAsync(cause, users, _ids.NewId()).ConfigureAwait(false);
-            return true;
-        }
         PinModelSelectionIfMissing();
         var run = AgentRunAdmissionFactory.ForAcceptedUserBatch(_ids.NewId(), _ids.NewId(), _ids.NewId(),
             _snapshot, users, _time.GetUtcNow(), await _tools.ResolveSkillCatalogAsync(_snapshot.AgentInstanceId, _snapshot.Definition, ct));
@@ -209,6 +200,23 @@ public sealed partial class SessionRuntime
         await PublishWaitingOutputAsync(context).ConfigureAwait(false);
     }
 
+    private async Task CancelUnstartedBoundAgentRunAsync(CancellationToken ct)
+    {
+        if (_activeResponseId is not null || _boundAgentRun is not { IsTerminal: false } bound
+            || _snapshot.Entries.Any(entry => entry.Role == ConversationRole.Assistant && entry.ResponseId == bound.ResponseId)) return;
+        var run = await _agentRuns.GetAsync(bound.Owner, bound.AgentRunId, ct).ConfigureAwait(false);
+        if (run is null || run.IsTerminal) { _boundAgentRun = null; return; }
+        if (run.Claim?.Generation != bound.Claim?.Generation) return;
+        var now = _time.GetUtcNow();
+        run = await _agentRuns.ApplyAsync(run.Owner, run.AgentRunId,
+            new AgentRunCommand.RequestCancellation(run.Revision, now, null), ct).ConfigureAwait(false);
+        if (run is { IsTerminal: false, Claim: { } claim })
+            await _agentRuns.ApplyAsync(run.Owner, run.AgentRunId,
+                new AgentRunCommand.CommitCancellation(run.Revision, now, claim.Generation, null), ct).ConfigureAwait(false);
+        _boundAgentRun = null;
+        ClearAgentRunTerminalPending();
+    }
+
     private void MarkAgentRunPendingTerminal()
     {
         _pendingTerminalAgentRunId = _boundAgentRun?.AgentRunId;
@@ -226,7 +234,7 @@ public sealed partial class SessionRuntime
 
     private async Task FinalizeAgentRunAfterPersistAsync(SessionSnapshot saved, CancellationToken ct)
     {
-        if (_agentRuns is null || _pendingTerminalAgentRunId is not { } id) return;
+        if (_pendingTerminalAgentRunId is not { } id) return;
         var run = await _agentRuns.GetAsync(RunOwner, id, ct).ConfigureAwait(false);
         if (run is null || run.IsTerminal) { _boundAgentRun = null; ClearAgentRunTerminalPending(); return; }
         var assistant = saved.Entries.LastOrDefault(entry => entry.Role == ConversationRole.Assistant && entry.ResponseId == run.ResponseId);
@@ -281,7 +289,7 @@ public sealed partial class SessionRuntime
 
     private bool ScheduleAgentRunRetry(EventContext context, Guid responseId, ProviderFailure failure)
     {
-        if (_agentRuns is null || _boundAgentRun is not { Claim: { } claim } run
+        if (_boundAgentRun is not { Claim: { } claim } run
             || run.ResponseId != responseId || run.CancellationRequested || _publishedDisplayLength != 0
             || run.AttemptCount >= run.MaxAttempts
             || run.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate
@@ -316,7 +324,6 @@ public sealed partial class SessionRuntime
     private async Task<AgentRun?> RequestAgentRunCommandAsync(EventContext cause, Guid responseId,
         Func<AgentRun, DateTimeOffset, AgentRunCommand> build, CancellationToken ct)
     {
-        if (_agentRuns is null) return null;
         var bound = _boundAgentRun ?? throw AgentCoreErrors.Conflict("AgentRun ownership is unavailable.");
         var generation = cause.AgentRunGeneration ?? bound.Claim?.Generation ?? bound.Approval?.ExecutionGeneration
             ?? throw AgentCoreErrors.Conflict("AgentRun generation is unavailable.");
@@ -331,7 +338,7 @@ public sealed partial class SessionRuntime
     {
         try
         {
-            if (_agentRuns is null || _activeResponseId != input.ResponseId || input.Context.Epoch != _epoch
+            if (_activeResponseId != input.ResponseId || input.Context.Epoch != _epoch
                 || _boundAgentRun?.AgentRunId != input.AgentRunId || _responseTerminal)
                 throw AgentCoreErrors.Conflict("AgentRun command is superseded.");
             var current = await _agentRuns.GetAsync(RunOwner, input.AgentRunId, ct).ConfigureAwait(false)
@@ -348,7 +355,7 @@ public sealed partial class SessionRuntime
 
     private async Task ResolveBoundApprovalAsync(AgentRunApprovalDecision? decision, CancellationToken ct, Action? accepted = null)
     {
-        if (_agentRuns is null || _boundAgentRun is not { Status: AgentRunStatus.WaitingForApproval, Approval: { } approval } run) return;
+        if (_boundAgentRun is not { Status: AgentRunStatus.WaitingForApproval, Approval: { } approval } run) return;
         var now = _time.GetUtcNow();
         AgentRunCommand command = decision is { } value
             ? new AgentRunCommand.DecideApproval(run.Revision, now, approval.ApprovalId, approval.Revision, approval.ActionHash, value)

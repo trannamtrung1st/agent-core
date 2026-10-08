@@ -24,7 +24,6 @@ public sealed partial class SessionRuntime
     {
         try
         {
-            if (_agentRuns is null) { input.Committed.TrySetResult(false); return; }
             var child = input.Source.Run;
             if (child.Owner != RunOwner || input.Source.Session.Origin.OriginatingSessionId != SessionId
                 || !input.Source.Session.Origin.MayReportCompletion(child.AgentRunId))

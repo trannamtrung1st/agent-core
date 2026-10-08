@@ -46,8 +46,8 @@ public static class AgentRunToolCallCheckpoint
     }
 
     public static bool TryWriteWithReserve(IReadOnlyList<ModelMessage> messages, bool observationRequired,
-        string? blockedActionHash, int reserve, out string payload, IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null) =>
-        TryWrite(messages, observationRequired, blockedActionHash, out payload, loadedCapabilityIds, capabilityLoadCount, skillState)
+        string? blockedActionHash, int reserve, out string payload, IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null, string? protocolRepairReason = null) =>
+        TryWrite(messages, observationRequired, blockedActionHash, out payload, loadedCapabilityIds, capabilityLoadCount, skillState, protocolRepairReason)
         && Encoding.UTF8.GetByteCount(payload) + RecoveryHeadroom(blockedActionHash) + reserve <= AgentRunLimits.MaxCheckpointBytes;
 
     public static IReadOnlyList<ModelToolCall> PendingCalls(IReadOnlyList<ModelMessage> messages)
@@ -111,17 +111,17 @@ public static class AgentRunToolCallCheckpoint
     public static string Write(
         IReadOnlyList<ModelMessage> messages,
         bool observationRequired = false,
-        string? blockedActionHash = null, IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null) =>
+        string? blockedActionHash = null, IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null, string? protocolRepairReason = null) =>
         JsonSerializer.Serialize(new Document(
             Phase,
             messages.Select(MessageDto.From).ToArray(),
             observationRequired,
-            blockedActionHash, loadedCapabilityIds, capabilityLoadCount, skillState), CheckpointJson);
+            blockedActionHash, loadedCapabilityIds, capabilityLoadCount, skillState, protocolRepairReason), CheckpointJson);
 
     public static bool TryWrite(IReadOnlyList<ModelMessage> messages, bool observationRequired,
-        string? blockedActionHash, out string payload, IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null)
+        string? blockedActionHash, out string payload, IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null, string? protocolRepairReason = null)
     {
-        payload = Write(messages, observationRequired, blockedActionHash, loadedCapabilityIds, capabilityLoadCount, skillState);
+        payload = Write(messages, observationRequired, blockedActionHash, loadedCapabilityIds, capabilityLoadCount, skillState, protocolRepairReason);
         return Encoding.UTF8.GetByteCount(payload) + RecoveryHeadroom(blockedActionHash) <= AgentRunLimits.MaxCheckpointBytes;
     }
 
@@ -205,6 +205,14 @@ public static class AgentRunToolCallCheckpoint
         return (ids, calls);
     }
 
+    public static string? ReadProtocolRepairReason(AgentRunCheckpoint? checkpoint)
+    {
+        var reason = checkpoint is null ? null : JsonSerializer.Deserialize<Document>(checkpoint.PayloadJson)?.ProtocolRepairReason;
+        if (reason is not null && ProtocolFailures.RepairInstruction(reason) is null)
+            throw new InvalidOperationException("Protocol repair checkpoint is invalid.");
+        return reason;
+    }
+
     public static ExecutionSkillState ReadSkillState(AgentRunCheckpoint? checkpoint)
     {
         var state = checkpoint is null ? null : JsonSerializer.Deserialize<Document>(checkpoint.PayloadJson)?.SkillState;
@@ -223,7 +231,8 @@ public static class AgentRunToolCallCheckpoint
         bool ObservationRequired = false,
         string? BlockedActionHash = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? LoadedCapabilityIds = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int CapabilityLoadCount = 0, ExecutionSkillState? SkillState = null);
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int CapabilityLoadCount = 0, ExecutionSkillState? SkillState = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ProtocolRepairReason = null);
 
     private sealed record MessageDto(
         string Role,

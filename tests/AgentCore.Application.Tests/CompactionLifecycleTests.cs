@@ -187,6 +187,8 @@ public sealed class CompactionLifecycleTests
         Assert.True(await runtime.SubmitPersistedUserTextAsync("second", Guid.Parse("019944af-0006-7000-8000-0000000000f6")));
         await deferred.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(1, recorder.ConversationRequestCount);
+        var deferredRun = Assert.Single(await SessionRuntimeFixture.RunsForAsync(runtime), run => run.Admission.Activation.SourceEventId == Guid.Parse("019944af-0006-7000-8000-0000000000f6"));
+        Assert.Equal(AgentRunStatus.Running, deferredRun.Status);
         Assert.True(await runtime.RequestLifecycleTransitionAsync(
             SessionLifecycleStatus.Paused,
             LifecycleTransitionSource.User,
@@ -200,6 +202,10 @@ public sealed class CompactionLifecycleTests
             "resume"));
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(2, recorder.ConversationRequestCount);
+        var resumedRun = Assert.Single(await SessionRuntimeFixture.RunsForAsync(runtime), run => run.AgentRunId == deferredRun.AgentRunId);
+        Assert.Equal(AgentRunStatus.Completed, resumedRun.Status);
+        Assert.Equal(deferredRun.ResponseId, resumedRun.ResponseId);
+        Assert.Equal(1, resumedRun.AttemptCount);
         Assert.Contains(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.User && entry.Text == "second");
         Assert.True(await runtime.SubmitPersistedUserTextAsync("third", Guid.Parse("019944af-0006-7000-8000-0000000000f7")));
         await runtime.WaitUntilIdleAsync();
@@ -361,7 +367,7 @@ public sealed class CompactionLifecycleTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 256).Select(index => Guid.Parse($"019944af-0007-7000-8000-{index:D12}")),
             [snapshot.SessionId]);
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),

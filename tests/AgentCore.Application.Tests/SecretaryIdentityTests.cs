@@ -194,7 +194,7 @@ public sealed class SecretaryIdentityTests
         snapshot = RuntimeAgentRunStore.WithPins(snapshot);
         turns.Bind(sessions);
         await sessions.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -346,7 +346,7 @@ public sealed class SecretaryIdentityTests
             AgentInstanceId: InstanceId);
         var sessions = new InMemoryMemoryStore();
         await sessions.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),

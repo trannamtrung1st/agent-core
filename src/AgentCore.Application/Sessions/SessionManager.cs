@@ -974,16 +974,18 @@ public sealed class SessionRuntimeFactory(
     IAttachmentProcessor processor,
     IArtifactReferenceAuthorizer artifacts,
     SessionToolExecutor tools,
+    IAgentRunStore agentRuns,
     ILanguageModelResolver? models = null,
     IModelCatalog? catalog = null,
     IUserTurnCapabilityValidator? turnCapabilities = null,
     IStructuredMemoryService? structuredMemory = null,
-    IAgentRunStore? agentRuns = null,
     IDiagnosticIdSource? diagnostics = null,
     IBrowserSessionLease? browserLease = null,
     IAgentRunAuthority? runAuthority = null,
     ITriggerStore? triggerOccurrences = null)
 {
+    private readonly IAgentRunStore _agentRuns = agentRuns ?? throw new ArgumentNullException(nameof(agentRuns));
+
     public SessionRuntime Create(SessionSnapshot snapshot, ISessionOutput output) =>
         new(
             snapshot,
@@ -994,6 +996,7 @@ public sealed class SessionRuntimeFactory(
             ids,
             time,
             loggers.CreateLogger(typeof(SessionRuntime).FullName!),
+            _agentRuns,
             classifier,
             recognition: voice.EffectivePlan.RecognitionCapabilities
                 ?? recognizer?.Capabilities
@@ -1010,7 +1013,6 @@ public sealed class SessionRuntimeFactory(
             catalog: catalog,
             turnCapabilities: turnCapabilities,
             structuredMemory: structuredMemory,
-            agentRuns: agentRuns,
             diagnostics: diagnostics,
             browserLease: browserLease, runAuthority: runAuthority, triggerOccurrences: triggerOccurrences);
 }
