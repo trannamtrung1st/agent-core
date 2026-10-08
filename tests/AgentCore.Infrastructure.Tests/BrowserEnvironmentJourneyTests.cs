@@ -186,15 +186,22 @@ public sealed class BrowserEnvironmentJourneyTests
             Assert.Equal("invalid", (await Run(new { operation = "set", origin = origin + "/path", latitude = 10, longitude = 20 })).ErrorCode);
             Assert.Equal("invalid", (await Run(new { operation = "set", origin, latitude = 91, longitude = 20 })).ErrorCode);
             Assert.Equal("invalid", (await Run(new { operation = "set", origin })).ErrorCode);
+            await browser.ContextFor(id)!.GrantPermissionsAsync(["notifications"], new() { Origin = origin });
             var granted = await Run(new { operation = "set", origin, latitude = 10.75, longitude = 20.5, accuracy = 10 });
             Assert.Null(granted.ErrorCode);
+            Assert.Equal("granted", await page.EvaluateAsync<string>("async () => (await navigator.permissions.query({name:'notifications'})).state"));
+            Assert.Null((await Run(new { operation = "set", origin, latitude = 10.75, longitude = 20.5 })).ErrorCode);
+            Assert.Equal("granted", await page.EvaluateAsync<string>("async () => (await navigator.permissions.query({name:'notifications'})).state"));
             Assert.DoesNotContain("10.75", granted.DataJson);
             var position = await page.EvaluateAsync<double[]>("() => new Promise((resolve,reject) => navigator.geolocation.getCurrentPosition(p => resolve([p.coords.latitude, p.coords.longitude]), reject))");
             Assert.Equal(new[] { 10.75, 20.5 }, position);
             var otherPage = await browser.ContextFor(id)!.NewPageAsync();
             await otherPage.GotoAsync(other.Origin + "/browser-v2-frame.html");
             Assert.Equal("prompt", await otherPage.EvaluateAsync<string>("async () => (await navigator.permissions.query({name:'geolocation'})).state"));
-            Assert.Null((await Run(new { operation = "clear", origin })).ErrorCode);
+            var cleared = await Run(new { operation = "clear", origin });
+            Assert.Null(cleared.ErrorCode);
+            Assert.Contains("\"permissionsReset\":true", cleared.DataJson);
+            Assert.Equal("prompt", await page.EvaluateAsync<string>("async () => (await navigator.permissions.query({name:'notifications'})).state"));
             Assert.Equal("prompt", await page.EvaluateAsync<string>("async () => (await navigator.permissions.query({name:'geolocation'})).state"));
             using var cancel = new CancellationTokenSource(); cancel.Cancel();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await browser.ExecuteAsync(new(id, ToolCatalog.BrowserGeolocation,

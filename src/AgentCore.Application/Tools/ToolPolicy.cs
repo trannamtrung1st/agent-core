@@ -64,7 +64,7 @@ public static class ToolPolicy
         }
 
         if (BrowserToolCatalog.TryGet(toolName, out var browserFeature)
-            && browserFeature.Feature is BrowserFeature.FillCredential or BrowserFeature.Evaluate
+            && browserFeature.Feature is BrowserFeature.FillCredential or BrowserFeature.Evaluate or BrowserFeature.Geolocation
             && admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn })
             return ToolPolicyDecision.Deny;
         if (toolName == ToolCatalog.BrowserVisionMouse && admission?.SupportsVision != true)
@@ -212,7 +212,7 @@ public static class ToolPolicy
         }
 
         if (BrowserToolCatalog.TryGet(descriptor.Name, out var browserFeature)
-            && browserFeature.Feature is BrowserFeature.FillCredential or BrowserFeature.Evaluate
+            && browserFeature.Feature is BrowserFeature.FillCredential or BrowserFeature.Evaluate or BrowserFeature.Geolocation
             && context is not { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn })
         {
             return false;

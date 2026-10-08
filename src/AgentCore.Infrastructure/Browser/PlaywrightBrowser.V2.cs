@@ -99,13 +99,23 @@ public sealed partial class PlaywrightBrowser
                         RememberOpenPages(session);
                         var operation = String(args, "operation");
                         if (operation is not ("list" or "new" or "select" or "close")) return new("invalid");
-                        if (operation == "list") return Data(new { tabs = DescribePages(session).Select(t => new { tabRef = t.PageId, url = t.Url, active = t.Active }) });
+                        if (operation == "list") return Data(new { tabs = (await DescribePagesAsync(session, ct)).Select(t => new { tabRef = t.PageId, url = t.Url, active = t.Active }) });
                         if (operation == "new")
                         {
                             var url = String(args, "url");
                             if (!BrowserTargetPolicy.EvaluateDestination(url, LeaseOrigins(session) ?? _policy.NavigationOrigins, _policy.PolicyMode).Allowed) return new("target_denied");
-                            var page = await session.Context.NewPageAsync().WaitAsync(ct); RememberPage(session, page);
-                            await page.GotoAsync(url!, new PageGotoOptions { Timeout = TimeoutMs(), WaitUntil = WaitUntilState.DOMContentLoaded }).WaitAsync(ct);
+                            // Page creation can finish late; close the context if cancellation wins that race.
+                            var creation = session.Context.NewPageAsync();
+                            await MutateContextAsync(session, creation, ct);
+                            var page = await creation; RememberPage(session, page);
+                            var navigation = page.GotoAsync(url!, new PageGotoOptions { Timeout = TimeoutMs(), WaitUntil = WaitUntilState.DOMContentLoaded });
+                            try { await navigation.WaitAsync(ct); }
+                            catch (Exception ex) when (ex is OperationCanceledException or PlaywrightException)
+                            {
+                                await CloseQuietlyAsync(page); ForgetPage(session, page);
+                                _ = navigation.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+                                throw;
+                            }
                             if (!IsAllowed(session, page.Url)) { await page.CloseAsync().WaitAsync(ct); return new("target_denied"); }
                             session.Page = page; session.LastAllowedUrl = page.Url; session.Generation++;
                             return new(null, await CaptureAsync(session, command.SessionId, ct));
@@ -127,7 +137,9 @@ public sealed partial class PlaywrightBrowser
                     {
                         var dialog = session.Dialog;
                         if (dialog is null) return new("dialog_missing");
-                        if (String(args, "operation") == "inspect") return Data(new { kind = dialog.Type, message = Redact(dialog.Message, [], session.ProtectedValues) });
+                        // A modal blocks page JS, including the live storage/password secret collector.
+                        // Mask the entire untrusted message rather than trusting stale pre-dialog evidence.
+                        if (String(args, "operation") == "inspect") return Data(new { kind = dialog.Type, message = "[redacted]", messageRedacted = true });
                         if (String(args, "operation") == "accept") await dialog.AcceptAsync(String(args, "promptText")).WaitAsync(ct);
                         else await dialog.DismissAsync().WaitAsync(ct);
                         session.Dialog = null;
@@ -171,7 +183,9 @@ public sealed partial class PlaywrightBrowser
                         return new(null, await CaptureAsync(session, command.SessionId, ct));
                     }
                 case "browser.resize":
-                    await session.Page.SetViewportSizeAsync(Int(args, "width", 1280), Int(args, "height", 800)).WaitAsync(ct); break;
+                    await Action(ResizeProbe is { } resizeProbe
+                        ? resizeProbe(session.Page, Int(args, "width", 1280), Int(args, "height", 800))
+                        : session.Page.SetViewportSizeAsync(Int(args, "width", 1280), Int(args, "height", 800))); break;
                 case "browser.fill_form":
                     {
                         var fields = new List<(ILocator Target, string? Value, bool? Checked)>();

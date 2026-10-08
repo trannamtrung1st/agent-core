@@ -24,7 +24,7 @@ The comparison uses the official [Playwright MCP inventory at `a6d7678b7bc10d9fb
 | `browser_file_upload` | browser.upload | Bounded subset | P/Upload | Write | Approved resources only; arbitrary host paths and implicit chooser authority excluded. | Implement |
 | `browser_fill_form` | browser.fill_form; browser.select_option | Implemented | P/FillForm / SelectOption | Write | Text, textarea, contenteditable, checkbox/switch and selects covered. | Implement |
 | `browser_find` | browser.find | Implemented | P/Find | ReadOnly | Full permitted index; bounded regex and 20 results. | Implement |
-| `browser_handle_dialog` | browser.dialog | Implemented | P/Dialog | Write; inspect read path | Pending alert/confirm/prompt inspect, accept and dismiss. | Implement |
+| `browser_handle_dialog` | browser.dialog | Bounded subset | P/Dialog | Write; inspect read path | Kind inspection, accept/dismiss and explicit prompt replies. Modal message is fully masked because live secret collection is blocked. | Implement |
 | `browser_hover` | browser.hover | Implemented | P/Hover | Write | Native Locator actionability. | Implement |
 | `browser_navigate` | browser.navigate (goto) | Implemented | P/Navigate | ReadOnly; destination policy | HTTP(S) only; redirects checked. | Implement |
 | `browser_navigate_back` | browser.navigate (back) | Implemented | P/Navigate | ReadOnly; destination policy | Forward and reload also supported. | Implement |
@@ -94,7 +94,7 @@ The comparison uses the official [Playwright MCP inventory at `a6d7678b7bc10d9fb
 | Viewport | `browser.resize`; `Browser:Environment:ViewportWidth/ViewportHeight` | Runtime + host creation / P Resize | Ordinary Write + interaction policy | Implemented; bounded CSS dimensions. |
 | Named device, touch, mobile layout, pixel ratio | `Browser:Environment:Device/IsMobile/HasTouch/DeviceScaleFactor` | Context creation / first-party P only | Host configuration | Implemented for ephemeral and persistent contexts. Device catalog stays inside provider. Runtime replacement deferred to preserve tabs, storage and profile ownership. |
 | Locale / timezone | `Browser:Environment:Locale/TimezoneId` | Context creation / first-party P only | Host configuration | Implemented. Browser resolves locale independently of invariant .NET globalization. Runtime replacement deferred. |
-| Geolocation | `browser.set_geolocation` set/clear | P Geolocation | SensitiveWrite, exact approval, attached UserTurn, explicit active allowed origin | Implemented; one origin grant at a time, no coordinate echo; no default grant. |
+| Geolocation | `browser.set_geolocation` set/clear | P Geolocation | SensitiveWrite, exact approval, attached UserTurn, explicit active allowed origin | One origin grant, no coordinate echo/default grant. Initial/same-origin updates preserve overrides; clear/origin switch resets all permission overrides (native limitation). |
 | Media / color / reduced motion / forced colors / contrast | `browser.emulate_media` | P Media | Ordinary Write + interaction policy | Implemented with omission preservation and individual null reset. Overrides belong to the active page, not all tabs. |
 | Online/offline | `browser.network_state` | P NetworkControl | SensitiveWrite / exact approval | Existing control retained; config inspection reports active state. |
 | Downloads | Action result → owner-scoped Artifacts | First-party P | Existing action authority + MIME/size/redaction policy | Implemented; no extra download tool needed. |

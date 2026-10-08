@@ -86,7 +86,7 @@ public sealed partial class PlaywrightBrowser
                 websocketOrigins = "resource origin policy",
                 navigationOriginCount = _policy.NavigationOrigins.Count,
                 interactionOriginCount = _policy.EffectiveInteractionOrigins.Count, resourceOriginCount = _policy.EffectiveResourceOrigins.Count,
-                originRestrictionsApply = true, permissions = "geolocation requires an exact origin and approval",
+                originRestrictionsApply = true, permissions = "Geolocation requires exact-origin approval. Initial/same-origin set preserves overrides; clear or origin change resets all permission overrides (Playwright limitation).",
                 contextSettings = "Device, locale, timezone and touch settings apply at context creation; active contexts are retained."
             },
             limits = new { snapshotChars = BrowserToolLimits.MaxSnapshotChars, captureBytes = BrowserToolLimits.MaxCaptureBytes, downloadBytes = BrowserToolLimits.MaxDownloadBytes }
@@ -133,8 +133,13 @@ public sealed partial class PlaywrightBrowser
 
         // A later grant must never finish after cancellation releases the owner gate.
         ct.ThrowIfCancellationRequested();
-        await MutateContextAsync(session, session.Context.ClearPermissionsAsync(), ct);
-        session.GeolocationOrigin = null;
+        // Playwright can only clear all overrides. Avoid this on initial/same-origin updates.
+        var permissionsReset = operation == "clear" || session.GeolocationOrigin is { } previous && previous != origin;
+        if (permissionsReset)
+        {
+            await MutateContextAsync(session, session.Context.ClearPermissionsAsync(), ct);
+            session.GeolocationOrigin = null;
+        }
         await MutateContextAsync(session, session.Context.SetGeolocationAsync(location), ct);
         if (location is not null && !ct.IsCancellationRequested)
         {
@@ -148,7 +153,7 @@ public sealed partial class PlaywrightBrowser
             session.GeolocationOrigin = null;
             ct.ThrowIfCancellationRequested();
         }
-        return new(null, DataJson: "{\"status\":\"ok\"}");
+        return new(null, DataJson: JsonSerializer.Serialize(new { status = "ok", permissionsReset }));
 
     }
 

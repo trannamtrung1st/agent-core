@@ -19,6 +19,21 @@ public sealed class UnattendedBrowserTests
     private const string PublishRef = "el_0123456789abcdefghijkl";
     private const string RepairRef = "el_abcdefghijklmnopqrstuv";
 
+    [Theory]
+    [InlineData(false, TriggerKind.UserTurn, true)]
+    [InlineData(false, TriggerKind.ScheduledOccurrence, false)]
+    [InlineData(true, TriggerKind.ScheduledOccurrence, false)]
+    [InlineData(true, TriggerKind.ApplicationEvent, false)]
+    public void Geolocation_projection_matches_direct_turn_execution(bool detached, TriggerKind kind, bool offered)
+    {
+        var definition=Definition() with { Environment=new RoleEnvironment(ToolAllowlist: [ToolCatalog.BrowserGeolocation]) };
+        var context=Context(trusted:true,kind:kind) with { Definition=definition, DetachedExecution=detached };
+        Assert.Equal(offered, ToolPolicy.IsOffered(definition,context,ToolCatalog.BrowserGeolocation,ToolConfigurationGates.AllowAll));
+        var admission=Admission() with { Detached=detached,TriggerKind=kind };
+        Assert.Equal(offered ? ToolPolicyDecision.RequireApproval : ToolPolicyDecision.Deny,
+            ToolPolicy.EvaluateExecution(definition,ToolCatalog.BrowserGeolocation,ToolConfigurationGates.AllowAll,admission:admission));
+    }
+
     [Fact]
     public async Task Work_recovery_keeps_loaded_instance_content_and_new_work_resolves_current_catalog()
     {

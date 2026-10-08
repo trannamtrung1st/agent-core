@@ -156,6 +156,7 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
     private int _stopped;
 
     internal Func<Exception?>? CaptureProbe { get; set; }
+    internal Func<IPage, int, int, Task>? ResizeProbe { get; set; }
 
     public PlaywrightBrowser(
         BrowserOptions options,
@@ -2047,7 +2048,7 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
         var elements = await CollectElementsAsync(session, sessionId, secrets, cancellationToken).ConfigureAwait(false);
         var intervention = await ClassifyInterventionAsync(session.Page, cancellationToken).ConfigureAwait(false);
         return new BrowserSnapshot(
-            Redact(session.Page.Url, secrets, session.ProtectedValues),
+            SafeBrowserUrl(session.Page.Url, secrets, session.ProtectedValues),
             Clip(title, BrowserToolLimits.MaxTitleLength),
             Clip(text, BrowserToolLimits.MaxVisibleTextLength),
             truncated,
@@ -2210,7 +2211,7 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
         return elements;
     }
 
-    private async Task<IReadOnlyList<string>> CollectSecretsAsync(SessionBrowser session, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<string>> CollectSecretsAsync(SessionBrowser session, CancellationToken cancellationToken, IPage? page = null)
     {
         var secrets = new List<string>(session.ProtectedValues);
         var cookies = await session.Context.CookiesAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -2219,7 +2220,7 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
             ConsiderSecret(secrets, "cookie", cookie.Name, cookie.Value);
         }
 
-        foreach (var frame in session.Page.Frames)
+        foreach (var frame in (page ?? session.Page).Frames)
         {
             if (frame != session.Page.MainFrame && !Allows(session, frame.Url, true)) continue;
             var storedJson = await frame.EvaluateAsync<string>(ReadSecrets).WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -2812,11 +2813,29 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
         }
     }
 
-    private static IReadOnlyList<BrowserPageInfo> DescribePages(SessionBrowser session)
+    private static string SafeBrowserUrl(string url, IReadOnlyList<string> secrets, IReadOnlyList<string> protectedValues)
+    {
+        var safe = System.Text.RegularExpressions.Regex.Replace(url, @"(?<=://)[^/@]+@", "[redacted]@");
+        safe = System.Text.RegularExpressions.Regex.Replace(safe, @"([?&#])([^=&#]+)=([^&#]*)", match =>
+        {
+            var key = Uri.UnescapeDataString(match.Groups[2].Value).Replace("+", " ");
+            return IsCredentialKey(key) || SensitiveControl(key) || key.Equals("code", StringComparison.OrdinalIgnoreCase)
+                ? match.Groups[1].Value + match.Groups[2].Value + "=[redacted]" : match.Value;
+        });
+        return Redact(safe, secrets.Select(Uri.EscapeDataString).Concat(secrets).ToArray(), protectedValues);
+    }
+
+    private async Task<IReadOnlyList<BrowserPageInfo>> DescribePagesAsync(SessionBrowser session, CancellationToken ct)
     {
         var active = session.Page;
-        return OpenPages(session)
-            .Select(item => new BrowserPageInfo(item.Id, Redact(SafePageUrl(item.Page), [], session.ProtectedValues), ReferenceEquals(item.Page, active)))
+        var pages = OpenPages(session);
+        var secrets = new List<string>();
+        foreach (var binding in pages.Where(p => IsAllowed(session, SafePageUrl(p.Page))))
+            foreach (var value in await CollectSecretsAsync(session, ct, binding.Page)) AddSecret(secrets, value);
+        return pages
+            .Select(item => new BrowserPageInfo(item.Id, IsAllowed(session, SafePageUrl(item.Page))
+                ? SafeBrowserUrl(SafePageUrl(item.Page), secrets, session.ProtectedValues)
+                : SafeNetworkUrl(SafePageUrl(item.Page)), ReferenceEquals(item.Page, active)))
             .ToArray();
     }
 

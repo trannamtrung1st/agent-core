@@ -2,6 +2,8 @@
 
 Review date: 2026-10-08. Starting commit: `885f759e`. This follow-on reviews the completed Browser v2 and [capability audit](browser-v2-completeness-and-polish.md); it adds no tools, features, grants, provider ports or UI surfaces.
 
+The subsequent [final bounded review](browser-v2-final-review.md) validates five additional privacy/projection/permission/cancellation findings against `68940e7b`; this report retains the evidence for its earlier checkpoint.
+
 ## Findings and corrections
 
 | Finding | Operational reproduction | Correction |
