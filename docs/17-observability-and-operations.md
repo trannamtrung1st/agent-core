@@ -32,6 +32,8 @@ Trace spans: session attach, user turn, brain decision, model generation, each T
 
 Application code records those histograms on `ActivitySource`/`Meter` `AgentCore.Runtime`. Observed synthetic 20-turn numbers live in [Milestone 12 demo verification](reports/m12-demo-verification.md); they are measurements, not SLAs. Compose SQLite volume survival and the owner-capability path are covered by `scripts/compose-sqlite-volume.sh` (also run on Ubuntu in [GitHub Actions](../.github/workflows/synthetic.yml)) and [MVP handoff](reports/m12-mvp-handoff.md).
 
+The existing Synthetic workflow also supports manual branch verification: `gh workflow run synthetic.yml --ref BRANCH` (replace `BRANCH` with the desired branch), then inspect the run's exact `headSha` and all five job results. This uses the same key-free gates when pull-request conflicts prevent automatic scheduling. Passing a branch run verifies its source; resolving conflicts with the target branch remains a separate merge prerequisite.
+
 ## Admin lifecycle observability (observed, P7)
 
 Admin routes under `/api/v2/admin` require the same trusted-local **owner capability** as other destructive catalog operations (`X-AgentCore-Owner-Capability` from `POST /api/v1/local/owner-capability` in Synthetic/Compose). Denied or missing capability fails closed with 401; trusted-local restrictions apply before any durable Admin mutation.
