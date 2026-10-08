@@ -1421,3 +1421,15 @@ Full architectural cutover is closed/frozen on `9c2d40e0`; all five [exact-SHA h
 Hosted results: 2,718 backend cases passed with 20 optional live/store/sandbox probes skipped; 745 frontend tests and build passed; 120 core browser scenarios and all 16 phase-acceptance scenarios passed; Compose persisted destination/delivery, Sessions/Runs and durable assets through recreation. Local coverage additionally passed the sandbox probes and four plugin tests. Full local outcomes, resolved retries, J01–J16 mapping and 1440/768/390 screenshots remain in the [verification report](docs/reports/automation-targets-background-reportback-verification.md).
 
 Historical AgentRun/Browser v2 freezes remain unchanged; P10/P11 remain unopened.
+
+## Completion inbox bounded post-closure hardening
+
+**Closed on verified behavior `5da84da16eea68274894d48202e422f14e2eb343` (`5da84da1`), 2026-10-08.** [Exact-SHA Synthetic workflow `37805812128`](https://github.com/trannamtrung1st/agent-core/actions/runs/37805812128) passed all five jobs in its first attempt.
+
+- [x] Synchronize unexpired consumption claims with valid parent lease renewal and same-Run resumption, preserving token/acknowledgment and expired-claim/generation fencing.
+- [x] Resume admitted waits normally when a child becomes missing or durably deleted, preserving Run/Response/attempt identities and bounded unavailable/pending statuses.
+- [x] Verify SQLite/InMemory parity: 106 admission tests; full local backend 2,784 passed with 14 optional skips; isolated Node 22 frontend 749 tests and build passed.
+- [x] Verify all hosted gates on the exact behavior SHA: backend 2,774 passed/20 optional skips, frontend 749/build, core Playwright 124, acceptance 16 and Compose volume survival. The same run covers the canonical startup migration repair from `727865d1`.
+- [x] Record final evidence and earlier local environment failures in the [verification report](docs/reports/durable-completion-inbox-result-handoff-wait-verification.md#post-closure-claim-renewal-and-unavailable-wait-targets-2026-10-08).
+
+This closure changes documentation only. Original completion-inbox/Automation freeze records remain historical; no additional UI change, migration reopening or P10/P11 work is included.

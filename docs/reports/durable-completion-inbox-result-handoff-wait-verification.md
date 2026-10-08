@@ -60,7 +60,9 @@ Canonical docs, product/design context, surface briefs, definition and report ar
 
 ## Post-closure claim renewal and unavailable wait targets (2026-10-08)
 
-The bounded review reproduced eight failures across SQLite and InMemory before correction: four long-running consumption cases and four deleted-child wait cases. A parent renewed its execution lease, but its inbox claim expired at the original deadline and became Pending. A tombstoned child remained a wait target, producing no early wake and a timeout after the deadline. Missing target metadata also caused strict target resolution to throw on recovery.
+**Closed on verified behavior `5da84da16eea68274894d48202e422f14e2eb343` (`5da84da1`).** [Hosted Synthetic workflow `37805812128`](https://github.com/trannamtrung1st/agent-core/actions/runs/37805812128) passed all five jobs in its first attempt. Original feature closure remains historical evidence; this follow-up does not reopen the migration or P10/P11.
+
+The bounded review reproduced eight failures across SQLite and InMemory before correction: four long-running consumption cases and four deleted-child wait cases. A parent renewed its execution lease, but its inbox claim expired at the original deadline and became Pending. A tombstoned child remained a wait target, producing no early wake and a timeout after the deadline. Code inspection also found strict recovery target resolution would throw if target metadata disappeared; the added regression exercises that boundary.
 
 Valid parent transitions now extend an unexpired consumption claim to the current execution lease in the existing outcome/Run transaction, retaining token and provisional acknowledgment. Expired claims are released rather than revived; generation and revision checks remain in place. Wait admission still rejects unresolved or foreign targets. Recovery of an already admitted wait instead appends a normal unavailable result for missing or durably deleted targets, retaining Run, Response and attempt identity and excluding unavailable IDs from pending IDs. No schema migration, data reset or new execution owner is introduced.
 
@@ -69,6 +71,18 @@ Valid parent transitions now extend an unexpired consumption claim to the curren
 Local gates:
 
 - `dotnet test AgentCore.sln --no-restore --nologo -p:UseSharedCompilation=false -m:1`: 2,784 passed, 14 optional skips, including four nopCommerce plugin tests (`/tmp/inbox-hardening-backend.log`).
-- Persistence admission parity: 106 passed after the correction (`/tmp/inbox-hardening-store.log`); strengthened final assertions are checked separately in `/tmp/inbox-hardening-store-final.log`.
-- Frontend verification and build: pending. The parallel local unit run was interrupted after rendering timeouts; the retry uses one worker with unchanged assertions and timeout.
-- Exact behavior-SHA hosted Synthetic workflow: pending. Original feature closure above remains historical evidence.
+- Persistence admission parity: 106 passed after the correction and again with strengthened final assertions (`/tmp/inbox-hardening-store.log`, `/tmp/inbox-hardening-store-final.log`).
+- Frontend: 749 tests across 98 files and production build passed on an archived exact-commit snapshot with Node 22.18.0, using `pnpm run test --run --maxWorkers=2` and `pnpm run build` (`/tmp/inbox-hardening-frontend-candidate.log`, `/tmp/inbox-hardening-web-build-candidate.log`). The shared checkout acquired unrelated concurrent changes, so the final frontend verification used `/tmp/inbox-hardening-candidate-5da84da1/web` with existing dependencies. No UI implementation changed.
+- Earlier local frontend attempts remain recorded: the parallel run was interrupted after rendering timeouts; the one-worker run had 679 passed and 70 failed because pnpm selected Node 26.7.0 and its native Web Storage made jsdom localStorage unavailable. All 70 affected tests passed with that native API disabled (`/tmp/inbox-hardening-frontend-storage.log`), then the full isolated Node 22 run passed without changing assertions or test timeout.
+
+Hosted acceptance on exact behavior SHA `5da84da1`:
+
+| Gate | Result |
+| --- | --- |
+| [Backend](https://github.com/trannamtrung1st/agent-core/actions/runs/37805812128/job/113409859078) | 2,774 passed, 20 optional skips: Domain 173, Infrastructure 885/15 skips, Application 1,333/2 skips, API 383/3 skips. |
+| [Frontend](https://github.com/trannamtrung1st/agent-core/actions/runs/37805812128/job/113409858235) | 749 tests across 98 files and production build passed. |
+| [Playwright core](https://github.com/trannamtrung1st/agent-core/actions/runs/37805812128/job/113409858886) | All 124 scenarios passed. |
+| [Playwright acceptance](https://github.com/trannamtrung1st/agent-core/actions/runs/37805812128/job/113409859350) | All 16 journeys across seven acceptance projects passed. |
+| [Compose](https://github.com/trannamtrung1st/agent-core/actions/runs/37805812128/job/113409858654) | Owner-capability and SQLite volume/recreation smoke passed. |
+
+Final metadata confirms completed/success and the full behavior SHA; logs are retained in `/tmp/inbox-hardening-hosted.log`. This run also covers startup repair `727865d1` and its three canonical migration regressions (upgrade, data preservation/reopen and untracked-schema rejection). The cancelled runs for `727865d1` and `c2639db0` are not acceptance evidence.
