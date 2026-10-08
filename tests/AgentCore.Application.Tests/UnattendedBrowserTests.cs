@@ -847,14 +847,19 @@ public sealed class UnattendedBrowserTests
         Assert.Equal(RepairRef, browser.LastActRef);
     }
 
-    [Fact]
-    public async Task In_flight_browser_act_without_a_saved_flag_is_observed_after_claim_expiry()
+    [Theory]
+    [InlineData(ToolCatalog.BrowserClick)]
+    [InlineData(ToolCatalog.BrowserHover)]
+    [InlineData(ToolCatalog.BrowserType)]
+    public async Task In_flight_browser_interaction_without_a_saved_flag_is_observed_after_claim_expiry(string interruptedTool)
     {
         var browser = new RecordingBrowser();
         var agents = await ActiveAgentsAsync(OwnerId);
         var now = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
         var generation = Guid.Parse("019944af-00e5-7000-8000-000000000001");
-        var act = Call(ToolCatalog.BrowserClick, $$"""{"ref":"{{PublishRef}}"}""");
+        var act = Call(interruptedTool, interruptedTool == ToolCatalog.BrowserType
+            ? $$"""{"ref":"{{PublishRef}}","text":"attempted change"}"""
+            : $$"""{"ref":"{{PublishRef}}"}""");
         var payload = DurableToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [act])], skillState: new([], [], 0));
         Assert.DoesNotContain("\"ObservationRequired\":true", payload, StringComparison.Ordinal);
         var store = new InMemoryWorkItemStore();
@@ -873,7 +878,7 @@ public sealed class UnattendedBrowserTests
             new WorkCheckpoint(payload, 0, 0, (int)ToolLimits.Overall.TotalMilliseconds),
             null,
             now);
-        var hash = ToolActionHash.Compute(ToolCatalog.BrowserClick, JsonDocument.Parse(act.ArgumentsJson).RootElement);
+        var hash = ToolActionHash.Compute(interruptedTool, JsonDocument.Parse(act.ArgumentsJson).RootElement);
         var prepared = await store.MarkSideEffectAsync(
             WorkId, saved.Revision, generation, WorkSideEffectDisposition.Prepared, act.Id, hash, now);
         await store.MarkSideEffectAsync(
@@ -893,7 +898,7 @@ public sealed class UnattendedBrowserTests
                 () => ToolRound(Call(ToolCatalog.BrowserSnapshot, "{}")),
                 () => ToolRound(Call(ToolCatalog.BrowserClick, $$"""{"ref":"{{RepairRef}}"}""")),
                 () => CompleteRound("observed")),
-            Definition(),
+            Definition() with { Environment = new RoleEnvironment(ToolAllowlist: Definition().Environment!.ToolAllowlist!.Append(interruptedTool).Distinct().ToArray()) },
             TriggerKind.ScheduledOccurrence,
             (current, body, token) => store.CheckpointAsync(
                 current.WorkItemId,

@@ -752,7 +752,7 @@ public sealed class DurableOccurrenceExecution(
 
             foreach (var call in message.ToolCalls)
             {
-                if (!string.Equals(call.Name, ToolCatalog.BrowserClick, StringComparison.Ordinal))
+                if (!BrowserToolCatalog.IsInteraction(call.Name))
                 {
                     continue;
                 }

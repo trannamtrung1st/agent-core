@@ -13,7 +13,7 @@ This user-authorized follow-on composes with the completed Agent Workspace refin
 
 ## Post-filesystem managed workspace refinement
 
-The workspace refinement is superseded by the authorized full migration: one real Agent Instance owner per Session, durable `/home`, temporary `/working`, transient mailbox cwd and canonical copy/move contracts. Runtime built-ins are current versions only; retired immutable files remain in Git. General Assistant is v16. Existing phase freezes remain historical; P10/P11 remain unopened.
+The workspace refinement is superseded by the authorized full migration: one real Agent Instance owner per Session, durable `/home`, temporary `/working`, transient mailbox cwd and canonical copy/move contracts. Runtime built-ins are current versions only; retired immutable files remain in Git. General Assistant is v17. Existing phase freezes remain historical; P10/P11 remain unopened.
 
 Full migration acceptance requires mandatory ownership and empty Chat guidance; exact file/tree cross-root copy, the four-file c#→csharp rename, CAS and lifecycle conflicts, Artifact delivery, Session deletion and owner deletion recovery; legacy-data rejection; full backend/frontend tests/build, Synthetic Playwright, Compose recreation, synchronized normative docs and hosted CI. See the migration verification report for the current measured gate status. Cwd persistence, cross-store batches and home sandbox mounts remain deferred.
 
