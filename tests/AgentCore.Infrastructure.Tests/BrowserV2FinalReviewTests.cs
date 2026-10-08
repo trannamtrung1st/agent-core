@@ -47,7 +47,7 @@ public sealed class BrowserV2FinalReviewTests
         {
             Assert.Null((await browser.NavigateAsync(new(id,new Uri(browser.HostPolicy.NavigationOrigins.Single()+"/browser-v2.html?compact=1")))).ErrorCode);
             var page=browser.ContextFor(id)!.Pages[0];
-            await page.EvaluateAsync("() => { localStorage.setItem('token','storage-private-7291'); history.replaceState(null,'','?ordinary=storage-private-7291&access_token=unknown-private-8392&view=summary'); }");
+            await page.EvaluateAsync("() => { localStorage.setItem('token','storage-private-7291'); history.replaceState(null,'','?ordinary=storage-private-7291&access_token=unknown-private-8392&api_key=api-private-7364&privateKey=key-private-9183&key=bare-private-7264&X-Amz-Signature=signature-private-8314&view=summary'); }");
             var secondary=await browser.ContextFor(id)!.NewPageAsync();
             await secondary.GotoAsync(browser.HostPolicy.NavigationOrigins.Single()+"/browser-v2-frame.html");
             await secondary.EvaluateAsync("() => { sessionStorage.setItem('token','secondary-private quote'); history.replaceState(null,'','?ordinary='+encodeURIComponent(sessionStorage.token)); }");

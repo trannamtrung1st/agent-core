@@ -429,6 +429,8 @@ Dialog inspection returns kind and a fully masked message (`messageRedacted=true
 
 Geolocation is projected only for an attached UserTurn, matching execution admission. Initial grants and updates at the same origin preserve unrelated permission overrides. Playwright 1.63 has no selective revoke or permission-override enumeration API: explicit clear and switching the granted origin reset all context permission overrides, reported as `permissionsReset=true` and in safe configuration policy information. No CDP workaround or permission subsystem is added.
 
+Credential-name classification normalizes separators and camel case in protected fields and URL parameter names. Standard API/private/access-key names, OTP spellings, bare URL keys and signature parameters remain masked or excluded from ordinary targets even when their exact values are not yet known.
+
 Persistent profiles remain Agent-Instance-owned and are independent of credentials. `browser.close` releases live state/locks but retains the profile directory. A competing process receives `profile_busy`. Profile reset is a separate owner action. Caller cancellation propagates its original token; timed-out/cancelled native actions must be fenced before another operation acquires the session gate. Core retains the durable approval acknowledgement, receipt and uncertain-effect recovery boundaries.
 
 The historical P9/P9.5/P9.6 reports describe their original runtime at frozen SHAs. Browser v2 acceptance is tracked independently in the [implementation plan](18-implementation-plan.md#browser-v2-full-cutover-active-migration).

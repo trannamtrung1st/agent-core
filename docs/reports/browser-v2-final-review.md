@@ -14,6 +14,10 @@ Date: 2026-10-08. Starting commit: `68940e7b` on `develop/branch-1`. This pass v
 
 The permission limitation is confirmed in the installed-version [Playwright 1.63 context implementation](https://github.com/microsoft/playwright/blob/v1.63.0/packages/playwright-core/src/server/browserContext.ts#L373-L387) and [official .NET API](https://playwright.dev/dotnet/docs/api/class-browsercontext#browser-context-clear-permissions). Grant is additive at each origin; clear removes all overrides. No unsupported selective-revocation guarantee is claimed.
 
+The final privacy check also normalizes separator/camel-case credential names in URL projection and the existing protected-field classifier, preserving its original case-insensitive checks. URL coverage includes `api_key`, `privateKey`, bare `key` and signed-URL signatures; protected-field regressions add `api_key`, `privateKey`, `one_time_code` and mixed-case `oTp`. This preserves one snapshot/execution taxonomy and prevents spelling variations from bypassing it.
+
+One intermediate solution run, while another native suite was running, also exposed a late popup-result race in the existing generic SPA journey: the forbidden popup stayed blocked, but interaction returned success because it checked denial before snapshot settlement. Recheck the denial after final capture/popup settlement; the existing assertion remains unchanged. An isolated final backend run verifies this correction alongside the normalized privacy checks.
+
 ## Operational verification
 
 `BrowserV2FinalReviewTests` launches isolated Chromium with disposable loopback fixtures. After correction:
@@ -29,9 +33,9 @@ The permission limitation is confirmed in the installed-version [Playwright 1.63
 | Initial focused privacy/tab reproductions | Five failures before correction: three modal kinds, URL privacy, stalled tab navigation. |
 | Focused native final-review + geolocation | Seven passed, no skips, including actual secure-sink fill and the second tab's encoded secret. |
 | Application policy + Browser v2 contracts | Eight passed; no skips. |
-| Key-free full solution | `dotnet test AgentCore.sln --no-restore --nologo -v minimal`: 2,693 passed (Domain 152, Application 1,322, Infrastructure 844, API 371, OrderEvents 4); 20 skips (14 explicit live opt-ins and six unrelated absent-image Docker prerequisites). Final browser rerun also covers the subsequent URL masking-order adjustment. |
-| Final all-browser filter | `dotnet test tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --no-restore --filter FullyQualifiedName~Browser -v minimal`: 103 passed, two explicit live-demo skips, including existing credentials/profiles/SPA/tabs/dialogs/downloads/cancellation and all final privacy tests. |
-| Hosted exact-SHA Synthetic | New candidate run required after publication; five existing jobs remain the hosted gate. |
+| Final key-free solution | `dotnet test AgentCore.sln --no-restore --nologo -v minimal`: 2,697 passed (Domain 152, Application 1,322, Infrastructure 848, API 371, OrderEvents 4); 20 skips (14 explicit live opt-ins and six unrelated absent-image Docker prerequisites). Includes credential spelling/case variants and the late popup-result guard. The subsequent permission-effect description edit is covered by the focused policy/catalog rerun. |
+| Final all-browser filter | `dotnet test tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --no-restore --filter FullyQualifiedName~Browser -v minimal`: 107 passed, two explicit live-demo skips, including existing credentials/profiles/SPA/tabs/dialogs/downloads/cancellation and all final privacy/name-variant tests. Final solution above also covers the later popup-result guard. |
+| Hosted exact-SHA Synthetic | All five jobs passed on `3b87934abf657aa7e411f06464a050fcc4029e5f` in [run 37734899571](https://github.com/trannamtrung1st/agent-core/actions/runs/37734899571), before the final credential-name normalization. The normalized behavior requires its own candidate run; five existing jobs remain the hosted gate. |
 | Documentation | Interface/backend behavior, capability matrix and testing strategy synchronized; relative links/fences in six changed documents and `git diff --check` passed. No local configuration/secret paths changed. |
 
 Historical full-cutover real-model Journey L remains an explicit open gate. No live-provider inference is authorized or executed by this review, and no full migration freeze is claimed. Previous enhancement/review evidence remains historical at its named SHA.

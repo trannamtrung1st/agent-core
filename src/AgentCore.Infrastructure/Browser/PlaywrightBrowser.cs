@@ -80,13 +80,15 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
           const sourceTag = (source.tagName || "").toLowerCase();
           const sourceType = (source.getAttribute("type") || "").toLowerCase();
           const sourceRole = (source.getAttribute("role") || role || "").toLowerCase();
-          const haystack = [name, source.id, source.getAttribute("name"), source.getAttribute("autocomplete"), source.getAttribute("aria-label")]
-            .filter(Boolean).join(" ").toLowerCase();
+          const rawHaystack = [name, source.id, source.getAttribute("name"), source.getAttribute("autocomplete"), source.getAttribute("aria-label")]
+            .filter(Boolean).join(" ");
+          const haystack = rawHaystack.toLowerCase();
+          const words = rawHaystack.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[-_]+/g, " ").toLowerCase();
           const sensitiveTerms = ["password", "passwd", "passcode", "secret", "token", "api key", "apikey", "access key", "private key", "client secret", "authorization", "one-time-code", "otp"];
           const sensitive = sourceType === "password"
             || sourceType === "hidden"
             || (source.getAttribute("autocomplete") || "").toLowerCase().includes("one-time-code")
-            || sensitiveTerms.some(term => haystack.includes(term));
+            || sensitiveTerms.some(term => haystack.includes(term) || words.includes(term.replace(/[-_]+/g, " ")));
           if (sourceType === "password") actions = ["fill_credential"];
           else if (sensitive) return "null";
           const state = {};
@@ -738,13 +740,15 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
             var settle = request.Operation is "click" or "doubleClick" or "drag" or "press" or "select" or "check" or "uncheck"
                 ? BrowserSnapshotSettle.Automatic
                 : BrowserSnapshotSettle.None;
-            return await CaptureWithRetryAsync(
+            var captured = await CaptureWithRetryAsync(
                 session,
                 request.SessionId,
                 "act",
                 settle,
                 timeoutMs: null,
                 cancellationToken).ConfigureAwait(false);
+            await SettlePopupsAsync(session).ConfigureAwait(false);
+            return session.PopupCode is { } popupCode ? Result(popupCode) : captured;
         }
         catch (OperationCanceledException)
         {
@@ -2819,7 +2823,10 @@ public sealed partial class PlaywrightBrowser : AgentCore.Application.Ports.IBro
         safe = System.Text.RegularExpressions.Regex.Replace(safe, @"([?&#])([^=&#]+)=([^&#]*)", match =>
         {
             var key = Uri.UnescapeDataString(match.Groups[2].Value).Replace("+", " ");
-            return IsCredentialKey(key) || SensitiveControl(key) || key.Equals("code", StringComparison.OrdinalIgnoreCase)
+            var words = System.Text.RegularExpressions.Regex.Replace(key, "([a-z])([A-Z])", "$1 $2").Replace('_', ' ').Replace('-', ' ');
+            return IsCredentialKey(key) || SensitiveControl(key) || SensitiveControl(words)
+                || key.Equals("code", StringComparison.OrdinalIgnoreCase) || key.Equals("key", StringComparison.OrdinalIgnoreCase)
+                || key.Equals("sig", StringComparison.OrdinalIgnoreCase) || words.Contains("signature", StringComparison.OrdinalIgnoreCase)
                 ? match.Groups[1].Value + match.Groups[2].Value + "=[redacted]" : match.Value;
         });
         return Redact(safe, secrets.Select(Uri.EscapeDataString).Concat(secrets).ToArray(), protectedValues);

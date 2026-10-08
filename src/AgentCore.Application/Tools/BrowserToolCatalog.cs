@@ -17,7 +17,7 @@ public sealed record BrowserToolMetadata(string Name, BrowserFeature Feature, st
     private string Guidance => Feature switch
     {
         BrowserFeature.Configuration => "Inspect safe provider, engine, readiness, effective environment and host restrictions without opening a context. No secrets or filesystem paths are returned.",
-        BrowserFeature.Geolocation => "Privileged origin-scoped geolocation emulation. Requires exact approval and a direct attached user turn. Coordinates are not echoed. Clear revokes the active geolocation grant.",
+        BrowserFeature.Geolocation => "Privileged origin-scoped geolocation emulation. Requires exact approval and a direct attached user turn. Coordinates are not echoed. Clear or changing the granted origin may reset all context permission overrides; follow the provider's effective policy before approval.",
         BrowserFeature.VisionMouse => "Vision-only bounded coordinates. For wheel, x/y select a safe viewport target and deltaX/deltaY specify signed scroll distances; at least one delta is required.",
         BrowserFeature.Media => "Change only supplied CSS media overrides; null clears an override. Omitted settings stay unchanged.",
         BrowserFeature.Find => "Search the complete current snapshot index by text OR bounded regex, including targets outside clipped output; does not invalidate refs.",

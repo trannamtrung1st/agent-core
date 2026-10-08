@@ -12,6 +12,10 @@ public sealed class BrowserV2BoundaryReviewTests
     [InlineData("otp")]
     [InlineData("passcode")]
     [InlineData("apikey")]
+    [InlineData("api_key")]
+    [InlineData("privateKey")]
+    [InlineData("one_time_code")]
+    [InlineData("oTp")]
     public async Task Protected_field_metadata_is_rechecked_for_native_typed_and_coordinate_actions(string protectedName)
     {
         var browser = new PlaywrightBrowser(new BrowserOptions { Enabled = true, Headless = true, FixturePort = 0 }, null);
