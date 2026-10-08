@@ -41,11 +41,19 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
 
         if (await TableExistsAsync(connection, "Sessions", cancellationToken).ConfigureAwait(false))
         {
-            // A complete current-model EnsureCreated fixture can be stamped; incomplete schemas are never repaired.
-            await ValidateCanonicalSchemaAsync(db, cancellationToken).ConfigureAwait(false);
-            await db.Database.ExecuteSqlRawAsync("CREATE TABLE IF NOT EXISTS __EFMigrationsHistory (MigrationId TEXT NOT NULL PRIMARY KEY, ProductVersion TEXT NOT NULL);", cancellationToken).ConfigureAwait(false);
-            foreach (var migration in db.Database.GetMigrations())
-                await db.Database.ExecuteSqlInterpolatedAsync($"INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ({migration}, {"10.0.12"});", cancellationToken).ConfigureAwait(false);
+            var migrations = db.Database.GetMigrations().ToArray();
+            var applied = (await db.Database.GetAppliedMigrationsAsync(cancellationToken).ConfigureAwait(false)).ToArray();
+            // Only a complete, known post-cutover history can advance through forward migrations.
+            // Legacy/untracked fixtures still require the exact current schema before stamping.
+            var trackedCanonicalSchema = applied.Contains("20261008063000_RetireLegacyExecution", StringComparer.Ordinal)
+                && applied.SequenceEqual(migrations.Take(applied.Length), StringComparer.Ordinal);
+            if (!trackedCanonicalSchema)
+            {
+                await ValidateCanonicalSchemaAsync(db, cancellationToken).ConfigureAwait(false);
+                await db.Database.ExecuteSqlRawAsync("CREATE TABLE IF NOT EXISTS __EFMigrationsHistory (MigrationId TEXT NOT NULL PRIMARY KEY, ProductVersion TEXT NOT NULL);", cancellationToken).ConfigureAwait(false);
+                foreach (var migration in migrations)
+                    await db.Database.ExecuteSqlInterpolatedAsync($"INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ({migration}, {"10.0.12"});", cancellationToken).ConfigureAwait(false);
+            }
         }
         await db.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
         await ValidateCanonicalSchemaAsync(db, cancellationToken).ConfigureAwait(false);
