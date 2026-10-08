@@ -1,6 +1,6 @@
 # Browser v2 full-cutover verification
 
-Date: 2026-10-08. Status: implementation candidate; behavioral closure is pending.
+Date: 2026-10-08. Status: implementation and key-free verification complete; real-model acceptance is pending.
 
 The authorized migration starts from `bd44046896df6f3e0fc2e7d15d60dd479a5349cd` and its five-job [Synthetic baseline run 37677917533](https://github.com/trannamtrung1st/agent-core/actions/runs/37677917533). That run proves the pre-migration tree, not Browser v2. Historical P9/P9.5/P9.6 and Instance Skills reports and freeze SHAs remain unchanged. P10/P11 remain unopened.
 
@@ -39,6 +39,8 @@ Admin effective configuration shows provider identity, readiness, supported feat
 
 Playwright MCP operated the Synthetic application on isolated API/Vite ports 5290/5390 with an ephemeral browser context. A General Assistant v17 chat looked up AC-1042 through the loopback browser fixture. The observed output was an intermediate application message followed by exactly one completed final response: AC-1042 is In review. Admin provider diagnostics rendered the advertised feature list, readiness and limits. At 390 pixels, document width was 390 pixels and the diagnostics exposed no private path.
 
+Reloading the tested deep link after the readiness correction restored Riley, Ready, exactly one final response and one separate application progress message; the composer became available only on the restored chat.
+
 These interactions complement the CLI suites; they do not replace the full regression gates or real-model journey.
 
 ## Dependency and environment verification
@@ -58,18 +60,24 @@ Local checks use native Synthetic hosts, isolated SQLite files, ephemeral profil
 | Audited `dotnet build` | Passed, zero warnings/errors |
 | `dotnet test tests/AgentCore.Domain.Tests/AgentCore.Domain.Tests.csproj` | 152 passed |
 | `dotnet test tests/AgentCore.Application.Tests/AgentCore.Application.Tests.csproj --nologo -m:1` | 1317 passed, 2 explicit live opt-in skips, after final telemetry/privacy corrections |
-| `dotnet test tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj` | 830 passed, 9 opt-in/platform skips |
-| `dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj` | 371 passed, 3 opt-in skips; final Application-change rerun pending |
+| `dotnet test tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj` | 830 passed, 9 explicit live opt-in skips |
+| `dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj` | 371 passed, 3 opt-in skips after final Application corrections |
 | OrderEvents plugin tests | 4 passed |
-| `pnpm --dir web run test --run --maxWorkers=2` | 739 passed across 96 files; complete rerun after bootstrap correction pending |
+| `pnpm --dir web run test --run --maxWorkers=2` | 739 passed across 96 files after bootstrap correction |
 | Five realtime unit files | 81 passed after bootstrap correction |
 | `pnpm --dir web run build` | Passed after bootstrap correction; existing bundle-size warning |
-| Playwright core (Synthetic, Browser STT and Browser/Browser) | Previous complete run 115/116. Deterministic held-models deep-link regression and full workspace/Artifact journey pass after correction. Complete final rerun pending. |
-| Seven Playwright acceptance projects | All seven projects passed, 16 tests total. Secretary passed all four scenarios after adding its omitted Browser v2 typing grant and scoping the final-response selector. |
-| `COMPOSE_PROJECT_NAME=agent-core-browser-v2-final` Compose smoke | Release build, owner-capability path, SQLite/keyring/profile/workspace/Skill-copy survival across recreation passed |
+| Playwright core (Synthetic, Browser STT and Browser/Browser) | 116 passed in the complete final run, including deterministic held-models deep-link/workspace/Artifact restoration and all active-response reconnect, streaming and Stop scenarios. |
+| Seven Playwright acceptance projects | All seven projects passed, 16 tests total. Secretary passed all four scenarios after its complete v2 grants, final-response scoping and bounded count wait corrections. |
+| `COMPOSE_PROJECT_NAME=agent-core-browser-v2-final AGENTCORE_COMPOSE_PORT=5188 ./scripts/compose-sqlite-volume.sh` | Release build, owner-capability path, SQLite/keyring/profile/workspace/Skill-copy survival across recreation passed |
+
+The final core command is `pnpm exec playwright test --project=synthetic --project=browser-stt --project=browser-browser`, with `CI=true`, API/Vite ports 5280/5373, Browser STT ports 5281/5374, Browser/Browser ports 5282/5375 and `PLAYWRIGHT_SQLITE_PATH=../data/browser-v2-core-final5.db`. Browser profile mode is EphemeralSession. Acceptance runs `pnpm exec playwright test --project=<name>` sequentially for faithful-manual, admin-lifecycle, p76-admin, p97-harness, p9899-continuity, p910-continuity-maintenance and secretary-demo, with a separate ignored SQLite file per project. Faithful-manual, p97-harness, p910-continuity-maintenance and secretary-demo use `PLAYWRIGHT_FAITHFUL_MANUAL=1`. The Compose test containers, networks and two task-owned volumes were removed after verification. All temporary native test and preview hosts were stopped; the original checkout hosts on 5180/5190 remained running.
 
 Earlier core attempts exposed stale built-in pins and a deep-link bootstrap race. The browser acceptance journey's custom Definition still had the former multiplexed action's click-only migration; Browser v2 additionally requires its explicit typing grant. Corrections retain all scenario assertions. Deep links stay Connecting with Message and Send disabled until attachment to the requested identity. Browser logs record provider/feature/operation/outcome durations while omitting accessible names and private URL components.
 
+Verified gate candidate is `162594346ebc869ff1197f2ca102c15e0c7c5a45`; all five jobs in [hosted run 37722988290](https://github.com/trannamtrung1st/agent-core/actions/runs/37722988290) completed successfully on that exact SHA. Production behavior is unchanged from `ff325a662153d23dc44553a32c41d5972f039664`. Active-response tests inspect actual hub attachment instead of waiting for an idle header label. All seven focused approval/streaming/Stop scenarios pass. The Secretary helper retains exact response count/text and uses its existing 30-second answer budget; a prior hosted snapshot showed the correct final answer arriving just after its default five-second count assertion expired.
+
+Hosted backend on the final candidate passed Domain 152, Infrastructure 824/15 skips, Application 1317/2 skips and API 371/3 skips. Six Docker sandbox cases had unavailable prerequisites on that backend runner; those six passed in the local Infrastructure gate. The remaining skips are explicit live-provider/site opt-ins. The hosted backend job does not include the separately verified four OrderEvents plugin cases. Hosted core (116 tests), acceptance (16 tests), frontend unit/build and Compose are also green. This final evidence update changes documentation only and does not move the tested behavior/test SHA.
+
 Authorized branch `develop/branch-1` is published in [draft PR #3](https://github.com/trannamtrung1st/agent-core/pull/3). [Hosted candidate run 37720003182](https://github.com/trannamtrung1st/agent-core/actions/runs/37720003182) tests behavior SHA `11333f2fa3a4392c41e74b794bb293010b0e72fc`: backend and Compose passed; acceptance exposed the same omitted typing grant. That candidate predates the final bootstrap/telemetry corrections and cannot establish final closure.
 
-Full closure requires all current local gates, the real-model generic-fixture proof, and all five hosted Synthetic jobs green on the final behavior SHA. Automatic approval review rejected the OpenRouter fixture invocation because destination/payload authorization was required; the requested authorization remains pending. Missing hosted credentials are not counted as offline test failures. The implementation is not behavior-frozen while any required gate remains pending.
+All current local gates and all five exact-candidate hosted Synthetic jobs pass. Full closure still requires the real-model generic-fixture proof. Automatic approval review rejected the OpenRouter fixture invocation because destination/payload authorization was required; the requested authorization remains pending. Missing hosted credentials are not counted as offline test failures. The implementation is not behavior-frozen while any required gate remains pending.
