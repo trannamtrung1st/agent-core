@@ -5,6 +5,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using SkiaSharp;
+using System.Buffers.Binary;
 
 namespace AgentCore.Infrastructure.Attachments;
 
@@ -247,28 +248,28 @@ public sealed class AttachmentProcessor : IAttachmentProcessor
 
     private static AttachmentProcessResult ProcessImage(AttachmentRecord record, byte[] bytes)
     {
-        // Check dimensions before allocating decoded pixels, including malformed oversized PNGs.
-        if (bytes.Length >= 24 && bytes.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }))
-        {
-            var width = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(16, 4));
-            var height = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(20, 4));
-            if ((ulong)width * height > (ulong)AttachmentLimits.MaxDecodedPixels) return Unsupported(record, "pixel_limit");
-        }
-        using var input = new SKMemoryStream(bytes);
-        using var codec = SKCodec.Create(input);
-        if (codec is null || codec.EncodedFormat is not (SKEncodedImageFormat.Png or SKEncodedImageFormat.Jpeg or SKEncodedImageFormat.Webp or SKEncodedImageFormat.Gif))
+        // Read PNG dimensions before the decoder allocates pixels, including malformed bomb fixtures.
+        if (bytes.Length >= 24 && bytes.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 })
+            && (long)BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(16, 4))
+                * BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(20, 4)) > AttachmentLimits.MaxDecodedPixels)
+            return Unsupported(record, "pixel_limit");
+        using var data = SKData.CreateCopy(bytes);
+        using var codec = SKCodec.Create(data);
+        if (codec is null) return Unsupported(record, "unsupported_reader");
+        var info = codec.Info;
+        if (info.Width <= 0 || info.Height <= 0 || (long)info.Width * info.Height > AttachmentLimits.MaxDecodedPixels)
+            return Unsupported(record, "pixel_limit");
+        // Decode only the first frame into new pixels. Re-encoding cannot retain source metadata.
+        using var bitmap = new SKBitmap(new SKImageInfo(info.Width, info.Height, SKColorType.Rgba8888, SKAlphaType.Premul));
+        if (codec.GetPixels(bitmap.Info, bitmap.GetPixels()) != SKCodecResult.Success)
             return Unsupported(record, "unsupported_reader");
-        if ((long)codec.Info.Width * codec.Info.Height > AttachmentLimits.MaxDecodedPixels) return Unsupported(record, "pixel_limit");
-        using var bitmap = new SKBitmap(new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Bgra8888, SKAlphaType.Premul));
-        if (codec.GetPixels(bitmap.Info, bitmap.GetPixels()) != SKCodecResult.Success) return Unsupported(record, "pixel_limit");
         using var image = SKImage.FromBitmap(bitmap);
-        var jpeg = AttachmentMedia.NormalizeContentType(record.ContentType) == "image/jpeg";
-        // Encoding decoded pixels into a new image drops source EXIF/ICC/XMP/IPTC metadata.
-        using var output = image.Encode(jpeg ? SKEncodedImageFormat.Jpeg : SKEncodedImageFormat.Png, 90);
-        if (output is null) return Unsupported(record, "unsupported_reader");
+        var png = AttachmentMedia.NormalizeContentType(record.ContentType) is "image/png" or "image/webp" or "image/gif";
+        using var encoded = image.Encode(png ? SKEncodedImageFormat.Png : SKEncodedImageFormat.Jpeg, 90);
+        if (encoded is null) return Unsupported(record, "unsupported_reader");
         return new AttachmentProcessResult(record.AttachmentId, AttachmentLimits.ProcessorVersion, AttachmentProcessKind.Image,
-            record.DisplayName, jpeg ? "image/jpeg" : "image/png", Text: string.Empty, Provenance: null,
-            StrippedImage: output.ToArray(), FailureCode: null);
+            record.DisplayName, png ? "image/png" : "image/jpeg", Text: string.Empty, Provenance: null,
+            StrippedImage: encoded.ToArray(), FailureCode: null);
     }
 
     private static string Truncate(string text)

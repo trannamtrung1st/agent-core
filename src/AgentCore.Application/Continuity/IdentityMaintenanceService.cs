@@ -182,7 +182,7 @@ public sealed class IdentityMaintenanceService(ExperienceService instances, IExp
                 Status = MemoryItemStatus.Active, CreatedAt = now, UpdatedAt = now,
                 Provenance = new(source, [], null, now, DerivedFromMemoryIds: lineage, MaintenanceOrigin: origin,
                     MaintenanceAgentInstanceId: id, MaintenanceSessionId: admission.Detached || sessionId == Guid.Empty ? null : sessionId,
-                    MaintenanceWorkItemId: admission.WorkItemId) };
+                    MaintenanceAgentRunId: admission.AgentRunId) };
             // Preserve exact retries created by the initiating instance before owner-based IDs.
             // Match the legacy operation hash, not just mutable canonical content/lineage.
             var legacyId = OperationId(id, "memory", new { sources[0].Scope, lineage, kind, subject, content });
@@ -221,7 +221,7 @@ public sealed class IdentityMaintenanceService(ExperienceService instances, IExp
         var consolidated = selected[0] with { ExperienceId = resultId, SourceKind = ExperienceSourceKind.Consolidation, SourceId = resultId,
             ThroughCursor = 0, SourceAtUtc = now, CreatedAtUtc = now, Content = contentResult, Visibility = ExperienceVisibility.Eligible, Revision = 1,
             DefinitionId = current.Id, DefinitionVersion = current.Version, Model = admission.Model ?? selected[0].Model,
-            GenerationDefinitionId = current.Id, GenerationDefinitionVersion = current.Version, GenerationPersona = instance.Persona, GenerationWorkItemId = admission.WorkItemId ?? Guid.Empty,
+            GenerationDefinitionId = current.Id, GenerationDefinitionVersion = current.Version, GenerationPersona = instance.Persona, GenerationAgentRunId = admission.AgentRunId ?? Guid.Empty,
             DerivedFromExperienceIds = parents, MaintenanceOrigin = origin, CheckpointAtUtc = now };
         var established = await experiences.ConsolidateAsync(selected, consolidated, ct);
         RuntimeTelemetry.RecordIdentityMaintenance("completed");

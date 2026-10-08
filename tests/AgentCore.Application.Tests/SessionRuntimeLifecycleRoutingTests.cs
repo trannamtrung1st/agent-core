@@ -283,7 +283,7 @@ public sealed class SessionRuntimeLifecycleRoutingTests
             now,
             now, AgentInstanceId: Guid.NewGuid());
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -330,7 +330,7 @@ public sealed class SessionRuntimeLifecycleRoutingTests
             store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         }
 
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),

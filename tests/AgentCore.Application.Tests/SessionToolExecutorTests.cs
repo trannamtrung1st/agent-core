@@ -303,7 +303,7 @@ trailer<< /Root 1 0 R >>
     {
         using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        using var encoded = SKImage.FromBitmap(image).Encode(SKEncodedImageFormat.Png, 90);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
         encoded.SaveTo(buffer);
         return buffer.ToArray();
     }

@@ -248,7 +248,7 @@ public sealed class IdentityUserMemoryTests
         };
         await sessions.SaveAsync(snapshot, 0);
         var model = new RecordingLanguageModel(new ScriptedLanguageModel());
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),

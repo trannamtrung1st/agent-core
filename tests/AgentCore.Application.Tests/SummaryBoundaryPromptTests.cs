@@ -241,6 +241,7 @@ public sealed class SummaryBoundaryPromptTests
         var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
         var factory = new SqliteFactory(options);
         var sqlite = new SqliteMemoryStore(factory, new FakeTimeProvider(Now));
+        SessionRuntimeFixture.Bind(sqlite, new SqliteAgentRunStore(factory, sqlite, new SystemDiagnosticIdSource()));
         try
         {
             await sqlite.EnsureCreatedAsync();
@@ -448,7 +449,7 @@ public sealed class SummaryBoundaryPromptTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-0005-7000-8000-{index:D12}")),
             [snapshot.SessionId]);
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),

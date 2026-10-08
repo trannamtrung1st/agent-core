@@ -124,6 +124,7 @@ public sealed class ExplicitUserMemoryTests
         var clock = new FakeTimeProvider(Now);
         var factory = new SqliteFactory(options);
         var sessions = new SqliteMemoryStore(factory, clock);
+        SessionRuntimeFixture.Bind(sessions, new SqliteAgentRunStore(factory, sessions, new SystemDiagnosticIdSource()));
         var memoryStore = new SqliteStructuredMemoryStore(factory);
         try
         {
@@ -190,6 +191,7 @@ public sealed class ExplicitUserMemoryTests
         var clock = new FakeTimeProvider(Now);
         var factory = new SqliteFactory(options);
         var sessions = new SqliteMemoryStore(factory, clock);
+        SessionRuntimeFixture.Bind(sessions, new SqliteAgentRunStore(factory, sessions, new SystemDiagnosticIdSource()));
         var memoryStore = new SqliteStructuredMemoryStore(factory);
         try
         {
@@ -273,6 +275,7 @@ public sealed class ExplicitUserMemoryTests
         var clock = new FakeTimeProvider(Now);
         var factory = new SqliteFactory(options);
         var sessions = new SqliteMemoryStore(factory, clock);
+        SessionRuntimeFixture.Bind(sessions, new SqliteAgentRunStore(factory, sessions, new SystemDiagnosticIdSource()));
         var memoryStore = new SqliteStructuredMemoryStore(factory);
         try
         {
@@ -396,7 +399,7 @@ public sealed class ExplicitUserMemoryTests
         IStructuredMemoryService memories,
         ILanguageModel model,
         TimeProvider time) =>
-        new(
+        SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),

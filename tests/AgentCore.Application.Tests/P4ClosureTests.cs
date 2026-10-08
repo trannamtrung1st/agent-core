@@ -41,6 +41,7 @@ public sealed class P4ClosureTests
         var clock = new FakeTimeProvider(Now);
         var factory = new SqliteFactory(options);
         var sessions = new SqliteMemoryStore(factory, clock);
+        SessionRuntimeFixture.Bind(sessions, new SqliteAgentRunStore(factory, sessions, new SystemDiagnosticIdSource()));
         var memories = new SqliteStructuredMemoryStore(factory);
         try
         {
@@ -123,6 +124,7 @@ public sealed class P4ClosureTests
             Assert.Equal(source.MemoryId, corrected.Provenance.OriginMemoryId);
 
             var reopenedSessions = new SqliteMemoryStore(factory, clock);
+            SessionRuntimeFixture.Bind(reopenedSessions, new SqliteAgentRunStore(factory, reopenedSessions, new SystemDiagnosticIdSource()));
             var reopenedMemories = new SqliteStructuredMemoryStore(factory);
             var reopenedService = Service(reopenedMemories, 8);
             var restored = (await reopenedSessions.LoadAsync(LongSession))!;
@@ -238,7 +240,7 @@ public sealed class P4ClosureTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 64).Select(index => Guid.Parse($"{idPrefix}{index:D12}")),
             [snapshot.SessionId]);
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),

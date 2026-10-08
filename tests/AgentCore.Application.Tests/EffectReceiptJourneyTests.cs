@@ -22,12 +22,30 @@ public sealed class EffectReceiptJourneyTests
         var output = new CapturingSessionOutput();
         var store = new InMemoryMemoryStore();
         var model = new CloseThenUnavailableModel();
-        await using var runtime = Create(output, store, model);
+        var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-02T12:00:00Z"));
+        var runs = CreateRuns(store);
+        await using var runtime = Create(output, store, model, clock, runs);
         await runtime.AttachAsync();
 
         await runtime.SubmitUserTextAsync("close the browser");
         await runtime.WaitUntilIdleAsync();
 
+        var waiting = Assert.Single(await runs.OpenAsync(runtime.SessionId));
+        Assert.Equal(AgentRunStatus.WaitingToRetry, waiting.Status);
+        for (var attempt = 1; attempt < waiting.MaxAttempts; attempt++)
+        {
+            clock.Advance(TimeSpan.FromSeconds(3));
+            var current = (await runs.GetAsync(waiting.Owner, waiting.AgentRunId))!;
+            var claimed = await runs.ApplyAsync(current.Owner, current.AgentRunId,
+                new AgentCore.Application.Execution.AgentRunCommand.Claim(current.Revision, clock.GetUtcNow(), Guid.NewGuid(), clock.GetUtcNow().AddMinutes(5)));
+            Assert.True(await runtime.DispatchAgentRunAsync(claimed.AgentRunId, false));
+            await runtime.WaitUntilIdleAsync();
+        }
+        var terminal = (await runs.GetAsync(waiting.Owner, waiting.AgentRunId))!;
+        Assert.Equal(AgentRunStatus.Failed, terminal.Status);
+        Assert.Equal(waiting.MaxAttempts, terminal.AttemptCount);
+        Assert.Equal(waiting.ResponseId, terminal.ResponseId);
+        Assert.Equal(1, model.CloseCalls);
         var first = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
         Assert.Equal(EntryStatus.Failed, first.Status);
         var receipt = Assert.Single(first.Envelope!.EffectReceipts!);
@@ -44,6 +62,16 @@ public sealed class EffectReceiptJourneyTests
 
         await runtime.SubmitUserTextAsync("why did it fail?");
         await runtime.WaitUntilIdleAsync();
+        var next = Assert.Single(await runs.OpenAsync(runtime.SessionId));
+        for (var attempt = 1; attempt < next.MaxAttempts; attempt++)
+        {
+            clock.Advance(TimeSpan.FromSeconds(3));
+            var current = (await runs.GetAsync(next.Owner, next.AgentRunId))!;
+            await runs.ApplyAsync(current.Owner, current.AgentRunId,
+                new AgentCore.Application.Execution.AgentRunCommand.Claim(current.Revision, clock.GetUtcNow(), Guid.NewGuid(), clock.GetUtcNow().AddMinutes(5)));
+            Assert.True(await runtime.DispatchAgentRunAsync(next.AgentRunId, false));
+            await runtime.WaitUntilIdleAsync();
+        }
 
         var assistants = runtime.Snapshot.Entries.Where(entry => entry.Role == ConversationRole.Assistant).ToArray();
         Assert.Equal(2, assistants.Length);
@@ -57,9 +85,9 @@ public sealed class EffectReceiptJourneyTests
     private static SessionRuntime Create(
         CapturingSessionOutput output,
         InMemoryMemoryStore store,
-        ILanguageModel model)
+        ILanguageModel model, FakeTimeProvider? clock = null, RuntimeAgentRunStore? runs = null)
     {
-        var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-02T12:00:00Z"));
+        var time = clock ?? new FakeTimeProvider(DateTimeOffset.Parse("2026-10-02T12:00:00Z"));
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 80).Select(index => Guid.Parse($"019944af-00e1-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940d201")]);
@@ -99,9 +127,10 @@ public sealed class EffectReceiptJourneyTests
                 "scripted",
                 ModelSelectionSource.SystemDefault,
                 null), AgentInstanceId: Guid.NewGuid());
+        snapshot = RuntimeAgentRunStore.WithPins(snapshot);
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         var browser = new ClosingBrowser();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder(ToolConfigurationGates.AllowAll, browser)),
@@ -111,12 +140,18 @@ public sealed class EffectReceiptJourneyTests
             time,
             NullLogger<SessionRuntime>.Instance,
             tools: new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll),
-            turnExecutions: new InMemoryConversationTurnExecutionStore());
+            agentRuns: runs ?? CreateRuns(store));
+    }
+
+    private static RuntimeAgentRunStore CreateRuns(InMemoryMemoryStore memory)
+    {
+        var runs = new RuntimeAgentRunStore(); runs.Bind(memory); return runs;
     }
 
     private sealed class CloseThenUnavailableModel : ILanguageModel
     {
         private int _calls;
+        internal int CloseCalls { get; private set; }
 
         public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true);
 
@@ -128,6 +163,7 @@ public sealed class EffectReceiptJourneyTests
             var call = Interlocked.Increment(ref _calls);
             if (call == 1)
             {
+                CloseCalls++;
                 yield return new ModelToolCallEvent(new ModelToolCall("close-1", ToolCatalog.BrowserClose, "{}"));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls);
                 yield break;

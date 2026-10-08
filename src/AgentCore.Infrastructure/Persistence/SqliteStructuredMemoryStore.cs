@@ -200,7 +200,7 @@ public sealed partial class SqliteStructuredMemoryStore(IDbContextFactory<AgentC
                 row.MaintenanceOrigin,
                 row.MaintenanceAgentInstanceId is null ? null : Guid.Parse(row.MaintenanceAgentInstanceId),
                 row.MaintenanceSessionId is null ? null : Guid.Parse(row.MaintenanceSessionId),
-                row.MaintenanceWorkItemId is null ? null : Guid.Parse(row.MaintenanceWorkItemId)),
+                row.MaintenanceAgentRunId is null ? null : Guid.Parse(row.MaintenanceAgentRunId)),
             DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc),
             DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc),
             (MemoryScope)row.Scope,
@@ -233,7 +233,7 @@ public sealed partial class SqliteStructuredMemoryStore(IDbContextFactory<AgentC
             MaintenanceOrigin = item.Provenance.MaintenanceOrigin,
             MaintenanceAgentInstanceId = item.Provenance.MaintenanceAgentInstanceId?.ToString("D"),
             MaintenanceSessionId = item.Provenance.MaintenanceSessionId?.ToString("D"),
-            MaintenanceWorkItemId = item.Provenance.MaintenanceWorkItemId?.ToString("D")
+            MaintenanceAgentRunId = item.Provenance.MaintenanceAgentRunId?.ToString("D")
         };
 
     private static void Copy(StructuredMemoryRecord row, StructuredMemoryItem item)
@@ -259,7 +259,7 @@ public sealed partial class SqliteStructuredMemoryStore(IDbContextFactory<AgentC
         row.MaintenanceOrigin = mapped.MaintenanceOrigin;
         row.MaintenanceAgentInstanceId = mapped.MaintenanceAgentInstanceId;
         row.MaintenanceSessionId = mapped.MaintenanceSessionId;
-        row.MaintenanceWorkItemId = mapped.MaintenanceWorkItemId;
+        row.MaintenanceAgentRunId = mapped.MaintenanceAgentRunId;
     }
 
     public async ValueTask<StructuredMemoryItem?> FindIdentityUserAsync(

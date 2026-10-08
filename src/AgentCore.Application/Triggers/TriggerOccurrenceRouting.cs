@@ -134,6 +134,7 @@ public sealed class TriggerOccurrenceRouter(
     public static readonly TimeSpan ClaimLease = TimeSpan.FromSeconds(30);
 
     public static readonly TimeSpan LivePreparedLease = TimeSpan.FromSeconds(30);
+    private Guid? _liveRepairCursor;
 
     public async Task RouteOnceAsync(CancellationToken cancellationToken = default)
     {
@@ -147,6 +148,27 @@ public sealed class TriggerOccurrenceRouter(
         {
             cancellationToken.ThrowIfCancellationRequested();
             await ResumePreparedAsync(occurrence, now, cancellationToken).ConfigureAwait(false);
+        }
+
+        var acceptedLive = await store.ListUnsettledLiveAsync(TriggerScheduler.DefaultBatchSize, _liveRepairCursor, cancellationToken).ConfigureAwait(false);
+        _liveRepairCursor = acceptedLive.Count == TriggerScheduler.DefaultBatchSize ? acceptedLive[^1].OccurrenceId : null;
+        foreach (var occurrence in acceptedLive)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var decision = await guard.EvaluateAsync(occurrence.Owner, AutomationRules.AdmissionSource(occurrence), cancellationToken)
+                .ConfigureAwait(false);
+            var targets = directory.ListCompatible(occurrence.Owner, occurrence.SourceKind);
+            if (decision.Kind == TriggerAdmissionDecisionKind.Suspend)
+            {
+                await store.CompleteLiveEvaluationAsync(occurrence.OccurrenceId, occurrence.LiveSessionId!.Value,
+                    now, cancellationToken).ConfigureAwait(false);
+                continue;
+            }
+            if (!targets.Any(target => target.SessionId == occurrence.LiveSessionId)) continue;
+            var delivery = Delivery(occurrence);
+            if (await mailbox.SubmitAsync(occurrence.LiveSessionId!.Value, delivery, cancellationToken).ConfigureAwait(false)
+                != OccurrenceAccept.Unavailable)
+                await mailbox.BeginAcceptedAsync(occurrence.LiveSessionId.Value, delivery, cancellationToken).ConfigureAwait(false);
         }
 
         var pending = await store.ListByDispositionAsync(
@@ -285,6 +307,13 @@ public sealed class TriggerOccurrenceRouter(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        if (occurrence.LiveSessionId is { } target && target != sessionId) return;
+        if (occurrence.LiveSessionId is null)
+        {
+            occurrence = await store.BindLiveSessionAsync(occurrence.OccurrenceId, occurrence.RoutingRevision,
+                sessionId, now, cancellationToken).ConfigureAwait(false) ?? occurrence;
+            if (occurrence.LiveSessionId != sessionId) return;
+        }
         var delivery = Delivery(occurrence);
         var accept = await mailbox.SubmitAsync(sessionId, delivery, cancellationToken).ConfigureAwait(false);
         if (accept == OccurrenceAccept.Unavailable)
@@ -317,6 +346,10 @@ public sealed class TriggerOccurrenceRouter(
             RuntimeTelemetry.RecordTriggerScheduler("released");
             return;
         }
+
+        stored = await store.BindLiveSessionAsync(occurrenceId, stored.RoutingRevision, sessionId, now, cancellationToken)
+            .ConfigureAwait(false);
+        if (stored is null) return;
 
         await FinishBeginAsync(sessionId, occurrenceId, stored.RoutingRevision, delivery, now, cancellationToken)
             .ConfigureAwait(false);
@@ -546,8 +579,7 @@ public sealed class DurableOrderEventIngress(
             null,
             null,
             null,
-            null,
-            pin?.Pin);
+            modelPin: pin?.Pin);
         var admitted = await store.AdmitOccurrenceAsync(occurrence, cancellationToken).ConfigureAwait(false);
         return admitted.Kind == TriggerOccurrenceAdmitKind.Duplicate
             ? new DurableEventResult(DurableEventOutcome.Duplicate, null, admitted.Occurrence)

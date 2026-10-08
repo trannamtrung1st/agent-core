@@ -63,8 +63,8 @@ public sealed partial class SqliteExperienceStore(IDbContextFactory<AgentCoreDbC
     public async ValueTask<IReadOnlyList<AgentExperience>> PendingAsync(int limit, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
-        // Only repair requests without a WorkItem; terminal failed work owns its status and cannot starve admission gaps.
-        var rows = await db.Experiences.FromSqlRaw("SELECT * FROM Experiences WHERE json_extract(PayloadJson, '$.Content') IS NULL AND json_extract(PayloadJson, '$.Visibility') <> 2 AND NOT EXISTS (SELECT 1 FROM WorkItems WHERE WorkItemId = json_extract(Experiences.PayloadJson, '$.GenerationWorkItemId'))")
+        // Only repair requests without an AgentRun; terminal failed work owns its status and cannot starve admission gaps.
+        var rows = await db.Experiences.FromSqlRaw("SELECT * FROM Experiences WHERE json_extract(PayloadJson, '$.Content') IS NULL AND json_extract(PayloadJson, '$.Visibility') <> 2 AND NOT EXISTS (SELECT 1 FROM AgentRuns WHERE AgentRunId = json_extract(Experiences.PayloadJson, '$.GenerationAgentRunId'))")
             .AsNoTracking().OrderBy(r => r.CreatedAtUtc).Take(Math.Clamp(limit, 1, 100)).ToListAsync(ct);
         return rows.Select(Decode).ToArray();
     }

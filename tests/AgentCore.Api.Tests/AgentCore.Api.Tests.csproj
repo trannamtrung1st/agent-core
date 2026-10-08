@@ -20,6 +20,9 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="AgentCore.Application.Execution" />
+    <Using Include="AgentCore.Tests.Shared" />
+    <Compile Include="../Shared/AgentRunTestFixtures.cs" Link="AgentRunTestFixtures.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,4 +1,4 @@
-import type { WorkItem } from "../../services/api";
+import type { BackgroundSession } from "../../services/api";
 
 export function runStatusLabel(value: string | null | undefined) {
   return ({ queued: "Queued", running: "Running", needsApproval: "Needs approval", WaitingForApproval: "Needs approval",
@@ -6,11 +6,15 @@ export function runStatusLabel(value: string | null | undefined) {
 }
 
 export function runOutcomeLabel(value: string | null | undefined) {
-  return ({ NoAction: "No action", ActionCompleted: "Action completed", AttentionRequested: "Needs attention",
-    ApprovalPending: "Needs approval", WaitingToRetry: "Retrying" } as Record<string, string>)[value ?? ""] ?? value ?? "Not yet";
+  return ({ NoAction: "No action", Response: "Response", Result: "Result", NeedsAttention: "Needs attention" } as Record<string, string>)[value ?? ""] ?? value ?? "Not yet";
 }
 export function runOriginLabel(origin: string) {
-  return origin;
+  return ({ ImmediateBackground: "Immediate task", AutomationOccurrence: "Automation", SourceOccurrence: "Application event", ManualBackground: "Manual task", UserChat: "Chat" } as Record<string, string>)[origin] ?? origin;
+}
+
+export function runActivationLabel(kind: string) {
+  return ({ UserTurn: "Chat turn", Initiative: "Initiative", ScheduledWork: "Scheduled task", ApplicationEvent: "Application event",
+    ImmediateBackground: "Immediate task", ManualBackground: "Manual task", BackgroundCompleted: "Completion report" } as Record<string, string>)[kind] ?? kind;
 }
 
 /** Localize the legacy one-shot ISO summary without rewriting other trigger kinds. */
@@ -23,9 +27,8 @@ export function runTriggerLabel(summary: string) {
   })}`;
 }
 export type AutomationSelection = { kind: "automation"; automationId: string; request: number };
-export type RunSource = Omit<AutomationSelection, "request"> | { kind: "experience"; workItemId: string };
-export function runSource(item: WorkItem): RunSource | null {
-  if (item.automationId) return { kind: "automation", automationId: item.automationId };
-  if (item.origin === "Automation · Manual" && item.workItemId) return { kind: "experience", workItemId: item.workItemId };
+export type RunSource = Omit<AutomationSelection, "request"> | { kind: "experience"; agentRunId: string };
+export function runSource(item: BackgroundSession): RunSource | null {
+  if (item.origin.automationId) return { kind: "automation", automationId: item.origin.automationId };
   return null;
 }

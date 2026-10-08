@@ -9,7 +9,7 @@ public enum AgentStepEffect
 }
 
 /// <summary>
-/// Controller reading of an accepted step. None of these flags mutate Session, WorkItem,
+/// Controller reading of an accepted step. None of these flags mutate Session, AgentRun,
 /// approval, trigger, or memory. Memory may be staged only after a Chat action succeeds.
 /// </summary>
 public sealed record AgentStepControllerDecision(
@@ -20,7 +20,7 @@ public sealed record AgentStepControllerDecision(
     bool StageMemoryAfterChatSuccess,
     bool SuccessfulAssistantCompletion,
     bool MutatesSessionLifecycle,
-    bool MutatesWorkItem,
+    bool MutatesAgentRun,
     bool MutatesApproval,
     bool MutatesTrigger,
     bool MutatesMemoryDirectly);
@@ -58,7 +58,7 @@ public static class AgentStepController
             StageMemoryAfterChatSuccess: true,
             SuccessfulAssistantCompletion: true,
             MutatesSessionLifecycle: false,
-            MutatesWorkItem: false,
+            MutatesAgentRun: false,
             MutatesApproval: false,
             MutatesTrigger: false,
             MutatesMemoryDirectly: false);
@@ -72,7 +72,7 @@ public static class AgentStepController
             StageMemoryAfterChatSuccess: false,
             SuccessfulAssistantCompletion: false,
             MutatesSessionLifecycle: false,
-            MutatesWorkItem: false,
+            MutatesAgentRun: false,
             MutatesApproval: false,
             MutatesTrigger: false,
             MutatesMemoryDirectly: false);

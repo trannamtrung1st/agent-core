@@ -28,8 +28,8 @@ public sealed class UnifiedWorkspaceMigrationTests
             var definition = Definition();
             var snapshot = new SessionSnapshot(1, Guid.NewGuid(), 1, definition, SessionMode.Text, null,
                 SessionStatus.Created, [], "sentinel", 0, null, null, now, now, owner);
-            var memory = new SqliteMemoryStore(factory, TimeProvider.System);
-            await memory.SaveAsync(snapshot, 0);
+            await MigrationSessionSeed.CopyPersistedSessionAsync(factory, snapshot,
+                "20261006095536_ConfigurableContinuityCadence");
             if (legacy == "compatibility")
             {
                 await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO AgentInstances (InstanceId, DefinitionId, ActiveVersion, PersonaJson, Lifecycle, CreatedAtUtc, UpdatedAtUtc, Compatibility, Revision, PersonaRevision) VALUES ({owner.ToString("D")}, 'examiner', 1, '{{}}', 'Active', 0, 0, 1, 1, 1)");

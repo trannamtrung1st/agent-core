@@ -25,6 +25,9 @@ const browserBrowserApiPort = process.env.PLAYWRIGHT_BROWSER_BROWSER_API_PORT ??
 const browserBrowserWebPort = process.env.PLAYWRIGHT_BROWSER_BROWSER_WEB_PORT ?? "5175";
 const browserBrowserApiUrl = `http://127.0.0.1:${browserBrowserApiPort}`;
 const browserBrowserWebUrl = `http://127.0.0.1:${browserBrowserWebPort}`;
+const fixturePort = process.env.PLAYWRIGHT_FIXTURE_PORT ?? "5091";
+const browserSttFixturePort = process.env.PLAYWRIGHT_BROWSER_STT_FIXTURE_PORT ?? "5092";
+const browserBrowserFixturePort = process.env.PLAYWRIGHT_BROWSER_BROWSER_FIXTURE_PORT ?? "5093";
 const faithfulManualOnly = process.env.PLAYWRIGHT_FAITHFUL_MANUAL === "1";
 
 const chromium = devices["Desktop Chrome"];
@@ -98,9 +101,9 @@ export default defineConfig({
         Browser__Headless: "true",
         Browser__PolicyMode: "Restricted",
         Browser__FixtureEnabled: "true",
-        Browser__FixturePort: "5091",
-        Browser__NavigationOrigins__0: "http://127.0.0.1:5091",
-        Browser__InteractionOrigins__0: "http://127.0.0.1:5091"
+        Browser__FixturePort: fixturePort,
+        Browser__NavigationOrigins__0: `http://127.0.0.1:${fixturePort}`,
+        Browser__InteractionOrigins__0: `http://127.0.0.1:${fixturePort}`
       },
       url: `${apiUrl}/health`,
       reuseExistingServer: !process.env.CI,
@@ -135,9 +138,9 @@ export default defineConfig({
         Browser__Headless: "true",
         Browser__PolicyMode: "Restricted",
         Browser__FixtureEnabled: "true",
-        Browser__FixturePort: "5092",
-        Browser__NavigationOrigins__0: "http://127.0.0.1:5092",
-        Browser__InteractionOrigins__0: "http://127.0.0.1:5092"
+        Browser__FixturePort: browserSttFixturePort,
+        Browser__NavigationOrigins__0: `http://127.0.0.1:${browserSttFixturePort}`,
+        Browser__InteractionOrigins__0: `http://127.0.0.1:${browserSttFixturePort}`
       },
       url: `${browserSttApiUrl}/health`,
       reuseExistingServer: false,
@@ -170,9 +173,9 @@ export default defineConfig({
         Browser__Headless: "true",
         Browser__PolicyMode: "Restricted",
         Browser__FixtureEnabled: "true",
-        Browser__FixturePort: "5093",
-        Browser__NavigationOrigins__0: "http://127.0.0.1:5093",
-        Browser__InteractionOrigins__0: "http://127.0.0.1:5093"
+        Browser__FixturePort: browserBrowserFixturePort,
+        Browser__NavigationOrigins__0: `http://127.0.0.1:${browserBrowserFixturePort}`,
+        Browser__InteractionOrigins__0: `http://127.0.0.1:${browserBrowserFixturePort}`
       },
       url: `${browserBrowserApiUrl}/health`,
       reuseExistingServer: false,

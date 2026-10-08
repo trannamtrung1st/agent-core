@@ -1,4 +1,4 @@
-using AgentCore.Domain.Work;
+using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Domain.Triggers;
 
@@ -23,12 +23,12 @@ public sealed class ExecutionModelPin
             throw new ArgumentException("Execution model source is not valid.", nameof(source));
         }
 
-        CatalogKey = WorkText.RequireToken(catalogKey, WorkLimits.MaxModelFieldCharacters, "Model catalog key");
-        ProviderAlias = WorkText.RequireToken(providerAlias, WorkLimits.MaxModelFieldCharacters, "Model provider");
-        ModelId = WorkText.RequireToken(modelId, WorkLimits.MaxModelFieldCharacters, "Model");
+        CatalogKey = AgentRunText.RequireToken(catalogKey, AgentRunLimits.MaxModelFieldCharacters, "Model catalog key");
+        ProviderAlias = AgentRunText.RequireToken(providerAlias, AgentRunLimits.MaxModelFieldCharacters, "Model provider");
+        ModelId = AgentRunText.RequireToken(modelId, AgentRunLimits.MaxModelFieldCharacters, "Model");
         ReasoningEffort = reasoningEffort is null
             ? null
-            : WorkText.RequireToken(reasoningEffort, WorkLimits.MaxReasoningEffortCharacters, "Reasoning effort");
+            : AgentRunText.RequireToken(reasoningEffort, AgentRunLimits.MaxReasoningEffortCharacters, "Reasoning effort");
         Source = source;
     }
 

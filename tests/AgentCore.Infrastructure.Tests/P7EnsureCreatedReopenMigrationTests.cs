@@ -8,7 +8,7 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed class P7EnsureCreatedReopenMigrationTests
 {
     [Fact]
-    public async Task Reopen_migrates_missing_agent_definition_publications_table()
+    public async Task Reopen_rejects_missing_agent_definition_publications_table_without_repair()
     {
         var path = Path.Combine(Path.GetTempPath(), $"agent-core-p7-partial-lifecycle-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
@@ -33,12 +33,11 @@ public sealed class P7EnsureCreatedReopenMigrationTests
                     """);
             }
 
-            await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
-
+            var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
+                new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync().AsTask());
+            Assert.Contains("reset", error.Message, StringComparison.OrdinalIgnoreCase);
             await using var verify = await factory.CreateDbContextAsync();
-            var tables = await TableNamesAsync(verify);
-            Assert.Contains("AgentDefinitionPublications", tables);
-            Assert.True(await MigrationAppliedAsync(verify, "20260925071140_P7DefinitionLifecycle"));
+            Assert.False(await MigrationAppliedAsync(verify, "20260925071140_P7DefinitionLifecycle"));
         }
         finally
         {
@@ -51,7 +50,7 @@ public sealed class P7EnsureCreatedReopenMigrationTests
     }
 
     [Fact]
-    public async Task Reopen_repairs_malformed_agent_definition_publications_columns()
+    public async Task Reopen_rejects_empty_malformed_agent_definition_publications_columns_without_repair()
     {
         var path = Path.Combine(Path.GetTempPath(), $"agent-core-p7-malformed-publications-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
@@ -87,12 +86,11 @@ public sealed class P7EnsureCreatedReopenMigrationTests
                     """);
             }
 
-            await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
-
+            var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
+                new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync().AsTask());
+            Assert.Contains("reset", error.Message, StringComparison.OrdinalIgnoreCase);
             await using var verify = await factory.CreateDbContextAsync();
-            Assert.True(await ColumnExistsAsync(verify, "AgentDefinitionPublications", "MetadataRevision"));
-            Assert.True(await ColumnExistsAsync(verify, "AgentDefinitionPublications", "PublishedAtUtc"));
-            Assert.True(await MigrationAppliedAsync(verify, "20260925071140_P7DefinitionLifecycle"));
+            Assert.False(await MigrationAppliedAsync(verify, "20260925071140_P7DefinitionLifecycle"));
         }
         finally
         {
@@ -149,7 +147,7 @@ public sealed class P7EnsureCreatedReopenMigrationTests
 
             var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
                 new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync().AsTask());
-            Assert.Contains("non-empty incompatible schema", error.Message, StringComparison.Ordinal);
+            Assert.Contains("incomplete or incompatible shape", error.Message, StringComparison.Ordinal);
         }
         finally
         {
@@ -246,7 +244,7 @@ public sealed class P7EnsureCreatedReopenMigrationTests
     }
 
     [Fact]
-    public async Task Reopen_migrates_missing_admin_events_operation_id_index()
+    public async Task Reopen_rejects_missing_admin_events_operation_id_index_without_repair()
     {
         var path = Path.Combine(Path.GetTempPath(), $"agent-core-p7-partial-admin-events-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
@@ -264,11 +262,12 @@ public sealed class P7EnsureCreatedReopenMigrationTests
                     """);
             }
 
-            await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
-
+            var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
+                new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync().AsTask());
+            Assert.Contains("reset", error.Message, StringComparison.OrdinalIgnoreCase);
             await using var verify = await factory.CreateDbContextAsync();
-            Assert.True(await IndexExistsAsync(verify, "IX_AdminEvents_OperationId"));
-            Assert.True(await MigrationAppliedAsync(verify, "20260925161000_P7AdminEvents"));
+            Assert.False(await IndexExistsAsync(verify, "IX_AdminEvents_OperationId"));
+            Assert.False(await MigrationAppliedAsync(verify, "20260925161000_P7AdminEvents"));
         }
         finally
         {

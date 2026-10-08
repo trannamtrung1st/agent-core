@@ -133,7 +133,7 @@ public sealed class TriggerDurablePolicyTests
             Now,
             AgentInstanceId: resolved.InstanceId);
         await memory.SaveAsync(snapshot, 0);
-        var runtime = new SessionRuntime(
+        var runtime = SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),

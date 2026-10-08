@@ -54,7 +54,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
   const apply = useCallback((next: AutomationReview) => {
     order.current.pending = Object.fromEntries(Object.entries(order.current.pending).filter(([id, prior]) => {
       const item = next.items.find(i => i.automationId === id);
-      return item && (!item.lastWorkItemId || item.lastWorkItemId === prior);
+      return item && (!item.lastAgentRunId || item.lastAgentRunId === prior);
     }));
     setPending(order.current.pending); setReview(next);
   }, []);
@@ -91,7 +91,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
     if (order.current.mutating || runId && runId in order.current.pending) return;
     order.current.mutating = true; ++order.current.generation; setBusy(true); setError(null);
     if (saveEditor) setEditorError(null);
-    if (runId) { order.current.pending = { ...order.current.pending, [runId]: review?.items.find(i => i.automationId === runId)?.lastWorkItemId ?? null }; setPending(order.current.pending); }
+    if (runId) { order.current.pending = { ...order.current.pending, [runId]: review?.items.find(i => i.automationId === runId)?.lastAgentRunId ?? null }; setPending(order.current.pending); }
     let accepted = false;
     let savedId: string | undefined;
     try {
@@ -252,7 +252,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
             { title: "Last run", key: "execution", width: 240,
               filters: [...new Set(review.items.map(item => item.executionStatus ?? "Not yet"))].map(value => ({ text: runStatusLabel(value), value })),
               onFilter: (value, item) => (item.executionStatus ?? "Not yet") === value,
-              render: (_, item) => item.lastWorkItemId ? <Button type="link" size="small" aria-label={`View last run: ${item.name}`} onClick={() => onWork(item.lastWorkItemId!)}>{runStatusLabel(item.executionStatus ?? "View run")}{item.outcome ? ` · ${runOutcomeLabel(item.outcome)}` : ""}</Button> : "Not yet" },
+              render: (_, item) => item.lastAgentRunId ? <Button type="link" size="small" aria-label={`View last run: ${item.name}`} onClick={() => onWork(item.lastAgentRunId!)}>{runStatusLabel(item.executionStatus ?? "View run")}{item.outcome ? ` · ${runOutcomeLabel(item.outcome)}` : ""}</Button> : "Not yet" },
             { title: "Model", key: "model", width: 180, ellipsis: true, render: (_, item) => item.effectiveModelKey ?? item.modelKey ?? "Unattended default" },
             { title: "Origin", key: "origin", width: 180,
               filters: [{ text: "Chat user request", value: "CurrentUserTurn" }, { text: "Admin owner", value: "AdminOwner" }],
@@ -281,7 +281,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
                   afterClose: () => { if (confirmed) requestAnimationFrame(() => newButton.current?.focus()); }
                 });
               }}>Delete automation</Button>
-              {item.lastWorkItemId ? <Button onClick={() => onWork(item.lastWorkItemId!)}>View last run</Button> : null}</Flex>
+              {item.lastAgentRunId ? <Button onClick={() => onWork(item.lastAgentRunId!)}>View last run</Button> : null}</Flex>
             </Flex>
           }} />
         </> : null}

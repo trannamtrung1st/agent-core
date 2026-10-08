@@ -208,8 +208,7 @@ public sealed class ExternalEventIngress(
             null,
             null,
             null,
-            null,
-            pin?.Pin);
+            modelPin: pin?.Pin);
         var admitted = await triggers.AdmitOccurrenceAsync(occurrence, cancellationToken).ConfigureAwait(false);
         return new DeliveryOutcome(ExternalEventDeliveryStatus.Admitted, admitted.Kind == TriggerOccurrenceAdmitKind.Admitted);
     }

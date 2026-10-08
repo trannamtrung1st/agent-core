@@ -1,3 +1,4 @@
+import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
 import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
@@ -121,48 +122,7 @@ async function releaseOtherLiveRuntimes(page: Page, sessionId: string): Promise<
 }
 
 function seedRetry(sessionId: string): void {
-  sqlite(
-    `
-import json, sqlite3, sys, time, uuid
-db, session_id = sys.argv[1], sys.argv[2]
-con = sqlite3.connect(db, timeout=30)
-con.execute("PRAGMA busy_timeout=8000")
-owner = con.execute(
-    """SELECT s.AgentInstanceId, snap.ProfileId
-       FROM Sessions s
-       JOIN SessionSnapshots snap ON snap.SessionId = s.SessionId
-       WHERE s.SessionId=?""",
-    (session_id,),
-).fetchone()
-if owner is None or not owner[0] or not owner[1]:
-    raise SystemExit("session owner was not stored")
-persona = con.execute("SELECT PersonaJson FROM AgentInstances WHERE InstanceId=?", (owner[0],)).fetchone()
-name = "Riley"
-if persona and persona[0]:
-    name = json.loads(persona[0]).get("name") or name
-now = int(time.time() * 1000)
-work_id = str(uuid.uuid4())
-con.execute(
-    """INSERT INTO WorkItems (
-        WorkItemId, AgentInstanceId, ProfileId, Status, Revision, AttemptCount, MaxAttempts,
-        NextRetryAtUtc, CancellationRequested, SourceOccurrenceId, SourceKind,
-        SourceSessionId, DedupeKey, ObservedAtUtc, EvidenceJson, DefinitionId, DefinitionVersion,
-        PersonaName, ModelCatalogKey, ModelProviderAlias, ModelId, ModelReasoningEffort,
-        SideEffectDisposition, CreatedAtUtc, UpdatedAtUtc
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-    (
-        work_id, owner[0], owner[1], 3, 2, 1, 3,
-        now + 86_400_000, 0, str(uuid.uuid4()), 0,
-        session_id, f"retry-{work_id}", now, "{}", "general-assistant", 10,
-        name, "scripted-alpha", "primary-llm", "scripted-alpha", "medium",
-        0, now, now,
-    ),
-)
-con.commit()
-con.close()
-`,
-    [sessionId]
-  );
+  execFileSync('python3', [path.resolve('e2e/support/seed-agent-run.py'), dbPath, sessionId, 'retry'], { encoding: 'utf8' });
 }
 
 test("a detached reminder completes in Background work and cancel survives reload", async ({ page }) => {
@@ -262,33 +222,33 @@ test("a detached reminder completes in Background work and cancel survives reloa
   await releaseOtherLiveRuntimes(page, sessionId);
   makeReminderDue(sessionId);
   await page.getByRole("button", { name: "Background work" }).click();
-  const drawer = page.getByRole("dialog", { name: "Background work" });
-  await expect(drawer.getByText("Reminder: Call John.").first()).toBeVisible({ timeout: 25_000 });
+  const drawer = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "All background Sessions", exact: true }) });
+  await page.getByRole("dialog", { name: "Background work", exact: true }).getByRole("button", { name: "View history", exact: true }).first().click();
+  await expect(page.getByRole("dialog").getByText("Reminder: Call John.").first()).toBeVisible({ timeout: 25_000 });
   await expect(transcript).toContainText(/Scheduled/i);
   await expect(transcript).not.toContainText("Reminder: Call John.");
 
   await page.reload();
   await expect(page.getByText("This conversation has ended.")).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Background work" }).click();
-  await expect(drawer.getByText("Reminder: Call John.").first()).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("dialog", { name: "Background work", exact: true }).getByRole("button", { name: "View history", exact: true }).first().click();
+  await expect(page.getByRole("dialog").getByText("Reminder: Call John.").first()).toBeVisible({ timeout: 15_000 });
   await expect(page.locator(".conversation-scroll")).not.toContainText("Reminder: Call John.");
 
   seedRetry(sessionId);
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Background work" }).click();
-  await expect(drawer.getByText("Retrying").first()).toBeVisible({ timeout: 15_000 });
-  await drawer
-    .locator(".background-work-item", { hasText: "Retrying" })
-    .first()
-    .getByRole("button", { name: "Cancel Automation · Schedule" })
-    .click();
-  await page.getByRole("button", { name: "Cancel work" }).click();
+  await expect(page.getByRole("dialog", { name: "Background work", exact: true }).getByText("Retrying").first()).toBeVisible({ timeout: 15_000 });
+  await page.getByRole('dialog', { name: 'Background work', exact: true }).getByRole('button', { name: 'Retry fixture', exact: true }).click();
+  await drawer.getByRole('button', { name: 'Cancel run', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Cancel this run?', exact: true }).getByRole('button', { name: 'Cancel run', exact: true }).click();
   await expect(drawer.getByText("Cancelled").first()).toBeVisible({ timeout: 15_000 });
 
   await page.reload();
   await page.getByRole("button", { name: "Background work" }).click();
-  await expect(drawer.getByText("Cancelled").first()).toBeVisible({ timeout: 15_000 });
-  await expect(drawer.getByText("Reminder: Call John.").first()).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Background work", exact: true }).getByText("Cancelled").first()).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("dialog", { name: "Background work", exact: true }).getByRole("button", { name: "View history", exact: true }).last().click();
+  await expect(page.getByRole("dialog").getByText("Reminder: Call John.").first()).toBeVisible();
   await expect(page.locator(".conversation-scroll")).not.toContainText("Reminder: Call John.");
 
   const unexpectedConsole = consoleErrors.filter((message) => !message.includes("[antd: List]"));

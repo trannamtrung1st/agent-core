@@ -62,41 +62,23 @@ export type SessionResponse = {
   agentInstanceId?: string | null;
 };
 
-export type WorkItem = {
-  instructions?: string | null;
-  automationName?: string | null;
-  triggerSummary?: string | null;
-  sourceId?: string | null;
-  automationId?: string | null;
-  modelKey?: string | null;
-  outcome?: string | null;
-  workItemId: string;
-  status: string;
-  revision: number;
-  origin: string;
-  progress: string | null;
-  needsApproval: boolean;
-  approvalId: string | null;
-  approvalRevision: number | null;
-  approvalPreview: string | null;
-  actionHash: string | null;
-  cancellationAvailable: boolean;
-  failureCode: string | null;
-  failureSummary: string | null;
-  knownEffect: string | null;
-  diagnosticId?: string | null;
-  createdAt: string;
-  updatedAt: string;
-  attentionRequired?: boolean;
-  attemptCount?: number | null;
-  maxAttempts?: number | null;
+export type AgentRun = {
+  agentRunId: string; sessionId: string; activationId: string; activationKind: string;
+  status: string; revision: number; attemptCount: number; maxAttempts: number;
+  cancellationRequested: boolean; cancellationAvailable: boolean; progress: string | null;
+  nextRetryAt: string | null; createdAt: string; updatedAt: string;
+  approval: { approvalId: string; revision: number; actionHash: string; toolName: string; preview: string; expiresAt: string } | null;
+  outcome: { kind: string; summary: string; outcomeEntryId: string | null; attentionRequired: boolean } | null;
+  failureCode: string | null; failureSummary: string | null; diagnosticId: string | null;
+  knownEffectSummary: string | null; modelCatalogKey: string; responseId: string | null;
+  automationId: string | null; experienceId: string | null; sourceOccurrenceId: string | null;
 };
-
-export type WorkItemResult = {
-  workItemId: string;
-  text: string;
-  completedAt: string;
-  attentionRequired?: boolean;
+export type CursorPage<T> = { items: T[]; nextCursor: string | null; hasMore: boolean };
+export type BackgroundSession = {
+  session: CatalogItem;
+  origin: { kind: string; initialAgentRunId: string; parentSessionId: string | null; parentAgentRunId: string | null;
+    automationId: string | null; occurrenceId: string | null; reportCompletion: boolean };
+  surfaces: string[]; latestRun: AgentRun | null; canContinueInChat: boolean; artifactCount: number; artifactCountHasMore: boolean;
 };
 
 export type SessionAutomation = {
@@ -536,80 +518,38 @@ export async function cancelSessionAutomation(
   return (await response.json()) as SessionAutomation;
 }
 
-export async function listWorkItems(sessionId: string, query?: DrawerPageQuery): Promise<WorkItem[]> {
-  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/work-items${drawerPageSearch(query)}`);
-  if (!response.ok) {
-    throw new Error(await problemMessage(response, "Unable to load background work."));
-  }
-
-  const body = (await response.json()) as { items: WorkItem[] };
-  return body.items;
-}
-
-export async function getWorkItemResult(sessionId: string, workItemId: string): Promise<WorkItemResult> {
-  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/work-items/${workItemId}/result`);
-  if (!response.ok) {
-    throw new Error(await problemMessage(response, "Unable to load the work result."));
-  }
-
-  return (await response.json()) as WorkItemResult;
-}
-
-export async function cancelWorkItem(sessionId: string, workItemId: string, expectedRevision: number): Promise<WorkItem> {
-  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/work-items/${workItemId}/cancel`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ expectedRevision })
+async function runRequest<T>(path: string, body?: unknown): Promise<T> {
+  const response = await ownerFetch(path, body === undefined ? undefined : {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body)
   });
-  if (!response.ok) {
-    throw new Error(await problemMessage(response, "Unable to cancel the work."));
-  }
-
-  return (await response.json()) as WorkItem;
+  if (!response.ok) throw new Error(await problemMessage(response, "Unable to update background work. Refresh and try again."));
+  return await response.json() as T;
 }
-
-export async function approveWorkItem(
-  sessionId: string,
-  workItemId: string,
-  approvalId: string,
-  expectedRevision: number,
-  expectedApprovalRevision: number,
-  actionHash: string
-): Promise<WorkItem> {
-  return decideWorkItem(sessionId, workItemId, approvalId, "approve", expectedRevision, expectedApprovalRevision, actionHash);
+export async function listBackgroundSessions(instanceId: string, cursor?: string, limit = 20): Promise<CursorPage<BackgroundSession>> {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (cursor) query.set("cursor", cursor);
+  return runRequest(`/api/v2/agent-instances/${instanceId}/background-sessions?${query}`);
 }
-
-export async function rejectWorkItem(
-  sessionId: string,
-  workItemId: string,
-  approvalId: string,
-  expectedRevision: number,
-  expectedApprovalRevision: number,
-  actionHash: string
-): Promise<WorkItem> {
-  return decideWorkItem(sessionId, workItemId, approvalId, "reject", expectedRevision, expectedApprovalRevision, actionHash);
+export async function getBackgroundSession(sessionId: string): Promise<BackgroundSession> {
+  return runRequest(`/api/v2/sessions/${sessionId}/background`);
 }
-
-async function decideWorkItem(
-  sessionId: string,
-  workItemId: string,
-  approvalId: string,
-  decision: "approve" | "reject",
-  expectedRevision: number,
-  expectedApprovalRevision: number,
-  actionHash: string
-): Promise<WorkItem> {
-  const response = await ownerFetch(
-    `/api/v2/sessions/${sessionId}/work-items/${workItemId}/approvals/${approvalId}/${decision}`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ expectedRevision, expectedApprovalRevision, actionHash })
-    }
-  );
-  if (!response.ok) {
-    throw new Error(await problemMessage(response, "Unable to update the approval."));
-  }
-
-  return (await response.json()) as WorkItem;
+export async function continueInChat(sessionId: string): Promise<{ sessionId: string }> {
+  return runRequest(`/api/v2/sessions/${sessionId}/continue-in-chat`, {});
+}
+export async function listAgentRuns(sessionId: string, cursor?: string, limit = 20): Promise<CursorPage<AgentRun>> {
+  return runRequest(`/api/v2/sessions/${sessionId}/agent-runs?${new URLSearchParams({ limit: String(limit), ...(cursor ? { before: cursor } : {}) })}`);
+}
+export async function listInstanceAgentRuns(instanceId: string, cursor?: string, limit = 20): Promise<CursorPage<AgentRun>> {
+  return runRequest(`/api/v2/agent-instances/${instanceId}/agent-runs?${new URLSearchParams({ limit: String(limit), ...(cursor ? { before: cursor } : {}) })}`);
+}
+export async function getInstanceAgentRun(instanceId: string, runId: string): Promise<AgentRun> {
+  return runRequest(`/api/v2/agent-instances/${instanceId}/agent-runs/${runId}`);
+}
+export async function cancelAgentRun(item: AgentRun): Promise<AgentRun> {
+  return runRequest(`/api/v2/sessions/${item.sessionId}/agent-runs/${item.agentRunId}/cancel`, { expectedRevision: item.revision });
+}
+export async function decideAgentRunApproval(item: AgentRun, decision: "approve" | "reject"): Promise<AgentRun> {
+  if (!item.approval) throw new Error("This run no longer needs approval. Refresh to see its current state.");
+  return runRequest(`/api/v2/sessions/${item.sessionId}/agent-runs/${item.agentRunId}/approvals/${item.approval.approvalId}/${decision}`,
+    { expectedRevision: item.revision, expectedApprovalRevision: item.approval.revision, actionHash: item.approval.actionHash });
 }

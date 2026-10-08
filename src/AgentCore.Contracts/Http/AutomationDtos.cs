@@ -9,7 +9,7 @@ public sealed record AutomationRequest(long ExpectedRevision, bool Enabled, stri
 public sealed record AutomationResponse(string AutomationId, long Revision, string Name, string Instructions, bool Enabled, string Status,
     AutomationTriggerDto Trigger, string AuthorizationOrigin, string? SourceSessionId, string? SourceEventId,
     string CreatedAt, string? NextRunAt, string? ModelKey, string? ReasoningEffort, string? EffectiveModelKey,
-    string? LastWorkItemId, string? ExecutionStatus, string? Outcome);
+    string? LastAgentRunId, string? ExecutionStatus, string? Outcome);
 public sealed record AutomationPolicy(bool AllowOneShot, bool AllowDaily, bool AllowWeekly, bool AllowFixedInterval,
     bool AllowIndefiniteRecurrence, int OneShotHorizonDays, int MinRecurrenceDays, int MinFixedIntervalSeconds, int MaxActiveRegistrations);
 public sealed record AutomationReview(IReadOnlyList<AutomationResponse> Items, AutomationPolicy? Policy = null);

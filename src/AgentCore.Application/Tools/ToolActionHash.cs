@@ -1,13 +1,13 @@
 using System.Text.Json;
-using AgentCore.Domain.Work;
+using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Application.Tools;
 
 public static class ToolActionHash
 {
     public static string Compute(string toolName, JsonElement args) =>
-        WorkActionHash.Compute(toolName, args);
+        CanonicalToolActionHash.Compute(toolName, args);
 
     public static string Normalize(JsonElement element) =>
-        WorkActionHash.Normalize(element);
+        CanonicalToolActionHash.Normalize(element);
 }

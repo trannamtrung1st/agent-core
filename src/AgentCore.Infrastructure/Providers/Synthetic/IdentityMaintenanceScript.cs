@@ -11,7 +11,7 @@ internal static class IdentityMaintenanceScript
     {
         var prompt = request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text ?? "";
         if (!prompt.Contains("synthetic-maintain-", StringComparison.Ordinal)) return null;
-        var automation = request.Messages.Any(m => m.Role == ModelRole.System && m.Text.StartsWith("Bounded Automation Run.", StringComparison.Ordinal));
+        var automation = request.Messages.Any(m => m.Role == ModelRole.System && m.Text.StartsWith("Bounded background Session task.", StringComparison.Ordinal));
         bool Offers(string name) => request.Tools?.Any(t => t.Name == name) == true;
         var results = request.Messages.Where(m => m.Role == ModelRole.Tool).ToArray();
         var memory = prompt.Contains("synthetic-maintain-memory", StringComparison.Ordinal);
@@ -57,7 +57,7 @@ internal static class IdentityMaintenanceScript
             lessons = new[] { "Verify observable state before acting and confirm each outcome; these observations do not prove every failure has the same cause." } });
     }
     private static IReadOnlyList<ModelGenerationEvent> Complete(bool automation, bool changed, string summary) => automation
-        ? Call(ToolCatalog.WorkComplete, new { outcome = changed ? "ActionCompleted" : "NoAction", summary, attentionRequired = false })
+        ? Call(ToolCatalog.WorkComplete, new { outcome = changed ? "Response" : "NoAction", summary, attentionRequired = false })
         : [new ModelTextDelta(summary), new ModelCompleted(ModelStopReason.Completed)];
     private static IReadOnlyList<ModelGenerationEvent> Call(string name, object args) =>
         [new ModelToolCallEvent(new("maintenance-" + name + "-" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(args))))[..8], name, JsonSerializer.Serialize(args))), new ModelCompleted(ModelStopReason.ToolCalls)];

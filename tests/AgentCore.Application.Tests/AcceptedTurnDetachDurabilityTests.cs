@@ -160,7 +160,7 @@ public sealed class AcceptedTurnDetachDurabilityTests
     {
         var releaseTerminalPersist = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var store = new TerminalAssistantPersistGate(releaseTerminalPersist);
-        var turnExecutions = new InMemoryConversationTurnExecutionStore();
+        var agentRuns = new RuntimeAgentRunStore();
         var output = new CapturingSessionOutput();
         var model = new DetachHoldingLanguageModel();
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
@@ -170,7 +170,7 @@ public sealed class AcceptedTurnDetachDurabilityTests
             time,
             new DefaultAgentBrain(new PromptContextBuilder()),
             store,
-            turnExecutions: turnExecutions);
+            agentRuns: agentRuns);
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("hi");
         await WaitForActiveResponseAsync(runtime);
@@ -178,19 +178,19 @@ public sealed class AcceptedTurnDetachDurabilityTests
         model.Release.TrySetResult();
         await store.WaitForSaveStartedAsync(TimeSpan.FromSeconds(5));
         Assert.True(runtime.HeadlessTransportDetached);
-        var openBefore = await turnExecutions.ListOpenForSessionAsync(runtime.SessionId);
+        var openBefore = await agentRuns.OpenAsync(runtime.SessionId);
         Assert.Single(openBefore);
-        var executionId = openBefore[0].ExecutionId;
+        var executionId = openBefore[0].AgentRunId;
 
         var attaching = runtime.AttachAsync();
         await Task.Delay(30);
         Assert.True(await runtime.HasAcceptedConversationWorkAsync());
-        Assert.Equal(executionId, (await turnExecutions.ListOpenForSessionAsync(runtime.SessionId)).Single().ExecutionId);
+        Assert.Equal(executionId, (await agentRuns.OpenAsync(runtime.SessionId)).Single().AgentRunId);
 
         store.Release();
         Assert.True(await attaching);
         await WaitUntilAsync(async () => !await runtime.HasAcceptedConversationWorkAsync());
-        Assert.Empty(await turnExecutions.ListOpenForSessionAsync(runtime.SessionId));
+        Assert.Empty(await agentRuns.OpenAsync(runtime.SessionId));
         Assert.Null(runtime.ActiveResponseId);
 
         var assistant = runtime.Snapshot.Entries.Single(e => e.Role == ConversationRole.Assistant);
@@ -266,7 +266,7 @@ public sealed class AcceptedTurnDetachDurabilityTests
         IAgentBrain brain,
         IMemoryStore? store = null,
         SessionSnapshot? snapshot = null,
-        InMemoryConversationTurnExecutionStore? turnExecutions = null,
+        RuntimeAgentRunStore? agentRuns = null,
         ILogger<SessionRuntime>? logger = null)
     {
         var ids = new DeterministicIdGenerator(
@@ -295,13 +295,16 @@ public sealed class AcceptedTurnDetachDurabilityTests
                 "scripted",
                 ModelSelectionSource.SystemDefault,
                 null), AgentInstanceId: Guid.NewGuid());
+        initial = RuntimeAgentRunStore.WithPins(initial);
+        agentRuns ??= new RuntimeAgentRunStore();
+        agentRuns.Bind(memory is TerminalAssistantPersistGate gate ? gate.Inner : (InMemoryMemoryStore)memory);
         if (snapshot is null)
         {
             memory.SaveAsync(initial, 0).AsTask().GetAwaiter().GetResult();
         }
 
-        turnExecutions ??= new InMemoryConversationTurnExecutionStore();
-        return new SessionRuntime(
+        agentRuns ??= new RuntimeAgentRunStore();
+        return SessionRuntimeFixture.Create(
             initial,
             model,
             brain,
@@ -311,12 +314,13 @@ public sealed class AcceptedTurnDetachDurabilityTests
             time,
             logger ?? NullLogger<SessionRuntime>.Instance,
             new FakeInterruptionClassifier(),
-            turnExecutions: turnExecutions);
+            agentRuns: agentRuns);
     }
 
     private sealed class TerminalAssistantPersistGate(TaskCompletionSource release) : IMemoryStore
     {
         private readonly InMemoryMemoryStore _inner = new();
+        public InMemoryMemoryStore Inner => _inner;
         public TaskCompletionSource TerminalSaveStarted { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 

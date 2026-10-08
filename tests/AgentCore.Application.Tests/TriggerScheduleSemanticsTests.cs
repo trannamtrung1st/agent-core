@@ -39,7 +39,7 @@ public sealed class TriggerScheduleSemanticsTests
         var speak = Assert.IsType<Speak>(decision);
         Assert.Contains(speak.Request.Tools!, tool => tool.Name == ToolCatalog.KnowledgeRetrieve);
         Assert.DoesNotContain(speak.Request.Tools!, tool => ToolCatalog.IsBrowserTool(tool.Name));
-        Assert.Contains(speak.Request.Messages, m => m.Role == ModelRole.System && m.Text.StartsWith("Bounded Automation Run.", StringComparison.Ordinal));
+        Assert.Contains(speak.Request.Messages, m => m.Role == ModelRole.System && m.Text.StartsWith("Bounded background Session task.", StringComparison.Ordinal));
     }
 
     [Fact]

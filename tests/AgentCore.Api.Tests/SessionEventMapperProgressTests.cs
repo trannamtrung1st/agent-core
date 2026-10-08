@@ -26,7 +26,7 @@ public sealed class SessionEventMapperProgressTests
             1);
 
         Assert.Equal("agent.response.started", mapped.Type);
-        Assert.Equal(executionId.ToString(), mapped.Payload["conversationExecutionId"]);
+        Assert.Equal(executionId.ToString(), mapped.Payload["agentRunId"]);
     }
 
     [Theory]

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Execution;
 using AgentCore.Application.Events;
 using AgentCore.Application.Observability;
 using AgentCore.Domain.Conversation;
@@ -17,9 +18,9 @@ public sealed partial class SessionRuntime
         var completed = new TaskCompletionSource<SkillLoadMailboxResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         BeginWork();
         if (!TryMailbox(new SkillLoadRequested(
-                NewContext(cause.EventId),
+                WorkerContext(cause),
                 responseId,
-                _epoch,
+                cause.Epoch,
                 argumentsJson,
                 completed)))
         {
@@ -55,24 +56,17 @@ public sealed partial class SessionRuntime
         CancellationToken cancellationToken)
     {
         var fence = SkillLoadFence(input);
-        if (fence is not null)
+        if (fence is not null || !await OwnsWorkerAsync(input.Context, input.ResponseId, cancellationToken).ConfigureAwait(false))
         {
-            return fence;
+            return fence ?? SkillLoadMailboxResult.Failed(SkillLoadAdmission.Error("stale", "Skill load is no longer owned by this execution."), "stale");
         }
 
-        var bound = _boundConversationExecution!;
-        if (_turnExecutions is null)
-        {
-            return SkillLoadMailboxResult.Failed(
-                SkillLoadAdmission.Error("forbidden", "Skill load requires a conversation execution."),
-                "denied");
-        }
-
-        var current = await _turnExecutions.GetAsync(bound.ExecutionId, cancellationToken).ConfigureAwait(false);
+        var bound = _boundAgentRun!;
+        var current = await _agentRuns.GetAsync(bound.Owner, bound.AgentRunId, cancellationToken).ConfigureAwait(false);
         if (current is null
             || current.Revision != bound.Revision
             || current.Claim?.Generation != bound.Claim!.Generation
-            || current.Status != ConversationTurnExecutionStatus.Running
+            || current.Status != AgentRunStatus.Running
             || current.CancellationRequested
             || current.ResponseId != input.ResponseId)
         {
@@ -109,17 +103,12 @@ public sealed partial class SessionRuntime
             return new SkillLoadMailboxResult(plan.ToToolResultJson(), current.ActiveSkillKeys, plan.Outcome);
         }
 
-        var updated = await _turnExecutions.AdmitActiveSkillsAsync(
-                current.ExecutionId,
-                current.Revision,
-                current.Claim!.Generation,
-                plan.IdsToAppend,
-                _time.GetUtcNow(),
-                cancellationToken)
-            .ConfigureAwait(false);
-        if (updated.ExecutionId == bound.ExecutionId)
+        var updated = await _agentRuns.ApplyAsync(current.Owner, current.AgentRunId,
+            new AgentRunCommand.LoadSkills(current.Revision, _time.GetUtcNow(), current.Claim!.Generation, plan.IdsToAppend),
+            cancellationToken).ConfigureAwait(false);
+        if (updated.AgentRunId == bound.AgentRunId)
         {
-            _boundConversationExecution = updated;
+            _boundAgentRun = updated;
         }
 
         return new SkillLoadMailboxResult(plan.ToToolResultJson(), updated.ActiveSkillKeys, plan.Outcome);
@@ -138,9 +127,9 @@ public sealed partial class SessionRuntime
                 "stale");
         }
 
-        if (_boundConversationExecution is not
+        if (_boundAgentRun is not
             {
-                Status: ConversationTurnExecutionStatus.Running,
+                Status: AgentRunStatus.Running,
                 Claim: not null
             } bound
             || bound.ResponseId != input.ResponseId)

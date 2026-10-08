@@ -69,11 +69,13 @@ internal static class MigrationSessionSeed
             await attach.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        foreach (var table in new[] { "Sessions", "Snapshots", "Entries" })
+        foreach (var table in new[] { "Sessions", "SessionSnapshots", "ConversationEntries" })
         {
             var columns = await ListColumnsAsync(connection, "src", table, cancellationToken).ConfigureAwait(false);
+            var targetColumns = await ListColumnsAsync(connection, "main", table, cancellationToken).ConfigureAwait(false);
             columns = columns
-                .Where(column => !string.Equals(column, "PinnedPersonaRevision", StringComparison.Ordinal))
+                .Where(column => targetColumns.Contains(column, StringComparer.Ordinal)
+                    && !string.Equals(column, "PinnedPersonaRevision", StringComparison.Ordinal))
                 .ToArray();
             if (columns.Length == 0)
             {

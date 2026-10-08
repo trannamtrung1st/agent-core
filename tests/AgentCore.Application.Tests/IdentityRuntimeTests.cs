@@ -109,7 +109,7 @@ public sealed class IdentityRuntimeTests
             now,
             now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
-        await using (var runtime = new SessionRuntime(
+        await using (var runtime = SessionRuntimeFixture.Create(
             snapshot,
             firstModel,
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -131,7 +131,7 @@ public sealed class IdentityRuntimeTests
         var paused = (await store.LoadAsync(snapshot.SessionId))!;
         var restored = await PausedSessionReopen.ReopenAsync(store, paused, time);
         var secondModel = new RecordingLanguageModel(new ScriptedLanguageModel());
-        await using var second = new SessionRuntime(
+        await using var second = SessionRuntimeFixture.Create(
             restored,
             secondModel,
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -173,8 +173,8 @@ public sealed class IdentityRuntimeTests
         Assert.Contains(examinerSnap.Entries, entry => entry.Role == ConversationRole.User && entry.Text == "Hello");
         Assert.DoesNotContain(examinerSnap.Entries, entry => entry.Text == "thanks");
         Assert.Contains(supportSnap.Entries, entry => entry.Text == "thanks");
-        Assert.Equal(5, examinerSnap.Revision);
-        Assert.Equal(5, supportSnap.Revision);
+        Assert.Equal(6, examinerSnap.Revision);
+        Assert.Equal(6, supportSnap.Revision);
         Assert.Contains("Alex", examinerModel.LastRequest!.Messages[0].Text, StringComparison.Ordinal);
         Assert.Contains("Sam", supportModel.LastRequest!.Messages[0].Text, StringComparison.Ordinal);
         Assert.Equal(1, examinerModel.LastRequest.Messages.Count(message => message.Role == ModelRole.User));
@@ -253,7 +253,7 @@ public sealed class IdentityRuntimeTests
             now,
             now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
-        var runtime = new SessionRuntime(
+        var runtime = SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),

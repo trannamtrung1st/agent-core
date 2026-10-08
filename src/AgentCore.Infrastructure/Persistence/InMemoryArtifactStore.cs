@@ -114,6 +114,19 @@ public sealed class InMemoryArtifactStore : IArtifactStore
         return ValueTask.FromResult(items);
     }
 
+    public ValueTask<ArtifactPage> ListPageAsync(Guid sessionId, Guid? before, int limit, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (limit is < 1 or > 100) throw AgentCoreErrors.Validation("Artifact limit must be between 1 and 100.");
+        var ordered = _items.Values.Where(item => item.SessionId == sessionId && !_deleted.ContainsKey(sessionId))
+            .OrderByDescending(item => item.CreatedAt).ThenByDescending(item => item.ArtifactId.ToString("D"), StringComparer.Ordinal).ToArray();
+        var offset = before is null ? 0 : Array.FindIndex(ordered, item => item.ArtifactId == before) + 1;
+        if (before is not null && offset == 0) throw AgentCoreErrors.Validation("Artifact cursor does not belong to this Session.");
+        var rows = ordered.Skip(offset).Take(limit + 1).ToArray();
+        var more = rows.Length > limit;
+        return ValueTask.FromResult(new ArtifactPage(rows.Take(limit).ToArray(), more ? rows[limit - 1].ArtifactId : null, more));
+    }
+
     public ValueTask<Stream> OpenContentAsync(
         Guid sessionId,
         Guid artifactId,

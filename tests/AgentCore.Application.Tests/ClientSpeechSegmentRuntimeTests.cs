@@ -146,7 +146,7 @@ public sealed class ClientSpeechSegmentRuntimeTests
             now,
             now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -346,7 +346,7 @@ public sealed class ClientSpeechSegmentRuntimeTests
             now,
             now, AgentInstanceId: Guid.NewGuid());
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),

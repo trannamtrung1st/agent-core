@@ -3885,7 +3885,7 @@ if (typeof window !== "undefined") {
     conversationExecution: () => {
       const snapshot = useSessionStore.getState();
       return {
-        executionId: snapshot.conversationExecutionId,
+        executionId: snapshot.agentRunId,
         responseId: snapshot.liveResponseId,
         outputState: snapshot.outputState
       };

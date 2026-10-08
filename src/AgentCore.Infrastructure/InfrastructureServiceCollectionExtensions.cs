@@ -2,7 +2,6 @@ using AgentCore.Application.Workspaces;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Credentials;
 using AgentCore.Infrastructure.Credentials;
-using AgentCore.Application.Conversation;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Identity;
 using AgentCore.Application.Memory;
@@ -102,10 +101,6 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<AgentCore.Application.Experience.ExperienceService>();
         services.TryAddSingleton<AgentCore.Application.Continuity.ContinuityService>();
         services.TryAddSingleton<AgentCore.Application.Continuity.IdentityMaintenanceService>();
-        services.TryAddSingleton<DurableWorkContextFactory>();
-        services.TryAddSingleton<WorkCancellationRegistry>();
-        services.TryAddSingleton<DurableReminderExecutor>();
-        services.TryAddSingleton<DurableWorkIntake>();
         services.TryAddSingleton<IInterruptionClassifier, HeuristicInterruptionClassifier>();
         services.TryAddSingleton<IIdGenerator, SystemIdGenerator>();
         services.TryAddSingleton<IDiagnosticIdSource, SystemDiagnosticIdSource>();
@@ -117,9 +112,14 @@ public static class InfrastructureServiceCollectionExtensions
                 options.UseSqlite(persistence.ConnectionString);
                 options.AddInterceptors(provider.GetRequiredService<SqlitePragmaInterceptor>());
             });
-            services.AddSingleton<IMemoryStore>(provider => new SqliteMemoryStore(
+            services.AddSingleton<SqliteMemoryStore>(provider => new SqliteMemoryStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                 provider.GetRequiredService<TimeProvider>()));
+            services.AddSingleton<IMemoryStore>(provider => provider.GetRequiredService<SqliteMemoryStore>());
+            services.AddSingleton<IAgentRunStore>(provider => new SqliteAgentRunStore(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                provider.GetRequiredService<SqliteMemoryStore>(),
+                provider.GetRequiredService<IDiagnosticIdSource>()));
             services.AddSingleton<IStructuredMemoryStore>(provider => new SqliteStructuredMemoryStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.AddSingleton<IAgentInstanceStore>(provider => new SqliteAgentInstanceStore(
@@ -128,13 +128,6 @@ public static class InfrastructureServiceCollectionExtensions
             services.AddSingleton<ITriggerStore>(provider => new SqliteTriggerStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.AddSingleton<IExperienceStore, SqliteExperienceStore>();
-            services.AddSingleton<IWorkItemStore>(provider => new SqliteWorkItemStore(
-                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
-                provider.GetRequiredService<IDiagnosticIdSource>()));
-            services.AddSingleton<IConversationTurnExecutionStore>(provider => new SqliteConversationTurnExecutionStore(
-                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
-            services.AddSingleton<IDurableWorkHandoff>(provider => new SqliteDurableWorkHandoff(
-                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.AddSingleton<IAgentDefinitionAdminStore>(provider => new SqliteAgentDefinitionAdminStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                 provider.GetRequiredService<IIdGenerator>(),
@@ -178,7 +171,8 @@ public static class InfrastructureServiceCollectionExtensions
         }
         else
         {
-            services.TryAddSingleton<IMemoryStore, InMemoryMemoryStore>();
+            services.TryAddSingleton<InMemoryMemoryStore>();
+            services.TryAddSingleton<IMemoryStore>(provider => provider.GetRequiredService<InMemoryMemoryStore>());
             services.TryAddSingleton<IStructuredMemoryStore, InMemoryStructuredMemoryStore>();
             services.TryAddSingleton<InMemoryAgentInstanceStore>();
             services.TryAddSingleton<IAgentInstanceStore>(provider =>
@@ -192,17 +186,9 @@ public static class InfrastructureServiceCollectionExtensions
             services.TryAddSingleton(provider =>
                 new InMemoryTriggerStore(provider.GetRequiredService<InMemoryDurableState>(), provider.GetRequiredService<InMemoryAdminEventStore>()));
             services.TryAddSingleton<ITriggerStore>(provider => provider.GetRequiredService<InMemoryTriggerStore>());
-            services.TryAddSingleton(provider =>
-                new InMemoryWorkItemStore(
-                    provider.GetRequiredService<InMemoryDurableState>(),
-                    provider.GetRequiredService<IDiagnosticIdSource>()));
-            services.TryAddSingleton<IWorkItemStore>(provider => provider.GetRequiredService<InMemoryWorkItemStore>());
-            services.TryAddSingleton(provider =>
-                new InMemoryConversationTurnExecutionStore(provider.GetRequiredService<InMemoryDurableState>()));
-            services.TryAddSingleton<IConversationTurnExecutionStore>(provider =>
-                provider.GetRequiredService<InMemoryConversationTurnExecutionStore>());
-            services.TryAddSingleton<IDurableWorkHandoff>(provider =>
-                new InMemoryDurableWorkHandoff(provider.GetRequiredService<InMemoryDurableState>()));
+            services.TryAddSingleton<IAgentRunStore>(provider => new InMemoryAgentRunStore(
+                provider.GetRequiredService<InMemoryMemoryStore>(),
+                provider.GetRequiredService<IDiagnosticIdSource>(), provider.GetRequiredService<InMemoryTriggerStore>()));
             services.TryAddSingleton<InMemoryCredentialStore>();
             services.TryAddSingleton<ICredentialStore>(p => p.GetRequiredService<InMemoryCredentialStore>());
             services.TryAddSingleton<IAgentCredentialBindingStore>(p => p.GetRequiredService<InMemoryCredentialStore>());
@@ -235,11 +221,9 @@ public static class InfrastructureServiceCollectionExtensions
                 _ = provider.GetRequiredService<IDefinitionDraftEvaluationStore>();
                 return new InMemoryAdminLifecycleDeletion(
                     provider.GetRequiredService<InMemoryAgentInstanceStore>(),
-                    (InMemoryMemoryStore)provider.GetRequiredService<IMemoryStore>(),
+                    provider.GetRequiredService<InMemoryMemoryStore>(),
                     (InMemoryStructuredMemoryStore)provider.GetRequiredService<IStructuredMemoryStore>(),
                     provider.GetRequiredService<InMemoryTriggerStore>(),
-                    provider.GetRequiredService<InMemoryWorkItemStore>(),
-                    provider.GetRequiredService<InMemoryConversationTurnExecutionStore>(),
                     provider.GetRequiredService<InMemoryAgentDefinitionAdminStore>(),
                     provider.GetRequiredService<InMemoryAdminEventStore>(),
                     (InMemoryExperienceStore)provider.GetRequiredService<IExperienceStore>(),
@@ -290,18 +274,6 @@ public static class InfrastructureServiceCollectionExtensions
                 new InMemoryArtifactStore(provider.GetRequiredService<TimeProvider>()));
         }
 
-        if (string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
-        {
-            services.TryAddSingleton<IWorkCaptureStore>(provider => new SqliteWorkCaptureStore(
-                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
-                provider.GetRequiredService<TimeProvider>(),
-                persistence.ArtifactRoot));
-        }
-        else
-        {
-            services.TryAddSingleton<IWorkCaptureStore>(provider =>
-                new InMemoryWorkCaptureStore(provider.GetRequiredService<TimeProvider>()));
-        }
         services.TryAddSingleton<IArtifactReferenceAuthorizer>(provider =>
             new SessionArtifactAuthorizer(provider.GetService<IArtifactStore>()));
         services.AddHttpClient(OpenAICompatibleLanguageModel.HttpClientName, client =>
@@ -418,7 +390,6 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<IMemoryStore>(),
             provider.GetService<IBrowser>(),
             provider.GetService<IAgentDefinitionResourceAdminStore>(),
-            provider.GetService<IWorkCaptureStore>(),
             () => provider.GetRequiredService<HarnessManagementService>(),
             provider.GetRequiredService<AgentCore.Application.Experience.ExperienceService>(),
             provider.GetRequiredService<AgentCore.Application.Continuity.ContinuityService>(),
@@ -450,15 +421,18 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IAttachmentProcessor>(),
                 provider.GetRequiredService<IArtifactReferenceAuthorizer>(),
                 provider.GetRequiredService<SessionToolExecutor>(),
+                provider.GetRequiredService<IAgentRunStore>(),
                 provider.GetRequiredService<ILanguageModelResolver>(),
                 provider.GetRequiredService<IModelCatalog>(),
                 provider.GetRequiredService<IUserTurnCapabilityValidator>(),
                 provider.GetRequiredService<IStructuredMemoryService>(),
-                provider.GetRequiredService<IConversationTurnExecutionStore>(),
                 provider.GetRequiredService<IDiagnosticIdSource>(),
-                provider.GetService<IBrowserLease>());
+                provider.GetService<IBrowserLease>(), provider.GetRequiredService<IAgentRunAuthority>());
         });
-        services.TryAddSingleton<ConversationExecutionCoordinator>();
+        services.TryAddSingleton<IAgentRunAuthority, AgentCore.Application.Execution.AgentRunAuthority>();
+        services.TryAddSingleton<AgentCore.Application.Execution.BackgroundOccurrenceIntake>();
+        services.TryAddSingleton<AgentCore.Application.Execution.BackgroundCompletionReporter>();
+        services.TryAddSingleton<AgentCore.Application.Execution.AgentRunCoordinator>();
         return services;
     }
 }

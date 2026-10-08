@@ -1,3 +1,4 @@
+import { approvalFixture, backgroundFixture, mockBackgroundSessions } from './support/background-fixtures';
 import { expect, test } from "@playwright/test";
 
 test("admin unattended model and event sources stay operable at wide and narrow widths", async ({ page }) => {
@@ -141,71 +142,24 @@ test("background work lists scheduled and order-placed sources", async ({ page }
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByRole("button", { name: "Background work" })).toBeVisible({ timeout: 15_000 });
 
-  await page.route("**/work-items**", async (route) => {
-    if (route.request().url().includes("/result")) {
-      await route.fulfill({ status: 404, body: "" });
-      return;
-    }
-
-    await route.fulfill({
-      json: {
-        items: [
-          {
-            workItemId: "019944af-00c5-7000-8000-0000000000b1",
-            status: "completed",
-            revision: 2,
-            origin: "Automation · Schedule",
-            progress: null,
-            needsApproval: false,
-            approvalId: null,
-            approvalRevision: null,
-            approvalPreview: null,
-            actionHash: null,
-            cancellationAvailable: false,
-            failureCode: null,
-            failureSummary: null,
-            knownEffect: null,
-            attentionRequired: false,
-            createdAt: "2026-10-04T01:00:00.000Z",
-            updatedAt: "2026-10-04T01:02:00.000Z"
-          },
-          {
-            workItemId: "019944af-00c5-7000-8000-0000000000b2",
-            status: "needsApproval",
-            revision: 3,
-            origin: "Automation · Event",
-            progress: null,
-            needsApproval: true,
-            approvalId: "019944af-00c5-7000-8000-0000000000b3",
-            approvalRevision: 1,
-            approvalPreview: "Click Publish",
-            actionHash: "a".repeat(64),
-            cancellationAvailable: true,
-            failureCode: null,
-            failureSummary: null,
-            knownEffect: null,
-            createdAt: "2026-10-04T01:03:00.000Z",
-            updatedAt: "2026-10-04T01:04:00.000Z"
-          }
-        ]
-      }
-    });
-  });
-
+  await mockBackgroundSessions(page, [backgroundFixture(177, 'Scheduled review', { activationKind: 'ScheduledWork' }),
+    backgroundFixture(178, 'Order-placed review', { activationKind: 'ApplicationEvent', status: 'needsApproval', outcome: null, approval: approvalFixture })]);
   const opener = page.getByRole("button", { name: "Background work" });
   await opener.focus();
   await page.keyboard.press("Enter");
   const drawer = page.getByRole("dialog", { name: "Background work" });
-  await expect(drawer.getByText("Automation · Schedule", { exact: true })).toBeVisible();
-  await expect(drawer.getByText("Automation · Event", { exact: true })).toBeVisible();
-  await expect(drawer.getByText("Approval required")).toBeVisible();
+  await expect(drawer.getByRole("button", { name: "Scheduled review", exact: true })).toBeVisible();
+  await expect(drawer.getByRole("button", { name: "Order-placed review", exact: true })).toBeVisible();
+  await expect(drawer.getByText("Needs approval")).toBeVisible();
   await expect(drawer.getByText(/sourceEventId|orderReference/)).toHaveCount(0);
+  await drawer.getByRole("button", { name: "Close", exact: true }).focus();
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
+  await expect(opener).toBeFocused();
 
   await page.setViewportSize({ width: 390, height: 800 });
   await opener.click();
-  await expect(drawer.getByText("Automation · Event", { exact: true })).toBeVisible();
+  await expect(drawer.getByRole("button", { name: "Order-placed review", exact: true })).toBeVisible();
   await drawer.getByRole("button", { name: "Close" }).click();
   await expect(drawer).toBeHidden();
 });

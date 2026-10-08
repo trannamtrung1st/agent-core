@@ -414,7 +414,7 @@ public sealed class UserTextQueueTests
         await store.SaveAsync(snapshot, 0);
         var output = new CapturingSessionOutput();
         var recorded = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(["batch"]),
             recorded,
@@ -485,7 +485,7 @@ public sealed class UserTextQueueTests
         await store.SaveAsync(snapshot, 0);
         var output = new CapturingSessionOutput();
         var model = new ScriptedLanguageModel(["should-not-run"]);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             model,
             new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder())),
@@ -699,7 +699,7 @@ public sealed class UserTextQueueTests
             now,
             now, AgentInstanceId: Guid.NewGuid());
         memory.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             brain,

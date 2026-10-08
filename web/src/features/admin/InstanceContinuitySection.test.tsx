@@ -18,7 +18,7 @@ const record = (index: number): ExperienceItem => ({
   experienceId: `experience-${index}`, sourceKind: 'Session', sourceId: `source-${index}`, throughCursor: index,
   sourceAt: '2026-01-01T00:00:00Z', sourceCreatedAt: '2026-01-01T00:00:00Z',
   checkpointAt: new Date(Date.UTC(2026, 1, index)).toISOString(), definitionId: 'secretary', definitionVersion: 1,
-  modelKey: 'synthetic-default', generationWorkItemId: `work-${index}`, visibility: 'Eligible', revision: 1,
+  modelKey: 'synthetic-default', generationAgentRunId: `work-${index}`, visibility: 'Eligible', revision: 1,
   status: 'Completed', eligibleForContext: true, diagnosticId: null, failureSummary: null,
   content: { goal: `Atlas review ${index}`, attempts: [], decisions: [], outcomes: [], corrections: [],
     unresolved: [], difficulties: [], lessons: [`Lesson ${index}`, 'Check unresolved decisions before confirming the agenda.'] }
@@ -33,12 +33,12 @@ beforeEach(() => {
 describe('Instance continuity owner controls', () => {
   it('does not claim a checkpoint disappeared when its source read fails and recovers on Reload', async () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
-    const ui = (selection?: { workItemId: string; request: number }) => <ConfigProvider><App>
+    const ui = (selection?: { agentRunId: string; request: number }) => <ConfigProvider><App>
       <ExperienceSection instanceId="owner-instance" onWork={vi.fn()} selection={selection} /></App></ConfigProvider>;
     const mounted = render(ui());
     await screen.findByText(/No experience yet/);
     request.mockRejectedValue(new Error('Network disconnected'));
-    mounted.rerender(ui({ workItemId: 'work-1', request: 1 }));
+    mounted.rerender(ui({ agentRunId: 'work-1', request: 1 }));
     const retry = await screen.findByRole('button', { name: /^Reload$/ });
     expect(screen.queryByText('This experience checkpoint is not available in the current records')).not.toBeInTheDocument();
     request.mockResolvedValue({ ...experience(), items: [record(1)] });
@@ -110,7 +110,7 @@ describe('Instance continuity owner controls', () => {
   it('distinguishes captured checkpoint time from source creation and marks legacy times unknown', async () => {
     const row = { experienceId: 'checkpoint', sourceKind: 'Session', sourceId: 'source', throughCursor: 4,
       sourceAt: '2026-01-01T00:00:00Z', sourceCreatedAt: '2026-01-01T00:00:00Z', checkpointAt: '2026-02-01T00:00:00Z',
-      definitionId: 'general-assistant', definitionVersion: 9, modelKey: 'synthetic-default', generationWorkItemId: 'work',
+      definitionId: 'general-assistant', definitionVersion: 9, modelKey: 'synthetic-default', generationAgentRunId: 'work',
       visibility: 'Eligible', revision: 1, eligibleForContext: true, status: 'Completed', content: { goal: 'Observed correction',
         attempts: [], decisions: [], outcomes: [], corrections: [], unresolved: [], difficulties: [], lessons: [] } };
     request.mockImplementation(async (_id, path) => path === 'thoughts' ? thoughts : { ...experience(), items: [row, { ...row, experienceId: 'legacy', checkpointAt: null, content: { ...row.content, goal: 'Legacy observation' } }] });
@@ -161,13 +161,13 @@ describe('Instance continuity owner controls', () => {
     enabled = true;
     request.mockResolvedValue({ ...experience(), items: Array.from({ length: 21 }, (_, index) => record(index + 1)) });
     const onWork = vi.fn();
-    const ui = (selection?: { workItemId: string; request: number }) => <ConfigProvider><App><ExperienceSection instanceId="owner-instance" onWork={onWork} selection={selection} /></App></ConfigProvider>;
+    const ui = (selection?: { agentRunId: string; request: number }) => <ConfigProvider><App><ExperienceSection instanceId="owner-instance" onWork={onWork} selection={selection} /></App></ConfigProvider>;
     const view = render(ui());
     await screen.findByRole('button', { name: 'View experience: Atlas review 21' });
     fireEvent.click(screen.getByRole("button", { name: "Enter Session ID" }));
     fireEvent.change(screen.getByLabelText('Session ID'), { target: { value: 'Unsaved session' } });
     fireEvent.change(screen.getByRole('textbox', { name: 'Search experience' }), { target: { value: 'Atlas review 21' } });
-    view.rerender(ui({ workItemId: 'work-1', request: 1 }));
+    view.rerender(ui({ agentRunId: 'work-1', request: 1 }));
     const selected = await screen.findByRole('button', { name: 'View experience: Atlas review 1' });
     await waitFor(() => expect(selected).toHaveFocus());
     expect(selected).toHaveAttribute('aria-expanded', 'true');

@@ -16,6 +16,78 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ActivationRecord", b =>
+                {
+                    b.Property<string>("ActivationId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AdmissionHash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("AdmittedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AgentInstanceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BackgroundSourceKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DedupeKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProfileId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("ActivationId");
+
+                    b.HasIndex("SessionId", "DedupeKey")
+                        .IsUnique();
+
+                    b.HasIndex("AgentInstanceId", "ProfileId", "BackgroundSourceKey")
+                        .IsUnique()
+                        .HasFilter("BackgroundSourceKey IS NOT NULL");
+
+                    b.ToTable("Activations", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ActivationSourceEntryRecord", b =>
+                {
+                    b.Property<string>("SessionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EntryId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ActivationId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("SessionId", "EntryId");
+
+                    b.HasIndex("EntryId");
+
+                    b.HasIndex("ActivationId", "Ordinal")
+                        .IsUnique();
+
+                    b.ToTable("ActivationSourceEntries", (string)null);
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AdminEventRecord", b =>
                 {
                     b.Property<string>("EventId")
@@ -508,6 +580,67 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("AgentInstanceSkills", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentRunRecord", b =>
+                {
+                    b.Property<string>("AgentRunId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ActivationId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AgentInstanceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("ApprovalExpiresAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("LeaseExpiresAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("NextRetryAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProfileId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("UpdatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("AgentRunId");
+
+                    b.HasIndex("ActivationId")
+                        .IsUnique();
+
+                    b.HasIndex("SessionId");
+
+                    b.HasIndex("Status", "NextRetryAtUtc", "CreatedAtUtc");
+
+                    b.HasIndex("AgentInstanceId", "ProfileId", "SessionId", "CreatedAtUtc");
+
+                    b.ToTable("AgentRuns", (string)null);
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentWorkspaceRow", b =>
                 {
                     b.Property<string>("ItemId")
@@ -764,134 +897,35 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("Automations", (string)null);
                 });
 
-            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ConversationTurnExecutionRecord", b =>
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.BackgroundCompletionReceiptRecord", b =>
                 {
-                    b.Property<string>("ExecutionId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("AcceptedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("ActiveSkillKeysJson")
-                        .IsRequired()
+                    b.Property<string>("ChildAgentRunId")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("AgentInstanceId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("AssistantEntryId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("CancellationRequested")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<long?>("CancellationRequestedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("CapabilityLoadCount")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("ClaimGeneration")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long?>("ClaimLeaseExpiresAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<long?>("ClaimedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("DefinitionId")
                         .IsRequired()
-                        .HasMaxLength(128)
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("DefinitionVersion")
+                    b.Property<long>("CreatedAtUtc")
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("LoadedCapabilityIdsJson")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ModelCatalogKey")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ModelId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ModelProviderAlias")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ModelReasoningEffort")
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("PinnedPersonaJson")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("PinnedSkillCatalogJson")
-                        .IsRequired()
+                    b.Property<string>("ParentActivationId")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ProfileId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ResponseId")
                         .IsRequired()
-                        .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
-                    b.Property<long>("Revision")
-                        .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("SessionId")
-                        .IsRequired()
-                        .HasMaxLength(36)
+                    b.Property<string>("SkipReason")
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("SkillLoadCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasDefaultValue(0);
+                    b.HasKey("ChildAgentRunId");
 
-                    b.Property<string>("SourceEventId")
-                        .IsRequired()
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
+                    b.HasIndex("ParentActivationId")
+                        .IsUnique()
+                        .HasFilter("ParentActivationId IS NOT NULL");
 
-                    b.Property<string>("SourceUserEntryId")
-                        .IsRequired()
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<long>("UpdatedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("ExecutionId");
-
-                    b.HasIndex("ResponseId");
-
-                    b.HasIndex("SessionId", "SourceEventId")
-                        .IsUnique();
-
-                    b.HasIndex("SessionId", "Status");
-
-                    b.HasIndex("Status", "ClaimLeaseExpiresAtUtc");
-
-                    b.ToTable("ConversationTurnExecutions", (string)null);
+                    b.ToTable("BackgroundCompletionReceipts", (string)null);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.CredentialRecord", b =>
@@ -1313,7 +1347,17 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("OriginJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("{\"kind\":0}");
+
                     b.Property<string>("PauseReason")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PendingAgentInputIdsJson")
+                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("PendingMode")
@@ -1334,6 +1378,11 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("Surfaces")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(1);
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -1485,14 +1534,14 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("MaintenanceAgentRunId")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("MaintenanceOrigin")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("MaintenanceSessionId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("MaintenanceWorkItemId")
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
@@ -1580,6 +1629,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("AcceptedAgentRunId")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("AdmittedAtUtc")
                         .HasColumnType("INTEGER");
 
@@ -1589,6 +1642,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("AutomationId")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BackgroundSessionId")
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
@@ -1611,13 +1668,16 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("DurableWorkItemId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("EvidenceJson")
                         .IsRequired()
                         .HasMaxLength(4096)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("LiveEvaluationCompletedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LiveSessionId")
+                        .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ModelCatalogKey")
@@ -1648,6 +1708,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<long>("RoutingRevision")
+                        .IsConcurrencyToken()
                         .HasColumnType("INTEGER");
 
                     b.Property<long?>("RoutingUpdatedAtUtc")
@@ -1668,6 +1729,16 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasKey("OccurrenceId");
 
+                    b.HasIndex("AcceptedAgentRunId")
+                        .IsUnique()
+                        .HasFilter("AcceptedAgentRunId IS NOT NULL");
+
+                    b.HasIndex("BackgroundSessionId")
+                        .IsUnique()
+                        .HasFilter("BackgroundSessionId IS NOT NULL");
+
+                    b.HasIndex("LiveSessionId");
+
                     b.HasIndex("Disposition", "ClaimLeaseExpiresAtUtc");
 
                     b.HasIndex("AgentInstanceId", "ProfileId", "DedupeKey")
@@ -1675,354 +1746,34 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AgentInstanceId", "ProfileId", "Disposition");
 
-                    b.ToTable("TriggerOccurrences", (string)null);
+                    b.ToTable("TriggerOccurrences", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TriggerOccurrences_BackgroundLink", "(BackgroundSessionId IS NULL AND AcceptedAgentRunId IS NULL) OR (BackgroundSessionId IS NOT NULL AND LiveSessionId IS NULL AND AcceptedAgentRunId IS NOT NULL) OR (BackgroundSessionId IS NULL AND LiveSessionId IS NOT NULL AND AcceptedAgentRunId IS NOT NULL AND LiveEvaluationCompletedAtUtc IS NOT NULL)");
+                        });
                 });
 
-            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkApprovalRecord", b =>
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ActivationRecord", b =>
                 {
-                    b.Property<string>("ApprovalId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ActionHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("CheckpointRevision")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("Consumed")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<long>("CreatedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<long?>("DecidedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("Decision")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("ExecutionGeneration")
-                        .IsRequired()
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("ExpiresAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("PreparedActionJson")
-                        .IsRequired()
-                        .HasMaxLength(8192)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Preview")
-                        .IsRequired()
-                        .HasMaxLength(12000)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("Revision")
-                        .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("ToolName")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("WorkItemId")
-                        .IsRequired()
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("ApprovalId");
-
-                    b.HasIndex("WorkItemId");
-
-                    b.ToTable("WorkApprovals", (string)null);
+                    b.HasOne("AgentCore.Infrastructure.Persistence.SessionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
-            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkAttentionAlertRecord", b =>
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ActivationSourceEntryRecord", b =>
                 {
-                    b.Property<string>("AlertKey")
-                        .HasMaxLength(80)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("CreatedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<long>("Revision")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("WorkItemId")
-                        .IsRequired()
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("AlertKey");
-
-                    b.HasIndex("WorkItemId")
-                        .IsUnique();
-
-                    b.ToTable("WorkAttentionAlerts", (string)null);
-                });
-
-            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkCaptureRow", b =>
-                {
-                    b.Property<string>("CaptureId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("AgentInstanceId")
-                        .IsRequired()
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("ByteSize")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("ContentType")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("CreatedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("RelativePath")
-                        .IsRequired()
-                        .HasMaxLength(240)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("RetainUntilUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Sha256Hex")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("WorkItemId")
-                        .IsRequired()
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("CaptureId");
-
-                    b.HasIndex("RetainUntilUtc");
-
-                    b.HasIndex("WorkItemId");
-
-                    b.ToTable("WorkCaptures", (string)null);
-                });
-
-            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkItemRecord", b =>
-                {
-                    b.Property<string>("WorkItemId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("AgentInstanceId")
-                        .IsRequired()
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("AttemptCount")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("AutomationId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("CancellationRequested")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<long?>("CancellationRequestedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("CheckpointJson")
-                        .HasMaxLength(65536)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long?>("CheckpointOutputBytes")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("CheckpointRemainingOverallBudgetMs")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("CheckpointStepCount")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("ClaimGeneration")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long?>("ClaimLeaseExpiresAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<long?>("ClaimedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<long>("CreatedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("CurrentApprovalId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("DedupeKey")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("DefinitionId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("DefinitionVersion")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("EvidenceJson")
-                        .IsRequired()
-                        .HasMaxLength(8192)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long?>("FailureAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("FailureCode")
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("FailureDiagnosticId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("FailureSummary")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("KnownEffectSummary")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("MaxAttempts")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("ModelCatalogKey")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ModelId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ModelProviderAlias")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ModelReasoningEffort")
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long?>("NextRetryAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<long>("ObservedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("PersonaName")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("PinnedPersonaJson")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ProfileId")
-                        .IsRequired()
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ProgressSummary")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long?>("ProgressUpdatedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("ResultAttentionRequired")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasDefaultValue(false);
-
-                    b.Property<long?>("ResultCompletedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("ResultText")
-                        .HasMaxLength(16000)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("Revision")
-                        .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<long?>("ScheduledAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("SideEffectActionHash")
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("SideEffectDisposition")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("SideEffectToolCallId")
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long?>("SideEffectUpdatedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("SourceEventId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("SourceKind")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("SourceOccurrenceId")
-                        .IsRequired()
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("SourceSessionId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<long>("UpdatedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("WorkItemId");
-
-                    b.HasIndex("SourceOccurrenceId")
-                        .IsUnique();
-
-                    b.HasIndex("Status", "ClaimLeaseExpiresAtUtc");
-
-                    b.HasIndex("Status", "NextRetryAtUtc");
-
-                    b.HasIndex("AgentInstanceId", "ProfileId", "CreatedAtUtc");
-
-                    b.ToTable("WorkItems", (string)null);
+                    b.HasOne("AgentCore.Infrastructure.Persistence.ActivationRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ActivationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Persistence.EntryRecord", null)
+                        .WithMany()
+                        .HasForeignKey("EntryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentCredentialBindingRecord", b =>
@@ -2058,6 +1809,35 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentRunRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.ActivationRecord", null)
+                        .WithOne()
+                        .HasForeignKey("AgentCore.Infrastructure.Persistence.AgentRunRecord", "ActivationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Persistence.SessionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.BackgroundCompletionReceiptRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.AgentRunRecord", null)
+                        .WithOne()
+                        .HasForeignKey("AgentCore.Infrastructure.Persistence.BackgroundCompletionReceiptRecord", "ChildAgentRunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Persistence.ActivationRecord", null)
+                        .WithOne()
+                        .HasForeignKey("AgentCore.Infrastructure.Persistence.BackgroundCompletionReceiptRecord", "ParentActivationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EntryRecord", b =>
                 {
                     b.HasOne("AgentCore.Infrastructure.Persistence.SessionRecord", "Session")
@@ -2080,13 +1860,22 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Navigation("Session");
                 });
 
-            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.WorkApprovalRecord", b =>
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.TriggerOccurrenceRecord", b =>
                 {
-                    b.HasOne("AgentCore.Infrastructure.Persistence.WorkItemRecord", null)
+                    b.HasOne("AgentCore.Infrastructure.Persistence.AgentRunRecord", null)
                         .WithMany()
-                        .HasForeignKey("WorkItemId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .HasForeignKey("AcceptedAgentRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Infrastructure.Persistence.SessionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("BackgroundSessionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Infrastructure.Persistence.SessionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("LiveSessionId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SessionRecord", b =>

@@ -148,7 +148,7 @@ public sealed class SpeechDuplexTests
             now,
             now, AgentInstanceId: Guid.NewGuid());
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(["There are three points. "]),
             new DefaultAgentBrain(new PromptContextBuilder()),

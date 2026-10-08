@@ -1,3 +1,4 @@
+using AgentCore.Application.Execution;
 using System.Text.Json;
 using AgentCore.Application.Events;
 using AgentCore.Application.Testing;
@@ -11,7 +12,6 @@ using AgentCore.Application.Work;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Triggers;
-using AgentCore.Domain.Work;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Identity;
@@ -34,18 +34,24 @@ public sealed class TriggerOccurrenceRoutingTests
     public async Task Live_occurrence_loads_without_connection_state_and_each_response_starts_fresh()
     {
         var model = new LiveCapabilityModel();
-        var harness = await StartAsync(model: model, capabilities: true);
+        var catalog = JourneyCatalog();
+        var definitions = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var harness = await StartAsync(model: model, capabilities: true, catalog: catalog);
         await using var runtime = harness.Runtime;
         Assert.True(await runtime.SubmitPersistedUserTextAsync("Load an interface", Guid.NewGuid()));
-        await runtime.WaitUntilIdleAsync();
-        var router = Router(harness, [runtime.SessionId], runtime);
+        try { await runtime.WaitUntilIdleAsync(new CancellationTokenSource(TimeSpan.FromSeconds(3)).Token); }
+        catch (OperationCanceledException) { Assert.Fail(harness.Runs.LastAdmissionError?.ToString() ?? "Runtime did not settle"); }
+        Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
+        var router = Router(harness, [runtime.SessionId], runtime, catalog, definitions);
         for (var index = 0; index < 2; index++)
         {
             var admitted = await Ingress(harness).PublishOrderStatusAsync(harness.Owner, Guid.NewGuid(), "CAP-" + index, "shipped", null);
             Assert.Equal(DurableEventOutcome.Admitted, admitted.Outcome);
             await router.RouteOnceAsync();
-            await runtime.WaitUntilIdleAsync();
-            Assert.Equal(OccurrenceRoutingDisposition.AcceptedLive, (await harness.Store.GetOccurrenceAsync(harness.Owner, admitted.Occurrence!.OccurrenceId))!.Disposition);
+            try { await runtime.WaitUntilIdleAsync(new CancellationTokenSource(TimeSpan.FromSeconds(3)).Token); }
+        catch (OperationCanceledException) { Assert.Fail(harness.Runs.LastAdmissionError?.ToString() ?? "Runtime did not settle"); }
+            var receipt = (await harness.Store.GetOccurrenceAsync(harness.Owner, admitted.Occurrence!.OccurrenceId))!;
+            Assert.Equal(OccurrenceRoutingDisposition.AcceptedLive, receipt.Disposition);
         }
         Assert.Equal(6, model.Requests.Count);
         foreach (var pair in model.Requests.Chunk(2))
@@ -99,6 +105,8 @@ public sealed class TriggerOccurrenceRoutingTests
         await runtime.WaitUntilIdleAsync();
         var saved = await harness.Store.GetOccurrenceAsync(harness.Owner, first.Occurrence!.OccurrenceId);
         Assert.Equal(OccurrenceRoutingDisposition.AcceptedLive, saved!.Disposition);
+        Assert.Null(harness.Runs.LastAdmissionError);
+        Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
         Assert.Equal(OccurrenceAccept.Duplicate, await runtime.SubmitOccurrenceAsync(new OccurrenceDelivery(first.Occurrence.OccurrenceId, harness.Owner, TriggerSourceKind.ApplicationEvent, saved.EvidenceJson)));
         Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
 
@@ -391,11 +399,13 @@ public sealed class TriggerOccurrenceRoutingTests
     public async Task Accepted_live_is_stored_before_a_quiet_launch_and_restart_does_not_repeat_it()
     {
         var probe = new AcceptCommittedModel(new ScriptedLanguageModel());
-        var harness = await StartAsync(model: probe);
+        var catalog = JourneyCatalog();
+        var definitions = new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var harness = await StartAsync(model: probe, capabilities: true, catalog: catalog);
         probe.Watch(harness.Store);
         await using var runtime = harness.Runtime;
         var admitted = await Ingress(harness).PublishOrderStatusAsync(harness.Owner, Guid.NewGuid(), "F-1", "shipped", "left the dock");
-        await Router(harness, [runtime.Snapshot.SessionId], runtime).RouteOnceAsync();
+        await Router(harness, [runtime.Snapshot.SessionId], runtime, catalog, definitions).RouteOnceAsync();
         Assert.Equal(
             OccurrenceRoutingDisposition.AcceptedLive,
             (await harness.Store.GetOccurrenceAsync(harness.Owner, admitted.Occurrence!.OccurrenceId))!.Disposition);
@@ -404,11 +414,8 @@ public sealed class TriggerOccurrenceRoutingTests
         Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
 
         harness.Time.Advance(TimeSpan.FromSeconds(31));
-        var restarted = await StartAsync();
-        await using var fresh = restarted.Runtime;
-        await Router(harness, [fresh.Snapshot.SessionId], fresh).RouteOnceAsync();
-        await fresh.WaitUntilIdleAsync();
-        Assert.DoesNotContain(fresh.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        await Router(harness, [], null).RouteOnceAsync();
+        Assert.Empty(await harness.Store.ListUnsettledLiveAsync(10));
         Assert.Equal(
             OccurrenceRoutingDisposition.AcceptedLive,
             (await harness.Store.GetOccurrenceAsync(harness.Owner, admitted.Occurrence.OccurrenceId))!.Disposition);
@@ -666,22 +673,16 @@ public sealed class TriggerOccurrenceRoutingTests
                 UnattendedModelCatalogKey: "scripted-alpha",
                 UnattendedReasoningEffort: "high"),
             Now);
-        var handoff = new CapturingHandoff();
-        var intake = new DurableWorkIntake(
-            harness.Store,
-            handoff,
-            harness.Instances,
-            definitions,
-            catalog,
-            new SystemIdGenerator(TimeProvider.System),
-            harness.Time,
-            NullLogger<DurableWorkIntake>.Instance);
+        var runs = new InMemoryAgentRunStore(harness.Memory, new SystemDiagnosticIdSource(), harness.Store);
+        var intake = new BackgroundOccurrenceIntake(harness.Store, runs, harness.Instances, definitions,
+            harness.Memory, catalog, new SystemIdGenerator(harness.Time), harness.Time);
         var admitted = await intake.AcceptAwaitingAsync();
         Assert.Equal(1, admitted.Accepted);
-        Assert.Equal("scripted-vision", handoff.Proposed!.Model.CatalogKey);
-        Assert.Equal("primary-llm", handoff.Proposed.Model.ProviderAlias);
-        Assert.Equal("scripted-vision", handoff.Proposed.Model.ModelId);
-        Assert.Null(handoff.Proposed.Model.ReasoningEffort);
+        var proposed = Assert.Single(await runs.ListAsync(new(InstanceId, ProfileId), 50), run => run.Admission.Activation.TriggerOccurrenceId == waiting.Occurrence.OccurrenceId);
+        Assert.Equal("scripted-vision", proposed.PinnedModel.CatalogKey);
+        Assert.Equal("primary-llm", proposed.PinnedModel.ProviderAlias);
+        Assert.Equal("scripted-vision", proposed.PinnedModel.ModelId);
+        Assert.Null(proposed.PinnedModel.ReasoningEffort);
         AssertSamePin(live.Occurrence.ModelPin, (await harness.Store.GetOccurrenceAsync(harness.Owner, live.Occurrence.OccurrenceId))!.ModelPin);
         AssertSamePin(live.Occurrence.ModelPin, (await harness.Store.GetOccurrenceAsync(harness.Owner, waiting.Occurrence.OccurrenceId))!.ModelPin);
     }
@@ -839,23 +840,9 @@ public sealed class TriggerOccurrenceRoutingTests
         }
     }
 
-    private sealed class CapturingHandoff : IDurableWorkHandoff
-    {
-        public WorkItem? Proposed { get; private set; }
-
-        public ValueTask<WorkItemCreateResult> AcceptAsync(
-            Guid occurrenceId,
-            WorkItem proposed,
-            DateTimeOffset acceptedAtUtc,
-            CancellationToken cancellationToken = default)
-        {
-            Proposed = proposed;
-            return ValueTask.FromResult(new WorkItemCreateResult(WorkItemCreateKind.Created, proposed));
-        }
-    }
-
     private static DurableOrderEventIngress Ingress(Harness harness) =>
-        new(harness.Store, harness.Guard, new SystemIdGenerator(TimeProvider.System), harness.Time);
+        new(harness.Store, harness.Guard, new SystemIdGenerator(TimeProvider.System), harness.Time,
+            harness.Instances, new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default), JourneyCatalog());
 
     private static TriggerOccurrenceRouter Router(
         Harness harness,
@@ -871,8 +858,8 @@ public sealed class TriggerOccurrenceRoutingTests
             new SystemIdGenerator(TimeProvider.System),
             harness.Time,
             harness.Instances,
-            definitions,
-            catalog);
+            definitions ?? new ScenarioDefinitionStore(FindAgents(), SyntheticProviderAliases.Default),
+            catalog ?? JourneyCatalog());
 
     private static async ValueTask<AgentInstance> ReassociateActiveVersionAsync(
         IAgentInstanceStore instances,
@@ -922,7 +909,7 @@ public sealed class TriggerOccurrenceRoutingTests
                 0);
         }
 
-        return new GuardScope(new TriggerAdmissionGuard(instances, definitions, memory), instances);
+        return new GuardScope(new TriggerAdmissionGuard(instances, definitions, memory), instances, memory);
     }
 
     private static async Task<Harness> StartAsync(
@@ -941,7 +928,7 @@ public sealed class TriggerOccurrenceRoutingTests
         var store = new InMemoryTriggerStore();
         var guard = await GuardAsync(store, includeInstance: true, definitionId, version);
         var sessionIds = new DeterministicIdGenerator(
-            Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-00c4-7000-8000-{index:D12}")),
+            Enumerable.Range(1, 256).Select(index => Guid.Parse($"019944af-00c4-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf21")]);
         var snapshot = new SessionSnapshot(
             1,
@@ -959,11 +946,19 @@ public sealed class TriggerOccurrenceRoutingTests
             Now,
             Now,
             AgentInstanceId: InstanceId,
-            ModelSelection: capabilities ? new("synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.SystemDefault, null) : null);
-        var memory = new InMemoryMemoryStore();
+            ModelSelection: capabilities ? new("scripted-alpha", "primary-llm", "scripted-alpha", ModelSelectionSource.SystemDefault, "medium") : null);
+        var memory = guard.Memory;
+        var runs = new RuntimeAgentRunStore();
+        snapshot = RuntimeAgentRunStore.WithPins(snapshot) with
+        {
+            ModelSelection = snapshot.ModelSelection ?? (catalog is null
+                ? new("synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.SystemDefault, null)
+                : AgentCore.Application.Models.SessionModelBinder.PinDefault(catalog, definition))
+        };
+        runs.Bind(memory, store);
         await memory.SaveAsync(snapshot, 0);
         var output = new CapturingSessionOutput();
-        var runtime = new SessionRuntime(
+        var runtime = SessionRuntimeFixture.Create(
             snapshot,
             model ?? new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -975,9 +970,9 @@ public sealed class TriggerOccurrenceRoutingTests
             modelResolver: resolver,
             catalog: catalog,
             tools: capabilities ? new SessionToolExecutor(configurationGate: ToolConfigurationGates.AllowAll) : null,
-            turnExecutions: capabilities ? new InMemoryConversationTurnExecutionStore() : null);
+            agentRuns: runs, triggerOccurrences: store);
         await runtime.AttachAsync();
-        return new Harness(runtime, store, guard.Guard, guard.Instances, time, new TriggerOwner(InstanceId, ProfileId), output);
+        return new Harness(runtime, store, guard.Guard, guard.Instances, time, new TriggerOwner(InstanceId, ProfileId), output, memory, runs);
     }
 
     private static async Task<AgentDefinition> LoadAsync(string id, int version)
@@ -1003,7 +998,7 @@ public sealed class TriggerOccurrenceRoutingTests
         throw new DirectoryNotFoundException("agents/");
     }
 
-    private sealed record GuardScope(TriggerAdmissionGuard Guard, InMemoryAgentInstanceStore Instances);
+    private sealed record GuardScope(TriggerAdmissionGuard Guard, InMemoryAgentInstanceStore Instances, InMemoryMemoryStore Memory);
 
     private sealed record Harness(
         SessionRuntime Runtime,
@@ -1012,7 +1007,7 @@ public sealed class TriggerOccurrenceRoutingTests
         InMemoryAgentInstanceStore Instances,
         FakeTimeProvider Time,
         TriggerOwner Owner,
-        CapturingSessionOutput Output);
+        CapturingSessionOutput Output, InMemoryMemoryStore Memory, RuntimeAgentRunStore Runs);
 
     private sealed class FixedDirectory(IReadOnlyList<Guid> sessions) : ILiveOccurrenceDirectory
     {
@@ -1161,6 +1156,17 @@ public sealed class TriggerOccurrenceRoutingTests
             return stored;
         }
 
+        public ValueTask<IReadOnlyList<TriggerOccurrence>> ListUnsettledLiveAsync(int limit, Guid? after = null, CancellationToken cancellationToken = default) =>
+            inner.ListUnsettledLiveAsync(limit, after, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> BindLiveSessionAsync(Guid occurrenceId, long expectedRoutingRevision,
+            Guid sessionId, DateTimeOffset atUtc, CancellationToken cancellationToken = default) =>
+            inner.BindLiveSessionAsync(occurrenceId, expectedRoutingRevision, sessionId, atUtc, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> CompleteLiveEvaluationAsync(Guid occurrenceId, Guid sessionId,
+            DateTimeOffset atUtc, CancellationToken cancellationToken = default) =>
+            inner.CompleteLiveEvaluationAsync(occurrenceId, sessionId, atUtc, cancellationToken);
+
         public ValueTask<TriggerOccurrence?> ConfirmLiveBeginAsync(
             Guid occurrenceId,
             long expectedRoutingRevision,
@@ -1222,7 +1228,9 @@ public sealed class TriggerOccurrenceRoutingTests
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             var store = _store ?? throw new InvalidOperationException("Occurrence store was not watched.");
-            Assert.NotEmpty(await store.ListByDispositionAsync(OccurrenceRoutingDisposition.AcceptedLive, 10, cancellationToken));
+            var accepted = (await store.ListByDispositionAsync(OccurrenceRoutingDisposition.AcceptedLive, 10, cancellationToken))
+                .Concat(await store.ListByDispositionAsync(OccurrenceRoutingDisposition.LivePrepared, 10, cancellationToken));
+            Assert.Contains(accepted, item => item.LiveSessionId is not null);
             Assert.Empty(await store.ListByDispositionAsync(OccurrenceRoutingDisposition.Claimed, 10, cancellationToken));
             SawCommittedAccept = true;
             await foreach (var item in inner.GenerateAsync(request, cancellationToken))
@@ -1297,6 +1305,17 @@ public sealed class TriggerOccurrenceRoutingTests
 
         public ValueTask<TriggerOccurrence?> TryAcceptLiveAsync(Guid occurrenceId, Guid claimId, DateTimeOffset acceptedAt, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult<TriggerOccurrence?>(null);
+
+        public ValueTask<IReadOnlyList<TriggerOccurrence>> ListUnsettledLiveAsync(int limit, Guid? after = null, CancellationToken cancellationToken = default) =>
+            inner.ListUnsettledLiveAsync(limit, after, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> BindLiveSessionAsync(Guid occurrenceId, long expectedRoutingRevision,
+            Guid sessionId, DateTimeOffset atUtc, CancellationToken cancellationToken = default) =>
+            inner.BindLiveSessionAsync(occurrenceId, expectedRoutingRevision, sessionId, atUtc, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> CompleteLiveEvaluationAsync(Guid occurrenceId, Guid sessionId,
+            DateTimeOffset atUtc, CancellationToken cancellationToken = default) =>
+            inner.CompleteLiveEvaluationAsync(occurrenceId, sessionId, atUtc, cancellationToken);
 
         public ValueTask<TriggerOccurrence?> ConfirmLiveBeginAsync(
             Guid occurrenceId,

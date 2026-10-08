@@ -891,6 +891,13 @@ public sealed class SessionManager
         return await artifacts.ListAsync(sessionId, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<ArtifactPage> ListArtifactPageAsync(Guid sessionId, Guid? before, int limit, CancellationToken cancellationToken = default)
+    {
+        _ = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        var artifacts = _artifacts ?? throw AgentCoreErrors.Forbidden("Artifact store is not configured.");
+        return await artifacts.ListPageAsync(sessionId, before, limit, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<ArtifactRecord> GetArtifactAsync(
         Guid sessionId,
         Guid artifactId,
@@ -967,14 +974,18 @@ public sealed class SessionRuntimeFactory(
     IAttachmentProcessor processor,
     IArtifactReferenceAuthorizer artifacts,
     SessionToolExecutor tools,
+    IAgentRunStore agentRuns,
     ILanguageModelResolver? models = null,
     IModelCatalog? catalog = null,
     IUserTurnCapabilityValidator? turnCapabilities = null,
     IStructuredMemoryService? structuredMemory = null,
-    IConversationTurnExecutionStore? turnExecutions = null,
     IDiagnosticIdSource? diagnostics = null,
-    IBrowserLease? browserLease = null)
+    IBrowserLease? browserLease = null,
+    IAgentRunAuthority? runAuthority = null,
+    ITriggerStore? triggerOccurrences = null)
 {
+    private readonly IAgentRunStore _agentRuns = agentRuns ?? throw new ArgumentNullException(nameof(agentRuns));
+
     public SessionRuntime Create(SessionSnapshot snapshot, ISessionOutput output) =>
         new(
             snapshot,
@@ -985,6 +996,7 @@ public sealed class SessionRuntimeFactory(
             ids,
             time,
             loggers.CreateLogger(typeof(SessionRuntime).FullName!),
+            _agentRuns,
             classifier,
             recognition: voice.EffectivePlan.RecognitionCapabilities
                 ?? recognizer?.Capabilities
@@ -1001,7 +1013,6 @@ public sealed class SessionRuntimeFactory(
             catalog: catalog,
             turnCapabilities: turnCapabilities,
             structuredMemory: structuredMemory,
-            turnExecutions: turnExecutions,
             diagnostics: diagnostics,
-            browserLease: browserLease);
+            browserLease: browserLease, runAuthority: runAuthority, triggerOccurrences: triggerOccurrences);
 }

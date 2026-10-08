@@ -17,7 +17,7 @@ public static class BrowserToolLimits
     public const int DefaultObserveTimeoutMs = 2500;
     public const int MaxCaptureBytes = 1_500_000;
     public const int MaxCapturesPerScope = 4;
-    public const int MaxWorkCaptures = 8;
+    public const int MaxSessionCaptures = 8;
     public const int MaxDownloadBytes = 5 * 1024 * 1024;
     public const int MaxDownloadsPerScope = 2;
     public const int MaxCaptureWidth = 1280;

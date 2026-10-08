@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using AgentCore.Api.Realtime;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Execution;
 using AgentCore.Contracts.Http;
 using AgentCore.Contracts.Realtime;
 using AgentCore.Domain.Conversation;
@@ -12,6 +13,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Hosting;
 
 namespace AgentCore.Api.Tests;
 
@@ -22,6 +24,150 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
     public SessionHostRaceTests(AgentCoreApiFactory factory)
     {
         _factory = factory;
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task Restart_repairs_accepted_input_intent_into_one_registered_run_without_requiring_attach()
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var model = new CountedModel(new ScriptedLanguageModel(["Recovered intent. ", "Done."], release));
+        await using var factory = _factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            foreach (var d in services.Where(d => d.ServiceType == typeof(ILanguageModel)
+                || d.ServiceType == typeof(IHostedService) && d.ImplementationType == typeof(AgentRunHostedService)).ToArray())
+                services.Remove(d);
+            services.AddSingleton<ILanguageModel>(model);
+        }));
+        var client = TestOwnerCapability.CreateOwnerClient(factory);
+        var instanceId = TestInstances.Create(client, "examiner", 1);
+        var response = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(instanceId, "text"));
+        response.EnsureSuccessStatusCode();
+        var view = (await response.Content.ReadFromJsonAsync<SessionViewResponse>())!;
+        var sessionId = Guid.Parse(view.SessionId);
+        var memory = factory.Services.GetRequiredService<IMemoryStore>();
+        var snapshot = (await memory.LoadAsync(sessionId))!;
+        var now = factory.Services.GetRequiredService<TimeProvider>().GetUtcNow();
+        var users = new[] { "First accepted send", "Second accepted send" }.Select((text, index) =>
+            new ConversationEntry(Guid.NewGuid(), index + 1, Guid.NewGuid(), ConversationRole.User, text, null,
+                EntryStatus.Completed, SessionMode.Text, 0, text.Length, now)).ToArray();
+        snapshot = snapshot with { Revision = snapshot.Revision + 1, Entries = users, LastEntrySequence = 2,
+            PendingAgentInputIds = users.Select(entry => entry.EntryId).ToArray(), Status = SessionStatus.Paused,
+            LifecycleStatus = SessionLifecycleStatus.Paused, PauseReason = "recovered" };
+        await memory.SaveAsync(snapshot, snapshot.Revision - 1);
+        var runs = factory.Services.GetRequiredService<IAgentRunStore>();
+        Assert.Empty(await runs.ListForSessionAsync(new(snapshot.AgentInstanceId, snapshot.ProfileId!.Value), sessionId));
+        var coordinator = factory.Services.GetRequiredService<AgentRunCoordinator>();
+        try
+        {
+            await coordinator.ExecuteRunnableAsync(8);
+            await model.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var host = factory.Services.GetRequiredService<SessionHost>();
+            Assert.True(host.HasLiveRuntime(sessionId));
+            Assert.False(host.HasActiveLiveConnection(sessionId));
+            var run = Assert.Single(await runs.ListForSessionAsync(new(snapshot.AgentInstanceId, snapshot.ProfileId!.Value), sessionId));
+            Assert.Equal(users.Select(entry => entry.EntryId), run.Admission.Activation.SourceEntryIds);
+            Assert.Equal(1, run.AttemptCount);
+            Assert.Empty((await memory.LoadAsync(sessionId))!.PendingAgentInputIds);
+            await coordinator.ExecuteRunnableAsync(8);
+            Assert.Equal(1, model.Calls);
+            release.TrySetResult();
+            var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+            while (!(await runs.GetAsync(run.Owner, run.AgentRunId))!.IsTerminal && DateTimeOffset.UtcNow < deadline)
+                await Task.Delay(10);
+            Assert.Equal(AgentRunStatus.Completed, (await runs.GetAsync(run.Owner, run.AgentRunId))!.Status);
+            var assistant = Assert.Single((await memory.LoadAsync(sessionId))!.Entries, entry => entry.Role == ConversationRole.Assistant);
+            Assert.Equal(run.ResponseId, assistant.ResponseId);
+            Assert.Equal("Recovered intent. Done.", assistant.Text);
+            Assert.Equal(1, model.Calls);
+        }
+        finally { release.TrySetResult(); }
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task Recovered_dispatch_ack_is_fast_and_reattach_observes_the_same_registered_running_response()
+    {
+        var releaseModel = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var model = new CountedModel(new ScriptedLanguageModel(["Recovered prefix. ", "Finished."], releaseModel));
+        await using var factory = _factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            foreach (var descriptor in services.Where(d => d.ServiceType == typeof(ILanguageModel)
+                || d.ServiceType == typeof(IHostedService) && d.ImplementationType == typeof(AgentRunHostedService)).ToArray())
+                services.Remove(descriptor);
+            services.AddSingleton<ILanguageModel>(model);
+        }));
+        var client = TestOwnerCapability.CreateOwnerClient(factory);
+        var created = await client.PostAsJsonAsync("/api/v2/sessions",
+            new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
+        created.EnsureSuccessStatusCode();
+        var view = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
+        var sessionId = Guid.Parse(view.SessionId);
+        var memory = factory.Services.GetRequiredService<IMemoryStore>();
+        var snapshot = (await memory.LoadAsync(sessionId))!;
+        var now = DateTimeOffset.UtcNow;
+        var user = new ConversationEntry(Guid.NewGuid(), 1, Guid.NewGuid(), ConversationRole.User,
+            "Recover this response", null, EntryStatus.Completed, SessionMode.Text, 0, 21, now);
+        snapshot = snapshot with { Revision = snapshot.Revision + 1, Entries = [user], LastEntrySequence = 1 };
+        var executions = factory.Services.GetRequiredService<IAgentRunStore>();
+        var proposed = AgentRunAdmissionFactory.ForAcceptedUserBatch(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            snapshot, [user], now, []);
+        await executions.AdmitAsync(snapshot, snapshot.Revision - 1, proposed);
+        var claimed = await executions.ApplyAsync(proposed.Owner, proposed.AgentRunId,
+            new AgentRunCommand.Claim(proposed.Revision, now, Guid.NewGuid(), now.AddMinutes(5)));
+        var host = factory.Services.GetRequiredService<SessionHost>();
+        try
+        {
+            Assert.True(await host.DispatchAgentRunAsync(claimed).AsTask().WaitAsync(TimeSpan.FromSeconds(5)));
+            Assert.True(host.HasLiveRuntime(sessionId));
+            Assert.False(host.HasActiveLiveConnection(sessionId));
+            await model.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await host.WaitUntilMailboxDrainedAsync(sessionId).WaitAsync(TimeSpan.FromSeconds(5));
+            var first = Assert.Single(host.LiveSnapshot(sessionId)!.Entries, entry => entry.Role == ConversationRole.Assistant);
+            Assert.Equal(claimed.ResponseId, first.ResponseId);
+            Assert.Equal(EntryStatus.Streaming, first.Status);
+
+            await using var hub = await ConnectFactoryAsync(factory);
+            var ready = ReadyWithActiveResponseWaiter(hub);
+            var attached = await AttachWhenSessionAvailableAsync(hub, view.SessionId);
+            Assert.True(attached.Accepted, attached.Error?.Message);
+            var (_, responseId) = await ready.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(claimed.ResponseId.ToString(), responseId, StringComparer.OrdinalIgnoreCase);
+            var liveEntry = Assert.Single(host.LiveSnapshot(sessionId)!.Entries, entry => entry.Role == ConversationRole.Assistant);
+            Assert.Equal(first.EntryId, liveEntry.EntryId);
+            Assert.Equal(1, model.Calls);
+
+            var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            hub.On<ServerEvent>("SessionEvent", evt =>
+            {
+                if (evt.Type == "agent.response.completed" && evt.ResponseId == claimed.ResponseId.ToString())
+                    completed.TrySetResult();
+            });
+            releaseModel.TrySetResult();
+            await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var final = Assert.Single((await memory.LoadAsync(sessionId))!.Entries, entry => entry.Role == ConversationRole.Assistant);
+            Assert.Equal(first.EntryId, final.EntryId);
+            Assert.Equal(EntryStatus.Completed, final.Status);
+            Assert.Equal("Recovered prefix. Finished.", final.Text);
+            Assert.Equal(1, model.Calls);
+        }
+        finally { releaseModel.TrySetResult(); }
+    }
+
+    private sealed class CountedModel(ILanguageModel inner) : ILanguageModel
+    {
+        private int _calls;
+        public int Calls => Volatile.Read(ref _calls);
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public ModelCapabilities Capabilities => inner.Capabilities;
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _calls);
+            await foreach (var update in inner.GenerateAsync(request, cancellationToken))
+            {
+                yield return update;
+                if (update is ModelTextDelta) Started.TrySetResult();
+            }
+        }
     }
 
     [Fact]

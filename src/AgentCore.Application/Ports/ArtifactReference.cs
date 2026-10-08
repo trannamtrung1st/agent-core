@@ -11,8 +11,11 @@ public sealed record ArtifactRecord(
     string? WorkspaceLogicalPath,
     DateTimeOffset CreatedAt);
 
+public sealed record ArtifactPage(IReadOnlyList<ArtifactRecord> Items, Guid? NextCursor, bool HasMore);
+
 public interface IArtifactStore
 {
+    ValueTask<ArtifactPage> ListPageAsync(Guid sessionId, Guid? before, int limit, CancellationToken cancellationToken = default);
     bool Exists(Guid sessionId, Guid artifactId);
 
     ValueTask<ArtifactRecord> CreateAsync(

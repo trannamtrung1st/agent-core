@@ -25,7 +25,7 @@ public sealed class ConversationFailureDiagnosticTests
         var diagnostics = new QueueDiagnosticIdSource([DiagnosticId, SecondDiagnosticId]);
         await using var runtime = CreateRuntime(new ScriptedEventsModel(
             [
-                new ModelFailed(new ProviderFailure(ProviderErrorCode.Unavailable, "synthetic failure"))
+                new ModelFailed(new ProviderFailure(ProviderErrorCode.InvalidRequest, "synthetic failure"))
             ],
             [
                 Ready("Recovered"),
@@ -38,7 +38,7 @@ public sealed class ConversationFailureDiagnosticTests
         Assert.Equal(EntryStatus.Failed, failed.Status);
         Assert.Equal(DiagnosticId, failed.Failure!.DiagnosticId);
         Assert.Equal("provider", failed.Failure.Category);
-        Assert.Equal("Unavailable", failed.Failure.Code);
+        Assert.Equal("InvalidRequest", failed.Failure.Code);
         var error = Assert.Single(Items(runtime), item => item.Payload is ErrorOutput);
         var payload = Assert.IsType<ErrorOutput>(error.Payload);
         Assert.Equal(DiagnosticId, payload.DiagnosticId);
@@ -324,7 +324,7 @@ public sealed class ConversationFailureDiagnosticTests
         await using var runtime = CreateRuntime(
             new ScriptedEventsModel(
             [
-                new ModelFailed(new ProviderFailure(ProviderErrorCode.Unavailable, "synthetic failure"))
+                new ModelFailed(new ProviderFailure(ProviderErrorCode.InvalidRequest, "synthetic failure"))
             ]),
             logs,
             diagnostics,
@@ -432,7 +432,7 @@ public sealed class ConversationFailureDiagnosticTests
             ModelSelection: modelSelection,
             AgentInstanceId: agentInstanceId ?? Guid.NewGuid());
         memory.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
-        var runtime = new SessionRuntime(
+        var runtime = SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),

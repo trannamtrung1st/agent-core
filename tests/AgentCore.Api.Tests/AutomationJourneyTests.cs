@@ -1,3 +1,4 @@
+using AgentCore.Application.Execution;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -10,7 +11,7 @@ using AgentCore.Application.Work;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Triggers;
-using AgentCore.Domain.Work;
+using AgentCore.Domain.Conversation;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AgentCore.Api.Tests;
@@ -59,7 +60,7 @@ public sealed class AutomationJourneyTests
             await service.RequestSessionAsync(instanceId, source.SessionId);
             var repeated = await ExperienceJourneyTests.SeedAsync(s, instanceId);
             await service.RequestSessionAsync(instanceId, repeated.SessionId);
-            Assert.Equal(2, await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100));
+            Assert.Equal(2, await s.ExecuteRunsAsync(100));
             instance = await s.GetRequiredService<HarnessManagementService>().ConfigureAsync(instanceId, instance.Revision,
                 new(HarnessManagementMode.Assisted, [ HarnessManagementScope.ToolSelection], [], [ToolCatalog.WebFetch]));
             var client = TestOwnerCapability.CreateOwnerClient(host);
@@ -72,40 +73,40 @@ public sealed class AutomationJourneyTests
             var run = await client.PostAsJsonAsync(path + "/" + automationId + "/run", new ContinuityRevisionRequest(r.Revision)); run.EnsureSuccessStatusCode();
             Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(path + "/" + automationId + "/run", new ContinuityRevisionRequest(r.Revision))).StatusCode);
             await Intake(s);
-            var work = s.GetRequiredService<IWorkItemStore>();
-            var owner = new WorkOwner(instanceId, AgentCore.Domain.Conversation.LocalUserProfile.Id);
-            var item = (await work.ListAsync(owner, 100)).Single(w => w.Provenance.AutomationId == automationId);
-            workId = item.WorkItemId;
-            Assert.Equal("Automation · Manual", item.OriginLabel);
-            var detailPath = $"/api/v2/admin/agent-instances/{instanceId}/work-items/{workId}";
-            var detail = (await client.GetFromJsonAsync<WorkItemResponse>(detailPath))!;
-            Assert.Equal(workId.ToString("D"), detail.WorkItemId);
+            var work = s.GetRequiredService<IAgentRunStore>();
+            var owner = new AgentRunOwner(instanceId, AgentCore.Domain.Conversation.LocalUserProfile.Id);
+            var item = Assert.Single(await s.AutomationRunsAsync(owner, automationId));
+            workId = item.AgentRunId;
+            Assert.Equal(SessionOriginKind.AutomationOccurrence, (await s.SessionAsync(item)).Origin.Kind);
+            var detailPath = $"/api/v2/agent-instances/{instanceId}/agent-runs/{workId}";
+            var detail = (await client.GetFromJsonAsync<AgentRunResponse>(detailPath))!;
+            Assert.Equal(workId.ToString("D"), detail.AgentRunId);
             Assert.Equal(automationId.ToString("D"), detail.AutomationId);
-            Assert.Equal("Automation · Manual", detail.Origin);
-            Assert.Equal("synthetic-automation-improve", detail.Instructions);
-            var listPath = $"/api/v2/admin/agent-instances/{instanceId}/work-items";
-            var listed = (await client.GetFromJsonAsync<WorkItemListResponse>(listPath))!;
-            Assert.Equal(detail.Instructions, Assert.Single(listed.Items, row => row.WorkItemId == detail.WorkItemId).Instructions);
-            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/admin/agent-instances/{instanceId}/work-items/{Guid.NewGuid()}")).StatusCode);
+            Assert.Equal("ManualBackground", detail.ActivationKind);
+            Assert.Contains("synthetic-automation-improve", Assert.Single((await s.SessionAsync(item)).Entries, e => e.Role == ConversationRole.User).Text);
+            var listPath = $"/api/v2/agent-instances/{instanceId}/agent-runs";
+            var listed = (await client.GetFromJsonAsync<AgentRunPageResponse>(listPath))!;
+            Assert.Equal(detail.ActivationId, Assert.Single(listed.Items, row => row.AgentRunId == detail.AgentRunId).ActivationId);
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/agent-instances/{instanceId}/agent-runs/{Guid.NewGuid()}")).StatusCode);
             var other = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
-            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/admin/agent-instances/{other.InstanceId}/work-items/{workId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/agent-instances/{other.InstanceId}/agent-runs/{workId}")).StatusCode);
             using var anonymous = host.CreateClient();
             Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(detailPath)).StatusCode);
 
-            Assert.Contains("synthetic-automation-improve", item.Provenance.EvidenceJson);
-            Assert.Equal(1, await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100));
+            Assert.Contains("synthetic-automation-improve", (await s.SessionAsync(item)).Entries[0].Text);
+            Assert.Equal(1, await s.ExecuteRunsAsync(100));
             item = (await work.GetAsync(owner, workId))!;
-            Assert.Equal(WorkItemStatus.Completed, item.Status);
+            Assert.Equal(AgentRunStatus.Completed, item.Status);
             Assert.Null(item.Approval);
             Assert.Single((await s.GetRequiredService<IAgentInstanceStore>().ReadSkillsAsync(instanceId)).InstanceSkills, skill => skill.Name == "Experience review");
             Assert.Equal(originalVersion, (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(instanceId))!.ActiveVersion);
             var edited = await client.PutAsJsonAsync(path + "/" + automationId, Draft(r.Revision) with { Instructions = "synthetic-automation-attention future prompt" }); edited.EnsureSuccessStatusCode();
-            var historical = (await client.GetFromJsonAsync<WorkItemResponse>(detailPath))!;
-            Assert.Equal("synthetic-automation-improve", historical.Instructions);
+            var historical = (await client.GetFromJsonAsync<AgentRunResponse>(detailPath))!;
+            Assert.Equal(detail.ActivationId, historical.ActivationId);
             var scheduler = await s.GetRequiredService<TriggerScheduler>().RunOnceAsync(DateTimeOffset.UtcNow);
             Assert.Equal(0, scheduler.Admitted);
-            Assert.Single(await work.ListAsync(owner, 100), w => w.Provenance.AutomationId == automationId);
-            Assert.Contains("synthetic-automation-improve", (await work.GetAsync(owner, workId))!.Provenance.EvidenceJson);
+            Assert.Single(await s.AutomationRunsAsync(owner, automationId));
+            Assert.Contains("synthetic-automation-improve", (await s.SessionAsync((await work.GetAsync(owner, workId))!)).Entries[0].Text);
             var toolExecutor = s.GetRequiredService<SessionToolExecutor>();
             var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", originalVersion))!;
             var harness = await toolExecutor.HarnessContextAsync(instanceId, default);
@@ -121,10 +122,10 @@ public sealed class AutomationJourneyTests
         await using (var host = new ExperienceHost(db))
         {
             var s = host.Services; var client = TestOwnerCapability.CreateOwnerClient(host);
-            var work = s.GetRequiredService<IWorkItemStore>(); var owner = new WorkOwner(instanceId, AgentCore.Domain.Conversation.LocalUserProfile.Id);
+            var work = s.GetRequiredService<IAgentRunStore>(); var owner = new AgentRunOwner(instanceId, AgentCore.Domain.Conversation.LocalUserProfile.Id);
             var item = (await work.GetAsync(owner, workId))!;
-            Assert.Equal(WorkItemStatus.Completed, item.Status);
-            Assert.Equal("ActionCompleted", WorkCompletionRequest.Outcome(item.Result!.Text));
+            Assert.Equal(AgentRunStatus.Completed, item.Status);
+            Assert.Equal("Response", item.Result!.OutcomeKind.ToString());
             Assert.False(item.Result.AttentionRequired);
             var instance = (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(instanceId))!;
             Assert.Equal(originalVersion, instance.ActiveVersion);
@@ -136,16 +137,16 @@ public sealed class AutomationJourneyTests
             r = await s.GetRequiredService<AdminAutomationAuthoringService>().SaveAsync(instanceId, automationId, r.Revision, true, 3600, "synthetic-automation-improve", null, null);
             await s.GetRequiredService<AdminAutomationAuthoringService>().RunNowAsync(instanceId, automationId, r.Revision);
             await Intake(s);
-            await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
-            var second = (await work.ListAsync(owner, 100)).First(w => w.WorkItemId != workId && w.Provenance.AutomationId == automationId);
-            Assert.Equal(WorkItemStatus.Completed, second.Status);
-            Assert.Equal("NoAction", WorkCompletionRequest.Outcome(second.Result!.Text));
+            await s.ExecuteRunsAsync(100);
+            var second = (await s.AutomationRunsAsync(owner, automationId)).First(w => w.AgentRunId != workId);
+            Assert.Equal(AgentRunStatus.Completed, second.Status);
+            Assert.Equal("NoAction", second.Result!.OutcomeKind.ToString());
             Assert.Empty(await Alerts(work, owner));
             Assert.DoesNotContain(await s.GetRequiredService<IExperienceStore>().ListAsync(instanceId, 100), e => e.SourceId == workId);
-            Assert.DoesNotContain(await s.GetRequiredService<IExperienceStore>().ListAsync(instanceId, 100), e => e.SourceId == second.WorkItemId);
+            Assert.DoesNotContain(await s.GetRequiredService<IExperienceStore>().ListAsync(instanceId, 100), e => e.SourceId == second.AgentRunId);
             r = await s.GetRequiredService<AdminAutomationAuthoringService>().SaveAsync(instanceId, automationId, r.Revision, true, 3600, "synthetic-automation-attention", null, null);
             await s.GetRequiredService<AdminAutomationAuthoringService>().RunNowAsync(instanceId, automationId, r.Revision); await Intake(s);
-            await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
+            await s.ExecuteRunsAsync(100);
             Assert.Single(await Alerts(work, owner));
             r = await s.GetRequiredService<AdminAutomationAuthoringService>().SaveAsync(instanceId, automationId, r.Revision, false, 3600, "Review", null, null);
             Assert.Equal(AutomationStatus.Disabled, r.Status);
@@ -177,26 +178,26 @@ public sealed class AutomationJourneyTests
             await automations.SaveAsync(instanceId, registration.AutomationId, registration.Revision, true, 3600,
                 "synthetic-automation-attention future activation", "scripted-beta", null);
             await Intake(services);
-            var work = Assert.Single(await services.GetRequiredService<IWorkItemStore>().ListAsync(new(instanceId, registration.Owner.ProfileId), 100));
-            workId = work.WorkItemId;
-            Assert.Equal(WorkSourceKind.Schedule, work.Provenance.SourceKind);
-            Assert.Equal("scripted-alpha", work.Model.CatalogKey);
-            Assert.Contains("Review; do nothing", work.Provenance.EvidenceJson);
-            Assert.DoesNotContain("synthetic-automation-attention", work.Provenance.EvidenceJson);
-            Assert.Null(work.Provenance.SourceSessionId);
+            var work = Assert.Single(await services.GetRequiredService<IAgentRunStore>().ListAsync(new(instanceId, registration.Owner.ProfileId), 100));
+            workId = work.AgentRunId;
+            Assert.Equal(ActivationKind.ScheduledWork, work.Admission.Activation.Kind);
+            Assert.Equal("scripted-alpha", work.PinnedModel.CatalogKey);
+            Assert.Contains("Review; do nothing", (await services.SessionAsync(work)).Entries[0].Text);
+            Assert.DoesNotContain("synthetic-automation-attention", (await services.SessionAsync(work)).Entries[0].Text);
+            Assert.Null((await services.SessionAsync(work)).Origin.OriginatingSessionId);
             Assert.Equal(0, (await scheduler.RunOnceAsync(clock.GetUtcNow().AddHours(10))).Admitted);
         }
         await using var reopened = new ExperienceHost(db, clock: clock);
         var s = reopened.Services;
-        var owner = new WorkOwner(instanceId, AgentCore.Domain.Conversation.LocalUserProfile.Id);
-        await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(clock.GetUtcNow(), 100);
-        var recovered = (await s.GetRequiredService<IWorkItemStore>().GetAsync(owner, workId))!;
-        Assert.Equal(WorkItemStatus.Completed, recovered.Status);
-        Assert.Equal("NoAction", WorkCompletionRequest.Outcome(recovered.Result!.Text));
+        var owner = new AgentRunOwner(instanceId, AgentCore.Domain.Conversation.LocalUserProfile.Id);
+        await s.ExecuteRunsAsync(100);
+        var recovered = (await s.GetRequiredService<IAgentRunStore>().GetAsync(owner, workId))!;
+        Assert.Equal(AgentRunStatus.Completed, recovered.Status);
+        Assert.Equal("NoAction", recovered.Result!.OutcomeKind.ToString());
         Assert.False(recovered.Result.AttentionRequired);
-        Assert.Single(await s.GetRequiredService<IWorkItemStore>().ListAsync(owner, 100));
+        Assert.Single(await s.GetRequiredService<IAgentRunStore>().ListAsync(owner, 100));
         Assert.Empty(await s.GetRequiredService<IExperienceStore>().ListAsync(instanceId, 100));
-        Assert.Empty(await Alerts(s.GetRequiredService<IWorkItemStore>(), owner));
+        Assert.Empty(await Alerts(s.GetRequiredService<IAgentRunStore>(), owner));
     }
     private sealed class AutomationClock(DateTimeOffset initial) : TimeProvider
     {
@@ -204,16 +205,16 @@ public sealed class AutomationJourneyTests
         public override DateTimeOffset GetUtcNow() => now;
         internal void Advance(TimeSpan elapsed) => now += elapsed;
     }
-    private static async Task<List<string>> Alerts(IWorkItemStore work, WorkOwner owner)
+    private static async Task<List<string>> Alerts(IAgentRunStore work, AgentRunOwner owner)
     {
         var all = new List<string>();
-        foreach (var item in await work.ListAsync(owner, 100)) all.AddRange(await work.ListAttentionAlertKeysAsync(item.WorkItemId));
+        foreach (var item in await work.ListAsync(owner, 100)) if (item.Result?.AttentionRequired == true) all.Add(AgentRunAttentionKey.Format(item.AgentRunId, item.Revision));
         return all;
     }
     internal static IntervalAutomationDraft Draft(long revision, int interval = 3600) => new(revision, true, interval, "synthetic-automation-improve", null, null);
     internal static async Task Intake(IServiceProvider services)
     {
         await services.GetRequiredService<TriggerOccurrenceRouter>().RouteOnceAsync();
-        Assert.Equal(1, (await services.GetRequiredService<DurableWorkIntake>().AcceptAwaitingAsync()).Accepted);
+        Assert.Equal(1, (await services.GetRequiredService<BackgroundOccurrenceIntake>().AcceptAwaitingAsync()).Accepted);
     }
 }

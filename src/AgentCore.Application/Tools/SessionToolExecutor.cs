@@ -31,7 +31,6 @@ public sealed partial class SessionToolExecutor(
     IMemoryStore? profiles = null,
     IBrowser? browser = null,
     IAgentDefinitionResourceAdminStore? definitionResources = null,
-    IWorkCaptureStore? workCaptures = null,
     Func<HarnessManagementService>? harnessAuthoring = null,
     AgentCore.Application.Experience.ExperienceService? experience = null,
     AgentCore.Application.Continuity.ContinuityService? continuity = null,
@@ -60,6 +59,13 @@ public sealed partial class SessionToolExecutor(
 
     public ValueTask<string> ExperienceContextAsync(Guid? instanceId, CancellationToken ct) =>
         experience?.RecallAsync(instanceId, ct) ?? ValueTask.FromResult("");
+    public async ValueTask<IReadOnlyList<ArtifactRecord>> CompletionArtifactsAsync(Guid sessionId, CancellationToken ct) =>
+        artifacts is null ? [] : (await artifacts.ListPageAsync(sessionId, null, 3, ct).ConfigureAwait(false)).Items;
+
+    public ValueTask<List<ModelMessage>> RehydrateCapturesAsync(Guid sessionId, List<ModelMessage> messages, bool supportsVision, CancellationToken ct) =>
+        supportsVision ? AgentCore.Application.Execution.SessionCaptureRehydration.ApplyAsync(sessionId, messages, artifacts, ct)
+            : ValueTask.FromResult(messages);
+
     public ValueTask<string> SelectedExperienceContextAsync(Guid instanceId, Guid workId, CancellationToken ct) =>
         experience?.SelectedSourceAsync(instanceId, workId, ct) ?? ValueTask.FromResult("");
     public ValueTask<string> ContinuityContextAsync(Guid? instanceId, string? query, Guid? sessionId, AgentDefinition definition, CancellationToken ct) =>
@@ -92,6 +98,7 @@ public sealed partial class SessionToolExecutor(
     public async ValueTask<ToolPolicyDecision> EvaluateExecutionPolicyAsync(AgentDefinition definition, Guid sessionId,
         ModelToolCall call, JsonElement args, ToolExecutionAdmission? admission, CancellationToken ct)
     {
+        if (admission?.OwnedSessionId is { } ownedSession && (ownedSession == Guid.Empty || ownedSession != sessionId)) return ToolPolicyDecision.Deny;
         if (!ToolCatalog.IsIdentityMaintenance(call.Name)) return EvaluateExecutionPolicy(definition, call.Name, admission: admission);
         if (identityMaintenance is null) { RecordMaintenanceRejection(call.Name); return ToolPolicyDecision.Deny; }
         try
@@ -166,7 +173,10 @@ public sealed partial class SessionToolExecutor(
             return TextResult(Error("forbidden", "Completion is owned by the occurrence."));
         }
 
+        if (admission?.OwnedSessionId is { } ownedSession && (ownedSession == Guid.Empty || ownedSession != sessionId))
+            return TextResult(Error("forbidden", "Session resource authority does not match."));
         if (admission?.Detached == true
+            && admission.OwnedSessionId != sessionId
             && ToolResources.IsSessionTool(call.Name)
             && !(HarnessChatTools.IsHarness(call.Name) && ToolResources.IsOccurrence(admission.TriggerKind))
             && !(ToolCatalog.IsBrowserTool(call.Name)
@@ -307,7 +317,7 @@ public sealed partial class SessionToolExecutor(
             }
             if (call.Name == AgentCore.Application.Experience.ExperienceService.SourceTool)
             {
-                if (experience is null || admission?.AgentInstanceId is not Guid ownerId || admission.WorkItemId is not Guid runId)
+                if (experience is null || admission?.AgentInstanceId is not Guid ownerId || admission.AgentRunId is not Guid runId)
                     return TextResult(Error("forbidden", "Experience source inspection requires an owned Run."));
                 using var source = JsonDocument.Parse(await experience.InspectSourceAsync(ownerId, runId, args, cancellationToken));
                 var root = source.RootElement;
@@ -349,7 +359,7 @@ public sealed partial class SessionToolExecutor(
             }
             if (call.Name == AgentCore.Application.Experience.ExperienceService.RecordTool)
             {
-                if (experience is null || admission?.AgentInstanceId is not Guid instanceId || admission.WorkItemId is not Guid workId)
+                if (experience is null || admission?.AgentInstanceId is not Guid instanceId || admission.AgentRunId is not Guid workId)
                     return TextResult(Error("forbidden", "Experience recording requires an owned review Run."));
                 return TextResult(await experience.RecordAsync(instanceId, workId, args, cancellationToken));
             }

@@ -317,46 +317,60 @@ owner = con.execute(
 if owner is None or not owner[0] or not owner[1]:
     raise SystemExit("session owner was not stored")
 now = int(time.time() * 1000)
-completed_id = str(uuid.uuid4())
-approval_work_id = str(uuid.uuid4())
-approval_id = str(uuid.uuid4())
-generation = str(uuid.uuid4())
+completed_id, approval_run_id = str(uuid.uuid4()), str(uuid.uuid4())
+approval_id, generation = str(uuid.uuid4()), str(uuid.uuid4())
 far_future = now + 86_400_000 * 30
-def insert_work(work_id, status, approval, result, checkpoint, created):
-    con.execute(
-        """INSERT INTO WorkItems (
-            WorkItemId, AgentInstanceId, ProfileId, Status, Revision, AttemptCount, MaxAttempts,
-            CancellationRequested, ProgressSummary, ProgressUpdatedAtUtc, CheckpointJson, ResultText, ResultCompletedAtUtc,
-            SideEffectDisposition, SideEffectActionHash, SideEffectUpdatedAtUtc, CurrentApprovalId, SourceOccurrenceId, SourceKind, SourceSessionId,
-            DedupeKey, ObservedAtUtc, EvidenceJson, DefinitionId, DefinitionVersion, PersonaName,
-            ModelCatalogKey, ModelProviderAlias, ModelId, ModelReasoningEffort, CreatedAtUtc, UpdatedAtUtc
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-        (
-            work_id, owner[0], owner[1], status, 2, 1, 3,
-            0, "Saved result" if result else "Waiting for approval", now, checkpoint, result, now if result else None,
-            1 if approval else 0, approval and "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", now if approval else None, approval, str(uuid.uuid4()), 0, session_id,
-            f"compose-{work_id}", created, "SECRET_EVIDENCE", "examiner", 1, "Examiner",
-            "scripted-alpha", "primary-llm", "scripted-alpha", "medium", created, now,
-        ),
-    )
-insert_work(completed_id, 4, None, "Compose result survived.", "SECRET_CHECKPOINT", now - 2000)
-insert_work(approval_work_id, 2, approval_id, None, "SECRET_CHECKPOINT", now - 1000)
-con.execute(
-    """INSERT INTO WorkApprovals (
-        ApprovalId, WorkItemId, ExecutionGeneration, CheckpointRevision, ToolName, PreparedActionJson,
-        ActionHash, Preview, ExpiresAtUtc, Decision, Consumed, Revision, CreatedAtUtc
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-    (
-        approval_id, approval_work_id, generation, 1, "http.request", '{"body":"SECRET_BODY"}',
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "POST https://example.invalid/compose", far_future, 0, 0, 1, now,
-    ),
-)
+from datetime import datetime, timezone
+import hashlib
+def utc(ms): return datetime.fromtimestamp(ms / 1000, timezone.utc).isoformat()
+def insert_row(table, values):
+    keys = list(values)
+    con.execute(f'INSERT INTO "{table}" (' + ','.join('"' + k + '"' for k in keys) + ') VALUES (' + ','.join('?' for _ in keys) + ')', tuple(values.values()))
+def entry(entry_id, sequence, role, text, response=None):
+    insert_row("ConversationEntries", dict(EntryId=entry_id, SessionId=session_id, EntrySequence=sequence,
+        Role=role, Text=text, ResponseId=response, Status="Completed", DeliveryMode="Text", HeardTextEndExclusive=0,
+        ReceivedTextEndExclusive=len(text), CreatedAtUtc=now))
+def insert_run(run_id, status, sequence):
+    activation_id, input_id, response_id = str(uuid.uuid4()), str(uuid.uuid4()), str(uuid.uuid4())
+    entry(input_id, sequence, "User", "Compose persistence fixture")
+    activation = dict(activationId=activation_id, sessionId=session_id, kind=0, sourceEntryIds=[input_id],
+        sourceEventId=input_id, triggerOccurrenceId=None, sourceSessionId=None, sourceAgentRunId=None,
+        dedupeKey="compose:" + run_id, admittedAtUtc=utc(now), evidenceJson='{"fixture":"SECRET_EVIDENCE"}')
+    admission = dict(activation=activation, definitionId="examiner", definitionVersion=1,
+        pinnedPersona=json.loads(con.execute("SELECT DefinitionJson FROM Sessions WHERE SessionId=?", (session_id,)).fetchone()[0])["identity"], responseId=response_id)
+    payload = dict(admission=admission, pinnedModel=dict(catalogKey="scripted-alpha", providerAlias="primary-llm", modelId="scripted-alpha", reasoningEffort="medium"),
+        attemptCount=1, maxAttempts=3, claim=None, cancellationRequested=False, cancellationRequestedAtUtc=None, knownEffectSummary=None,
+        progress=None, checkpoint=dict(payloadJson='{"fixture":"SECRET_CHECKPOINT"}', stepCount=1, outputBytes=0, remainingOverallBudgetMs=180000),
+        result=None, failure=None, sideEffect=dict(disposition=0, toolCallId=None, actionHash=None, updatedAtUtc=None), approval=None,
+        pinnedSkillCatalog=[], activeSkillKeys=[], skillLoadCount=0, loadedCapabilityIds=[], capabilityLoadCount=0)
+    if status == 4:
+        outcome_id = str(uuid.uuid4())
+        entry(outcome_id, sequence + 1, "Assistant", "Compose result survived.", response_id)
+        payload["result"] = dict(text="Compose result survived.", completedAtUtc=utc(now), attentionRequired=False, outcomeKind=0, outcomeEntryId=outcome_id)
+    else:
+        action_hash = "b" * 64
+        payload["sideEffect"] = dict(disposition=1, toolCallId="compose-http", actionHash=action_hash, updatedAtUtc=utc(now))
+        payload["approval"] = dict(approvalId=approval_id, agentRunId=run_id, executionGeneration=generation, checkpointRevision=1,
+            toolName="http.request", preparedActionJson='{"body":"SECRET_BODY"}', actionHash=action_hash,
+            preview="POST https://example.invalid/compose", expiresAtUtc=utc(far_future), decision=0, decidedAtUtc=None,
+            consumed=False, revision=1, createdAtUtc=utc(now))
+    insert_row("Activations", dict(ActivationId=activation_id, SessionId=session_id, AgentInstanceId=owner[0], ProfileId=owner[1],
+        DedupeKey=activation["dedupeKey"], BackgroundSourceKey=None, AdmissionHash=hashlib.sha256(run_id.encode()).hexdigest(),
+        PayloadJson=json.dumps(activation), AdmittedAtUtc=now))
+    insert_row("ActivationSourceEntries", dict(ActivationId=activation_id, EntryId=input_id, SessionId=session_id, Ordinal=0))
+    insert_row("AgentRuns", dict(AgentRunId=run_id, ActivationId=activation_id, SessionId=session_id, AgentInstanceId=owner[0], ProfileId=owner[1],
+        Status=status, Revision=2, NextRetryAtUtc=None, LeaseExpiresAtUtc=None, ApprovalExpiresAtUtc=far_future if status == 2 else None,
+        PayloadJson=json.dumps(payload), CreatedAtUtc=now, UpdatedAtUtc=now))
+insert_run(completed_id, 4, 1)
+insert_run(approval_run_id, 2, 3)
+con.execute("UPDATE SessionSnapshots SET LastEntrySequence=3 WHERE SessionId=?", (session_id,))
+assert not con.execute("SELECT 1 FROM sqlite_master WHERE name IN ('WorkItems','WorkApprovals','WorkCaptures','WorkAttentionAlerts','ConversationTurnExecutions')").fetchone()
+assert not con.execute("PRAGMA foreign_key_check").fetchall()
 con.commit()
 con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 con.close()
-json.dump({"completedId": completed_id, "approvalWorkId": approval_work_id}, open("/tmp/agent-core-work.json", "w"))
-print("seeded", completed_id, approval_work_id)
+json.dump({"completedId": completed_id, "approvalRunId": approval_run_id}, open("/tmp/agent-core-runs.json", "w"))
+print("seeded AgentRuns", completed_id, approval_run_id)
 PY
 docker cp "$seed_dir/agent-core.db" "$cid":/data/agent-core.db
 volume="$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/data" }}{{ .Name }}{{ end }}{{ end }}' "$cid")"
@@ -405,32 +419,30 @@ with urllib.request.urlopen(req) as response:
 assert any(item["sessionId"] == session_id for item in catalog["items"]), catalog
 print("survived", body["sessionId"], body["status"])
 
-work = json.load(open("/tmp/agent-core-work.json"))
+runs = json.load(open("/tmp/agent-core-runs.json"))
 def get(url):
     req = urllib.request.Request(url, headers={"X-AgentCore-Owner-Capability": token})
     with urllib.request.urlopen(req) as response:
-        payload = response.read()
-        return response.status, payload.decode("utf-8")
-
-status, listed = get(f"http://127.0.0.1:{port}/api/v2/sessions/{session_id}/work-items")
+        return response.status, response.read().decode("utf-8")
+status, listed = get(f"http://127.0.0.1:{port}/api/v2/sessions/{session_id}/agent-runs")
 assert status == 200, listed
-for secret in ("SECRET_BODY", "SECRET_EVIDENCE", "SECRET_CHECKPOINT", "Compose result survived."):
+for secret in ("SECRET_BODY", "SECRET_EVIDENCE", "SECRET_CHECKPOINT"):
     assert secret not in listed, secret
 items = json.loads(listed)["items"]
-assert {item["workItemId"] for item in items} >= {work["completedId"], work["approvalWorkId"]}, items
-approval = next(item for item in items if item["workItemId"] == work["approvalWorkId"])
+assert {item["agentRunId"] for item in items} >= {runs["completedId"], runs["approvalRunId"]}, items
+approval = next(item for item in items if item["agentRunId"] == runs["approvalRunId"])
 assert approval["status"] == "needsApproval", approval
-assert approval["approvalPreview"] == "POST https://example.invalid/compose", approval
-status, detail = get(f"http://127.0.0.1:{port}/api/v2/sessions/{session_id}/work-items/{work['approvalWorkId']}")
+assert approval["approval"]["preview"] == "POST https://example.invalid/compose", approval
+status, detail = get(f"http://127.0.0.1:{port}/api/v2/sessions/{session_id}/agent-runs/{runs['approvalRunId']}")
 assert status == 200, detail
 for secret in ("SECRET_BODY", "SECRET_EVIDENCE", "SECRET_CHECKPOINT"):
     assert secret not in detail, secret
-status, result = get(f"http://127.0.0.1:{port}/api/v2/sessions/{session_id}/work-items/{work['completedId']}/result")
+status, result = get(f"http://127.0.0.1:{port}/api/v2/sessions/{session_id}/agent-runs/{runs['completedId']}")
 assert status == 200, result
-assert "Compose result survived." in result, result
+assert json.loads(result)["outcome"]["summary"] == "Compose result survived.", result
 for secret in ("SECRET_BODY", "SECRET_EVIDENCE", "SECRET_CHECKPOINT"):
     assert secret not in result, secret
-print("work survived", work["completedId"], work["approvalWorkId"])
+print("AgentRuns survived", runs["completedId"], runs["approvalRunId"])
 PY
 
 python3 - <<PY

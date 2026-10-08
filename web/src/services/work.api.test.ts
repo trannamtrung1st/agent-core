@@ -1,80 +1,28 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { approveWorkItem, cancelWorkItem, getWorkItemResult, listWorkItems, rejectWorkItem } from "./api";
-
-const queued = {
-  workItemId: "work-1",
-  status: "queued",
-  revision: 2,
-  origin: "Scheduled reminder",
-  progress: null,
-  needsApproval: false,
-  approvalId: null,
-  approvalRevision: null,
-  approvalPreview: null,
-  actionHash: null,
-  cancellationAvailable: true,
-  failureCode: null,
-  failureSummary: null,
-  knownEffect: null,
-  createdAt: "2026-09-24T09:00:00.000Z",
-  updatedAt: "2026-09-24T09:00:00.000Z"
-};
-
-describe("background work owner fetch", () => {
-  afterEach(() => {
-    window.localStorage.clear();
-    vi.unstubAllGlobals();
-  });
-
-  it("loads, reads a result, and sends revision-bound cancel and approval", async () => {
-    window.localStorage.setItem("agent-core.owner-capability", "owner-token");
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ items: [queued] })
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ workItemId: "work-1", text: "Oven timer finished.", completedAt: queued.updatedAt })
-      })
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 409,
-        json: async () => ({ title: "Conflict", detail: "Work revision is stale." })
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ ...queued, status: "needsApproval" })
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ ...queued, status: "queued", needsApproval: false })
-      });
-    vi.stubGlobal("fetch", fetchMock);
-
-    const listed = await listWorkItems("session-1");
-    expect(listed[0]?.origin).toBe("Scheduled reminder");
-    const result = await getWorkItemResult("session-1", "work-1");
-    expect(result.text).toBe("Oven timer finished.");
-    await expect(cancelWorkItem("session-1", "work-1", 1)).rejects.toThrow("Work revision is stale.");
-    await approveWorkItem("session-1", "work-1", "approval-1", 4, 1, "a".repeat(64));
-    await rejectWorkItem("session-1", "work-1", "approval-1", 4, 1, "a".repeat(64));
-
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v2/sessions/session-1/work-items");
-    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/v2/sessions/session-1/work-items/work-1/result");
-    expect(fetchMock.mock.calls[2]?.[0]).toBe("/api/v2/sessions/session-1/work-items/work-1/cancel");
-    expect(fetchMock.mock.calls[3]?.[0]).toBe("/api/v2/sessions/session-1/work-items/work-1/approvals/approval-1/approve");
-    expect(fetchMock.mock.calls[4]?.[0]).toBe("/api/v2/sessions/session-1/work-items/work-1/approvals/approval-1/reject");
-    const headers = fetchMock.mock.calls[0]?.[1].headers as Headers;
-    expect(headers.get("X-AgentCore-Owner-Capability")).toBe("owner-token");
-    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1].body))).toEqual({
-      expectedRevision: 4,
-      expectedApprovalRevision: 1,
-      actionHash: "a".repeat(64)
-    });
+import { cancelAgentRun, decideAgentRunApproval, listAgentRuns, listBackgroundSessions, continueInChat } from "./api";
+import { fixtureRun } from "../features/chat/agentRunFixtures";
+describe("Background Session and AgentRun owner API", () => {
+  afterEach(() => { window.localStorage.clear(); vi.unstubAllGlobals(); });
+  it("uses Session identity, scoped run routes and exact revision approval", async () => {
+const storage = new Map<string, string>();
+    Object.defineProperty(window, "localStorage", { configurable: true, value: { getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key), clear: () => storage.clear() } });
+        window.localStorage.setItem("agent-core.owner-capability", "owner-token");
+    const fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ items: [], nextCursor: null, hasMore: false }) });
+    vi.stubGlobal("fetch", fetch);
+    await listBackgroundSessions("instance-1", "opaque", 20);
+    await listAgentRuns("background-1", "run-0", 20);
+    await continueInChat("background-1");
+    const run = { ...fixtureRun, revision: 4, approval: { approvalId: "approval-1", revision: 2, actionHash: "a".repeat(64), toolName: "email.send", preview: "Send email", expiresAt: fixtureRun.updatedAt } };
+    await decideAgentRunApproval(run, "approve");
+    expect(fetch.mock.calls[0][0]).toBe("/api/v2/agent-instances/instance-1/background-sessions?limit=20&cursor=opaque");
+    expect(fetch.mock.calls[1][0]).toBe("/api/v2/sessions/background-1/agent-runs?limit=20&before=run-0");
+    expect(fetch.mock.calls[2][0]).toBe("/api/v2/sessions/background-1/continue-in-chat");
+    expect(fetch.mock.calls[3][0]).toBe("/api/v2/sessions/background-1/agent-runs/run-1/approvals/approval-1/approve");
+    expect(JSON.parse(fetch.mock.calls[3][1].body)).toEqual({ expectedRevision: 4, expectedApprovalRevision: 2, actionHash: "a".repeat(64) });
+    expect((fetch.mock.calls[0][1].headers as Headers).get("X-AgentCore-Owner-Capability")).toBe("owner-token");
+    fetch.mockResolvedValueOnce({ ok: false, status: 409, json: async () => ({ detail: "Run revision is stale." }) });
+    await expect(cancelAgentRun(run)).rejects.toThrow("Run revision is stale.");
+    await expect(decideAgentRunApproval(fixtureRun, "approve")).rejects.toThrow("no longer needs approval");
   });
 });

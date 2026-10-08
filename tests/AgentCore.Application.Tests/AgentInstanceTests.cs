@@ -94,7 +94,7 @@ public sealed class AgentInstanceTests
         var manager = Manager(definitions, sessions, service, clock, new InMemoryStructuredMemoryStore());
         var session = await manager.CreateForInstanceAsync(alice.InstanceId, SessionMode.Text);
         var model = new RecordingLanguageModel(new ScriptedLanguageModel());
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             session,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),

@@ -163,7 +163,7 @@ public sealed class SecretaryIdentityTests
         var pending = secretary.SkillList.Select(s => s.Id).ToArray();
         Assert.Contains("store.product.manage", pending);
         Assert.Contains("store.order.review", pending);
-        var turns = new InMemoryConversationTurnExecutionStore();
+        var turns = new RuntimeAgentRunStore();
         var model = new CompletingLanguageModel();
         var sessionIds = new DeterministicIdGenerator(
             Enumerable.Range(1, 32).Select(index => Guid.Parse($"019944af-00c5-7000-8000-{index:D12}")),
@@ -191,8 +191,10 @@ public sealed class SecretaryIdentityTests
                 ModelSelectionSource.SystemDefault,
                 null));
         var sessions = new InMemoryMemoryStore();
+        snapshot = RuntimeAgentRunStore.WithPins(snapshot);
+        turns.Bind(sessions);
         await sessions.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -202,14 +204,14 @@ public sealed class SecretaryIdentityTests
             new FakeTimeProvider(Now),
             NullLogger<SessionRuntime>.Instance,
             tools: new SessionToolExecutor(agentInstances: agents),
-            turnExecutions: turns);
+            agentRuns: turns);
         await runtime.AttachAsync();
 
         const string journey = "Publish AC Keyboard with SKU AC-KBD-001 at $99 using ac-keyboard.png and verify it on the storefront.";
         Assert.True(await runtime.SubmitUserTextAsync(journey));
         await runtime.WaitUntilIdleAsync();
         var user = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.User);
-        var pinned = await turns.GetBySourceEventAsync(runtime.SessionId, user.SourceEventId ?? user.EntryId);
+        var pinned = await turns.ForSourceAsync(runtime.SessionId, user.SourceEventId ?? user.EntryId);
         Assert.Empty(pinned!.ActiveSkillKeys);
         Assert.Contains(pinned.PinnedSkillCatalog, s => s.Key == "definition:store.product.manage");
         Assert.Contains(
@@ -220,13 +222,13 @@ public sealed class SecretaryIdentityTests
         Assert.True(await runtime.SubmitUserTextAsync("Remind me tomorrow at 9 AM to call John."));
         await runtime.WaitUntilIdleAsync();
         var reminder = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.User && entry.Text.Contains("Remind me", StringComparison.Ordinal));
-        var reminderPin = await turns.GetBySourceEventAsync(runtime.SessionId, reminder.SourceEventId ?? reminder.EntryId);
+        var reminderPin = await turns.ForSourceAsync(runtime.SessionId, reminder.SourceEventId ?? reminder.EntryId);
         Assert.DoesNotContain("store.product.manage", reminderPin!.ActiveSkillKeys);
 
         Assert.True(await runtime.SubmitUserTextAsync("Review pending orders."));
         await runtime.WaitUntilIdleAsync();
         var orders = runtime.Snapshot.Entries.Last(entry => entry.Text == "Review pending orders.");
-        var orderPin = await turns.GetBySourceEventAsync(runtime.SessionId, orders.SourceEventId ?? orders.EntryId);
+        var orderPin = await turns.ForSourceAsync(runtime.SessionId, orders.SourceEventId ?? orders.EntryId);
         Assert.DoesNotContain("store.product.manage", orderPin!.ActiveSkillKeys);
         Assert.Empty(orderPin.ActiveSkillKeys);
         Assert.Contains(orderPin.PinnedSkillCatalog, s => s.Key == "definition:store.order.review");
@@ -344,7 +346,7 @@ public sealed class SecretaryIdentityTests
             AgentInstanceId: InstanceId);
         var sessions = new InMemoryMemoryStore();
         await sessions.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),

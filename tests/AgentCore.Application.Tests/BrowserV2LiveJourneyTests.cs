@@ -54,11 +54,11 @@ public sealed class BrowserV2LiveJourneyTests
             var instances = new InMemoryAgentInstanceStore();
             await instances.InsertAsync(new(owner, definition.Id, definition.Version, definition.Identity, AgentInstanceLifecycle.Active, now, now), initialSkills: definition.SkillList);
             var output = new CapturingSessionOutput();
-            await using var runtime = new SessionRuntime(snapshot, new SemanticResponseLanguageModel(recording),
+            await using var runtime = AgentCore.Tests.Shared.SessionRuntimeFixture.Create(snapshot, new SemanticResponseLanguageModel(recording),
                 new DefaultAgentBrain(new PromptContextBuilder(ToolConfigurationGates.AllowAll, browser)), memory, output,
                 new SystemIdGenerator(TimeProvider.System), TimeProvider.System, NullLogger<SessionRuntime>.Instance,
                 tools: new SessionToolExecutor(browser: browser, agentInstances: instances, configurationGate: ToolConfigurationGates.AllowAll),
-                turnExecutions: new InMemoryConversationTurnExecutionStore());
+                browserLease: browser);
             await runtime.AttachAsync();
             var url = browser.HostPolicy.NavigationOrigins.Single() + "/browser-v2.html";
             Assert.True(await runtime.SubmitUserTextAsync($"Use the browser at {url}. Find and activate Asset 159, fill the Title field with Browser v2 proof and the Notes field with Generic SPA verified. Set Enabled to checked. Verify the resulting fields and report what happened. Use only this fixture; do not use web search or other websites."));

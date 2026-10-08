@@ -989,9 +989,7 @@ public sealed class BrowserToolTests
         Assert.Null(limited.Parts);
         Assert.Equal(5, browser.Captures);
 
-        var created = new DateTimeOffset(2026, 10, 3, 0, 0, 0, TimeSpan.Zero);
-        Assert.Equal(created.AddDays(7), WorkCaptureRetention.Until(created, created.AddHours(1)));
-        Assert.Equal(created.AddDays(8).AddHours(24), WorkCaptureRetention.Until(created, created.AddDays(8)));
+
     }
 
     private static SessionToolExecutor Executor(FakeBrowser browser) =>
@@ -1221,6 +1219,7 @@ public sealed class BrowserToolTests
 
     private sealed class RecordingArtifacts : IArtifactStore
     {
+        public ValueTask<ArtifactPage> ListPageAsync(Guid sessionId, Guid? before, int limit, CancellationToken ct = default) => new(new ArtifactPage([], null, false));
         public int Created { get; private set; }
 
         public bool Exists(Guid sessionId, Guid artifactId) => false;

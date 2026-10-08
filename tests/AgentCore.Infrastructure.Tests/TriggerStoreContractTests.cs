@@ -348,7 +348,7 @@ public sealed class TriggerStoreContractTests
     }
 
     [Fact]
-    public async Task Previous_schema_upgrade_keeps_triggers_after_session_and_memory_deletion()
+    public async Task Canonical_schema_keeps_triggers_after_session_and_memory_deletion()
     {
         var path = TempDatabase();
         var factory = Factory(path);
@@ -357,7 +357,7 @@ public sealed class TriggerStoreContractTests
         {
             await using (var db = await factory.CreateDbContextAsync())
             {
-                await db.Database.MigrateAsync("20260923110000_UserMemory");
+                await db.Database.MigrateAsync();
             }
 
             await new SqliteMemoryStore(factory, time).EnsureCreatedAsync();
@@ -369,7 +369,8 @@ public sealed class TriggerStoreContractTests
                 Assert.Contains("TriggerOccurrences", tables);
                 Assert.DoesNotContain(tables, name => name.Contains("Timer", StringComparison.OrdinalIgnoreCase));
                 Assert.Equal(0, await ForeignKeyCountAsync(db, "Automations"));
-                Assert.Equal(0, await ForeignKeyCountAsync(db, "TriggerOccurrences"));
+                Assert.Equal(new[] { "AcceptedAgentRunId", "BackgroundSessionId", "LiveSessionId" },
+                    await ForeignKeyColumnsAsync(db, "TriggerOccurrences"));
             }
 
             var owner = new TriggerOwner(InstanceA, ProfileA);
@@ -521,6 +522,17 @@ public sealed class TriggerStoreContractTests
         }
 
         return count;
+    }
+
+    private static async Task<string[]> ForeignKeyColumnsAsync(AgentCoreDbContext db, string table)
+    {
+        var connection = await OpenAsync(db);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA foreign_key_list(\"{table}\");";
+        var columns = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync()) columns.Add(reader.GetString(3));
+        return columns.Order(StringComparer.Ordinal).ToArray();
     }
 
     private static async Task<System.Data.Common.DbConnection> OpenAsync(AgentCoreDbContext db)

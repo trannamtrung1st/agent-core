@@ -1,4 +1,4 @@
-using AgentCore.Domain.Work;
+using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Domain.Triggers;
 
@@ -578,10 +578,10 @@ public sealed class Automation
         TriggerRevision = triggerRevision;
         Provenance = provenance ?? throw new ArgumentException("Provenance is required.", nameof(provenance));
         SuspensionReason = TriggerText.OptionalReason(suspensionReason);
-        ModelOverrideCatalogKey = OptionalModelToken(modelOverrideCatalogKey, WorkLimits.MaxModelFieldCharacters, "Model override");
+        ModelOverrideCatalogKey = OptionalModelToken(modelOverrideCatalogKey, AgentRunLimits.MaxModelFieldCharacters, "Model override");
         ModelOverrideReasoningEffort = OptionalModelToken(
             modelOverrideReasoningEffort,
-            WorkLimits.MaxReasoningEffortCharacters,
+            AgentRunLimits.MaxReasoningEffortCharacters,
             "Model override reasoning effort");
         RequiresVision = requiresVision;
 
@@ -727,7 +727,7 @@ public sealed class Automation
             return null;
         }
 
-        return WorkText.RequireToken(value, max, name);
+        return AgentRunText.RequireToken(value, max, name);
     }
 
     private static void RequireUtc(DateTimeOffset? value, string name)
@@ -759,8 +759,11 @@ public sealed class TriggerOccurrence
         DateTimeOffset? routingUpdatedAtUtc,
         Guid? claimId,
         DateTimeOffset? claimLeaseExpiresAtUtc,
-        Guid? durableWorkItemId = null,
-        ExecutionModelPin? modelPin = null)
+        ExecutionModelPin? modelPin = null,
+        Guid? backgroundSessionId = null,
+        Guid? acceptedAgentRunId = null,
+        Guid? liveSessionId = null,
+        DateTimeOffset? liveEvaluationCompletedAtUtc = null)
     {
         if (occurrenceId == Guid.Empty)
         {
@@ -790,12 +793,18 @@ public sealed class TriggerOccurrence
         RequireOptionalId(automationId, "Registration");
         RequireOptionalId(sourceEventId, "Source event");
         RequireOptionalId(claimId, "Claim");
-        RequireOptionalId(durableWorkItemId, "Durable work item");
+        RequireOptionalId(backgroundSessionId, "Background Session");
+        RequireOptionalId(acceptedAgentRunId, "Accepted AgentRun");
+        RequireOptionalId(liveSessionId, "Live Session");
+        RequireUtc(liveEvaluationCompletedAtUtc, "Live evaluation completion");
+        if (backgroundSessionId is not null && (acceptedAgentRunId is null || liveSessionId is not null)
+            || acceptedAgentRunId is not null && backgroundSessionId is null && liveSessionId is null)
+            throw new ArgumentException("An occurrence must have exactly one complete execution admission link.");
         if (disposition == OccurrenceRoutingDisposition.AcceptedDurable)
         {
-            if (durableWorkItemId is null)
+            if (backgroundSessionId is null || acceptedAgentRunId is null)
             {
-                throw new ArgumentException("Accepted durable work requires a work item.", nameof(durableWorkItemId));
+                throw new ArgumentException("Accepted background work requires its Session and AgentRun.", nameof(acceptedAgentRunId));
             }
 
             if (claimId is not null || claimLeaseExpiresAtUtc is not null)
@@ -803,10 +812,17 @@ public sealed class TriggerOccurrence
                 throw new ArgumentException("Accepted durable work cannot hold a routing claim.", nameof(disposition));
             }
         }
-        else if (durableWorkItemId is not null)
+        else if (backgroundSessionId is not null
+            || acceptedAgentRunId is not null && disposition != OccurrenceRoutingDisposition.AcceptedLive)
         {
-            throw new ArgumentException("Only accepted durable work can link a work item.", nameof(durableWorkItemId));
+            throw new ArgumentException("Only accepted work can link a background Session or AgentRun.", nameof(acceptedAgentRunId));
         }
+
+        if (liveSessionId is not null && (automationId is not null
+            || disposition is not (OccurrenceRoutingDisposition.LivePrepared or OccurrenceRoutingDisposition.AcceptedLive))
+            || liveEvaluationCompletedAtUtc is not null && (liveSessionId is null || disposition != OccurrenceRoutingDisposition.AcceptedLive)
+            || liveSessionId is not null && acceptedAgentRunId is not null && liveEvaluationCompletedAtUtc is null)
+            throw new ArgumentException("Live acceptance requires a native event, its Session and a completed evaluation before Run linkage.");
 
         RequireUtc(scheduledAtUtc, "Scheduled");
         RequireUtc(observedAtUtc, "Observed");
@@ -830,8 +846,11 @@ public sealed class TriggerOccurrence
         RoutingUpdatedAtUtc = routingUpdatedAtUtc;
         ClaimId = claimId;
         ClaimLeaseExpiresAtUtc = claimLeaseExpiresAtUtc;
-        DurableWorkItemId = durableWorkItemId;
         ModelPin = modelPin;
+        BackgroundSessionId = backgroundSessionId;
+        AcceptedAgentRunId = acceptedAgentRunId;
+        LiveSessionId = liveSessionId;
+        LiveEvaluationCompletedAtUtc = liveEvaluationCompletedAtUtc;
     }
 
     public Guid OccurrenceId { get; }
@@ -868,9 +887,12 @@ public sealed class TriggerOccurrence
 
     public DateTimeOffset? ClaimLeaseExpiresAtUtc { get; }
 
-    public Guid? DurableWorkItemId { get; }
-
     public ExecutionModelPin? ModelPin { get; }
+
+    public Guid? BackgroundSessionId { get; }
+    public Guid? AcceptedAgentRunId { get; }
+    public Guid? LiveSessionId { get; }
+    public DateTimeOffset? LiveEvaluationCompletedAtUtc { get; }
 
     public TriggerOccurrence WithModelPin(ExecutionModelPin pin) =>
         ModelPin is null
@@ -892,42 +914,43 @@ public sealed class TriggerOccurrence
                 RoutingUpdatedAtUtc,
                 ClaimId,
                 ClaimLeaseExpiresAtUtc,
-                DurableWorkItemId,
-                pin)
+                pin, BackgroundSessionId, AcceptedAgentRunId, LiveSessionId, LiveEvaluationCompletedAtUtc)
             : this;
 
-    public TriggerOccurrence WithDurableAcceptance(Guid workItemId, long routingRevision, DateTimeOffset acceptedAtUtc)
+    public TriggerOccurrence WithLiveSession(Guid sessionId, long expectedRevision, DateTimeOffset atUtc)
     {
-        if (Disposition != OccurrenceRoutingDisposition.AwaitingDurableWork)
-        {
-            throw new ArgumentException("Only awaiting durable work can be accepted.", nameof(workItemId));
-        }
+        if (Disposition != OccurrenceRoutingDisposition.LivePrepared || RoutingRevision != expectedRevision
+            || LiveSessionId is not null && LiveSessionId != sessionId)
+            throw new ArgumentException("Live preparation requires its current revision and one target Session.");
+        return CopyLive(sessionId, null, null, OccurrenceRoutingDisposition.LivePrepared, atUtc);
+    }
 
-        if (routingRevision != RoutingRevision + 1)
-        {
-            throw new ArgumentException("Durable acceptance must advance the routing revision.", nameof(routingRevision));
-        }
+    public TriggerOccurrence WithLiveEvaluation(Guid sessionId, Guid? agentRunId, DateTimeOffset atUtc)
+    {
+        if (Disposition is not (OccurrenceRoutingDisposition.LivePrepared or OccurrenceRoutingDisposition.AcceptedLive)
+            || LiveSessionId != sessionId || LiveEvaluationCompletedAtUtc is not null)
+            throw new ArgumentException("Live evaluation requires its prepared Session and an unfinished receipt.");
+        return CopyLive(sessionId, agentRunId, atUtc, OccurrenceRoutingDisposition.AcceptedLive, atUtc);
+    }
 
-        return new TriggerOccurrence(
-            OccurrenceId,
-            DedupeKey,
-            AutomationId,
-            Owner,
-            SourceKind,
-            ScheduledAtUtc,
-            ObservedAtUtc,
-            AdmittedAtUtc,
-            EvidenceJson,
-            SourceEventId,
-            TriggerRevision,
-            OccurrenceRoutingDisposition.AcceptedDurable,
-            null,
-            routingRevision,
-            acceptedAtUtc,
-            null,
-            null,
-            workItemId,
-            ModelPin);
+    private TriggerOccurrence CopyLive(Guid sessionId, Guid? runId, DateTimeOffset? completedAt,
+        OccurrenceRoutingDisposition disposition, DateTimeOffset atUtc) =>
+        new(OccurrenceId, DedupeKey, AutomationId, Owner, SourceKind, ScheduledAtUtc, ObservedAtUtc,
+            AdmittedAtUtc, EvidenceJson, SourceEventId, TriggerRevision, disposition, null,
+            RoutingRevision + 1, atUtc, disposition == OccurrenceRoutingDisposition.LivePrepared ? ClaimId : null,
+            disposition == OccurrenceRoutingDisposition.LivePrepared ? ClaimLeaseExpiresAtUtc : null,
+            modelPin: ModelPin, acceptedAgentRunId: runId, liveSessionId: sessionId,
+            liveEvaluationCompletedAtUtc: completedAt);
+
+    public TriggerOccurrence WithBackgroundAcceptance(Guid sessionId, Guid agentRunId, long expectedRevision,
+        DateTimeOffset acceptedAtUtc)
+    {
+        if (Disposition != OccurrenceRoutingDisposition.AwaitingDurableWork || RoutingRevision != expectedRevision)
+            throw new ArgumentException("Occurrence admission requires its current awaiting routing revision.");
+        return new TriggerOccurrence(OccurrenceId, DedupeKey, AutomationId, Owner, SourceKind, ScheduledAtUtc,
+            ObservedAtUtc, AdmittedAtUtc, EvidenceJson, SourceEventId, TriggerRevision,
+            OccurrenceRoutingDisposition.AcceptedDurable, null, RoutingRevision + 1, acceptedAtUtc, null, null,
+            ModelPin, sessionId, agentRunId);
     }
 
     public TriggerOccurrence WithRouting(
@@ -955,8 +978,10 @@ public sealed class TriggerOccurrence
             routingUpdatedAtUtc,
             claimId,
             claimLeaseExpiresAtUtc,
-            durableWorkItemId: null,
-            modelPin: ModelPin);
+            modelPin: ModelPin,
+            acceptedAgentRunId: disposition == OccurrenceRoutingDisposition.AcceptedLive ? AcceptedAgentRunId : null,
+            liveSessionId: disposition == OccurrenceRoutingDisposition.AcceptedLive ? LiveSessionId : null,
+            liveEvaluationCompletedAtUtc: disposition == OccurrenceRoutingDisposition.AcceptedLive ? LiveEvaluationCompletedAtUtc : null);
 
     private static void RequireUtc(DateTimeOffset value, string name)
     {

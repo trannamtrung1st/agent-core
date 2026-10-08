@@ -187,7 +187,7 @@ public sealed class ApplicationMessageTests
     public async Task Same_generation_batch_denies_app_message_until_the_next_generation()
     {
         var model = new BatchedHallucinatedMessageLanguageModel();
-        var turns = new InMemoryConversationTurnExecutionStore();
+        var turns = new RuntimeAgentRunStore();
         await using var runtime = Create(model, turns, Definition());
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("hello");
@@ -205,7 +205,7 @@ public sealed class ApplicationMessageTests
     public async Task Casual_greeting_completes_with_chat_respond_and_no_application_messages()
     {
         var model = new GreetingLanguageModel();
-        var turns = new InMemoryConversationTurnExecutionStore();
+        var turns = new RuntimeAgentRunStore();
         await using var runtime = Create(model, turns, Definition());
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("how you doing");
@@ -224,7 +224,7 @@ public sealed class ApplicationMessageTests
     public async Task Send_admits_three_visible_messages_and_the_next_turn_does_not_see_them()
     {
         var model = new MessagingLanguageModel();
-        var turns = new InMemoryConversationTurnExecutionStore();
+        var turns = new RuntimeAgentRunStore();
         var output = new CapturingSessionOutput();
         await using var runtime = Create(model, turns, Definition(), output);
         await runtime.AttachAsync();
@@ -294,7 +294,7 @@ public sealed class ApplicationMessageTests
     public async Task Cancelled_send_writes_nothing_and_keeps_an_already_admitted_message()
     {
         var model = new CancelMessagingLanguageModel();
-        var turns = new InMemoryConversationTurnExecutionStore();
+        var turns = new RuntimeAgentRunStore();
         var output = new CapturingSessionOutput();
         await using var runtime = Create(model, turns, Definition(), output);
         await runtime.AttachAsync();
@@ -317,7 +317,7 @@ public sealed class ApplicationMessageTests
     public async Task Steered_turn_drops_the_late_application_message_and_does_not_speak_it()
     {
         var model = new LateMessageLanguageModel();
-        var turns = new InMemoryConversationTurnExecutionStore();
+        var turns = new RuntimeAgentRunStore();
         var output = new CapturingSessionOutput();
         await using var runtime = Create(model, turns, Definition(), output);
         await runtime.AttachAsync();
@@ -352,7 +352,7 @@ public sealed class ApplicationMessageTests
     public async Task Ten_progress_messages_are_admitted_with_substantive_work_between_each()
     {
         var model = new TenProgressLanguageModel();
-        var turns = new InMemoryConversationTurnExecutionStore();
+        var turns = new RuntimeAgentRunStore();
         await using var runtime = Create(model, turns, Definition());
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("build files");
@@ -374,7 +374,7 @@ public sealed class ApplicationMessageTests
     public async Task Thirteenth_message_is_rejected_after_twelve_admissions()
     {
         var model = new TwelveMessageCapLanguageModel();
-        var turns = new InMemoryConversationTurnExecutionStore();
+        var turns = new RuntimeAgentRunStore();
         await using var runtime = Create(model, turns, Definition());
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("status");
@@ -391,7 +391,7 @@ public sealed class ApplicationMessageTests
     public async Task Duplicate_send_returns_budget_without_consuming_count()
     {
         var model = new MessagingLanguageModel();
-        var turns = new InMemoryConversationTurnExecutionStore();
+        var turns = new RuntimeAgentRunStore();
         await using var runtime = Create(model, turns, Definition());
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("hello");
@@ -409,7 +409,7 @@ public sealed class ApplicationMessageTests
     public async Task Next_user_turn_receives_a_fresh_message_budget_in_tool_description()
     {
         var model = new TwoTurnBudgetLanguageModel();
-        var turns = new InMemoryConversationTurnExecutionStore();
+        var turns = new RuntimeAgentRunStore();
         await using var runtime = Create(model, turns, Definition());
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("hello");
@@ -453,7 +453,7 @@ public sealed class ApplicationMessageTests
 
     private static SessionRuntime Create(
         ILanguageModel model,
-        InMemoryConversationTurnExecutionStore turns,
+        RuntimeAgentRunStore turns,
         AgentDefinition definition,
         CapturingSessionOutput? output = null)
     {
@@ -484,8 +484,10 @@ public sealed class ApplicationMessageTests
                 ModelSelectionSource.SystemDefault,
                 null), AgentInstanceId: Guid.NewGuid());
         var memory = new InMemoryMemoryStore();
+        snapshot = RuntimeAgentRunStore.WithPins(snapshot);
+        turns.Bind(memory);
         memory.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -495,7 +497,7 @@ public sealed class ApplicationMessageTests
             time,
             NullLogger<SessionRuntime>.Instance,
             new FakeInterruptionClassifier(),
-            turnExecutions: turns);
+            agentRuns: turns);
     }
 
     private sealed class BatchedHallucinatedMessageLanguageModel : ILanguageModel

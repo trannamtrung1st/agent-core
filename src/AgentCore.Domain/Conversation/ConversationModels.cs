@@ -333,8 +333,45 @@ public sealed record SessionSnapshot(
     DateTimeOffset? SummaryGeneratedAt = null,
     ModelGenerationProvenance? SummaryModel = null,
     AgentIdentity? PinnedPersona = null,
-    long? PinnedPersonaRevision = null)
+    long? PinnedPersonaRevision = null,
+    SessionOrigin? Origin = null,
+    SessionSurface Surfaces = SessionSurface.ChatList,
+    IReadOnlyList<Guid>? PendingAgentInputIds = null)
 {
+    private IReadOnlyList<Guid> _pendingAgentInputIds = ValidatePendingInputs(PendingAgentInputIds ?? []);
+    public IReadOnlyList<Guid> PendingAgentInputIds
+    {
+        get => _pendingAgentInputIds;
+        init => _pendingAgentInputIds = ValidatePendingInputs(value);
+    }
+
+    private static IReadOnlyList<Guid> ValidatePendingInputs(IReadOnlyList<Guid> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        if (ids.Count > Activation.MaxSourceEntries || ids.Any(id => id == Guid.Empty)
+            || ids.Distinct().Count() != ids.Count)
+            throw new ArgumentException("Pending agent inputs must have bounded distinct identities.");
+        return Array.AsReadOnly(ids.ToArray());
+    }
+
+    private SessionOrigin _origin = Origin ?? SessionOrigin.UserChat;
+    public SessionOrigin Origin
+    {
+        get => _origin;
+        init => _origin = value ?? throw new ArgumentNullException(nameof(Origin));
+    }
+
+    private SessionSurface _surfaces = RequireSurfaces(Surfaces);
+    public SessionSurface Surfaces
+    {
+        get => _surfaces;
+        init => _surfaces = RequireSurfaces(value);
+    }
+
+    private static SessionSurface RequireSurfaces(SessionSurface surfaces) =>
+        (surfaces & ~(SessionSurface.ChatList | SessionSurface.BackgroundWork)) == 0 ? surfaces
+            : throw new ArgumentException("Session surface flags are invalid.", nameof(Surfaces));
+
     private Guid _agentInstanceId = RequireOwner(AgentInstanceId);
 
     public Guid AgentInstanceId

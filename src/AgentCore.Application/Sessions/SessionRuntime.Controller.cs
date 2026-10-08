@@ -82,7 +82,7 @@ public sealed partial class SessionRuntime
 
         var attachPhase = _snapshot.Status == SessionStatus.Paused ? "resumed" : "cold";
 
-        await ReconcileDurableConversationBeforeAttachAsync(cancellationToken).ConfigureAwait(false);
+        await ReconcileAgentRunBeforeAttachAsync(cancellationToken).ConfigureAwait(false);
         _deactivated = false;
         _headlessTransportDetached = false;
         PinModelSelectionIfMissing();

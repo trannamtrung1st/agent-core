@@ -126,7 +126,7 @@ public sealed class VisionCapabilityRuntimeTests
                 ModelSelectionSource.SystemDefault,
                 "medium"), AgentInstanceId: Guid.NewGuid());
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -146,7 +146,7 @@ public sealed class VisionCapabilityRuntimeTests
     {
         using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        using var encoded = SKImage.FromBitmap(image).Encode(SKEncodedImageFormat.Png, 90);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 90);
         encoded.SaveTo(buffer);
         return buffer.ToArray();
     }

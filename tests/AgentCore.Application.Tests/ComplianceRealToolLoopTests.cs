@@ -76,7 +76,7 @@ public sealed class ComplianceRealToolLoopTests
     {
         using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        using var encoded = SKImage.FromBitmap(image).Encode(SKEncodedImageFormat.Png, 90);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
         encoded.SaveTo(buffer);
         return buffer.ToArray();
     }
@@ -116,7 +116,7 @@ public sealed class ComplianceRealToolLoopTests
             time.GetUtcNow(),
             time.GetUtcNow(), AgentInstanceId: Guid.NewGuid());
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),

@@ -233,6 +233,7 @@ public sealed partial class SessionRuntime
             _snapshot.Definition.Voice.SpeakingRate,
             CanonicalAudio.Format,
             SpeechLocale.Resolve(_snapshot).Effective);
+        var synthesisContext = cause with { Epoch = _epoch, AgentRunGeneration = _boundAgentRun?.Claim?.Generation };
         BeginWork();
         _ = Task.Run(async () =>
         {
@@ -243,7 +244,7 @@ public sealed partial class SessionRuntime
                     var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                     BeginWork();
                     if (!TryMailbox(
-                            new SynthesisResultReceived(NewContext(cause.EventId), responseId, segment.SegmentIndex, evt, processed)))
+                            new SynthesisResultReceived(WorkerContext(synthesisContext), responseId, segment.SegmentIndex, evt, processed)))
                     {
                         EndWork();
                         processed.TrySetResult();
@@ -271,7 +272,7 @@ public sealed partial class SessionRuntime
                 BeginWork();
                 if (!TryMailbox(
                         new SynthesisResultReceived(
-                            NewContext(cause.EventId),
+                            WorkerContext(synthesisContext),
                             responseId,
                             segment.SegmentIndex,
                             new SpeechSynthesisFailed(new ProviderFailure(ProviderErrorCode.Unknown, "Synthesis failed."), diagnosticId),
@@ -289,7 +290,8 @@ public sealed partial class SessionRuntime
 
     private async Task HandleSynthesisAsync(SynthesisResultReceived input, CancellationToken cancellationToken)
     {
-        if (_activeResponseId != input.ResponseId || _responseLifecycle != ResponseLifecycle.Live)
+        if (_activeResponseId != input.ResponseId || _responseLifecycle != ResponseLifecycle.Live || input.Context.Epoch != _epoch
+            || !await OwnsWorkerAsync(input.Context, input.ResponseId, cancellationToken).ConfigureAwait(false))
         {
             input.Processed.TrySetResult();
             return;
@@ -560,10 +562,10 @@ public sealed partial class SessionRuntime
         var capturedResponseId = responseId;
         var capturedEntryId = _activeEntryId;
         var textLength = DisplayLength();
-        var userTerminal = _activeResponseTriggerKind == TriggerKind.UserTurn;
+        var userTerminal = _boundAgentRun?.ResponseId == responseId || _activeResponseTriggerKind == TriggerKind.UserTurn;
         if (userTerminal)
         {
-            MarkConversationExecutionPendingTerminal();
+            MarkAgentRunPendingTerminal();
         }
 
         RequestPersist(
@@ -573,7 +575,7 @@ public sealed partial class SessionRuntime
             {
                 if (userTerminal)
                 {
-                    await FinalizeConversationExecutionAfterPersistAsync(_snapshot, ct).ConfigureAwait(false);
+                    await FinalizeAgentRunAfterPersistAsync(_snapshot, ct).ConfigureAwait(false);
                 }
 
                 var stillOwns = _activeResponseId == capturedResponseId && _activeEntryId == capturedEntryId;

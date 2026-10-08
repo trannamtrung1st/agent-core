@@ -12,6 +12,10 @@ related_targets:
   - web/src/features/chat/AgentPicker.tsx
   - web/src/features/chat/SessionRail.tsx
   - web/src/features/chat/BackgroundWorkDrawer.tsx
+  - web/src/features/chat/AgentRunDetails.tsx
+  - web/src/features/chat/SessionArtifacts.tsx
+  - web/src/features/chat/ArtifactView.tsx
+  - web/src/features/chat/DrawerListFooter.tsx
   - web/src/app/antdTheme.ts
   - web/src/app.css
 ---
@@ -41,4 +45,8 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 - Composer stays in voice. End remains the existing session-end control until `/docs` and tests change together.
 - Session catalog, attachments, realtime, and voice contracts stay compatible.
 
-PRESENTATION: Compact Chat list/row menus omit unnecessary separators, retaining danger styling and confirmation. Background Work and Run details use a 640px maximum width on wide screens and full viewport width below 768px. Instructions, approval previews and results reuse labeled, focusable regions capped at clamp(8rem, 24dvh, 16rem), with independent text scrolling and natural short-content height. The body owns its 16px inset; detail insets own 12px padding and 8px gap. Model/outcome/Run ID share aligned metadata with wrapping identifiers. One-shot ISO summaries show readable local date/time and zone. Model keeps the reasoning-footer boundary. AppShell publishes resolved theme tokens to shell and root for portal surfaces.
+PRESENTATION: Compact Chat list/row menus retain danger styling and confirmation. Background Work is a Session catalog with complete wrapping title controls, latest Run status, readable origin/time and optional progress/unread attention. View history and the title enter that Session's Run history and Files; Back receives focus and restores the exact opener on return. Continue failures/recovery remain in the drawer; successful live/paused/read-only ended opening reveals the chat. Eligibility remains in docs/13.
+
+REUSE: Background Work and Run details cap at 640px on wide screens and use full viewport width below 768px. The body owns its 16px inset; catalog rows own their 12px inline inset and 8px control groups. AgentRunDetails adds no catalog-row or outer padding and is shared with Admin. Run history owns section separation. Outcome, confirmed effects and approval preview use open labeled, focusable regions with natural short-content height and independent scrolling capped at clamp(8rem, 24dvh, 16rem). Files reuse ArtifactView and the shared bounded-page footer. Cancel/Back stay content-width; selected-Session Continue is primary and fills available width. Narrow drawer controls retain 40px minimum height. Automations keeps its separate 400px/320px width, title/subtitle and elevated schedule-expression inset. AppShell publishes resolved theme tokens for portal surfaces.
+
+EVIDENCE: Responsive component previews and keyboard/recovery fixtures passed at 1440/768/390px. Legacy cutover compilation is resolved; actual Synthetic background creation, completion reporting and same-Session continuation are verified. Final hosted acceptance passes on 8cec78c5d47a43e0236a5c38f2e312f4e36ce283. Documentation sync uses source/token/link checks and does not imply new runtime evidence; see docs/reports/activation-agent-run-background-sessions-verification.md.

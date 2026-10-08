@@ -621,7 +621,7 @@ public sealed class TriggerScheduleRuntimeTests
             AgentInstanceId: InstanceId);
         var memory = new InMemoryMemoryStore();
         await memory.SaveAsync(snapshot, 0);
-        var runtime = new SessionRuntime(
+        var runtime = SessionRuntimeFixture.Create(
             snapshot,
             model ?? new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -682,7 +682,7 @@ public sealed class TriggerScheduleRuntimeTests
         {
             var snapshot = await Memory.LoadMetadataAsync(Runtime.SessionId).ConfigureAwait(false)
                 ?? Runtime.Snapshot;
-            var runtime = new SessionRuntime(
+            var runtime = SessionRuntimeFixture.Create(
                 snapshot,
                 Model,
                 new DefaultAgentBrain(new PromptContextBuilder()),

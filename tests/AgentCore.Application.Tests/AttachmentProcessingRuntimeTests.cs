@@ -228,6 +228,9 @@ public sealed class AttachmentProcessingRuntimeTests
         Assert.DoesNotContain(brain.Contexts, context => context.Trigger.Text == "turnA");
         Assert.Contains(brain.Contexts, context => context.Trigger.Text == "turnB");
         Assert.Equal(OutputActivity.Idle, runtime.Output);
+        var runs = await SessionRuntimeFixture.RunsForAsync(runtime);
+        Assert.Equal(AgentRunStatus.Cancelled, Assert.Single(runs, run => run.Admission.Activation.SourceEventId == eventA).Status);
+        Assert.Equal(AgentRunStatus.Completed, Assert.Single(runs, run => run.Admission.Activation.SourceEventId == eventB).Status);
     }
 
     [Fact]
@@ -286,7 +289,7 @@ public sealed class AttachmentProcessingRuntimeTests
             time.GetUtcNow(),
             time.GetUtcNow(), AgentInstanceId: Guid.NewGuid());
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             brain ?? new DefaultAgentBrain(new PromptContextBuilder()),

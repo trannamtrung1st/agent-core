@@ -1,3 +1,4 @@
+import { backgroundFixture, mockBackgroundSessions } from './support/background-fixtures';
 import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test } from "@playwright/test";
 
@@ -37,40 +38,18 @@ test("background work shows a seeded terminal diagnostic", async ({ page }) => {
   await page.getByLabel("Message").fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.locator(".chat-message-assistant")).toBeVisible({ timeout: 15_000 });
-  await page.route("**/work-items**", async (route) => {
-    await route.fulfill({
-      json: {
-        items: [
-          {
-            workItemId: "019944af-00c5-7000-8000-0000000000aa",
-            status: "failed",
-            revision: 4,
-            origin: "Automation · Schedule",
-            progress: null,
-            needsApproval: false,
-            approvalId: null,
-            approvalRevision: null,
-            approvalPreview: null,
-            actionHash: null,
-            cancellationAvailable: false,
-            failureCode: "model-timeout",
-            failureSummary: "The model timed out.",
-            knownEffect: null,
-            diagnosticId: "019944af-0008-7000-8000-0000000000d9",
-            createdAt: "2026-09-24T09:00:00.000Z",
-            updatedAt: "2026-09-24T09:01:00.000Z"
-          }
-        ]
-      }
-    });
-  });
-  await page.getByRole("button", { name: "Background work" }).click();
-  const drawer = page.getByRole("dialog", { name: "Background work" });
-  await expect(drawer.getByText("The model timed out.")).toBeVisible();
+  await mockBackgroundSessions(page, [backgroundFixture(170, 'Failed check', {
+    agentRunId: '019944af-00c5-7000-8000-0000000000aa', status: 'failed', outcome: null,
+    failureCode: 'model-timeout', failureSummary: 'The model timed out.', diagnosticId: '019944af-0008-7000-8000-0000000000d9'
+  })]);
+  await page.getByRole('button', { name: 'Background work', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Background work', exact: true }).getByRole('button', { name: 'View history', exact: true }).click();
+  const drawer = page.getByRole('dialog', { name: 'Failed check', exact: true });
+  await expect(drawer.getByText('The model timed out.')).toBeVisible();
   await drawer.getByRole("button", { name: "Error details" }).click();
   const details = page.getByTestId("diagnostic-details");
   await expect(page.getByTestId("diagnostic-id")).toHaveText("019944af-0008-7000-8000-0000000000d9");
-  await expect(details).toContainText("Work Item ID");
+  await expect(details).toContainText("AgentRun ID");
   await expect(details).toContainText("019944af-00c5-7000-8000-0000000000aa");
   await expect(details).toContainText("model-timeout");
   await expect(details).not.toContainText("Trigger ID");

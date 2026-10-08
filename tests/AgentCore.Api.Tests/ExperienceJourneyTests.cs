@@ -1,3 +1,4 @@
+using AgentCore.Application.Execution;
 using System.Net;
 using System.Net.Http.Json;
 using AgentCore.Application.Admin;
@@ -58,7 +59,7 @@ public sealed class ExperienceJourneyTests
             Assert.DoesNotContain("POISONED_RECEIPT_SECRET", projection);
             Assert.DoesNotContain("fake.admin", projection);
             Assert.Contains("Email sent", projection);
-            Assert.Equal(1, await services.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100));
+            Assert.Equal(1, await services.ExecuteRunsAsync(100));
             var review = (await client.GetFromJsonAsync<ExperienceReviewResponse>(path))!;
             var generated = Assert.Single(review.Items);
             Assert.Equal("Completed", generated.Status);
@@ -141,7 +142,7 @@ internal sealed class ExperienceHost : DurableSqliteHostFactory
         builder.ConfigureTestServices(services =>
         {
             foreach (var hosted in services.Where(s => s.ImplementationType is { } t &&
-                (t == typeof(DurableWorkHostedService) || t == typeof(DurableWorkIntakeHostedService) || t == typeof(TriggerSchedulerHostedService))).ToArray()) services.Remove(hosted);
+                (t == typeof(AgentRunHostedService) || t == typeof(BackgroundOccurrenceIntakeHostedService) || t == typeof(TriggerSchedulerHostedService))).ToArray()) services.Remove(hosted);
             if (clock is not null) { services.RemoveAll<TimeProvider>(); services.AddSingleton(clock); }
             services.RemoveAll<IStructuredMemoryStore>(); services.AddSingleton<IStructuredMemoryStore, SqliteStructuredMemoryStore>();
             services.RemoveAll<IExperienceStore>(); services.AddSingleton<IExperienceStore, SqliteExperienceStore>();

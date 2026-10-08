@@ -18,6 +18,8 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         }
 
+        if (toolName == ToolCatalog.BackgroundStart && admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn, OwnedSessionId: not null })
+            return ToolPolicyDecision.Deny;
         if (InstanceSkillTools.IsManagement(toolName) && admission is not { AgentInstanceId: not null, SupportsTools: true })
             return ToolPolicyDecision.Deny;
 
@@ -111,6 +113,7 @@ public static class ToolPolicy
         }
 
         if (admission?.Detached == true
+            && admission.OwnedSessionId is not { }
             && descriptor.Scope == ToolResourceScope.Session
             && !(ToolCatalog.IsBrowserTool(toolName) && UnattendedBrowser(admission))
             && !(HarnessChatTools.IsHarness(toolName) && ToolResources.IsOccurrence(admission.TriggerKind)))
@@ -146,6 +149,8 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (descriptor.Name == ToolCatalog.BackgroundStart && context is not { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn, OwnedSessionId: not null })
+            return false;
         if (InstanceSkillTools.IsManagement(descriptor.Name) && context is not { AgentInstanceId: not null, ModelSupportsTools: true })
             return false;
 
@@ -160,6 +165,7 @@ public static class ToolPolicy
         }
 
         if (context?.DetachedExecution == true
+            && context.OwnedSessionId is not { }
             && descriptor.Scope == ToolResourceScope.Session
             && !(ToolCatalog.IsBrowserTool(descriptor.Name) && UnattendedBrowser(context))
             && !(HarnessChatTools.IsHarness(descriptor.Name) && ToolResources.IsOccurrence(context.Trigger.Kind)))

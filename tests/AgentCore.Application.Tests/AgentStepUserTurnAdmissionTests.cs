@@ -20,7 +20,7 @@ public sealed class AgentStepUserTurnAdmissionTests
     public async Task Second_user_turn_succeeds_after_first_turn_no_chat_agent_step_is_rejected()
     {
         var output = new CapturingSessionOutput();
-        var turns = new InMemoryConversationTurnExecutionStore();
+        var turns = new RuntimeAgentRunStore();
         var model = new SemanticResponseLanguageModel(new NoChatThenChatLanguageModel());
         await using var runtime = Create(output, model, turns);
         await runtime.AttachAsync();
@@ -39,10 +39,10 @@ public sealed class AgentStepUserTurnAdmissionTests
 
         var firstUser = runtime.Snapshot.Entries.Single(entry => entry is { Role: ConversationRole.User, Text: "first" });
         var firstSourceEventId = firstUser.SourceEventId ?? firstUser.EntryId;
-        var firstExecution = await turns.GetBySourceEventAsync(runtime.SessionId, firstSourceEventId);
+        var firstExecution = await turns.ForSourceAsync(runtime.SessionId, firstSourceEventId);
         Assert.NotNull(firstExecution);
-        Assert.Equal(ConversationTurnExecutionStatus.Failed, firstExecution!.Status);
-        Assert.False(firstExecution.IsOpen);
+        Assert.Equal(AgentRunStatus.Failed, firstExecution!.Status);
+        Assert.False(!firstExecution.IsTerminal);
 
         await runtime.SubmitUserTextAsync("second");
         await runtime.WaitUntilIdleAsync();
@@ -53,14 +53,14 @@ public sealed class AgentStepUserTurnAdmissionTests
         var secondAssistant = Assert.Single(assistants, entry => entry.Status == EntryStatus.Completed);
         Assert.Equal("second answer", secondAssistant.Text);
         Assert.NotEqual(firstAssistant.ResponseId, secondAssistant.ResponseId);
-        Assert.Empty(await turns.ListOpenForSessionAsync(runtime.SessionId));
+        Assert.Empty(await turns.OpenAsync(runtime.SessionId));
         var secondUser = runtime.Snapshot.Entries.Single(entry => entry is { Role: ConversationRole.User, Text: "second" });
-        var secondExecution = await turns.GetBySourceEventAsync(
+        var secondExecution = await turns.ForSourceAsync(
             runtime.SessionId,
             secondUser.SourceEventId ?? secondUser.EntryId);
         Assert.NotNull(secondExecution);
-        Assert.Equal(ConversationTurnExecutionStatus.Completed, secondExecution!.Status);
-        Assert.NotEqual(firstExecution.ExecutionId, secondExecution.ExecutionId);
+        Assert.Equal(AgentRunStatus.Completed, secondExecution!.Status);
+        Assert.NotEqual(firstExecution.AgentRunId, secondExecution.AgentRunId);
         Assert.NotEqual(firstExecution.ResponseId, secondExecution.ResponseId);
         Assert.Contains(output.Items, item => item.Payload is ErrorOutput);
         var projected = PublicHistory.FromEntry(firstAssistant);
@@ -78,7 +78,7 @@ public sealed class AgentStepUserTurnAdmissionTests
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));
         var output = new CapturingSessionOutput();
-        var turns = new InMemoryConversationTurnExecutionStore();
+        var turns = new RuntimeAgentRunStore();
         var model = new SemanticResponseLanguageModel(new ChatNoChatChatLanguageModel());
         var definition = SampleDefinitions.Examiner with
         {
@@ -103,11 +103,11 @@ public sealed class AgentStepUserTurnAdmissionTests
         await runtime.WaitUntilIdleAsync();
 
         var helloUser = runtime.Snapshot.Entries.Single(entry => entry is { Role: ConversationRole.User, Text: "hello" });
-        var helloExecution = await turns.GetBySourceEventAsync(
+        var helloExecution = await turns.ForSourceAsync(
             runtime.SessionId,
             helloUser.SourceEventId ?? helloUser.EntryId);
         Assert.NotNull(helloExecution);
-        Assert.Equal(ConversationTurnExecutionStatus.Completed, helloExecution!.Status);
+        Assert.Equal(AgentRunStatus.Completed, helloExecution!.Status);
 
         time.Advance(TimeSpan.FromSeconds(91));
         await runtime.WaitUntilMailboxDrainedAsync();
@@ -123,17 +123,17 @@ public sealed class AgentStepUserTurnAdmissionTests
         await runtime.WaitUntilIdleAsync();
 
         var secondUser = runtime.Snapshot.Entries.Single(entry => entry is { Role: ConversationRole.User, Text: "second" });
-        var secondExecution = await turns.GetBySourceEventAsync(
+        var secondExecution = await turns.ForSourceAsync(
             runtime.SessionId,
             secondUser.SourceEventId ?? secondUser.EntryId);
         Assert.NotNull(secondExecution);
-        Assert.Equal(ConversationTurnExecutionStatus.Completed, secondExecution!.Status);
-        Assert.Empty(await turns.ListOpenForSessionAsync(runtime.SessionId));
+        Assert.Equal(AgentRunStatus.Completed, secondExecution!.Status);
+        Assert.Empty(await turns.OpenAsync(runtime.SessionId));
 
-        helloExecution = await turns.GetBySourceEventAsync(
+        helloExecution = await turns.ForSourceAsync(
             runtime.SessionId,
             helloUser.SourceEventId ?? helloUser.EntryId);
-        Assert.Equal(ConversationTurnExecutionStatus.Completed, helloExecution!.Status);
+        Assert.Equal(AgentRunStatus.Completed, helloExecution!.Status);
 
         var secondAssistant = Assert.Single(
             runtime.Snapshot.Entries,
@@ -144,7 +144,7 @@ public sealed class AgentStepUserTurnAdmissionTests
     private static SessionRuntime Create(
         ISessionOutput output,
         ILanguageModel model,
-        InMemoryConversationTurnExecutionStore turns,
+        RuntimeAgentRunStore turns,
         IAgentBrain? brain = null,
         AgentDefinition? definition = null,
         FakeTimeProvider? time = null)
@@ -176,8 +176,10 @@ public sealed class AgentStepUserTurnAdmissionTests
                 ModelSelectionSource.SystemDefault,
                 null), AgentInstanceId: Guid.NewGuid());
         var store = new InMemoryMemoryStore();
+        snapshot = RuntimeAgentRunStore.WithPins(snapshot);
+        turns.Bind(store);
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             brain ?? new DefaultAgentBrain(new PromptContextBuilder()),
@@ -187,7 +189,7 @@ public sealed class AgentStepUserTurnAdmissionTests
             time,
             NullLogger<SessionRuntime>.Instance,
             new FakeInterruptionClassifier(),
-            turnExecutions: turns);
+            agentRuns: turns);
     }
 
     private sealed class NoChatThenChatLanguageModel : ILanguageModel

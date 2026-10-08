@@ -142,10 +142,10 @@ public sealed class ContinuityService(ExperienceService experience, IExperienceS
             kept.Add(item);
         }
         if (items.Count > 0 && kept.Count == 0)
-            return Work.DurableToolCallCheckpoint.FinishRequiredResult(budget);
+            return Execution.AgentRunToolCallCheckpoint.FinishRequiredResult(budget);
         var json = Serialize(new { trust = TrustLabel, result = kept, truncated = kept.Count < items.Count });
         return Encoding.UTF8.GetByteCount(json) <= budget ? json
-            : Work.DurableToolCallCheckpoint.FinishRequiredResult(budget);
+            : Execution.AgentRunToolCallCheckpoint.FinishRequiredResult(budget);
     }
 
     public static string Serialize(object value) => JsonSerializer.Serialize(value, Json);

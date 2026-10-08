@@ -45,8 +45,8 @@ test('Unified Automation authoring retains admitted instructions and source focu
   const runLink = automations.getByRole('button', { name: 'View last run: Review current orders', exact: true });
   await runLink.click();
   const details = page.getByRole('dialog', { name: 'Run details', exact: true });
-  await expect(details.getByText(row.instructions, { exact: true })).toBeVisible();
-  await expect(details.locator('.background-work-metadata').getByText('No action', { exact: true })).toBeVisible();
+  await expect(details.getByText('No action', { exact: true }).first()).toBeVisible();
+  await expect(details.locator('.agent-run-details').getByText('No action', { exact: true })).toBeVisible();
   await details.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(runLink).toBeFocused(); await runLink.click();
   const updatedName = 'Updated order review';
@@ -55,20 +55,19 @@ test('Unified Automation authoring retains admitted instructions and source focu
     modelKey: row.modelKey, reasoningEffort: row.reasoningEffort
   } });
   expect(update.ok()).toBe(true);
-  await details.getByRole('button', { name: 'View automation', exact: true }).click();
+  await details.getByRole('button', { name: 'View Automation', exact: true }).click();
   const updatedSource = automations.getByRole('button', { name: `View automation: ${updatedName}`, exact: true });
   await expect(updatedSource).toBeFocused();
   await page.getByRole('tab', { name: 'Runs', exact: true }).click(); await page.reload();
   const runs = page.getByRole('region', { name: 'Runs', exact: true });
-  await expect(runs.getByText(row.instructions, { exact: true })).toHaveAttribute('title', row.instructions);
-  await expect(runs.getByText('Future review instructions', { exact: true })).toHaveCount(0);
-  const historyLink = runs.getByRole('button', { name: /^View automation · manual run / }).first();
-  await page.route('**/work-items/*/result', route => route.fulfill({ status: 503, json: { message: 'Result temporarily unavailable' } }));
+  const admitted = (await (await page.request.get(`/api/v2/agent-instances/${id}/agent-runs`, { headers })).json()).items[0];
+  const history = await page.request.get(`/api/v1/sessions/${admitted.sessionId}/messages`, { headers });
+  expect(history.ok()).toBe(true);
+  expect(await history.text()).toContain(row.instructions);
+  expect(await history.text()).not.toContain('Future review instructions');
+  const historyLink = runs.getByRole('button', { name: admitted.agentRunId, exact: true });
   await historyLink.click();
-  await expect(details.getByText('Run result could not be loaded', { exact: true })).toBeVisible();
-  await page.unroute('**/work-items/*/result');
-  await details.getByRole('button', { name: 'Retry result', exact: true }).click();
-  await expect(details.locator('.background-work-result')).toBeVisible();
+  await expect(details.getByText('No action', { exact: true }).first()).toBeVisible();
   await details.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(historyLink).toBeFocused();
   errors.splice(0); // The deliberate 503 is the tested recovery boundary.
@@ -84,7 +83,7 @@ test('Unified Automation authoring retains admitted instructions and source focu
   await page.reload(); if (await updatedSource.getAttribute('aria-expanded') !== 'true') await updatedSource.click();
   await expect(automations.getByRole('button', { name: 'Run automation now', exact: true })).toBeDisabled();
   const persisted = (await (await page.request.get(path, { headers })).json()).items[0];
-  expect(persisted.status).toBe('Disabled'); expect(persisted.authorizationOrigin).toBe('AdminOwner'); expect(persisted.lastWorkItemId).toBeTruthy();
+  expect(persisted.status).toBe('Disabled'); expect(persisted.authorizationOrigin).toBe('AdminOwner'); expect(persisted.lastAgentRunId).toBeTruthy();
   await automations.getByRole('button', { name: 'Delete automation', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete automation', exact: true }).click();
   await expect(automations.getByText(/No automations yet/)).toBeVisible();

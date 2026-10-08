@@ -21,7 +21,6 @@ public static class RuntimeTelemetry
     private static readonly Counter<long> TriggerSchedulerEvents = Meter.CreateCounter<long>("trigger_scheduler_events");
     private static readonly Counter<long> AutomationEvents = Meter.CreateCounter<long>("trigger_registration_events");
     private static readonly Histogram<double> TriggerDueLagMs = Meter.CreateHistogram<double>("trigger_due_lag_ms");
-    private static readonly Counter<long> GenerationRetries = Meter.CreateCounter<long>("llm.generation.retry");
     private static readonly Counter<long> ResponseRepairs = Meter.CreateCounter<long>("llm.response.repair");
 
     private static readonly ConcurrentQueue<TimelineEvent> Timeline = new();
@@ -96,28 +95,6 @@ public static class RuntimeTelemetry
         MemoryRetrieval.Add(1, new KeyValuePair<string, object?>("result", result));
     }
 
-    public static void RecordGenerationRetry(string phase, string reason)
-    {
-        if (phase is not ("initial" or "follow-up"))
-        {
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(reason) || reason.Length > 64)
-        {
-            return;
-        }
-
-        GenerationRetries.Add(
-            1,
-            new TagList
-            {
-                { "attempt", "1" },
-                { "phase", phase },
-                { "reason", reason }
-            });
-    }
-
     public static void RecordResponseRepair(string reason, string outcome, string phase)
     {
         if (ProtocolFailures.Disposition(reason) != ProtocolFailureDisposition.Repairable
@@ -159,6 +136,23 @@ public static class RuntimeTelemetry
     private static readonly Counter<long> IdentityMaintenanceEvents = Meter.CreateCounter<long>("identity_maintenance_events");
     public static void RecordIdentityMaintenance(string outcome) => IdentityMaintenanceEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
     public static void RecordExperience(string outcome) => ExperienceEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
+    private static readonly Counter<long> AgentRunEvents = Meter.CreateCounter<long>("agent_run_events");
+    private static readonly Counter<long> ActivationEvents = Meter.CreateCounter<long>("activation_events");
+    private static readonly Counter<long> BackgroundSessionEvents = Meter.CreateCounter<long>("background_session_events");
+    public static void RecordAgentRun(string outcome)
+    {
+        if (outcome is "created" or "claimed" or "attempt" or "retry" or "approval" or "completed" or "failed" or "cancelled" or "recovered" or "unconfirmed-effect")
+            AgentRunEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
+    }
+    public static void RecordActivation(string outcome)
+    {
+        if (outcome is "admitted" or "duplicate") ActivationEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
+    }
+    public static void RecordBackgroundSession(string outcome)
+    {
+        if (outcome is "admitted" or "foregrounded" or "completion-emitted" or "completion-deduped" or "completion-skipped")
+            BackgroundSessionEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
+    }
     private static readonly Counter<long> WorkEvents = Meter.CreateCounter<long>("work_events");
     private static readonly Counter<long> AgentSteps = Meter.CreateCounter<long>("agent_steps");
     private static readonly Counter<long> ActiveSkills = Meter.CreateCounter<long>("active_skills");

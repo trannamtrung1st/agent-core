@@ -4,7 +4,7 @@ public static class HistoryRestoreWindow
 {
     public const int PromptKeep = 20;
 
-    public static IReadOnlyList<ConversationEntry> Select(IReadOnlyList<ConversationEntry> entries)
+    public static IReadOnlyList<ConversationEntry> Select(IReadOnlyList<ConversationEntry> entries, IReadOnlyList<Guid>? pendingInputIds = null)
     {
         if (entries.Count == 0)
         {
@@ -20,6 +20,7 @@ public static class HistoryRestoreWindow
         return prompt
             .Concat(suffix)
             .Concat(streaming)
+            .Concat(ordered.Where(entry => pendingInputIds?.Contains(entry.EntryId) == true))
             .DistinctBy(entry => entry.EntryId)
             .OrderBy(entry => entry.Sequence)
             .ToArray();

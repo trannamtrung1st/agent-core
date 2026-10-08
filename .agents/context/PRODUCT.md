@@ -38,7 +38,7 @@ The distinctive mechanism is one Session Runtime mailbox owning mutable conversa
 - Identities load from versioned JSON under `agents/` (`examiner.json`, `customer-support.json`, `compliance.json`; see [docs/12](../../docs/12-backend-implementation-spec.md)).
 - `voiceAvailable` on GET `/api/v1/agents` and on `session.ready` agent uses the same backend gate ([docs/04](../../docs/04-backend-interfaces.md)); the composer hides Voice when it is false. Synthetic profile advertises voice for voice-enabled agents; Real profile keeps voice hidden until hosted STT/TTS is wired, even if synthetic speech adapters are registered for development.
 - Browser talks to `/hubs/session` (SignalR + MessagePack by default; `VITE_AGENTCORE_REALTIME_PROTOCOL=json` is a same-hub diagnostic mode). HTTP is for agent/session/history and health, not live chat text.
-- A failed assistant turn, terminal background-work item, or admin server error can show one safe diagnostic id for copy. The id is server-owned. Conversation text and stacks stay off that copy.
+- A failed assistant turn, failed AgentRun, or admin server error can show one safe diagnostic id for copy. The id is server-owned. Conversation text and stacks stay off that copy.
 - Persistence/reconnect restores the active conversation; ended catalog rows open a read-only history without attach; durable sessions use the v2 catalog rail (see [docs/13](../../docs/13-frontend-implementation-spec.md)), not a separate inbox product.
 
 ## Capabilities and Constraints
@@ -76,6 +76,7 @@ Stack (existing codebase, not a greenfield choice): React SPA, Vite, pnpm, stric
 - Official docs under `/docs` (source of truth).
 - Implemented SPA in `web/` uses Ant Design v6 plus the presentation policy in DESIGN.md (composer Model chip with in-button reasoning level, Spoken inset (first in assistant turn when it differs from display; TTS uses that projection only), compact 8px composer/overlay shells, 8/12/16px rhythm, 8px control inner padding matching session rows). `/docs` still owns behavior.
 - Demo narratives in `docs/09-demo-scenarios.md`.
+- Current Background Work is Session-first, with shared Run history/details, Files, focus-preserving navigation and inline Continue recovery; see [docs/13](../../docs/13-frontend-implementation-spec.md#background-work-drawer). Component/fixture checks cover 1440/768/390px; the [verification report](../../docs/reports/activation-agent-run-background-sessions-verification.md) records complete backend/browser/Compose and all five hosted gates on `8cec78c5d47a43e0236a5c38f2e312f4e36ce283`. The cutover is closed/frozen.
 - No brand illustration pack, logo lockup, or photography set. Do not invent them.
 
 ## Product Principles
@@ -90,7 +91,7 @@ Observed P9 Chat behavior, not a new visual system: while a browser tool runs, t
 
 Current Credentials UX supersedes the P9.5 connection surface: global System Credentials and per-instance explicit bindings, masked create/replace with no reveal, independent Browser state reset, and Event Sources under Connections with reaction behavior under Automation. Chat has no application connection indicator. Background Work retains text attention labels and quiet completions. Use existing Ant Design v6/layout tokens. `/docs` remains authoritative. Historical P9.5/P9.6 evidence stays unchanged.
 
-Observed P9.6 operator behavior, not a phase closure: Admin Memory & automation saves an unattended model and a registration override, and names the effective source. Admin home creates, rotates, and revokes an Event Source credential that is shown once and then cleared. An instance authors an Event Automation for `order.placed` without receiving a store connection. Background Work names the source (Automation Schedule/Event/manual) and shows the updated time in the viewer locale. It does not render webhook evidence. P9 stays frozen on `bba1de4`. P10 and P11 were not started. `/docs` remains the product specification.
+Historical P9.6 operator behavior, not a current cutover claim: Admin Memory & automation saves an unattended model and a registration override, and names the effective source. Admin home creates, rotates, and revokes an Event Source credential that is shown once and then cleared. An instance authors an Event Automation for `order.placed` without receiving a store connection. At that stage, Background Work named the source (Automation Schedule/Event/manual) and showed the updated time in the viewer locale. The current Session-first presentation is recorded above and in docs/13. It does not render webhook evidence. P9 stays frozen on `bba1de4`. P10 and P11 were not started. `/docs` remains the product specification.
 
 ## Accessibility & Inclusion
 

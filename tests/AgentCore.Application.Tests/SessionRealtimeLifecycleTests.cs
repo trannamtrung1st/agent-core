@@ -212,7 +212,7 @@ public sealed class SessionRealtimeLifecycleTests
             created, AgentInstanceId: Guid.NewGuid());
         var store = new InMemoryMemoryStore();
         await store.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -555,7 +555,7 @@ public sealed class SessionRealtimeLifecycleTests
             store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         }
 
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),

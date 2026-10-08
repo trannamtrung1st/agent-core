@@ -89,6 +89,7 @@
     "capabilities": {
       "mode": "Selected",
       "resolvedCapabilities": [
+        "background.start",
         "knowledge.retrieve",
         "workspace.cwd",
         "workspace.read",
@@ -156,6 +157,7 @@
     },
     "projection": {
       "alwaysCapabilities": [
+        "background.start",
         "knowledge.retrieve",
         "workspace.cwd",
         "workspace.read",

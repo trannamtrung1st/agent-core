@@ -31,7 +31,7 @@ public sealed class MessagingSkillJourneyTests
 
         var recording = new RecordingModel(new ScriptedLanguageModel());
         var output = new CapturingSessionOutput();
-        var turns = new InMemoryConversationTurnExecutionStore();
+        var turns = new RuntimeAgentRunStore();
         var memory = new InMemoryMemoryStore();
         await using var runtime = Create(new SemanticResponseLanguageModel(recording), output, turns, memory, definition);
         await runtime.AttachAsync();
@@ -66,7 +66,7 @@ public sealed class MessagingSkillJourneyTests
         Assert.DoesNotContain(output.Items, item => item.Payload is SpeechOutputSegmentOutput or SpeechOutputCompletedOutput);
 
         var user = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.User);
-        var pinned = await turns.GetBySourceEventAsync(runtime.SessionId, user.SourceEventId ?? user.EntryId);
+        var pinned = await turns.ForSourceAsync(runtime.SessionId, user.SourceEventId ?? user.EntryId);
         Assert.Equal(["definition:" + ScriptedLanguageModel.MessagingSkillJourneyTargetSkill], pinned!.ActiveSkillKeys);
         Assert.Equal(1, pinned.SkillLoadCount);
 
@@ -91,7 +91,7 @@ public sealed class MessagingSkillJourneyTests
             entry => entry.Role == ConversationRole.Assistant && entry.Status == EntryStatus.Completed);
         Assert.Equal(
             ["definition:" + ScriptedLanguageModel.MessagingSkillJourneyTargetSkill],
-            (await turns.GetBySourceEventAsync(runtime.SessionId, user.SourceEventId ?? user.EntryId))!.ActiveSkillKeys);
+            (await turns.ForSourceAsync(runtime.SessionId, user.SourceEventId ?? user.EntryId))!.ActiveSkillKeys);
     }
 
     private static string Text(ModelRequest request) =>
@@ -112,7 +112,7 @@ public sealed class MessagingSkillJourneyTests
     private static SessionRuntime Create(
         ILanguageModel model,
         CapturingSessionOutput output,
-        InMemoryConversationTurnExecutionStore turns,
+        RuntimeAgentRunStore turns,
         InMemoryMemoryStore memory,
         AgentDefinition definition,
         SessionSnapshot? snapshot = null)
@@ -143,6 +143,8 @@ public sealed class MessagingSkillJourneyTests
                 "scripted",
                 ModelSelectionSource.SystemDefault,
                 null), AgentInstanceId: Guid.NewGuid());
+        snapshot = RuntimeAgentRunStore.WithPins(snapshot);
+        turns.Bind(memory);
         if (snapshot.Entries.Count == 0)
         {
             memory.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
@@ -151,7 +153,7 @@ public sealed class MessagingSkillJourneyTests
         var instances = new InMemoryAgentInstanceStore();
         instances.InsertAsync(new(snapshot.AgentInstanceId, definition.Id, definition.Version, definition.Identity,
             AgentInstanceLifecycle.Active, now, now), initialSkills: definition.SkillList).AsTask().GetAwaiter().GetResult();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -161,7 +163,7 @@ public sealed class MessagingSkillJourneyTests
             time,
             NullLogger<SessionRuntime>.Instance,
             new FakeInterruptionClassifier(),
-            turnExecutions: turns, tools: new SessionToolExecutor(agentInstances: instances));
+            agentRuns: turns, tools: new SessionToolExecutor(agentInstances: instances));
     }
 
     private sealed class RecordingModel(ILanguageModel inner) : ILanguageModel

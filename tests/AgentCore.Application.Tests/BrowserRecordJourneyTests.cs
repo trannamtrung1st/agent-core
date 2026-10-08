@@ -31,7 +31,7 @@ public sealed class BrowserRecordJourneyTests
         var browser = new FixtureBrowser();
         var recording = new RecordingModel(new ScriptedLanguageModel());
         var output = new CapturingSessionOutput();
-        var turns = new InMemoryConversationTurnExecutionStore();
+        var turns = new RuntimeAgentRunStore();
         await using var runtime = Create(new SemanticResponseLanguageModel(recording), output, definition, browser, turns);
         await runtime.AttachAsync();
         Assert.True(await runtime.SubmitUserTextAsync(userText));
@@ -82,7 +82,7 @@ public sealed class BrowserRecordJourneyTests
         var browser = new FixtureBrowser();
         var recording = new RecordingModel(new ScriptedLanguageModel());
         var output = new CapturingSessionOutput();
-        var turns = new InMemoryConversationTurnExecutionStore();
+        var turns = new RuntimeAgentRunStore();
         await using var runtime = Create(
             new SemanticResponseLanguageModel(recording),
             output,
@@ -112,7 +112,7 @@ public sealed class BrowserRecordJourneyTests
         var browser = new FixtureBrowser();
         var recording = new RecordingModel(new ScriptedLanguageModel());
         var output = new CapturingSessionOutput();
-        var turns = new InMemoryConversationTurnExecutionStore();
+        var turns = new RuntimeAgentRunStore();
         await using var runtime = Create(
             new SemanticResponseLanguageModel(recording),
             output,
@@ -160,7 +160,7 @@ public sealed class BrowserRecordJourneyTests
         var browser = new FixtureBrowser();
         var recording = new RecordingModel(new ScriptedLanguageModel());
         var output = new CapturingSessionOutput();
-        var turns = new InMemoryConversationTurnExecutionStore();
+        var turns = new RuntimeAgentRunStore();
         await using var runtime = Create(
             new SemanticResponseLanguageModel(recording),
             output,
@@ -240,7 +240,7 @@ public sealed class BrowserRecordJourneyTests
         CapturingSessionOutput output,
         AgentDefinition definition,
         FixtureBrowser browser,
-        InMemoryConversationTurnExecutionStore turns)
+        RuntimeAgentRunStore turns)
     {
         var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-01T12:00:00Z"));
         var ids = new DeterministicIdGenerator(
@@ -269,11 +269,13 @@ public sealed class BrowserRecordJourneyTests
                 ModelSelectionSource.SystemDefault,
                 null), AgentInstanceId: Guid.NewGuid());
         var store = new InMemoryMemoryStore();
+        snapshot = RuntimeAgentRunStore.WithPins(snapshot);
+        turns.Bind(store);
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         var instances = new InMemoryAgentInstanceStore();
         instances.InsertAsync(new(snapshot.AgentInstanceId, definition.Id, definition.Version, definition.Identity,
             AgentInstanceLifecycle.Active, now, now), initialSkills: definition.SkillList).AsTask().GetAwaiter().GetResult();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder(ToolConfigurationGates.AllowAll, browser)),
@@ -283,7 +285,7 @@ public sealed class BrowserRecordJourneyTests
             time,
             NullLogger<SessionRuntime>.Instance,
             tools: new SessionToolExecutor(agentInstances: instances, browser: browser, configurationGate: ToolConfigurationGates.AllowAll),
-            turnExecutions: turns);
+            agentRuns: turns);
     }
 
     private sealed class RecordingModel(ILanguageModel inner) : ILanguageModel

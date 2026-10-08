@@ -58,7 +58,7 @@ public sealed class HistoricalImageRereadTests
         var sessionId = Guid.NewGuid();
         using var image = new SKBitmap(3, 3);
         using var webp = new MemoryStream();
-        using var encoded = SKImage.FromBitmap(image).Encode(SKEncodedImageFormat.Webp, 90);
+        using var encoded = image.Encode(SKEncodedImageFormat.Webp, 90);
         encoded.SaveTo(webp);
         var uploaded = await attachments.UploadPendingAsync(
             sessionId,
@@ -689,7 +689,7 @@ public sealed class HistoricalImageRereadTests
             store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         }
 
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -732,7 +732,7 @@ public sealed class HistoricalImageRereadTests
     {
         using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        using var encoded = SKImage.FromBitmap(image).Encode(SKEncodedImageFormat.Png, 90);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
         encoded.SaveTo(buffer);
         return buffer.ToArray();
     }
@@ -741,18 +741,12 @@ public sealed class HistoricalImageRereadTests
     {
         using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        using var encoded = SKImage.FromBitmap(image).Encode(SKEncodedImageFormat.Jpeg, 90);
+        using var encoded = image.Encode(SKEncodedImageFormat.Jpeg, 90);
         encoded.SaveTo(buffer);
         return buffer.ToArray();
     }
 
-    private static byte[] GifBytes()
-    {
-        using var image = new SKBitmap(2, 2);
-        using var buffer = new MemoryStream();
-        buffer.Write(Convert.FromBase64String("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"));
-        return buffer.ToArray();
-    }
+    private static byte[] GifBytes() => Convert.FromBase64String("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
 
     private sealed class NonVisionLanguageModel : ILanguageModel
     {

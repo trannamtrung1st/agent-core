@@ -301,7 +301,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             1, ids.NewSessionId(), 1, definition, SessionMode.Text, null,
             SessionStatus.Created, [], string.Empty, 0, null, null, now, now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             Create(
                 handler,
@@ -320,7 +320,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             time.Advance(TimeSpan.FromSeconds(10));
         }
         using var idleWait = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        await runtime.WaitUntilIdleAsync(idleWait.Token);
+        await SessionRuntimeFixture.SettleRetriesAsync(runtime);
         Assert.DoesNotContain(
             output.Items,
             item => item.Payload is ErrorOutput error
@@ -340,7 +340,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             Assert.Equal(EntryStatus.Failed, assistant.Status);
             Assert.Equal(ProviderFailureReason.StreamIdle, assistant.Failure!.FailureReason);
         }
-        Assert.Equal(2, recoverSetup ? setupHandler.PostCount : idleHandler.PostCount);
+        Assert.Equal(recoverSetup ? 2 : 3, recoverSetup ? setupHandler.PostCount : idleHandler.PostCount);
     }
 
     [Fact]
@@ -748,7 +748,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             1, ids.NewSessionId(), 1, definition, SessionMode.Text, null,
             SessionStatus.Created, [], string.Empty, 0, null, null, now, now, AgentInstanceId: Guid.NewGuid());
         await store.SaveAsync(snapshot, 0);
-        await using var runtime = new SessionRuntime(
+        await using var runtime = SessionRuntimeFixture.Create(
             snapshot,
             Create(handler),
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -943,7 +943,7 @@ public sealed class OpenAICompatibleLanguageModelTests
                     ModelSelectionSource.SystemDefault,
                     "medium"), AgentInstanceId: Guid.NewGuid());
             await memory.SaveAsync(snapshot, 0);
-            await using var runtime = new SessionRuntime(
+            await using var runtime = SessionRuntimeFixture.Create(
                 snapshot,
                 recording,
                 new DefaultAgentBrain(new PromptContextBuilder()),

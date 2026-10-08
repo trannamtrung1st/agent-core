@@ -7,8 +7,8 @@ namespace AgentCore.Application.Work;
 public static class WorkCompletionRequest
 {
     public static readonly ModelToolDefinition Contract = new(ToolCatalog.WorkComplete,
-        "Finish this bounded Automation Run. NoAction is successful and quiet. ActionCompleted is quiet; AttentionRequested uses trusted-owner attention delivery. Never choose recipients or authority.",
-        """{"type":"object","additionalProperties":false,"properties":{"summary":{"type":"string","minLength":1,"maxLength":2000},"attentionRequired":{"type":"boolean"},"outcome":{"type":"string","enum":["NoAction","ActionCompleted","AttentionRequested"]}},"required":["summary","attentionRequired","outcome"]}""");
+        "Finish this bounded background AgentRun. NoAction is successful and quiet. Response records completed work; NeedsAttention uses trusted-owner attention delivery. Never choose recipients or authority.",
+        """{"type":"object","additionalProperties":false,"properties":{"summary":{"type":"string","minLength":1,"maxLength":2000},"attentionRequired":{"type":"boolean"},"outcome":{"type":"string","enum":["NoAction","Response","NeedsAttention"]}},"required":["summary","attentionRequired","outcome"]}""");
     public static bool TryParse(JsonElement args, IReadOnlyList<ModelMessage> messages, out string result, out bool attention, out string rejection)
     {
         result = ""; attention = false; rejection = "Run completion requires a bounded summary, outcome and attentionRequired.";
@@ -18,9 +18,9 @@ public static class WorkCompletionRequest
             || !args.TryGetProperty("outcome", out var outcome) || outcome.ValueKind != JsonValueKind.String
             || !args.TryGetProperty("attentionRequired", out var flag) || flag.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return false;
         var kind = outcome.GetString();
-        if (kind is not ("NoAction" or "ActionCompleted" or "AttentionRequested")) return false;
+        if (kind is not ("NoAction" or "Response" or "NeedsAttention")) return false;
         attention = flag.GetBoolean();
-        if (attention != (kind == "AttentionRequested")) return false;
+        if (attention != (kind == "NeedsAttention")) return false;
         if (kind == "NoAction" && messages.Where(m => m.Role == ModelRole.Tool)
             .Any(m => m.Name is { } name && ToolRegistry.TryGet(name, out var descriptor)
                 && descriptor.Effect != ToolEffect.ReadOnly && !IsRejectedToolResult(m.Text)))

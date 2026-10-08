@@ -1,3 +1,4 @@
+using AgentCore.Application.Execution;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Identity;
 using AgentCore.Application.Memory;
@@ -8,7 +9,6 @@ using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Memory;
 using AgentCore.Domain.Triggers;
-using AgentCore.Domain.Work;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -236,7 +236,7 @@ public sealed class ManagedInstanceP7DRegressionTests
     [Fact]
     public async Task Archived_managed_instance_leaves_accepted_running_work_unchanged()
     {
-        await ForEachWorkStore(async work =>
+        await ForEachRunStore(async (work, runMemory) =>
         {
             var definitions = new VersionedDefinitions(SampleDefinitions.Examiner);
             var instances = new InMemoryAgentInstanceStore();
@@ -244,14 +244,15 @@ public sealed class ManagedInstanceP7DRegressionTests
             var clock = new FakeTimeProvider(Now);
             var service = Service(instances, definitions, sessions, clock);
             var managed = await service.CreateAsync("examiner", 1);
-            var owner = new WorkOwner(managed.InstanceId, ProfileId);
+            var owner = new AgentRunOwner(managed.InstanceId, ProfileId);
             var workItemId = Guid.Parse("019944af-00f5-7000-8000-000000000001");
             var sourceId = Guid.Parse("019944af-00f5-7000-8000-000000000002");
-            var created = await work.CreateAsync(NewWorkItem(owner, workItemId, sourceId, Now));
+            var runSnapshot = AgentRunTestFixtures.Snapshot(owner, SampleDefinitions.Examiner, Now, sourceEventId: sourceId);
+            var created = await work.AdmitAsync(runSnapshot, 0, AgentRunTestFixtures.Run(runSnapshot, Now, runId: workItemId));
             var generation = Guid.Parse("019944af-00f5-7000-8000-000000000003");
-            var running = await work.TryClaimAsync(created.Item.WorkItemId, generation, Now, Now.AddMinutes(5));
+            var running = await work.ApplyAsync(owner, created.Run.AgentRunId, new AgentRunCommand.Claim(created.Run.Revision, Now, generation, Now.AddMinutes(5)));
             Assert.NotNull(running);
-            Assert.Equal(WorkItemStatus.Running, running.Status);
+            Assert.Equal(AgentRunStatus.Running, running.Status);
 
             var archived = await service.SetLifecycleAsync(
                 managed.InstanceId,
@@ -261,7 +262,7 @@ public sealed class ManagedInstanceP7DRegressionTests
 
             var after = await work.GetAsync(owner, workItemId);
             Assert.NotNull(after);
-            Assert.Equal(WorkItemStatus.Running, after.Status);
+            Assert.Equal(AgentRunStatus.Running, after.Status);
             Assert.Equal(running.Revision, after.Revision);
             Assert.Equal(generation, after.Claim!.Generation);
             Assert.False(after.CancellationRequested);
@@ -303,16 +304,18 @@ public sealed class ManagedInstanceP7DRegressionTests
         }
     }
 
-    private static async Task ForEachWorkStore(Func<IWorkItemStore, Task> exercise)
+    private static async Task ForEachRunStore(Func<IAgentRunStore, IMemoryStore, Task> exercise)
     {
-        await exercise(new InMemoryWorkItemStore());
+        var memory = new InMemoryMemoryStore();
+        await exercise(new InMemoryAgentRunStore(memory, new SystemDiagnosticIdSource()), memory);
         var path = Path.Combine(Path.GetTempPath(), $"agent-core-p7d-work-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
         var factory = new SqliteFactory(options);
         try
         {
             await new SqliteMemoryStore(factory, new FakeTimeProvider(Now)).EnsureCreatedAsync();
-            await exercise(new SqliteWorkItemStore(factory));
+            var sqliteMemory = new SqliteMemoryStore(factory, new FakeTimeProvider(Now));
+            await exercise(new SqliteAgentRunStore(factory, sqliteMemory, new SystemDiagnosticIdSource()), sqliteMemory);
         }
         finally
         {
@@ -345,27 +348,6 @@ public sealed class ManagedInstanceP7DRegressionTests
             new VoiceAvailability { SpeechAdaptersResolved = true },
             structuredMemory: structured,
             instances: instances);
-
-    private static WorkItem NewWorkItem(WorkOwner owner, Guid workItemId, Guid sourceId, DateTimeOffset createdAt) =>
-        WorkItem.Create(
-            workItemId,
-            owner,
-            new WorkProvenance(
-                sourceId,
-                WorkSourceKind.ApplicationEvent,
-                null,
-                Guid.Parse("019944af-00f5-7000-8000-000000000099"),
-                null,
-                $"source|{sourceId:N}",
-                createdAt,
-                createdAt,
-                """{"instruction":"synthetic"}""",
-                "examiner",
-                1,
-                "Alex"),
-            new WorkModelPin("synthetic-default", "synthetic", "synthetic-small", "minimal"),
-            3,
-            createdAt);
 
     private static DeterministicIdGenerator Ids(int count, string prefix) =>
         new(

@@ -29,6 +29,7 @@ public sealed class LongSessionCompactionTests
         var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
         var clock = new FakeTimeProvider(Now);
         var store = new SqliteMemoryStore(new SqliteFactory(options), clock);
+        SessionRuntimeFixture.Bind(store, new SqliteAgentRunStore(new SqliteFactory(options), store, new SystemDiagnosticIdSource()));
         try
         {
             await store.EnsureCreatedAsync();
@@ -55,6 +56,7 @@ public sealed class LongSessionCompactionTests
             }
 
             var reopened = new SqliteMemoryStore(new SqliteFactory(options), clock);
+            SessionRuntimeFixture.Bind(reopened, new SqliteAgentRunStore(new SqliteFactory(options), reopened, new SystemDiagnosticIdSource()));
             var restored = (await reopened.LoadAsync(SessionId))!;
             Assert.Contains(Fact, restored.Summary, StringComparison.Ordinal);
             Assert.DoesNotContain(restored.Entries, entry => entry.Text.Contains(Fact, StringComparison.Ordinal));
@@ -97,7 +99,7 @@ public sealed class LongSessionCompactionTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 256).Select(index => Guid.Parse($"019944af-0009-7000-8000-{index:D12}")),
             [snapshot.SessionId]);
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),

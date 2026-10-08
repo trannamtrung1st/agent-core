@@ -735,7 +735,7 @@ public sealed class MemoryProposalAdmissionTests
         IStructuredMemoryService memories,
         ILanguageModel model,
         IAgentBrain? brain = null) =>
-        new(
+        SessionRuntimeFixture.Create(
             snapshot,
             model,
             brain ?? new DefaultAgentBrain(new PromptContextBuilder()),

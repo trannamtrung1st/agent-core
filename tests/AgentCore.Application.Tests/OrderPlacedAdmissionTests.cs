@@ -81,7 +81,7 @@ public sealed class OrderPlacedAdmissionTests
             item => Assert.Equal(
                 ExternalEventIngress.OccurrenceDedupeKey(issued.SourceId, "order-105-created") + ":" + item.AutomationId,
                 item.DedupeKey));
-        Assert.All(pending, item => Assert.Null(item.DurableWorkItemId));
+        Assert.All(pending, item => Assert.Null(item.AcceptedAgentRunId));
         var saved = await secretary.Events.GetEventAsync(issued.SourceId, "order-105-created");
         Assert.Equal(first.EventId, saved!.EventId);
 

@@ -37,6 +37,7 @@ public static class SafeExecutionTrace
         try
         {
             using var document = JsonDocument.Parse(resultJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object) return "ok";
             if (document.RootElement.TryGetProperty("error", out var error)
                 && error.ValueKind == JsonValueKind.String
                 && error.GetString() is { Length: > 0 } code)
@@ -179,6 +180,7 @@ public static class SafeExecutionTrace
         try
         {
             using var document = JsonDocument.Parse(resultJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object) return string.Empty;
             if (!document.RootElement.TryGetProperty("error", out var error)
                 || error.ValueKind != JsonValueKind.String
                 || error.GetString() != "schedule_validation_failed"

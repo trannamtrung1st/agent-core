@@ -1,3 +1,4 @@
+using AgentCore.Application.Execution;
 using System.Text;
 using System.Text.Json;
 using System.Runtime.CompilerServices;
@@ -9,7 +10,6 @@ using AgentCore.Application.Tools;
 using AgentCore.Application.Triggers;
 using AgentCore.Application.Work;
 using AgentCore.Domain.Definitions;
-using AgentCore.Domain.Work;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Memory;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,10 +43,10 @@ public sealed class ContinuityBudgetTests
         var r = await automations.SaveAsync(id, null, 0, true, 3600, "try to consolidate your memory and experience", null, null);
         await automations.RunNowAsync(id, r.AutomationId, r.Revision);
         await AutomationJourneyTests.Intake(s);
-        await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
-        var work = Assert.Single(await s.GetRequiredService<IWorkItemStore>().ListAsync(new(id, LocalUserProfile.Id), 100));
-        Assert.Equal(WorkItemStatus.Completed, work.Status);
-        Assert.Equal("NoAction", WorkCompletionRequest.Outcome(work.Result!.Text));
+        await s.ExecuteRunsAsync(100);
+        var work = Assert.Single(await s.GetRequiredService<IAgentRunStore>().ListAsync(new(id, LocalUserProfile.Id), 100));
+        Assert.Equal(AgentRunStatus.Completed, work.Status);
+        Assert.Equal("NoAction", work.Result!.OutcomeKind.ToString());
         Assert.False(work.Result.AttentionRequired); Assert.Null(work.Approval);
         Assert.Single(await memory.ListActiveUserAsync(LocalUserProfile.Id));
         Assert.Single(await memory.ListActiveIdentityUserAsync(id, LocalUserProfile.Id));

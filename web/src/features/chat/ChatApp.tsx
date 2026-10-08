@@ -44,15 +44,7 @@ import { imageModelCompatibility } from "./imageModelCompatibility";
 import { mapAgentActivity, conversationStatusLabel, conversationStatusTone, pausedSessionMessage } from "./activityState";
 import { terminalSessionNote } from "./sessionLifecycle";
 import { ChatHeader } from "./ChatHeader";
-import {
-  approveWorkItem,
-  cancelSessionAutomation,
-  cancelWorkItem,
-  getWorkItemResult,
-  listSessionAutomations,
-  listWorkItems,
-  rejectWorkItem
-} from "../../services/api";
+import { getSession, listBackgroundSessions, listSessionAutomations, cancelSessionAutomation, type AgentRun } from "../../services/api";
 import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
 import { AutomationDrawer } from "./AutomationDrawer";
 import { Composer } from "./Composer";
@@ -98,46 +90,43 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [schedulesOpen, setSchedulesOpen] = useState(false);
   const [workOpen, setWorkOpen] = useState(false);
-  const [attentionItems, setAttentionItems] = useState<Awaited<ReturnType<typeof listWorkItems>>>([]);
+  const [attentionItems, setAttentionItems] = useState<AgentRun[]>([]);
+  const [backgroundInstanceId, setBackgroundInstanceId] = useState<string | null>(null);
   const { isUnread } = useWorkReadState();
   const attentionCount = attentionItems.filter(isUnread).length;
 
   useEffect(() => {
     if (!state.sessionId) {
       setAttentionItems([]);
+      setBackgroundInstanceId(null);
+      setWorkOpen(false);
       return;
     }
 
     let current = true;
     let generation = 0;
+    // Keep the drawer mounted while opening another Session owned by the same instance.
+    // Its pending Continue action must survive the connection state transition.
     setAttentionItems([]);
+    let owner: string | null = null;
     async function refresh() {
       const request = ++generation;
       try {
-        const items: Awaited<ReturnType<typeof listWorkItems>> = [];
-        let before: string | undefined;
-        while (current) {
-          const batch = await listWorkItems(state.sessionId!, { limit: 100, before, attentionOnly: true });
-          items.push(...batch);
-          if (batch.length < 100) break;
-          const next = batch[batch.length - 1].workItemId;
-          if (next === before) break;
-          before = next;
-        }
+        owner ??= (await getSession(state.sessionId!)).agentInstanceId ?? null;
+        if (!owner || !current) return;
+        setBackgroundInstanceId(owner);
+        const items: AgentRun[] = []; let cursor: string | undefined;
+        do {
+          const page = await listBackgroundSessions(owner, cursor, 100);
+          for (const item of page.items) if (item.latestRun?.outcome?.attentionRequired) items.push(item.latestRun);
+          cursor = page.hasMore ? page.nextCursor ?? undefined : undefined;
+        } while (current && cursor);
         if (current && request === generation) setAttentionItems(items);
-      } catch {
-        // Keep the last known attention count during a transient list failure.
-      }
+      } catch { /* Preserve the last known attention count during a transient failure. */ }
     }
-
     void refresh();
-    const timer = window.setInterval(() => {
-      void refresh();
-    }, 5_000);
-    return () => {
-      current = false;
-      window.clearInterval(timer);
-    };
+    const timer = window.setInterval(() => void refresh(), 5_000);
+    return () => { current = false; window.clearInterval(timer); };
   }, [state.sessionId]);
   const [scheduleEpoch, setScheduleEpoch] = useState(0);
   const outputStateRef = useRef(state.outputState);
@@ -531,19 +520,9 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
             </div>
           </Content>
         </Layout>
-        {state.sessionId ? (
-          <BackgroundWorkDrawer
-            sessionId={state.sessionId}
-            open={workOpen}
-            wide={!isNarrow}
-            onClose={() => setWorkOpen(false)}
-            load={listWorkItems}
-            loadResult={getWorkItemResult}
-            cancel={cancelWorkItem}
-            approve={approveWorkItem}
-            reject={rejectWorkItem}
-          />
-        ) : null}
+        {backgroundInstanceId ? <BackgroundWorkDrawer instanceId={backgroundInstanceId} open={workOpen} wide={!isNarrow}
+          onClose={() => setWorkOpen(false)} /> : null}
+
         {state.sessionId ? (
           <AutomationDrawer
             sessionId={state.sessionId}

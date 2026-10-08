@@ -52,7 +52,7 @@ public static class ProblemResults
     {
         return new DiagnosticContext(
             SessionId: RouteGuid(httpContext, "sessionId"),
-            WorkItemId: RouteGuid(httpContext, "workItemId"),
+            AgentRunId: RouteGuid(httpContext, "agentRunId"),
             ErrorCategory: category,
             ErrorCode: code);
     }

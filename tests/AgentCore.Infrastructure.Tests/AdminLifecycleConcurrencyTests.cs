@@ -363,8 +363,6 @@ public sealed class AdminLifecycleConcurrencyTests
             sessions,
             new InMemoryStructuredMemoryStore(),
             new InMemoryTriggerStore(state),
-            new InMemoryWorkItemStore(state),
-            new InMemoryConversationTurnExecutionStore(state),
             definitions,
             events);
         var gate = new AdminLifecycleCoordinator();

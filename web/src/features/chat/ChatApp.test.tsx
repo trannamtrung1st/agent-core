@@ -4,8 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { antdTheme } from "../../app/antdTheme";
 import { emptySession, useSessionStore } from "../../state/sessionStore";
 import { bootstrap, sendDraft, cancelRenderedResponse, resumePausedSession } from "../../services/realtime";
-import { getWorkItemResult, listWorkItems } from "../../services/api";
+import { listBackgroundSessions, listAgentRuns } from "../../services/api";
 import { ChatApp } from "./ChatApp";
+import { fixtureBackground, fixtureRun } from "./agentRunFixtures";
 
 function stubMatchMedia(matches: (query: string) => boolean) {
   window.matchMedia = ((query: string) => ({
@@ -42,12 +43,9 @@ vi.mock("../../services/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../services/api")>();
   return {
     ...actual,
-    listWorkItems: vi.fn(async () => []),
-    getSession: vi.fn(async () => ({ agentInstanceId: null })),
-    getWorkItemResult: vi.fn(),
-    cancelWorkItem: vi.fn(),
-    approveWorkItem: vi.fn(),
-    rejectWorkItem: vi.fn()
+    listBackgroundSessions: vi.fn(async () => ({ items: [], hasMore: false, nextCursor: null })),
+    listAgentRuns: vi.fn(async () => ({ items: [], hasMore: false, nextCursor: null })),
+    getSession: vi.fn(async () => ({ agentInstanceId: "instance-1" }))
   };
 });
 
@@ -988,31 +986,8 @@ describe("ChatApp tablet session rail", () => {
   });
 
   it("keeps background work available for live, paused, and ended sessions without a transcript result", async () => {
-    vi.mocked(listWorkItems).mockResolvedValue([
-      {
-        workItemId: "work-1",
-        status: "completed",
-        revision: 3,
-        origin: "Scheduled reminder",
-        progress: "Checking the oven",
-        needsApproval: false,
-        approvalId: null,
-        approvalRevision: null,
-        approvalPreview: null,
-        actionHash: null,
-        cancellationAvailable: false,
-        failureCode: null,
-        failureSummary: null,
-        knownEffect: null,
-        createdAt: "2026-09-24T09:00:00.000Z",
-        updatedAt: "2026-09-24T09:01:00.000Z"
-      }
-    ]);
-    vi.mocked(getWorkItemResult).mockResolvedValue({
-      workItemId: "work-1",
-      text: "Oven timer finished.",
-      completedAt: "2026-09-24T09:01:00.000Z"
-    });
+    vi.mocked(listBackgroundSessions).mockResolvedValue({ items: [fixtureBackground], nextCursor: null, hasMore: false });
+    vi.mocked(listAgentRuns).mockResolvedValue({ items: [{ ...fixtureRun, outcome: { kind: "Result", summary: "Oven timer finished.", outcomeEntryId: "result", attentionRequired: true } }], nextCursor: null, hasMore: false });
 
     for (const status of ["active", "paused", "ended"] as const) {
       await act(async () => {
@@ -1044,7 +1019,8 @@ describe("ChatApp tablet session rail", () => {
       });
       const view = await act(async () => renderChat());
       expect(screen.getByRole("button", { name: "Background work" })).toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Background work" }));
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Background work" })));
+      fireEvent.click(await screen.findByRole("button", { name: "View history" }));
       expect(await screen.findByText("Oven timer finished.")).toBeInTheDocument();
       const conversation = screen.getByRole("region", { name: "Conversation" });
       expect(within(conversation).getByText("Hello from the conversation.")).toBeInTheDocument();

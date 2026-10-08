@@ -1,3 +1,4 @@
+using AgentCore.Application.Execution;
 using System.Net;
 using System.Diagnostics.Metrics;
 using System.Security.Cryptography;
@@ -18,7 +19,6 @@ using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Experience;
 using AgentCore.Domain.Memory;
-using AgentCore.Domain.Work;
 using AgentCore.Application.Triggers;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -81,7 +81,7 @@ public sealed class IdentityMaintenanceJourneyTests
             Assert.Equal(firstId, canonical.Provenance.MaintenanceAgentInstanceId);
             Assert.Equal(session.SessionId, canonical.Provenance.MaintenanceSessionId);
             Assert.Null(canonical.Provenance.OriginSessionId);
-            Assert.Null(canonical.Provenance.MaintenanceWorkItemId);
+            Assert.Null(canonical.Provenance.MaintenanceAgentRunId);
         }
         await using (var host = new ExperienceHost(db))
         {
@@ -134,8 +134,8 @@ public sealed class IdentityMaintenanceJourneyTests
         var preview = prepared.Preparation.Preview + "\n" + string.Join("\n", prepared.Preparation.Details.Select(d => $"{d.Key}: {d.Value}"));
         Assert.True(preview.Length > 2000);
         var now = DateTimeOffset.UtcNow;
-        var durable = new WorkApproval(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1, call.Name, call.ArgumentsJson, prepared.Preparation.ActionHash,
-            preview, now.AddMinutes(5), WorkApprovalDecision.Pending, null, false, 1, now);
+        var durable = new AgentRunApproval(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1, call.Name, call.ArgumentsJson, prepared.Preparation.ActionHash,
+            preview, now.AddMinutes(5), AgentRunApprovalDecision.Pending, null, false, 1, now);
         Assert.Equal(preview, durable.Preview);
         Assert.Contains("forbidden", (await ToolActionPreparation.PrepareApprovalAsync(tools, call, args)).ErrorJson);
         await Assert.ThrowsAsync<AgentCoreException>(() => service.ExecuteAsync(definition, session.SessionId, call, args, admission, null, default).AsTask());
@@ -256,29 +256,30 @@ public sealed class IdentityMaintenanceJourneyTests
             var r = await automations.SaveAsync(id, null, 0, true, 3600, "synthetic-maintain-memory", null, null);
             await automations.RunNowAsync(id, r.AutomationId, r.Revision);
             await AutomationJourneyTests.Intake(s);
-            await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
-            var work = Assert.Single(await s.GetRequiredService<IWorkItemStore>().ListAsync(new(id, LocalUserProfile.Id), 100));
-            workId = work.WorkItemId;
-            Assert.Equal(WorkItemStatus.WaitingForApproval, work.Status);
+            await s.ExecuteRunsAsync(100);
+            var work = Assert.Single(await s.GetRequiredService<IAgentRunStore>().ListAsync(new(id, LocalUserProfile.Id), 100));
+            workId = work.AgentRunId;
+            Assert.Equal(AgentRunStatus.WaitingForApproval, work.Status);
             Assert.Equal(ToolCatalog.MemoryConsolidate, work.Approval!.ToolName);
-            Assert.Contains("Scope: This Agent Instance and trusted user profile", work.Approval.Preview);
-            Assert.Contains("Source subjects:", work.Approval.Preview);
+            var preview = JsonSerializer.Deserialize<JsonElement>(work.Approval.Preview);
+            Assert.Equal("This Agent Instance and trusted user profile", preview.GetProperty("details").GetProperty("Scope").GetString());
+            Assert.True(preview.GetProperty("details").TryGetProperty("Source subjects", out _));
             Assert.Contains("Frontend samples", work.Approval.Preview);
             Assert.Equal(3, await s.GetRequiredService<IStructuredMemoryStore>().CountActiveIdentityUserAsync(id, LocalUserProfile.Id));
         }
         await using (var host = new ExperienceHost(db))
         {
             var s = host.Services;
-            var store = s.GetRequiredService<IWorkItemStore>();
+            var store = s.GetRequiredService<IAgentRunStore>();
             var work = (await store.GetAsync(new(id, LocalUserProfile.Id), workId))!;
             var a = work.Approval!;
-            Assert.Equal(WorkItemStatus.WaitingForApproval, work.Status);
+            Assert.Equal(AgentRunStatus.WaitingForApproval, work.Status);
             if (optOut) await s.GetRequiredService<IExperienceStore>().ConfigureMaintenanceAsync(id, 1, false);
             else await s.GetRequiredService<IStructuredMemoryService>().DeleteIdentityUserAsync(new(id, LocalUserProfile.Id), sourceId, true);
             var client = TestOwnerCapability.CreateOwnerClient(host);
-            var url = $"/api/v2/admin/agent-instances/{id}/work-items/{workId}/approvals/{a.ApprovalId}/approve";
-            (await client.PostAsJsonAsync(url, new DecideWorkApprovalRequest(work.Revision, a.Revision, a.ActionHash))).EnsureSuccessStatusCode();
-            await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
+            var url = $"/api/v2/sessions/{work.SessionId}/agent-runs/{workId}/approvals/{a.ApprovalId}/approve";
+            (await client.PostAsJsonAsync(url, new DecideAgentRunApprovalRequest(work.Revision, a.Revision, a.ActionHash))).EnsureSuccessStatusCode();
+            await s.ExecuteRunsAsync(100);
             Assert.Equal(optOut ? 3 : 2, await s.GetRequiredService<IStructuredMemoryStore>().CountActiveIdentityUserAsync(id, LocalUserProfile.Id));
             Assert.DoesNotContain(await s.GetRequiredService<IStructuredMemoryStore>().ListActiveIdentityUserAsync(id, LocalUserProfile.Id), m => m.Provenance.DerivedFromMemoryIds is { Count: > 0 });
             if (!optOut) Assert.Equal(MemoryItemStatus.Deleted, (await s.GetRequiredService<IStructuredMemoryStore>().FindIdentityUserAsync(id, LocalUserProfile.Id, sourceId))!.Status);
@@ -308,14 +309,14 @@ public sealed class IdentityMaintenanceJourneyTests
         var automations = s.GetRequiredService<AdminAutomationAuthoringService>();
         var r = await automations.SaveAsync(id, null, 0, true, 3600, "synthetic-maintain-memory", null, null);
         await automations.RunNowAsync(id, r.AutomationId, r.Revision); await AutomationJourneyTests.Intake(s);
-        await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
-        var store = s.GetRequiredService<IWorkItemStore>();
+        await s.ExecuteRunsAsync(100);
+        var store = s.GetRequiredService<IAgentRunStore>();
         var work = Assert.Single(await store.ListAsync(new(id, LocalUserProfile.Id), 100));
-        Assert.Equal(WorkItemStatus.Completed, work.Status);
-        Assert.Equal("NoAction", WorkCompletionRequest.Outcome(work.Result!.Text));
+        Assert.Equal(AgentRunStatus.Completed, work.Status);
+        Assert.Equal("NoAction", work.Result!.OutcomeKind.ToString());
         Assert.False(work.Result.AttentionRequired);
         Assert.Empty(metrics.Outcomes);
-        Assert.Empty(await store.ListAttentionAlertKeysAsync(work.WorkItemId));
+        Assert.False(work.Result?.AttentionRequired ?? false);
         Assert.Equal(2, await s.GetRequiredService<IStructuredMemoryStore>().CountActiveIdentityUserAsync(id, LocalUserProfile.Id));
     }
 
@@ -395,7 +396,7 @@ public sealed class IdentityMaintenanceJourneyTests
             }
             sourceId = stored[0].MemoryId;
             var tools = s.GetRequiredService<SessionToolExecutor>();
-            var automation = new ToolExecutionAdmission(true, TriggerKind.ManualInvocation, AgentInstanceId: id, WorkItemId: Guid.NewGuid());
+            var automation = new ToolExecutionAdmission(true, TriggerKind.ManualInvocation, AgentInstanceId: id, AgentRunId: Guid.NewGuid());
             memoryCall = new("maintenance-memory", ToolCatalog.MemoryConsolidate, JsonSerializer.Serialize(new { sourceMemoryIds = stored.Select(m => m.MemoryId), kind = "Preference", subject = "Frontend language", content = "Prefer TypeScript for frontend examples." }));
             var args = JsonSerializer.Deserialize<JsonElement>(memoryCall.ArgumentsJson);
             Assert.Equal(ToolPolicyDecision.Allow, await tools.EvaluateExecutionPolicyAsync(definition, Guid.Empty, memoryCall, args, automation, default));
@@ -412,7 +413,7 @@ public sealed class IdentityMaintenanceJourneyTests
             var activeItem = Assert.Single(active.Items);
             Assert.Equal(3, activeItem.Provenance.DerivedFromMemoryIds!.Count);
             Assert.Equal(id.ToString("D"), activeItem.Provenance.MaintenanceAgentInstanceId);
-            Assert.Equal(automation.WorkItemId!.Value.ToString("D"), activeItem.Provenance.MaintenanceWorkItemId);
+            Assert.Equal(automation.AgentRunId!.Value.ToString("D"), activeItem.Provenance.MaintenanceAgentRunId);
             Assert.Null(activeItem.Provenance.MaintenanceSessionId);
             var fresh = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(id, SessionMode.Text);
             var recall = await SessionMemoryPrompt.LoadAsync(memory, fresh.SessionId, definition, profile, [], agentInstanceId: id);
@@ -433,7 +434,7 @@ public sealed class IdentityMaintenanceJourneyTests
                 var source = await ExperienceJourneyTests.SeedAsync(s, id);
                 records.Add(await s.GetRequiredService<ExperienceService>().RequestSessionAsync(id, source.SessionId));
             }
-            await s.GetRequiredService<DurableReminderExecutor>().ExecuteDueAsync(DateTimeOffset.UtcNow, 100);
+            await s.ExecuteRunsAsync(100);
             var call = new ModelToolCall("maintenance-experience", ToolCatalog.ExperienceConsolidate, JsonSerializer.Serialize(new {
                 sourceExperienceIds = records.Select(r => r.ExperienceId), goal = "Review repeated browser work", attempts = new[] { "Observed current page" },
                 decisions = Array.Empty<string>(), outcomes = new[] { "Observed successful retry" }, corrections = new[] { "Check page state first" },

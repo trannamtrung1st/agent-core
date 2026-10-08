@@ -7,6 +7,10 @@ public static class ToolRegistry
     private static readonly IReadOnlyDictionary<string, ToolDescriptor> Registered =
         new Dictionary<string, ToolDescriptor>(StringComparer.Ordinal)
         {
+            [ToolCatalog.BackgroundStart] = Descriptor(ToolCatalog.BackgroundStart,
+                "Start a bounded task now in a separate Session for this same Agent. Returns its committed Session ID promptly; does not create an Automation. Use only for explicitly authorized background work. The child cannot create children.",
+                """{"type":"object","additionalProperties":false,"properties":{"objective":{"type":"string","minLength":1,"maxLength":4000},"title":{"type":"string","minLength":1,"maxLength":80},"reportCompletion":{"type":"boolean"}},"required":["objective"]}""",
+                ToolEffect.Write, replaySafety: ToolReplaySafety.IntegrationIdempotent),
             [ToolCatalog.CredentialsList] = Descriptor(ToolCatalog.CredentialsList,
                 "List this Agent Instance's active bound credentials: safe aliases, kinds and non-secret metadata only. Never returns protected values. Bindings do not grant capabilities. Results are ordered by alias; use nextCursor to continue.",
                 """{"type":"object","additionalProperties":false,"properties":{"cursor":{"type":"string","maxLength":64},"limit":{"type":"integer","minimum":1,"maximum":100}}}""",

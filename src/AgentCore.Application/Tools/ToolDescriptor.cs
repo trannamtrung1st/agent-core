@@ -30,13 +30,13 @@ public sealed record ToolExecutionAdmission(
     Guid? AgentInstanceId = null,
     bool SupportsVision = false,
     string? CaptureScope = null,
-    Guid? WorkItemId = null,
+    Guid? AgentRunId = null,
     HarnessChatContext? Harness = null,
     IReadOnlyList<HarnessSourceReceipt>? HarnessSources = null,
     string? OwnerTurnText = null,
     bool SupportsTools = true,
-    AgentCore.Domain.Work.WorkModelPin? Model = null,
-    string? WorkspaceCwd = null);
+    AgentCore.Domain.Conversation.AgentRunModelPin? Model = null,
+    string? WorkspaceCwd = null, Guid? OwnedSessionId = null);
 
 public sealed record ToolDescriptor(
     ModelToolDefinition ModelDefinition,

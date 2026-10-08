@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using AgentCore.Application.Execution;
 using System.Net.Http.Json;
 using AgentCore.Api;
 using AgentCore.Api.Realtime;
@@ -665,6 +667,11 @@ internal class DurableSqliteHostFactory(string dbPath, bool runScheduler = true,
         });
         builder.ConfigureTestServices(services =>
         {
+            services.RemoveAll<IAgentRunStore>();
+            services.AddSingleton<IAgentRunStore>(provider => new SqliteAgentRunStore(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                new SqliteMemoryStore(provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(), provider.GetRequiredService<TimeProvider>()),
+                provider.GetRequiredService<AgentCore.Application.Ports.IDiagnosticIdSource>()));
             var persistence = new PersistenceOptions
             {
                 Provider = "Sqlite",
@@ -713,13 +720,14 @@ internal class DurableSqliteHostFactory(string dbPath, bool runScheduler = true,
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                 provider.GetRequiredService<IIdGenerator>()));
 
-            foreach (var store in services.Where(item => item.ServiceType == typeof(IWorkItemStore)).ToArray())
+            foreach (var store in services.Where(item => item.ServiceType == typeof(IAgentRunStore)).ToArray())
             {
                 services.Remove(store);
             }
 
-            services.AddSingleton<IWorkItemStore>(provider => new SqliteWorkItemStore(
-                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+            services.AddSingleton<IAgentRunStore>(provider => new SqliteAgentRunStore(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                (SqliteMemoryStore)provider.GetRequiredService<IMemoryStore>(), provider.GetRequiredService<IDiagnosticIdSource>()));
 
             foreach (var store in services.Where(item => item.ServiceType == typeof(ICredentialStore) || item.ServiceType == typeof(IAgentCredentialBindingStore)).ToArray())
             {
@@ -738,20 +746,12 @@ internal class DurableSqliteHostFactory(string dbPath, bool runScheduler = true,
             services.AddSingleton<IExternalEventStore>(provider => new SqliteExternalEventStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
 
-            foreach (var handoff in services.Where(item => item.ServiceType == typeof(IDurableWorkHandoff)).ToArray())
-            {
-                services.Remove(handoff);
-            }
-
-            services.AddSingleton<IDurableWorkHandoff>(provider => new SqliteDurableWorkHandoff(
-                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
-
             if (!runScheduler)
             {
                 foreach (var hosted in services.Where(item =>
                              item.ImplementationType == typeof(TriggerSchedulerHostedService)
-                             || item.ImplementationType == typeof(DurableWorkHostedService)
-                             || item.ImplementationType == typeof(DurableWorkIntakeHostedService)).ToArray())
+                             || item.ImplementationType == typeof(AgentRunHostedService)
+                             || item.ImplementationType == typeof(BackgroundOccurrenceIntakeHostedService)).ToArray())
                 {
                     services.Remove(hosted);
                 }
@@ -810,6 +810,11 @@ internal sealed class GatedUserTurnSqliteFactory(string dbPath) : WebApplication
         });
         builder.ConfigureTestServices(services =>
         {
+            services.RemoveAll<IAgentRunStore>();
+            services.AddSingleton<IAgentRunStore>(provider => new SqliteAgentRunStore(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                new SqliteMemoryStore(provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(), provider.GetRequiredService<TimeProvider>()),
+                provider.GetRequiredService<AgentCore.Application.Ports.IDiagnosticIdSource>()));
             var persistence = new PersistenceOptions
             {
                 Provider = "Sqlite",
@@ -938,6 +943,11 @@ internal sealed class GatedEndSqliteFactory : WebApplicationFactory<Program>
         });
         builder.ConfigureTestServices(services =>
         {
+            services.RemoveAll<IAgentRunStore>();
+            services.AddSingleton<IAgentRunStore>(provider => new SqliteAgentRunStore(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                new SqliteMemoryStore(provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(), provider.GetRequiredService<TimeProvider>()),
+                provider.GetRequiredService<AgentCore.Application.Ports.IDiagnosticIdSource>()));
             var persistence = new PersistenceOptions
             {
                 Provider = "Sqlite",
@@ -1088,6 +1098,11 @@ internal sealed class PauseAfterEndSqliteFactory : WebApplicationFactory<Program
         });
         builder.ConfigureTestServices(services =>
         {
+            services.RemoveAll<IAgentRunStore>();
+            services.AddSingleton<IAgentRunStore>(provider => new SqliteAgentRunStore(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                new SqliteMemoryStore(provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(), provider.GetRequiredService<TimeProvider>()),
+                provider.GetRequiredService<AgentCore.Application.Ports.IDiagnosticIdSource>()));
             var persistence = new PersistenceOptions
             {
                 Provider = "Sqlite",
@@ -1239,6 +1254,11 @@ internal sealed class FailingEndSqliteFactory : WebApplicationFactory<Program>
         });
         builder.ConfigureTestServices(services =>
         {
+            services.RemoveAll<IAgentRunStore>();
+            services.AddSingleton<IAgentRunStore>(provider => new SqliteAgentRunStore(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                new SqliteMemoryStore(provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(), provider.GetRequiredService<TimeProvider>()),
+                provider.GetRequiredService<AgentCore.Application.Ports.IDiagnosticIdSource>()));
             var persistence = new PersistenceOptions
             {
                 Provider = "Sqlite",
@@ -1370,6 +1390,11 @@ internal sealed class FailingUserTurnSqliteFactory : WebApplicationFactory<Progr
         });
         builder.ConfigureTestServices(services =>
         {
+            services.RemoveAll<IAgentRunStore>();
+            services.AddSingleton<IAgentRunStore>(provider => new SqliteAgentRunStore(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                new SqliteMemoryStore(provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(), provider.GetRequiredService<TimeProvider>()),
+                provider.GetRequiredService<AgentCore.Application.Ports.IDiagnosticIdSource>()));
             var persistence = new PersistenceOptions
             {
                 Provider = "Sqlite",

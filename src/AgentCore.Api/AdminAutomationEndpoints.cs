@@ -17,7 +17,7 @@ internal static class AdminAutomationEndpoints
     public static void Map(RouteGroupBuilder admin)
     {
         var group = admin.MapGroup("/agent-instances/{instanceId:guid}/automations");
-        group.MapGet("", (Guid instanceId, ExperienceService instances, ITriggerStore store, IWorkItemStore work,
+        group.MapGet("", (Guid instanceId, ExperienceService instances, ITriggerStore store, IAgentRunStore runs,
             IAgentDefinitionStore definitions, IModelCatalog catalog, CancellationToken ct) => Respond(async () =>
         {
             var instance = await instances.RequireInstanceAsync(instanceId, ct);
@@ -26,7 +26,7 @@ internal static class AdminAutomationEndpoints
             var items = new List<AutomationResponse>();
             foreach (var registration in rows.Where(r => r.Status != AutomationStatus.Cancelled))
             {
-                var last = await work.GetLatestForRegistrationAsync(new(instanceId, LocalUserProfile.Id), registration.AutomationId, ct);
+                var last = await runs.GetLatestForAutomationAsync(new(instanceId, LocalUserProfile.Id), registration.AutomationId, ct);
                 items.Add(Project(registration, definition is null ? null : ExecutionModelPolicy.Resolve(catalog, definition, instance, registration).Pin?.CatalogKey, last));
             }
             return new AutomationReview(items,
@@ -73,11 +73,11 @@ internal static class AdminAutomationEndpoints
             _ => throw AgentCoreErrors.Validation("Schedule kind is invalid.")
         };
     }
-    private static AutomationResponse Project(Automation r, string? effective = null, AgentCore.Domain.Work.WorkItem? work = null) =>
+    private static AutomationResponse Project(Automation r, string? effective = null, AgentRun? run = null) =>
         new(r.AutomationId.ToString("D"), r.Revision, r.Name, r.Instructions, r.Status == AutomationStatus.Active, r.Status.ToString(), Trigger(r.Trigger),
             r.Provenance.AuthorizationOrigin.ToString(), r.Provenance.SourceSessionId?.ToString("D"), r.Provenance.SourceEventId?.ToString("D"),
             HttpMapping.Format(r.Provenance.CreatedAt), r.NextOccurrenceAtUtc is { } next ? HttpMapping.Format(next) : null,
-            r.ModelOverrideCatalogKey, r.ModelOverrideReasoningEffort, effective, work?.WorkItemId.ToString("D"), work?.Status.ToString(), work?.Result is { } result ? AgentCore.Application.Work.WorkCompletionRequest.Outcome(result.Text) : null);
+            r.ModelOverrideCatalogKey, r.ModelOverrideReasoningEffort, effective, run?.AgentRunId.ToString("D"), run?.Status.ToString(), run?.Result is { } result ? result.OutcomeKind.ToString() : null);
     private static AutomationTiming Timing(TriggerSchedule s) => s switch
     {
         OneShotSchedule t => new("oneShot", t.TimeZoneId, HttpMapping.Format(t.AtUtc)),

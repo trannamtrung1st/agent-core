@@ -43,12 +43,12 @@ public sealed class AttachmentProcessorTests
     }
 
     [Fact]
-    public async Task Images_strip_exif_and_pixel_bombs_fail_closed()
+    public async Task Images_strip_metadata_and_pixel_bombs_fail_closed()
     {
         var store = new InMemoryAttachmentStore(TimeProvider.System);
         var session = Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842");
         var processor = new AttachmentProcessor(store);
-        var png = PngWithExif();
+        var png = PngWithMetadata();
         var uploaded = await Upload(store, session, "shot.png", "image/png", png);
         var result = (await processor.ProcessTurnAsync(session, [uploaded.AttachmentId]))[0];
         Assert.Equal(AttachmentProcessKind.Image, result.Kind);
@@ -210,26 +210,29 @@ trailer<< /Root 1 0 R >>
         return Encoding.ASCII.GetBytes(pdf.Replace("\r\n", "\n", StringComparison.Ordinal));
     }
 
-    private static byte[] PngWithExif()
+    private static byte[] PngWithMetadata()
     {
         var png = MinimalPngBytes();
-        // Inject a standards-compliant EXIF chunk so metadata stripping remains independently tested.
-        var metadata = System.Text.Encoding.ASCII.GetBytes("II\x2A\0\x08\0\0\0\x01\0\x0E\x01\x02\0\x10\0\0\0\x1A\0\0\0\0\0\0\0AgentCoreSecret\0");
-        var type = System.Text.Encoding.ASCII.GetBytes("eXIf");
-        using var output = new MemoryStream(); output.Write(png.AsSpan(0, png.Length - 12));
-        Span<byte> length = stackalloc byte[4]; System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(length, metadata.Length); output.Write(length);
-        output.Write(type); output.Write(metadata);
+        var payload = Encoding.ASCII.GetBytes("Description\0AgentCoreSecret");
+        var type = "tEXt"u8.ToArray();
+        var chunk = new byte[payload.Length + 12];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(chunk, payload.Length);
+        type.CopyTo(chunk, 4); payload.CopyTo(chunk, 8);
         uint crc = 0xffffffff;
-        foreach (var value in type.Concat(metadata)) { crc ^= value; for (var bit = 0; bit < 8; bit++) crc = (crc & 1) != 0 ? 0xedb88320 ^ (crc >> 1) : crc >> 1; }
-        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(length, ~crc); output.Write(length); output.Write(png.AsSpan(png.Length - 12));
-        return output.ToArray();
+        foreach (var value in chunk.AsSpan(4, payload.Length + 4))
+        {
+            crc ^= value;
+            for (var bit = 0; bit < 8; bit++) crc = (crc >> 1) ^ ((crc & 1) != 0 ? 0xedb88320u : 0);
+        }
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(chunk.AsSpan(chunk.Length - 4), ~crc);
+        return [.. png.AsSpan(0, png.Length - 12), .. chunk, .. png.AsSpan(png.Length - 12)];
     }
 
     private static byte[] OversizedPngHeader()
     {
         using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        using var encoded = SKImage.FromBitmap(image).Encode(SKEncodedImageFormat.Png, 90);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
         encoded.SaveTo(buffer);
         var png = buffer.ToArray();
         var width = BitConverter.GetBytes(System.Net.IPAddress.HostToNetworkOrder(20000));
@@ -253,7 +256,7 @@ trailer<< /Root 1 0 R >>
     {
         using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        using var encoded = SKImage.FromBitmap(image).Encode(SKEncodedImageFormat.Png, 90);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 90);
         encoded.SaveTo(buffer);
         return buffer.ToArray();
     }
@@ -262,7 +265,7 @@ trailer<< /Root 1 0 R >>
     {
         using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        using var encoded = SKImage.FromBitmap(image).Encode(SKEncodedImageFormat.Jpeg, 90);
+        using var encoded = image.Encode(SKEncodedImageFormat.Jpeg, 90);
         encoded.SaveTo(buffer);
         return buffer.ToArray();
     }
@@ -271,16 +274,10 @@ trailer<< /Root 1 0 R >>
     {
         using var image = new SKBitmap(2, 2);
         using var buffer = new MemoryStream();
-        using var encoded = SKImage.FromBitmap(image).Encode(SKEncodedImageFormat.Webp, 90);
+        using var encoded = image.Encode(SKEncodedImageFormat.Webp, 90);
         encoded.SaveTo(buffer);
         return buffer.ToArray();
     }
 
-    private static byte[] MinimalGifBytes()
-    {
-        using var image = new SKBitmap(2, 2);
-        using var buffer = new MemoryStream();
-        buffer.Write(Convert.FromBase64String("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"));
-        return buffer.ToArray();
-    }
+    private static byte[] MinimalGifBytes() => Convert.FromBase64String("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
 }

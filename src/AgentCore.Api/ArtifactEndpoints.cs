@@ -29,6 +29,16 @@ public static class ArtifactEndpoints
             }
         });
 
+        group.MapGet("page", async (Guid sessionId, Guid? before, int? limit, SessionManager sessions, CancellationToken ct) =>
+        {
+            try
+            {
+                var page = await sessions.ListArtifactPageAsync(sessionId, before, limit ?? 20, ct).ConfigureAwait(false);
+                return Results.Json(new ArtifactPageResponse(page.Items.Select(HttpMapping.ToArtifact).ToArray(), page.NextCursor?.ToString("D"), page.HasMore));
+            }
+            catch (AgentCoreException ex) { return ProblemResults.From(ex); }
+        });
+
         group.MapGet("{artifactId:guid}", async (
             Guid sessionId,
             Guid artifactId,

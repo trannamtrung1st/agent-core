@@ -72,7 +72,7 @@ describe("Identity maintenance", () => {
 
   it("distinguishes consolidated and superseded Experience without offering restoration", async () => {
     const row: ExperienceItem = { experienceId: "consolidated", sourceKind: "Consolidation", sourceId: "operation", sourceAt: "2026-10-06T00:00:00Z", throughCursor: 0, definitionId: "assistant", definitionVersion: 9,
-      generationWorkItemId: "00000000-0000-0000-0000-000000000000", modelKey: "synthetic", status: "Completed", visibility: "Superseded", revision: 3, eligibleForContext: false,
+      generationAgentRunId: "00000000-0000-0000-0000-000000000000", modelKey: "synthetic", status: "Completed", visibility: "Superseded", revision: 3, eligibleForContext: false,
       content: { goal: "Repeated browser lessons", attempts: [], decisions: [], outcomes: [], corrections: [], unresolved: [], difficulties: [], lessons: ["Preserve meaningful exceptions"] },
       diagnosticId: null, failureSummary: null, derivedFromExperienceIds: ["a", "b"], maintenanceOrigin: "Thought" };
     request.mockResolvedValue({ enabled: true, settingsRevision: 1, contextBudgetCharacters: 6000, items: [row] });

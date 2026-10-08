@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Reflection;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
+using AgentCore.Application.Execution;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Testing;
@@ -28,10 +29,10 @@ public sealed class ToolApprovalTests
     {
         DemoSensitiveActionStore.Reset();
         var output = new CapturingSessionOutput();
-        var turns = DispatchProxy.Create<IConversationTurnExecutionStore, BlockingResumeStore>();
+        var turns = DispatchProxy.Create<IAgentRunStore, BlockingResumeStore>();
         var gate = (BlockingResumeStore)(object)turns;
         await using var runtime = new Harness(CreateRuntime(output, await LoadGeneralV3(), new ScriptedLanguageModel(),
-            new SessionToolExecutor(), turnExecutions: turns));
+            new SessionToolExecutor(), agentRuns: turns));
         await runtime.Runtime.AttachAsync();
         Assert.True(await runtime.Runtime.SubmitUserTextAsync("Please run sensitive approval for the demo."));
         var approvalEvent = await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
@@ -49,7 +50,8 @@ public sealed class ToolApprovalTests
             gate.Release.TrySetResult();
         }
         await runtime.Runtime.WaitUntilIdleAsync();
-        Assert.Empty(await turns.ListOpenForSessionAsync(runtime.Runtime.SessionId));
+        Assert.DoesNotContain(await turns.ListForSessionAsync(new(runtime.Runtime.Snapshot.AgentInstanceId,
+            runtime.Runtime.Snapshot.ProfileId!.Value), runtime.Runtime.SessionId), run => !run.IsTerminal);
         var assistant = runtime.Runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
         Assert.Equal(EntryStatus.Completed, assistant.Status);
         if (decision == ToolApprovalDecision.Approve)
@@ -60,18 +62,23 @@ public sealed class ToolApprovalTests
 
     public class BlockingResumeStore : DispatchProxy
     {
-        private readonly InMemoryConversationTurnExecutionStore _inner = new();
+        internal RuntimeAgentRunStore Inner { get; } = new();
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        protected override object? Invoke(MethodInfo? method, object?[]? args) =>
-            method!.Name == nameof(IConversationTurnExecutionStore.ResumeRunningAsync)
-                ? new ValueTask<ConversationTurnExecution>(ResumeAsync(method, args))
-                : method.Invoke(_inner, args);
-        private async Task<ConversationTurnExecution> ResumeAsync(MethodInfo method, object?[]? args)
+        private bool HasDecision;
+        protected override object? Invoke(MethodInfo? method, object?[]? args)
+        {
+            if (args?[2] is AgentRunCommand.DecideApproval) HasDecision = true;
+            return
+            method!.Name == nameof(IAgentRunStore.ApplyAsync) && args?[2] is AgentRunCommand.Claim && HasDecision
+                ? new ValueTask<AgentRun>(ResumeAsync(method, args))
+                : method.Invoke(Inner, args);
+        }
+        private async Task<AgentRun> ResumeAsync(MethodInfo method, object?[]? args)
         {
             Entered.TrySetResult();
             await Release.Task;
-            return await (ValueTask<ConversationTurnExecution>)method.Invoke(_inner, args)!;
+            return await (ValueTask<AgentRun>)method.Invoke(Inner, args)!;
         }
     }
 
@@ -415,7 +422,7 @@ public sealed class ToolApprovalTests
         AgentDefinition definition,
         ILanguageModel model,
         SessionToolExecutor tools,
-        FakeTimeProvider? time = null, IConversationTurnExecutionStore? turnExecutions = null)
+        FakeTimeProvider? time = null, IAgentRunStore? agentRuns = null)
     {
         time ??= new FakeTimeProvider(new DateTimeOffset(2026, 9, 21, 0, 0, 0, TimeSpan.Zero));
         var ids = new DeterministicIdGenerator(
@@ -437,10 +444,15 @@ public sealed class ToolApprovalTests
             null,
             null,
             now,
-            now, AgentInstanceId: Guid.NewGuid(), ModelSelection: turnExecutions is null ? null : new SessionModelSelection(
+            now, AgentInstanceId: Guid.NewGuid(), ModelSelection: agentRuns is null ? null : new SessionModelSelection(
                 "synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.SystemDefault, null));
+        if (agentRuns is not null)
+        {
+            snapshot = RuntimeAgentRunStore.WithPins(snapshot);
+            if (agentRuns is BlockingResumeStore proxy) proxy.Inner.Bind(store);
+        }
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
-        return new SessionRuntime(
+        return SessionRuntimeFixture.Create(
             snapshot,
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),
@@ -449,7 +461,7 @@ public sealed class ToolApprovalTests
             ids,
             time,
             NullLogger<SessionRuntime>.Instance,
-            tools: tools, turnExecutions: turnExecutions);
+            tools: tools, agentRuns: agentRuns);
     }
 
     private static AgentDefinition Definition(string id, int version, IReadOnlyList<string> tools) =>

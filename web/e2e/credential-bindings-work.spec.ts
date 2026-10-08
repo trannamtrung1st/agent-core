@@ -1,3 +1,4 @@
+import { backgroundFixture, mockBackgroundSessions } from './support/background-fixtures';
 import { expect, test } from "@playwright/test";
 import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 
@@ -30,81 +31,22 @@ test("credential bindings and quiet background work stay labeled", async ({ page
   const work = page.getByRole("button", { name: "Background work", exact: true });
   await expect(work).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("button", { name: /need attention/ })).toHaveCount(0);
-  await page.route("**/work-items**", async (route) => {
-    if (route.request().url().includes("/result")) {
-      await route.fulfill({ status: 404, body: "" });
-      return;
-    }
-
-    await route.fulfill({ json: { items: [] } });
-  });
-  await work.focus();
-  await expect(work).toBeFocused();
-  await page.keyboard.press("Enter");
-  const drawer = page.getByRole("dialog", { name: "Background work" });
-  await expect(drawer).toBeVisible({ timeout: 15_000 });
-  await expect(drawer.getByText("No runs yet. Runs appear when Automations or manual reviews execute.")).toBeVisible({ timeout: 15_000 });
-  const close = drawer.getByRole("button", { name: "Close" });
-  await close.focus();
-  await expect(close).toBeFocused();
-  await page.keyboard.press("Escape");
-  await expect(drawer).toBeHidden({ timeout: 15_000 });
-  await page.unroute("**/work-items**");
-
-  const attentionId = "019944af-00c5-7000-8000-0000000000a1";
-  const quietId = "019944af-00c5-7000-8000-0000000000a2";
-  await page.route("**/work-items**", async (route) => {
-    const url = route.request().url();
-    const completed = (workItemId: string, origin: string, attentionRequired: boolean) => ({
-      workItemId,
-      status: "completed",
-      revision: 2,
-      origin,
-      progress: null,
-      needsApproval: false,
-      approvalId: null,
-      approvalRevision: null,
-      approvalPreview: null,
-      actionHash: null,
-      cancellationAvailable: false,
-      failureCode: null,
-      failureSummary: null,
-      knownEffect: null,
-      attentionRequired,
-      createdAt: "2026-10-02T09:00:00.000Z",
-      updatedAt: "2026-10-02T09:01:00.000Z"
-    });
-    if (url.includes("/result")) {
-      const attention = url.includes(attentionId);
-      await route.fulfill({
-        json: {
-          workItemId: attention ? attentionId : quietId,
-          text: attention ? "Low stock on AC Keyboard." : "Stock is unchanged.",
-          completedAt: "2026-10-02T09:01:00.000Z",
-          attentionRequired: attention
-        }
-      });
-      return;
-    }
-
-    await route.fulfill({
-      json: {
-        items: [
-          completed(attentionId, "Morning review", true),
-          completed(quietId, "Quiet check", false)
-        ]
-      }
-    });
-  });
-
+  await mockBackgroundSessions(page, []);
+  await work.focus(); await page.keyboard.press('Enter');
+  const drawer = page.getByRole('dialog', { name: 'Background work', exact: true });
+  await expect(drawer.getByText('No background Sessions yet')).toBeVisible();
+  await drawer.getByRole('button', { name: 'Close', exact: true }).focus();
+  await page.keyboard.press('Escape'); await expect(drawer).toBeHidden();
+  await page.unroute('**/background-sessions?**');
+  await mockBackgroundSessions(page, [backgroundFixture(161, 'Morning review', { outcome: { kind: 'NeedsAttention', summary: 'Low stock on AC Keyboard.', outcomeEntryId: null, attentionRequired: true } }),
+    backgroundFixture(162, 'Quiet check', { outcome: { kind: 'NoAction', summary: 'Stock is unchanged.', outcomeEntryId: null, attentionRequired: false } })]);
   const attentionWork = page.getByRole("button", { name: /Background work, 1 need attention/ });
   await expect(attentionWork).toBeVisible({ timeout: 12_000 });
   await attentionWork.click();
-  await expect(drawer.getByText("Needs attention")).toHaveCount(1);
-  await expect(drawer.getByText("Low stock on AC Keyboard.")).toBeVisible();
-  const quietRow = drawer.getByRole("listitem").filter({ hasText: "Stock is unchanged." });
-  await expect(quietRow).toBeVisible();
-  await expect(quietRow.getByText("Needs attention")).toHaveCount(0);
+  await expect(drawer.getByText('Unread · needs attention')).toHaveCount(1);
+  await expect(drawer.getByRole('button', { name: 'Morning review', exact: true })).toBeVisible();
+  const quietRow = drawer.getByRole('listitem').filter({ hasText: 'Quiet check' });
+  await expect(quietRow).toBeVisible(); await expect(quietRow.getByText('Unread · needs attention')).toHaveCount(0);
   const closeAgain = drawer.getByRole("button", { name: "Close" });
   await closeAgain.focus();
   await expect(closeAgain).toBeFocused();

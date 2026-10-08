@@ -40,17 +40,19 @@ public sealed class CapabilityProjectionTests
         var now = time.GetUtcNow();
         var snapshot = new SessionSnapshot(1, Guid.NewGuid(), 1, d, SessionMode.Text, null, SessionStatus.Created, [], "", 0, null, null, now, now, ModelSelection: new SessionModelSelection("synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.SystemDefault, null), AgentInstanceId: Guid.NewGuid());
         var memory = new AgentCore.Infrastructure.Persistence.InMemoryMemoryStore();
-        var turns = new AgentCore.Infrastructure.Persistence.InMemoryConversationTurnExecutionStore();
+        var turns = new RuntimeAgentRunStore();
         var workspace = new AgentCore.Infrastructure.Workspaces.FileSessionWorkspace(root, root, sessions: new WorkspaceTestSessions());
         await workspace.EnsureAsync(snapshot.SessionId, d);
+        snapshot = RuntimeAgentRunStore.WithPins(snapshot);
+        turns.Bind(memory);
         await memory.SaveAsync(snapshot, 0);
         var model = new LoadQueryModel(query);
         try
         {
-            await using var runtime = new SessionRuntime(snapshot, model,
+            await using var runtime = SessionRuntimeFixture.Create(snapshot, model,
                 new AgentCore.Application.Agents.DefaultAgentBrain(new AgentCore.Application.Agents.PromptContextBuilder()), memory,
                 new AgentCore.Application.Testing.CapturingSessionOutput(), ids, time, Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionRuntime>.Instance,
-                tools: new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace)), turnExecutions: turns);
+                tools: new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace)), agentRuns: turns);
             await runtime.AttachAsync();
             var source = Guid.NewGuid();
             Assert.True(await runtime.SubmitPersistedUserTextAsync("synthetic-capability-projection:write", source));
@@ -59,7 +61,7 @@ public sealed class CapabilityProjectionTests
             Assert.Contains("Capability projection results:", answer.Text);
             Assert.DoesNotContain("error", answer.Text);
             Assert.Equal("Loaded exact capability café\r\n", System.Text.Encoding.UTF8.GetString((await workspace.ReadAsync(snapshot.SessionId, d, "/workspace/working/loaded-capability.txt")).Bytes));
-            var execution = await turns.GetBySourceEventAsync(snapshot.SessionId, source);
+            var execution = await turns.ForSourceAsync(snapshot.SessionId, source);
             Assert.Equal([ToolCatalog.WorkspaceWrite], execution!.LoadedCapabilityIds);
             Assert.Equal(1, execution.CapabilityLoadCount);
             Assert.True(await runtime.SubmitPersistedUserTextAsync("synthetic-capability-projection:inspect", Guid.NewGuid()));

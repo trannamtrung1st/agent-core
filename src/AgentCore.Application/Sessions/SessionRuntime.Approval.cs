@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Text.Json;
 using AgentCore.Application.Events;
+using AgentCore.Application.Execution;
+using AgentCore.Domain.Conversation;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
@@ -70,6 +72,15 @@ public sealed partial class SessionRuntime
                 pending = _pendingApproval;
             }
 
+            if (pending is null && _boundAgentRun is { Status: AgentRunStatus.WaitingForApproval, Approval: { } recovered } run
+                && recovered.ApprovalId == input.ApprovalId && run.ResponseId == input.ResponseId && recovered.ExpiresAtUtc > _time.GetUtcNow())
+            {
+                _boundAgentRun = await _agentRuns.ApplyAsync(run.Owner, run.AgentRunId, new AgentRunCommand.DecideApproval(run.Revision,
+                    _time.GetUtcNow(), recovered.ApprovalId, recovered.Revision, recovered.ActionHash,
+                    input.Decision == ToolApprovalDecision.Approve ? AgentRunApprovalDecision.Approved : AgentRunApprovalDecision.Rejected), CancellationToken.None).ConfigureAwait(false);
+                input.Completed?.TrySetResult(ResponseApprovalResult.Accepted);
+                return;
+            }
             if (pending is null)
             {
                 OperationalDiagnostics.RecordApproval("unknown", "unknown", null);
@@ -96,6 +107,20 @@ public sealed partial class SessionRuntime
                 return;
             }
 
+            if (_time.GetUtcNow() >= pending.ExpiresAt)
+            {
+                pending.Completion.TrySetResult(ApprovalWaitResult.Expired);
+                input.Completed?.TrySetResult(ResponseApprovalResult.Stale);
+                return;
+            }
+
+            await ResolveBoundApprovalAsync(input.Decision == ToolApprovalDecision.Approve
+                ? AgentRunApprovalDecision.Approved : AgentRunApprovalDecision.Rejected, CancellationToken.None, () =>
+                {
+                    pending.Decided = true;
+                    pending.Decision = input.Decision;
+                    input.Completed?.TrySetResult(ResponseApprovalResult.Accepted);
+                }).ConfigureAwait(false);
             pending.Decided = true;
             pending.Decision = input.Decision;
             pending.Completion.TrySetResult(
@@ -104,7 +129,7 @@ public sealed partial class SessionRuntime
                     : ApprovalWaitResult.Rejected);
             // ACK the accepted decision; durable continuation remains owned by this mailbox.
             input.Completed?.TrySetResult(ResponseApprovalResult.Accepted);
-            await ResumeBoundExecutionAfterApprovalAsync(CancellationToken.None).ConfigureAwait(false);
+
             return;
         }
         catch
@@ -166,9 +191,20 @@ public sealed partial class SessionRuntime
             _pendingApproval = pending;
         }
 
-        await MarkBoundExecutionWaitingForApprovalAsync(CancellationToken.None).ConfigureAwait(false);
+        await RequestAgentRunCommandAsync(cause, responseId, (run, now) =>
+            new AgentRunCommand.BeginApproval(run.Revision, now, run.Claim!.Generation, approvalId,
+                call.Name, args.GetRawText(), actionHash,
+                JsonSerializer.Serialize(new { summary, details }), expiresAt), CancellationToken.None).ConfigureAwait(false);
         var waitStarted = Stopwatch.GetTimestamp();
         OperationalDiagnostics.RecordApproval("waiting", "waiting", null);
+
+        // Arm the deadline before exposing the request. A decision or clock advance can
+        // arrive as soon as the output is observed, including while publication awaits.
+        using var expiryTimer = _time.CreateTimer(
+            _ => completion.TrySetResult(ApprovalWaitResult.Expired),
+            null,
+            TimeSpan.FromTicks(Math.Max(0, (expiresAt - _time.GetUtcNow()).Ticks)),
+            Timeout.InfiniteTimeSpan);
 
         await PublishAsync(
                 new SessionOutput(
@@ -196,12 +232,6 @@ public sealed partial class SessionRuntime
             .ConfigureAwait(false);
 
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        using var expiryTimer = _time.CreateTimer(
-            _ => completion.TrySetResult(ApprovalWaitResult.Expired),
-            null,
-            ToolApprovalLimits.Lifetime,
-            Timeout.InfiniteTimeSpan);
-
         ApprovalWaitResult waitResult;
         try
         {
@@ -225,6 +255,15 @@ public sealed partial class SessionRuntime
                     _pendingApproval = null;
                 }
             }
+        }
+
+        if (waitResult == ApprovalWaitResult.Expired)
+        {
+            var expired = await RequestAgentRunCommandAsync(cause, responseId,
+                (run, now) => new AgentRunCommand.ExpireApproval(run.Revision, now), CancellationToken.None).ConfigureAwait(false);
+            await RequestAgentRunCommandAsync(cause, responseId,
+                (run, now) => new AgentRunCommand.Claim(run.Revision, now, _ids.NewId(), now + AgentRunCoordinator.ClaimDuration),
+                CancellationToken.None).ConfigureAwait(false);
         }
 
         await CompleteWaitingExternalProgressAsync(cause, responseId, operationId, CancellationToken.None)
@@ -274,6 +313,21 @@ public sealed partial class SessionRuntime
         lock (_approvalGate)
         {
             var pending = _pendingApproval;
+            if (pending is null && _boundAgentRun is { Status: AgentRunStatus.WaitingForApproval, Approval: { } approval, ResponseId: { } response })
+            {
+                string summary = "Review the prepared action.";
+                IReadOnlyDictionary<string, string> details = new Dictionary<string, string>();
+                try
+                {
+                    using var document = JsonDocument.Parse(approval.Preview);
+                    if (document.RootElement.TryGetProperty("summary", out var text)) summary = text.GetString() ?? summary;
+                    if (document.RootElement.TryGetProperty("details", out var values))
+                        details = JsonSerializer.Deserialize<Dictionary<string, string>>(values.GetRawText()) ?? [];
+                }
+                catch (JsonException) { }
+                return new PublicPendingApproval(approval.ApprovalId, response, approval.ApprovalId, approval.ToolName,
+                    ToWireEffect(ToolCatalog.EffectOf(approval.ToolName)), summary, details, approval.ExpiresAtUtc);
+            }
             if (pending is null || pending.Decided)
             {
                 return null;

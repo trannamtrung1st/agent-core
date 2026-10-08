@@ -6,6 +6,8 @@ using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace AgentCore.Infrastructure.Persistence;
 
@@ -28,20 +30,69 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
     public async ValueTask EnsureCreatedAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        await StampLegacyEnsureCreatedAsync(db, cancellationToken).ConfigureAwait(false);
-        await RepairEnsureCreatedP7SchemaGapsAsync(db, cancellationToken).ConfigureAwait(false);
-        await StampP7MigrationsWhenSchemaCompleteAsync(db, cancellationToken).ConfigureAwait(false);
+        var connection = db.Database.GetDbConnection();
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        // The cutover is explicit. Startup never converts, retires or deletes an existing legacy execution graph.
+        foreach (var table in new[] { "WorkItems", "WorkApprovals", "WorkAttentionAlerts", "WorkCaptures", "ConversationTurnExecutions" })
+            if (await TableExistsAsync(connection, table, cancellationToken).ConfigureAwait(false))
+                throw ResetRequired("Legacy execution tables are present.");
+        if (await ColumnExistsAsync(connection, "TriggerOccurrences", "DurableWorkItemId", cancellationToken).ConfigureAwait(false))
+            throw ResetRequired("Legacy occurrence links are present.");
+
+        if (await TableExistsAsync(connection, "Sessions", cancellationToken).ConfigureAwait(false))
+        {
+            // A complete current-model EnsureCreated fixture can be stamped; incomplete schemas are never repaired.
+            await ValidateCanonicalSchemaAsync(db, cancellationToken).ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync("CREATE TABLE IF NOT EXISTS __EFMigrationsHistory (MigrationId TEXT NOT NULL PRIMARY KEY, ProductVersion TEXT NOT NULL);", cancellationToken).ConfigureAwait(false);
+            foreach (var migration in db.Database.GetMigrations())
+                await db.Database.ExecuteSqlInterpolatedAsync($"INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ({migration}, {"10.0.12"});", cancellationToken).ConfigureAwait(false);
+        }
         await db.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
+        await ValidateCanonicalSchemaAsync(db, cancellationToken).ConfigureAwait(false);
         await ValidateStoredSkillContractAsync(db, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static AgentCoreException ResetRequired(string reason) =>
+        AgentCoreErrors.Persistence(reason + " Explicit disposable-data reset required: stop the API, back up the configured database and data roots together, then start with fresh demo data. See docs/17-observability-and-operations.md.");
+
+    private static async Task ValidateCanonicalSchemaAsync(AgentCoreDbContext db, CancellationToken ct)
+    {
+        var connection = db.Database.GetDbConnection();
+        foreach (var entity in db.GetService<IDesignTimeModel>().Model.GetEntityTypes())
+        {
+            var table = entity.GetTableName()!;
+            var key = entity.FindPrimaryKey()!;
+            var columns = entity.GetProperties().Select(property => new ColumnSpec(property.GetColumnName(),
+                property.GetRelationalTypeMapping().StoreType, !property.IsNullable, key.Properties.Contains(property))).ToArray();
+            if (!await ColumnsMatchAsync(connection, table, columns, ct).ConfigureAwait(false))
+                throw ResetRequired($"Canonical table {table} has an incomplete or incompatible shape.");
+            foreach (var index in entity.GetIndexes())
+            {
+                var names = index.Properties.Select(property => property.GetColumnName()).ToArray();
+                var filter = index.GetFilter();
+                var matches = filter is null
+                    ? await HasIndexAsync(connection, table, names, index.IsUnique, ct).ConfigureAwait(false)
+                    : await HasUniqueIndexAsync(connection, table, names, index.IsUnique, filter, ct).ConfigureAwait(false);
+                if (!matches) throw ResetRequired($"Canonical index on {table} is missing or incompatible.");
+            }
+            foreach (var foreignKey in entity.GetForeignKeys())
+                for (var index = 0; index < foreignKey.Properties.Count; index++)
+                    if (!await HasForeignKeyAsync(connection, table, foreignKey.Properties[index].GetColumnName(),
+                        foreignKey.PrincipalEntityType.GetTableName()!, foreignKey.PrincipalKey.Properties[index].GetColumnName(),
+                        foreignKey.DeleteBehavior switch { DeleteBehavior.Cascade => "CASCADE", DeleteBehavior.SetNull => "SET NULL", DeleteBehavior.Restrict => "RESTRICT", _ => "NO ACTION" }, ct).ConfigureAwait(false))
+                        throw ResetRequired($"Canonical ownership foreign key on {table} is missing or incompatible.");
+        }
+        await using var constraint = connection.CreateCommand();
+        constraint.CommandText = "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'TriggerOccurrences';";
+        var definition = NormalizeSql(Convert.ToString(await constraint.ExecuteScalarAsync(ct).ConfigureAwait(false)) ?? "");
+        const string expected = "(BackgroundSessionId IS NULL AND AcceptedAgentRunId IS NULL) OR (BackgroundSessionId IS NOT NULL AND LiveSessionId IS NULL AND AcceptedAgentRunId IS NOT NULL) OR (BackgroundSessionId IS NULL AND LiveSessionId IS NOT NULL AND AcceptedAgentRunId IS NOT NULL AND LiveEvaluationCompletedAtUtc IS NOT NULL)";
+        if (!definition.Contains(NormalizeSql(expected), StringComparison.Ordinal))
+            throw ResetRequired("Canonical occurrence admission constraint is missing or incompatible.");
     }
 
     private static async Task ValidateStoredSkillContractAsync(AgentCoreDbContext db, CancellationToken cancellationToken)
     {
-        // Reject incompatible persisted contracts before crash recovery deserializes them.
-        // This is a reset guard, never a legacy reader or automatic conversion.
         var connection = db.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
-            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         command.CommandText = """
             WITH Definitions(Json) AS (
@@ -58,385 +109,10 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                     WHERE Kind != 'object' OR json_type(Body, '$.projection') IS NOT 'text'
                         OR json_extract(Body, '$.projection') NOT IN ('Always', 'OnDemand')
                         OR json_type(Body, '$.defaultEnabled') NOT IN ('true', 'false')
-                        OR json_type(Body, '$.defaultEnabled') IS NULL) OR
-                EXISTS(SELECT 1 FROM ConversationTurnExecutions
-                    WHERE NOT json_valid(PinnedSkillCatalogJson) OR NOT json_valid(ActiveSkillKeysJson));
+                        OR json_type(Body, '$.defaultEnabled') IS NULL);
             """;
         if (Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)) != 0)
-            throw new InvalidOperationException("Legacy Skill data reset required: stop the API, back up the configured database and data roots together, then start with fresh data. See docs/17-observability-and-operations.md. Stored Skill JSON is incompatible with the Instance Skills cutover.");
-    }
-
-    private static async Task StampLegacyEnsureCreatedAsync(AgentCoreDbContext db, CancellationToken cancellationToken)
-    {
-        var connection = db.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
-        {
-            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        await using var tables = connection.CreateCommand();
-        tables.CommandText =
-            """
-            SELECT
-                EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'Sessions'),
-                EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '__EFMigrationsHistory')
-            """;
-        await using (var reader = await tables.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
-        {
-            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-            {
-                return;
-            }
-
-            var hasSessions = reader.GetInt64(0) != 0;
-            var hasHistory = reader.GetInt64(1) != 0;
-            if (!hasSessions || hasHistory)
-            {
-                return;
-            }
-        }
-
-        if (await HasCompleteLegacySchemaAsync(connection, cancellationToken).ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
-                    "MigrationId" TEXT NOT NULL CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY,
-                    "ProductVersion" TEXT NOT NULL
-                );
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20260915064647_InitialCreate', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
-        if (await HasEnsureCreatedCurrentSchemaAsync(connection, cancellationToken).ConfigureAwait(false))
-        {
-            var attachments = await TableExistsAsync(connection, "Attachments", cancellationToken).ConfigureAwait(false);
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
-                    "MigrationId" TEXT NOT NULL CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY,
-                    "ProductVersion" TEXT NOT NULL
-                );
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20260915064647_InitialCreate', '10.0.12');
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20260916104118_SessionCatalogAndOwnerCapability', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-            if (attachments)
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260916120000_Attachments', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await ColumnExistsAsync(connection, "ConversationEntries", "EnvelopeJson", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260916180000_ResponseEnvelope', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await ColumnExistsAsync(connection, "ConversationEntries", "AttachmentRefsJson", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260917012822_ConversationEntryAttachmentRefs', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await ColumnExistsAsync(connection, "SessionSnapshots", "LastUserActivityAtUtc", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260917100000_LastUserActivityAt', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await ColumnExistsAsync(connection, "Sessions", "PauseReason", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260917120000_PauseReasonAndActivityBackfill', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await ColumnExistsAsync(connection, "ConversationEntries", "SourceAdmissionFingerprint", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260917234608_SourceAdmissionFingerprint', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await ColumnExistsAsync(connection, "ConversationEntries", "FinishReason", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260918013000_EntryFinishReason', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await ColumnExistsAsync(connection, "ConversationEntries", "InterruptReason", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260922103000_EntryInterruptReason', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await ColumnExistsAsync(connection, "SessionSnapshots", "SummaryFormatVersion", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260923025000_SummaryMetadata', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await TableExistsAsync(connection, "StructuredMemories", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260923050000_StructuredSessionMemory', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await TableExistsAsync(connection, "AgentInstances", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260923070000_AgentInstance', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await ColumnExistsAsync(connection, "StructuredMemories", "Scope", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260923090000_MemoryScope', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await IndexExistsAsync(connection, "IX_StructuredMemories_UserOwner_Kind_SubjectKey", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260923110000_UserMemory', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await TableExistsAsync(connection, "Automations", cancellationToken).ConfigureAwait(false)
-                && await TableExistsAsync(connection, "TriggerOccurrences", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260923160000_TriggerContracts', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await IndexExistsAsync(connection, "IX_TriggerOccurrences_AgentInstanceId_ProfileId_DedupeKey", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260923220000_OwnerScopedOccurrenceDedupe', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await TableExistsAsync(connection, "WorkItems", cancellationToken).ConfigureAwait(false)
-                && await TableExistsAsync(connection, "WorkApprovals", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260924060915_WorkItemContracts', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await ColumnExistsAsync(connection, "TriggerOccurrences", "DurableWorkItemId", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260924065742_OccurrenceDurableWorkLink', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await ColumnExistsAsync(connection, "WorkItems", "SideEffectToolCallId", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260924155535_WorkSideEffectToolCallId', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await ColumnExistsAsync(connection, "SessionSnapshots", "LifecycleStatus", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260918200644_SessionLifecycle', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await ColumnExistsAsync(connection, "SessionSnapshots", "SpeechLocaleOverride", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260919040000_SpeechLocaleOverride', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await ColumnExistsAsync(connection, "SessionSnapshots", "ModelCatalogKey", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260919080000_SessionModelSelection', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await TableExistsAsync(connection, "AgentWorkspaceItems", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync("""
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20261006131121_AgentInstanceWorkspace', '10.0.12');
-                    """, cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await TableExistsAsync(connection, "Artifacts", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20260916210000_Artifacts', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await ColumnExistsAsync(connection, "AgentInstances", "HarnessManagementJson", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20261004092058_P97HarnessManagement', '10.0.12');
-                    """,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await TableExistsAsync(connection, "Experiences", cancellationToken).ConfigureAwait(false)
-                && await TableExistsAsync(connection, "ExperienceSettings", cancellationToken).ConfigureAwait(false)
-                && await ColumnExistsAsync(connection, "Experiences", "ThroughCursor", cancellationToken).ConfigureAwait(false)
-                && await ColumnExistsAsync(connection, "Experiences", "PayloadJson", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20261005003621_P9899Experience', '10.0.12');
-                    """, cancellationToken).ConfigureAwait(false);
-            }
-            if (await ColumnExistsAsync(connection, "StructuredMemories", "DerivedFromMemoryIdsJson", cancellationToken).ConfigureAwait(false)
-                && await ColumnExistsAsync(connection, "StructuredMemories", "MaintenanceOrigin", cancellationToken).ConfigureAwait(false)
-                && await ColumnExistsAsync(connection, "IdentityMaintenanceSettings", "AllowAgentConsolidation", cancellationToken).ConfigureAwait(false)
-                && await ColumnExistsAsync(connection, "IdentityMaintenanceSettings", "Revision", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20261006013730_P910IdentityMaintenance', '10.0.12');
-                    """, cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await ColumnExistsAsync(connection, "StructuredMemories", "MaintenanceAgentInstanceId", cancellationToken).ConfigureAwait(false)
-                && await ColumnExistsAsync(connection, "StructuredMemories", "MaintenanceSessionId", cancellationToken).ConfigureAwait(false)
-                && await ColumnExistsAsync(connection, "StructuredMemories", "MaintenanceWorkItemId", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20261006042725_P910MaintenanceProvenance', '10.0.12');
-                    """, cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await ColumnExistsAsync(connection, "ContinuityMaintenanceSettings", "IntervalSeconds", cancellationToken).ConfigureAwait(false)
-                && await ColumnExistsAsync(connection, "ContinuityMaintenanceSettings", "LastMaintenanceAtUtc", cancellationToken).ConfigureAwait(false)
-                && await ColumnExistsAsync(connection, "ContinuityMaintenanceSettings", "Revision", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20261006095536_ConfigurableContinuityCadence', '10.0.12');
-                    """, cancellationToken).ConfigureAwait(false);
-            }
-
-            await StampP7MigrationsWhenSchemaCompleteAsync(db, cancellationToken).ConfigureAwait(false);
-            // EnsureCreated uses the current model, so this schema already has the
-            // required Session owner and no compatibility discriminator.
-            if (await TableExistsAsync(connection, "AgentWorkspaceItems", cancellationToken).ConfigureAwait(false)
-                && !await ColumnExistsAsync(connection, "AgentInstances", "Compatibility", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                    VALUES ('20261007014134_UnifiedAgentWorkspace', '10.0.12');
-                    """, cancellationToken).ConfigureAwait(false);
-            }
-
-            if (await ColumnExistsAsync(connection, "Automations", "TriggerKind", cancellationToken).ConfigureAwait(false))
-                await db.Database.ExecuteSqlRawAsync("INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ('20261007072939_UnifiedAutomation', '10.0.12');", cancellationToken).ConfigureAwait(false);
-            if (await ColumnExistsAsync(connection, "Automations", "TriggerRevision", cancellationToken).ConfigureAwait(false)
-                && await ColumnExistsAsync(connection, "TriggerOccurrences", "TriggerRevision", cancellationToken).ConfigureAwait(false))
-                await db.Database.ExecuteSqlRawAsync("INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ('20261007101836_AutomationTriggerRevision', '10.0.12');", cancellationToken).ConfigureAwait(false);
-            if (await TableExistsAsync(connection, "AgentInstanceSkills", cancellationToken).ConfigureAwait(false)
-                && await TableExistsAsync(connection, "AgentDefinitionSkillStates", cancellationToken).ConfigureAwait(false)
-                && await ColumnExistsAsync(connection, "ConversationTurnExecutions", "PinnedSkillCatalogJson", cancellationToken).ConfigureAwait(false))
-                await db.Database.ExecuteSqlRawAsync("INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ('20261007114116_InstanceSkillsCutover', '10.0.12');", cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
-        throw AgentCoreErrors.Persistence("Legacy SQLite schema is incomplete.");
+            throw ResetRequired("Stored Skill JSON is incompatible with the Instance Skills contract.");
     }
 
     public async ValueTask BackupToAsync(string destinationPath, CancellationToken cancellationToken = default)
@@ -497,7 +173,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             return null;
         }
 
-        var entries = await LoadRestoreEntryRowsAsync(db, key, cancellationToken).ConfigureAwait(false);
+        var entries = await LoadRestoreEntryRowsAsync(db, key, JsonSerializer.Deserialize<Guid[]>(row.PendingAgentInputIdsJson, Json) ?? [], cancellationToken).ConfigureAwait(false);
         return ToSnapshot(row, entries);
     }
 
@@ -517,14 +193,21 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         return row is null ? null : ToSnapshot(row, []);
     }
 
-    public async ValueTask SaveAsync(
-        SessionSnapshot snapshot,
-        long expectedRevision,
+    public async ValueTask SaveAsync(SessionSnapshot snapshot, long expectedRevision,
         CancellationToken cancellationToken = default)
     {
         MaterializedEntryRows = 0;
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await StageSaveAsync(db, snapshot, expectedRevision, cancellationToken).ConfigureAwait(false);
+        await SaveChangesOrThrowAsync(db, cancellationToken).ConfigureAwait(false);
+        await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    // Shared by normal persistence and atomic input/Activation/AgentRun admission.
+    internal async Task StageSaveAsync(AgentCoreDbContext db, SessionSnapshot snapshot,
+        long expectedRevision, CancellationToken cancellationToken)
+    {
         var key = snapshot.SessionId.ToString("D");
         var existing = await db.Sessions
             .Include(item => item.Snapshot)
@@ -539,8 +222,6 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
 
             db.Sessions.Add(ToRecord(snapshot));
             MaterializedEntryRows += snapshot.Entries.Count;
-            await SaveChangesOrThrowAsync(db, cancellationToken).ConfigureAwait(false);
-            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -549,7 +230,6 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         var current = ToSnapshot(existing, matched);
         if (existing.Revision == snapshot.Revision && MemoryStoreSemantics.SameContent(current, snapshot))
         {
-            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -558,10 +238,10 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             throw AgentCoreErrors.Conflict("Stale session revision.");
         }
 
+        if (current.Origin != snapshot.Origin)
+            throw AgentCoreErrors.Conflict("Session origin is immutable.");
         ApplySession(existing, snapshot);
         await UpsertEntriesAsync(db, existing, snapshot, cancellationToken).ConfigureAwait(false);
-        await SaveChangesOrThrowAsync(db, cancellationToken).ConfigureAwait(false);
-        await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask<IReadOnlyList<ConversationEntry>> ReadHistoryAsync(
@@ -709,6 +389,11 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
     {
         MaterializedEntryRows = 0;
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var openRunRows = await db.AgentRuns.AsNoTracking().Where(run => run.Status != (int)AgentRunStatus.Completed
+            && run.Status != (int)AgentRunStatus.Failed && run.Status != (int)AgentRunStatus.Cancelled)
+            .ToArrayAsync(cancellationToken).ConfigureAwait(false);
+        var openResponses = openRunRows.Select(AgentRunStoreMapping.ToDomain).GroupBy(run => run.SessionId)
+            .ToDictionary(group => group.Key, group => group.Select(run => run.ResponseId).OfType<Guid>().ToHashSet());
         var rows = await db.Sessions.Include(item => item.Snapshot)
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -725,7 +410,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
             MaterializedEntryRows += streaming.Count;
-            var recovered = MemoryStoreSemantics.Recover(ToSnapshot(row, streaming), now);
+            var recovered = MemoryStoreSemantics.Recover(ToSnapshot(row, streaming), now,
+                openResponses.GetValueOrDefault(Guid.Parse(row.SessionId)));
             if (recovered.Revision == row.Revision)
             {
                 continue;
@@ -763,11 +449,14 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         return (await query.OrderBy(s => s.SessionId).Take(limit).ToArrayAsync(cancellationToken)).Select(s => ToSnapshot(s, [])).ToArray();
     }
 
-    public async ValueTask<SessionCatalogPage> ListCatalogAsync(
-        string? cursor,
-        int limit,
-        bool includeArchived,
-        CancellationToken cancellationToken = default)
+    public ValueTask<SessionCatalogPage> ListBackgroundSessionsAsync(AgentRunOwner owner, string? cursor, int limit,
+        bool includeArchived = false, CancellationToken ct = default) => ListSurfaceCatalogAsync(SessionSurface.BackgroundWork, owner, cursor, limit, includeArchived, ct);
+
+    public ValueTask<SessionCatalogPage> ListCatalogAsync(string? cursor, int limit, bool includeArchived, CancellationToken cancellationToken = default) =>
+        ListSurfaceCatalogAsync(SessionSurface.ChatList, null, cursor, limit, includeArchived, cancellationToken);
+
+    private async ValueTask<SessionCatalogPage> ListSurfaceCatalogAsync(SessionSurface surface, AgentRunOwner? owner, string? cursor,
+        int limit, bool includeArchived, CancellationToken cancellationToken)
     {
         if (limit is < 1 or > 100)
         {
@@ -776,7 +465,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
 
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var query = db.Sessions.AsNoTracking().Include(item => item.Snapshot)
-            .Where(row => row.DurablyDeletedAtUtc == null);
+            .Where(row => row.DurablyDeletedAtUtc == null && (row.Surfaces & (int)surface) != 0);
+        if (owner is { } scopedOwner) query = query.Where(row => row.AgentInstanceId == scopedOwner.AgentInstanceId.ToString("D") && row.Snapshot!.ProfileId == scopedOwner.ProfileId.ToString("D"));
         if (!includeArchived)
         {
             query = query.Where(row => row.ArchivedAtUtc == null);
@@ -808,6 +498,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
     private async Task<List<EntryRecord>> LoadRestoreEntryRowsAsync(
         AgentCoreDbContext db,
         string sessionId,
+        IReadOnlyList<Guid> pendingInputIds,
         CancellationToken cancellationToken)
     {
         var newest = await db.Entries.AsNoTracking()
@@ -859,6 +550,14 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             }
         }
 
+        var missingInputs = pendingInputIds.Select(id => id.ToString("D")).Where(id => !loadedIds.Contains(id)).ToArray();
+        if (missingInputs.Length > 0)
+        {
+            var pending = await db.Entries.AsNoTracking().Where(entry => entry.SessionId == sessionId && missingInputs.Contains(entry.EntryId))
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            MaterializedEntryRows += pending.Count;
+            newest.AddRange(pending);
+        }
         return newest;
     }
 
@@ -948,6 +647,9 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             ? null
             : JsonSerializer.Serialize(snapshot.PinnedPersona, Json);
         row.PinnedPersonaRevision = snapshot.PinnedPersonaRevision;
+        row.PendingAgentInputIdsJson = JsonSerializer.Serialize(snapshot.PendingAgentInputIds, Json);
+        row.OriginJson = JsonSerializer.Serialize(snapshot.Origin, Json);
+        row.Surfaces = (int)snapshot.Surfaces;
         row.Mode = snapshot.Mode.ToString();
         row.PendingMode = snapshot.PendingMode?.ToString();
         row.Status = snapshot.Status.ToString();
@@ -1077,7 +779,10 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             string.IsNullOrEmpty(row.PinnedPersonaJson)
                 ? null
                 : JsonSerializer.Deserialize<AgentIdentity>(row.PinnedPersonaJson, Json),
-            row.PinnedPersonaRevision);
+            row.PinnedPersonaRevision,
+            JsonSerializer.Deserialize<SessionOrigin>(row.OriginJson, Json) ?? throw AgentCoreErrors.Persistence("Session origin is missing."),
+            (SessionSurface)row.Surfaces,
+            JsonSerializer.Deserialize<Guid[]>(row.PendingAgentInputIdsJson, Json) ?? throw AgentCoreErrors.Persistence("Pending agent input intent is missing."));
     }
 
     private static ConversationEntry ToEntry(EntryRecord row) =>
@@ -1257,945 +962,6 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
     private static DateTimeOffset FromUnix(long milliseconds) =>
         DateTimeOffset.FromUnixTimeMilliseconds(milliseconds);
 
-    private static async Task StampP7MigrationsWhenSchemaCompleteAsync(
-        AgentCoreDbContext db,
-        CancellationToken cancellationToken)
-    {
-        var connection = db.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
-        {
-            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await HasP7DefinitionLifecycleSchemaAsync(connection, cancellationToken).ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20260925071140_P7DefinitionLifecycle', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await HasP7DefinitionResourcesSchemaAsync(connection, cancellationToken).ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20260925084907_P7DefinitionResources', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await HasP7ManagedAgentInstanceSchemaAsync(connection, cancellationToken).ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20260925101355_P7ManagedAgentInstance', '10.0.12');
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20260925101918_P7ManagedAgentInstanceRevisionToken', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await HasP7PinnedPersonaRevisionSchemaAsync(connection, cancellationToken).ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20260925103832_P7PinnedPersonaRevision', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await HasP7DefinitionDraftEvaluationSchemaAsync(connection, cancellationToken).ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20260925150254_P7DefinitionDraftEvaluation', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await HasP7AdminEventsSchemaAsync(connection, cancellationToken).ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20260925161000_P7AdminEvents', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await TableExistsAsync(connection, "WorkItems", cancellationToken).ConfigureAwait(false)
-            && await ColumnExistsAsync(connection, "WorkItems", "PinnedPersonaJson", cancellationToken).ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20260926083213_P7WorkPinnedPersona', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await TableExistsAsync(connection, "ConversationTurnExecutions", cancellationToken).ConfigureAwait(false))
-        {
-            if (!await HasP7ConversationTurnExecutionSchemaAsync(connection, cancellationToken).ConfigureAwait(false))
-            {
-                throw AgentCoreErrors.Persistence(
-                    "ConversationTurnExecutions has an incomplete or incompatible schema.");
-            }
-
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20260926175411_P7ConversationTurnExecution', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await ColumnExistsAsync(connection, "ConversationEntries", "FailureReferenceJson", cancellationToken).ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20260929121048_P7FailureReference', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await ColumnExistsAsync(connection, "WorkItems", "FailureDiagnosticId", cancellationToken).ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20260929125852_P7WorkFailureDiagnosticId', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await ColumnExistsAsync(connection, "ConversationTurnExecutions", "ActiveSkillKeysJson", cancellationToken)
-            .ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20260930065327_P8PinnedActiveSkillIds', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await ColumnExistsAsync(connection, "ConversationTurnExecutions", "SkillLoadCount", cancellationToken)
-            .ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20260930174851_P85SkillLoadCount', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        var capabilityIds = await ColumnExistsAsync(connection, "ConversationTurnExecutions", "LoadedCapabilityIdsJson", cancellationToken);
-        var capabilityCount = await ColumnExistsAsync(connection, "ConversationTurnExecutions", "CapabilityLoadCount", cancellationToken);
-        if (capabilityIds != capabilityCount) throw new AgentCoreException("SessionPersistenceUnavailable", "ConversationTurnExecutions capability load schema is incomplete.", 503);
-        if (capabilityIds)
-            await db.Database.ExecuteSqlRawAsync("""
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20261006182813_CapabilityExecutionLoads', '10.0.12');
-                """, cancellationToken).ConfigureAwait(false);
-
-        if (await ColumnExistsAsync(connection, "ConversationEntries", "ApplicationMessageEffectKey", cancellationToken)
-            .ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20260930181733_P85ApplicationMessageEffectKey', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        var credentialSchema = await TableExistsAsync(connection, "Credentials", cancellationToken).ConfigureAwait(false);
-        if (credentialSchema != await TableExistsAsync(connection, "AgentCredentialBindings", cancellationToken).ConfigureAwait(false))
-            throw new AgentCoreException("SessionPersistenceUnavailable", "Credential schema is incomplete.", 503);
-        if (credentialSchema)
-            await db.Database.ExecuteSqlRawAsync("""
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20261007045013_SystemCredentials', '10.0.12');
-                """, cancellationToken).ConfigureAwait(false);
-
-        if (credentialSchema || await TableExistsAsync(connection, "ApplicationConnections", cancellationToken).ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20261002094238_P95ApplicationConnection', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await ColumnExistsAsync(connection, "WorkItems", "ResultAttentionRequired", cancellationToken)
-            .ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20261002114349_P95WorkAttention', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await ColumnExistsAsync(connection, "Automations", "ModelOverrideCatalogKey", cancellationToken)
-            .ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20261003155703_P96ExecutionModelPin', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await TableExistsAsync(connection, "WorkCaptures", cancellationToken).ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20261003163628_P96WorkCaptures', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (credentialSchema || await ColumnExistsAsync(connection, "ApplicationConnections", "WebhookKey", cancellationToken)
-            .ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20261003175239_P96OrderPlacedWebhook', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await TableExistsAsync(connection, "ExternalEventSources", cancellationToken).ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20261004020003_P96ExternalEventSource', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await TableExistsAsync(connection, "ExternalEventDeliveries", cancellationToken).ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20261004065312_P96ExternalEventDelivery', '10.0.12');
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-    }
-
-    private static async Task RepairEnsureCreatedP7SchemaGapsAsync(
-        AgentCoreDbContext db,
-        CancellationToken cancellationToken)
-    {
-        var connection = db.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
-        {
-            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        if (!await HasEnsureCreatedCurrentSchemaAsync(connection, cancellationToken).ConfigureAwait(false))
-        {
-            return;
-        }
-
-        if (await TableExistsAsync(connection, "AgentDefinitionDrafts", cancellationToken).ConfigureAwait(false))
-        {
-            if (!await TableExistsAsync(connection, "AgentDefinitionPublications", cancellationToken).ConfigureAwait(false))
-            {
-                await db.Database.ExecuteSqlRawAsync(CreateAgentDefinitionPublicationsTableSql, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            else if (!await ColumnsMatchAsync(
-                connection,
-                "AgentDefinitionPublications",
-                P7AgentDefinitionPublicationColumns,
-                cancellationToken).ConfigureAwait(false))
-            {
-                await RepairP7TableShapeAsync(
-                    db,
-                    connection,
-                    "AgentDefinitionPublications",
-                    P7AgentDefinitionPublicationColumns,
-                    CreateAgentDefinitionPublicationsTableSql,
-                    cancellationToken).ConfigureAwait(false);
-            }
-        }
-
-        await RepairP7TableShapeWhenColumnsMismatchAsync(
-            db,
-            connection,
-            "AgentDefinitionDrafts",
-            P7AgentDefinitionDraftColumns,
-            CreateAgentDefinitionDraftsTableSql,
-            cancellationToken).ConfigureAwait(false);
-        await RepairP7TableShapeWhenColumnsMismatchAsync(
-            db,
-            connection,
-            "AgentDefinitionDraftResources",
-            P7AgentDefinitionDraftResourceColumns,
-            CreateAgentDefinitionDraftResourcesTableSql,
-            cancellationToken).ConfigureAwait(false);
-        await RepairP7TableShapeWhenColumnsMismatchAsync(
-            db,
-            connection,
-            "AgentDefinitionPublicationResources",
-            P7AgentDefinitionPublicationResourceColumns,
-            CreateAgentDefinitionPublicationResourcesTableSql,
-            cancellationToken).ConfigureAwait(false);
-        await RepairP7TableShapeWhenColumnsMismatchAsync(
-            db,
-            connection,
-            "AgentDefinitionDraftEvaluationResults",
-            P7AgentDefinitionDraftEvaluationResultColumns,
-            CreateAgentDefinitionDraftEvaluationResultsTableSql,
-            cancellationToken).ConfigureAwait(false);
-        await RepairP7TableShapeWhenColumnsMismatchAsync(
-            db,
-            connection,
-            "AgentDefinitionDraftEvaluationScenarios",
-            P7AgentDefinitionDraftEvaluationScenarioColumns,
-            CreateAgentDefinitionDraftEvaluationScenariosTableSql,
-            cancellationToken).ConfigureAwait(false);
-        await RepairP7TableShapeWhenColumnsMismatchAsync(
-            db,
-            connection,
-            "AdminEvents",
-            P7AdminEventColumns,
-            CreateAdminEventsTableSql,
-            cancellationToken).ConfigureAwait(false);
-
-        if (await TableExistsAsync(connection, "AgentDefinitionDrafts", cancellationToken).ConfigureAwait(false)
-            && !await IndexExistsAsync(connection, "IX_AgentDefinitionDrafts_DefinitionId", cancellationToken).ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                CREATE INDEX IF NOT EXISTS "IX_AgentDefinitionDrafts_DefinitionId"
-                ON "AgentDefinitionDrafts" ("DefinitionId");
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await TableExistsAsync(connection, "AdminEvents", cancellationToken).ConfigureAwait(false)
-            && !await HasUniqueIndexAsync(
-                connection,
-                "AdminEvents",
-                ["OperationId"],
-                partial: false,
-                partialPredicate: null,
-                cancellationToken).ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                CREATE UNIQUE INDEX IF NOT EXISTS "IX_AdminEvents_OperationId"
-                ON "AdminEvents" ("OperationId");
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await TableExistsAsync(connection, "AdminEvents", cancellationToken).ConfigureAwait(false)
-            && !await IndexExistsAsync(connection, "IX_AdminEvents_TargetType_TargetId_OccurredAtUtc", cancellationToken)
-                .ConfigureAwait(false))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                CREATE INDEX IF NOT EXISTS "IX_AdminEvents_TargetType_TargetId_OccurredAtUtc"
-                ON "AdminEvents" ("TargetType", "TargetId", "OccurredAtUtc");
-                """,
-                cancellationToken).ConfigureAwait(false);
-        }
-    }
-
-    private static readonly ColumnSpec[] P7AgentDefinitionDraftColumns =
-    [
-        new("DraftId", "TEXT", NotNull: true, Pk: true),
-        new("DefinitionId", "TEXT", NotNull: true, Pk: false),
-        new("Revision", "INTEGER", NotNull: true, Pk: false),
-        new("CandidateJson", "TEXT", NotNull: true, Pk: false),
-        new("SourceKind", "INTEGER", NotNull: true, Pk: false),
-        new("SourceVersion", "INTEGER", NotNull: false, Pk: false),
-        new("CreatedAtUtc", "INTEGER", NotNull: true, Pk: false),
-        new("UpdatedAtUtc", "INTEGER", NotNull: true, Pk: false)
-    ];
-
-    private static readonly ColumnSpec[] P7AgentDefinitionPublicationColumns =
-    [
-        new("DefinitionId", "TEXT", NotNull: true, Pk: true),
-        new("Version", "INTEGER", NotNull: true, Pk: true),
-        new("PayloadJson", "TEXT", NotNull: true, Pk: false),
-        new("SourceDraftRevision", "INTEGER", NotNull: true, Pk: false),
-        new("Status", "INTEGER", NotNull: true, Pk: false),
-        new("MetadataRevision", "INTEGER", NotNull: true, Pk: false),
-        new("PublishedAtUtc", "INTEGER", NotNull: true, Pk: false)
-    ];
-
-    private static readonly ColumnSpec[] P7AgentDefinitionDraftResourceColumns =
-    [
-        new("ResourceId", "TEXT", NotNull: true, Pk: true),
-        new("DraftId", "TEXT", NotNull: true, Pk: false),
-        new("LogicalPath", "TEXT", NotNull: true, Pk: false),
-        new("Kind", "INTEGER", NotNull: true, Pk: false),
-        new("MediaType", "TEXT", NotNull: true, Pk: false),
-        new("ContentSha256", "TEXT", NotNull: true, Pk: false),
-        new("ByteLength", "INTEGER", NotNull: true, Pk: false),
-        new("UpdatedAtUtc", "INTEGER", NotNull: true, Pk: false)
-    ];
-
-    private static readonly ColumnSpec[] P7AgentDefinitionPublicationResourceColumns =
-    [
-        new("DefinitionId", "TEXT", NotNull: true, Pk: true),
-        new("Version", "INTEGER", NotNull: true, Pk: true),
-        new("ResourceId", "TEXT", NotNull: true, Pk: true),
-        new("LogicalPath", "TEXT", NotNull: true, Pk: false),
-        new("Kind", "INTEGER", NotNull: true, Pk: false),
-        new("MediaType", "TEXT", NotNull: true, Pk: false),
-        new("ContentSha256", "TEXT", NotNull: true, Pk: false),
-        new("ByteLength", "INTEGER", NotNull: true, Pk: false)
-    ];
-
-    private static readonly ColumnSpec[] P7AgentDefinitionDraftEvaluationResultColumns =
-    [
-        new("ResultId", "TEXT", NotNull: true, Pk: true),
-        new("DraftId", "TEXT", NotNull: true, Pk: false),
-        new("DraftRevision", "INTEGER", NotNull: true, Pk: false),
-        new("ConfigurationFingerprint", "TEXT", NotNull: true, Pk: false),
-        new("ScenarioId", "TEXT", NotNull: true, Pk: false),
-        new("ScenarioVersion", "INTEGER", NotNull: true, Pk: false),
-        new("RuntimeKind", "TEXT", NotNull: true, Pk: false),
-        new("Passed", "INTEGER", NotNull: true, Pk: false),
-        new("FindingsJson", "TEXT", NotNull: true, Pk: false),
-        new("RecordedAtUtc", "INTEGER", NotNull: true, Pk: false)
-    ];
-
-    private static readonly ColumnSpec[] P7AgentDefinitionDraftEvaluationScenarioColumns =
-    [
-        new("DraftId", "TEXT", NotNull: true, Pk: true),
-        new("ScenarioId", "TEXT", NotNull: true, Pk: true),
-        new("ScenarioVersion", "INTEGER", NotNull: true, Pk: false),
-        new("Title", "TEXT", NotNull: true, Pk: false),
-        new("Prompt", "TEXT", NotNull: true, Pk: false),
-        new("RequirementLevel", "INTEGER", NotNull: true, Pk: false),
-        new("CheckType", "INTEGER", NotNull: true, Pk: false),
-        new("ToolName", "TEXT", NotNull: true, Pk: false),
-        new("UpdatedAtUtc", "INTEGER", NotNull: true, Pk: false)
-    ];
-
-    private static readonly ColumnSpec[] P7AdminEventColumns =
-    [
-        new("EventId", "TEXT", NotNull: true, Pk: true),
-        new("OperationId", "TEXT", NotNull: true, Pk: false),
-        new("OccurredAtUtc", "INTEGER", NotNull: true, Pk: false),
-        new("ActorKind", "TEXT", NotNull: true, Pk: false),
-        new("Operation", "TEXT", NotNull: true, Pk: false),
-        new("TargetType", "TEXT", NotNull: true, Pk: false),
-        new("TargetId", "TEXT", NotNull: true, Pk: false),
-        new("Revision", "INTEGER", NotNull: false, Pk: false),
-        new("Version", "INTEGER", NotNull: false, Pk: false),
-        new("SummaryJson", "TEXT", NotNull: true, Pk: false)
-    ];
-
-    private static readonly ColumnSpec[] P7ConversationTurnExecutionColumns =
-    [
-        new("ExecutionId", "TEXT", NotNull: true, Pk: true),
-        new("SessionId", "TEXT", NotNull: true, Pk: false),
-        new("SourceUserEntryId", "TEXT", NotNull: true, Pk: false),
-        new("SourceEventId", "TEXT", NotNull: true, Pk: false),
-        new("ResponseId", "TEXT", NotNull: true, Pk: false),
-        new("AgentInstanceId", "TEXT", NotNull: false, Pk: false),
-        new("ProfileId", "TEXT", NotNull: false, Pk: false),
-        new("DefinitionId", "TEXT", NotNull: true, Pk: false),
-        new("DefinitionVersion", "INTEGER", NotNull: true, Pk: false),
-        new("PinnedPersonaJson", "TEXT", NotNull: false, Pk: false),
-        new("ModelCatalogKey", "TEXT", NotNull: true, Pk: false),
-        new("ModelProviderAlias", "TEXT", NotNull: true, Pk: false),
-        new("ModelId", "TEXT", NotNull: true, Pk: false),
-        new("ModelReasoningEffort", "TEXT", NotNull: false, Pk: false),
-        new("Status", "INTEGER", NotNull: true, Pk: false),
-        new("Revision", "INTEGER", NotNull: true, Pk: false),
-        new("ClaimGeneration", "TEXT", NotNull: false, Pk: false),
-        new("ClaimedAtUtc", "INTEGER", NotNull: false, Pk: false),
-        new("ClaimLeaseExpiresAtUtc", "INTEGER", NotNull: false, Pk: false),
-        new("AssistantEntryId", "TEXT", NotNull: false, Pk: false),
-        new("CancellationRequested", "INTEGER", NotNull: true, Pk: false),
-        new("CancellationRequestedAtUtc", "INTEGER", NotNull: false, Pk: false),
-        new("AcceptedAtUtc", "INTEGER", NotNull: true, Pk: false),
-        new("UpdatedAtUtc", "INTEGER", NotNull: true, Pk: false)
-    ];
-
-    private const string CreateAgentDefinitionDraftsTableSql =
-        """
-        CREATE TABLE IF NOT EXISTS "AgentDefinitionDrafts" (
-            "DraftId" TEXT NOT NULL,
-            "DefinitionId" TEXT NOT NULL,
-            "Revision" INTEGER NOT NULL,
-            "CandidateJson" TEXT NOT NULL,
-            "SourceKind" INTEGER NOT NULL,
-            "SourceVersion" INTEGER NULL,
-            "CreatedAtUtc" INTEGER NOT NULL,
-            "UpdatedAtUtc" INTEGER NOT NULL,
-            CONSTRAINT "PK_AgentDefinitionDrafts" PRIMARY KEY ("DraftId")
-        );
-        """;
-
-    private const string CreateAgentDefinitionPublicationsTableSql =
-        """
-        CREATE TABLE IF NOT EXISTS "AgentDefinitionPublications" (
-            "DefinitionId" TEXT NOT NULL,
-            "Version" INTEGER NOT NULL,
-            "PayloadJson" TEXT NOT NULL,
-            "SourceDraftRevision" INTEGER NOT NULL,
-            "Status" INTEGER NOT NULL,
-            "MetadataRevision" INTEGER NOT NULL,
-            "PublishedAtUtc" INTEGER NOT NULL,
-            CONSTRAINT "PK_AgentDefinitionPublications" PRIMARY KEY ("DefinitionId", "Version")
-        );
-        """;
-
-    private const string CreateAgentDefinitionDraftResourcesTableSql =
-        """
-        CREATE TABLE IF NOT EXISTS "AgentDefinitionDraftResources" (
-            "ResourceId" TEXT NOT NULL,
-            "DraftId" TEXT NOT NULL,
-            "LogicalPath" TEXT NOT NULL,
-            "Kind" INTEGER NOT NULL,
-            "MediaType" TEXT NOT NULL,
-            "ContentSha256" TEXT NOT NULL,
-            "ByteLength" INTEGER NOT NULL,
-            "UpdatedAtUtc" INTEGER NOT NULL,
-            CONSTRAINT "PK_AgentDefinitionDraftResources" PRIMARY KEY ("ResourceId")
-        );
-        """;
-
-    private const string CreateAgentDefinitionPublicationResourcesTableSql =
-        """
-        CREATE TABLE IF NOT EXISTS "AgentDefinitionPublicationResources" (
-            "DefinitionId" TEXT NOT NULL,
-            "Version" INTEGER NOT NULL,
-            "ResourceId" TEXT NOT NULL,
-            "LogicalPath" TEXT NOT NULL,
-            "Kind" INTEGER NOT NULL,
-            "MediaType" TEXT NOT NULL,
-            "ContentSha256" TEXT NOT NULL,
-            "ByteLength" INTEGER NOT NULL,
-            CONSTRAINT "PK_AgentDefinitionPublicationResources" PRIMARY KEY ("DefinitionId", "Version", "ResourceId")
-        );
-        """;
-
-    private const string CreateAgentDefinitionDraftEvaluationResultsTableSql =
-        """
-        CREATE TABLE IF NOT EXISTS "AgentDefinitionDraftEvaluationResults" (
-            "ResultId" TEXT NOT NULL,
-            "DraftId" TEXT NOT NULL,
-            "DraftRevision" INTEGER NOT NULL,
-            "ConfigurationFingerprint" TEXT NOT NULL,
-            "ScenarioId" TEXT NOT NULL,
-            "ScenarioVersion" INTEGER NOT NULL,
-            "RuntimeKind" TEXT NOT NULL,
-            "Passed" INTEGER NOT NULL,
-            "FindingsJson" TEXT NOT NULL,
-            "RecordedAtUtc" INTEGER NOT NULL,
-            CONSTRAINT "PK_AgentDefinitionDraftEvaluationResults" PRIMARY KEY ("ResultId")
-        );
-        """;
-
-    private const string CreateAgentDefinitionDraftEvaluationScenariosTableSql =
-        """
-        CREATE TABLE IF NOT EXISTS "AgentDefinitionDraftEvaluationScenarios" (
-            "DraftId" TEXT NOT NULL,
-            "ScenarioId" TEXT NOT NULL,
-            "ScenarioVersion" INTEGER NOT NULL,
-            "Title" TEXT NOT NULL,
-            "Prompt" TEXT NOT NULL,
-            "RequirementLevel" INTEGER NOT NULL,
-            "CheckType" INTEGER NOT NULL,
-            "ToolName" TEXT NOT NULL,
-            "UpdatedAtUtc" INTEGER NOT NULL,
-            CONSTRAINT "PK_AgentDefinitionDraftEvaluationScenarios" PRIMARY KEY ("DraftId", "ScenarioId")
-        );
-        """;
-
-    private const string CreateAdminEventsTableSql =
-        """
-        CREATE TABLE IF NOT EXISTS "AdminEvents" (
-            "EventId" TEXT NOT NULL,
-            "OperationId" TEXT NOT NULL,
-            "OccurredAtUtc" INTEGER NOT NULL,
-            "ActorKind" TEXT NOT NULL,
-            "Operation" TEXT NOT NULL,
-            "TargetType" TEXT NOT NULL,
-            "TargetId" TEXT NOT NULL,
-            "Revision" INTEGER NULL,
-            "Version" INTEGER NULL,
-            "SummaryJson" TEXT NOT NULL,
-            CONSTRAINT "PK_AdminEvents" PRIMARY KEY ("EventId")
-        );
-        """;
-
-    private static async Task RepairP7TableShapeWhenColumnsMismatchAsync(
-        AgentCoreDbContext db,
-        System.Data.Common.DbConnection connection,
-        string table,
-        ColumnSpec[] expected,
-        string createTableSql,
-        CancellationToken cancellationToken)
-    {
-        if (!await TableExistsAsync(connection, table, cancellationToken).ConfigureAwait(false))
-        {
-            return;
-        }
-
-        if (await ColumnsMatchAsync(connection, table, expected, cancellationToken).ConfigureAwait(false))
-        {
-            return;
-        }
-
-        await RepairP7TableShapeAsync(db, connection, table, expected, createTableSql, cancellationToken)
-            .ConfigureAwait(false);
-    }
-
-    private static async Task RepairP7TableShapeAsync(
-        AgentCoreDbContext db,
-        System.Data.Common.DbConnection connection,
-        string table,
-        ColumnSpec[] expected,
-        string createTableSql,
-        CancellationToken cancellationToken)
-    {
-        if (!IsKnownP7RepairTable(table))
-        {
-            throw AgentCoreErrors.Persistence("Unknown P7 repair table.");
-        }
-
-        if (await ColumnsMatchAsync(connection, table, expected, cancellationToken).ConfigureAwait(false))
-        {
-            return;
-        }
-
-        if (await TableRowCountAsync(connection, table, cancellationToken).ConfigureAwait(false) != 0)
-        {
-            throw AgentCoreErrors.Persistence(
-                $"P7 table \"{table}\" has a non-empty incompatible schema and cannot be repaired automatically.");
-        }
-
-#pragma warning disable EF1002
-        await db.Database.ExecuteSqlRawAsync($"DROP TABLE IF EXISTS \"{table}\";", cancellationToken)
-            .ConfigureAwait(false);
-#pragma warning restore EF1002
-        await db.Database.ExecuteSqlRawAsync(createTableSql, cancellationToken).ConfigureAwait(false);
-    }
-
-    private static bool IsKnownP7RepairTable(string table) =>
-        table is "AgentDefinitionDrafts"
-            or "AgentDefinitionPublications"
-            or "AgentDefinitionDraftResources"
-            or "AgentDefinitionPublicationResources"
-            or "AgentDefinitionDraftEvaluationResults"
-            or "AgentDefinitionDraftEvaluationScenarios"
-            or "AdminEvents";
-
-    private static async Task<long> TableRowCountAsync(
-        System.Data.Common.DbConnection connection,
-        string table,
-        CancellationToken cancellationToken)
-    {
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT COUNT(*) FROM \"{table}\";";
-        var result = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-        return Convert.ToInt64(result ?? 0);
-    }
-
-    private static async Task<bool> HasP7TableColumnsAsync(
-        System.Data.Common.DbConnection connection,
-        string table,
-        ColumnSpec[] expected,
-        CancellationToken cancellationToken,
-        bool allowAdditionalColumns = false) =>
-        await TableExistsAsync(connection, table, cancellationToken).ConfigureAwait(false)
-        && await ColumnsMatchAsync(connection, table, expected, cancellationToken, allowAdditionalColumns)
-            .ConfigureAwait(false);
-
-    private static async Task<bool> HasP7DefinitionLifecycleSchemaAsync(
-        System.Data.Common.DbConnection connection,
-        CancellationToken cancellationToken) =>
-        await HasP7TableColumnsAsync(connection, "AgentDefinitionDrafts", P7AgentDefinitionDraftColumns, cancellationToken)
-            .ConfigureAwait(false)
-        && await HasP7TableColumnsAsync(
-            connection,
-            "AgentDefinitionPublications",
-            P7AgentDefinitionPublicationColumns,
-            cancellationToken).ConfigureAwait(false)
-        && await IndexExistsAsync(connection, "IX_AgentDefinitionDrafts_DefinitionId", cancellationToken).ConfigureAwait(false);
-
-    private static async Task<bool> HasP7DefinitionResourcesSchemaAsync(
-        System.Data.Common.DbConnection connection,
-        CancellationToken cancellationToken) =>
-        await HasP7TableColumnsAsync(
-            connection,
-            "AgentDefinitionDraftResources",
-            P7AgentDefinitionDraftResourceColumns,
-            cancellationToken).ConfigureAwait(false)
-        && await HasP7TableColumnsAsync(
-            connection,
-            "AgentDefinitionPublicationResources",
-            P7AgentDefinitionPublicationResourceColumns,
-            cancellationToken).ConfigureAwait(false)
-        && await IndexExistsAsync(connection, "IX_AgentDefinitionDraftResources_DraftId", cancellationToken).ConfigureAwait(false)
-        && await HasUniqueIndexAsync(
-            connection,
-            "AgentDefinitionDraftResources",
-            ["DraftId", "LogicalPath"],
-            partial: false,
-            partialPredicate: null,
-            cancellationToken).ConfigureAwait(false)
-        && await HasUniqueIndexAsync(
-            connection,
-            "AgentDefinitionPublicationResources",
-            ["DefinitionId", "Version", "LogicalPath"],
-            partial: false,
-            partialPredicate: null,
-            cancellationToken).ConfigureAwait(false);
-
-    private static async Task<bool> HasP7ManagedAgentInstanceSchemaAsync(
-        System.Data.Common.DbConnection connection,
-        CancellationToken cancellationToken) =>
-        await TableExistsAsync(connection, "AgentInstances", cancellationToken).ConfigureAwait(false)
-        && await ColumnMatchesSqliteSpecAsync(
-            connection,
-            "AgentInstances",
-            "PersonaRevision",
-            "INTEGER",
-            notNull: true,
-            cancellationToken).ConfigureAwait(false)
-        && await ColumnMatchesSqliteSpecAsync(
-            connection,
-            "AgentInstances",
-            "Revision",
-            "INTEGER",
-            notNull: true,
-            cancellationToken).ConfigureAwait(false);
-
-    private static async Task<bool> HasP7PinnedPersonaRevisionSchemaAsync(
-        System.Data.Common.DbConnection connection,
-        CancellationToken cancellationToken) =>
-        await TableExistsAsync(connection, "Sessions", cancellationToken).ConfigureAwait(false)
-        && await ColumnMatchesSqliteSpecAsync(
-            connection,
-            "Sessions",
-            "PinnedPersonaRevision",
-            "INTEGER",
-            notNull: false,
-            cancellationToken).ConfigureAwait(false);
-
-    private static async Task<bool> HasP7DefinitionDraftEvaluationSchemaAsync(
-        System.Data.Common.DbConnection connection,
-        CancellationToken cancellationToken) =>
-        await HasP7TableColumnsAsync(
-            connection,
-            "AgentDefinitionDraftEvaluationResults",
-            P7AgentDefinitionDraftEvaluationResultColumns,
-            cancellationToken).ConfigureAwait(false)
-        && await HasP7TableColumnsAsync(
-            connection,
-            "AgentDefinitionDraftEvaluationScenarios",
-            P7AgentDefinitionDraftEvaluationScenarioColumns,
-            cancellationToken).ConfigureAwait(false)
-        && await IndexExistsAsync(
-            connection,
-            "IX_AgentDefinitionDraftEvaluationResults_DraftId_ScenarioId_RecordedAtUtc",
-            cancellationToken).ConfigureAwait(false)
-        && await IndexExistsAsync(connection, "IX_AgentDefinitionDraftEvaluationScenarios_DraftId", cancellationToken)
-            .ConfigureAwait(false);
-
-    private static async Task<bool> HasP7AdminEventsSchemaAsync(
-        System.Data.Common.DbConnection connection,
-        CancellationToken cancellationToken) =>
-        await HasP7TableColumnsAsync(connection, "AdminEvents", P7AdminEventColumns, cancellationToken)
-            .ConfigureAwait(false)
-        && await HasUniqueIndexAsync(
-            connection,
-            "AdminEvents",
-            ["OperationId"],
-            partial: false,
-            partialPredicate: null,
-            cancellationToken).ConfigureAwait(false)
-        && await IndexExistsAsync(connection, "IX_AdminEvents_TargetType_TargetId_OccurredAtUtc", cancellationToken)
-            .ConfigureAwait(false);
-
-    private static async Task<bool> HasP7ConversationTurnExecutionSchemaAsync(
-        System.Data.Common.DbConnection connection,
-        CancellationToken cancellationToken) =>
-        await HasP7TableColumnsAsync(
-            connection,
-            "ConversationTurnExecutions",
-            P7ConversationTurnExecutionColumns,
-            cancellationToken,
-            // Later additive migrations, including the active-skill pin, stay outside this stamp.
-            allowAdditionalColumns: true).ConfigureAwait(false)
-        && await HasIndexAsync(
-            connection,
-            "ConversationTurnExecutions",
-            ["SessionId", "SourceEventId"],
-            unique: true,
-            cancellationToken).ConfigureAwait(false)
-        && await HasIndexAsync(
-            connection,
-            "ConversationTurnExecutions",
-            ["SessionId", "Status"],
-            unique: false,
-            cancellationToken).ConfigureAwait(false)
-        && await HasIndexAsync(
-            connection,
-            "ConversationTurnExecutions",
-            ["Status", "ClaimLeaseExpiresAtUtc"],
-            unique: false,
-            cancellationToken).ConfigureAwait(false)
-        && await HasIndexAsync(
-            connection,
-            "ConversationTurnExecutions",
-            ["ResponseId"],
-            unique: false,
-            cancellationToken).ConfigureAwait(false);
-
-    private static async Task<bool> ColumnMatchesSqliteSpecAsync(
-        System.Data.Common.DbConnection connection,
-        string table,
-        string column,
-        string type,
-        bool notNull,
-        CancellationToken cancellationToken)
-    {
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"PRAGMA table_info(\"{table}\");";
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            if (!string.Equals(reader.GetString(1), column, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            var actualType = reader.GetString(2);
-            var actualNotNull = reader.GetInt64(3) != 0;
-            return string.Equals(actualType, type, StringComparison.OrdinalIgnoreCase) && actualNotNull == notNull;
-        }
-
-        return false;
-    }
-
-    private static async Task<bool> HasCompleteLegacySchemaAsync(
-        System.Data.Common.DbConnection connection,
-        CancellationToken cancellationToken)
-    {
-        var tables = new Dictionary<string, ColumnSpec[]>(StringComparer.Ordinal)
-        {
-            ["Sessions"] =
-            [
-                new("SessionId", "TEXT", NotNull: true, Pk: true),
-                new("AgentId", "TEXT", NotNull: true, Pk: false),
-                new("AgentVersion", "INTEGER", NotNull: true, Pk: false),
-                new("DefinitionJson", "TEXT", NotNull: true, Pk: false),
-                new("Mode", "TEXT", NotNull: true, Pk: false),
-                new("PendingMode", "TEXT", NotNull: false, Pk: false),
-                new("Status", "TEXT", NotNull: true, Pk: false),
-                new("CreatedAtUtc", "INTEGER", NotNull: true, Pk: false),
-                new("UpdatedAtUtc", "INTEGER", NotNull: true, Pk: false),
-                new("Revision", "INTEGER", NotNull: true, Pk: false)
-            ],
-            ["UserProfiles"] =
-            [
-                new("ProfileId", "TEXT", NotNull: true, Pk: true),
-                new("PreferencesJson", "TEXT", NotNull: true, Pk: false),
-                new("Revision", "INTEGER", NotNull: true, Pk: false),
-                new("UpdatedAtUtc", "INTEGER", NotNull: true, Pk: false)
-            ],
-            ["ConversationEntries"] =
-            [
-                new("EntryId", "TEXT", NotNull: true, Pk: true),
-                new("SessionId", "TEXT", NotNull: true, Pk: false),
-                new("EntrySequence", "INTEGER", NotNull: true, Pk: false),
-                new("SourceEventId", "TEXT", NotNull: false, Pk: false),
-                new("Role", "TEXT", NotNull: true, Pk: false),
-                new("Text", "TEXT", NotNull: true, Pk: false),
-                new("ResponseId", "TEXT", NotNull: false, Pk: false),
-                new("Status", "TEXT", NotNull: true, Pk: false),
-                new("DeliveryMode", "TEXT", NotNull: true, Pk: false),
-                new("HeardTextEndExclusive", "INTEGER", NotNull: true, Pk: false),
-                new("ReceivedTextEndExclusive", "INTEGER", NotNull: true, Pk: false),
-                new("CreatedAtUtc", "INTEGER", NotNull: true, Pk: false)
-            ],
-            ["SessionSnapshots"] =
-            [
-                new("SessionId", "TEXT", NotNull: true, Pk: true),
-                new("SchemaVersion", "INTEGER", NotNull: true, Pk: false),
-                new("Summary", "TEXT", NotNull: true, Pk: false),
-                new("SummarizedThroughEntrySequence", "INTEGER", NotNull: true, Pk: false),
-                new("PendingTopic", "TEXT", NotNull: false, Pk: false),
-                new("ProfileId", "TEXT", NotNull: false, Pk: false),
-                new("LastEntrySequence", "INTEGER", NotNull: true, Pk: false),
-                new("UpdatedAtUtc", "INTEGER", NotNull: true, Pk: false)
-            ]
-        };
-
-        foreach (var (table, columns) in tables)
-        {
-            if (!await TableExistsAsync(connection, table, cancellationToken).ConfigureAwait(false))
-            {
-                return false;
-            }
-
-            if (!await ColumnsMatchAsync(connection, table, columns, cancellationToken).ConfigureAwait(false))
-            {
-                return false;
-            }
-        }
-
-        if (!await HasForeignKeyAsync(connection, "SessionSnapshots", "SessionId", "Sessions", "SessionId", "CASCADE", cancellationToken).ConfigureAwait(false)
-            || !await HasForeignKeyAsync(connection, "ConversationEntries", "SessionId", "Sessions", "SessionId", "CASCADE", cancellationToken).ConfigureAwait(false))
-        {
-            return false;
-        }
-
-        return await HasUniqueIndexAsync(
-                connection,
-                "ConversationEntries",
-                ["SessionId", "EntrySequence"],
-                partial: false,
-                partialPredicate: null,
-                cancellationToken)
-            .ConfigureAwait(false)
-            && await HasUniqueIndexAsync(
-                connection,
-                "ConversationEntries",
-                ["SessionId", "SourceEventId"],
-                partial: true,
-                partialPredicate: "SourceEventId IS NOT NULL",
-                cancellationToken)
-            .ConfigureAwait(false);
-    }
-
-    private static async Task<bool> HasEnsureCreatedCurrentSchemaAsync(
-        System.Data.Common.DbConnection connection,
-        CancellationToken cancellationToken) =>
-        await TableExistsAsync(connection, "OwnerCapabilities", cancellationToken).ConfigureAwait(false)
-        && await ColumnExistsAsync(connection, "Sessions", "Title", cancellationToken).ConfigureAwait(false);
-
     private static async Task<bool> ColumnExistsAsync(
         System.Data.Common.DbConnection connection,
         string table,
@@ -2217,21 +983,6 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
     }
 
     private readonly record struct ColumnSpec(string Name, string Type, bool NotNull, bool Pk);
-
-    private static async Task<bool> IndexExistsAsync(
-        System.Data.Common.DbConnection connection,
-        string index,
-        CancellationToken cancellationToken)
-    {
-        await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = $name);";
-        var name = command.CreateParameter();
-        name.ParameterName = "$name";
-        name.Value = index;
-        command.Parameters.Add(name);
-        var result = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-        return result is long count && count == 1;
-    }
 
     private static async Task<bool> TableExistsAsync(
         System.Data.Common.DbConnection connection,

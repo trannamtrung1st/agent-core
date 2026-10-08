@@ -34,7 +34,7 @@ public sealed record MemoryProvenance(
     string? MaintenanceOrigin = null,
     Guid? MaintenanceAgentInstanceId = null,
     Guid? MaintenanceSessionId = null,
-    Guid? MaintenanceWorkItemId = null);
+    Guid? MaintenanceAgentRunId = null);
 
 public sealed record StructuredMemoryItem(
     Guid MemoryId,
