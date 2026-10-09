@@ -62,7 +62,9 @@ public sealed class BrowserCleanupTests
             var context = browser.ContextFor(id)!;
             browser.OperationTimeout = TimeSpan.FromMilliseconds(100);
             browser.ExplicitCloseProbe = async value => { await release.Task; await value.CloseAsync(); closed.TrySetResult(); };
-            Assert.Equal("close_uncertain", (await browser.ExecuteAsync(BrowserTestRequests.Close(id))).ErrorCode);
+            var uncertain = await browser.ExecuteAsync(BrowserTestRequests.Close(id));
+            Assert.Equal("close_uncertain", uncertain.ErrorCode);
+            Assert.True(uncertain.EffectAttempted); Assert.False(uncertain.EffectConfirmedBySdk); Assert.False(uncertain.ApplicationOutcomeVerified);
             Assert.Same(context, browser.ContextFor(id));
             Assert.False(context.Pages[0].IsClosed);
             release.TrySetResult(); await closed.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -90,6 +92,7 @@ public sealed class BrowserCleanupTests
             browser.ExplicitCloseProbe = _ => uncertain ? Task.CompletedTask : throw new PlaywrightException("Injected close failure");
             var failed = await browser.ExecuteAsync(BrowserTestRequests.Close(id));
             Assert.Equal(uncertain ? "close_uncertain" : "close_failed", failed.ErrorCode);
+            Assert.True(failed.EffectAttempted); Assert.False(failed.EffectConfirmedBySdk); Assert.False(failed.ApplicationOutcomeVerified);
             Assert.False(page.IsClosed); Assert.Same(context, browser.ContextFor(id));
             await Assert.ThrowsAsync<IOException>(() => browser.ResetPersistentProfileAsync(owner).AsTask());
             Assert.Same(context, browser.ContextFor(id));

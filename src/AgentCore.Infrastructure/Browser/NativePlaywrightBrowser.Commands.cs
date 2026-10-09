@@ -26,11 +26,11 @@ public sealed partial class NativePlaywrightBrowser
         if (command.Operation == BrowserOperation.Navigate) return await NavigateAsync(command, cancellationToken);
         if (command.Operation == BrowserOperation.Close)
         {
-            var contextWasOpen = _sessions.ContainsKey(command.SessionId);
             var closed = await CloseAsync(command.SessionId, cancellationToken);
             return closed.Status is "closed" or "already_closed" ? new(null, Status: closed.Status,
                 DataJson: JsonSerializer.Serialize(new { status = closed.Status }), EffectAttempted: closed.Status == "closed",
-                EffectConfirmedBySdk: closed.Status == "closed") : new(closed.Status, Status: closed.Status, EffectAttempted: contextWasOpen);
+                EffectConfirmedBySdk: closed.Status == "closed") : new(closed.Status, Status: closed.Status,
+                    EffectAttempted: closed.Status is "close_failed" or "close_uncertain");
         }
         cancellationToken.ThrowIfCancellationRequested();
         if (!IsAvailable) return command.Operation == BrowserOperation.GetConfig ? Configuration(null) : new("provider_unavailable");

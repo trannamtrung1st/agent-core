@@ -1,6 +1,6 @@
 # Browser semantic redesign verification
 
-Complete native implementation on `develop/branch-1a`, 2026-10-09. Acceptance is still in progress: the initial paid candidate regressed Luna, the corrected schema awaits an explicitly approved repeat comparison, and the exact-head hosted gate remains pending. This report does not claim closure.
+Complete native implementation on `develop/branch-1a`, 2026-10-09. Acceptance is still in progress: the initial paid candidate regressed Luna and the corrected schema awaits an explicitly approved repeat comparison. Exact-head hosted results are recorded in the delivery message and the linked hosted record. This report does not claim closure.
 
 ## Pinned evidence and public SDK decision
 
@@ -156,10 +156,11 @@ The final schema now explicitly excludes `name` for literal targets, adds minima
 | SDK + direct target + popup focused tests | 3 passed; denied-popup repetition 10/10 passed |
 | Final native/browser/credential boundary filter | 72 passed, including tab/frame generation rejection and independent effect assertions |
 | Final effect/environment and route-restoration checks | 13 passed; six journey/direct-action tests passed after confirming unroute restores the actual server response |
+| Stalled/failed/persistent close effects | Four passed; actual context/authentication state remains independent from effect attempt and SDK confirmation |
 | `dotnet test tests/AgentCore.Domain.Tests/... -m:1 --no-restore --nologo` | 173 passed |
 | Application full gate | 1,446 passed, 3 explicit live opt-in skips |
 | API full gate | 390 passed, 2 explicit live opt-in skips |
-| Infrastructure full gate | 926 passed, 7 explicit opt-in skips after frame-generation fix; final effect/route corrections subsequently passed focused runtime checks, full final gate pending |
+| Infrastructure full gate | 926 passed, 7 explicit opt-in skips after final effect/route fixes (4m37s); subsequent close-status refinement passed all four cleanup scenarios |
 | OrderEvents plugin full gate | 4 passed |
 | Frontend Node 22 `vitest.mjs run --maxWorkers=1` | Latest full run: 769 passed, one unchanged Event credential-dialog lookup failure; isolated 4/4 file tests passed. Earlier full run: 768 passed, two Admin continuity timeouts; isolated 8/8 file tests passed. Hosted full gate pending. |
 | Frontend `pnpm run build` | TypeScript/Vite passed; existing chunk-size warning |
@@ -172,8 +173,8 @@ The final schema now explicitly excludes `name` for literal targets, adds minima
 | Playwright MCP affected UI + denied-origin journey | Passed; no browser console errors |
 | Initial authorized paid comparison | 12 executed; baseline Luna 2/3, baseline DeepSeek 3/3, candidate Luna 0/3, candidate DeepSeek 3/3; final-candidate repeat awaiting approval |
 | Source/deletion/doc-link audit | No retired execution classes/parsers/registry; historical/negative references only; 426 local links checked, none missing |
-| Exact-head hosted Synthetic jobs (backend, frontend, core, acceptance, Compose) | Pending |
+| Exact-head hosted Synthetic jobs (backend, frontend, core, acceptance, Compose) | [Hosted record for this branch](https://github.com/trannamtrung1st/agent-core/actions?query=workflow%3Asynthetic+branch%3Adevelop%2Fbranch-1a). Delivery records the exact final checkout SHA, terminal run URL and five job results. |
 
 Reproduction uses isolated ports (API 5180–5182, UI 5273–5275, fixtures 5191–5193), fresh `/private/tmp` SQLite/profile/resource roots, `CI=1` and the seven projects in `.github/workflows/synthetic.yml`. Full core: `playwright test --project=synthetic --project=browser-stt --project=browser-browser`. Each acceptance project receives a separate DB; faithful-manual, p97-harness, p910-continuity-maintenance and secretary-demo use `PLAYWRIGHT_FAITHFUL_MANUAL=1` as in CI. Node 26's unavailable experimental localStorage caused the first frontend environment failures; using CI's Node 22 resolved the storage failures without product/test changes. Original local failure logs are retained separately during work; passing reruns do not erase their diagnosis.
 
-Final behavior SHA / five-job run and remaining final model acceptance will be recorded only from actual results. No integration with the independent main thread was attempted. SDK ref support, more advanced native protected-output APIs and broader real-application benchmarking remain future opportunities rather than custom ref emulation or current success claims.
+The delivery message pins the final behavior SHA / five-job run from actual results. Remaining model acceptance is recorded only after an authorized final-candidate comparison. No integration with the independent main thread was attempted. SDK ref support, more advanced native protected-output APIs and broader real-application benchmarking remain future opportunities rather than custom ref emulation or current success claims.
