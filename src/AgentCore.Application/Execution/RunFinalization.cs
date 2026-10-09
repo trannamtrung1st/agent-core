@@ -12,6 +12,12 @@ internal static class RunFinalization
     internal static bool CleanupTool(string name) => name is ToolCatalog.BrowserFind or ToolCatalog.BrowserSnapshot or ToolCatalog.BrowserDialog or ToolCatalog.BrowserClick or ToolCatalog.BrowserClose or ToolCatalog.BrowserTabs;
     internal const string Marker = "Core finalization phase: ";
     internal const string Instruction = "The work phase has ended. Generate a final reply only from existing durable tool receipts. No tools or new external effects are permitted. Distinguish recorded actions from unverified task outcomes. A browser closure does not establish sign-out. Report incomplete or uncertain work accurately.";
+    internal static DateTimeOffset? Deadline(DateTimeOffset now, DateTimeOffset? overallDeadline, TimeSpan reserve)
+    {
+        if (reserve == TimeSpan.Zero) return overallDeadline;
+        var reservedDeadline = now + reserve;
+        return overallDeadline is null || reservedDeadline < overallDeadline ? reservedDeadline : overallDeadline;
+    }
     internal static string? Restore(IEnumerable<ModelMessage> messages) => messages
         .Where(m => m.Role == ModelRole.System && m.Text.StartsWith(Marker, StringComparison.Ordinal))
         .Select(m => m.Text[Marker.Length..]).FirstOrDefault(r => r is "runDeadline" or "providerTimeout" or "providerCancelled" or "browserBlocked");

@@ -2666,10 +2666,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             finalizationReason = reason;
             workTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
             cleanupTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
-            var finalDeadline = _time.GetUtcNow() + budget.FinalizationReserve;
-            if (overallDeadline is null || finalDeadline < overallDeadline) overallDeadline = finalDeadline;
-            var remaining = overallDeadline.Value - _time.GetUtcNow();
-            overallTimer?.Change(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+            overallDeadline = RunFinalization.Deadline(_time.GetUtcNow(), overallDeadline, budget.FinalizationReserve);
+            if (overallDeadline is { } deadline)
+            {
+                var remaining = deadline - _time.GetUtcNow();
+                overallTimer?.Change(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+            }
             // Answer every unexecuted pending call before persisting: recovery cannot replay it.
             foreach (var unexecuted in AgentRunToolCallCheckpoint.PendingCalls(CheckpointSuffix()))
                 messages.Add(new ModelMessage(ModelRole.Tool, "{\"error\":\"finish_required\",\"reason\":\"finalization_reserve\"}", ToolCallId: unexecuted.Id, Name: unexecuted.Name));

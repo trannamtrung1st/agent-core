@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Execution;
 using AgentCore.Application.Tools;
 
 namespace AgentCore.Application.Tests;
@@ -8,6 +9,17 @@ public sealed class BrowserDialogProgressTests
 {
     private const string Pending = "{\"error\":\"dialog_pending\"}";
     private static ModelToolCall Call(string name, string args = "{}", string id = "call") => new(id, name, args);
+
+    [Fact]
+    public void Blocked_finalization_preserves_existing_unattended_deadlines_and_never_extends_interactive_time()
+    {
+        var now = DateTimeOffset.Parse("2026-10-09T12:00:00Z");
+        var deadline = now.AddSeconds(120);
+        Assert.Equal(deadline, RunFinalization.Deadline(now, deadline, ToolExecutionBudget.Standard.FinalizationReserve));
+        Assert.Equal(deadline, RunFinalization.Deadline(now, deadline, ToolExecutionBudget.UnattendedBoundBrowser.FinalizationReserve));
+        Assert.Equal(now.AddSeconds(30), RunFinalization.Deadline(now, deadline, ToolExecutionBudget.InteractiveBrowser.FinalizationReserve));
+        Assert.Equal(now.AddSeconds(5), RunFinalization.Deadline(now, now.AddSeconds(5), ToolExecutionBudget.InteractiveBrowser.FinalizationReserve));
+    }
 
     [Fact]
     public void Checkpoint_receipts_restore_the_blocker_and_equivalent_failure_bound_without_replaying_effects()

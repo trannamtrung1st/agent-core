@@ -19,6 +19,8 @@ Those records do not prove the reported native blocker or a provider resolution 
 
 Verified resolution, missing modal or confirmed closed context and confirmed cleanup clear the old condition. An explicit resolution that reveals another modal starts a fresh bound. Same-Run restoration rebuilds state from receipts; independent Runs start clean. Capability/origin/credential checks, approval and generation fences remain unchanged. No modal is automatically accepted.
 
+The existing finalization deadline calculation preserves Standard/unattended deadlines when their reply reserve is zero; interactive finalization still uses at most its existing 30 seconds and never extends the hard deadline. This boundary has dedicated budget coverage. Existing blank-argument close canonicalization also clears the receipt-derived blocker after confirmed closure.
+
 ## Previously solved behavior retained
 
 - `27a98478`: required find `by`/`value`, authorized discovery/projection, invalid-call circuit breaker and trusted current/prior execution evidence.
@@ -36,11 +38,11 @@ After correction, the owned Run executes a single sign-out trigger; it resolves 
 | --- | --- |
 | Focused owned native Run, checkpoint, malformed configuration and userSteer acceptance | 10 passed (`/tmp/dialog-final-acceptance.log`); final strategy/checkpoint/unchanged-evidence subset 15 passed (`/tmp/dialog-strategy-final.log`) |
 | Focused native lifecycle | 4 passed (`/tmp/dialog-native-focused.log`); existing native cleanup/redaction cases also passed in the earlier focused run |
-| Full backend | Passed: Domain 173; Application 1,434 / 3 opt-in skipped; Infrastructure 924 / 7 skipped; API 390 / 2 skipped; OrderEvents 4. Final Application rerun in progress (`/tmp/browser-blocked-application-final.log`) |
-| Frontend unit | 769 passed / 1 credential-dialog timing failure under two workers; its isolated file passed all 4 cases. Full single-worker rerun in progress (`/tmp/browser-blocked-frontend-single.log`) |
+| Full backend | Passed: Domain 173; Application 1,434 / 3 opt-in skipped; Infrastructure 924 / 7 skipped; API 390 / 2 skipped; OrderEvents 4. Final Application 1,436 / 3 skipped; deadline-boundary rerun in progress (`/tmp/browser-blocked-application-deadline-final.log`) |
+| Frontend unit | 769 passed / 1 credential-dialog timing failure under two workers; its isolated file passed all 4 cases. Single-worker run: 769 passed / 1 different Admin timeout; that isolated case passed in 4.8 seconds (`/tmp/browser-blocked-admin-recheck.log`). The prior behavior 389f9aa5 full hosted frontend gate passed |
 | Frontend production build | Passed; existing bundle-size warning (`/tmp/browser-blocked-web-build.log`) |
-| Isolated Synthetic Playwright | In progress; `/tmp/browser-blocked-synthetic.log` |
-| Exact-behavior hosted CI | Pending final behavior commit |
+| Isolated Synthetic Playwright | 123 passed / 1 unrelated Admin selection failure. Fresh-data diagnostics + Admin rerun: 11 passed (`/tmp/browser-blocked-synthetic-recheck.log`), including the native sign-out/closure/final reply/reload case |
+| Exact-behavior hosted CI | Final deadline-boundary behavior commit pending; prior behavior 389f9aa5 backend/frontend/acceptance/Compose gates passed in workflow 37899700812 |
 
 Commands use `dotnet test ... --nologo -m:1 -nr:false -p:UseSharedCompilation=false`. Single-process MSBuild avoids unavailable local build-server pipes. Frontend uses `NODE_OPTIONS=--no-experimental-webstorage pnpm run test --run --maxWorkers=2`; the initial run without that documented override encountered Node/jsdom storage-global failures and is not acceptance evidence. The CLI Synthetic suite uses `/tmp/browser-blocked.playwright.config.mts`, ports 5380/5473, fixture 5391, and disposable `/tmp/browser-blocked-ui` database/workspace/artifact/key roots. It does not reset existing Sessions or profiles. No paid model, AHI authentication or private credential is required.
 
