@@ -258,7 +258,7 @@ Speech boundaries include sampleOffset in the same stream coordinate as audio. A
 
 ## Server events
 
-History entries in HTTP pages and `session.ready.history` include optional `completedAt` (UTC ISO string), the durable successful assistant completion time. `agent.response.completed` includes the same optional `completedAt`; null/absent covers unsuccessful or historical responses without a recorded time. `createdAt` continues to mean entry creation/generation start. Completion time is metadata, never an entry/control ordering key.
+History entries in HTTP pages and `session.ready.history` include optional `completedAt` (UTC ISO string), the durable assistant terminal time (completed, failed or interrupted). `agent.response.completed` and `agent.response.interrupted` include the same optional `completedAt`; null/absent covers historical responses or quiet outcomes without a recorded assistant entry. Conflicting late terminal events cannot replace a settled entry status or timestamp, including after reattach. `createdAt` continues to mean entry creation/generation start. Completion time is metadata, never an entry/control ordering key.
 
 | Type | Required payload fields |
 | --- | --- |

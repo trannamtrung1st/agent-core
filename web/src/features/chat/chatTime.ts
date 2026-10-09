@@ -1,7 +1,7 @@
 import type { HistoryEntry } from "../../state/sessionStore";
 
 export function messageTimestamp(entry: HistoryEntry, entries: readonly HistoryEntry[] = []): string {
-  if (entry.role !== "assistant" || entry.status !== "completed") return entry.createdAt;
+  if (entry.role !== "assistant" || !["completed", "failed", "interrupted"].includes(entry.status)) return entry.createdAt;
   if (entry.completedAt) return entry.completedAt;
 
   // Older replies have no recorded completion time. Their progress notices provide

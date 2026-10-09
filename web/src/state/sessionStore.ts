@@ -976,6 +976,13 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       const status = event.type === "agent.response.interrupted"
         ? "interrupted"
         : asString(event.payload.status) === "failed" ? "failed" : "completed";
+      const settledStatus = event.responseId
+        ? state.tombstones[event.responseId]
+          ?? state.entries.find((entry) => isAssistantForResponse(entry, event.responseId) && entry.status !== "streaming")?.status
+        : null;
+      if (settledStatus && settledStatus !== status) {
+        return { ...state, lastServerSequence: event.sequence };
+      }
       const finishReason = event.type === "agent.response.completed"
         ? asString(event.payload.finishReason) || null
         : null;

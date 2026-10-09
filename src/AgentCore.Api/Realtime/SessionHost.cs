@@ -2562,7 +2562,8 @@ public static class SessionEventMapper
                 {
                     ["reason"] = reason,
                     ["heardTextEndExclusive"] = terminal.HeardTextEndExclusive,
-                    ["speechText"] = terminal.SpeechText
+                    ["speechText"] = terminal.SpeechText,
+                    ["completedAt"] = terminal.CompletedAt is { } completedAt ? HttpMapping.Format(completedAt) : null
                 }),
             ResponseCompletedOutput terminal => ("agent.response.completed", new Dictionary<string, object?>
             {

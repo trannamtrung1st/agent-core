@@ -1,6 +1,6 @@
 # Persistence and Configuration
 
-`EntryCompletionTime` adds nullable `ConversationEntries.CompletedAtUtc` (UTC Unix milliseconds). The Session mailbox records successful assistant completion once, independently of immutable `CreatedAtUtc`, and preserves it through checkpoints, save retries and history reads. Historical rows remain null; migration does not guess past completion times or change entry ordering. User and application-message publication times remain `CreatedAtUtc`.
+`EntryCompletionTime` adds nullable `ConversationEntries.CompletedAtUtc` (UTC Unix milliseconds). The Session mailbox records assistant terminal time once (completed, failed or interrupted), independently of immutable `CreatedAtUtc`, and preserves it through checkpoints, save retries and history reads. Historical rows remain null; migration does not guess past completion times or change entry ordering. User and application-message publication times remain `CreatedAtUtc`.
 
 ## Activation and AgentRun storage foundation
 
