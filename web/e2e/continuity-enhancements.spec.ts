@@ -68,7 +68,7 @@ test('Unified Automation authoring retains admitted instructions and source focu
   expect(await history.text()).not.toContain('Future review instructions');
   const historyLink = runs.getByRole('row')
     .filter({ has: page.getByTitle(admitted.agentRunId, { exact: true }) })
-    .getByRole('button', { name: 'Scheduled task', exact: true });
+    .getByRole('button', { name: 'Manual task', exact: true });
   await historyLink.click();
   await expect(details.getByText('No action', { exact: true }).first()).toBeVisible();
   await details.getByRole('button', { name: 'Close', exact: true }).click();
