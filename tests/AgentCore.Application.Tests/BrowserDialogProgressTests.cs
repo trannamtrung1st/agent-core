@@ -79,7 +79,7 @@ public sealed class BrowserDialogProgressTests
         progress.NoteResult(Call(ToolCatalog.BrowserDialog, "{\"operation\":\"accept\"}"), Pending);
         Assert.True(progress.DialogPending);
         Assert.False(progress.DialogRecoveryExhausted);
-        progress.NoteResult(Call(ToolCatalog.BrowserClose), "{\"status\":\"closed\"}");
+        progress.NoteResult(Call(ToolCatalog.BrowserClose, ""), "{\"status\":\"closed\"}");
         Assert.False(progress.DialogPending);
         progress.NoteResult(Call(ToolCatalog.BrowserFind), "{\"error\":\"not_found\"}");
         Assert.False(progress.DialogRecoveryExhausted);

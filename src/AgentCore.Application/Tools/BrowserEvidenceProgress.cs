@@ -60,7 +60,7 @@ internal sealed class BrowserEvidenceProgress
             var root = receipt.RootElement;
             if (root.ValueKind != JsonValueKind.Object) return;
             var error = Read(root, "error");
-            using var arguments = JsonDocument.Parse(call.ArgumentsJson);
+            using var arguments = JsonDocument.Parse(string.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson);
             var operation = arguments.RootElement.ValueKind == JsonValueKind.Object ? Read(arguments.RootElement, "operation") : "";
             if (error == "dialog_pending")
             {
