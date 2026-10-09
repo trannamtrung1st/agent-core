@@ -260,9 +260,9 @@ describe("definition candidate editor", () => {
     await openDraft();
     // These controls stay mounted across draft tabs. Reuse their accessible
     // handles instead of rescanning the entire AntD form after every change.
-    const save = screen.getByRole("button", { name: "Save draft", exact: true });
-    const capabilitiesTab = screen.getByRole("tab", { name: "Capabilities", exact: true });
-    const definitionTab = screen.getByRole("tab", { name: "Definition", exact: true });
+    const save = screen.getByRole("button", { name: "Save draft" });
+    const capabilitiesTab = screen.getByRole("tab", { name: "Capabilities" });
+    const definitionTab = screen.getByRole("tab", { name: "Definition" });
     setSpin("Minimum recurrence days", "0.5");
     expect(screen.getByLabelText("Minimum recurrence days")).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByLabelText("Minimum recurrence days")).toHaveAccessibleDescription(
