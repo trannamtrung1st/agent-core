@@ -6,7 +6,7 @@ import { cancelAgentRun, decideAgentRunApproval, listAgentRuns, type AgentRun } 
 import { useCursorPages } from "./useCursorPages";
 import { DrawerListFooter } from "./DrawerListFooter";
 import { DiagnosticDetails } from "./DiagnosticDetails";
-import { runActivationLabel, runOutcomeLabel, runStatusLabel } from "./runPresentation";
+import { runActivationLabel, runBudgetLabel, runOutcomeLabel, runStatusLabel } from "./runPresentation";
 import { confirmAction } from "../../app/confirmAction";
 import { formatChatTime } from "./chatTime";
 
@@ -79,11 +79,12 @@ export function AgentRunDetails({ run, onChange }: { run: AgentRun; onChange: (r
     <Descriptions size="small" column={1} items={[
       { key: "model", label: "Model", children: <Typography.Text className="background-work-progress">{run.modelCatalogKey}</Typography.Text> },
       ...(run.budget ? [
-        { key: "budget", label: "Execution budget", children: `${run.budget.class} · ${run.budget.source} · ${run.budget.maxSteps} steps · ${run.budget.durationSeconds / 60} minutes` },
+        { key: "budget", label: "Execution budget", children: `${runBudgetLabel(run.budget.class)} · ${runBudgetLabel(run.budget.source)} · ${run.budget.maxSteps} steps · ${run.budget.durationSeconds / 60} minutes` },
         { key: "consumed", label: "Consumed", children: `${run.budget.stepsConsumed} / ${run.budget.maxSteps} steps · ${(run.budget.activeExecutionMs / 1000).toFixed(1)}s active` },
-        { key: "phase", label: "Phase", children: run.budget.phase },
-        { key: "reason", label: "Termination reason", children: run.budget.terminationReason ?? 'None recorded' },
-        { key: "cleanup", label: "Requested cleanup", children: `${run.budget.cleanupStatus} · closure ${run.budget.closureConfirmed ? 'confirmed' : 'unverified'}. Sign-out requires separate application evidence.` }
+        { key: "phase", label: "Phase", children: runBudgetLabel(run.budget.phase) },
+        { key: "reason", label: "Termination reason", children: run.budget.terminationReason ? runBudgetLabel(run.budget.terminationReason) : 'None recorded' },
+        { key: "cleanup", label: "Requested cleanup", children: runBudgetLabel(run.budget.cleanupStatus) },
+        { key: "closure", label: "Browser closure", children: `${run.budget.closureConfirmed ? 'Confirmed' : 'Unverified'}. Sign-out requires separate application evidence.` }
       ] : []),
       { key: "attempt", label: "Attempt", children: `${run.attemptCount} of ${run.maxAttempts}` },
       { key: "updated", label: "Updated", children: <time dateTime={run.updatedAt}>{formatChatTime(run.updatedAt) ?? "Unknown time"}</time> }
