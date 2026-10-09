@@ -27,6 +27,45 @@ beforeEach(() => {
 });
 const show = (instanceId = "instance-1") => render(<App><BackgroundWorkDrawer instanceId={instanceId} open wide onClose={() => undefined} /></App>);
 describe("Background Sessions", () => {
+  it("removes stale background actions after a later poll fails and restores them after retry", async () => {
+    const owned = { ...fixtureBackground, session: { ...fixtureBackground.session, agentInstanceId: "instance-1" } };
+    vi.mocked(getBackgroundSession).mockResolvedValueOnce(owned).mockRejectedValueOnce(new Error("Background refresh failed")).mockResolvedValue(owned);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const view = render(<App><BackgroundWorkDrawer instanceId="instance-1" open wide initialSessionId={owned.session.sessionId} onClose={vi.fn()} /></App>);
+    try {
+      expect(await screen.findByRole("button", { name: "Continue in chat" })).toBeVisible();
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+      expect(await screen.findByText("Background refresh failed")).toBeVisible();
+      expect(screen.queryByRole("button", { name: "Continue in chat" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Cancel run" })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Retry background session" }));
+      expect(await screen.findByRole("button", { name: "Continue in chat" })).toBeVisible();
+    } finally { view.unmount(); vi.useRealTimers(); }
+  });
+  it.each(["continuation", "metadata"])("invalidates pending %s navigation when the exact Session changes", async phase => {
+    const first = { ...fixtureBackground, session: { ...fixtureBackground.session, agentInstanceId: "instance-1" } };
+    const next = { ...first, originalTitle: "Next original task", session: { ...first.session, sessionId: "next-session" } };
+    let finish!: (value: { sessionId: string } | typeof first) => void;
+    const pending = new Promise<{ sessionId: string } | typeof first>(resolve => { finish = resolve; });
+    let firstReads = 0;
+    vi.mocked(getBackgroundSession).mockImplementation(async id => {
+      if (id === next.session.sessionId) return next;
+      if (++firstReads > 1 && phase === "metadata") return await pending as typeof first;
+      return first;
+    });
+    vi.mocked(continueInChat).mockImplementation(async id => id === first.session.sessionId && phase === "continuation" ? await pending as { sessionId: string } : { sessionId: id });
+    const onOpenConversation = vi.fn(); const onClose = vi.fn();
+    const view = render(<App><BackgroundWorkDrawer instanceId="instance-1" open wide initialSessionId={first.session.sessionId} onOpenConversation={onOpenConversation} onClose={onClose} /></App>);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue in chat" }));
+    await waitFor(() => expect(phase === "metadata" ? firstReads : vi.mocked(continueInChat).mock.calls.length).toBe(phase === "metadata" ? 2 : 1));
+    view.rerender(<App><BackgroundWorkDrawer instanceId="instance-1" open wide initialSessionId={next.session.sessionId} onOpenConversation={onOpenConversation} onClose={onClose} /></App>);
+    expect(await screen.findByRole("dialog", { name: "Next original task" })).toBeVisible();
+    await act(async () => { finish(phase === "metadata" ? first : { sessionId: first.session.sessionId }); });
+    expect(onOpenConversation).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Continue in chat" }));
+    await waitFor(() => expect(onOpenConversation).toHaveBeenCalledWith(next.session.sessionId));
+  });
   it("shows one exact-detail error without a lingering spinner and retries that Session", async () => {
     const owned = { ...fixtureBackground, session: { ...fixtureBackground.session, agentInstanceId: "instance-1" } };
     vi.mocked(getBackgroundSession).mockRejectedValueOnce(new Error("Original result is unavailable"))

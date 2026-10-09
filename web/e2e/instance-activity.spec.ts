@@ -79,6 +79,12 @@ test("Activity preserves the original background result and continues its exact 
   await page.getByRole("button", { name: "Retry background session", exact: true }).click();
   const drawer = page.getByRole("dialog", { name: "Background progress check", exact: true });
   await expect(drawer).toContainText("Result A:"); await expect(drawer).toContainText("Original task files");
+  unavailable = true;
+  await expect(page.getByText("Original result is temporarily unavailable", { exact: true })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole("button", { name: "Continue in chat", exact: true })).toBeHidden();
+  await expect(page.getByLabel("Loading background Session", { exact: true })).toBeHidden();
+  unavailable = false; await page.getByRole("button", { name: "Retry background session", exact: true }).click();
+  await expect(drawer).toContainText("Result A:");
   await drawer.getByRole("button", { name: "Continue in chat", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/c/${child.session.sessionId}\\?returnTo=`));
   await expect(page.getByTestId("connection")).toHaveText("Ready"); await expect(page.locator(".conversation-scroll")).toContainText("Result A:");

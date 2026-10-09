@@ -39,7 +39,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
     historyOpener.current = null; moveFocus.current = false;
     setReadFeedback(null);
     return () => { epoch.current++; };
-  }, [instanceId, open]);
+  }, [instanceId, open, initialSessionId]);
   useEffect(() => {
     if (!open || !moveFocus.current) return;
     moveFocus.current = false;
@@ -62,7 +62,12 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
         if (!current || request !== generation) return;
         if (item.session.agentInstanceId !== instanceId) throw new Error("This Session belongs to another Agent Instance.");
         setSelected(item); setDetailError(null);
-      } catch (reason) { if (current && request === generation) setDetailError(reason instanceof Error ? reason.message : "Unable to load background Session."); }
+      } catch (reason) {
+        if (current && request === generation) {
+          setSelected(null);
+          setDetailError(reason instanceof Error ? reason.message : "Unable to load background Session.");
+        }
+      }
     }
     void load(); const timer = window.setInterval(() => void load(), 5000);
     return () => { current = false; window.clearInterval(timer); };

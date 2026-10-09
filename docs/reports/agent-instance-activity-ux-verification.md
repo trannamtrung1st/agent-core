@@ -74,3 +74,16 @@ Follow-up checks:
 - At 1440/768/390px, long titles remained contained, page overflow was zero, row gap was 8px, and search width was 448/448/366px. Drawer body padding was 16px; width was 640px on desktop/tablet and 390px on mobile after the resize transition settled. Final local detail evidence: `/tmp/activity-polish-confirm-detail-1440.png`, `/tmp/activity-polish-confirm-detail-768.png`, `/tmp/activity-polish-confirm-detail-390.png`.
 
 This follow-up changes frontend detail states and documentation only. Backend verification above remains the prior scoped result; it was not rerun. Full CI, Compose and full-repository regression remain unrun.
+
+## Background lifecycle review fixes
+
+The 2026-10-09 review identified two remaining lifecycle defects. A failed later exact-read poll now clears the selected background snapshot, removing its action/detail controls until retry or polling successfully reloads it. The operation epoch also resets when `initialSessionId` changes, invalidating pending continuation, metadata refresh and handling-run results for the previous selection. Backend work already admitted before navigation is not undone; the obsolete frontend response cannot navigate or overwrite the new selection.
+
+Three regressions cover later-poll failure/retry and selection changes while continuation or subsequent metadata reads are pending. The two pending-response regressions failed against the prior implementation. The poll test uses controlled interval advancement; its initial timer-spy harness was corrected because nested history polling shares the same interval. The Synthetic background journey now also fails a poll after a successful inspection and verifies actions stay absent until recovery.
+
+- `pnpm --dir web run test --run src/features/chat/BackgroundWorkDrawer.test.tsx src/features/admin/InstanceActivitySection.test.tsx src/app/AppRouter.test.tsx --maxWorkers=1`: **42 passed** across 3 files.
+- `pnpm --dir web run build`: **passed**, including strict TypeScript and Vite. Existing chunk-size and SignalR annotation warnings remain.
+- `pnpm exec playwright test --config playwright.activity.lifecycle.local.config.ts instance-activity.spec.ts agent-run-background-session.spec.ts`: **4 passed** against disposable Synthetic/InMemory API 5188 and Vite 5278. Temporary configuration is removed after verification.
+- Playwright MCP created two actual Synthetic background Sessions. A later 503 removed continuation controls; retry restored them. Holding A's continuation response, switching to B through browser history, and releasing A retained B's inspection; continuing B then opened its exact conversation with Ready state. The expected injected 503 was the only console error; no unrelated failed request or page exception was observed.
+
+The existing architecture and visual presentation are preserved. Hosted CI status will be reported for the exact pushed lifecycle fix commit; earlier local results do not imply hosted acceptance.
