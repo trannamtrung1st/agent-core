@@ -2,7 +2,7 @@
 
 Date: 2026-10-09. Branch: `develop/branch-1`.
 
-Implementation SHA: recorded after the source commit in the evidence follow-up. Hosted acceptance is deferred at the user's direction; this follow-up is **not frozen**.
+Implementation SHA: `bc0a7e940f3c8fa0836d2d20b11e0af14010887d`. The following evidence-only commit records this source SHA without changing executable behavior. Hosted acceptance is deferred at the user's direction; this follow-up is **not frozen**.
 
 ## Scope and reviewed lifecycle
 
