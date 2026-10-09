@@ -118,6 +118,7 @@ internal static class BrowserSnapshotCompaction
 
     private static string Receipt(string text, bool rich)
     {
+        var status = "unknown";
         var url = string.Empty;
         var title = string.Empty;
         var visible = string.Empty;
@@ -126,6 +127,7 @@ internal static class BrowserSnapshotCompaction
         {
             using var document = JsonDocument.Parse(text);
             var root = document.RootElement;
+            status = Read(root, "status") == "ok" ? "ok" : "unknown";
             url = Read(root, "url");
             title = Read(root, "title");
             visible = Read(root, "content");
@@ -143,6 +145,7 @@ internal static class BrowserSnapshotCompaction
         return settled is bool settledValue
             ? JsonSerializer.Serialize(new
             {
+                status,
                 untrustedBrowserContent = true,
                 compacted = true,
                 url,
@@ -152,6 +155,7 @@ internal static class BrowserSnapshotCompaction
             })
             : JsonSerializer.Serialize(new
             {
+                status,
                 untrustedBrowserContent = true,
                 compacted = true,
                 url,

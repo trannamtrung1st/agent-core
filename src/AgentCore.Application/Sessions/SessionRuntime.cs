@@ -2624,6 +2624,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var checkpointCapacityReached = false;
         string? continuationInstruction = null;
         var evidence = new BrowserEvidenceProgress();
+        var invalidCalls = new InvalidToolCallRecovery(CheckpointSuffix());
+        var invalidRecoveryExhausted = invalidCalls.Exhausted;
+        var executionRun = _boundAgentRun?.ResponseId == request.ResponseId ? _boundAgentRun : null;
+        var previousFacts = executionRun is null ? null : await PreviousExecutionFactsAsync(executionRun, cancellationToken).ConfigureAwait(false);
         var budgetTools = _snapshot.Definition.Environment?.Capabilities is null
             ? WithOfferedTools(request, authorizedTools, trigger, model).Tools
             : ToolCatalog.Eligible(_snapshot.Definition,
@@ -2695,6 +2699,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     prompt.Add(new ModelMessage(ModelRole.System, ChallengedBrowserInstruction));
                 }
 
+                prompt = prompt.ToList();
+                var factsIndex = prompt.FindIndex(message => message.Role != ModelRole.System);
+                if (factsIndex < 0) factsIndex = prompt.Count;
+                prompt.Insert(factsIndex, new ModelMessage(ModelRole.System, RunExecutionFacts.Current(executionRun?.AgentRunId, loadedCapabilities, CheckpointSuffix())));
+                if (previousFacts is not null) prompt.Insert(factsIndex + 1, new ModelMessage(ModelRole.System, previousFacts));
+                if (invalidRecoveryExhausted) prompt.Add(new ModelMessage(ModelRole.System, "Repeated malformed tool strategy remains blocked. Finish from existing evidence and report the validation blocker; do not request more tools."));
+
                 var working = inRepair
                     ? request with
                     {
@@ -2715,6 +2726,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             model),
                         pageBlocked,
                         terminalBrowserContinuation);
+                if (invalidRecoveryExhausted) working = working with { Tools = IsInitialBackgroundRun ? [AgentCore.Application.Work.WorkCompletionRequest.Contract] : null };
                 if (checkpointCapacityReached) working = working with { Tools = IsInitialBackgroundRun ? [AgentCore.Application.Work.WorkCompletionRequest.Contract] : null };
                 if (trigger.Kind == TriggerKind.BackgroundCompleted) working = working with { Tools = null };
                 var projectionModel = _boundAgentRun is { } binding && binding.ResponseId == request.ResponseId
@@ -2738,7 +2750,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     }
                     if (evt is ModelToolCallEvent tool)
                     {
-                        if (!inRepair && !terminalBrowserContinuation)
+                        if (invalidRecoveryExhausted)
+                        {
+                            await MailboxModelAsync(cause, request.ResponseId,
+                                new ModelFailed(new ProviderFailure(ProviderErrorCode.InvalidRequest, "Repeated invalid tool strategy blocked.", FailureReason: "invalidToolStrategy")), generateToken).ConfigureAwait(false);
+                            return;
+                        }
+                        if (!inRepair && !terminalBrowserContinuation && !invalidRecoveryExhausted)
                         {
                             pending.Add(tool.Call);
                         }
@@ -3071,6 +3089,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             args = default;
                         }
 
+                        if (args.ValueKind != JsonValueKind.Object && invalidCalls.Refuse(call) is { } malformedRefusal)
+                            executionResult = ToolExecutionResult.FromText(malformedRefusal);
                         if (args.ValueKind == JsonValueKind.Object)
                         {
                             var policy = await _tools.EvaluateExecutionPolicyAsync(
@@ -3106,6 +3126,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 OperationalDiagnostics.RecordToolDenial(call.Name);
                                 executionResult = ToolExecutionResult.FromText(
                                     """{"error":"forbidden","message":"Tool is not permitted for this role."}""");
+                            }
+                            else if (invalidCalls.Refuse(call) is { } invalidRefusal)
+                            {
+                                executionResult = ToolExecutionResult.FromText(invalidRefusal);
                             }
                             else if (ToolCatalog.IsCompletionTool(call.Name))
                             {
@@ -3397,10 +3421,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         toolDetail);
                     RuntimeTelemetry.Record("tools", RuntimeTelemetry.ElapsedMs(toolStarted), call.Name);
 
+                    executionResult = executionResult with { Text = invalidCalls.Note(call, executionResult.Text, out var recoveryExhausted) };
+                    invalidRecoveryExhausted |= recoveryExhausted;
                     harnessSources.AddRange(HarnessChatTools.Sources(call, executionResult.Text));
                     executionResult = ToolResultAdmission.AdmitForModel(model, executionResult);
                     if (Encoding.UTF8.GetByteCount(executionResult.Text) > resultBudget)
-                        executionResult = executionResult with { Text = ToolJsonResults.FitToBudget(resultBudget, executionResult.Text) };
+                        executionResult = executionResult with { Text = InvalidToolCallRecovery.FitReceipt(call, executionResult.Text, resultBudget) ?? ToolJsonResults.FitToBudget(resultBudget, executionResult.Text) };
                     var closedPage = false;
                     if (!refusedBlocked)
                     {
@@ -3478,6 +3504,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken).ConfigureAwait(false);
                     if (effectFenced)
                         await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.ClearSideEffect(run.Revision, now, run.Claim!.Generation, ToolCatalog.RecordsOwnerVisibleEffect(call.Name)), generateToken).ConfigureAwait(false);
+                    if (invalidRecoveryExhausted && IsInitialBackgroundRun)
+                    {
+                        await MailboxModelAsync(cause, request.ResponseId,
+                            new ModelFailed(new ProviderFailure(ProviderErrorCode.InvalidRequest, "Repeated invalid tool strategy blocked.", FailureReason: "invalidToolStrategy")), generateToken).ConfigureAwait(false);
+                        return;
+                    }
                 }
 
                 if (substantiveWorkInBatch)

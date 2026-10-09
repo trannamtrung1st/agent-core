@@ -6,7 +6,7 @@ namespace AgentCore.Application.Tools;
 
 public static class BrowserToolArguments
 {
-    internal const string FindQueryGuidance = "Choose exactly one of role (with optional name), text, label, placeholder, altText, title or testId. Omit all unused fields; do not populate them with empty strings or guesses. For Email, use {\"placeholder\":\"Enter your email\"} or {\"role\":\"textbox\",\"name\":\"Email\"}. Omit scopeRef and frameRef unless narrowing to a discovered container or frame. Find creates its own opaque ref and needs no prior snapshot.";
+    internal const string FindQueryGuidance = "Choose exactly one search strategy using required by and value. by is role, text, label, placeholder, altText, title or testId. For Email, use {\"by\":\"placeholder\",\"value\":\"Enter your email\"} or {\"by\":\"role\",\"value\":\"textbox\",\"name\":\"Email\"}. name is only for by=role. Omit unused refinements; empty or null optional fields mean omitted. Do not send parallel role/text/label/placeholder fields. A unique match creates its own opaque ref and needs no prior snapshot.";
     private static readonly Regex OpaqueRef = new(
         "^el_[A-Za-z0-9_-]{22}$",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -69,6 +69,7 @@ public static class BrowserToolArguments
     public static BrowserRequest Request(Guid sessionId, string tool, JsonElement args)
     {
         var operation = Enum.GetValues<BrowserOperation>().Single(o => ToolName(o) == tool);
+        if (operation == BrowserOperation.Find) args = NormalizeFindArguments(args);
         var options = System.Text.Json.JsonSerializer.Deserialize<BrowserOptionsData>(args, JsonOptions)!;
         if (operation == BrowserOperation.EmulateMedia)
             options = options with
@@ -80,8 +81,35 @@ public static class BrowserToolArguments
                 ContrastSpecified = args.TryGetProperty("contrast", out _),
             };
         if (operation == BrowserOperation.Find)
-            options = options with { Query = System.Text.Json.JsonSerializer.Deserialize<BrowserTargetQuery>(args, JsonOptions) };
+            options = options with { Query = FindQuery(args) };
         return new(sessionId, operation, options);
+    }
+
+    private static JsonElement NormalizeFindArguments(JsonElement args)
+    {
+        var fields = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (var field in args.EnumerateObject())
+        {
+            if (field.Name is not ("by" or "value") && field.Value.ValueKind == JsonValueKind.Null) continue;
+            if (field.Name is "name" or "hasText" or "scopeRef" or "frameRef"
+                && field.Value.ValueKind == JsonValueKind.String && string.IsNullOrWhiteSpace(field.Value.GetString())) continue;
+            fields[field.Name] = field.Value;
+        }
+        return JsonSerializer.SerializeToElement(fields);
+    }
+
+    private static BrowserTargetQuery FindQuery(JsonElement args)
+    {
+        var query = JsonSerializer.Deserialize<BrowserTargetQuery>(args, JsonOptions)!;
+        var by = args.TryGetProperty("by", out var strategy) && strategy.ValueKind == JsonValueKind.String ? strategy.GetString() : null;
+        var value = args.TryGetProperty("value", out var criterion) && criterion.ValueKind == JsonValueKind.String ? criterion.GetString() : null;
+        return query with
+        {
+            Role = by == "role" ? value : null, Text = by == "text" ? value : null,
+            Label = by == "label" ? value : null, Placeholder = by == "placeholder" ? value : null,
+            AltText = by == "altText" ? value : null, Title = by == "title" ? value : null,
+            TestId = by == "testId" ? value : null
+        };
     }
 
     public static bool TryCanonicalizeClose(string? json, out string errorJson)
@@ -107,6 +135,7 @@ public static class BrowserToolArguments
         { error = "forbidden"; return false; }
         using var schema = JsonDocument.Parse(metadata.ParametersJson);
         if (!ValidateBrowserShape(args, schema.RootElement)) return false;
+        if (metadata.Feature == BrowserFeature.Find) args = NormalizeFindArguments(args);
         request = Request(sessionId, tool, args);
         if (request.Operation == BrowserOperation.Navigate && (request.Options.Operation is null or "goto") && string.IsNullOrWhiteSpace(request.Options.Url)) return false;
         if (request.Operation == BrowserOperation.Find && !ValidQuery(request.Options.Query)) return false;

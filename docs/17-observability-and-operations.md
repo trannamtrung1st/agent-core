@@ -370,7 +370,7 @@ Use the key-free embedded dense fixture; do not substitute an external applicati
 
 ## Native browser definition adoption
 
-The native wrapper replaces the browser implementation for all executions; there is no engine switch or legacy schema translator. General Assistant v18 and Secretary v6 are new immutable publications. Create disposable proof instances pinned to these versions, or explicitly adopt them for an existing owner through the current Admin version workflow. In-flight semantic refs/checkpoints should be completed or canceled before deploying the changed schemas; restart the host after normal backup and upgrade. Browser profiles and System Credentials remain independent, owner-bound data.
+The native wrapper replaces the browser implementation for all executions; there is no engine switch or legacy schema translator. General Assistant v20 and Secretary v7 are the current immutable publications for the by/value search contract. The native cutover v18/v6 publications remain available for pinned owners. Create disposable proof instances pinned to these versions, or explicitly adopt them for an existing owner through the current Admin version workflow. In-flight semantic refs/checkpoints should be completed or canceled before deploying the changed schemas; restart the host after normal backup and upgrade. Browser profiles and System Credentials remain independent, owner-bound data.
 
 This cutover uses temporary test databases/profiles only and resets no user/demo database, credential store or authenticated owner profile. Any later clean demo reset requires an explicit inventory and scope approval. Native output and diagnostics may be stale evidence after restart; use fresh semantic discovery rather than translating persisted refs.
 

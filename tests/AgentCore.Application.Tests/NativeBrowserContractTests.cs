@@ -8,6 +8,31 @@ using AgentCore.Infrastructure.Tools;
 namespace AgentCore.Application.Tests;
 public sealed class NativeBrowserContractTests
 {
+    [Theory]
+    [InlineData("role", "textbox")]
+    [InlineData("text", "Email")]
+    [InlineData("label", "Email")]
+    [InlineData("placeholder", "Enter your email")]
+    [InlineData("altText", "Logo")]
+    [InlineData("title", "Help")]
+    [InlineData("testId", "email")]
+    public void Single_strategy_normalizes_harmless_optional_fields(string by, string value)
+    {
+        var args = JsonSerializer.SerializeToElement(new { by, value, name = "  ", hasText = "", scopeRef = "", frameRef = (string?)null, exact = (bool?)null, limit = (int?)null });
+        Assert.True(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserFind, args, out var request, out _));
+        var query = request.Options.Query!;
+        Assert.Contains(value, new[] { query.Role, query.Text, query.Label, query.Placeholder, query.AltText, query.Title, query.TestId });
+        Assert.Null(query.ScopeRef); Assert.Null(query.FrameRef); Assert.Null(query.Name); Assert.Null(query.HasText);
+    }
+
+    [Theory]
+    [InlineData("{\"by\":\"label\",\"value\":\"Email\",\"name\":\"Email\"}")]
+    [InlineData("{\"by\":\"role\",\"value\":\"textbox\",\"text\":\"Email\"}")]
+    [InlineData("{\"by\":\"unknown\",\"value\":\"Email\"}")]
+    [InlineData("{\"by\":\"text\",\"value\":\"Email\",\"scopeRef\":\"el_0123456789abcdefghijkl\",\"frameRef\":\"frame-1\"}")]
+    public void Incompatible_nonempty_criteria_are_rejected(string json) =>
+        Assert.False(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserFind, JsonSerializer.Deserialize<JsonElement>(json), out _, out _));
+
     [Fact]
     public async Task Malformed_discovery_explains_query_repair_before_reference_repair()
     {
@@ -27,7 +52,7 @@ public sealed class NativeBrowserContractTests
             Assert.Contains("Omit", result.Text);
         }
         var badScope = await executor.ExecuteAsync(definition, Guid.NewGuid(),
-            new("find", ToolCatalog.BrowserFind, "{\"placeholder\":\"Enter your email\",\"scopeRef\":\"\"}"),
+            new("find", ToolCatalog.BrowserFind, "{\"by\":\"placeholder\",\"value\":\"Enter your email\",\"scopeRef\":\"invalid\"}"),
             ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn));
         Assert.Contains("invalid_reference", badScope.Text);
         Assert.Contains("scopeRef", badScope.Text);
@@ -41,12 +66,12 @@ public sealed class NativeBrowserContractTests
     public void Relational_text_filter_is_bounded_literal_neutral_data_and_requires_a_primary_query()
     {
         var id = Guid.NewGuid();
-        var args = JsonSerializer.SerializeToElement(new { role = "row", hasText = "Record.*B" });
+        var args = JsonSerializer.SerializeToElement(new { by = "role", value = "row", hasText = "Record.*B" });
         Assert.True(BrowserToolArguments.TryRequest(id, ToolCatalog.BrowserFind, args, out var request, out _));
         Assert.Equal("row", request.Options.Query!.Role);
         Assert.Equal("Record.*B", request.Options.Query.HasText);
-        foreach (var invalid in new object[] { new { hasText = "Record B" }, new { role = "row", hasText = "" },
-            new { role = "row", hasText = new string('x', 201) }, new { role = "row", hasText = new { regex = "Record.*" } } })
+        foreach (var invalid in new object[] { new { hasText = "Record B" }, new { by = "text", value = "row", name = "Invalid" },
+            new { by = "role", value = "row", hasText = new string('x', 201) }, new { by = "role", value = "row", hasText = new { regex = "Record.*" } } })
             Assert.False(BrowserToolArguments.TryRequest(id, ToolCatalog.BrowserFind, JsonSerializer.SerializeToElement(invalid), out _, out _));
         Assert.False(BrowserToolArguments.ValidQuery(new(Role: "row", HasText: new string('x', 201))));
     }

@@ -175,13 +175,13 @@ public sealed class BrowserReliabilityRuntimeTests
                     0 => (ToolCatalog.BrowserNavigate, new { url }),
                     1 => (ToolCatalog.BrowserFind, new { role = "textbox", name = "Email", text = "Email", label = "Email", placeholder = "Enter your email", scopeRef = "", frameRef = "" }),
                     2 => (ToolCatalog.BrowserSnapshot, new { }),
-                    3 => (ToolCatalog.BrowserFind, targetRole == "generic" ? (object)new { text = "Entry 1999" } : new { role = targetRole, name = "Entry 1999" }),
+                    3 => (ToolCatalog.BrowserFind, targetRole == "generic" ? (object)new { by = "text", value = "Entry 1999" } : new { by = "role", value = targetRole, name = "Entry 1999" }),
                     4 => (ToolCatalog.BrowserSnapshot, new { }),
                     5 => (ToolCatalog.BrowserClick, new { @ref = Reference() }),
                     6 => (ToolCatalog.CapabilitiesLoad, new { query = "browser.fill_form", limit = 1 }),
-                    7 => (ToolCatalog.BrowserFind, new { role = "textbox", name = "Summary" }),
+                    7 => (ToolCatalog.BrowserFind, new { by = "role", value = "textbox", name = "Summary" }),
                     8 => (ToolCatalog.BrowserFillForm, new { fields = new[] { new { @ref = Reference(), value = "Verified change" } } }),
-                    9 => (ToolCatalog.BrowserFind, new { role = "textbox", name = "Summary" }),
+                    9 => (ToolCatalog.BrowserFind, new { by = "role", value = "textbox", name = "Summary" }),
                     _ => ("", new { })
                 };
                 if (step == 3)

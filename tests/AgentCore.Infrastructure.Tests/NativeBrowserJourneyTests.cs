@@ -172,7 +172,7 @@ public sealed class NativeBrowserJourneyTests
             Assert.DoesNotContain("Title", scoped.Observation.Content);
             Assert.NotEmpty(await Find("Title"));
             var frameRef = Assert.Single(scoped.Observation.Frames!).Ref;
-            var frameFound = await Run("browser.find", new { role = "button", name = "Save frame", frameRef });
+            var frameFound = await Run("browser.find", new { by = "role", value = "button", name = "Save frame", frameRef });
             Assert.Null(frameFound.ErrorCode);
             var frame = JsonDocument.Parse(frameFound.DataJson!).RootElement.GetProperty("matches")[0].GetProperty("ref").GetString()!;
             var saved = await browser.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, frame, null)); Assert.Null(saved.ErrorCode);

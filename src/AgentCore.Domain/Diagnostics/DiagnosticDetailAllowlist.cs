@@ -36,6 +36,7 @@ public static class DiagnosticDetailAllowlist
         "streamIncomplete",
         "incompleteToolCall",
         "circuitOpen",
+        "invalidToolStrategy",
         "streamLimit"
     };
 

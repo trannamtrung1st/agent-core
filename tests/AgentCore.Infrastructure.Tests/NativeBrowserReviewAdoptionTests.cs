@@ -119,22 +119,22 @@ public sealed class NativeBrowserReviewAdoptionTests
                 using var json = JsonDocument.Parse(result.DataJson!);
                 return json.RootElement.GetProperty("matches")[0].GetProperty("ref").GetString()!;
             }
-            var duplicate = await Run("browser.find", new { role = "button", name = "Edit" });
+            var duplicate = await Run("browser.find", new { by = "role", value = "button", name = "Edit" });
             Assert.Equal("ambiguous_target", duplicate.ErrorCode);
             Assert.DoesNotContain("\"ref\":", duplicate.DataJson!);
-            var row = Ref(await Run("browser.find", new { role, hasText = "Record B" }));
-            var edit = Ref(await Run("browser.find", new { role = "button", name = "Edit", scopeRef = row }));
+            var row = Ref(await Run("browser.find", new { by = "role", value = role, hasText = "Record B" }));
+            var edit = Ref(await Run("browser.find", new { by = "role", value = "button", name = "Edit", scopeRef = row }));
             await page.GetByRole(nativeRole).Filter(new() { HasText = "Record B" })
                 .EvaluateAsync("row => row.replaceWith(row.cloneNode(true))");
             Assert.Null((await Run("browser.click", new { @ref = edit })).ErrorCode);
             Assert.Equal("Record B Edit", await page.GetByRole(AriaRole.Status).InnerTextAsync());
-            var delete = Ref(await Run("browser.find", new { role = "button", name = "Delete", scopeRef = row }));
+            var delete = Ref(await Run("browser.find", new { by = "role", value = "button", name = "Delete", scopeRef = row }));
             Assert.Null((await Run("browser.click", new { @ref = delete })).ErrorCode);
             Assert.Equal("Record B Delete", await page.GetByRole(AriaRole.Status).InnerTextAsync());
-            var stillAmbiguous = await Run("browser.find", new { role, hasText = "Record" });
+            var stillAmbiguous = await Run("browser.find", new { by = "role", value = role, hasText = "Record" });
             Assert.Equal("ambiguous_target", stillAmbiguous.ErrorCode);
             Assert.DoesNotContain("\"ref\":", stillAmbiguous.DataJson!);
-            Assert.Equal("not_found", (await Run("browser.find", new { role, hasText = "Record.*B" })).ErrorCode);
+            Assert.Equal("not_found", (await Run("browser.find", new { by = "role", value = role, hasText = "Record.*B" })).ErrorCode);
             await page.GetByRole(nativeRole).Filter(new() { HasText = "Record B" })
                 .EvaluateAsync("row => row.after(row.cloneNode(true))");
             Assert.Equal("ambiguous_target", (await Run("browser.click", new { @ref = edit })).ErrorCode);

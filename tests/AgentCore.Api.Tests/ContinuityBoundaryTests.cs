@@ -178,7 +178,7 @@ public sealed class ContinuityBoundaryTests
         await s.ExecuteRunsAsync(100);
         var item = (await s.GetRequiredService<IAgentRunStore>().GetAsync(new(instance.InstanceId, LocalUserProfile.Id), record.GenerationAgentRunId))!;
         Assert.Equal(mode == "prose" ? AgentRunStatus.WaitingToRetry : AgentRunStatus.Failed, item.Status);
-        Assert.Equal(mode == "prose" ? "completion-required" : "tool-step-limit", item.Failure!.Code);
+        Assert.Equal(mode == "prose" ? "completion-required" : "invalid-tool-strategy", item.Failure!.Code);
         Assert.Null((await s.GetRequiredService<IExperienceStore>().GetAsync(instance.InstanceId, record.ExperienceId))!.Content);
         Assert.Empty(await s.GetRequiredService<IExperienceStore>().PendingAsync(100));
         Assert.Equal(before, JsonSerializer.Serialize(await history.LoadMetadataAsync(source.SessionId)));

@@ -280,6 +280,7 @@ public sealed partial class SessionRuntime
     private static string AgentRunFailureCode(ProviderFailure? failure) => failure?.SafeMessage switch
     {
         "Tool step limit reached." => "tool-step-limit",
+        "Repeated invalid tool strategy blocked." => "invalid-tool-strategy",
         "Tool output limit reached." => "tool-output-limit",
         "Tool deadline reached." => "tool-deadline",
         "Background work requires an explicit completion outcome." => "completion-required",
@@ -289,6 +290,7 @@ public sealed partial class SessionRuntime
     private static string AgentRunFailureSummary(ProviderFailure? failure) => AgentRunFailureCode(failure) switch
     {
         "tool-step-limit" => "Tool step limit reached.",
+        "invalid-tool-strategy" => "Repeated invalid tool strategy blocked.",
         "tool-output-limit" => "Tool output limit reached.",
         "tool-deadline" => "Tool deadline reached.",
         "completion-required" => "Background work requires an explicit completion outcome.",

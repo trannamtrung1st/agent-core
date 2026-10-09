@@ -192,7 +192,7 @@ describe("failed assistant details", () => {
     expect(screen.queryByTestId("diagnostic-channel")).not.toBeInTheDocument();
   });
 
-  it.each(["setupTimeout", "streamIdle", "totalTimeout"])("shows and copies timeout reason %s", async (reason) => {
+  it.each(["setupTimeout", "streamIdle", "totalTimeout", "invalidToolStrategy"])("shows and copies registered failure reason %s", async (reason) => {
     render(<ChatMessage agentName="Alex" sessionId="session-1" entry={failedEntry({
       diagnosticId: "diag-timeout", correlationId: null, category: "provider", code: "Timeout",
       failureReason: reason

@@ -31,7 +31,7 @@ This user-authorized follow-on composes with the completed Agent Workspace refin
 
 ## Post-filesystem managed workspace refinement
 
-The workspace refinement is superseded by the authorized full migration: one real Agent Instance owner per Session, durable `/home`, temporary `/working`, transient mailbox cwd and canonical copy/move contracts. Runtime built-ins include deliberately retained published versions for pinned owners; unsupported retired files remain in Git history. General Assistant v18 combines capability-aware native Browser projection with explicitly authorized `background.start`. Existing phase freezes remain historical; P10/P11 remain unopened.
+The workspace refinement is superseded by the authorized full migration: one real Agent Instance owner per Session, durable `/home`, temporary `/working`, transient mailbox cwd and canonical copy/move contracts. Runtime built-ins include deliberately retained published versions for pinned owners; unsupported retired files remain in Git history. General Assistant v20 combines capability-aware native Browser projection with explicitly authorized `background.start`. Existing phase freezes remain historical; P10/P11 remain unopened.
 
 Full migration acceptance requires mandatory ownership and empty Chat guidance; exact file/tree cross-root copy, the four-file c#→csharp rename, CAS and lifecycle conflicts, Artifact delivery, Session deletion and owner deletion recovery; legacy-data rejection; full backend/frontend tests/build, Synthetic Playwright, Compose recreation, synchronized normative docs and hosted CI. See the migration verification report for the current measured gate status. Cwd persistence, cross-store batches and home sandbox mounts remain deferred.
 
@@ -461,3 +461,7 @@ The requested enhancement converges global Connections resources on Credentials 
 ## Historical Browser v2 reliability follow-up
 
 Authorized focused work on the existing Browser v2/AgentRun substrate: shared remaining-byte snapshot projection, bounded semantic discovery and scoped reads, precise opaque-reference errors, dependable authorized bootstrap with closure, bounded model-guided recovery and truthful observed completion. No migration, new execution architecture, selector/script authority, immutable Definition rewriting or P10/P11 work. Required acceptance is the independent dense Chromium fixture, full Synthetic model/tool-loop, full Application/Infrastructure regressions, synchronized owning documents and exact-SHA hosted Synthetic gates. [The verification ledger](reports/browser-v2-reliability-verification.md) distinguishes local implementation from final acceptance.
+
+### Browser model compatibility enhancement
+
+The user authorized all review recommendations after browser discovery recovery `13ba2f59`. This follow-up simplifies the model-facing find schema, bounds repeated invalid strategies across checkpoints, derives trusted current/prior Run facts, and adds an opt-in two-origin synthetic SSO comparison. It publishes immutable General Assistant v20 / Secretary v7. The prior native cutover freeze and earlier CI evidence remain historical; current gates are tracked in [browser model compatibility verification](reports/browser-model-compatibility-verification.md). P10/P11 remain unopened.

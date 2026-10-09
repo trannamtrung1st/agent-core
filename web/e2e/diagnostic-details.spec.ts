@@ -31,6 +31,27 @@ test("failed assistant details copy and survive reload", async ({ page }) => {
   await expect(page.getByTestId("diagnostic-id")).toHaveText(diagnosticId);
 });
 
+test("invalid tool strategy is bounded and its diagnostic survives reload", async ({ page }) => {
+  await page.goto("/");
+  await selectInstanceIdentity(page, { id: "general-assistant", version: 20 });
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await page.getByLabel("Message").fill("synthetic-invalid-tool-turn");
+  await page.getByRole("button", { name: "Send" }).click();
+  const row = page.locator(".chat-message-assistant").last();
+  await expect(row.getByText("Failed")).toBeVisible({ timeout: 15_000 });
+  await row.getByRole("button", { name: "Failed — show error details" }).click();
+  await expect(page.getByTestId("diagnostic-reason")).toHaveText("invalidToolStrategy");
+  const id = await page.getByTestId("diagnostic-id").innerText();
+  await page.getByRole("button", { name: "Copy details" }).click();
+  await expect(page.getByRole("status")).toHaveText("Copied");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("Reason: invalidToolStrategy");
+  await page.reload();
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await page.locator(".chat-message-assistant").last().getByRole("button", { name: "Failed — show error details" }).click();
+  await expect(page.getByTestId("diagnostic-id")).toHaveText(id);
+  await expect(page.getByTestId("diagnostic-reason")).toHaveText("invalidToolStrategy");
+});
+
 test("background work shows a seeded terminal diagnostic", async ({ page }) => {
   await page.goto("/");
   await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);

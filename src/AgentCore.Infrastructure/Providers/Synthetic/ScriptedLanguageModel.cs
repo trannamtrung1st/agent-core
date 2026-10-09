@@ -200,6 +200,14 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
         var diagnosticUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        if (diagnosticUser.Contains("synthetic-invalid-tool-turn", StringComparison.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return new ModelToolCallEvent(new("invalid-" + request.Messages.Count, ToolCatalog.BrowserFind,
+                "{\"role\":\"textbox\",\"text\":\"Email\"}"));
+            yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            yield break;
+        }
         if (diagnosticUser.Contains(DiagnosticFailureMarker, StringComparison.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1537,7 +1545,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                     JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = origin + "/" }));
                 return true;
             case 2:
-                events = ToolTurn("product-find", ToolCatalog.BrowserFind, JsonSerializer.Serialize(new { role = "button", name = "Publish" }));
+                events = ToolTurn("product-find", ToolCatalog.BrowserFind, JsonSerializer.Serialize(new { by = "role", value = "button", name = "Publish" }));
                 return true;
             case 3:
                 return TryInteraction("product-publish", "click", ElementRef(request.Messages, "Publish"), null, out events);
@@ -1585,7 +1593,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             case 0:
                 events = ToolTurn("p9-navigate", ToolCatalog.BrowserNavigate, JsonSerializer.Serialize(new { url = startUrl })); return true;
             case 1:
-                events = ToolTurn("p9-find-record", ToolCatalog.BrowserFind, JsonSerializer.Serialize(new { label = "Record" })); return true;
+                events = ToolTurn("p9-find-record", ToolCatalog.BrowserFind, JsonSerializer.Serialize(new { by = "label", value = "Record" })); return true;
             case 2:
                 events = ToolTurn("p9-skill", ToolCatalog.SkillsLoad, JsonSerializer.Serialize(new { ids = new[] { "definition:" + BrowserRecordSkillId } })); return true;
             case 3 when Offers(request, ToolCatalog.AppMessageSend):
@@ -1593,11 +1601,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             case 4:
                 return TryInteraction("fill", "fill", ElementRef(request.Messages, "Record"), "AC-1042", out events);
             case 5:
-                events = ToolTurn("p9-find-search", ToolCatalog.BrowserFind, JsonSerializer.Serialize(new { role = "button", name = "Search" })); return true;
+                events = ToolTurn("p9-find-search", ToolCatalog.BrowserFind, JsonSerializer.Serialize(new { by = "role", value = "button", name = "Search" })); return true;
             case 6:
                 return TryInteraction("search", "click", ElementRef(request.Messages, "Search"), null, out events);
             case 7:
-                events = ToolTurn("p9-find-open", ToolCatalog.BrowserFind, JsonSerializer.Serialize(new { role = "link", name = "AC-1042" })); return true;
+                events = ToolTurn("p9-find-open", ToolCatalog.BrowserFind, JsonSerializer.Serialize(new { by = "role", value = "link", name = "AC-1042" })); return true;
             case 8:
                 return TryInteraction("open", "click", ElementRef(request.Messages, "AC-1042"), null, out events);
             case 9:

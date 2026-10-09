@@ -52,7 +52,7 @@ public sealed class NativeBrowserBoundaryReviewTests
             var recovered = await browser.ExecuteAsync(BrowserTestRequests.Inspect(id));
             Assert.Null(recovered.ErrorCode);
             Assert.DoesNotContain("original", recovered.Observation!.Content);
-            Assert.Equal("forbidden", (await Run("browser.find", new { label = "Title" })).ErrorCode);
+            Assert.Equal("forbidden", (await Run("browser.find", new { by = "label", value = "Title" })).ErrorCode);
         }
         finally { await browser.StopAsync(CancellationToken.None); }
     }
@@ -105,7 +105,7 @@ public sealed class NativeBrowserBoundaryReviewTests
             var field = await BrowserTestQueries.Find(browser, id, "Title");
             Assert.Equal("[redacted]", field.State!.Value);
             var duplicates = await browser.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(id,
-                "browser.find", JsonSerializer.SerializeToElement(new { role = "button" })));
+                "browser.find", JsonSerializer.SerializeToElement(new { by = "role", value = "button" })));
             Assert.Equal("ambiguous_target", duplicates.ErrorCode);
             Assert.DoesNotContain("private-prefix", duplicates.DataJson!);
             var console = await browser.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(id,

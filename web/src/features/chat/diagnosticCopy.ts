@@ -47,6 +47,7 @@ const failureReasonTokens = new Set([
   "streamIncomplete",
   "incompleteToolCall",
   "circuitOpen",
+  "invalidToolStrategy",
   "streamLimit",
   "speechOmitted",
   "speechMalformed"
