@@ -26,4 +26,5 @@ public sealed record InstanceActivitySessionResponse(SessionCatalogItemResponse 
 public sealed record InstanceActivitySessionPageResponse(IReadOnlyList<InstanceActivitySessionResponse> Items, string? NextCursor, bool HasMore);
 
 public sealed record AgentRunBudgetResponse(string Class, string Source, int MaxSteps, int DurationSeconds, int PerToolSeconds,
-    int StepsConsumed, int ActiveExecutionMs, string Phase, string? TerminationReason, string CleanupStatus, bool ClosureConfirmed);
+    int StepsConsumed, int ActiveExecutionMs, string Phase, string? TerminationReason, string CleanupStatus, bool ClosureConfirmed, bool? ClosureRequested = null, bool? LogoutRequested = null,
+    bool LogoutVerified = false, bool CleanupBlocked = false);

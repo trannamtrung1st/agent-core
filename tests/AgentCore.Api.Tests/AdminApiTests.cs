@@ -31,6 +31,10 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         var created = await client.PostAsJsonAsync("/api/v2/admin/agent-instances", new AdminCreateAgentInstanceRequest("general-assistant", 21));
         created.EnsureSuccessStatusCode();
         var instance = (await created.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>())!;
+        const string limitsUrl = "/api/v2/admin/execution-budget-limits";
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _factory.CreateClient().GetAsync(limitsUrl)).StatusCode);
+        var limits = await client.GetFromJsonAsync<ExecutionBudgetCeilings>(limitsUrl);
+        Assert.Equal(ExecutionBudgetCeilings.Default, limits);
         var url = $"/api/v2/admin/agent-instances/{instance.InstanceId}/execution-budgets";
         Assert.Equal(HttpStatusCode.Unauthorized, (await _factory.CreateClient().GetAsync(url)).StatusCode);
         var before = JsonDocument.Parse(await client.GetStringAsync(url));
@@ -44,6 +48,51 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         using var after = JsonDocument.Parse(await client.GetStringAsync(url));
         Assert.Equal("instance", after.RootElement.GetProperty("effective").GetProperty("InteractiveBrowser").GetProperty("source").GetString());
         Assert.Equal(24, after.RootElement.GetProperty("effective").GetProperty("Standard").GetProperty("profile").GetProperty("maxSteps").GetInt32());
+    }
+
+    [Fact]
+    public async Task Definition_budget_reset_is_published_per_class_and_adopted_without_removing_instance_override()
+    {
+        var client = OwnerClient(); const string id = "budget-reset-publication";
+        var policy = new ExecutionBudgetPolicy(Standard: new(40, 240),
+            InteractiveBrowser: ExecutionBudgetProfile.For(ExecutionBudgetClass.InteractiveBrowser, ExecutionBudgetPreset.Extended));
+        var candidate = SampleDraftCandidate(id) with { ExecutionBudgets = policy };
+        var created = await client.PostAsJsonAsync("/api/v2/admin/definition-drafts",
+            new AdminCreateDefinitionDraftRequest(id, JsonSerializer.SerializeToElement(candidate, JsonOptions())));
+        created.EnsureSuccessStatusCode();
+        var draft = (await created.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>())!;
+        (await client.PostAsJsonAsync($"/api/v2/admin/definition-drafts/{draft.DraftId}/publish", new AdminPublishDefinitionDraftRequest(draft.Revision))).EnsureSuccessStatusCode();
+        var inheritedCreate = await client.PostAsJsonAsync("/api/v2/admin/agent-instances", new AdminCreateAgentInstanceRequest(id, 1));
+        inheritedCreate.EnsureSuccessStatusCode();
+        var inherited = (await inheritedCreate.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>())!;
+        var overrideCreate = await client.PostAsJsonAsync("/api/v2/admin/agent-instances", new AdminCreateAgentInstanceRequest(id, 1));
+        overrideCreate.EnsureSuccessStatusCode();
+        var overridden = (await overrideCreate.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>())!;
+        var instances = _factory.Services.GetRequiredService<IAgentInstanceStore>();
+        var changed = await instances.UpdateWithExpectedRevisionAsync(new(Guid.Parse(overridden.InstanceId), overridden.Revision,
+            SetExecutionBudgets: true, ExecutionBudgets: new(InteractiveBrowser: new(120, 720))), DateTimeOffset.UtcNow);
+        var fork = await client.PostAsJsonAsync("/api/v2/admin/definition-drafts/fork", new AdminForkDefinitionDraftRequest(id, 1, "ForkDurable"));
+        fork.EnsureSuccessStatusCode();
+        var forked = (await fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>())!;
+        var reset = candidate with { ExecutionBudgets = policy with { InteractiveBrowser = null } };
+        var updated = await client.PutAsJsonAsync($"/api/v2/admin/definition-drafts/{forked.DraftId}",
+            new AdminUpdateDefinitionDraftRequest(forked.Revision, JsonSerializer.SerializeToElement(reset, JsonOptions())));
+        updated.EnsureSuccessStatusCode();
+        var resetDraft = (await updated.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>())!;
+        (await client.PostAsJsonAsync($"/api/v2/admin/definition-drafts/{resetDraft.DraftId}/publish", new AdminPublishDefinitionDraftRequest(resetDraft.Revision))).EnsureSuccessStatusCode();
+        foreach (var (instanceId, revision) in new[] { (inherited.InstanceId, inherited.Revision), (overridden.InstanceId, changed.Revision) })
+            (await client.PatchAsJsonAsync($"/api/v2/admin/agent-instances/{instanceId}/active-version", new AdminReassociateAgentInstanceVersionRequest(revision, 2))).EnsureSuccessStatusCode();
+        using var inheritedAfter = JsonDocument.Parse(await client.GetStringAsync($"/api/v2/admin/agent-instances/{inherited.InstanceId}/execution-budgets"));
+        var effective = inheritedAfter.RootElement.GetProperty("effective");
+        Assert.Equal("system", effective.GetProperty("InteractiveBrowser").GetProperty("source").GetString());
+        Assert.Equal(48, effective.GetProperty("InteractiveBrowser").GetProperty("profile").GetProperty("maxSteps").GetInt32());
+        Assert.Equal(40, effective.GetProperty("Standard").GetProperty("profile").GetProperty("maxSteps").GetInt32());
+        using var overrideAfter = JsonDocument.Parse(await client.GetStringAsync($"/api/v2/admin/agent-instances/{overridden.InstanceId}/execution-budgets"));
+        Assert.Equal("instance", overrideAfter.RootElement.GetProperty("effective").GetProperty("InteractiveBrowser").GetProperty("source").GetString());
+        Assert.Equal(120, overrideAfter.RootElement.GetProperty("effective").GetProperty("InteractiveBrowser").GetProperty("profile").GetProperty("maxSteps").GetInt32());
+        var definitions = _factory.Services.GetRequiredService<IAgentDefinitionStore>();
+        Assert.Equal(policy, (await definitions.GetAsync(id, 1))!.ExecutionBudgets);
+        Assert.Equal(reset.ExecutionBudgets, (await definitions.GetAsync(id, 2))!.ExecutionBudgets);
     }
 
     [Fact]

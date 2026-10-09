@@ -158,3 +158,5 @@ The scoped [native browser final reliability follow-up](docs/reports/browser-fin
 ## Configurable execution budgets
 
 Definition defaults and independent Instance overrides select bounded Standard, Interactive Browser and Unattended Bound Browser profiles. Each Run pins its effective limits; changes apply to the next Run, including the next message of an existing Session. Requested cleanup has coordinated time, step, checkpoint and reply reserves, and Activity separates verified cleanup from browser closure. See [the verification report](docs/reports/execution-budget-cleanup-verification.md) and [resource limits](docs/10-technology-decisions.md#planned-resource-limits).
+
+The [final execution-budget polish](docs/reports/execution-budget-final-polish-verification.md) tightens truthful cleanup diagnostics, deterministic positive/negative reservation intent, backend-owned Admin ceilings and per-class Definition reset. Earlier budget and browser verification outcomes remain historical evidence for their original commits.

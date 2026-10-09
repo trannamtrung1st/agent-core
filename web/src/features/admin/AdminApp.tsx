@@ -1,3 +1,4 @@
+import { ExecutionBudgetLimitsProvider, useExecutionBudgetLimits } from "./executionBudgetLimits";
 import { InstanceExecutionBudgets, validExecutionBudgets } from "./ExecutionBudgetsSection";
 import { groupedCapabilityOptions, reconcileAlwaysCapabilities } from "./capabilityOptions";
 import { InstanceSkillsSection } from "./InstanceSkillsSection";
@@ -292,6 +293,9 @@ export function groupDefinitionInventory(
 }
 
 export function AdminApp({ route }: { route: AdminRoute }) {
+  return <ExecutionBudgetLimitsProvider><AdminAppContent route={route} /></ExecutionBudgetLimitsProvider>;
+}
+function AdminAppContent({ route }: { route: AdminRoute }) {
   const [collection, setCollection] = useState<AdminCollection>(route.view === "home" ? route.collection ?? "definitions" : "definitions");
   const [connectionCollection, setConnectionCollection] = useState<"events" | "credentials">(route.view === "home" && route.collection === "events" ? "events" : "credentials");
   useEffect(() => {
@@ -962,6 +966,7 @@ function DefinitionDetail({
 }) {
   const { message, modal } = App.useApp();
   const { token } = theme.useToken();
+  const { limits: budgetLimits } = useExecutionBudgetLimits();
   const [detailTab, updateDetailTab] = useState<AdminDefinitionTab>(tab ?? "versions");
   const setDetailTab = useCallback((next: AdminDefinitionTab) => {
     updateDetailTab(next);
@@ -1243,7 +1248,7 @@ function DefinitionDetail({
   };
 
   const saveDraft = async () => {
-    if (!activeDraft || jsonError || automationNumberErrors(candidate).length > 0 || !validExecutionBudgets((candidate.executionBudgets ?? {}) as import("../../services/adminApi").ExecutionBudgetPolicy)) {
+    if (!activeDraft || jsonError || automationNumberErrors(candidate).length > 0 || !validExecutionBudgets((candidate.executionBudgets ?? {}) as import("../../services/adminApi").ExecutionBudgetPolicy, budgetLimits)) {
       return;
     }
     setBusy(true);
@@ -1674,6 +1679,7 @@ function DraftEditor({
   ) => void;
   onError: (message: string | null, diagnosticId?: string | null) => void;
 }) {
+  const { limits: budgetLimits } = useExecutionBudgetLimits();
   const capabilities = readDraftEnvironment(candidate);
   const candidateLocked = jsonError !== null;
   const onCapabilitiesChange = (next: DraftEnvironment) => {
@@ -1710,10 +1716,10 @@ function DraftEditor({
     }
   }, [catalogReady, candidateLocked, editorView, capabilities.capabilityMode, capabilityCatalog, onCandidateChange]);
   const numberErrors = automationNumberErrors(candidate);
-  const saveBlocked = candidateLocked || !validExecutionBudgets((candidate.executionBudgets ?? {}) as import("../../services/adminApi").ExecutionBudgetPolicy) || numberErrors.length > 0 || (editorView === "form" && !catalogReady);
+  const saveBlocked = candidateLocked || !validExecutionBudgets((candidate.executionBudgets ?? {}) as import("../../services/adminApi").ExecutionBudgetPolicy, budgetLimits) || numberErrors.length > 0 || (editorView === "form" && !catalogReady);
   const saveBlockedMessage = candidateLocked
     ? "Advanced JSON is invalid — fix it before saving. This does not change the draft revision."
-    : !validExecutionBudgets((candidate.executionBudgets ?? {}) as import("../../services/adminApi").ExecutionBudgetPolicy) ? "Execution budgets require whole values within the host limits." : numberErrors[0]?.message ?? "Authoring options are loading. Wait before saving or use Advanced JSON.";
+    : !validExecutionBudgets((candidate.executionBudgets ?? {}) as import("../../services/adminApi").ExecutionBudgetPolicy, budgetLimits) ? budgetLimits ? "Execution budgets require whole values within the host limits." : "Execution limits are unavailable. Retry the limits read in Definition before saving budget values." : numberErrors[0]?.message ?? "Authoring options are loading. Wait before saving or use Advanced JSON.";
   const [resources, setResources] = useState<AdminDefinitionDraftResource[]>([]);
   const [resourcesLoading, setResourcesLoading] = useState(false);
   const [logicalPath, setLogicalPath] = useState("");

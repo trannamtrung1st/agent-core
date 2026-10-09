@@ -4,6 +4,7 @@ import { DefinitionVersionsTable } from "./DefinitionVersionsTable";
 import { getAdminDefinitionVersion, listAdminAuthoringOptions } from "../../services/adminApi";
 
 vi.mock("../../services/adminApi", () => ({
+  getExecutionBudgetLimits: vi.fn().mockResolvedValue({ maxSteps: 144, durationSeconds: 900, perToolSeconds: 30 }),
   getAdminDefinitionVersion: vi.fn(),
   listAdminAuthoringOptions: vi.fn()
 }));

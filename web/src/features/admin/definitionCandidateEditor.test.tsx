@@ -7,6 +7,7 @@ import { DefinitionCandidateEditor } from "./definitionCandidateEditor";
 import { DefinitionSkillsSection } from "./DefinitionSkillsSection";
 
 vi.mock("../../services/adminApi", () => ({
+  getExecutionBudgetLimits: vi.fn().mockResolvedValue({ maxSteps: 144, durationSeconds: 900, perToolSeconds: 30 }),
   listAdminDefinitions: vi.fn(),
   listAdminInstances: vi.fn(),
   getAdminEffectiveConfig: vi.fn(),

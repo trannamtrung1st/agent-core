@@ -160,7 +160,7 @@ public static class BackgroundSessionEndpoints
     {
         var d = AgentCore.Application.Execution.RunBudgetDiagnosticProjection.From(run);
         return d is null ? null : new(d.Class, d.Source, d.MaxSteps, d.DurationSeconds, d.PerToolSeconds,
-            d.StepsConsumed, d.ActiveExecutionMs, d.Phase, d.TerminationReason, d.CleanupStatus, d.ClosureConfirmed);
+            d.StepsConsumed, d.ActiveExecutionMs, d.Phase, d.TerminationReason, d.CleanupStatus, d.ClosureConfirmed, d.ClosureRequested, d.LogoutRequested, d.LogoutVerified, d.CleanupBlocked);
     }
 
     private static async Task<BackgroundSessionResponse> ToSessionAsync(SessionSnapshot session, AgentRun? initial,

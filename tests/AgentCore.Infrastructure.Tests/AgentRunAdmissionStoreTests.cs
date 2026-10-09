@@ -34,7 +34,8 @@ public sealed class AgentRunAdmissionStoreTests
         await f.Memory.SaveAsync(snapshot, 0);
         var activation = new Activation(Guid.NewGuid(), snapshot.SessionId, ActivationKind.Initiative, [], Guid.NewGuid(), null, null, null, "budget-pin", Now);
         var pin = ExecutionBudgetPolicy.Resolve(ExecutionBudgetClass.InteractiveBrowser,
-            new(InteractiveBrowser: ExecutionBudgetProfile.For(ExecutionBudgetClass.InteractiveBrowser, ExecutionBudgetPreset.Extended)), null);
+            new(InteractiveBrowser: ExecutionBudgetProfile.For(ExecutionBudgetClass.InteractiveBrowser, ExecutionBudgetPreset.Extended)), null)
+            with { RequestedCleanup = true, CleanupIntent = new(true, false) };
         var run = AgentRun.Create(Guid.NewGuid(), Owner, new(activation, Definition.Id, Definition.Version, Definition.Identity,
             Guid.NewGuid(), AgentRunOutputContract.ConversationResponse, pin), new("synthetic", "synthetic", "synthetic", null), 3, Now);
         await f.Runs.AdmitAsync(snapshot with { Revision = 2 }, 1, run);

@@ -84,7 +84,9 @@ export function AgentRunDetails({ run, onChange }: { run: AgentRun; onChange: (r
         { key: "phase", label: "Phase", children: runBudgetLabel(run.budget.phase) },
         { key: "reason", label: "Termination reason", children: run.budget.terminationReason ? runBudgetLabel(run.budget.terminationReason) : 'None recorded' },
         { key: "cleanup", label: "Requested cleanup", children: runBudgetLabel(run.budget.cleanupStatus) },
-        { key: "closure", label: "Browser closure", children: `${run.budget.closureConfirmed ? 'Confirmed' : 'Unverified'}. Sign-out requires separate application evidence.` }
+        { key: "logout", label: "Sign-out", children: run.budget.logoutRequested == null ? 'Request not recorded · Unverified' : !run.budget.logoutRequested ? 'Not requested' : run.budget.logoutVerified ? 'Independently verified' : 'Requested · Unverified. Observed evidence remains in the result; Core has no sign-out-specific proof.' },
+        { key: "closure", label: "Browser closure", children: `${run.budget.closureRequested == null ? 'Request not recorded' : run.budget.closureRequested ? 'Requested' : 'Not requested'} · ${run.budget.closureConfirmed ? 'Confirmed' : 'Unverified'}` },
+        { key: "cleanupBlocked", label: "Cleanup blocker", children: run.budget.cleanupBlocked ? 'Unresolved browser failure; see result evidence.' : 'None recorded' }
       ] : []),
       { key: "attempt", label: "Attempt", children: `${run.attemptCount} of ${run.maxAttempts}` },
       { key: "updated", label: "Updated", children: <time dateTime={run.updatedAt}>{formatChatTime(run.updatedAt) ?? "Unknown time"}</time> }

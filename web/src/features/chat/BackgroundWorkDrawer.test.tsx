@@ -274,6 +274,16 @@ describe("Background Sessions", () => {
     fireEvent.click(screen.getByRole("button", { name: "View original result" }));
     expect(await screen.findByText("No action was needed.")).toBeInTheDocument();
   });
+  it("keeps partial cleanup, requested sign-out and confirmed closure independent", () => {
+    render(<App><AgentRunDetails run={{ ...fixtureRun, budget: { class: "InteractiveBrowser", source: "system",
+      maxSteps: 48, durationSeconds: 300, perToolSeconds: 30, stepsConsumed: 41, activeExecutionMs: 90000,
+      phase: "cleanup", terminationReason: null, cleanupStatus: "partial", closureConfirmed: true,
+      closureRequested: true, logoutRequested: true, logoutVerified: false, cleanupBlocked: false } }} onChange={() => undefined} /></App>);
+    expect(screen.getByText("Partially completed")).toBeVisible();
+    expect(screen.getByText(/Requested · Unverified. Observed evidence remains in the result/)).toBeVisible();
+    expect(screen.getByText("Requested · Confirmed")).toBeVisible();
+    expect(screen.queryByText("Independently verified")).not.toBeInTheDocument();
+  });
   it("sends cancellation only after review and retains a stale-action error", async () => {
     const run = { ...fixtureRun, status: "running", cancellationAvailable: true };
     vi.mocked(cancelAgentRun).mockRejectedValue(new Error("Run revision is stale. Refresh and try again."));

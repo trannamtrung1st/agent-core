@@ -32,6 +32,24 @@ public sealed class ExecutionBudgetPolicyTests
         Assert.Equal(144, ExecutionBudgetPolicy.Resolve(ExecutionBudgetClass.InteractiveBrowser, definition, instance).Profile.MaxSteps);
     }
 
+    [Fact]
+    public void Definition_reset_changes_inheritance_without_mutating_other_classes_instances_or_admitted_runs()
+    {
+        var definition = new ExecutionBudgetPolicy(Standard: new(40, 240), InteractiveBrowser: ExecutionBudgetProfile.For(ExecutionBudgetClass.InteractiveBrowser, ExecutionBudgetPreset.Extended));
+        var instance = new ExecutionBudgetPolicy(InteractiveBrowser: new(120, 720));
+        var admitted = ExecutionBudgetPolicy.Resolve(ExecutionBudgetClass.InteractiveBrowser, definition, null);
+        var nextVersion = definition with { InteractiveBrowser = null };
+        Assert.Equal(definition.Standard, nextVersion.Standard);
+        Assert.Equal(48, ExecutionBudgetPolicy.Resolve(ExecutionBudgetClass.InteractiveBrowser, nextVersion, null).Profile.MaxSteps);
+        Assert.Equal("system", ExecutionBudgetPolicy.Resolve(ExecutionBudgetClass.InteractiveBrowser, nextVersion, null).Source);
+        Assert.Equal(instance.InteractiveBrowser, ExecutionBudgetPolicy.Resolve(ExecutionBudgetClass.InteractiveBrowser, nextVersion, instance).Profile);
+        Assert.Equal(96, admitted.Profile.MaxSteps); Assert.Equal("definition", admitted.Source);
+        var intent = admitted with { RequestedCleanup = true, CleanupIntent = new(true, false) };
+        Assert.Equal(intent, JsonSerializer.Deserialize<EffectiveExecutionBudget>(JsonSerializer.Serialize(intent)));
+        var historical = JsonSerializer.Deserialize<EffectiveExecutionBudget>(JsonSerializer.Serialize(admitted));
+        Assert.Null(historical!.CleanupIntent);
+    }
+
     [Theory]
     [InlineData(145, 900, 30)] [InlineData(144, 901, 30)] [InlineData(144, 900, 31)]
     [InlineData(7, 300, 30)] [InlineData(48, 59, 30)] [InlineData(48, 300, 0)]
