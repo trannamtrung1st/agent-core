@@ -23,7 +23,6 @@ public sealed partial class NativePlaywrightBrowser
     public async ValueTask<BrowserResult> ExecuteAsync(BrowserRequest command, CancellationToken cancellationToken = default)
     {
         if (!BrowserToolCatalog.TryGet(BrowserToolArguments.ToolName(command.Operation), out var metadata) || !Provider.Supports(metadata.Feature)) return new("unsupported_operation");
-        var args = command.Options;
         if (command.Operation == BrowserOperation.Navigate) return await NavigateAsync(command, cancellationToken);
         if (command.Operation == BrowserOperation.Close)
         {
@@ -35,10 +34,10 @@ public sealed partial class NativePlaywrightBrowser
         if (!IsAvailable) return command.Operation == BrowserOperation.GetConfig ? Configuration(null) : new("provider_unavailable");
         if (!_sessions.TryGetValue(command.SessionId, out var session))
             return command.Operation == BrowserOperation.GetConfig ? Configuration(null) : new("provider_unavailable");
-        if (command.Operation == BrowserOperation.Screenshot)
+        if (command.Command is BrowserScreenshot captureArgs)
         {
-            var capture = await CaptureViewportAsync(new BrowserScreenshotRequest(command.SessionId, args.Format ?? "png",
-                args.FullPage == true, args.TargetRef), cancellationToken);
+            var capture = await CaptureViewportAsync(new BrowserScreenshotRequest(command.SessionId, captureArgs.Format,
+                captureArgs.FullPage, captureArgs.Target), cancellationToken);
             return new(capture.ErrorCode, Bytes: capture.Png, ContentType: capture.ContentType, FileName: "screenshot." + capture.ContentType.Split('/')[1], RedactionCount: capture.RedactionCount, Width: capture.Width, Height: capture.Height);
         }
         await using var interactive = await EnterInteractiveAsync(command.SessionId, cancellationToken).ConfigureAwait(false);
@@ -51,9 +50,31 @@ public sealed partial class NativePlaywrightBrowser
         using var cancel = ct.Register(() => CancelCall(session, call));
         session.DeniedNavigation = false; session.PopupCode = null; session.TimedOut = false;
         Task? activeAction = null;
+        var effectAttempted = false;
+        var effectConfirmed = false;
         session.DialogSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
         BrowserResult Data(object value) => new(null, DataJson: JsonSerializer.Serialize(value));
         try
+        {
+            var result = await Dispatch();
+            return result with { EffectAttempted = result.EffectAttempted || effectAttempted,
+                EffectConfirmedBySdk = result.EffectConfirmedBySdk || effectConfirmed };
+        }
+        catch (BrowserDialogPendingException) { return new("dialog_pending", EffectAttempted: effectAttempted); }
+        catch (BrowserTargetException ex) { return new(ex.Code, EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
+        catch (BrowserTargetDeniedException) { return new("target_denied", EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await FenceActionAsync();
+            throw new OperationCanceledException(cancellationToken);
+        }
+        catch (OperationCanceledException) { await FenceActionAsync(); return new("timeout", EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
+        catch (RegexMatchTimeoutException) { return new("timeout", EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
+        catch (TimeoutException) { return new("timeout", EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
+        catch (PlaywrightException ex) { return new((await FailAsync(session, metadata.Feature.ToString(), "interaction", ex)).ErrorCode, EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
+        finally { session.Gate.Release(); }
+
+        async Task<BrowserResult> Dispatch()
         {
             if (session.Dialog?.Page?.IsClosed == true)
             { session.Dialog = null; session.PendingAction = null; }
@@ -61,49 +82,46 @@ public sealed partial class NativePlaywrightBrowser
             if (session.Dialog is not null && command.Operation != BrowserOperation.Dialog) return new("dialog_pending");
             if (command.Operation is not (BrowserOperation.Tabs or BrowserOperation.Dialog)) await AdoptOpenWebPageAsync(session, ct);
             if (!IsAllowed(session, session.Page.Url)) return new("target_denied");
-            var readsOnly = metadata.Effect == ToolEffect.ReadOnly || command.Operation == BrowserOperation.Tabs && args.Operation == "list"
-                || command.Operation == BrowserOperation.Dialog && args.Operation == "inspect";
+            var readsOnly = metadata.Effect == ToolEffect.ReadOnly || command.Command is BrowserTabs { Operation: "list" }
+                || command.Command is BrowserDialog { Operation: "inspect" };
             if (!readsOnly && !BrowserTargetPolicy.EvaluateAct(_policy.InteractionMode,
                 session.Page.Url, _policy.EffectiveInteractionOrigins, _policy.PolicyMode).Allowed) return new("forbidden");
-            switch (command.Operation)
+            switch (command.Command)
             {
-                case BrowserOperation.SetGeolocation:
+                case BrowserSetGeolocation args:
                     return await GeolocationAsync(session, args, ct);
-                case BrowserOperation.Snapshot:
+                case BrowserObserve args:
                     {
-                        var scopeRef = command.Options.TargetRef;
-                        var scope = scopeRef is null ? session.Page.Locator("body") : await Target(scopeRef);
-                        if (scope is null) return new("stale_reference");
-                        return new(null, await ObserveAsync(session, command.SessionId, scope,
-                            command.Options.Depth ?? 32, scopeRef, ct, command.Options.Boxes == true));
+                        var scope = args.Target is null ? session.Page.Locator("body") : await Target(args.Target);
+                        return new(null, await ObserveAsync(session, command.SessionId, scope!, args.Depth, args.Target, ct, args.Boxes));
                     }
-                case BrowserOperation.Find:
-                    return await FindAsync(session, command.SessionId, command.Options.Query, ct);
-                case BrowserOperation.Upload:
+                case BrowserFind args:
+                    return await FindAsync(session, args, ct);
+                case BrowserUploadCommand args:
                     {
-                        var target = await Target(command.Options.Ref);
-                        if (target is null) return new("stale_reference");
+                        var target = await Target(args.Target);
+                        if (target is null) return new("target_missing");
                         if (!await Ordinary(target)) return new("forbidden");
-                        if (command.Options.Uploads is not { Count: > 0 and <= 8 } uploads) return new("invalid");
+                        if (args.Uploads is not { Count: > 0 and <= 8 } uploads) return new("invalid");
                         await Action(target.SetInputFilesAsync(uploads.Select(u => new FilePayload
                         { Name = u.FileName, MimeType = u.MediaType, Buffer = u.Content.ToArray() }), new() { Timeout = TimeoutMs() }));
                         break;
                     }
-                case BrowserOperation.Hover:
+                case BrowserHover args:
                     {
-                        var target = await Target(command.Options.Ref);
-                        if (target is null) return new("stale_reference");
+                        var target = await Target(args.Target);
+                        if (target is null) return new("target_missing");
                         if (!await Ordinary(target)) return new("forbidden");
                         await Action(target.HoverAsync(new() { Timeout = TimeoutMs() })); break;
                     }
-                case BrowserOperation.Drag:
+                case BrowserDrag args:
                     {
-                        var source = await Target(command.Options.Ref); var destination = await Target(command.Options.TargetRef);
-                        if (source is null || destination is null) return new("stale_reference");
+                        var source = await Target(args.Target); var destination = await Target(args.Destination);
+                        if (source is null || destination is null) return new("target_missing");
                         if (!await Ordinary(source) || !await Ordinary(destination)) return new("forbidden");
                         await Action(source.DragToAsync(destination, new() { Timeout = TimeoutMs() })); break;
                     }
-                case BrowserOperation.Tabs:
+                case BrowserTabs args:
                     {
                         RememberOpenPages(session);
                         var operation = args.Operation;
@@ -118,11 +136,12 @@ public sealed partial class NativePlaywrightBrowser
                             var url = args.Url;
                             if (!BrowserTargetPolicy.EvaluateDestination(url, LeaseOrigins(session) ?? _policy.NavigationOrigins, _policy.PolicyMode).Allowed) return new("target_denied");
                             // Page creation can finish late; close the context if cancellation wins that race.
+                            effectAttempted = true; effectConfirmed = false;
                             var creation = session.Context.NewPageAsync();
                             await MutateContextAsync(session, creation, ct);
                             var page = await creation; RememberPage(session, page);
                             var navigation = page.GotoAsync(url!, new PageGotoOptions { Timeout = TimeoutMs(), WaitUntil = WaitUntilState.DOMContentLoaded });
-                            try { await navigation.WaitAsync(ct); }
+                            try { await navigation.WaitAsync(ct); effectConfirmed = true; }
                             catch (Exception ex) when (ex is OperationCanceledException or PlaywrightException)
                             {
                                 await CloseQuietlyAsync(page); ForgetPage(session, page);
@@ -130,7 +149,7 @@ public sealed partial class NativePlaywrightBrowser
                                 throw;
                             }
                             if (!IsAllowed(session, page.Url)) { await page.CloseAsync().WaitAsync(ct); return new("target_denied"); }
-                            session.Page = page; session.LastAllowedUrl = page.Url; session.Generation++;
+                            session.Page = page; session.LastAllowedUrl = page.Url; AdvanceGeneration(session);
                             return new(null, await CaptureAsync(session, command.SessionId, ct));
                         }
                         var binding = FindPage(session, args.TabRef);
@@ -139,7 +158,7 @@ public sealed partial class NativePlaywrightBrowser
                         if (operation == "close")
                         {
                             if (OpenPages(session).Count == 1) return new("last_tab");
-                            ForgetPage(session, binding.Page); await binding.Page.CloseAsync().WaitAsync(ct);
+                            ForgetPage(session, binding.Page); await Action(binding.Page.CloseAsync());
                             if (ReferenceEquals(session.Page, binding.Page)) session.Page = OpenPages(session).First().Page;
                         }
                         else if (operation == "select")
@@ -149,15 +168,16 @@ public sealed partial class NativePlaywrightBrowser
                             await Action(ActivateTabProbe is { } activate ? activate(binding.Page) : binding.Page.BringToFrontAsync());
                         }
                         else return new("invalid");
-                        session.Generation++; return new(null, await CaptureAsync(session, command.SessionId, ct));
+                        AdvanceGeneration(session); return new(null, await CaptureAsync(session, command.SessionId, ct));
                     }
-                case BrowserOperation.Dialog:
+                case BrowserDialog args:
                     {
                         var dialog = session.Dialog;
                         if (dialog is null) return new("dialog_missing");
                         // A modal blocks page JS, including the live storage/password secret collector.
                         // Mask the entire untrusted message rather than trusting stale pre-dialog evidence.
                         if (args.Operation == "inspect") return Data(new { kind = dialog.Type, message = "[redacted]", messageRedacted = true });
+                        effectAttempted = true; effectConfirmed = false;
                         activeAction = DialogResolutionProbe is { } resolve ? resolve(dialog)
                             : args.Operation == "accept" ? dialog.AcceptAsync(args.PromptText) : dialog.DismissAsync();
                         try { await activeAction.WaitAsync(ct); }
@@ -166,7 +186,7 @@ public sealed partial class NativePlaywrightBrowser
                             if (ReferenceEquals(session.Dialog, dialog)) session.Dialog = null;
                             return new("dialog_missing");
                         }
-                        activeAction = null;
+                        activeAction = null; effectConfirmed = true;
                         if (ReferenceEquals(session.Dialog, dialog)) session.Dialog = null;
                         if (session.PendingAction is { } pending)
                         {
@@ -183,12 +203,12 @@ public sealed partial class NativePlaywrightBrowser
                         if (session.Dialog is not null) return new("dialog_pending");
                         session.DialogSignal = new(TaskCreationOptions.RunContinuationsAsynchronously); return new(null, await CaptureAsync(session, command.SessionId, ct));
                     }
-                case BrowserOperation.WaitFor:
+                case BrowserWaitFor args:
                     {
                         var condition = args.Condition; var text = args.Text;
                         if (condition == "stable")
                         {
-                            var settled = await BrowserPageSettle.WaitAsync(session.Page, (args.TimeoutMs ?? 2500), ct);
+                            var settled = await BrowserPageSettle.WaitAsync(session.Page, args.TimeoutMs, ct);
                             return new(null, (await CaptureAsync(session, command.SessionId, ct)) with { Settled = settled });
                         }
                         if (condition is "text" or "textGone")
@@ -198,59 +218,59 @@ public sealed partial class NativePlaywrightBrowser
                             // nor prove that every matching text has disappeared.
                             await session.Page.GetByText(text, new PageGetByTextOptions { Exact = false })
                                 .Filter(new() { Visible = true }).First.WaitForAsync(new LocatorWaitForOptions
-                            { State = condition == "text" ? WaitForSelectorState.Visible : WaitForSelectorState.Hidden, Timeout = (args.TimeoutMs ?? 2500) }).WaitAsync(ct);
+                            { State = condition == "text" ? WaitForSelectorState.Visible : WaitForSelectorState.Hidden, Timeout = args.TimeoutMs }).WaitAsync(ct);
                         }
                         else if (condition == "target")
                         {
                             var state = args.State ?? "visible";
-                            var target = await Target(args.Ref, state is "hidden" or "detached"); if (target is null) return new("stale_reference");
+                            var target = await Target(args.Target, state is "hidden" or "detached"); if (target is null) return new("target_missing");
                             if (state is "enabled" or "disabled")
                             {
-                                await Assertions.Expect(target).ToBeEnabledAsync(new LocatorAssertionsToBeEnabledOptions { Enabled = state == "enabled", Timeout = (args.TimeoutMs ?? 2500) }).WaitAsync(ct);
+                                await Assertions.Expect(target).ToBeEnabledAsync(new LocatorAssertionsToBeEnabledOptions { Enabled = state == "enabled", Timeout = args.TimeoutMs }).WaitAsync(ct);
                             }
                             else if (Enum.TryParse<WaitForSelectorState>(state, true, out var parsed))
-                                await target.WaitForAsync(new LocatorWaitForOptions { State = parsed, Timeout = (args.TimeoutMs ?? 2500) }).WaitAsync(ct);
+                                await target.WaitForAsync(new LocatorWaitForOptions { State = parsed, Timeout = args.TimeoutMs }).WaitAsync(ct);
                             else return new("invalid");
                         }
                         else if (condition == "url")
                         {
                             var url = args.Url; if (url is null) return new("invalid");
-                            await session.Page.WaitForURLAsync(url, new PageWaitForURLOptions { Timeout = (args.TimeoutMs ?? 2500) }).WaitAsync(ct);
+                            await session.Page.WaitForURLAsync(url, new PageWaitForURLOptions { Timeout = args.TimeoutMs }).WaitAsync(ct);
                         }
                         else if (condition == "load") await session.Page.WaitForLoadStateAsync(args.State == "load" ? LoadState.Load : LoadState.DOMContentLoaded,
-                            new PageWaitForLoadStateOptions { Timeout = (args.TimeoutMs ?? 2500) }).WaitAsync(ct);
+                            new PageWaitForLoadStateOptions { Timeout = args.TimeoutMs }).WaitAsync(ct);
                         else return new("invalid");
                         return new(null, await CaptureAsync(session, command.SessionId, ct));
                     }
-                case BrowserOperation.Scroll:
-                    if (command.Options.Ref is { } scrollRef)
+                case BrowserScroll args:
+                    if (args.Target is { } scrollRef)
                     {
                         var target = await Target(scrollRef);
-                        if (target is null) return new("stale_reference");
+                        if (target is null) return new("target_missing");
                         if (!await Ordinary(target)) return new("forbidden");
                         await target.HoverAsync(new() { Timeout = TimeoutMs() }).WaitAsync(ct);
                     }
-                    await Action(session.Page.Mouse.WheelAsync(command.Options.DeltaX ?? 0, command.Options.DeltaY ?? 0));
+                    await Action(session.Page.Mouse.WheelAsync(args.DeltaX, args.DeltaY));
                     break;
-                case BrowserOperation.Resize:
+                case BrowserResize args:
                     await Action(ResizeProbe is { } resizeProbe
-                        ? resizeProbe(session.Page, (args.Width ?? 1280), (args.Height ?? 800))
-                        : session.Page.SetViewportSizeAsync((args.Width ?? 1280), (args.Height ?? 800))); break;
-                case BrowserOperation.FillForm:
+                        ? resizeProbe(session.Page, args.Width, args.Height)
+                        : session.Page.SetViewportSizeAsync(args.Width, args.Height)); break;
+                case BrowserFillForm args:
                     {
-                        var fields = new List<(string Ref, string? Value, bool? Checked)>();
+                        var fields = new List<BrowserFormField>();
                         foreach (var field in args.Fields ?? [])
                         {
                             if ((field.Value is not null) == (field.Checked is not null)) return new("invalid");
-                            var target = await Target(field.Ref); if (target is null) return new("stale_reference");
+                            var target = await Target(field.Target); if (target is null) return new("target_missing");
                             if (!await Ordinary(target)) return new("forbidden");
-                            fields.Add((field.Ref, field.Value, field.Checked));
+                            fields.Add(field);
                         }
                         foreach (var field in fields)
                         {
                             // Earlier input handlers may rerender, duplicate or protect a later field.
                             // Retain all-field preflight and recheck the live authority before each effect.
-                            var target = await Target(field.Ref); if (target is null) return new("stale_reference");
+                            var target = await Target(field.Target); if (target is null) return new("target_missing");
                             if (!await Ordinary(target)) return new("forbidden");
                             if (field.Checked is bool check) await Action(target.SetCheckedAsync(check, new LocatorSetCheckedOptions { Timeout = TimeoutMs() }));
                             else if (field.Value is { } value) await Action(target.FillAsync(value, new LocatorFillOptions { Timeout = TimeoutMs() }));
@@ -258,11 +278,11 @@ public sealed partial class NativePlaywrightBrowser
                         }
                         break;
                     }
-                case BrowserOperation.PressKey:
+                case BrowserPressKey args:
                     {
                         var key = args.Key; if (key is null || !Regex.IsMatch(key, "^[A-Za-z0-9+_-]{1,80}$")) return new("invalid");
-                        if (args.Ref is { } reference)
-                        { var target = await Target(reference); if (target is null) return new("stale_reference"); if (!await Ordinary(target)) return new("forbidden"); await Action(target.PressAsync(key, new LocatorPressOptions { Timeout = TimeoutMs() })); }
+                        if (args.Target is { } reference)
+                        { var target = await Target(reference); if (target is null) return new("target_missing"); if (!await Ordinary(target)) return new("forbidden"); await Action(target.PressAsync(key, new LocatorPressOptions { Timeout = TimeoutMs() })); }
                         else
                         {
                             if (!await session.Page.EvaluateAsync<bool>("() => (" + OrdinaryElement + ")(document.activeElement)").WaitAsync(ct)) return new("forbidden");
@@ -270,68 +290,68 @@ public sealed partial class NativePlaywrightBrowser
                         }
                         break;
                     }
-                case BrowserOperation.SelectOption:
-                    { var target = await Target(args.Ref); if (target is null) return new("stale_reference"); if (!await Ordinary(target)) return new("forbidden"); await Action(target.SelectOptionAsync(args.Values ?? [], new LocatorSelectOptionOptions { Timeout = TimeoutMs() })); break; }
-                case BrowserOperation.Click:
+                case BrowserSelectOption args:
+                    { var target = await Target(args.Target); if (target is null) return new("target_missing"); if (!await Ordinary(target)) return new("forbidden"); await Action(target.SelectOptionAsync(args.Values, new LocatorSelectOptionOptions { Timeout = TimeoutMs() })); break; }
+                case BrowserClick args:
                     {
-                        var target = await Target(args.Ref); if (target is null) return new("stale_reference"); if (!await Ordinary(target)) return new("forbidden");
+                        var target = await Target(args.Target); if (target is null) return new("target_missing"); if (!await Ordinary(target)) return new("forbidden");
                         var modifiers = args.Modifiers?.Select(v => Enum.Parse<KeyboardModifier>(v)).ToArray() ?? [];
-                        await Action(target.ClickAsync(new LocatorClickOptions { Timeout = TimeoutMs(), ClickCount = (args.ClickCount ?? 1), Button = Enum.Parse<MouseButton>(args.Button ?? "left", true), Modifiers = modifiers })); break;
+                        await Action(target.ClickAsync(new LocatorClickOptions { Timeout = TimeoutMs(), ClickCount = args.ClickCount, Button = Enum.Parse<MouseButton>(args.Button, true), Modifiers = modifiers })); break;
                     }
-                case BrowserOperation.Type:
+                case BrowserTypeText args:
                     {
-                        var target = await Target(args.Ref); if (target is null) return new("stale_reference");
+                        var target = await Target(args.Target); if (target is null) return new("target_missing");
                         if (!await Ordinary(target)) return new("forbidden");
-                        await Action(target.FillAsync(args.Slowly == true ? "" : args.Text!, new LocatorFillOptions { Timeout = TimeoutMs() }));
-                        if (args.Slowly == true)
+                        await Action(target.FillAsync(args.Slowly ? "" : args.Text!, new LocatorFillOptions { Timeout = TimeoutMs() }));
+                        if (args.Slowly)
                         {
-                            target = await Target(args.Ref); if (target is null) return new("stale_reference");
+                            target = await Target(args.Target); if (target is null) return new("target_missing");
                             if (!await Ordinary(target)) return new("forbidden");
                             await Action(target.PressSequentiallyAsync(args.Text!, new LocatorPressSequentiallyOptions { Timeout = TimeoutMs() }));
                         }
-                        if (args.Submit == true)
+                        if (args.Submit)
                         {
-                            target = await Target(args.Ref); if (target is null) return new("stale_reference");
+                            target = await Target(args.Target); if (target is null) return new("target_missing");
                             if (!await Ordinary(target)) return new("forbidden");
                             await Action(target.PressAsync("Enter", new LocatorPressOptions { Timeout = TimeoutMs() }));
                         }
                         break;
                     }
-                case BrowserOperation.Drop:
+                case BrowserDrop args:
                     {
-                        var target = await Target(args.Ref); if (target is null) return new("stale_reference"); if (!await Ordinary(target)) return new("forbidden");
+                        var target = await Target(args.Target); if (target is null) return new("target_missing"); if (!await Ordinary(target)) return new("forbidden");
                         var text = args.Text; if (text is null) return new("invalid");
                         await Action(target.EvaluateAsync("(el, data) => { const transfer = new DataTransfer(); transfer.setData(data.mime, data.text); el.dispatchEvent(new DragEvent('drop', {bubbles:true,dataTransfer:transfer})); }", new { mime = args.MimeType ?? "text/plain", text })); break;
                     }
-                case BrowserOperation.Highlight:
+                case BrowserHighlight args:
                     {
-                        var operation = args.Operation ?? "show";
+                        var operation = args.Operation;
                         if (operation is not ("show" or "hide")) return new("invalid");
-                        if (operation == "hide" && args.Ref is null) await session.Page.HideHighlightAsync().WaitAsync(ct);
+                        if (operation == "hide" && args.Target is null) await session.Page.HideHighlightAsync().WaitAsync(ct);
                         else
                         {
-                            var target = await Target(args.Ref); if (target is null) return new("stale_reference");
+                            var target = await Target(args.Target); if (target is null) return new("target_missing");
                             await (operation == "hide" ? target.HideHighlightAsync() : target.HighlightAsync()).WaitAsync(ct);
                         }
                         return Data(new { status = "ok" });
                     }
-                case BrowserOperation.GenerateLocator:
+                case BrowserGenerateLocator args:
                     {
-                        var target = await Target(args.Ref); if (target is null) return new("stale_reference");
+                        var target = await Target(args.Target); if (target is null) return new("target_missing");
                         return Data(new { locator = Redact(target.ToString() ?? "", await CollectSecretsAsync(session, ct), session.ProtectedValues), informationalOnly = true });
                     }
-                case BrowserOperation.Verify:
+                case BrowserVerify args:
                     {
-                        var target = args.Ref is { } reference ? await Target(reference) : session.Page.GetByText(args.Text ?? "", new PageGetByTextOptions { Exact = false }).First;
-                        if (target is null) return new("stale_reference");
+                        var target = await Target(args.Target ?? new BrowserTarget("text", args.Text!, Exact: false), args.Condition == "hidden");
+                        if (target is null) return new("target_missing");
                         if (args.Condition == "value" && !await Ordinary(target)) return new("forbidden");
                         var passed = args.Condition switch
                         { "visible" => await target.IsVisibleAsync().WaitAsync(ct), "hidden" => !await target.IsVisibleAsync().WaitAsync(ct), "checked" => await target.IsCheckedAsync().WaitAsync(ct), "text" => (await target.InnerTextAsync().WaitAsync(ct)).Contains(args.Text ?? "", StringComparison.Ordinal), "value" => await target.InputValueAsync().WaitAsync(ct) == args.Value, _ => false };
-                        return Data(new { passed });
+                        return Data(new { passed }) with { ApplicationOutcomeVerified = passed };
                     }
-                case BrowserOperation.Mouse:
+                case BrowserMouse args:
                     {
-                        var x = (args.X ?? -1); var y = (args.Y ?? -1); var viewport = session.Page.ViewportSize;
+                        var x = args.X; var y = args.Y; var viewport = session.Page.ViewportSize;
                         if (viewport is null || !float.IsFinite(x) || !float.IsFinite(y) || x < 0 || y < 0 || x > viewport.Width || y > viewport.Height) return new("invalid");
                         async Task<bool> SafePoint(float px, float py) => await session.Page.EvaluateAsync<bool>(
                             "p => { const e = document.elementFromPoint(p.x,p.y); if (!e) return false; for (let n=e;n;n=n.parentElement) if (!(" + OrdinaryElement + ")(n)) return false; return true; }", new { x = (double)px, y = (double)py }).WaitAsync(ct);
@@ -357,32 +377,32 @@ public sealed partial class NativePlaywrightBrowser
                         }
                         break;
                     }
-                case BrowserOperation.EmulateMedia:
+                case BrowserEmulateMedia args:
                     await EmulateMediaAsync(session, args, ct, Action); break;
-                case BrowserOperation.ConsoleMessages:
+                case BrowserConsoleMessages args:
                     {
                         var secrets = await CollectSecretsAsync(session, ct); string[] messages;
-                        var level = args.Level ?? "all";
+                        var level = args.Level;
                         lock (session.PopupGate) messages = session.Console.Where(message => level == "all" || message.StartsWith(level + ":", StringComparison.Ordinal))
-                            .TakeLast((args.Limit ?? 20)).Select(message => Redact(message, secrets, session.ProtectedValues)).ToArray();
+                            .TakeLast(args.Limit).Select(message => Redact(message, secrets, session.ProtectedValues)).ToArray();
                         return Data(new { messages, untrustedBrowserContent = true });
                     }
-                case BrowserOperation.NetworkRequests:
-                    lock (session.PopupGate) return Data(new { requests = session.Network.TakeLast((args.Limit ?? 20)).Select(r => new { requestRef = r.Key, method = r.Value.Method, url = SafeNetworkUrl(r.Value.Url), resourceType = r.Value.ResourceType }), untrustedBrowserContent = true });
-                case BrowserOperation.NetworkRequest:
+                case BrowserNetworkRequests args:
+                    lock (session.PopupGate) return Data(new { requests = session.Network.TakeLast(args.Limit).Select(r => new { requestRef = r.Key, method = r.Value.Method, url = SafeNetworkUrl(r.Value.Url), resourceType = r.Value.ResourceType }), untrustedBrowserContent = true });
+                case BrowserNetworkRequest args:
                     lock (session.PopupGate)
                     {
                         if (!session.Network.TryGetValue(args.RequestRef ?? "", out var request)) return new("invalid");
                         return Data(new { method = request.Method, url = SafeNetworkUrl(request.Url), resourceType = request.ResourceType });
                     }
-                case BrowserOperation.Route:
-                case BrowserOperation.Routes:
-                case BrowserOperation.Unroute:
-                case BrowserOperation.NetworkState:
-                case BrowserOperation.Cookies:
-                case BrowserOperation.LocalStorage:
-                case BrowserOperation.SessionStorage:
-                    return await StateCommandAsync(session, command, ct, Action);
+                case BrowserRoute:
+                case BrowserRoutes:
+                case BrowserUnroute:
+                case BrowserNetworkState:
+                case BrowserCookies:
+                case BrowserLocalStorage:
+                case BrowserSessionStorage:
+                    return await StateCommandAsync(session, command.Command, ct, Action);
                 default: return new("unsupported_operation");
             }
             if (session.Dialog is not null) return new("dialog_pending");
@@ -391,27 +411,20 @@ public sealed partial class NativePlaywrightBrowser
             if (session.PopupCode is not null) return new(session.PopupCode);
             if (session.DeniedNavigation || !IsAllowed(session, session.Page.Url))
             { await RestoreAllowedPageAsync(session, ct); return new("target_denied"); }
-            return await CaptureWithRetryAsync(session, command.SessionId, metadata.Feature.ToString(),
+            var captured = await CaptureWithRetryAsync(session, command.SessionId, metadata.Feature.ToString(),
                 metadata.Effect == ToolEffect.ReadOnly ? BrowserSnapshotSettle.None : (command.Operation is BrowserOperation.Type or BrowserOperation.Upload or BrowserOperation.Hover ? BrowserSnapshotSettle.None : BrowserSnapshotSettle.Automatic), null, ct);
+            // Page/context events may arrive while native observation is captured.
+            await SettlePopupsAsync(session);
+            if (session.PopupCode is not null) return new(session.PopupCode);
+            if (session.DeniedNavigation || !IsAllowed(session, session.Page.Url))
+            { await RestoreAllowedPageAsync(session, ct); return new("target_denied"); }
+            return captured;
         }
-        catch (BrowserDialogPendingException) { return new("dialog_pending"); }
-        catch (BrowserReferenceException ex) { return new(ex.Code); }
-        catch (BrowserTargetDeniedException) { return new("target_denied"); }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            await FenceActionAsync();
-            RemoveRefs(command.SessionId);
-            throw new OperationCanceledException(cancellationToken);
-        }
-        catch (OperationCanceledException) { await FenceActionAsync(); RemoveRefs(command.SessionId); return new("timeout"); }
-        catch (RegexMatchTimeoutException) { return new("timeout"); }
-        catch (TimeoutException) { return new("timeout"); }
-        catch (PlaywrightException ex) { return new((await FailAsync(session, metadata.Feature.ToString(), "interaction", ex)).ErrorCode); }
-        finally { session.Gate.Release(); }
 
         async Task Action(Task action)
         {
             activeAction = action;
+            effectAttempted = true; effectConfirmed = false;
             ActionStartedProbe?.Invoke();
             if (await Task.WhenAny(action, session.DialogSignal.Task).WaitAsync(ct) != action)
             {
@@ -420,7 +433,7 @@ public sealed partial class NativePlaywrightBrowser
                 throw new BrowserDialogPendingException();
             }
             await action.WaitAsync(ct);
-            activeAction = null;
+            activeAction = null; effectConfirmed = true;
         }
         async Task FenceActionAsync()
         {
@@ -429,25 +442,13 @@ public sealed partial class NativePlaywrightBrowser
             await FencePageAsync(session, command.SessionId);
             _ = activeAction.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
         }
-        async Task<ILocator?> Target(string? reference, bool allowMissing = false)
-        {
-            var error = ReferenceError(reference, command.SessionId, out var live);
-            if (error is not null) throw new BrowserReferenceException(error);
-            var count = await live!.Handle.CountAsync().WaitAsync(ct);
-            if (count == 0 && !allowMissing) throw new BrowserReferenceException("target_missing");
-            if (count == 0) return live.Handle;
-            if (count > 1) throw new BrowserReferenceException("ambiguous_target");
-            if (metadata.Feature == BrowserFeature.Click && live.Actions.Count == 0)
-                throw new BrowserReferenceException("non_actionable_target");
-            var frameUrl = await live.Handle.EvaluateAsync<string>("el => el.ownerDocument.location.href").WaitAsync(ct);
-            if (metadata.Effect == ToolEffect.ReadOnly ? !Allows(session, frameUrl, true)
-                : !BrowserTargetPolicy.EvaluateAct(_policy.InteractionMode, frameUrl, LeaseOrigins(session) ?? _policy.EffectiveInteractionOrigins, _policy.PolicyMode).Allowed) throw new BrowserTargetDeniedException();
-            return live.Handle;
-        }
+        async Task<ILocator?> Target(BrowserTarget? target, bool allowMissing = false) =>
+            await ResolveTargetAsync(session, target, metadata.Effect != ToolEffect.ReadOnly, ct, allowMissing,
+                requireAction: metadata.Feature == BrowserFeature.Click);
         async Task<bool> Ordinary(ILocator target) => await target.EvaluateAsync<bool>(OrdinaryElement).WaitAsync(ct);
     }
 
-    private sealed class BrowserReferenceException(string code) : Exception { public string Code { get; } = code; }
+    private sealed class BrowserTargetException(string code) : Exception { public string Code { get; } = code; }
 
     private sealed class BrowserDialogPendingException : Exception;
     private sealed class BrowserTargetDeniedException : Exception;

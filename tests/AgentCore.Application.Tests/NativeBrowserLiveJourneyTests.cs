@@ -31,7 +31,7 @@ public sealed class NativeBrowserLiveJourneyTests(ITestOutputHelper evidence)
         {
             var agentDirectory = new DirectoryInfo(AppContext.BaseDirectory);
             while (agentDirectory is not null && !Directory.Exists(Path.Combine(agentDirectory.FullName, "agents"))) agentDirectory = agentDirectory.Parent;
-            var definition = (await new FileAgentDefinitionStore(Path.Combine(agentDirectory!.FullName, "agents"), SyntheticProviderAliases.Default).GetAsync("general-assistant", 18))!;
+            var definition = (await new FileAgentDefinitionStore(Path.Combine(agentDirectory!.FullName, "agents"), SyntheticProviderAliases.Default).GetAsync("general-assistant", 21))!;
             // Keep this proof bounded to Browser and contextual capability discovery.
             definition = definition with { Environment = definition.Environment! with
             {
@@ -62,7 +62,7 @@ public sealed class NativeBrowserLiveJourneyTests(ITestOutputHelper evidence)
                 browserLease: browser);
             await runtime.AttachAsync();
             var url = browser.HostPolicy.NavigationOrigins.Single() + "/browser-native.html";
-            Assert.True(await runtime.SubmitUserTextAsync($"Use the browser at {url}. Find and activate Asset 159, fill the Title field with Native browser proof and the Notes field with Generic SPA verified. Set Enabled to checked. Load browser.fill_form through capabilities.load if it is not offered, and use browser.fill_form to set all three fields together. Verify the resulting fields and report what happened. Use only this fixture; do not use web search or other websites."));
+            Assert.True(await runtime.SubmitUserTextAsync($"Use the browser at {url}. Find and activate Asset 159, fill the Title field with Native browser proof and the Notes field with Generic SPA verified. Set Enabled to checked. Verify the resulting fields and report what happened. Use only this fixture; do not use web search or other websites."));
             using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(5));
             await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput or ErrorOutput, deadline.Token);
             await runtime.WaitUntilIdleAsync();
@@ -79,8 +79,6 @@ public sealed class NativeBrowserLiveJourneyTests(ITestOutputHelper evidence)
             Assert.Equal("Generic SPA verified", await page.GetByRole(Microsoft.Playwright.AriaRole.Textbox, new() { Name = "Notes", Exact = true }).InputValueAsync());
             Assert.True(await page.GetByRole(Microsoft.Playwright.AriaRole.Checkbox, new() { Name = "Enabled", Exact = true }).IsCheckedAsync());
             Assert.Contains("Selected Asset 159", await page.GetByRole(Microsoft.Playwright.AriaRole.Status).InnerTextAsync());
-            Assert.Contains(recording.Calls, call => call.Name == ToolCatalog.BrowserFind);
-            Assert.Contains(recording.Calls, call => call.Name == ToolCatalog.BrowserFillForm);
             Assert.Contains(recording.Calls, call => call.Name == ToolCatalog.CapabilitiesLoad);
             Assert.DoesNotContain(output.Items, item => item.Payload is ErrorOutput);
             Assert.NotEmpty(runtime.Snapshot.Entries.Last(e => e.Role == ConversationRole.Assistant && e.Status == EntryStatus.Completed).Text);

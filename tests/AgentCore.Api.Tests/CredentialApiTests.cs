@@ -13,8 +13,8 @@ public sealed class CredentialApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task Owner_shared_resource_journey_has_no_value_readback_and_enforces_lifecycle()
     {
         using var client = TestOwnerCapability.CreateOwnerClient(_factory);
-        var a = TestInstances.Create(client, "secretary", 3);
-        var b = TestInstances.Create(client, "secretary", 3);
+        var a = TestInstances.Create(client, "secretary", 8);
+        var b = TestInstances.Create(client, "secretary", 8);
         var aPath = $"/api/v2/admin/agent-instances/{a}/credential-bindings";
         var bPath = $"/api/v2/admin/agent-instances/{b}/credential-bindings";
         const string initial = "api-private-value-9475";

@@ -58,14 +58,14 @@ public sealed partial class TerminalDisplayRepairTests
             Requests.Add(request); var step = Requests.Count - 1;
             var results = request.Messages.Where(m => m.Role == ModelRole.Tool).ToArray();
             if (step == 1) clock.Advance(TimeSpan.FromSeconds(220));
-            string Ref() { using var json = JsonDocument.Parse(results.Last().Text); return json.RootElement.GetProperty("matches")[0].GetProperty("ref").GetString()!; }
+            BrowserTarget Ref() { using var json = JsonDocument.Parse(results.Last().Text); return json.RootElement.GetProperty("matches")[0].GetProperty("target").Deserialize<BrowserTarget>(JsonSerializerOptions.Web)!; }
             (string, object) action = step switch
             {
-                0 => (ToolCatalog.BrowserFind, new { by = "role", value = "button", name = "Sign out" }),
-                1 => (ToolCatalog.BrowserClick, new { @ref = Ref() }),
+                0 => (ToolCatalog.BrowserFind, new { target = new { by = "role", value = "button", name = "Sign out" } }),
+                1 => (ToolCatalog.BrowserClick, new { target = Ref() }),
                 2 when authorized => (ToolCatalog.BrowserDialog, new { operation = "inspect" }),
                 3 when authorized => (ToolCatalog.BrowserDialog, new { operation = "accept" }),
-                4 when authorized => (ToolCatalog.BrowserFind, new { by = "role", value = "button", name = "Sign in" }),
+                4 when authorized => (ToolCatalog.BrowserFind, new { target = new { by = "role", value = "button", name = "Sign in" } }),
                 5 when authorized => (ToolCatalog.BrowserClose, new { }),
                 2 => (ToolCatalog.BrowserClose, new { }),
                 _ => ("", new { })

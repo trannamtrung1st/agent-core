@@ -24,7 +24,7 @@ public sealed class BrowserDialogProgressTests
     [Fact]
     public void Checkpoint_receipts_restore_the_blocker_and_equivalent_failure_bound_without_replaying_effects()
     {
-        var calls = new[] { Call(ToolCatalog.BrowserClick, id: "click"), Call(ToolCatalog.BrowserFind, "{\"by\":\"text\",\"value\":\"A\"}", "a"), Call(ToolCatalog.BrowserSnapshot, id: "snapshot") };
+        var calls = new[] { Call(ToolCatalog.BrowserClick, id: "click"), Call(ToolCatalog.BrowserFind, "{\"target\":{\"by\":\"text\",\"value\":\"A\"}}", "a"), Call(ToolCatalog.BrowserSnapshot, id: "snapshot") };
         var receipts = new List<ModelMessage>();
         foreach (var call in calls)
         {
@@ -53,7 +53,7 @@ public sealed class BrowserDialogProgressTests
         Assert.False(progress.DialogRecoveryExhausted);
         using var invalid = JsonDocument.Parse("{\"by\":\"role\"}");
         Assert.Null(progress.Refuse(Call(ToolCatalog.BrowserFind, invalid.RootElement.GetRawText()), invalid.RootElement));
-        using var valid = JsonDocument.Parse("{\"by\":\"text\",\"value\":\"A\"}");
+        using var valid = JsonDocument.Parse("{\"target\":{\"by\":\"text\",\"value\":\"A\"}}");
         Assert.Contains("strategySuppressed", progress.Refuse(Call(ToolCatalog.BrowserFind, valid.RootElement.GetRawText()), valid.RootElement)!);
         progress.NoteResult(dismiss, "{\"url\":\"http://fixture.test/\"}");
         Assert.False(progress.DialogPending);

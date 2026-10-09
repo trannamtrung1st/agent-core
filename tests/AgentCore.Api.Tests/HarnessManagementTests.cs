@@ -14,7 +14,7 @@ public sealed class HarnessManagementTests
         await using var factory = new AgentCoreApiFactory();
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(factory.Services));
-        var instance = await factory.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
+        var instance = await factory.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
         var url = $"/api/v2/admin/agent-instances/{instance.InstanceId}/harness";
         var configured = await client.PutAsJsonAsync(url + "/policy", new HarnessPolicyRequest(instance.Revision, "Managed", ["KnowledgeResources"], [], []));
         configured.EnsureSuccessStatusCode();
@@ -26,7 +26,7 @@ public sealed class HarnessManagementTests
         frozen.EnsureSuccessStatusCode();
         review = (await frozen.Content.ReadFromJsonAsync<HarnessReviewResponse>())!;
         Assert.True(review.Policy.Frozen);
-        Assert.Equal(17, review.ActiveVersion);
+        Assert.Equal(21, review.ActiveVersion);
         Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsJsonAsync(url + "/continue", new HarnessRunRequest(Guid.NewGuid().ToString()))).StatusCode);
     }
 }

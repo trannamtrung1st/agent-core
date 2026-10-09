@@ -28,21 +28,21 @@ public sealed class NativeBrowserBoundaryReviewTests
         {
             var opened = await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(browser.HostPolicy.NavigationOrigins.Single() + "/browser-native.html?compact=1")));
             Assert.Null(opened.ErrorCode);
-            var reference = (await BrowserTestQueries.Find(browser, id, "Title")).Ref;
+            var reference = (await BrowserTestQueries.Find(browser, id, "Title")).Target;
             var page = browser.ContextFor(id)!.Pages[0];
             var field = page.GetByRole(AriaRole.Textbox, new() { Name = "Title", Exact = true });
             await field.FillAsync("original");
             // Retain the accessible name/Locator while the SPA makes this field protected.
             await field.EvaluateAsync("(el,name) => el.name=name", protectedName);
-            Assert.Equal("forbidden", (await Run("browser.type", new { @ref = reference, text = "replacement", slowly = true })).ErrorCode);
+            Assert.Equal("forbidden", (await Run("browser.type", new { target = reference, text = "replacement", slowly = true })).ErrorCode);
             var typed = await browser.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Type, reference, "replacement"));
             Assert.Equal("forbidden", typed.ErrorCode);
             Assert.Null(typed.AllowedActions);
-            Assert.Equal("forbidden", (await Run("browser.press_key", new { @ref = reference, key = "Backspace" })).ErrorCode);
-            var dragSource = (await BrowserTestQueries.Find(browser, id, "Asset 1", "treeitem")).Ref;
-            Assert.Equal("forbidden", (await browser.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Drag, dragSource, null, TargetRef: reference))).ErrorCode);
-            Assert.Equal("forbidden", (await Run("browser.fill_form", new { fields = new[] { new { @ref = reference, value = "replacement" } } })).ErrorCode);
-            Assert.Equal("forbidden", (await Run("browser.verify", new { @ref = reference, condition = "value", value = "original" })).ErrorCode);
+            Assert.Equal("forbidden", (await Run("browser.press_key", new { target = reference, key = "Backspace" })).ErrorCode);
+            var dragSource = (await BrowserTestQueries.Find(browser, id, "Asset 1", "treeitem")).Target;
+            Assert.Equal("forbidden", (await browser.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Drag, dragSource, null, Destination: reference))).ErrorCode);
+            Assert.Equal("forbidden", (await Run("browser.fill_form", new { fields = new[] { new { target = reference, value = "replacement" } } })).ErrorCode);
+            Assert.Equal("forbidden", (await Run("browser.verify", new { target = reference, condition = "value", value = "original" })).ErrorCode);
             await field.FocusAsync();
             Assert.Equal("forbidden", (await Run("browser.press_key", new { key = "Backspace" })).ErrorCode);
             Assert.Equal("original", await field.InputValueAsync());
@@ -52,7 +52,7 @@ public sealed class NativeBrowserBoundaryReviewTests
             var recovered = await browser.ExecuteAsync(BrowserTestRequests.Inspect(id));
             Assert.Null(recovered.ErrorCode);
             Assert.DoesNotContain("original", recovered.Observation!.Content);
-            Assert.Equal("forbidden", (await Run("browser.find", new { by = "label", value = "Title" })).ErrorCode);
+            Assert.Equal("forbidden", (await Run("browser.find", new { target = new { by = "label", value = "Title" } })).ErrorCode);
         }
         finally { await browser.StopAsync(CancellationToken.None); }
     }
@@ -105,7 +105,7 @@ public sealed class NativeBrowserBoundaryReviewTests
             var field = await BrowserTestQueries.Find(browser, id, "Title");
             Assert.Equal("[redacted]", field.State!.Value);
             var duplicates = await browser.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(id,
-                "browser.find", JsonSerializer.SerializeToElement(new { by = "role", value = "button" })));
+                "browser.find", JsonSerializer.SerializeToElement(new { target = new { by = "role", value = "button" } })));
             Assert.Equal("ambiguous_target", duplicates.ErrorCode);
             Assert.DoesNotContain("private-prefix", duplicates.DataJson!);
             var console = await browser.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(id,

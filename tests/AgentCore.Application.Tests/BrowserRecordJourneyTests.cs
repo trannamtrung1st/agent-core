@@ -38,7 +38,7 @@ public sealed class BrowserRecordJourneyTests
         Assert.True(await runtime.SubmitUserTextAsync(userText));
         await runtime.WaitUntilIdleAsync();
 
-        Assert.Equal(11, recording.Requests.Count);
+        Assert.Equal(8, recording.Requests.Count);
         Assert.DoesNotContain(
             recording.Requests[0].Tools ?? [],
             tool => tool.Name == ToolCatalog.AppMessageSend);
@@ -47,10 +47,10 @@ public sealed class BrowserRecordJourneyTests
             tool => tool.Name == ToolCatalog.BrowserNavigate
                 && tool.Description.Contains("Trusted browser start: http://127.0.0.1:5094/.", StringComparison.Ordinal));
         Assert.Contains(
-            recording.Requests[3].Tools ?? [],
+            recording.Requests[2].Tools ?? [],
             tool => tool.Name == ToolCatalog.AppMessageSend);
         var firstPrompt = string.Join('\n', recording.Requests[0].Messages.Select(message => message.Text));
-        var afterLoad = string.Join('\n', recording.Requests[3].Messages.Select(message => message.Text));
+        var afterLoad = string.Join('\n', recording.Requests[2].Messages.Select(message => message.Text));
         Assert.DoesNotContain(Procedure, firstPrompt, StringComparison.Ordinal);
         Assert.Contains(Procedure, afterLoad, StringComparison.Ordinal);
 
@@ -311,10 +311,8 @@ public sealed class BrowserRecordJourneyTests
     private sealed class FixtureBrowser : IBrowser
     {
         public BrowserProviderDescriptor Provider { get; } = new("fixture", "Test browser", new HashSet<BrowserFeature> { BrowserFeature.Navigate, BrowserFeature.Snapshot, BrowserFeature.Find, BrowserFeature.Click, BrowserFeature.Type, BrowserFeature.Hover, BrowserFeature.Drag, BrowserFeature.FillForm, BrowserFeature.SelectOption, BrowserFeature.PressKey, BrowserFeature.Upload, BrowserFeature.FillCredential, BrowserFeature.Wait, BrowserFeature.Tabs, BrowserFeature.Screenshot, BrowserFeature.Close });
-        private readonly Dictionary<string, string> _refs = new(StringComparer.Ordinal);
         private string _page = "none";
         private string? _filled;
-        private int _mint;
 
         public int ObserveCalls { get; private set; }
 
@@ -337,14 +335,14 @@ public sealed class BrowserRecordJourneyTests
             BrowserRequest request,
             CancellationToken cancellationToken = default)
         {
-            NavigatedUrls.Add(request.Options.Url!);
-            if (!string.Equals(new Uri(request.Options.Url!)!.GetLeftPart(UriPartial.Authority), Origin, StringComparison.Ordinal)
-                || new Uri(request.Options.Url!).AbsolutePath is not ("/" or "" or "/challenge" or "/signup" or "/account"))
+            NavigatedUrls.Add(((BrowserNavigate)request.Command).Url!);
+            if (!string.Equals(new Uri(((BrowserNavigate)request.Command).Url!)!.GetLeftPart(UriPartial.Authority), Origin, StringComparison.Ordinal)
+                || new Uri(((BrowserNavigate)request.Command).Url!).AbsolutePath is not ("/" or "" or "/challenge" or "/signup" or "/account"))
             {
                 return new(new BrowserResult("target_denied", null));
             }
 
-            _page = new Uri(request.Options.Url!)!.AbsolutePath switch
+            _page = new Uri(((BrowserNavigate)request.Command).Url!)!.AbsolutePath switch
             {
                 "/challenge" => "challenge",
                 "/signup" => "signup",
@@ -368,15 +366,15 @@ public sealed class BrowserRecordJourneyTests
             CancellationToken cancellationToken = default)
         {
             ActCalls++;
-            if (!_refs.TryGetValue(request.Options.Ref!, out var name))
+            if (Capture().Targets.FirstOrDefault(e => e.Target == (request.Command switch { BrowserClick click => click.Target, BrowserTypeText type => type.Target, _ => null })) is not { Name: var name })
             {
-                return new(new BrowserResult("stale_reference", null));
+                return new(new BrowserResult("action_not_confirmed", null));
             }
 
             switch (AgentCore.Application.Tools.BrowserToolArguments.ToolName(request.Operation)[8..], name)
             {
                 case ("type", "Record"):
-                    _filled = request.Options.Text;
+                    _filled = ((BrowserTypeText)request.Command).Text;
                     return new(Ok(Capture()));
                 case ("click", "Search"):
                     _page = _filled == "AC-1042" ? "record" : "nomatch";
@@ -403,8 +401,6 @@ public sealed class BrowserRecordJourneyTests
 
         private BrowserSnapshot Capture()
         {
-            _refs.Clear();
-            _mint++;
             return _page switch
             {
                 "challenge" => Page(
@@ -445,24 +441,10 @@ public sealed class BrowserRecordJourneyTests
             (string Name, string Role)[] targets,
             BrowserInterventionKind intervention = BrowserInterventionKind.None)
         {
-            var captured = targets.Select(element =>
-            {
-                var reference = Mint(element.Name);
-                _refs[reference] = element.Name;
-                return new BrowserElement(reference, element.Role, element.Name);
-            }).ToArray();
+            var captured = targets.Select(element => new BrowserElement(
+                element.Name == "Record" ? new BrowserTarget("label", "Record") : new BrowserTarget("role", element.Role, element.Name),
+                element.Role, element.Name)).ToArray();
             return new BrowserSnapshot(url, title, content, false, captured, intervention);
-        }
-
-        private string Mint(string name)
-        {
-            var salt = name switch
-            {
-                "Record" => "r",
-                "Search" => "s",
-                _ => "a"
-            };
-            return "el_" + (salt + _mint.ToString("x21"))[..22];
         }
 
         public ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default) => request.Operation switch

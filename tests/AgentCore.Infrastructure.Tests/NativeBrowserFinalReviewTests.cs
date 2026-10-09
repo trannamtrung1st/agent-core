@@ -22,7 +22,7 @@ public sealed class NativeBrowserFinalReviewTests
             Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(browser.HostPolicy.NavigationOrigins.Single()+"/credential-login?reflect=1")))).ErrorCode);
             var context=browser.ContextFor(id)!; var page=context.Pages[0];
             var observation=await browser.ExecuteAsync(BrowserTestRequests.Inspect(id));
-            var reference=(await BrowserTestQueries.Find(browser, id, "Password")).Ref;
+            var reference=(await BrowserTestQueries.Find(browser, id, "Password")).Target;
             Assert.Null((await browser.FillCredentialAsync(id,reference,(_,_)=>ValueTask.FromResult("credential-private-1574"))).ErrorCode);
             await context.AddCookiesAsync([new() { Name="review", Value="cookie-private-7291", Url=page.Url }]);
             await page.EvaluateAsync("() => { localStorage.setItem('token','local-private-8392'); sessionStorage.setItem('token','session-private-9483'); }");

@@ -69,7 +69,7 @@ public sealed class AgentBrowserProfileTests
             var allowed = await executor.ExecuteAsync(BrowserDefinition(), Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission);
             Assert.DoesNotContain("forbidden", allowed.Text); Assert.Equal(1, browser.NavigateCalls); Assert.Equal(instanceId, browser.BoundAgent);
             await instances.UpdateWithExpectedRevisionAsync(new(instanceId, 1, Lifecycle: AgentInstanceLifecycle.Archived), now);
-            foreach (var blocked in new[] { call, new ModelToolCall("snapshot", ToolCatalog.BrowserSnapshot, "{}"), new ModelToolCall("click", ToolCatalog.BrowserClick, """{"ref":"el_aaaaaaaaaaaaaaaaaaaaaa"}""") })
+            foreach (var blocked in new[] { call, new ModelToolCall("snapshot", ToolCatalog.BrowserSnapshot, "{}"), new ModelToolCall("click", ToolCatalog.BrowserClick, """{"target":{"by":"role","value":"button","name":"el_aaaaaaaaaaaaaaaaaaaaaa"}}""") })
                 Assert.Contains("forbidden", (await executor.ExecuteAsync(BrowserDefinition(), Guid.NewGuid(), blocked, ToolLimits.MaxOutputBytes, admission: admission)).Text);
             Assert.Equal(1, browser.NavigateCalls); Assert.Equal(0, browser.ObserveCalls); Assert.Equal(0, browser.ActCalls); Assert.True(File.Exists(marker));
             var missing = await executor.ExecuteAsync(BrowserDefinition(), Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission with { AgentInstanceId = Guid.NewGuid() });
@@ -131,7 +131,7 @@ public sealed class AgentBrowserProfileTests
             NavigateCalls++;
             return ValueTask.FromResult(new BrowserResult(
                 null,
-                new BrowserSnapshot(request.Options.Url!, "admin", string.Empty, false, [])));
+                new BrowserSnapshot(((BrowserNavigate)request.Command).Url!, "admin", string.Empty, false, [])));
         }
 
         public ValueTask<BrowserResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)

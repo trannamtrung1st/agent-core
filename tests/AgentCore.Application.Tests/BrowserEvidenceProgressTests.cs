@@ -71,7 +71,7 @@ public sealed class BrowserEvidenceProgressTests
     {
         var progress = new BrowserEvidenceProgress();
         var page = Page("http://store.test/", "Catalog", "el_1");
-        var search = """{"snapshotId":"snap_1","matches":[{"ref":"el_2","role":"button","name":"Open review","actions":["click"]}]}""";
+        var search = """{"snapshotId":"snap_1","matches":[{"target":{"by":"role","value":"button","name":"el_2"},"role":"button","name":"Open review","actions":["click"]}]}""";
         progress.Note(ToolCatalog.BrowserSnapshot, page);
         progress.Note(ToolCatalog.BrowserSnapshot, page);
         Assert.Equal(1, progress.Repeated);
@@ -90,7 +90,7 @@ public sealed class BrowserEvidenceProgressTests
         var settledJson = settled is bool flag ? $",\"settled\":{(flag ? "true" : "false")}" : string.Empty;
         var state = value.Length == 0 ? string.Empty : $",\"state\":{{\"value\":\"{value}\"}}";
         return $$"""
-        {"untrustedBrowserContent":true,"url":"{{url}}","title":"Store","content":"{{visible}}"{{settledJson}},"targets":[{"ref":"{{reference}}","role":"textbox","name":"Name","actions":["fill"]{{state}}}]}
+        {"untrustedBrowserContent":true,"url":"{{url}}","title":"Store","content":"{{visible}}"{{settledJson}},"targets":[{"target":{"by":"role","value":"button","name":"{{reference}}"},"role":"textbox","name":"Name","actions":["fill"]{{state}}}]}
         """;
     }
 }

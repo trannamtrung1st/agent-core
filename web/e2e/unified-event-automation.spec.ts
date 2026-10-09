@@ -9,7 +9,7 @@ test('Completed Automation can be deleted while its quiet Run remains inspectabl
   const owner = (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))!;
   const headers = { 'X-AgentCore-Owner-Capability': owner };
   const created = await page.request.post('/api/v2/admin/agent-instances', { headers, data: {
-    definitionId: 'secretary', version: 5,
+    definitionId: 'secretary', version: 8,
     persona: { name: 'Completed Automation review', role: 'Reviewer', description: 'Disposable Synthetic lifecycle verification', tone: 'Clear' }
   } });
   expect(created.ok()).toBe(true);

@@ -31,68 +31,34 @@ public sealed class NativeBrowserContractTests
     [InlineData("role", "textbox")]
     [InlineData("text", "Email")]
     [InlineData("label", "Email")]
-    [InlineData("placeholder", "Enter your email")]
+    [InlineData("placeholder", "Your email")]
     [InlineData("altText", "Logo")]
     [InlineData("title", "Help")]
     [InlineData("testId", "email")]
-    public void Single_strategy_normalizes_harmless_optional_fields(string by, string value)
+    public void Direct_target_is_shared_by_discovery_and_actions(string by, string value)
     {
-        var args = JsonSerializer.SerializeToElement(new { by, value, name = "  ", hasText = "", scopeRef = "", frameRef = (string?)null, exact = (bool?)null, limit = (int?)null });
-        Assert.True(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserFind, args, out var request, out _));
-        var query = request.Options.Query!;
-        Assert.Contains(value, new[] { query.Role, query.Text, query.Label, query.Placeholder, query.AltText, query.Title, query.TestId });
-        Assert.Null(query.ScopeRef); Assert.Null(query.FrameRef); Assert.Null(query.Name); Assert.Null(query.HasText);
+        var target = new BrowserTarget(by, value);
+        Assert.True(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserClick, JsonSerializer.SerializeToElement(new { target }), out var click, out _));
+        Assert.Equal(target, Assert.IsType<BrowserClick>(click.Command).Target);
+        Assert.True(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserFind, JsonSerializer.SerializeToElement(new { target }), out var find, out _));
+        Assert.Equal(target, Assert.IsType<BrowserFind>(find.Command).Target);
     }
 
     [Theory]
-    [InlineData("{\"by\":\"label\",\"value\":\"Email\",\"name\":\"Email\"}")]
-    [InlineData("{\"by\":\"role\",\"value\":\"textbox\",\"text\":\"Email\"}")]
-    [InlineData("{\"by\":\"unknown\",\"value\":\"Email\"}")]
-    [InlineData("{\"by\":\"text\",\"value\":\"Email\",\"scopeRef\":\"el_0123456789abcdefghijkl\",\"frameRef\":\"frame-1\"}")]
-    public void Incompatible_nonempty_criteria_are_rejected(string json) =>
-        Assert.False(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserFind, JsonSerializer.Deserialize<JsonElement>(json), out _, out _));
+    [InlineData("{\"ref\":\"el_0123456789abcdefghijkl\"}")]
+    [InlineData("{\"target\":{\"by\":\"css\",\"value\":\"#password\"}}")]
+    [InlineData("{\"target\":{\"by\":\"label\",\"value\":\"Email\",\"name\":\"Email\"}}")]
+    [InlineData("{\"target\":{\"by\":\"role\",\"value\":\"button\",\"within\":{\"by\":\"text\",\"value\":\"row\",\"within\":{}}}}")]
+    public void Retired_refs_selectors_incompatible_names_and_recursive_scopes_fail_before_dispatch(string json) =>
+        Assert.False(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserClick, JsonSerializer.Deserialize<JsonElement>(json), out _, out _));
 
     [Fact]
-    public async Task Malformed_discovery_explains_query_repair_before_reference_repair()
+    public void Relational_filter_is_bounded_literal_data()
     {
-        const string overloaded = """{"role":"textbox","name":"Email","text":"Email","label":"Email","placeholder":"Enter your email","scopeRef":"","frameRef":""}""";
-        Assert.False(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserFind,
-            JsonSerializer.Deserialize<JsonElement>(overloaded), out _, out var error));
-        Assert.Equal("invalid", error);
-        var browser = new Subset();
-        var executor = new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll);
-        var definition = Definition(ToolCatalog.BrowserFind, ToolCatalog.BrowserSnapshot);
-        foreach (var args in new[] { overloaded, "{}", "{\"label\":\"Email\",\"name\":\"Email\"}" })
-        {
-            var result = await executor.ExecuteAsync(definition, Guid.NewGuid(), new("find", ToolCatalog.BrowserFind, args),
-                ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn));
-            Assert.Contains("Choose exactly one", result.Text);
-            Assert.Contains("placeholder", result.Text);
-            Assert.Contains("Omit", result.Text);
-        }
-        var badScope = await executor.ExecuteAsync(definition, Guid.NewGuid(),
-            new("find", ToolCatalog.BrowserFind, "{\"by\":\"placeholder\",\"value\":\"Enter your email\",\"scopeRef\":\"invalid\"}"),
-            ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn));
-        Assert.Contains("invalid_reference", badScope.Text);
-        Assert.Contains("scopeRef", badScope.Text);
-        var snapshot = await executor.ExecuteAsync(definition, Guid.NewGuid(),
-            new("snapshot", ToolCatalog.BrowserSnapshot, "{\"targetRef\":\"\"}"), ToolLimits.MaxOutputBytes,
-            admission: new(false, TriggerKind.UserTurn));
-        Assert.Contains("Omit it to inspect the page", snapshot.Text);
-        Assert.Equal(0, browser.Commands);
-    }
-    [Fact]
-    public void Relational_text_filter_is_bounded_literal_neutral_data_and_requires_a_primary_query()
-    {
-        var id = Guid.NewGuid();
-        var args = JsonSerializer.SerializeToElement(new { by = "role", value = "row", hasText = "Record.*B" });
-        Assert.True(BrowserToolArguments.TryRequest(id, ToolCatalog.BrowserFind, args, out var request, out _));
-        Assert.Equal("row", request.Options.Query!.Role);
-        Assert.Equal("Record.*B", request.Options.Query.HasText);
-        foreach (var invalid in new object[] { new { hasText = "Record B" }, new { by = "text", value = "row", name = "Invalid" },
-            new { by = "role", value = "row", hasText = new string('x', 201) }, new { by = "role", value = "row", hasText = new { regex = "Record.*" } } })
-            Assert.False(BrowserToolArguments.TryRequest(id, ToolCatalog.BrowserFind, JsonSerializer.SerializeToElement(invalid), out _, out _));
-        Assert.False(BrowserToolArguments.ValidQuery(new(Role: "row", HasText: new string('x', 201))));
+        var target = new BrowserTarget("role", "button", Name: "Edit", Within: new("role", "row", HasText: "Record.*B"));
+        Assert.True(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserClick, JsonSerializer.SerializeToElement(new { target }), out var request, out _));
+        Assert.Equal("Record.*B", Assert.IsType<BrowserClick>(request.Command).Target.Within!.HasText);
+        Assert.False(BrowserToolArguments.ValidTarget(target with { HasText = new string('x', 201) }));
     }
 
     [Fact]
@@ -106,7 +72,7 @@ public sealed class NativeBrowserContractTests
             Assert.Equal(metadata.Effect,tool.Effect);
             Assert.Equal(ToolResourceScope.Session,tool.Scope);
             Assert.Equal(metadata.Feature == BrowserFeature.Close ? ToolReplaySafety.IntegrationIdempotent : ToolReplaySafety.NonReplayable,tool.ReplaySafety);
-            Assert.DoesNotContain("oneOf",tool.ModelDefinition.ParametersJson);
+            Assert.False(doc.RootElement.TryGetProperty("oneOf", out _));
         }
         foreach(var retired in new[]{"observe","act","pages","capture"}) Assert.False(ToolRegistry.TryGet("browser."+retired,out _));
         Assert.Equal(ToolEffect.SensitiveWrite,ToolCatalog.EffectOf("browser.route"));
@@ -118,16 +84,16 @@ public sealed class NativeBrowserContractTests
     {
         var subset=new Subset();var gate=new ToolConfigurationGate(null,null,null,subset,true);
         Assert.True(gate.IsConfigured("browser.navigate"));Assert.False(gate.IsConfigured("browser.hover"));
-        var result=await subset.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(Guid.NewGuid(),"browser.hover",JsonSerializer.SerializeToElement(new { @ref = "el_0123456789abcdefghijkl" })));
+        var result=await subset.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(Guid.NewGuid(),"browser.hover",JsonSerializer.SerializeToElement(new { target = new { by = "role", value = "button", name = "Submit" } })));
         Assert.Equal("unsupported_operation",result.ErrorCode);
         Assert.Null((await subset.ExecuteAsync(BrowserTestRequests.Navigate(Guid.NewGuid(),new Uri("http://127.0.0.1/")))).ErrorCode);
         var definition = Definition("browser.navigate", "browser.hover");
         var executor = new SessionToolExecutor(browser: subset, configurationGate: gate);
-        var forced = await executor.ExecuteAsync(definition, Guid.NewGuid(), new("trace", "browser.hover", "{\"ref\":\"el_0123456789abcdefghijkl\"}"),
+        var forced = await executor.ExecuteAsync(definition, Guid.NewGuid(), new("trace", "browser.hover", "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_0123456789abcdefghijkl\"}}"),
             ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn));
         Assert.Contains("unsupported_operation", forced.Text);
         var unauthorized = await executor.ExecuteAsync(definition with { Environment = new RoleEnvironment(ToolAllowlist: ["browser.navigate"]) },
-            Guid.NewGuid(), new("trace", "browser.hover", "{\"ref\":\"el_0123456789abcdefghijkl\"}"), ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn));
+            Guid.NewGuid(), new("trace", "browser.hover", "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_0123456789abcdefghijkl\"}}"), ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn));
         Assert.Contains("forbidden", unauthorized.Text);
     }
     [Fact]
@@ -175,8 +141,8 @@ public sealed class NativeBrowserContractTests
             Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("media", ToolCatalog.BrowserMedia, json), ToolLimits.MaxOutputBytes, admission: admission)).Text);
         foreach (var json in new[] { "{\"colorScheme\":true}", "{\"contrast\":\"wrong\"}", "{\"colorScheme\":null,\"colorScheme\":\"light\"}" })
             Assert.Contains("invalid", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("media", ToolCatalog.BrowserMedia, json), ToolLimits.MaxOutputBytes, admission: admission)).Text);
-        Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("type", ToolCatalog.BrowserType, "{\"ref\":\"el_0123456789012345678901\",\"text\":\"abc\",\"slowly\":true}"), ToolLimits.MaxOutputBytes, admission: admission)).Text);
-        Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("type", ToolCatalog.BrowserType, "{\"ref\":\"el_0123456789012345678901\",\"text\":\"abc\",\"slowly\":false}"), ToolLimits.MaxOutputBytes, admission: admission)).Text);
+        Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("type", ToolCatalog.BrowserType, "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_0123456789012345678901\"},\"text\":\"abc\",\"slowly\":true}"), ToolLimits.MaxOutputBytes, admission: admission)).Text);
+        Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("type", ToolCatalog.BrowserType, "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_0123456789012345678901\"},\"text\":\"abc\",\"slowly\":false}"), ToolLimits.MaxOutputBytes, admission: admission)).Text);
         Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("config", ToolCatalog.BrowserConfiguration, "{\"enabled\":true}"), ToolLimits.MaxOutputBytes, admission: admission)).Text);
         Assert.Contains("forbidden", (await executor.ExecuteAsync(definition with { Environment = new RoleEnvironment(ToolAllowlist: []) }, Guid.NewGuid(), new("config", ToolCatalog.BrowserConfiguration, "{}"), ToolLimits.MaxOutputBytes, admission: admission)).Text);
     }

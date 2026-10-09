@@ -19,7 +19,7 @@ public sealed class BrowserReliabilityTests
             status = "ok", untrustedBrowserContent = true, snapshotId = "snap_test", tabRef = "pg_test",
             url = "https://example.test/catalog", title = "Dense catalog", content = new string('界', 8000),
             truncated = true,
-            targets = Enumerable.Range(0, 2000).Select(i => new { @ref = "el_" + i, role = "button", name = "Open item " + i, actions = new[] { "click" } })
+            targets = Enumerable.Range(0, 2000).Select(i => new { target = "el_" + i, role = "button", name = "Open item " + i, actions = new[] { "click" } })
         });
         var fitted = ToolJsonResults.FitToBudget(budget, json);
         Assert.InRange(Encoding.UTF8.GetByteCount(fitted), 1, budget);
@@ -59,7 +59,7 @@ public sealed class BrowserReliabilityTests
     {
         var json = JsonSerializer.Serialize(new { untrustedBrowserContent = true, snapshotId = "snap_find", offset = 10,
             matchCount = 30, returnedCount = 20, nextOffset = 30,
-            matches = Enumerable.Range(10, 20).Select(i => new { @ref = "el_" + i, name = new string('界', 100), role = "button", actions = new[] { "click" } }) });
+            matches = Enumerable.Range(10, 20).Select(i => new { target = "el_" + i, name = new string('界', 100), role = "button", actions = new[] { "click" } }) });
         var result = ToolJsonResults.FitToBudget(1500, json);
         using var document = JsonDocument.Parse(result);
         var root = document.RootElement;
@@ -72,7 +72,7 @@ public sealed class BrowserReliabilityTests
     private sealed class DenseBrowser : IBrowser
     {
         public BrowserSnapshot Snapshot { get; } = new("https://example.test/", "Dense", new string('界', 3000), true,
-            Enumerable.Range(0, 2000).Select(i => new BrowserElement("el_" + i, "button", "Entry " + i, ["click"])).ToArray(),
+            Enumerable.Range(0, 2000).Select(i => new BrowserElement(new BrowserTarget("role", "button", Name: "Entry " + i), "button", "Entry " + i, ["click"])).ToArray(),
             SnapshotId: "snap_dense", TabRef: "pg_dense");
         public bool IsAvailable => true;
         public BrowserProviderDescriptor Provider { get; } = new("dense", "Dense", new HashSet<BrowserFeature> { BrowserFeature.Snapshot });

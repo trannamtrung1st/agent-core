@@ -205,17 +205,17 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             cancellationToken.ThrowIfCancellationRequested();
             var results = request.Messages.Skip(request.Messages.ToList().FindLastIndex(m => m.Role == ModelRole.User) + 1).Where(m => m.Role == ModelRole.Tool).ToArray();
             var origin = System.Text.RegularExpressions.Regex.Match(diagnosticUser, @"http://127\.0\.0\.1:\d+").Value;
-            string Ref() { using var json = JsonDocument.Parse(results.Last().Text); return json.RootElement.GetProperty("matches")[0].GetProperty("ref").GetString()!; }
+            BrowserTarget Target() { using var json = JsonDocument.Parse(results.Last().Text); return json.RootElement.GetProperty("matches")[0].GetProperty("target").Deserialize<BrowserTarget>(JsonSerializerOptions.Web)!; }
             (string, object) plan = results.Length switch
             {
                 0 when origin.Length > 0 => (ToolCatalog.BrowserNavigate, new { url = origin + "/credential-login" }),
-                1 => (ToolCatalog.BrowserFind, new { by = "role", value = "button", name = "Sign in" }),
-                2 => (ToolCatalog.BrowserClick, new { @ref = Ref() }),
-                3 => (ToolCatalog.BrowserFind, new { by = "role", value = "button", name = "Sign out" }),
-                4 => (ToolCatalog.BrowserClick, new { @ref = Ref() }),
+                1 => (ToolCatalog.BrowserFind, new { target = new { by = "role", value = "button", name = "Sign in" } }),
+                2 => (ToolCatalog.BrowserClick, new { target = Target() }),
+                3 => (ToolCatalog.BrowserFind, new { target = new { by = "role", value = "button", name = "Sign out" } }),
+                4 => (ToolCatalog.BrowserClick, new { target = Target() }),
                 5 => (ToolCatalog.BrowserDialog, new { operation = "inspect" }),
                 6 => (ToolCatalog.BrowserDialog, new { operation = "accept" }),
-                7 => (ToolCatalog.BrowserFind, new { by = "role", value = "button", name = "Sign in" }),
+                7 => (ToolCatalog.BrowserFind, new { target = new { by = "role", value = "button", name = "Sign in" } }),
                 8 => (ToolCatalog.BrowserClose, new { }),
                 _ => ("", new { })
             };
@@ -1602,19 +1602,12 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                     JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = origin + "/" }));
                 return true;
             case 2:
-                events = ToolTurn("product-find", ToolCatalog.BrowserFind, JsonSerializer.Serialize(new { by = "role", value = "button", name = "Publish" }));
-                return true;
-            case 3:
-                return TryInteraction("product-publish", "click", ElementRef(request.Messages, "Publish"), null, out events);
+                return TryInteraction("product-publish", "click", new BrowserTarget("role", "button", "Publish"), null, out events);
+            case 3 when !stopAfterClick:
+                events = ToolTurn("product-storefront", ToolCatalog.BrowserNavigate,
+                    JsonSerializer.Serialize(new { url = origin + "/storefront" })); return true;
             case 4 when !stopAfterClick:
-                events = ToolTurn(
-                    "product-storefront",
-                    ToolCatalog.BrowserNavigate,
-                    JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = origin + "/storefront" }));
-                return true;
-            case 5 when !stopAfterClick:
-                events = ToolTurn("product-storefront-observe", ToolCatalog.BrowserSnapshot, "{}");
-                return true;
+                events = ToolTurn("product-storefront-observe", ToolCatalog.BrowserSnapshot, "{}"); return true;
             default:
                 events = ProductPublishAnswer(login: false, stopAfterClick);
                 return true;
@@ -1650,22 +1643,16 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             case 0:
                 events = ToolTurn("p9-navigate", ToolCatalog.BrowserNavigate, JsonSerializer.Serialize(new { url = startUrl })); return true;
             case 1:
-                events = ToolTurn("p9-find-record", ToolCatalog.BrowserFind, JsonSerializer.Serialize(new { by = "label", value = "Record" })); return true;
-            case 2:
                 events = ToolTurn("p9-skill", ToolCatalog.SkillsLoad, JsonSerializer.Serialize(new { ids = new[] { "definition:" + BrowserRecordSkillId } })); return true;
-            case 3 when Offers(request, ToolCatalog.AppMessageSend):
+            case 2 when Offers(request, ToolCatalog.AppMessageSend):
                 events = ToolTurn("p9-message", ToolCatalog.AppMessageSend, JsonSerializer.Serialize(new { text = BrowserRecordMessage })); return true;
+            case 3:
+                return TryInteraction("fill", "fill", new BrowserTarget("label", "Record"), "AC-1042", out events);
             case 4:
-                return TryInteraction("fill", "fill", ElementRef(request.Messages, "Record"), "AC-1042", out events);
+                return TryInteraction("search", "click", new BrowserTarget("role", "button", "Search"), null, out events);
             case 5:
-                events = ToolTurn("p9-find-search", ToolCatalog.BrowserFind, JsonSerializer.Serialize(new { by = "role", value = "button", name = "Search" })); return true;
+                return TryInteraction("open", "click", new BrowserTarget("role", "link", "AC-1042"), null, out events);
             case 6:
-                return TryInteraction("search", "click", ElementRef(request.Messages, "Search"), null, out events);
-            case 7:
-                events = ToolTurn("p9-find-open", ToolCatalog.BrowserFind, JsonSerializer.Serialize(new { by = "role", value = "link", name = "AC-1042" })); return true;
-            case 8:
-                return TryInteraction("open", "click", ElementRef(request.Messages, "AC-1042"), null, out events);
-            case 9:
                 events = ToolTurn("p9-observe-result", ToolCatalog.BrowserSnapshot, "{}"); return true;
             default:
                 events = [new ModelTextDelta(BrowserRecordAnswer), new ModelCompleted(ModelStopReason.Completed)]; return true;
@@ -1705,25 +1692,25 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     private static bool TryInteraction(
         string callId,
         string operation,
-        string? reference,
+        BrowserTarget? target,
         string? value,
         out IReadOnlyList<ModelGenerationEvent> events)
     {
-        if (string.IsNullOrEmpty(reference))
+        if (target is null)
         {
             events =
             [
                 new ModelFailed(new ProviderFailure(
                     ProviderErrorCode.InvalidResponse,
-                    "Synthetic browser journey missed an element reference."))
+                    "Synthetic browser journey missed a semantic target."))
             ];
             return true;
         }
 
-        var arguments = new Dictionary<string, string>
+        var arguments = new Dictionary<string, object>
         {
             ["operation"] = operation,
-            ["ref"] = reference
+            ["target"] = target
         };
         if (value is not null)
         {
@@ -1734,11 +1721,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         var tool = operation switch { "fill" => ToolCatalog.BrowserType, "press" => ToolCatalog.BrowserPressKey, "fill_credential" => ToolCatalog.BrowserFillCredential, _ => ToolCatalog.BrowserClick };
         if (operation == "fill" && arguments.Remove("value", out var text)) arguments["text"] = text;
         if (operation == "press" && arguments.Remove("value", out var key)) arguments["key"] = key;
-        events = ToolTurn("p9-" + callId, tool, JsonSerializer.Serialize(arguments));
+        events = ToolTurn("p9-" + callId, tool, JsonSerializer.Serialize(arguments, JsonSerializerOptions.Web));
         return true;
     }
 
-    private static string? ElementRef(IReadOnlyList<ModelMessage> messages, string name)
+    private static BrowserTarget? ElementTarget(IReadOnlyList<ModelMessage> messages, string name)
     {
         for (var index = messages.Count - 1; index >= 0; index--)
         {
@@ -1766,10 +1753,10 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                 {
                     if (element.TryGetProperty("name", out var elementName)
                         && string.Equals(elementName.GetString(), name, StringComparison.Ordinal)
-                        && element.TryGetProperty("ref", out var reference)
-                        && reference.GetString() is { Length: > 0 } token)
+                        && element.TryGetProperty("target", out var target)
+                        && target.ValueKind == JsonValueKind.Object)
                     {
-                        return token;
+                        return target.Deserialize<BrowserTarget>(JsonSerializerOptions.Web);
                     }
                 }
             }

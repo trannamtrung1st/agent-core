@@ -28,7 +28,7 @@ public sealed class SkillDefinitionRoundTripTests
         var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         var definitions = await store.ListAsync();
         Assert.NotEmpty(definitions);
-        var skillVersions = new[] { 17, 18, 20 };
+        var skillVersions = new[] { 21 };
         Assert.All(
             definitions.Where(definition =>
                 (definition.Id != "general-assistant" || !skillVersions.Contains(definition.Version))
@@ -44,12 +44,12 @@ public sealed class SkillDefinitionRoundTripTests
             Assert.Equal("browser.record.lookup", skill.Id);
         }
 
-        var secretarySkills = Assert.Single(definitions, definition => definition.Id == "secretary" && definition.Version == 3)
+        var secretarySkills = Assert.Single(definitions, definition => definition.Id == "secretary" && definition.Version == 8)
             .SkillList
             .Select(skill => skill.Id)
             .ToArray();
         Assert.Equal(
-            ["store.product.manage", "store.order.review", "store.inventory.review", "store.promotion.manage", "store.daily.review"],
+            ["store.signin", "store.product.manage", "store.order.review", "store.inventory.review", "store.promotion.manage", "store.daily.review"],
             secretarySkills);
     }
 

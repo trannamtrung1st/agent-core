@@ -22,7 +22,7 @@ public sealed class BrowserBlockedDialogTests
             var page = browser.ContextFor(id)!.Pages[0];
             await page.EvaluateAsync("() => { document.body.innerHTML = '<button>Two decisions</button>'; window.effects = 0; document.querySelector('button').onclick = () => { window.effects++; confirm('private first'); prompt('private second'); }; }");
             var target = await BrowserTestQueries.Find(browser, id, "Two decisions");
-            Assert.Equal("dialog_pending", (await Run(ToolCatalog.BrowserClick, new { @ref = target.Ref })).ErrorCode);
+            Assert.Equal("dialog_pending", (await Run(ToolCatalog.BrowserClick, new { target = target.Target })).ErrorCode);
             Assert.Equal("dialog_pending", (await Run(ToolCatalog.BrowserDialog, new { operation = "accept" })).ErrorCode);
             var inspect = await Run(ToolCatalog.BrowserDialog, new { operation = "inspect" });
             Assert.Contains("prompt", inspect.DataJson!);
@@ -72,7 +72,7 @@ public sealed class BrowserBlockedDialogTests
             var page = browser.ContextFor(id)!.Pages[0];
             await page.GetByRole(AriaRole.Button, new() { Name = "Sign in", Exact = true }).ClickAsync();
             var target = await BrowserTestQueries.Find(browser, id, "Sign out");
-            Assert.Equal("dialog_pending", (await Run(ToolCatalog.BrowserClick, new { @ref = target.Ref })).ErrorCode);
+            Assert.Equal("dialog_pending", (await Run(ToolCatalog.BrowserClick, new { target = target.Target })).ErrorCode);
             browser.DialogResolutionProbe = dialog => native = Delayed(dialog);
             async Task Delayed(IDialog dialog) { entered.TrySetResult(); await release.Task; await dialog.AcceptAsync(); }
             using var cancel = new CancellationTokenSource();

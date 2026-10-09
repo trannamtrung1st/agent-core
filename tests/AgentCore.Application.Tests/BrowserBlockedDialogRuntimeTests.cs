@@ -72,7 +72,7 @@ public sealed partial class TerminalDisplayRepairTests
             Requests.Add(request);
             var step = Requests.Count - 1;
             var results = request.Messages.Where(m => m.Role == ModelRole.Tool).ToArray();
-            string Ref() { using var json = JsonDocument.Parse(results.Last().Text); return json.RootElement.GetProperty("matches")[0].GetProperty("ref").GetString()!; }
+            BrowserTarget Ref() { using var json = JsonDocument.Parse(results.Last().Text); return json.RootElement.GetProperty("matches")[0].GetProperty("target").Deserialize<BrowserTarget>(JsonSerializerOptions.Web)!; }
             if (step >= 2 && (repeat || !authorized || step < 4))
             {
                 Assert.DoesNotContain(request.Tools ?? [], t => t.Name == ToolCatalog.BrowserFind);
@@ -86,13 +86,13 @@ public sealed partial class TerminalDisplayRepairTests
             }
             (string tool, object args) action = step switch
             {
-                0 => (ToolCatalog.BrowserFind, new { by = "role", value = "button", name = "Sign out" }),
-                1 => (ToolCatalog.BrowserClick, new { @ref = Ref() }),
+                0 => (ToolCatalog.BrowserFind, new { target = new { by = "role", value = "button", name = "Sign out" } }),
+                1 => (ToolCatalog.BrowserClick, new { target = Ref() }),
                 2 when resume => (ToolCatalog.ExecutionWait, new { mode = "duration", seconds = 2 }),
-                _ when repeat => (ToolCatalog.BrowserFind, new { by = "text", value = "irrelevant query " + step }),
+                _ when repeat => (ToolCatalog.BrowserFind, new { target = new { by = "text", value = "irrelevant query " + step } }),
                 2 => (ToolCatalog.BrowserDialog, new { operation = "inspect" }),
                 3 => (ToolCatalog.BrowserDialog, new { operation = "accept" }),
-                _ => (ToolCatalog.BrowserFind, new { by = "role", value = "button", name = "Sign in" })
+                _ => (ToolCatalog.BrowserFind, new { target = new { by = "role", value = "button", name = "Sign in" } })
             };
             // The repeated case deliberately violates projection to exercise dispatch refusal too.
             yield return new ModelToolCallEvent(new("blocked-" + step, action.tool, JsonSerializer.Serialize(action.args)));

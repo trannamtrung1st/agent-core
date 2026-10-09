@@ -31,12 +31,12 @@ public sealed class NativeBrowserConsistencyReviewTests
                     field.addEventListener('keydown', e => { if (e.key === 'Enter') window.enterCount++; });
                 }
                 """);
-            var found = await browser.ExecuteAsync(new(id, BrowserOperation.Find, new() { Query = new() { TestId = "field" } }));
+            var found = await browser.ExecuteAsync(new(id, new BrowserFind(Target: new BrowserTarget("testId", "field"))));
             Assert.Null(found.ErrorCode);
             using var data = JsonDocument.Parse(found.DataJson!);
-            var reference = data.RootElement.GetProperty("matches")[0].GetProperty("ref").GetString()!;
+            var reference = data.RootElement.GetProperty("matches")[0].GetProperty("target").Deserialize<BrowserTarget>(JsonSerializerOptions.Web)!;
             var result = await browser.ExecuteAsync(BrowserToolArguments.Request(id, "browser.type",
-                JsonSerializer.SerializeToElement(new { @ref = reference, text = "review value", slowly, submit = !slowly })));
+                JsonSerializer.SerializeToElement(new { target = reference, text = "review value", slowly, submit = !slowly })));
             Assert.Equal("forbidden", result.ErrorCode);
             Assert.Equal(slowly ? "" : "review value", await page.GetByTestId("field").InputValueAsync());
             Assert.Equal(0, await page.EvaluateAsync<int>("() => window.enterCount"));
@@ -95,18 +95,17 @@ public sealed class NativeBrowserConsistencyReviewTests
                     else later.after(later.cloneNode());
                 })
                 """, mutation);
-            async Task<string> Find(string testId)
+            async Task<BrowserTarget> Find(string testId)
             {
-                var found = await browser.ExecuteAsync(new(id, BrowserOperation.Find,
-                    new() { Query = new() { TestId = testId } }));
+                var found = await browser.ExecuteAsync(new(id, new BrowserFind(Target: new BrowserTarget("testId", testId))));
                 Assert.Null(found.ErrorCode);
                 using var data = JsonDocument.Parse(found.DataJson!);
-                return data.RootElement.GetProperty("matches")[0].GetProperty("ref").GetString()!;
+                return data.RootElement.GetProperty("matches")[0].GetProperty("target").Deserialize<BrowserTarget>(JsonSerializerOptions.Web)!;
             }
             var first = await Find("first");
             var second = await Find("second");
             var result = await browser.ExecuteAsync(BrowserToolArguments.Request(id, "browser.fill_form",
-                JsonSerializer.SerializeToElement(new { fields = new[] { new { @ref = first, value = "change page" }, new { @ref = second, value = "later value" } } })));
+                JsonSerializer.SerializeToElement(new { fields = new[] { new { target = first, value = "change page" }, new { target = second, value = "later value" } } })));
             Assert.Equal(expectedError, result.ErrorCode);
             Assert.Equal("change page", await page.GetByTestId("first").InputValueAsync());
             Assert.Equal(expectedError is null ? "later value" : "", await page.GetByTestId("second").First.InputValueAsync());

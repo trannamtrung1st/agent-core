@@ -26,7 +26,7 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
             "/api/v2/admin/agent-instances",
             new AdminCreateAgentInstanceRequest(
                 "general-assistant",
-                17,
+                21,
                 new AdminPersonaResponse("Tommy", "Assistant", "A named assistant.", "Direct")));
         Assert.Equal(HttpStatusCode.Created, create.StatusCode);
         var instance = await create.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();

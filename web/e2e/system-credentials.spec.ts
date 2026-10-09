@@ -15,8 +15,8 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
   const errors: string[] = []; page.on("pageerror", e => errors.push(e.message));
   await page.goto("/admin/connections/credentials");
   await page.waitForFunction(() => localStorage.getItem("agent-core.owner-capability"));
-  const a = await owner(page, "agent-instances", "POST", { definitionId: "secretary", version: 3 });
-  const b = await owner(page, "agent-instances", "POST", { definitionId: "secretary", version: 3 });
+  const a = await owner(page, "agent-instances", "POST", { definitionId: "secretary", version: 8 });
+  const b = await owner(page, "agent-instances", "POST", { definitionId: "secretary", version: 8 });
   const name = `Shared credentials ${Date.now()}`;
   await page.getByRole("button", {name:"Create credential",exact:true}).click();
   const create = page.getByRole("dialog", {name:"Create credential",exact:true});

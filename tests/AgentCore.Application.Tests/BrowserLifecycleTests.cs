@@ -180,7 +180,7 @@ public sealed class BrowserLifecycleTests
         var run = (await runs.AdmitAsync(snapshot, 0, AgentRunTestFixtures.Run(snapshot, now))).Run;
         var generation = Guid.NewGuid();
         run = await runs.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.Claim(run.Revision, now, generation, now.AddMinutes(5)));
-        var original = new ModelToolCall("original", ToolCatalog.BrowserClick, "{\"ref\":\"el_aaaaaaaaaaaaaaaaaaaaaa\"}");
+        var original = new ModelToolCall("original", ToolCatalog.BrowserClick, "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_aaaaaaaaaaaaaaaaaaaaaa\"}}");
         var hash = ToolActionHash.Compute(original.Name, JsonDocument.Parse(original.ArgumentsJson).RootElement);
         run = await runs.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.Checkpoint(run.Revision, now, generation,
             new(AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [original])]), 1, 0, 180000), null));
@@ -283,7 +283,7 @@ public sealed class BrowserLifecycleTests
             {
                 0 => new ModelToolCall("snapshot", ToolCatalog.BrowserSnapshot, "{}"),
                 1 => original with { Id = "repeat" },
-                2 => new ModelToolCall("new", ToolCatalog.BrowserClick, "{\"ref\":\"el_bbbbbbbbbbbbbbbbbbbbbb\"}"),
+                2 => new ModelToolCall("new", ToolCatalog.BrowserClick, "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_bbbbbbbbbbbbbbbbbbbbbb\"}}"),
                 _ => null
             };
             if (call is not null)
@@ -455,20 +455,20 @@ public sealed class BrowserLifecycleTests
 
             return new BrowserResult(
                 null,
-                new BrowserSnapshot(request.Options.Url!, LateTitle, "Search", false, []));
+                new BrowserSnapshot(((BrowserNavigate)request.Command).Url!, LateTitle, "Search", false, []));
         }
 
         public ValueTask<BrowserResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             SnapshotCalls++;
             return new(SuccessfulSnapshot ? new(null, new BrowserSnapshot(FixtureOrigin[0], "Fresh page", "Record " + SnapshotCalls, false,
-                [new("el_bbbbbbbbbbbbbbbbbbbbbb", "button", "Save", ["click"])])) : new BrowserResult("provider_unavailable", null));
+                [new(new BrowserTarget("role", "button", Name: "Save"), "button", "Save", ["click"])])) : new BrowserResult("provider_unavailable", null));
         }
 
         public ValueTask<BrowserResult> InteractAsync(BrowserRequest request, CancellationToken cancellationToken = default)
         {
             InteractCalls++;
-            LastInteractionRef = request.Options.Ref;
+            LastInteractionRef = ((BrowserClick)request.Command).Target.Name;
             return new(new BrowserResult(null, new BrowserSnapshot(FixtureOrigin[0], "Saved", "Saved", false, [])));
         }
 

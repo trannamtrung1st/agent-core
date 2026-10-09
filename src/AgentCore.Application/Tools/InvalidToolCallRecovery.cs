@@ -45,7 +45,7 @@ internal sealed class InvalidToolCallRecovery
             using var json = JsonDocument.Parse(result);
             if (json.RootElement.ValueKind != JsonValueKind.Object) return result;
             var invalid = json.RootElement.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String
-                && error.GetString() is "invalid" or "invalid_reference" or "ValidationError" or "invalid_tool_strategy_blocked";
+                && error.GetString() is "invalid" or "invalid_target" or "ValidationError" or "invalid_tool_strategy_blocked";
             JsonElement outcome = default;
             var ineffectiveDiscovery = call.Name == ToolCatalog.CapabilitiesLoad && json.RootElement.TryGetProperty("outcome", out outcome)
                 && outcome.ValueKind == JsonValueKind.String && outcome.GetString() is "load_no_match" or "load_unavailable" or "load_already_projected" or "load_over_budget";
@@ -58,8 +58,8 @@ internal sealed class InvalidToolCallRecovery
             _attempts[strategy] = attempt;
             exhausted = attempt >= 4;
             var fields = json.RootElement.EnumerateObject().Where(p => p.Name != "invalidCallRecovery").ToDictionary(p => p.Name, p => (object)p.Value.Clone());
-            if (call.Name == ToolCatalog.BrowserFind && error.GetString() != "invalid_tool_strategy_blocked" && !result.Contains(BrowserToolArguments.FindQueryGuidance, StringComparison.Ordinal))
-                fields["message"] = "Invalid discovery arguments. " + BrowserToolArguments.FindQueryGuidance;
+            if (call.Name == ToolCatalog.BrowserFind && error.GetString() != "invalid_tool_strategy_blocked" && !result.Contains(BrowserToolArguments.TargetGuidance, StringComparison.Ordinal))
+                fields["message"] = "Invalid discovery arguments. " + BrowserToolArguments.TargetGuidance;
             fields["invalidCallRecovery"] = new
             {
                 strategy, attempt,
@@ -91,7 +91,7 @@ internal sealed class InvalidToolCallRecovery
                 fields["nextStep"] = "Use offered tools, a different goal, or report the blocker.";
             }
             else fields["message"] = call.Name == ToolCatalog.BrowserFind && recovery.GetProperty("attempt").GetInt32() < 3
-                ? "Use by/value; omit unused fields." : "Correct arguments or report the blocked strategy.";
+                ? "Use target={by,value}; omit unused fields." : "Correct arguments or report the blocked strategy.";
             var compact = JsonSerializer.Serialize(fields);
             return Encoding.UTF8.GetByteCount(compact) <= budget ? compact : null;
         }
@@ -105,8 +105,11 @@ internal sealed class InvalidToolCallRecovery
         {
             using var json = JsonDocument.Parse(call.ArgumentsJson);
             // Overloaded find calls differing only in guessed labels are the same malformed strategy.
-            // Ref mistakes and other tools retain values so a corrected value remains permitted.
+            // Native lookup failures retain values so a corrected accessible name remains permitted.
             if (json.RootElement.ValueKind != JsonValueKind.Object) data = "non_object:" + json.RootElement.ValueKind;
+            else if (call.Name.StartsWith("browser.", StringComparison.Ordinal)
+                && BrowserToolArguments.InvalidTargetReason(json.RootElement) is { } reason)
+                data = "target_validation:" + reason;
             else if (call.Name == ToolCatalog.BrowserFind && json.RootElement.ValueKind == JsonValueKind.Object
                 && !BrowserToolArguments.TryRequest(Guid.Empty, call.Name, json.RootElement, out _, out var error) && error == "invalid")
                 data = string.Join("|", json.RootElement.EnumerateObject().OrderBy(p => p.Name, StringComparer.Ordinal).Select(p => p.Name + ":" + p.Value.ValueKind));

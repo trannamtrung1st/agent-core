@@ -81,7 +81,7 @@ public sealed class ProductPublishWorkflowTests
         var uploaded = await executor.ExecuteAsync(
             Definition(),
             sessionId,
-            Call($$"""{"ref":"{{Reference}}","artifactIds":["{{created.ArtifactId}}"]}"""),
+            Call($$"""{"target":{"by":"role","value":"button","name":"{{Reference}}"},"artifactIds":["{{created.ArtifactId}}"]}"""),
             ToolLimits.MaxOutputBytes,
             admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn));
 
@@ -100,13 +100,13 @@ public sealed class ProductPublishWorkflowTests
         var path = await executor.ExecuteAsync(
             Definition(),
             sessionId,
-            Call($$"""{"ref":"{{Reference}}","artifactIds":["/tmp/ac-keyboard.png"]}"""),
+            Call($$"""{"target":{"by":"role","value":"button","name":"{{Reference}}"},"artifactIds":["/tmp/ac-keyboard.png"]}"""),
             ToolLimits.MaxOutputBytes,
             admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn));
         var url = await executor.ExecuteAsync(
             Definition(),
             sessionId,
-            Call($$"""{"ref":"{{Reference}}","artifactIds":["https://files.example/ac-keyboard.png"]}"""),
+            Call($$"""{"target":{"by":"role","value":"button","name":"{{Reference}}"},"artifactIds":["https://files.example/ac-keyboard.png"]}"""),
             ToolLimits.MaxOutputBytes,
             admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn));
         Assert.Contains("invalid", path.Text, StringComparison.Ordinal);
@@ -126,7 +126,7 @@ public sealed class ProductPublishWorkflowTests
         var uploaded = await executor.ExecuteAsync(
             Definition(),
             Guid.NewGuid(),
-            Call($$"""{"ref":"{{Reference}}","artifactIds":["{{resourceId}}"]}"""),
+            Call($$"""{"target":{"by":"role","value":"button","name":"{{Reference}}"},"artifactIds":["{{resourceId}}"]}"""),
             ToolLimits.MaxOutputBytes,
             admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn));
 
@@ -277,9 +277,7 @@ public sealed class ProductPublishWorkflowTests
     private sealed class ProductBrowser : IBrowser
     {
         public BrowserProviderDescriptor Provider { get; } = new("fixture", "Test browser", new HashSet<BrowserFeature> { BrowserFeature.Navigate, BrowserFeature.Snapshot, BrowserFeature.Find, BrowserFeature.Click, BrowserFeature.Type, BrowserFeature.Hover, BrowserFeature.Drag, BrowserFeature.FillForm, BrowserFeature.SelectOption, BrowserFeature.PressKey, BrowserFeature.Upload, BrowserFeature.FillCredential, BrowserFeature.Wait, BrowserFeature.Tabs, BrowserFeature.Screenshot, BrowserFeature.Close });
-        private readonly Dictionary<string, string> _refs = new(StringComparer.Ordinal);
         private string _page = "none";
-        private int _mint;
 
         public int ActCalls { get; private set; }
 
@@ -302,15 +300,15 @@ public sealed class ProductPublishWorkflowTests
             BrowserRequest request,
             CancellationToken cancellationToken = default)
         {
-            NavigatedUrls.Add(request.Options.Url!);
-            Steps.Add(new ProductPublishStep(ToolCatalog.BrowserNavigate, request.Options.Url!));
-            if (!string.Equals(new Uri(request.Options.Url!)!.GetLeftPart(UriPartial.Authority), Origin, StringComparison.Ordinal)
-                || new Uri(request.Options.Url!).AbsolutePath is not ("/" or "" or "/storefront" or "/login"))
+            NavigatedUrls.Add(((BrowserNavigate)request.Command).Url!);
+            Steps.Add(new ProductPublishStep(ToolCatalog.BrowserNavigate, ((BrowserNavigate)request.Command).Url!));
+            if (!string.Equals(new Uri(((BrowserNavigate)request.Command).Url!)!.GetLeftPart(UriPartial.Authority), Origin, StringComparison.Ordinal)
+                || new Uri(((BrowserNavigate)request.Command).Url!).AbsolutePath is not ("/" or "" or "/storefront" or "/login"))
             {
                 return new(new BrowserResult("target_denied", null));
             }
 
-            _page = new Uri(request.Options.Url!)!.AbsolutePath switch
+            _page = new Uri(((BrowserNavigate)request.Command).Url!)!.AbsolutePath switch
             {
                 "/storefront" => "storefront",
                 "/login" => "login",
@@ -337,7 +335,7 @@ public sealed class ProductPublishWorkflowTests
         {
             ActCalls++;
             Steps.Add(new ProductPublishStep(ToolCatalog.BrowserClick, AgentCore.Application.Tools.BrowserToolArguments.ToolName(request.Operation)[8..]));
-            if (!_refs.TryGetValue(request.Options.Ref!, out var name) || name != "Publish" || AgentCore.Application.Tools.BrowserToolArguments.ToolName(request.Operation)[8..] != "click")
+            if (Capture().Targets.FirstOrDefault(e => e.Target == (request.Command switch { BrowserClick click => click.Target, BrowserTypeText type => type.Target, _ => null })) is not { Name: var name } || name != "Publish" || AgentCore.Application.Tools.BrowserToolArguments.ToolName(request.Operation)[8..] != "click")
             {
                 return new(new BrowserResult("unsupported_operation", null));
             }
@@ -356,9 +354,6 @@ public sealed class ProductPublishWorkflowTests
 
         private BrowserSnapshot Capture()
         {
-            _refs.Clear();
-            _mint++;
-            var reference = "el_" + _mint.ToString("D22");
             return _page switch
             {
                 "login" => new BrowserSnapshot(
@@ -374,19 +369,18 @@ public sealed class ProductPublishWorkflowTests
                     "AC Keyboard $99 Published ac-keyboard.png",
                     false,
                     []),
-                _ => Remember(reference)
+                _ => ProductPage()
             };
         }
 
-        private BrowserSnapshot Remember(string reference)
+        private BrowserSnapshot ProductPage()
         {
-            _refs[reference] = "Publish";
             return new BrowserSnapshot(
                 Origin + "/",
                 "Product",
                 "Saved",
                 false,
-                [new BrowserElement(reference, "button", "Publish", ["click"])]);
+                [new BrowserElement(new BrowserTarget("role", "button", Name: "Publish"), "button", "Publish", ["click"])]);
         }
 
         public ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default) => request.Operation switch
@@ -430,7 +424,7 @@ public sealed class ProductPublishWorkflowTests
             CancellationToken cancellationToken = default)
         {
             ActCalls++;
-            LastUpload = request.Options.Uploads?.FirstOrDefault() ?? request.Options.Uploads?.FirstOrDefault();
+            LastUpload = ((BrowserUploadCommand)request.Command).Uploads?.FirstOrDefault() ?? ((BrowserUploadCommand)request.Command).Uploads?.FirstOrDefault();
             return new(new BrowserResult(null, Page()));
         }
 

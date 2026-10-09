@@ -55,7 +55,7 @@ public sealed class SafeExecutionTraceTests
               "visibleText": "Order 1001 Processing",
               "settled": false,
               "elements": [
-                {"ref":"el_secretrefsecretrefsec","role":"link","name":"Orders","actions":["click"]}
+                {"target":{"by":"role","value":"button","name":"el_secretrefsecretrefsec"},"role":"link","name":"Orders","actions":["click"]}
               ]
             }
             """;
@@ -87,7 +87,7 @@ public sealed class SafeExecutionTraceTests
     {
         const string reference = "el_0123456789abcdefghijkl";
         const string secret = "do-not-log-fill-value";
-        var json = System.Text.Json.JsonSerializer.Serialize(new { @ref = reference, selector = secret });
+        var json = System.Text.Json.JsonSerializer.Serialize(new { target = reference, selector = secret });
         using var args = JsonDocument.Parse(json);
         Assert.False(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserClick, args.RootElement, out _, out var error));
         var detail = SafeExecutionTrace.BuildToolDetail(ToolCatalog.BrowserClick, json, "{\"error\":\"" + error + "\"}");
@@ -97,7 +97,7 @@ public sealed class SafeExecutionTraceTests
     [Fact]
     public void BuildActDetail_does_not_record_fill_value_or_ref()
     {
-        var args = """{"operation":"fill","ref":"secret-ref","value":"super-secret-value"}""";
+        var args = """{"operation":"fill","target":{"by":"role","value":"button","name":"secret-ref"},"value":"super-secret-value"}""";
         var detail = SafeExecutionTrace.BuildToolDetail(ToolCatalog.BrowserClick, args, "{}");
         Assert.DoesNotContain("super-secret-value", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("secret-ref", detail, StringComparison.Ordinal);
@@ -106,12 +106,12 @@ public sealed class SafeExecutionTraceTests
     [Fact]
     public void BuildActDetail_does_not_record_upload_content_or_path()
     {
-        var args = """{"operation":"upload","ref":"e9","artifactId":"11111111-1111-1111-1111-111111111111"}""";
+        var args = """{"operation":"upload","target":{"by":"role","value":"button","name":"e9"},"artifactId":"11111111-1111-1111-1111-111111111111"}""";
         var result = """
             {
               "url": "http://127.0.0.1:5088/Admin/Product/Edit/48",
               "elements": [
-                {"ref":"e9","role":"file","name":"Picture","actions":["upload"]}
+                {"target":{"by":"role","value":"button","name":"e9"},"role":"file","name":"Picture","actions":["upload"]}
               ]
             }
             """;
@@ -127,11 +127,11 @@ public sealed class SafeExecutionTraceTests
     public void BuildActDetail_omits_sensitive_accessible_names()
     {
         Assert.True(SafeExecutionTrace.SensitiveAccessibleName("API token field"));
-        var args = """{"operation":"fill","ref":"e3"}""";
+        var args = """{"operation":"fill","target":{"by":"role","value":"button","name":"e3"}}""";
         var result = """
             {
               "elements": [
-                {"ref":"e3","role":"textbox","name":"API token","actions":["fill"]}
+                {"target":{"by":"role","value":"button","name":"e3"},"role":"textbox","name":"API token","actions":["fill"]}
               ]
             }
             """;

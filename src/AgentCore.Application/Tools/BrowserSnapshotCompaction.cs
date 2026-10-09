@@ -21,7 +21,7 @@ internal static class BrowserSnapshotCompaction
             }
         }
 
-        // A read-only snapshot does not invalidate native refs. Keep recent discoveries
+        // Direct semantic actions need no stored refs. Keep recent discoveries
         // available across observations; failures and ambiguity retain their repair evidence.
         var discoveries = Enumerable.Range(0, messages.Count).Where(i => IsSuccessfulDiscovery(messages[i])).ToArray();
         foreach (var index in discoveries.Take(Math.Max(0, discoveries.Length - RecentDiscoveries)))
@@ -72,7 +72,7 @@ internal static class BrowserSnapshotCompaction
         {
             untrustedBrowserContent = true, compacted = true, status = "ok",
             matchCount = root.TryGetProperty("matchCount", out var count) && count.ValueKind == JsonValueKind.Number && count.TryGetInt32(out var value) ? value : root.GetProperty("matches").GetArrayLength(),
-            guidance = "An earlier search succeeded; its detailed evidence was compacted. Use browser.find to obtain a current ref if needed."
+            guidance = "An earlier browser.find search succeeded; its detailed evidence was compacted. Observe or act using current direct semantic targets."
         });
     }
 
@@ -123,6 +123,7 @@ internal static class BrowserSnapshotCompaction
         var title = string.Empty;
         var visible = string.Empty;
         bool? settled = null;
+        bool? effectAttempted = null, effectConfirmedBySdk = null, applicationOutcomeVerified = null;
         try
         {
             using var document = JsonDocument.Parse(text);
@@ -131,6 +132,9 @@ internal static class BrowserSnapshotCompaction
             url = Read(root, "url");
             title = Read(root, "title");
             visible = Read(root, "content");
+            effectAttempted = ReadBoolean(root, "effectAttempted");
+            effectConfirmedBySdk = ReadBoolean(root, "effectConfirmedBySdk");
+            applicationOutcomeVerified = ReadBoolean(root, "applicationOutcomeVerified");
             if (root.TryGetProperty("settled", out var settledProperty)
                 && settledProperty.ValueKind is JsonValueKind.True or JsonValueKind.False)
             {
@@ -145,7 +149,7 @@ internal static class BrowserSnapshotCompaction
         return settled is bool settledValue
             ? JsonSerializer.Serialize(new
             {
-                status,
+                status, effectAttempted, effectConfirmedBySdk, applicationOutcomeVerified,
                 untrustedBrowserContent = true,
                 compacted = true,
                 url,
@@ -155,7 +159,7 @@ internal static class BrowserSnapshotCompaction
             })
             : JsonSerializer.Serialize(new
             {
-                status,
+                status, effectAttempted, effectConfirmedBySdk, applicationOutcomeVerified,
                 untrustedBrowserContent = true,
                 compacted = true,
                 url,
@@ -181,6 +185,9 @@ internal static class BrowserSnapshotCompaction
         var edge = (budget - marker.Length) / 2;
         return visible[..edge] + marker + visible[^edge..];
     }
+
+    private static bool? ReadBoolean(JsonElement root, string name) => root.TryGetProperty(name, out var value)
+        && value.ValueKind is JsonValueKind.True or JsonValueKind.False ? value.GetBoolean() : null;
 
     private static string Read(JsonElement root, string name) =>
         root.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String

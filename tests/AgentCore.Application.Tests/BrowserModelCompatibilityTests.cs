@@ -37,6 +37,7 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
         Assert.True(result.DomVerified);
         Assert.True(result.Completed);
         Assert.True(result.CapabilityLoaded);
+        if (!recover) Assert.DoesNotContain(model.Requests.SelectMany(r => r.Messages).SelectMany(m => m.ToolCalls ?? []), c => c.Name == ToolCatalog.BrowserFind);
         Assert.Equal(recover ? 3 : 0, result.MalformedCalls);
         Assert.Equal(recover ? 1 : 0, result.BlockedCalls);
         Assert.Contains(model.Requests.SelectMany(r => r.Messages), m => m.Role == ModelRole.System && m.Text.Contains("Trusted Core execution facts (current"));
@@ -101,9 +102,9 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
             if (scenario == "denied-identity") Assert.Contains("target_denied", navigation);
             else
             {
-                using var found = JsonDocument.Parse(await Execute(ToolCatalog.BrowserFind, new { by = "label", value = "Password" }));
-                var reference = found.RootElement.GetProperty("matches")[0].GetProperty("ref").GetString();
-                var result = await Execute(ToolCatalog.BrowserFillCredential, new { @ref = reference, credentialRef = scenario == "unknown-binding" ? "absent" : "demo-sso" });
+                using var found = JsonDocument.Parse(await Execute(ToolCatalog.BrowserFind, new { target = new { by = "label", value = "Password" } }));
+                var reference = found.RootElement.GetProperty("matches")[0].GetProperty("target").Deserialize<BrowserTarget>(JsonSerializerOptions.Web);
+                var result = await Execute(ToolCatalog.BrowserFillCredential, new { target = reference, credentialRef = scenario == "unknown-binding" ? "absent" : "demo-sso" });
                 Assert.Contains("error", result); Assert.DoesNotContain(GenericSsoFixture.Password, result);
                 Assert.Equal("", await browser.ContextFor(session)!.Pages.First().GetByLabel("Password").InputValueAsync());
             }
@@ -118,22 +119,23 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
     public async Task Three_natural_instruction_trials_per_model(string modelId)
     {
         var results = new List<TrialResult>();
-        for (var trial = 1; trial <= 3; trial++)
+        using var http = new HttpClient();
+        var model = new OpenAICompatibleLanguageModel(http, new LanguageModelProviderOptions
+        {
+            Adapter = "OpenAICompatible", BaseUrl = "https://openrouter.ai/api/v1/", ApiKey = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY"),
+            DefaultModel = modelId, Tools = true, StructuredOutput = false, ReasoningEffort = "medium", ReasoningObjectWire = true,
+            Timeouts = new() { SetupSeconds = 20, StreamIdleSeconds = 60, TotalSeconds = 120 }
+        });
+        var firstTrial = int.TryParse(Environment.GetEnvironmentVariable("AGENTCORE_BROWSER_BENCHMARK_FIRST_TRIAL"), out var requested) && requested is >= 1 and <= 3 ? requested : 1;
+        for (var trial = firstTrial; trial <= 3; trial++)
         {
             await using var fixture = new GenericSsoFixture();
-            using var http = new HttpClient();
-            var model = new OpenAICompatibleLanguageModel(http, new LanguageModelProviderOptions
-            {
-                Adapter = "OpenAICompatible", BaseUrl = "https://openrouter.ai/api/v1/", ApiKey = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY"),
-                DefaultModel = modelId, Tools = true, StructuredOutput = false, ReasoningEffort = "medium", ReasoningObjectWire = true,
-                Timeouts = new() { SetupSeconds = 20, StreamIdleSeconds = 60, TotalSeconds = 120 }
-            });
             var result = await Trial(fixture, new SemanticResponseLanguageModel(model), modelId: modelId);
             results.Add(result);
             // Safe metrics only: no calls/arguments, prompts, refs, secrets, page contents or URLs.
-            output.WriteLine(JsonSerializer.Serialize(new { model = modelId, effort = "medium", trial, result }));
+            output.WriteLine(JsonSerializer.Serialize(new { model = modelId, effort = "medium", trial, transport = trial == firstTrial ? "cold-client" : "warm-client", profile = "cold", result }));
         }
-        Assert.All(results, result => Assert.True(result.DomVerified && result.Completed && result.CapabilityLoaded,
+        Assert.All(results, result => Assert.True(result.DomVerified && result.Completed && result.ReplyCompleted && result.CapabilityLoaded,
             "A model trial did not independently complete authenticated record retrieval; see safe trial metrics."));
     }
 
@@ -148,7 +150,7 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
         {
             var directory = new DirectoryInfo(AppContext.BaseDirectory);
             while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "agents"))) directory = directory.Parent;
-            var definition = (await new FileAgentDefinitionStore(Path.Combine(directory!.FullName, "agents"), SyntheticProviderAliases.Default).GetAsync("general-assistant", 20))!;
+            var definition = (await new FileAgentDefinitionStore(Path.Combine(directory!.FullName, "agents"), SyntheticProviderAliases.Default).GetAsync("general-assistant", 21))!;
             definition = definition with { Environment = definition.Environment! with
             {
                 Capabilities = new("Selected", [ToolCatalog.BrowserNavigate, ToolCatalog.BrowserSnapshot,
@@ -181,8 +183,10 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
             var timedOut = false;
             try { await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromMinutes(4)); }
             catch (TimeoutException) { timedOut = true; }
-            var completed = !timedOut && !sink.Items.Any(i => i.Payload is ErrorOutput)
-                && runtime.Snapshot.Entries.Any(e => e.Role == ConversationRole.Assistant && e.Status == EntryStatus.Completed && e.Text.Contains("Ready for inspection", StringComparison.OrdinalIgnoreCase));
+            var replyCompleted = !timedOut && !sink.Items.Any(i => i.Payload is ErrorOutput)
+                && runtime.Snapshot.Entries.Any(e => e.Role == ConversationRole.Assistant && e.Status == EntryStatus.Completed);
+            var completed = replyCompleted && runtime.Snapshot.Entries.Any(e => e.Role == ConversationRole.Assistant
+                && e.Status == EntryStatus.Completed && e.Text.Contains("Ready for inspection", StringComparison.OrdinalIgnoreCase));
             var page = browser.ContextFor(id)?.Pages.FirstOrDefault();
             var dom = page is not null && page.Url == fixture.ApplicationOrigin + "/record" && fixture.AcceptedLogins == 1 && fixture.ProtectedReads > 0
                 && await page.GetByRole(Microsoft.Playwright.AriaRole.Status).InnerTextAsync() == "Authenticated: AC-1042 is Ready for inspection.";
@@ -192,18 +196,27 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
             string? Error(ModelMessage message) { using var json = JsonDocument.Parse(message.Text); return json.RootElement.ValueKind == JsonValueKind.Object && json.RootElement.TryGetProperty("error", out var error) ? error.GetString() : null; }
             Assert.DoesNotContain(GenericSsoFixture.Password, string.Join('\n', recording.Requests.SelectMany(r => r.Messages).Select(m => m.Text)));
             Assert.DoesNotContain(recording.Calls, c => c.ArgumentsJson.Contains(GenericSsoFixture.Password));
-            output.WriteLine("Trial diagnostics: " + JsonSerializer.Serialize(new { requests = recording.Requests.Count, calls = recording.Calls.Select(c => c.Name), errors = sink.Items.Select(i => i.Payload).OfType<ErrorOutput>().Select(e => new { e.Code, e.FailureReason }), receipts = receipts.Select(r => new { r.Name, error = Error(r) }), dom, completed }));
-            var malformed = receipts.Count(r => Error(r) is "invalid" or "invalid_reference" or "ValidationError" or "invalid_tool_strategy_blocked");
+            string? TargetValidation(ModelToolCall call)
+            {
+                try { using var args = JsonDocument.Parse(call.ArgumentsJson); return BrowserToolArguments.InvalidTargetReason(args.RootElement); }
+                catch (JsonException) { return "malformed_json"; }
+            }
+            output.WriteLine("Trial diagnostics: " + JsonSerializer.Serialize(new { requests = recording.Requests.Count, calls = recording.Calls.Select(c => c.Name), targetValidation = recording.Calls.Where(c => c.Name.StartsWith("browser.")).Select(TargetValidation).Where(reason => reason is not null), errors = sink.Items.Select(i => i.Payload).OfType<ErrorOutput>().Select(e => new { e.Code, e.FailureReason }), receipts = receipts.Select(r => new { r.Name, error = Error(r) }), dom, completed }));
+            var malformed = receipts.Count(r => Error(r) is "invalid" or "invalid_target" or "ValidationError" or "invalid_tool_strategy_blocked");
             return new(recording.Requests.Count, recording.Calls.Count, receipts.Count(r => Error(r) is null), malformed,
                 receipts.Count(r => Error(r) == "invalid_tool_strategy_blocked"),
                 receipts.Count(r => { using var json = JsonDocument.Parse(r.Text); return json.RootElement.ValueKind == JsonValueKind.Object && json.RootElement.TryGetProperty("invalidCallRecovery", out var recovery) && recovery.GetProperty("attempt").GetInt32() >= 2; }),
-                runs.Any(r => r.LoadedCapabilityIds.Contains(ToolCatalog.BrowserFillCredential)), dom, completed, timedOut, Math.Round(timer.Elapsed.TotalSeconds, 1));
+                runs.Any(r => r.LoadedCapabilityIds.Contains(ToolCatalog.BrowserFillCredential)), dom, completed, timedOut, Math.Round(timer.Elapsed.TotalSeconds, 1),
+                recording.Calls.Count(c => c.Name == ToolCatalog.BrowserFind),
+                receipts.Where(r => r.Name?.StartsWith("browser.") == true).Select(r => System.Text.Encoding.UTF8.GetByteCount(r.Text)).DefaultIfEmpty().Max(),
+                receipts.Select(Error).Where(e => e is not null).Distinct().ToArray()!, replyCompleted);
         }
         finally { await browser.StopAsync(CancellationToken.None); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
     private sealed record TrialResult(int ModelRequests, int ToolCalls, int ValidCalls, int MalformedCalls, int BlockedCalls, int RepeatedFailures,
-        bool CapabilityLoaded, bool DomVerified, bool Completed, bool TimedOut, double ElapsedSeconds);
+        bool CapabilityLoaded, bool DomVerified, bool Completed, bool TimedOut, double ElapsedSeconds,
+        int FindCalls, int MaxBrowserReceiptBytes, string?[] FailureCodes, bool ReplyCompleted);
 
     private sealed class RecordingModel(ILanguageModel model) : ILanguageModel
     {
@@ -238,25 +251,21 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
                 yield return new ModelSemanticResponseReady(new("The repeated discovery strategy was blocked after invalid arguments; login was not completed.", new(ModelSpeechMode.Same, null), []));
                 yield return new ModelCompleted(ModelStopReason.Completed); yield break;
             }
-            if (interrupt && step == 7)
+            if (interrupt && step == 5)
             {
                 Ready.TrySetResult(); await Task.Delay(Timeout.InfiniteTimeSpan, ct);
             }
             var results = request.Messages.Where(m => m.Role == ModelRole.Tool).ToArray();
-            string Ref() { using var json = JsonDocument.Parse(results.Last(m => m.Name == ToolCatalog.BrowserFind).Text); return json.RootElement.GetProperty("matches")[0].GetProperty("ref").GetString()!; }
             var plan = step == 0 ? (ToolCatalog.BrowserNavigate, (object)new { url = origin + "/" })
                 : (recover && step is >= 1 and <= 3 || blockedForever && step is >= 1 and <= 4) ? (ToolCatalog.BrowserFind, new { role = "textbox", label = "Email" })
                 : (step - (recover ? 3 : 0)) switch
                 {
-                    1 => (ToolCatalog.BrowserFind, new { by = "label", value = "Email" }),
-                    2 => (ToolCatalog.BrowserType, new { @ref = Ref(), text = GenericSsoFixture.Email }),
-                    3 => (ToolCatalog.CapabilitiesLoad, new { query = "browser.fill_credential", limit = 1 }),
-                    4 => (ToolCatalog.CredentialsList, new { }),
-                    5 => (ToolCatalog.BrowserFind, new { by = "label", value = "Password" }),
-                    6 => (ToolCatalog.BrowserFillCredential, new { @ref = Ref(), credentialRef = "demo-sso" }),
-                    7 => (ToolCatalog.BrowserFind, new { by = "role", value = "button", name = "Sign in" }),
-                    8 => (ToolCatalog.BrowserClick, new { @ref = Ref() }),
-                    9 => (ToolCatalog.BrowserSnapshot, new { }),
+                    1 => (ToolCatalog.BrowserType, new { target = new BrowserTarget("label", "Email"), text = GenericSsoFixture.Email }),
+                    2 => (ToolCatalog.CapabilitiesLoad, new { query = "browser.fill_credential", limit = 1 }),
+                    3 => (ToolCatalog.CredentialsList, new { }),
+                    4 => (ToolCatalog.BrowserFillCredential, new { target = new BrowserTarget("label", "Password"), credentialRef = "demo-sso" }),
+                    5 => (ToolCatalog.BrowserClick, new { target = new BrowserTarget("role", "button", "Sign in") }),
+                    6 => (ToolCatalog.BrowserSnapshot, new { }),
                     _ => ("", new { })
                 };
             if (plan.Item1 == "")

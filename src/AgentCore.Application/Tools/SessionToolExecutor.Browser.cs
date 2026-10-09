@@ -15,13 +15,11 @@ public sealed partial class SessionToolExecutor
     {
         var started = Stopwatch.GetTimestamp();
         ToolExecutionResult Fail(string code, string message) => FitResult(remainingOutputBytes, FinishBrowser(name, started, Error(code, message)));
+        if (BrowserContractCutover.Retired(definition.SystemInstructions) || definition.SkillList.Any(skill => BrowserContractCutover.Retired(skill.Procedure)))
+            return Fail("browser_contract_retired", BrowserContractCutover.Message);
         if (!BrowserToolCatalog.TryGet(name, out var metadata)) return Fail("unsupported_operation", "Unknown browser feature.");
         if (!BrowserToolArguments.TryRequest(sessionId, name, args, out var request, out var argumentError))
-            return Fail(argumentError, name == ToolCatalog.BrowserFind && argumentError is "invalid" or "invalid_reference"
-                ? (argumentError == "invalid_reference" ? "An optional scopeRef is invalid. Omit it for an unscoped search, or use an opaque container ref returned by browser.find. " : "") + BrowserToolArguments.FindQueryGuidance
-                : name == ToolCatalog.BrowserSnapshot && argumentError == "invalid_reference"
-                    ? "An optional targetRef is invalid. Omit it to inspect the page, or use an opaque el_ ref returned by browser.find for a subtree."
-                    : BrowserFailureMessage(argumentError));
+            return Fail(argumentError, BrowserToolArguments.ArgumentGuidance(args));
         var denied = await BindBrowserAsync(sessionId, admission, ct).ConfigureAwait(false);
         if (denied is not null) return TextResult(FinishBrowser(name, started, denied));
         if (browser is null || !browser.IsAvailable && metadata.Feature != BrowserFeature.Configuration) return Fail("provider_unavailable", "Browser is unavailable.");
@@ -29,13 +27,11 @@ public sealed partial class SessionToolExecutor
         if (metadata.Feature == BrowserFeature.VisionMouse && admission?.SupportsVision != true) return Fail("forbidden", "Coordinate actions require a vision model.");
         if (metadata.Feature is BrowserFeature.FillCredential or BrowserFeature.Geolocation
             && admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn }) return Fail("forbidden", "This feature requires a direct attached user turn.");
-        if (request.Operation == BrowserOperation.Navigate && (request.Options.Operation is null or "goto")
-            && !BrowserTargetPolicy.EvaluateDestination(request.Options.Url, browser.HostPolicy.NavigationOrigins, browser.HostPolicy.PolicyMode).Allowed)
+        if (request.Command is BrowserNavigate { Operation: "goto" } navigate
+            && !BrowserTargetPolicy.EvaluateDestination(navigate.Url, browser.HostPolicy.NavigationOrigins, browser.HostPolicy.PolicyMode).Allowed)
             return Fail("target_denied", BrowserFailureMessage("target_denied"));
         if (name == ToolCatalog.BrowserScreenshot)
             return await CaptureBrowserAsync(sessionId, args, admission, ct);
-        if (name == ToolCatalog.BrowserFind && !BrowserToolArguments.ValidQuery(request.Options.Query))
-            return Fail("invalid", "Choose one semantic mode; name requires role. Use scopeRef for a unique region.");
         if (name == ToolCatalog.BrowserUpload)
         {
             var uploads = new List<BrowserUpload>();
@@ -45,15 +41,15 @@ public sealed partial class SessionToolExecutor
                 if (resolved.ErrorJson is not null) return Fail("invalid", "The Artifact cannot be uploaded.");
                 uploads.Add(resolved.Upload!);
             }
-            request = request with { Options = request.Options with { Uploads = uploads } };
+            request = request with { Command = ((BrowserUploadCommand)request.Command) with { Uploads = uploads } };
         }
         if (name == ToolCatalog.BrowserFillCredential)
         {
             if (admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn, AgentInstanceId: Guid owner }
                 || credentials is null || browser is not IBrowserPasswordSink sink)
                 return Fail("forbidden", "Protected credential use requires direct Chat.");
-            var filled = await sink.FillCredentialAsync(sessionId, args.GetProperty("ref").GetString()!,
-                (origin, token) => credentials.ResolvePasswordAsync(owner, args.GetProperty("credentialRef").GetString()!, origin, token), ct);
+            var filled = await sink.FillCredentialAsync(sessionId, ((BrowserFillCredential)request.Command).Target,
+                (origin, token) => credentials.ResolvePasswordAsync(owner, ((BrowserFillCredential)request.Command).CredentialRef, origin, token), ct);
             return FitResult(remainingOutputBytes, FinishBrowser(name, started,
                 await PresentBrowserAsync(sessionId, admission, filled, ct)));
         }
@@ -92,7 +88,7 @@ public sealed partial class SessionToolExecutor
             }
             if (result.Observation is not null)
                 return FitResult(remainingOutputBytes, FinishBrowser(name, started, await PresentBrowserAsync(sessionId, admission, result, ct)));
-            return FitResult(remainingOutputBytes, FinishBrowser(name, started, result.DataJson ?? JsonSerializer.Serialize(new { status = result.Status ?? "ok" })));
+            return FitResult(remainingOutputBytes, FinishBrowser(name, started, SerializeBrowserData(result)));
         }
     }
 
@@ -101,14 +97,12 @@ public sealed partial class SessionToolExecutor
         "forbidden",
         "invalid",
         "target_denied",
-        "stale_reference",
-        "invalid_reference",
-        "unknown_reference",
-        "wrong_session_reference",
         "target_missing",
+        "invalid_target",
+        "stale_frame",
+        "action_not_confirmed",
         "ambiguous_target",
         "not_found",
-        "reference_limit",
         "non_actionable_target",
         "timeout",
         "provider_unavailable",
@@ -529,7 +523,8 @@ public sealed partial class SessionToolExecutor
 
     private static readonly JsonSerializerOptions DownloadJson = new()
     {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
     private sealed record DownloadReceipt(
@@ -538,6 +533,16 @@ public sealed partial class SessionToolExecutor
         string? contentType,
         int? byteSize,
         string? artifactId);
+
+    private static string SerializeBrowserData(BrowserResult result)
+    {
+        var data = result.DataJson is null ? new System.Text.Json.Nodes.JsonObject { ["status"] = result.Status ?? "ok" }
+            : System.Text.Json.Nodes.JsonNode.Parse(result.DataJson)!.AsObject();
+        data["effectAttempted"] = result.EffectAttempted;
+        data["effectConfirmedBySdk"] = result.EffectConfirmedBySdk;
+        data["applicationOutcomeVerified"] = result.ApplicationOutcomeVerified;
+        return data.ToJsonString();
+    }
 
     private static string FromBrowserProvider(BrowserResult result)
     {
@@ -550,10 +555,10 @@ public sealed partial class SessionToolExecutor
 
             if (result.Observation.Intervention != BrowserInterventionKind.None)
             {
-                return SerializeBrowserIntervention(result.Observation);
+                return SerializeBrowserIntervention(result.Observation, result);
             }
 
-            return SerializeBrowserSnapshot(result.Observation);
+            return SerializeBrowserSnapshot(result.Observation, result);
         }
 
         var code = BrowserErrorCodes.Contains(result.ErrorCode) ? result.ErrorCode : "provider_unavailable";
@@ -570,27 +575,30 @@ public sealed partial class SessionToolExecutor
                 {
                     error = "unsupported_operation",
                     message = "This element does not support that operation.",
-                    allowedActions = allowed
+                    allowedActions = allowed, effectAttempted = result.EffectAttempted,
+                    effectConfirmedBySdk = result.EffectConfirmedBySdk, applicationOutcomeVerified = result.ApplicationOutcomeVerified
                 });
             }
         }
 
-        return Error(code, BrowserFailureMessage(code));
+        return JsonSerializer.Serialize(new { error = code, message = BrowserFailureMessage(code),
+            effectAttempted = result.EffectAttempted, effectConfirmedBySdk = result.EffectConfirmedBySdk,
+            applicationOutcomeVerified = result.ApplicationOutcomeVerified });
     }
 
-    private static string SerializeBrowserSnapshot(BrowserSnapshot observation) => JsonSerializer.Serialize(new
+    private static string SerializeBrowserSnapshot(BrowserSnapshot observation, BrowserResult result) => JsonSerializer.Serialize(new
     {
-        status = "ok", untrustedBrowserContent = true, snapshotId = observation.SnapshotId,
+        status = "ok", effectAttempted = result.EffectAttempted, effectConfirmedBySdk = result.EffectConfirmedBySdk, applicationOutcomeVerified = result.ApplicationOutcomeVerified, untrustedBrowserContent = true, snapshotId = observation.SnapshotId,
         tabRef = observation.TabRef, url = ClipBrowser(observation.Url, BrowserToolLimits.MaxUrlLength), title = ClipBrowser(observation.Title, BrowserToolLimits.MaxTitleLength),
         content = ToolJsonResults.ClipUtf8Prefix(observation.Content, BrowserToolLimits.MaxSnapshotBytes),
-        targets = observation.Targets.Select(e => new { @ref = e.Ref, role = e.Role, name = ClipBrowser(e.Name, BrowserToolLimits.MaxAccessibleNameLength), actions = e.Actions, state = ControlState(e.State) }),
+        targets = observation.Targets.Select(e => new { target = e.Target, role = e.Role, name = ClipBrowser(e.Name, BrowserToolLimits.MaxAccessibleNameLength), actions = e.Actions, state = ControlState(e.State) }),
         truncated = observation.ContentTruncated || Encoding.UTF8.GetByteCount(observation.Content) > BrowserToolLimits.MaxSnapshotBytes,
         hasMore = observation.ContentTruncated || Encoding.UTF8.GetByteCount(observation.Content) > BrowserToolLimits.MaxSnapshotBytes,
-        settled = observation.Settled, scope = observation.Scope, frames = observation.Frames,
-        guidance = "Use browser.find with a semantic query; use scopeRef for duplicate targets."
+        settled = observation.Settled, scope = observation.Scope, frames = observation.Frames, boxes = observation.Boxes,
+        guidance = BrowserToolArguments.TargetGuidance
     }, DownloadJson);
 
-    private static string SerializeBrowserIntervention(BrowserSnapshot observation)
+    private static string SerializeBrowserIntervention(BrowserSnapshot observation, BrowserResult result)
     {
         var kind = observation.Intervention switch
         {
@@ -601,6 +609,8 @@ public sealed partial class SessionToolExecutor
         return JsonSerializer.Serialize(new
         {
             error = "user_intervention_required",
+            effectAttempted = result.EffectAttempted, effectConfirmedBySdk = result.EffectConfirmedBySdk,
+            applicationOutcomeVerified = result.ApplicationOutcomeVerified,
             kind,
             url = ClipBrowser(observation.Url, BrowserToolLimits.MaxUrlLength),
             title = ClipBrowser(observation.Title, BrowserToolLimits.MaxTitleLength),
@@ -646,14 +656,12 @@ public sealed partial class SessionToolExecutor
             "forbidden" => "Browser operation is not permitted.",
             "invalid" => "Browser arguments are invalid.",
             "target_denied" => "Browser target is not allowed.",
-            "stale_reference" => "The browser context changed. Refresh and use browser.find to rediscover; do not replay an uncertain effect.",
-            "invalid_reference" => "Use an opaque el_ reference returned by browser.find; selectors and invented strings are invalid.",
-            "unknown_reference" => "This opaque reference is unknown. Obtain a current reference with browser.find.",
-            "wrong_session_reference" => "This reference belongs to a different Session. Discover a target in this Session.",
-            "target_missing" => "The locator no longer resolves. Refresh and rediscover with browser.find before acting.",
-            "ambiguous_target" => "The target is ambiguous. Narrow role/name or use a unique scopeRef.",
+            "invalid_target" => BrowserToolArguments.TargetGuidance,
+            "stale_frame" => "This frame is no longer current. Observe the current permitted frame inventory.",
+            "action_not_confirmed" => "The page changed during the operation. Observe current state; do not replay an uncertain effect.",
+            "target_missing" => "No current rendered target matches. Observe the page, narrow the semantics or render virtualized content before acting.",
+            "ambiguous_target" => "The target is ambiguous. Narrow role/name or use within with a unique row/group and literal hasText.",
             "not_found" => "No rendered target matches. Change the query or scroll the region to reveal virtualized content.",
-            "reference_limit" => "The bounded semantic ref registry is full; reopen or wait for expiration before rediscovery.",
             "non_actionable_target" => "The target has no actions. Search for its actionable descendant with browser.find.",
             "target_unreachable" => "The host refused the connection. Do not retry that host.",
             "dialog_pending" => "A native dialog is pending. Use authorized browser.dialog inspect to see its redacted type, then accept or dismiss only when justified by the requested action. Do not repeat the triggering click. Verify the application state afterwards; close does not prove sign-out.",

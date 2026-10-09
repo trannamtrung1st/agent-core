@@ -7,26 +7,26 @@ namespace AgentCore.Application.Tests;
 public sealed class BrowserSnapshotCompactionTests
 {
     [Fact]
-    public void New_snapshot_preserves_recent_discovery_refs_and_failures()
+    public void New_snapshot_preserves_recent_direct_targets_and_failures()
     {
         var messages = new List<ModelMessage>
         {
-            new(ModelRole.Tool, "{\"matches\":[{\"ref\":\"el_old\",\"name\":\"Asset 159\"}]}", Name: "browser.find"),
-            new(ModelRole.Tool, "{\"error\":\"invalid_reference\",\"message\":\"Omit an unused scopeRef.\"}", Name: "browser.find"),
+            new(ModelRole.Tool, "{\"matches\":[{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_old\"},\"name\":\"Asset 159\"}]}", Name: "browser.find"),
+            new(ModelRole.Tool, "{\"error\":\"invalid_target\",\"message\":\"Omit name for a literal target.\"}", Name: "browser.find"),
             Observation(1, "el_latest")
         };
         BrowserSnapshotCompaction.Compact(messages);
         Assert.Contains("el_old", messages[0].Text);
-        Assert.Contains("invalid_reference", messages[1].Text);
-        Assert.Contains("Omit an unused scopeRef", messages[1].Text);
+        Assert.Contains("invalid_target", messages[1].Text);
+        Assert.Contains("Omit name for a literal target", messages[1].Text);
         Assert.Contains("el_latest", messages[2].Text);
     }
 
     [Fact]
-    public void Older_discoveries_keep_outcomes_without_unbounded_reference_history()
+    public void Older_discoveries_keep_outcomes_without_unbounded_target_details()
     {
         var messages = Enumerable.Range(0, 20).Select(i => new ModelMessage(ModelRole.Tool,
-            JsonSerializer.Serialize(new { status = "ok", matchCount = 1, matches = new[] { new { @ref = $"el_found_{i}" } } }),
+            JsonSerializer.Serialize(new { status = "ok", matchCount = 1, matches = new[] { new { target = new { by = "text", value = $"Fixture match {i}" } } } }),
             Name: "browser.find")).ToList();
         var error = "{\"error\":\"not_found\",\"message\":\"No rendered target matches.\"}";
         messages.Insert(0, new(ModelRole.Tool, error, Name: "browser.find"));
@@ -34,12 +34,26 @@ public sealed class BrowserSnapshotCompactionTests
         BrowserSnapshotCompaction.Compact(messages);
         BrowserSnapshotCompaction.Compact(messages);
         Assert.Equal(error, messages[0].Text);
-        Assert.Equal(8, messages.Count(m => m.Text.Contains("el_found_", StringComparison.Ordinal)));
+        Assert.Equal(8, messages.Count(m => m.Text.Contains("Fixture match ", StringComparison.Ordinal)));
         using var receipt = JsonDocument.Parse(messages[1].Text);
         Assert.Equal("ok", receipt.RootElement.GetProperty("status").GetString());
         Assert.Equal(1, receipt.RootElement.GetProperty("matchCount").GetInt32());
         Assert.Contains("browser.find", receipt.RootElement.GetProperty("guidance").GetString());
     }
+    [Fact]
+    public void Durable_action_and_observed_outcome_facts_survive_evidence_compaction()
+    {
+        var observed = Observation(0, "Fixture control");
+        var data = System.Text.Json.Nodes.JsonNode.Parse(observed.Text)!.AsObject();
+        data["effectAttempted"] = true; data["effectConfirmedBySdk"] = true; data["applicationOutcomeVerified"] = false;
+        var messages = new List<ModelMessage> { observed with { Text = data.ToJsonString() }, Observation(1, "Next control") };
+        BrowserSnapshotCompaction.Compact(messages);
+        using var receipt = JsonDocument.Parse(messages[0].Text);
+        Assert.True(receipt.RootElement.GetProperty("effectAttempted").GetBoolean());
+        Assert.True(receipt.RootElement.GetProperty("effectConfirmedBySdk").GetBoolean());
+        Assert.False(receipt.RootElement.GetProperty("applicationOutcomeVerified").GetBoolean());
+    }
+
     [Fact]
     public void Repeated_browser_rounds_keep_only_the_latest_full_observations()
     {
@@ -110,7 +124,7 @@ public sealed class BrowserSnapshotCompactionTests
         Assert.Equal(note, messages[3].Text);
         var latest = JsonDocument.Parse(messages[6].Text).RootElement;
         Assert.True(latest.TryGetProperty("targets", out var targets));
-        Assert.Contains("el_latest", targets[0].GetProperty("ref").GetString(), StringComparison.Ordinal);
+        Assert.Contains("el_latest", targets[0].GetProperty("target").GetRawText(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -152,7 +166,7 @@ public sealed class BrowserSnapshotCompactionTests
                 title = "Store",
                 content = visible,
                 settled = settledValue,
-                targets = new[] { new { @ref = "el_aaaaaaaaaaaaaaaaaaaaaa", role = "link", name = "Row" } }
+                targets = new[] { new { target = "el_aaaaaaaaaaaaaaaaaaaaaa", role = "link", name = "Row" } }
             })
             : JsonSerializer.Serialize(new
             {
@@ -160,7 +174,7 @@ public sealed class BrowserSnapshotCompactionTests
                 url,
                 title = "Store",
                 content = visible,
-                targets = new[] { new { @ref = "el_aaaaaaaaaaaaaaaaaaaaaa", role = "link", name = "Row" } }
+                targets = new[] { new { target = "el_aaaaaaaaaaaaaaaaaaaaaa", role = "link", name = "Row" } }
             });
         return new ModelMessage(ModelRole.Tool, json, ToolCallId: marker, Name: "browser.snapshot");
     }
@@ -169,8 +183,8 @@ public sealed class BrowserSnapshotCompactionTests
     {
         var targets = Enumerable.Range(0, 40)
             .Select(index => index == 0
-                ? (object)new { @ref = reference, role = "textbox", name = "SKU", actions = new[] { "fill" }, state = new { value = $"SKU-{reference}" } }
-                : new { @ref = $"el_{round}_{index}", role = "button", name = new string('n', 80), actions = new[] { "click" } })
+                ? (object)new { target = reference, role = "textbox", name = "SKU", actions = new[] { "fill" }, state = new { value = $"SKU-{reference}" } }
+                : new { target = $"el_{round}_{index}", role = "button", name = new string('n', 80), actions = new[] { "click" } })
             .ToArray();
         var json = JsonSerializer.Serialize(new
         {

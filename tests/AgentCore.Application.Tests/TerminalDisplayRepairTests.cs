@@ -774,10 +774,10 @@ public sealed partial class TerminalDisplayRepairTests
             BrowserRequest request,
             CancellationToken cancellationToken = default)
         {
-            Navigated.Add(request.Options.Url!);
+            Navigated.Add(((BrowserNavigate)request.Command).Url!);
             return new(new BrowserResult(
                 null,
-                new BrowserSnapshot(request.Options.Url!, "Zigwheels", "Open", false, [])));
+                new BrowserSnapshot(((BrowserNavigate)request.Command).Url!, "Zigwheels", "Open", false, [])));
         }
 
         public ValueTask<BrowserResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)

@@ -2597,6 +2597,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var started = Stopwatch.GetTimestamp();
         using var activity = RuntimeTelemetry.Activity.StartActivity("model");
         var checkpoint = _boundAgentRun?.ResponseId == request.ResponseId ? _boundAgentRun.Checkpoint : null;
+        AgentRunToolCallCheckpoint.EnsureCurrentBrowserContract(checkpoint);
         var restored = AgentRunToolCallCheckpoint.TryRead(checkpoint, out var restoredMessages);
         var messages = restored ? request.Messages.Concat(restoredMessages!).ToList() : request.Messages.ToList();
         if (restored) messages = await _tools.RehydrateCapturesAsync(SessionId, messages, model.Capabilities.Vision, cancellationToken).ConfigureAwait(false);

@@ -72,7 +72,7 @@ internal sealed class BrowserEvidenceProgress
             else if (error == "dialog_missing" && call.Name == ToolCatalog.BrowserDialog
                 || error.Length == 0 && call.Name != ToolCatalog.BrowserConfiguration
                     && (call.Name != ToolCatalog.BrowserDialog || operation != "inspect")) ClearDialog();
-            else if (DialogPending && error.Length > 0 && error is not ("invalid" or "invalid_reference" or "forbidden" or "invalid_tool_strategy_blocked")
+            else if (DialogPending && error.Length > 0 && error is not ("invalid" or "invalid_target" or "forbidden" or "invalid_tool_strategy_blocked")
                 && DialogRecoveryTool(call.Name)) CountBlocked(call.Name + ":" + operation + ":" + error);
         }
         catch (JsonException) { }

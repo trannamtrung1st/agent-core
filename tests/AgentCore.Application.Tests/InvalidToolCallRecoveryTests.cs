@@ -94,10 +94,10 @@ public sealed class InvalidToolCallRecoveryTests
     public void Provider_rejected_query_is_bounded_while_a_corrected_query_remains_available()
     {
         var recovery = new InvalidToolCallRecovery([]);
-        var call = new ModelToolCall("one", ToolCatalog.BrowserFind, "{\"by\":\"role\",\"value\":\"invented-role\"}");
+        var call = new ModelToolCall("one", ToolCatalog.BrowserFind, "{\"target\":{\"by\":\"role\",\"value\":\"invented-role\"}}");
         for (var i = 0; i < 2; i++) recovery.Note(call, "{\"error\":\"invalid\"}", out _);
         Assert.NotNull(recovery.Refuse(call));
-        Assert.Null(recovery.Refuse(call with { ArgumentsJson = "{\"by\":\"role\",\"value\":\"textbox\"}" }));
+        Assert.Null(recovery.Refuse(call with { ArgumentsJson = "{\"target\":{\"by\":\"role\",\"value\":\"textbox\"}}" }));
         const string unrelated = "{\"error\":{\"code\":\"private-value\"}}";
         Assert.Equal(unrelated, recovery.Note(call, unrelated, out _));
     }
@@ -111,7 +111,7 @@ public sealed class InvalidToolCallRecoveryTests
         Assert.Contains("by", receipt); Assert.Contains("value", receipt);
         recovery.Note(first with { ArgumentsJson = "another broken JSON" }, "{\"error\":\"invalid\"}", out _);
         Assert.NotNull(recovery.Refuse(first with { ArgumentsJson = "{different" }));
-        Assert.Null(recovery.Refuse(first with { ArgumentsJson = "{\"by\":\"text\",\"value\":\"Email\"}" }));
+        Assert.Null(recovery.Refuse(first with { ArgumentsJson = "{\"target\":{\"by\":\"text\",\"value\":\"Email\"}}" }));
     }
 
     [Fact]
@@ -135,7 +135,7 @@ public sealed class InvalidToolCallRecoveryTests
         Assert.Contains("invalid_tool_strategy_blocked", blocked);
         recovery.Note(first, blocked!, out var exhausted);
         Assert.False(exhausted); // One opportunity for a different valid discovery remains.
-        Assert.Null(recovery.Refuse(first with { ArgumentsJson = """{"by":"role","value":"textbox","name":"Email"}""" }));
+        Assert.Null(recovery.Refuse(first with { ArgumentsJson = """{"target":{"by":"role","value":"textbox","name":"Email"}}""" }));
         recovery.Note(first, recovery.Refuse(first)!, out exhausted);
         Assert.True(exhausted);
     }
@@ -143,14 +143,32 @@ public sealed class InvalidToolCallRecoveryTests
     [Fact]
     public void Shared_recovery_preserves_corrected_values_and_does_not_count_policy_denials()
     {
-        var call = new ModelToolCall("one", ToolCatalog.BrowserType, """{"ref":"bad","text":"private-value"}""");
+        var call = new ModelToolCall("one", ToolCatalog.BrowserType, """{"target":{"by":"role","value":"button","name":"bad"},"text":"private-value"}""");
         var recovery = new InvalidToolCallRecovery([]);
-        for (var i = 0; i < 2; i++) recovery.Note(call, """{"error":"invalid_reference"}""", out _);
+        for (var i = 0; i < 2; i++) recovery.Note(call, """{"error":"invalid_target"}""", out _);
         Assert.NotNull(recovery.Refuse(call));
-        Assert.Null(recovery.Refuse(call with { ArgumentsJson = """{"ref":"el_0123456789abcdefghijkl","text":"private-value"}""" }));
+        Assert.Null(recovery.Refuse(call with { ArgumentsJson = """{"target":{"by":"role","value":"button","name":"el_0123456789abcdefghijkl"},"text":"private-value"}""" }));
         var denial = """{"error":"target_denied"}""";
         Assert.Equal(denial, recovery.Note(call, denial, out _));
-        Assert.DoesNotContain("private-value", recovery.Note(call, """{"error":"invalid_reference"}""", out _));
+        Assert.DoesNotContain("private-value", recovery.Note(call, """{"error":"invalid_target"}""", out _));
+    }
+
+    [Theory]
+    [InlineData("name_requires_role", "{\"target\":{\"by\":\"label\",\"value\":\"Email\",\"name\":\"Email\"},\"text\":\"demo\"}", "{\"target\":{\"by\":\"label\",\"value\":\"Different email\",\"name\":\"Changed name\"},\"text\":\"demo\"}")]
+    [InlineData("frame_requires_current_id", "{\"target\":{\"by\":\"label\",\"value\":\"Email\",\"frameRef\":\"main\"},\"text\":\"demo\"}", "{\"target\":{\"by\":\"label\",\"value\":\"Email\",\"frameRef\":\"guessed\"},\"text\":\"demo\"}")]
+    public void Structural_target_errors_are_precise_and_bounded_without_blocking_corrected_targets(string reason, string first, string second)
+    {
+        using var args = JsonDocument.Parse(first);
+        Assert.Equal(reason, BrowserToolArguments.InvalidTargetReason(args.RootElement));
+        Assert.False(BrowserToolArguments.TryRequest(Guid.Empty, ToolCatalog.BrowserType, args.RootElement, out _, out var error));
+        Assert.Equal("invalid_target", error);
+        Assert.DoesNotContain("Changed name", BrowserToolArguments.ArgumentGuidance(args.RootElement));
+        var recovery = new InvalidToolCallRecovery([]);
+        var call = new ModelToolCall("one", ToolCatalog.BrowserType, first);
+        recovery.Note(call, "{\"error\":\"invalid_target\"}", out _);
+        recovery.Note(call with { ArgumentsJson = second }, "{\"error\":\"invalid_target\"}", out _);
+        Assert.NotNull(recovery.Refuse(call with { ArgumentsJson = second }));
+        Assert.Null(recovery.Refuse(call with { ArgumentsJson = "{\"target\":{\"by\":\"label\",\"value\":\"Email\"},\"text\":\"demo\"}" }));
     }
 
     [Fact]
@@ -158,7 +176,7 @@ public sealed class InvalidToolCallRecoveryTests
     {
         var receipts = new ModelMessage[]
         {
-            new(ModelRole.Tool, """{"status":"ok","url":"https://private.test/token","content":"Authenticated password secret","ref":"el_private"}""", Name: ToolCatalog.BrowserFillCredential),
+            new(ModelRole.Tool, """{"status":"ok","url":"https://private.test/token","content":"Authenticated password secret","target":{"by":"role","value":"button","name":"el_private"}}""", Name: ToolCatalog.BrowserFillCredential),
             new(ModelRole.Tool, """{"status":"ok","content":"signed in"}""", Name: ToolCatalog.BrowserClick),
             new(ModelRole.Tool, """{"error":"invented-secret-code"}""", Name: ToolCatalog.BrowserFind)
         };

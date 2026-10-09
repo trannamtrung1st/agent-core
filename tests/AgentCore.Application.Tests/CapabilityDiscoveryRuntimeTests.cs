@@ -100,7 +100,7 @@ public sealed partial class TerminalDisplayRepairTests
     private sealed class DiscoveryFormModel : ILanguageModel
     {
         private int _step;
-        private string? _ref;
+        private BrowserTarget? _ref;
         public string LastResult { get; private set; } = "";
         public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
@@ -108,7 +108,7 @@ public sealed partial class TerminalDisplayRepairTests
             var step = _step++;
             var results = request.Messages.Where(m => m.Role == ModelRole.Tool).ToArray();
             LastResult = results.LastOrDefault()?.Text ?? "";
-            string Ref() { using var json = JsonDocument.Parse(results.Last().Text); return json.RootElement.GetProperty("matches")[0].GetProperty("ref").GetString()!; }
+            BrowserTarget Ref() { using var json = JsonDocument.Parse(results.Last().Text); return json.RootElement.GetProperty("matches")[0].GetProperty("target").Deserialize<BrowserTarget>(JsonSerializerOptions.Web)!; }
             if (step == 0) Assert.DoesNotContain(request.Tools ?? [], t => t.Name == ToolCatalog.BrowserFillForm);
             if (step == 1)
             {
@@ -120,9 +120,9 @@ public sealed partial class TerminalDisplayRepairTests
             (string, object) action = step switch
             {
                 0 => (ToolCatalog.CapabilitiesLoad, new { query = "fill a form", limit = 1 }),
-                1 => (ToolCatalog.BrowserFind, new { by = "label", value = "Record" }),
-                2 => (ToolCatalog.BrowserFillForm, new { fields = new[] { new { @ref = _ref = Ref(), value = "Discovery verified" } } }),
-                3 => (ToolCatalog.BrowserSnapshot, new { targetRef = _ref }),
+                1 => (ToolCatalog.BrowserFind, new { target = new { by = "label", value = "Record" } }),
+                2 => (ToolCatalog.BrowserFillForm, new { fields = new[] { new { target = _ref = Ref(), value = "Discovery verified" } } }),
+                3 => (ToolCatalog.BrowserSnapshot, new { target = _ref }),
                 _ => ("", new { })
             };
             if (step == 4)

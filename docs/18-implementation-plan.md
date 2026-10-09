@@ -1,5 +1,11 @@
 # Implementation Plan
 
+## Browser semantic-action redesign
+
+User-authorized complete cutover on `develop/branch-1a` from behavior baseline `09e20afea2ffbc381fce1b43f5c49fd3722e50e8`. This follow-up preserves existing milestone invariants and leaves P10/P11 unopened. Application now owns one closed typed command family and direct semantic target grammar; Infrastructure delegates matching/actionability to public Microsoft.Playwright 1.63 APIs. Optional find mints no authority. General Assistant v21 / Secretary v8 replace executable old browser instructions, and old browser checkpoints cannot resume.
+
+Acceptance requires the complete feature/threat matrix, SDK qualification, actual Chromium parity/security, owned natural-language scripted and opted-in repeated real-model comparison, full local backend/frontend/Synthetic/Compose gates and all five hosted jobs on the final behavior SHA. [Verification ledger](reports/browser-semantic-redesign-verification.md) owns observed results and pending gaps. Prior native/browser freezes below are historical evidence and do not establish acceptance of this redesign.
+
 ## Activation, AgentRun and background Sessions cutover
 
 Accepted follow-on requirement reviewed against `bd44046896df6f3e0fc2e7d15d60dd479a5349cd` on 2026-10-08. This does not reopen historical freezes or start P10/P11. The approved target and migration policy are owned by [Architecture](03-system-architecture.md#accepted-activation-and-agentrun-cutover) and [Technology Decisions](10-technology-decisions.md#decision-unified-activation-agentrun-and-background-sessions).
@@ -12,7 +18,7 @@ Acceptance requires all AC01–AC20 and J1–J12 in the approved proposal: batch
 
 The final behavior commit must have all required hosted Synthetic/Compose jobs green on its exact SHA before closure. The baseline's hosted result does not verify this migration. [Verification](reports/activation-agent-run-background-sessions-verification.md) records phase/AC evidence, failed gates and final closure.
 
-## Native Playwright wrapper full cutover
+## Historical native Playwright wrapper full cutover
 
 User-authorized on `develop/branch-1` at baseline `75bf40aaaaba5a256d528d9e3feeb25c7a967b0d`. The implementation replaces indexed Browser v2 with one typed neutral port, direct native Locator discovery, native subtree observations, bounded opaque refs and unchanged owner/security/effect boundaries. General Assistant v18 and Secretary v6 publish the new guidance. P10/P11 remain unopened. Historical Browser v2 acceptance and freezes remain in their reports; they do not verify this cutover.
 

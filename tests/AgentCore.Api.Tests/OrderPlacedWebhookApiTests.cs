@@ -31,7 +31,7 @@ public sealed class OrderPlacedWebhookApiTests
         Directory.CreateDirectory(directory);
         try
         {
-            var json = JsonNode.Parse(File.ReadAllText(Path.Combine(FindAgents(), "secretary-v3.json")))!;
+            var json = JsonNode.Parse(File.ReadAllText(Path.Combine(FindAgents(), "secretary-v8.json")))!;
             json["triggerPolicy"]!["enabled"] = eventOnly;
             if (eventOnly) json["triggerPolicy"]!["allowedSourceKinds"] = new JsonArray("applicationEvent");
             File.WriteAllText(Path.Combine(directory, "secretary.json"), json.ToJsonString());
@@ -43,7 +43,7 @@ public sealed class OrderPlacedWebhookApiTests
                 services.AddSingleton(new FileAgentDefinitionStore(directory, SyntheticProviderAliases.Default));
                 services.AddSingleton<IBuiltInAgentDefinitionStore>(provider => provider.GetRequiredService<FileAgentDefinitionStore>());
             }));
-            var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("secretary", 3);
+            var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("secretary", 8);
             using var owner = TestOwnerCapability.CreateOwnerClient(host);
             var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/automations";
             var policy = (await owner.GetFromJsonAsync<AutomationReview>(path))!.Policy!;
@@ -64,8 +64,8 @@ public sealed class OrderPlacedWebhookApiTests
             await using var host = new DurableSqliteHostFactory(db, runScheduler: false);
             var owner = OwnerClient(host);
             var (resourceId, key, token) = await CreateSourceAsync(owner, "Large payload");
-            var first = await InsertInstanceAsync(host, "secretary", 3);
-            var second = await InsertInstanceAsync(host, "secretary", 3);
+            var first = await InsertInstanceAsync(host, "secretary", 8);
+            var second = await InsertInstanceAsync(host, "secretary", 8);
             var request = new AutomationRequest(0, true, "Long instructions", new string('中', 850),
                 new("event", EventId: resourceId.ToString()), ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none"));
             (await owner.PostAsJsonAsync($"/api/v2/admin/agent-instances/{first}/automations", request)).EnsureSuccessStatusCode();
@@ -97,8 +97,8 @@ public sealed class OrderPlacedWebhookApiTests
             issued.EnsureSuccessStatusCode();
             var credential = (await issued.Content.ReadFromJsonAsync<AdminWebhookEventCredentialResponse>())!;
             Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(path, new AdminCreateWebhookEventRequest("Duplicate key", "invoice.paid"))).StatusCode);
-            var first = await InsertInstanceAsync(host, "secretary", 3);
-            var second = await InsertInstanceAsync(host, "secretary", 3);
+            var first = await InsertInstanceAsync(host, "secretary", 8);
+            var second = await InsertInstanceAsync(host, "secretary", 8);
             await SubscribeAsync(owner, first, Guid.Parse(credential.EventId));
             await SubscribeAsync(owner, second, Guid.Parse(credential.EventId));
             var automationPath = $"/api/v2/admin/agent-instances/{second}/automations";
@@ -151,8 +151,8 @@ public sealed class OrderPlacedWebhookApiTests
                 Assert.DoesNotContain(WebhookTokens.Hash(token), listed, StringComparison.Ordinal);
                 Assert.Contains(sourceKey, listed, StringComparison.Ordinal);
 
-                instanceId = await InsertInstanceAsync(host, "secretary", 3);
-                secondId = await InsertInstanceAsync(host, "secretary", 3);
+                instanceId = await InsertInstanceAsync(host, "secretary", 8);
+                secondId = await InsertInstanceAsync(host, "secretary", 8);
                 await SubscribeAsync(owner, instanceId, sourceId);
                 await SubscribeAsync(owner, secondId, sourceId);
                 var ineligible = await InsertInstanceAsync(host, "examiner", 1);
@@ -233,8 +233,8 @@ public sealed class OrderPlacedWebhookApiTests
             {
                 var owner = OwnerClient(host);
                 (sourceId, _, _) = await CreateSourceAsync(owner, "Demo Store");
-                firstId = await InsertInstanceAsync(host, "secretary", 3);
-                secondId = await InsertInstanceAsync(host, "secretary", 3);
+                firstId = await InsertInstanceAsync(host, "secretary", 8);
+                secondId = await InsertInstanceAsync(host, "secretary", 8);
                 await SubscribeAsync(owner, firstId, sourceId);
                 await SubscribeAsync(owner, secondId, sourceId);
 
@@ -281,7 +281,7 @@ public sealed class OrderPlacedWebhookApiTests
 
             await using var reopened = new DurableSqliteHostFactory(db, runScheduler: false);
             var client = OwnerClient(reopened);
-            var lateId = await InsertInstanceAsync(reopened, "secretary", 3);
+            var lateId = await InsertInstanceAsync(reopened, "secretary", 8);
             await SubscribeAsync(client, lateId, sourceId);
             var created = await reopened.Services.GetRequiredService<ExternalEventIngress>().ResumePendingAsync();
             Assert.Equal(1, created);

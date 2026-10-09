@@ -5,9 +5,9 @@ namespace AgentCore.Application.Tests;
 public sealed class BrowserInteractionContractTests
 {
     [Theory]
-    [InlineData("browser.click", "{\"ref\":\"el_0123456789abcdefghijkl\"}", BrowserOperation.Click)]
-    [InlineData("browser.type", "{\"ref\":\"el_0123456789abcdefghijkl\",\"text\":\"hello\"}", BrowserOperation.Type)]
-    [InlineData("browser.fill_form", "{\"fields\":[{\"ref\":\"el_0123456789abcdefghijkl\",\"checked\":true}]}", BrowserOperation.FillForm)]
+    [InlineData("browser.click", "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_0123456789abcdefghijkl\"}}", BrowserOperation.Click)]
+    [InlineData("browser.type", "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_0123456789abcdefghijkl\"},\"text\":\"hello\"}", BrowserOperation.Type)]
+    [InlineData("browser.fill_form", "{\"fields\":[{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_0123456789abcdefghijkl\"},\"checked\":true}]}", BrowserOperation.FillForm)]
     [InlineData("browser.press_key", "{\"key\":\"Control+A\"}", BrowserOperation.PressKey)]
     public void Canonical_shapes_produce_typed_requests(string tool, string json, BrowserOperation operation)
     {
@@ -17,7 +17,7 @@ public sealed class BrowserInteractionContractTests
     }
 
     [Theory]
-    [InlineData("browser.click", "{\"ref\":\"button\"}", "invalid_reference")]
+    [InlineData("browser.click", "{\"ref\":\"button\"}", "invalid")]
     [InlineData("browser.type", "{\"ref\":\"el_0123456789abcdefghijkl\"}", "invalid")]
     [InlineData("browser.click", "{\"ref\":\"el_0123456789abcdefghijkl\",\"operation\":\"click\"}", "invalid")]
     [InlineData("browser.click", "{\"ref\":\"el_0123456789abcdefghijkl\",\"selector\":\"#private\"}", "invalid")]

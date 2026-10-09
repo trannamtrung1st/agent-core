@@ -110,7 +110,7 @@ public sealed partial class NativePlaywrightBrowser
         _ = close.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
     }
 
-    private async Task<BrowserResult> GeolocationAsync(SessionBrowser session, BrowserOptionsData args, CancellationToken ct)
+    private async Task<BrowserResult> GeolocationAsync(SessionBrowser session, BrowserSetGeolocation args, CancellationToken ct)
     {
         var operation = args.Operation;
         if (operation is not ("set" or "clear") || !Uri.TryCreate(args.Origin, UriKind.Absolute, out var target)
@@ -169,7 +169,7 @@ public sealed partial class NativePlaywrightBrowser
         }
     }
 
-    private async Task EmulateMediaAsync(SessionBrowser session, BrowserOptionsData args, CancellationToken ct, Func<Task, Task> action)
+    private async Task EmulateMediaAsync(SessionBrowser session, BrowserEmulateMedia args, CancellationToken ct, Func<Task, Task> action)
     {
         static T? Setting<T>(bool specified, string? value) where T : struct, Enum => !specified ? null
             : value is null ? Enum.Parse<T>("Null") : Enum.Parse<T>(value.Replace("-", ""), true);

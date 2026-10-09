@@ -6,17 +6,7 @@ namespace AgentCore.Application.Tools;
 
 public static class BrowserToolArguments
 {
-    internal const string FindQueryGuidance = "Choose exactly one search strategy using required by and value. by is role, text, label, placeholder, altText, title or testId. For Email, use {\"by\":\"placeholder\",\"value\":\"Enter your email\"} or {\"by\":\"role\",\"value\":\"textbox\",\"name\":\"Email\"}. name is only for by=role. Omit unused refinements; empty or null optional fields mean omitted. Do not send parallel role/text/label/placeholder fields. A unique match creates its own opaque ref and needs no prior snapshot.";
-    private static readonly Regex OpaqueRef = new(
-        "^el_[A-Za-z0-9_-]{22}$",
-        RegexOptions.CultureInvariant | RegexOptions.Compiled);
-
-    private static readonly Regex PageRef = new(
-        "^pg_[A-Za-z0-9_-]{22}$",
-        RegexOptions.CultureInvariant | RegexOptions.Compiled);
-
-    public static bool IsOpaqueReference(string? value) => value is not null && OpaqueRef.IsMatch(value);
-
+    internal const string TargetGuidance = "Use a minimal target object. For a label: {\"target\":{\"by\":\"label\",\"value\":\"Email\"}}. For role, value is an ARIA role and name is its accessible name. Example: {\"target\":{\"by\":\"role\",\"value\":\"textbox\",\"name\":\"Email\"}}. exact defaults to true. For repeated Edit buttons use within={by:role,value:row,hasText:Pump 002}. Omit unused fields, including name for non-role targets and frameRef for the main page. One bounded within scope only. Actions need no browser.find call. Never invent frameRef; use only a current snapshot frame ID.";
     internal static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
@@ -66,51 +56,66 @@ public static class BrowserToolArguments
         _ => ""
     };
 
-    public static BrowserRequest Request(Guid sessionId, string tool, JsonElement args)
+    private static BrowserRequest Parse(Guid sessionId, string tool, JsonElement args)
     {
         var operation = Enum.GetValues<BrowserOperation>().Single(o => ToolName(o) == tool);
-        if (operation == BrowserOperation.Find) args = NormalizeFindArguments(args);
-        var options = System.Text.Json.JsonSerializer.Deserialize<BrowserOptionsData>(args, JsonOptions)!;
-        if (operation == BrowserOperation.EmulateMedia)
-            options = options with
+        var type = operation switch
+        {
+            BrowserOperation.Navigate => typeof(BrowserNavigate),
+            BrowserOperation.Snapshot => typeof(BrowserObserve),
+            BrowserOperation.Find => typeof(BrowserFind),
+            BrowserOperation.Click => typeof(BrowserClick),
+            BrowserOperation.Hover => typeof(BrowserHover),
+            BrowserOperation.Drag => typeof(BrowserDrag),
+            BrowserOperation.Drop => typeof(BrowserDrop),
+            BrowserOperation.Type => typeof(BrowserTypeText),
+            BrowserOperation.FillForm => typeof(BrowserFillForm),
+            BrowserOperation.SelectOption => typeof(BrowserSelectOption),
+            BrowserOperation.PressKey => typeof(BrowserPressKey),
+            BrowserOperation.Upload => typeof(BrowserUploadCommand),
+            BrowserOperation.FillCredential => typeof(BrowserFillCredential),
+            BrowserOperation.WaitFor => typeof(BrowserWaitFor),
+            BrowserOperation.Tabs => typeof(BrowserTabs),
+            BrowserOperation.Dialog => typeof(BrowserDialog),
+            BrowserOperation.Resize => typeof(BrowserResize),
+            BrowserOperation.Close => typeof(BrowserClose),
+            BrowserOperation.Screenshot => typeof(BrowserScreenshot),
+            BrowserOperation.ConsoleMessages => typeof(BrowserConsoleMessages),
+            BrowserOperation.NetworkRequests => typeof(BrowserNetworkRequests),
+            BrowserOperation.NetworkRequest => typeof(BrowserNetworkRequest),
+            BrowserOperation.Route => typeof(BrowserRoute),
+            BrowserOperation.Routes => typeof(BrowserRoutes),
+            BrowserOperation.Unroute => typeof(BrowserUnroute),
+            BrowserOperation.NetworkState => typeof(BrowserNetworkState),
+            BrowserOperation.Cookies => typeof(BrowserCookies),
+            BrowserOperation.LocalStorage => typeof(BrowserLocalStorage),
+            BrowserOperation.SessionStorage => typeof(BrowserSessionStorage),
+            BrowserOperation.Verify => typeof(BrowserVerify),
+            BrowserOperation.GenerateLocator => typeof(BrowserGenerateLocator),
+            BrowserOperation.Mouse => typeof(BrowserMouse),
+            BrowserOperation.Highlight => typeof(BrowserHighlight),
+            BrowserOperation.EmulateMedia => typeof(BrowserEmulateMedia),
+            BrowserOperation.GetConfig => typeof(BrowserGetConfig),
+            BrowserOperation.SetGeolocation => typeof(BrowserSetGeolocation),
+            BrowserOperation.Scroll => typeof(BrowserScroll),
+            _ => throw new ArgumentException("Unknown browser operation.")
+        };
+        var command = (BrowserCommand)JsonSerializer.Deserialize(args, type, JsonOptions)!;
+        if (command is BrowserEmulateMedia media)
+            command = media with
             {
                 MediaSpecified = args.TryGetProperty("media", out _),
                 ColorSchemeSpecified = args.TryGetProperty("colorScheme", out _),
                 ReducedMotionSpecified = args.TryGetProperty("reducedMotion", out _),
                 ForcedColorsSpecified = args.TryGetProperty("forcedColors", out _),
-                ContrastSpecified = args.TryGetProperty("contrast", out _),
+                ContrastSpecified = args.TryGetProperty("contrast", out _)
             };
-        if (operation == BrowserOperation.Find)
-            options = options with { Query = FindQuery(args) };
-        return new(sessionId, operation, options);
+        return new(sessionId, command);
     }
 
-    private static JsonElement NormalizeFindArguments(JsonElement args)
-    {
-        var fields = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-        foreach (var field in args.EnumerateObject())
-        {
-            if (field.Name is not ("by" or "value") && field.Value.ValueKind == JsonValueKind.Null) continue;
-            if (field.Name is "name" or "hasText" or "scopeRef" or "frameRef"
-                && field.Value.ValueKind == JsonValueKind.String && string.IsNullOrWhiteSpace(field.Value.GetString())) continue;
-            fields[field.Name] = field.Value;
-        }
-        return JsonSerializer.SerializeToElement(fields);
-    }
-
-    private static BrowserTargetQuery FindQuery(JsonElement args)
-    {
-        var query = JsonSerializer.Deserialize<BrowserTargetQuery>(args, JsonOptions)!;
-        var by = args.TryGetProperty("by", out var strategy) && strategy.ValueKind == JsonValueKind.String ? strategy.GetString() : null;
-        var value = args.TryGetProperty("value", out var criterion) && criterion.ValueKind == JsonValueKind.String ? criterion.GetString() : null;
-        return query with
-        {
-            Role = by == "role" ? value : null, Text = by == "text" ? value : null,
-            Label = by == "label" ? value : null, Placeholder = by == "placeholder" ? value : null,
-            AltText = by == "altText" ? value : null, Title = by == "title" ? value : null,
-            TestId = by == "testId" ? value : null
-        };
-    }
+    public static BrowserRequest Request(Guid sessionId, string tool, JsonElement args) =>
+        TryRequest(sessionId, tool, args, out var request, out var error) ? request
+            : throw new ArgumentException(error + ": " + TargetGuidance);
 
     public static bool TryCanonicalizeClose(string? json, out string errorJson)
     {
@@ -134,30 +139,35 @@ public static class BrowserToolArguments
         if (args.ValueKind == JsonValueKind.Object && args.EnumerateObject().Any(p => p.Name is "origins" or "targetOrigins" or "headless" or "enabled" or "interactionMode"))
         { error = "forbidden"; return false; }
         using var schema = JsonDocument.Parse(metadata.ParametersJson);
-        if (!ValidateBrowserShape(args, schema.RootElement)) return false;
-        if (metadata.Feature == BrowserFeature.Find) args = NormalizeFindArguments(args);
-        request = Request(sessionId, tool, args);
-        if (request.Operation == BrowserOperation.Navigate && (request.Options.Operation is null or "goto") && string.IsNullOrWhiteSpace(request.Options.Url)) return false;
-        if (request.Operation == BrowserOperation.Find && !ValidQuery(request.Options.Query)) return false;
-        if (!ValidReferences(args)) { error = "invalid_reference"; return false; }
+        if (!ValidateBrowserShape(args, schema.RootElement)) { if (InvalidTargetReason(args) is not null) error = "invalid_target"; return false; }
+        try { request = Parse(sessionId, tool, args); }
+        catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidOperationException) { return false; }
+        if (request.Command is BrowserNavigate { Operation: "goto", Url: null or "" }) return false;
+        if (!ValidTargets(args)) { error = "invalid_target"; return false; }
+        if (request.Command is BrowserFillForm form && form.Fields.Any(f => (f.Value is not null) == (f.Checked is not null))) return false;
+        if (request.Command is BrowserWaitFor wait && (wait.Condition == "target" && wait.Target is null
+            || wait.Condition is "text" or "textGone" && wait.Text is null || wait.Condition == "url" && wait.Url is null)) return false;
+        if (request.Command is BrowserVerify verify && verify.Target is null && string.IsNullOrWhiteSpace(verify.Text)) return false;
         error = ""; return true;
     }
 
-    private static bool ValidReferences(JsonElement value)
+    private static bool ValidTargets(JsonElement value)
     {
         if (value.ValueKind == JsonValueKind.Object)
             foreach (var property in value.EnumerateObject())
             {
-                if (property.Name is "ref" or "targetRef" or "scopeRef" && !BrowserToolArguments.IsOpaqueReference(property.Value.GetString())) return false;
-                if (!ValidReferences(property.Value)) return false;
+                if (property.Name is "target" or "destination" && !ValidTarget(JsonSerializer.Deserialize<BrowserTarget>(property.Value, JsonOptions))) return false;
+                if (!ValidTargets(property.Value)) return false;
             }
         if (value.ValueKind == JsonValueKind.Array)
-            foreach (var item in value.EnumerateArray()) if (!ValidReferences(item)) return false;
+            foreach (var item in value.EnumerateArray()) if (!ValidTargets(item)) return false;
         return true;
     }
 
     private static bool ValidateBrowserShape(JsonElement value, JsonElement schema)
     {
+        if (schema.TryGetProperty("oneOf", out var variants))
+            return variants.EnumerateArray().Count(variant => ValidateBrowserShape(value, variant)) == 1;
         var types = schema.GetProperty("type");
         if (types.ValueKind == JsonValueKind.Array && value.ValueKind == JsonValueKind.Null)
             return types.EnumerateArray().Any(t => t.GetString() == "null");
@@ -194,9 +204,53 @@ public static class BrowserToolArguments
         return true;
     }
 
-    public static bool ValidQuery(BrowserTargetQuery? query) => query is not null
-        && new[] { query.Role, query.Text, query.Label, query.Placeholder, query.AltText, query.Title, query.TestId }.Count(x => x is not null) == 1
-        && (query.Name is null || query.Role is not null)
-        && (query.ScopeRef is null || query.FrameRef is null)
-        && (query.HasText is null || query.HasText.Length is >= 1 and <= 200);
+    public static bool ValidTarget(BrowserTarget? target) => TargetError(target) is null;
+
+    private static string? TargetError(BrowserTarget? target)
+    {
+        if (target is null) return "target_missing_fields";
+        if (target.Name is not null && target.By != "role" || target.Within is { Name: not null, By: not "role" }) return "name_requires_role";
+        if (!ValidCriterion(target.By, target.Value, target.Name, target.HasText)
+            || target.Within is { } scope && !ValidCriterion(scope.By, scope.Value, scope.Name, scope.HasText)) return "target_invalid_criterion";
+        return target.FrameRef is not null && !Regex.IsMatch(target.FrameRef, "^fr_[a-f0-9]{32}$", RegexOptions.CultureInvariant) ? "frame_requires_current_id" : null;
+    }
+
+    internal static string? InvalidTargetReason(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Object)
+            foreach (var property in value.EnumerateObject())
+            {
+                if (property.Name is "target" or "destination")
+                {
+                    try
+                    {
+                        var error = TargetError(JsonSerializer.Deserialize<BrowserTarget>(property.Value, JsonOptions));
+                        if (error is not null) return error;
+                    }
+                    catch (JsonException) { return "target_invalid_shape"; }
+                }
+                var nested = InvalidTargetReason(property.Value);
+                if (nested is not null) return nested;
+            }
+        if (value.ValueKind == JsonValueKind.Array)
+            foreach (var item in value.EnumerateArray())
+            {
+                var error = InvalidTargetReason(item);
+                if (error is not null) return error;
+            }
+        return null;
+    }
+
+    internal static string ArgumentGuidance(JsonElement args) => InvalidTargetReason(args) switch
+    {
+        "name_requires_role" => "For by=label/text/placeholder/altText/title/testId, put the literal label in value and omit name. Example: {\"target\":{\"by\":\"label\",\"value\":\"Email\"}}.",
+        "frame_requires_current_id" => "Omit frameRef for the main page. For an iframe, use only its current snapshot fr_ ID; never a label, URL, main or guessed ID.",
+        _ => TargetGuidance
+    };
+
+    private static bool ValidCriterion(string by, string value, string? name, string? hasText) =>
+        by is "role" or "text" or "label" or "placeholder" or "altText" or "title" or "testId"
+        && !string.IsNullOrWhiteSpace(value) && value.Length <= 200
+        && (name is null || by == "role" && !string.IsNullOrWhiteSpace(name) && name.Length <= 200)
+        && (hasText is null || !string.IsNullOrWhiteSpace(hasText) && hasText.Length <= 200);
 }

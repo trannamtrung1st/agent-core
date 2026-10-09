@@ -30,7 +30,7 @@ public sealed class BrowserOriginHandoffTests
                 new ModelToolCallEvent(new ModelToolCall(
                     "act-b",
                     ToolCatalog.BrowserClick,
-                    """{"ref":"el_bbbbbbbbbbbbbbbbbbbbbb"}""")),
+                    """{"target":{"by":"role","value":"button","name":"el_bbbbbbbbbbbbbbbbbbbbbb"}}""")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             Answer("Compared the open site."));
@@ -517,7 +517,7 @@ public sealed class BrowserOriginHandoffTests
         public ValueTask<BrowserResult> NavigateAsync(
             BrowserRequest request,
             CancellationToken cancellationToken = default) =>
-            new(Page($"el_nav_{request.Options.Url!.Length}"));
+            new(Page($"el_nav_{((BrowserNavigate)request.Command).Url!.Length}"));
 
         public ValueTask<BrowserResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
@@ -539,7 +539,7 @@ public sealed class BrowserOriginHandoffTests
                     "Orders",
                     "Orders grid",
                     false,
-                    [new BrowserElement(reference, "link", "Order")],
+                    [new BrowserElement(new BrowserTarget("role", "link", Name: "Order"), "link", "Order")],
                     Settled: true));
 
         public ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default) => request.Operation switch
@@ -578,8 +578,8 @@ public sealed class BrowserOriginHandoffTests
             BrowserRequest request,
             CancellationToken cancellationToken = default)
         {
-            Navigated.Add(request.Options.Url!);
-            return new(Page(new Uri(request.Options.Url!)));
+            Navigated.Add(((BrowserNavigate)request.Command).Url!);
+            return new(Page(new Uri(((BrowserNavigate)request.Command).Url!)));
         }
 
         public ValueTask<BrowserResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
@@ -612,7 +612,7 @@ public sealed class BrowserOriginHandoffTests
                     challenged ? "Verify" : "Specs",
                     challenged ? "Human verification required" : "Listed price",
                     false,
-                    challenged ? [] : [new BrowserElement("el_bbbbbbbbbbbbbbbbbbbbbb", "link", "Specs")],
+                    challenged ? [] : [new BrowserElement(new BrowserTarget("role", "link", Name: "Specs"), "link", "Specs")],
                     challenged ? BrowserInterventionKind.HumanVerificationRequired : BrowserInterventionKind.None));
         }
 
@@ -646,11 +646,11 @@ public sealed class BrowserOriginHandoffTests
             BrowserRequest request,
             CancellationToken cancellationToken = default)
         {
-            Navigated.Add(request.Options.Url!);
-            var challenged = new Uri(request.Options.Url!)!.Host is "cars.test" or "www.cars.test";
+            Navigated.Add(((BrowserNavigate)request.Command).Url!);
+            var challenged = new Uri(((BrowserNavigate)request.Command).Url!)!.Host is "cars.test" or "www.cars.test";
             var final = challenged
                 ? new Uri("https://www.cars.test/page")
-                : new Uri(request.Options.Url!);
+                : new Uri(((BrowserNavigate)request.Command).Url!);
             return new(new BrowserResult(
                 null,
                 new BrowserSnapshot(

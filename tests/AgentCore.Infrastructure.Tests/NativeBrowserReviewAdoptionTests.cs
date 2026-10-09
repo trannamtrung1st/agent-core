@@ -28,11 +28,11 @@ public sealed class NativeBrowserReviewAdoptionTests
             var priorBlank = await context.NewPageAsync();
             await original.SetContentAsync("<button>Open denied</button>");
             await original.EvaluateAsync("() => document.querySelector('button').addEventListener('click', () => window.open('https://example.invalid/denied'))");
-            var reference = (await BrowserTestQueries.Find(browser, id, "Open denied")).Ref;
+            var reference = (await BrowserTestQueries.Find(browser, id, "Open denied")).Target;
             browser.DeniedPopupCloseProbe = async page => { entered.TrySetResult(); await release.Task; await page.CloseAsync(); };
             browser.PopupCleanupWaitProbe = () => waiting.TrySetResult();
             var pending = browser.ExecuteAsync(BrowserToolArguments.Request(id, "browser.click",
-                JsonSerializer.SerializeToElement(new { @ref = reference }))).AsTask();
+                JsonSerializer.SerializeToElement(new { target = reference }))).AsTask();
             var started = await Task.WhenAny(entered.Task, pending).WaitAsync(TimeSpan.FromSeconds(10));
             Assert.True(ReferenceEquals(started, entered.Task), "Tool ended before denied-popup cleanup: " + (pending.IsCompletedSuccessfully ? (await pending).ErrorCode : pending.Status.ToString()));
             var observed = await Task.WhenAny(waiting.Task, pending).WaitAsync(TimeSpan.FromSeconds(10));
@@ -113,31 +113,31 @@ public sealed class NativeBrowserReviewAdoptionTests
             var nativeRole = Enum.Parse<AriaRole>(role, true);
             async Task<BrowserResult> Run(string tool, object args) => await browser.ExecuteAsync(
                 BrowserToolArguments.Request(id, tool, JsonSerializer.SerializeToElement(args)));
-            static string Ref(BrowserResult result)
+            static BrowserTarget Ref(BrowserResult result)
             {
                 Assert.Null(result.ErrorCode);
                 using var json = JsonDocument.Parse(result.DataJson!);
-                return json.RootElement.GetProperty("matches")[0].GetProperty("ref").GetString()!;
+                return json.RootElement.GetProperty("matches")[0].GetProperty("target").Deserialize<BrowserTarget>(JsonSerializerOptions.Web)!;
             }
-            var duplicate = await Run("browser.find", new { by = "role", value = "button", name = "Edit" });
+            var duplicate = await Run("browser.find", new { target = new { by = "role", value = "button", name = "Edit" } });
             Assert.Equal("ambiguous_target", duplicate.ErrorCode);
             Assert.DoesNotContain("\"ref\":", duplicate.DataJson!);
-            var row = Ref(await Run("browser.find", new { by = "role", value = role, hasText = "Record B" }));
-            var edit = Ref(await Run("browser.find", new { by = "role", value = "button", name = "Edit", scopeRef = row }));
+            var row = Ref(await Run("browser.find", new { target = new { by = "role", value = role, hasText = "Record B" } }));
+            var edit = Ref(await Run("browser.find", new { target = new { by = "role", value = "button", name = "Edit", within = BrowserTestQueries.Scope(row) } }));
             await page.GetByRole(nativeRole).Filter(new() { HasText = "Record B" })
                 .EvaluateAsync("row => row.replaceWith(row.cloneNode(true))");
-            Assert.Null((await Run("browser.click", new { @ref = edit })).ErrorCode);
+            Assert.Null((await Run("browser.click", new { target = edit })).ErrorCode);
             Assert.Equal("Record B Edit", await page.GetByRole(AriaRole.Status).InnerTextAsync());
-            var delete = Ref(await Run("browser.find", new { by = "role", value = "button", name = "Delete", scopeRef = row }));
-            Assert.Null((await Run("browser.click", new { @ref = delete })).ErrorCode);
+            var delete = Ref(await Run("browser.find", new { target = new { by = "role", value = "button", name = "Delete", within = BrowserTestQueries.Scope(row) } }));
+            Assert.Null((await Run("browser.click", new { target = delete })).ErrorCode);
             Assert.Equal("Record B Delete", await page.GetByRole(AriaRole.Status).InnerTextAsync());
-            var stillAmbiguous = await Run("browser.find", new { by = "role", value = role, hasText = "Record" });
+            var stillAmbiguous = await Run("browser.find", new { target = new { by = "role", value = role, hasText = "Record" } });
             Assert.Equal("ambiguous_target", stillAmbiguous.ErrorCode);
             Assert.DoesNotContain("\"ref\":", stillAmbiguous.DataJson!);
-            Assert.Equal("not_found", (await Run("browser.find", new { by = "role", value = role, hasText = "Record.*B" })).ErrorCode);
+            Assert.Equal("not_found", (await Run("browser.find", new { target = new { by = "role", value = role, hasText = "Record.*B" } })).ErrorCode);
             await page.GetByRole(nativeRole).Filter(new() { HasText = "Record B" })
                 .EvaluateAsync("row => row.after(row.cloneNode(true))");
-            Assert.Equal("ambiguous_target", (await Run("browser.click", new { @ref = edit })).ErrorCode);
+            Assert.Equal("ambiguous_target", (await Run("browser.click", new { target = edit })).ErrorCode);
             Assert.Equal("Record B Delete", await page.GetByRole(AriaRole.Status).InnerTextAsync());
         }
         finally { await browser.StopAsync(CancellationToken.None); }

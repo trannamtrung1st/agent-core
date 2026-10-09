@@ -25,7 +25,7 @@ public sealed class BrowserCredentialSinkTests(BrowserHostFixture fixture) : ICl
         try
         {
             var instances = new InMemoryAgentInstanceStore(); var now = DateTimeOffset.UtcNow;
-            await instances.InsertAsync(new(owner, "secretary", 3, new("Test", "Secretary", "Test", "neutral"), AgentInstanceLifecycle.Active, now, now));
+            await instances.InsertAsync(new(owner, "secretary", 8, new("Test", "Secretary", "Test", "neutral"), AgentInstanceLifecycle.Active, now, now));
             var store = new InMemoryCredentialStore(instances);
             var service = new CredentialService(store, store, new LocalCredentialProtector(root), instances, new SystemIdGenerator(TimeProvider.System), TimeProvider.System);
             var c = await service.CreateAsync("Store", "Password", new Dictionary<string,string> { ["username"] = "owner@example.test" }, [origin], password);
@@ -35,19 +35,19 @@ public sealed class BrowserCredentialSinkTests(BrowserHostFixture fixture) : ICl
             async Task<string> Execute(string tool, string args, ToolExecutionAdmission? a = null) => (await executor.ExecuteAsync(definition, session, new("call-" + Guid.NewGuid(), tool, args), ToolLimits.MaxOutputBytes, admission: a ?? admission)).Text;
             var nav = await Execute(ToolCatalog.BrowserNavigate, JsonSerializer.Serialize(new { url = origin + "/credential-login?reflect=1" }));
             Assert.DoesNotContain("error", nav);
-            var passwordRef = (await BrowserTestQueries.Find(fixture.Session, session, "Password")).Ref;
-            var usernameRef = (await BrowserTestQueries.Find(fixture.Session, session, "Username")).Ref;
+            var passwordRef = (await BrowserTestQueries.Find(fixture.Session, session, "Password")).Target;
+            var usernameRef = (await BrowserTestQueries.Find(fixture.Session, session, "Username")).Target;
             var resolvedNonPassword = false;
             var wrongField = await fixture.Session.FillCredentialAsync(session, usernameRef!, (_, _) => { resolvedNonPassword = true; return ValueTask.FromResult(password); });
             Assert.Equal("unsupported_operation", wrongField.ErrorCode);
             Assert.False(resolvedNonPassword);
-            var raw = await Execute(ToolCatalog.BrowserType, JsonSerializer.Serialize(new { @ref = passwordRef, text = "model-supplied" }));
+            var raw = await Execute(ToolCatalog.BrowserType, JsonSerializer.Serialize(new { target = passwordRef, text = "model-supplied" }));
             Assert.Contains("forbidden", raw);
-            var detached = await Execute(ToolCatalog.BrowserFillCredential, JsonSerializer.Serialize(new { @ref = passwordRef, credentialRef = "store-admin" }), admission with { Detached = true, TriggerKind = TriggerKind.ScheduledOccurrence });
+            var detached = await Execute(ToolCatalog.BrowserFillCredential, JsonSerializer.Serialize(new { target = passwordRef, credentialRef = "store-admin" }), admission with { Detached = true, TriggerKind = TriggerKind.ScheduledOccurrence });
             Assert.Contains("forbidden", detached);
-            var unknown = await Execute(ToolCatalog.BrowserFillCredential, JsonSerializer.Serialize(new { @ref = passwordRef, credentialRef = "other-agent" }));
+            var unknown = await Execute(ToolCatalog.BrowserFillCredential, JsonSerializer.Serialize(new { target = passwordRef, credentialRef = "other-agent" }));
             Assert.Contains("Forbidden", unknown);
-            var filled = await Execute(ToolCatalog.BrowserFillCredential, JsonSerializer.Serialize(new { @ref = passwordRef, credentialRef = "store-admin" }));
+            var filled = await Execute(ToolCatalog.BrowserFillCredential, JsonSerializer.Serialize(new { target = passwordRef, credentialRef = "store-admin" }));
             Assert.DoesNotContain("error", filled); Assert.DoesNotContain(password, filled); Assert.Contains("redacted", filled);
             var observed = await Execute(ToolCatalog.BrowserSnapshot, "{}"); Assert.DoesNotContain(password, observed);
             var screenshot = await fixture.Session.ExecuteAsync(BrowserTestRequests.Screenshot(session));
@@ -55,8 +55,8 @@ public sealed class BrowserCredentialSinkTests(BrowserHostFixture fixture) : ICl
             Assert.NotEmpty(screenshot.Bytes!);
             // The reflected text has a child element; text-node masking must still cover it.
             Assert.True(screenshot.RedactionCount >= 2);
-            var submit = (await BrowserTestQueries.Find(fixture.Session, session, "Sign in")).Ref;
-            var login = await Execute(ToolCatalog.BrowserClick, JsonSerializer.Serialize(new { @ref = submit }));
+            var submit = (await BrowserTestQueries.Find(fixture.Session, session, "Sign in")).Target;
+            var login = await Execute(ToolCatalog.BrowserClick, JsonSerializer.Serialize(new { target = submit }));
             Assert.Contains("AC-CREDENTIAL-1042", login); Assert.DoesNotContain(password, login);
             var resolvedStale = false;
             var stale = await fixture.Session.FillCredentialAsync(session, passwordRef!, (_, _) => { resolvedStale = true; return ValueTask.FromResult(password); });
@@ -78,18 +78,18 @@ public sealed class BrowserCredentialSinkTests(BrowserHostFixture fixture) : ICl
         try
         {
             var navigated = await fixture.Session.ExecuteAsync(BrowserTestRequests.Navigate(session, new(fixture.Session.Fixture.Origin + "/credential-login?reflect=1")));
-            var reference = (await BrowserTestQueries.Find(fixture.Session, session, "Password")).Ref;
+            var reference = (await BrowserTestQueries.Find(fixture.Session, session, "Password")).Target;
             var first = new string('&', 60000);
             var filled = await fixture.Session.FillCredentialAsync(session, reference, (_, _) => ValueTask.FromResult(first));
             Assert.Null(filled.ErrorCode); Assert.DoesNotContain(first, filled.Observation!.Content!);
-            reference = (await BrowserTestQueries.Find(fixture.Session, session, "Password")).Ref;
+            reference = (await BrowserTestQueries.Find(fixture.Session, session, "Password")).Target;
             var denied = await fixture.Session.FillCredentialAsync(session, reference, (_, _) => ValueTask.FromResult(first + "x"));
             Assert.Equal("user_intervention_required", denied.ErrorCode);
             var observed = await fixture.Session.ExecuteAsync(BrowserTestRequests.Inspect(session));
             Assert.DoesNotContain(first, observed.Observation!.Content!);
             Assert.Contains("redacted", observed.Observation.Content!);
             Assert.DoesNotContain("[redacted]x", observed.Observation.Content!);
-            reference = (await BrowserTestQueries.Find(fixture.Session, session, "Password")).Ref;
+            reference = (await BrowserTestQueries.Find(fixture.Session, session, "Password")).Target;
             var reused = await fixture.Session.FillCredentialAsync(session, reference, (_, _) => ValueTask.FromResult(first));
             Assert.Null(reused.ErrorCode);
             Assert.Contains("redacted", reused.Observation!.Content!);
@@ -116,7 +116,7 @@ public sealed class BrowserCredentialSinkTests(BrowserHostFixture fixture) : ICl
                 "() => document.body.insertAdjacentHTML('beforeend','<label>Password<input type=password autocomplete=current-password></label>')");
         }
         var password = await BrowserTestQueries.Find(fixture.Session, session, "Password");
-        var filled = await fixture.Session.FillCredentialAsync(session, password.Ref,
+        var filled = await fixture.Session.FillCredentialAsync(session, password.Target,
             (_, _) => { called = true; return ValueTask.FromResult("private"); });
         Assert.Equal("user_intervention_required", filled.ErrorCode);
         Assert.False(called); await fixture.Session.ReleaseAsync(session);
@@ -136,9 +136,9 @@ public sealed class BrowserCredentialSinkTests(BrowserHostFixture fixture) : ICl
             browser.BindSession(first, owner);
             var login = (await browser.ExecuteAsync(BrowserTestRequests.Navigate(first, new(origin + "/credential-login")))).Observation!;
             var password = (await BrowserTestQueries.Find(browser, first, "Password"));
-            var filled = await browser.FillCredentialAsync(first, password.Ref, (_, _) => ValueTask.FromResult("profile-password-5387"));
+            var filled = await browser.FillCredentialAsync(first, password.Target, (_, _) => ValueTask.FromResult("profile-password-5387"));
             Assert.Null(filled.ErrorCode);
-            var signedIn = await browser.ExecuteAsync(BrowserTestRequests.Interaction(first, BrowserOperation.Click, (await BrowserTestQueries.Find(browser, first, "Sign in")).Ref, null));
+            var signedIn = await browser.ExecuteAsync(BrowserTestRequests.Interaction(first, BrowserOperation.Click, (await BrowserTestQueries.Find(browser, first, "Sign in")).Target, null));
             Assert.Contains("AC-CREDENTIAL-1042", signedIn.Observation!.Content!);
             await browser.ReleaseAsync(first); browser.BindSession(next, owner);
             Assert.Contains("AC-CREDENTIAL-1042", (await browser.ExecuteAsync(BrowserTestRequests.Navigate(next, new(origin + "/credential-login")))).Observation!.Content!);
@@ -146,7 +146,7 @@ public sealed class BrowserCredentialSinkTests(BrowserHostFixture fixture) : ICl
             var restarted = Guid.NewGuid(); browser.BindSession(restarted, owner);
             Assert.Contains("AC-CREDENTIAL-1042", (await browser.ExecuteAsync(BrowserTestRequests.Navigate(restarted, new(origin + "/credential-login")))).Observation!.Content!);
             var other = Guid.NewGuid(); var instances = new InMemoryAgentInstanceStore(); var now = DateTimeOffset.UtcNow;
-            await instances.InsertAsync(new(other, "secretary", 3, new("Other", "Secretary", "Test", "neutral"), AgentInstanceLifecycle.Active, now, now));
+            await instances.InsertAsync(new(other, "secretary", 8, new("Other", "Secretary", "Test", "neutral"), AgentInstanceLifecycle.Active, now, now));
             var executor = new SessionToolExecutor(browser: browser, agentInstances: instances, configurationGate: ToolConfigurationGates.AllowAll);
             var attention = await executor.ExecuteAsync(await Definition(), Guid.NewGuid(), new("login-wall", ToolCatalog.BrowserNavigate, JsonSerializer.Serialize(new { url = origin + "/credential-login" })), ToolLimits.MaxOutputBytes,
                 admission: new(true, TriggerKind.ApplicationEvent, AgentInstanceId: other));
@@ -162,6 +162,6 @@ public sealed class BrowserCredentialSinkTests(BrowserHostFixture fixture) : ICl
     private static async Task<AgentDefinition> Definition()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory); while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "AgentCore.sln"))) dir = dir.Parent;
-        return (await new FileAgentDefinitionStore(Path.Combine(dir!.FullName, "agents"), SyntheticProviderAliases.Default).GetAsync("secretary", 3))!;
+        return (await new FileAgentDefinitionStore(Path.Combine(dir!.FullName, "agents"), SyntheticProviderAliases.Default).GetAsync("secretary", 8))!;
     }
 }

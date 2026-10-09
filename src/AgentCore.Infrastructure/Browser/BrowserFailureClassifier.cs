@@ -23,13 +23,13 @@ internal static class BrowserFailureClassifier
         if (text.Contains("context closed", StringComparison.OrdinalIgnoreCase)
             || text.Contains("Context closed", StringComparison.Ordinal))
         {
-            return new Decision("stale_reference", "contextClosed");
+            return new Decision("action_not_confirmed", "contextClosed");
         }
 
         if (text.Contains("has been closed", StringComparison.Ordinal)
             || text.Contains("Target closed", StringComparison.Ordinal))
         {
-            return new Decision("stale_reference", "pageClosed");
+            return new Decision("action_not_confirmed", "pageClosed");
         }
 
         if (text.Contains("not a <select>", StringComparison.OrdinalIgnoreCase)
@@ -56,7 +56,7 @@ internal static class BrowserFailureClassifier
             || text.Contains("frame was detached", StringComparison.OrdinalIgnoreCase)
             || text.Contains("most likely because of a navigation", StringComparison.Ordinal))
         {
-            return new Decision("stale_reference", "pageChanged");
+            return new Decision("action_not_confirmed", "pageChanged");
         }
 
         if (text.Contains("not attached", StringComparison.OrdinalIgnoreCase)
@@ -64,10 +64,11 @@ internal static class BrowserFailureClassifier
             || text.Contains("not connected", StringComparison.OrdinalIgnoreCase)
             || text.Contains("stale element", StringComparison.OrdinalIgnoreCase))
         {
-            return new Decision("stale_reference", "staleElement");
+            return new Decision("action_not_confirmed", "staleElement");
         }
 
-        return new Decision("stale_reference", "pageChanged");
+        if (text.Contains("strict mode violation", StringComparison.OrdinalIgnoreCase)) return new Decision("ambiguous_target", "duplicateTarget");
+        return new Decision("action_not_confirmed", "pageChanged");
     }
 
     internal static bool IsTransientCapture(string? message)

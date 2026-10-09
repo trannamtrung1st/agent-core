@@ -15,11 +15,11 @@ public sealed class BrowserCustomTargetJourneyTests
             await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new(browser.HostPolicy.NavigationOrigins.Single() + "/browser-custom-tree.html")));
             var page = browser.ContextFor(id)!.Pages[0];
             await page.GetByRole(AriaRole.Tree).EvaluateAsync("el=>{el.innerHTML='<span>Choose</span><span style=display:none>Choose</span><div role=group aria-label=North><span class=caption>Choose</span></div><div role=group aria-label=South><span class=caption>Choose</span></div>';el.addEventListener('click',e=>{document.querySelector('[role=status]').textContent=e.target.parentElement.getAttribute('aria-label')})}");
-            Assert.Equal("ambiguous_target", (await browser.ExecuteAsync(new(id, BrowserOperation.Find, new() { Query = new(Text: "Choose") }))).ErrorCode);
-            var south = await BrowserReliabilityJourneyTests.Find(browser, id, new(Role: "group", Name: "South"));
-            var caption = await BrowserReliabilityJourneyTests.Find(browser, id, new(Text: "Choose", ScopeRef: south));
+            Assert.Equal("ambiguous_target", (await browser.ExecuteAsync(new(id, new BrowserFind(Target: new BrowserTarget("text", "Choose"))))).ErrorCode);
+            var south = await BrowserReliabilityJourneyTests.Find(browser, id, new BrowserTarget("role", "group", Name: "South"));
+            var caption = await BrowserReliabilityJourneyTests.Find(browser, id, new BrowserTarget("text", "Choose", Within: BrowserTestQueries.Scope(south)));
             await browser.ExecuteAsync(BrowserTestRequests.Inspect(id));
-            Assert.Null((await browser.ExecuteAsync(new(id, BrowserOperation.Click, new() { Ref = caption }))).ErrorCode);
+            Assert.Null((await browser.ExecuteAsync(new(id, new BrowserClick(Target: caption)))).ErrorCode);
             Assert.Equal("South", await page.GetByRole(AriaRole.Status).InnerTextAsync());
         }
         finally { await browser.StopAsync(CancellationToken.None); }
@@ -34,17 +34,17 @@ public sealed class BrowserCustomTargetJourneyTests
             var nav = await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new(browser.HostPolicy.NavigationOrigins.Single() + "/browser-custom-tree.html")));
             Assert.DoesNotContain("custom-private-token", nav.Observation!.Content);
             var page = browser.ContextFor(id)!.Pages[0];
-            var target = await BrowserReliabilityJourneyTests.Find(browser, id, new(Text: "Entry 1999"));
+            var target = await BrowserReliabilityJourneyTests.Find(browser, id, new BrowserTarget("text", "Entry 1999"));
             await page.GetByRole(AriaRole.Tree).EvaluateAsync("el=>render()");
-            Assert.Null((await browser.ExecuteAsync(new(id, BrowserOperation.Click, new() { Ref = target }))).ErrorCode);
+            Assert.Null((await browser.ExecuteAsync(new(id, new BrowserClick(Target: target)))).ErrorCode);
             Assert.Equal("Entry 1999 detail", await page.GetByRole(AriaRole.Heading, new() { Level = 2 }).InnerTextAsync());
             var caption = page.GetByText("Entry 1998", new() { Exact = true });
-            target = await BrowserReliabilityJourneyTests.Find(browser, id, new(Text: "Entry 1998"));
+            target = await BrowserReliabilityJourneyTests.Find(browser, id, new BrowserTarget("text", "Entry 1998"));
             await caption.EvaluateAsync("el=>el.after(el.cloneNode(true))");
-            Assert.Equal("ambiguous_target", (await browser.ExecuteAsync(new(id, BrowserOperation.Click, new() { Ref = target }))).ErrorCode);
+            Assert.Equal("ambiguous_target", (await browser.ExecuteAsync(new(id, new BrowserClick(Target: target)))).ErrorCode);
             await caption.Last.EvaluateAsync("el=>el.remove()");
             await caption.EvaluateAsync("el=>el.setAttribute('aria-label','API key')");
-            Assert.Equal("forbidden", (await browser.ExecuteAsync(new(id, BrowserOperation.Click, new() { Ref = target }))).ErrorCode);
+            Assert.Equal("forbidden", (await browser.ExecuteAsync(new(id, new BrowserClick(Target: target)))).ErrorCode);
             Assert.Equal("Opened Entry 1999", await page.GetByRole(AriaRole.Status).InnerTextAsync());
         }
         finally { await browser.StopAsync(CancellationToken.None); }

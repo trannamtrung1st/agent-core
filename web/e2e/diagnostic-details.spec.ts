@@ -33,7 +33,7 @@ test("failed assistant details copy and survive reload", async ({ page }) => {
 
 test("invalid tool strategy is bounded and its diagnostic survives reload", async ({ page }) => {
   await page.goto("/");
-  await selectInstanceIdentity(page, { id: "general-assistant", version: 20 });
+  await selectInstanceIdentity(page, { id: "general-assistant", version: 21 });
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByLabel("Message").fill("synthetic-invalid-tool-turn");
   await page.getByRole("button", { name: "Send" }).click();
@@ -55,7 +55,7 @@ test("invalid tool strategy is bounded and its diagnostic survives reload", asyn
 for (const replyFails of [false, true]) {
   test(`browser actions survive ${replyFails ? "failed" : "recovered"} finalization`, async ({ page }) => {
     await page.goto("/");
-    await selectInstanceIdentity(page, { id: "general-assistant", version: 20 });
+    await selectInstanceIdentity(page, { id: "general-assistant", version: 21 });
     await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
     const origin = `http://127.0.0.1:${process.env.PLAYWRIGHT_FIXTURE_PORT ?? "5091"}`;
     await page.getByLabel("Message").fill(`synthetic-finalization-${replyFails ? "fail" : "recover"} ${origin}/`);
@@ -81,7 +81,7 @@ for (const replyFails of [false, true]) {
 
 test("native sign-out confirmation completes before closure and final reply", async ({ page }) => {
   await page.goto("/");
-  await selectInstanceIdentity(page, { id: "general-assistant", version: 20 });
+  await selectInstanceIdentity(page, { id: "general-assistant", version: 21 });
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByLabel("Message").fill(`synthetic-browser-cleanup http://127.0.0.1:${process.env.PLAYWRIGHT_FIXTURE_PORT ?? "5091"}/`);
   await page.getByRole("button", { name: "Send" }).click();

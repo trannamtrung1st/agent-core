@@ -23,7 +23,7 @@ public sealed class BrowserCleanupTests
             async Task Pending()
             {
                 var target = await BrowserTestQueries.Find(browser, id, "Sign out");
-                Assert.Equal("dialog_pending", (await Run(ToolCatalog.BrowserClick, new { @ref = target.Ref })).ErrorCode);
+                Assert.Equal("dialog_pending", (await Run(ToolCatalog.BrowserClick, new { target = target.Target })).ErrorCode);
                 Assert.Equal("dialog_pending", (await browser.ExecuteAsync(BrowserTestRequests.Inspect(id))).ErrorCode);
                 var inspected = await Run(ToolCatalog.BrowserDialog, new { operation = "inspect" });
                 Assert.Contains("confirm", inspected.DataJson!);

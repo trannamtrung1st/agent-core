@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 
 namespace AgentCore.Application.Tools;
 
-/// <summary>Presentation only: native semantic refs survive byte-budget projection.</summary>
+/// <summary>Presentation only: native semantic evidence fits the current byte budget.</summary>
 internal static class BrowserResultProjection
 {
     internal static string? Fit(int budget, string json)
@@ -20,7 +20,7 @@ internal static class BrowserResultProjection
         var content = root["content"]?.GetValue<string>() ?? "";
         root["truncated"] = true;
         root["hasMore"] = true;
-        root["guidance"] = "Use browser.find to search beyond this projection; use scopeRef for duplicate targets.";
+        root["guidance"] = "Act using a direct semantic target; use optional browser.find for deep content, within for duplicate controls.";
         root[key] = new JsonArray();
         if (key == "targets") { root["content"] = ""; root["truncated"] = true; }
         root.Remove("boxes");
@@ -31,7 +31,7 @@ internal static class BrowserResultProjection
         var minimal = root.ToJsonString();
         if (Bytes(minimal) > budget)
         {
-            root["guidance"] = "Use browser.find.";
+            root["guidance"] = "Observe or use a direct target.";
             minimal = root.ToJsonString();
             foreach (var optional in new[] { "scope", "frames", "title", "url" })
             {

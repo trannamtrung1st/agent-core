@@ -89,7 +89,7 @@ public sealed class CapabilityProjectionTests
     internal static async Task<AgentDefinition> Definition(params string[] names)
     {
         var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../agents"));
-        var baseline = (await new FileAgentDefinitionStore(path, SyntheticProviderAliases.Default).GetAsync("general-assistant", 17))!;
+        var baseline = (await new FileAgentDefinitionStore(path, SyntheticProviderAliases.Default).GetAsync("general-assistant", 21))!;
         return baseline with { Skills = [], Environment = baseline.Environment! with { ToolAllowlist = null,
             Capabilities = new("Selected", names), Projection = new([]) } };
     }

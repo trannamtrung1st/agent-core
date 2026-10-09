@@ -7,7 +7,7 @@ test("nested shared Event creation preserves Automation draft and lifecycle link
   await expect.poll(() => page.evaluate(() => localStorage.getItem("agent-core.owner-capability"))).not.toBeNull();
   const owner = (await page.evaluate(() => localStorage.getItem("agent-core.owner-capability")))!;
   const headers = { "X-AgentCore-Owner-Capability": owner };
-  const created = await page.request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "secretary", version: 5 } });
+  const created = await page.request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "secretary", version: 8 } });
   expect(created.ok()).toBe(true);
   const instanceId = (await created.json()).instanceId;
   await page.goto(`/admin/instances/${instanceId}/automation/automations`);

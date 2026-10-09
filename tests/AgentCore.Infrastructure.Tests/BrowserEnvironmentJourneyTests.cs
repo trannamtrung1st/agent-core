@@ -75,7 +75,7 @@ public sealed class BrowserEnvironmentJourneyTests
         await browser.StartAsync(CancellationToken.None);
         var id = Guid.NewGuid();
         browser.BindSession(id, Guid.NewGuid());
-        async Task<BrowserResult> Run(string tool, object args) => await browser.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(id, tool, JsonSerializer.SerializeToElement(args)));
+        async Task<BrowserResult> Run(string tool, object args) => BrowserToolArguments.TryRequest(id, tool, JsonSerializer.SerializeToElement(args), out var request, out _) ? await browser.ExecuteAsync(request) : new("invalid");
         try
         {
             var closed = await Run(ToolCatalog.BrowserConfiguration, new { });
@@ -121,13 +121,13 @@ public sealed class BrowserEnvironmentJourneyTests
             Assert.Equal("preserved", await page.EvaluateAsync<string>("localStorage.getItem('draft')"));
             await page.GetByRole(AriaRole.Textbox, new() { Name = "Title", Exact = true }).EvaluateAsync("el => { window.keys=[]; el.addEventListener('keydown', event => { if (event.key.length === 1) window.keys.push(event.key); }); }");
             var snapshot = await browser.ExecuteAsync(BrowserTestRequests.Inspect(id));
-            var reference = (await BrowserTestQueries.Find(browser, id, "Title")).Ref;
-            Assert.Null((await Run(ToolCatalog.BrowserType, new { @ref = reference, text = "abc", slowly = true })).ErrorCode);
+            var reference = (await BrowserTestQueries.Find(browser, id, "Title")).Target;
+            Assert.Null((await Run(ToolCatalog.BrowserType, new { target = reference, text = "abc", slowly = true })).ErrorCode);
             Assert.Equal(new[] { "a", "b", "c" }, await page.EvaluateAsync<string[]>("window.keys"));
             Assert.Equal("abc", await page.GetByRole(AriaRole.Textbox, new() { Name = "Title", Exact = true }).InputValueAsync());
             await browser.ExecuteAsync(BrowserTestRequests.Inspect(id));
-            reference = (await BrowserTestQueries.Find(browser, id, "Title")).Ref;
-            Assert.Null((await Run(ToolCatalog.BrowserHighlight, new { @ref = reference })).ErrorCode);
+            reference = (await BrowserTestQueries.Find(browser, id, "Title")).Target;
+            Assert.Null((await Run(ToolCatalog.BrowserHighlight, new { target = reference })).ErrorCode);
             Assert.Null((await Run(ToolCatalog.BrowserHighlight, new { operation = "hide" })).ErrorCode);
             Assert.Equal(0, await page.Locator("x-pw-tooltip").CountAsync());
             var worker = await page.EvaluateAsync<bool>("async () => { try { return !!(await navigator.serviceWorker.register('/browser-native-worker.js')); } catch { return false; } }");
@@ -147,7 +147,7 @@ public sealed class BrowserEnvironmentJourneyTests
         var browser = new NativePlaywrightBrowser(new BrowserOptions { Enabled = true, Headless = true, FixturePort = 0 }, null);
         await browser.StartAsync(CancellationToken.None);
         var id = Guid.NewGuid();
-        async Task<BrowserResult> Run(object args) => await browser.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(id, "browser.mouse", JsonSerializer.SerializeToElement(args)));
+        async Task<BrowserResult> Run(object args) => AgentCore.Application.Tools.BrowserToolArguments.TryRequest(id, "browser.mouse", JsonSerializer.SerializeToElement(args), out var request, out _) ? await browser.ExecuteAsync(request) : new("invalid");
         try
         {
             Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(browser.HostPolicy.NavigationOrigins.Single() + "/browser-native.html?compact=1")))).ErrorCode);
@@ -179,7 +179,7 @@ public sealed class BrowserEnvironmentJourneyTests
         }, loggerFactory: null);
         await browser.StartAsync(CancellationToken.None);
         var id = Guid.NewGuid();
-        async Task<BrowserResult> Run(object args) => await browser.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(id, ToolCatalog.BrowserGeolocation, JsonSerializer.SerializeToElement(args)));
+        async Task<BrowserResult> Run(object args) => AgentCore.Application.Tools.BrowserToolArguments.TryRequest(id, ToolCatalog.BrowserGeolocation, JsonSerializer.SerializeToElement(args), out var request, out _) ? await browser.ExecuteAsync(request) : new("invalid");
         try
         {
             var origin = browser.HostPolicy.NavigationOrigins[0];

@@ -27,11 +27,11 @@ public sealed class NativeBrowserJourneyTests
             var snapshot = await browser.ExecuteAsync(BrowserTestRequests.Inspect(id)); Assert.Null(snapshot.ErrorCode);
             var observation = (await browser.ExecuteAsync(BrowserTestRequests.Inspect(id))).Observation!;
             var frameRef = Assert.Single(observation.Frames!).Ref;
-            var discovered = await browser.ExecuteAsync(new(id, BrowserOperation.Find, new() { Query = new(Role: "button", Name: "Save frame", FrameRef: frameRef) }));
+            var discovered = await browser.ExecuteAsync(new(id, new BrowserFind(Target: new BrowserTarget("role", "button", Name: "Save frame", FrameRef: frameRef))));
             Assert.Null(discovered.ErrorCode);
-            var reference = JsonDocument.Parse(discovered.DataJson!).RootElement.GetProperty("matches")[0].GetProperty("ref").GetString()!;
+            var reference = JsonDocument.Parse(discovered.DataJson!).RootElement.GetProperty("matches")[0].GetProperty("target").Deserialize<BrowserTarget>(JsonSerializerOptions.Web)!;
             Assert.Equal("target_denied", (await browser.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, reference, null))).ErrorCode);
-            Assert.Equal("target_denied", (await browser.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(id, "browser.click", JsonSerializer.SerializeToElement(new { @ref = reference, clickCount = 1 })))).ErrorCode);
+            Assert.Equal("target_denied", (await browser.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(id, "browser.click", JsonSerializer.SerializeToElement(new { target = reference, clickCount = 1 })))).ErrorCode);
             Assert.Equal("Save frame", await page.FrameLocator("iframe").GetByRole(Microsoft.Playwright.AriaRole.Button).InnerTextAsync());
         }
         finally { await browser.StopAsync(CancellationToken.None); }
@@ -47,18 +47,18 @@ public sealed class NativeBrowserJourneyTests
         {
             Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(browser.HostPolicy.NavigationOrigins.Single() + "/browser-native.html?compact=1")))).ErrorCode);
             async Task<BrowserResult> Run(string tool, object args) => await browser.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(id, tool, JsonSerializer.SerializeToElement(args)));
-            async Task<string> Find(string name) => (await BrowserTestQueries.Find(browser, id, name)).Ref;
-            Assert.Null((await Run("browser.fill_form", new { fields = new[] { new { @ref = await Find("Enabled"), @checked = true } } })).ErrorCode);
+            async Task<BrowserTarget> Find(string name) => (await BrowserTestQueries.Find(browser, id, name)).Target;
+            Assert.Null((await Run("browser.fill_form", new { fields = new[] { new { target = await Find("Enabled"), @checked = true } } })).ErrorCode);
             Assert.True(await browser.ContextFor(id)!.Pages[0].GetByRole(Microsoft.Playwright.AriaRole.Checkbox).IsCheckedAsync());
-            Assert.Null((await Run("browser.type", new { @ref = await Find("Editable"), text = "Content edited" })).ErrorCode);
+            Assert.Null((await Run("browser.type", new { target = await Find("Editable"), text = "Content edited" })).ErrorCode);
             Assert.Equal("Content edited", await browser.ContextFor(id)!.Pages[0].GetByRole(Microsoft.Playwright.AriaRole.Textbox, new() { Name = "Editable" }).InnerTextAsync());
-            Assert.Null((await Run("browser.press_key", new { @ref = await Find("Editable"), key = "Home" })).ErrorCode);
-            Assert.Null((await Run("browser.click", new { @ref = await Find("Category"), clickCount = 1 })).ErrorCode);
-            var category = await Run("browser.click", new { @ref = await Find("Tools"), clickCount = 1 });
+            Assert.Null((await Run("browser.press_key", new { target = await Find("Editable"), key = "Home" })).ErrorCode);
+            Assert.Null((await Run("browser.click", new { target = await Find("Category"), clickCount = 1 })).ErrorCode);
+            var category = await Run("browser.click", new { target = await Find("Tools"), clickCount = 1 });
             Assert.Contains("Category Tools", category.Observation!.Content!);
-            Assert.Null((await Run("browser.select_option", new { @ref = await Find("Tags"), values = new[] { "one", "two" } })).ErrorCode);
+            Assert.Null((await Run("browser.select_option", new { target = await Find("Tags"), values = new[] { "one", "two" } })).ErrorCode);
             Assert.Equal(2, await browser.ContextFor(id)!.Pages[0].GetByRole(Microsoft.Playwright.AriaRole.Listbox, new() { Name = "Tags" }).EvaluateAsync<int>("e=>e.selectedOptions.length"));
-            var dropped = await Run("browser.drop", new { @ref = await Find("Drop zone"), text = "Dropped fixture text" });
+            var dropped = await Run("browser.drop", new { target = await Find("Drop zone"), text = "Dropped fixture text" });
             Assert.Contains("Dropped fixture text", dropped.Observation!.Content!);
             await browser.ContextFor(id)!.Pages[0].Locator("canvas").ScrollIntoViewIfNeededAsync();
             var box = (await browser.ContextFor(id)!.Pages[0].Locator("canvas").BoundingBoxAsync())!;
@@ -70,12 +70,11 @@ public sealed class NativeBrowserJourneyTests
             var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             browser.ActionStartedProbe = () => started.TrySetResult();
             using var cancel = new CancellationTokenSource();
-            var pending = browser.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(id, "browser.click", JsonSerializer.SerializeToElement(new { @ref = waiting, clickCount = 1 })), cancel.Token).AsTask();
+            var pending = browser.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(id, "browser.click", JsonSerializer.SerializeToElement(new { target = waiting, clickCount = 1 })), cancel.Token).AsTask();
             await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
             cancel.Cancel();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
             browser.ActionStartedProbe = null;
-            Assert.Equal("unknown_reference", (await Run("browser.click", new { @ref = waiting, clickCount = 1 })).ErrorCode);
             var recovered = await Run("browser.snapshot", new { }); Assert.Null(recovered.ErrorCode);
             Assert.Contains("Nothing selected", recovered.Observation!.Content!);
         }
@@ -93,11 +92,11 @@ public sealed class NativeBrowserJourneyTests
             var origin = browser.HostPolicy.NavigationOrigins.Single();
             Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(origin + "/browser-native.html?compact=1")))).ErrorCode);
             async Task<BrowserResult> Run(string tool, object args) => await browser.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(id, tool, JsonSerializer.SerializeToElement(args)));
-            async Task<string> Find(string name) => (await BrowserTestQueries.Find(browser, id, name)).Ref;
+            async Task<BrowserTarget> Find(string name) => (await BrowserTestQueries.Find(browser, id, name)).Target;
             foreach (var (button, operation, prompt) in new[] { ("Alert", "accept", ""), ("Confirm", "dismiss", ""), ("Prompt", "accept", "A label") })
             {
                 var reference = await Find(button);
-                var clicked = await Run("browser.click", new { @ref = reference, clickCount = 1 });
+                var clicked = await Run("browser.click", new { target = reference, clickCount = 1 });
                 Assert.Equal("dialog_pending", clicked.ErrorCode);
                 Assert.Null((await Run("browser.dialog", new { operation = "inspect" })).ErrorCode);
                 Assert.Equal("dialog_pending", (await Run("browser.snapshot", new { })).ErrorCode);
@@ -108,7 +107,7 @@ public sealed class NativeBrowserJourneyTests
             }
             var uploaded = await browser.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Upload, await Find("Upload file"), null, Uploads: [new("note.txt", "text/plain", System.Text.Encoding.UTF8.GetBytes("Approved resource"))]));
             Assert.Null(uploaded.ErrorCode); Assert.Contains("note.txt", uploaded.Observation!.Content!);
-            var downloaded = await Run("browser.click", new { @ref = await Find("Download note"), clickCount = 1 });
+            var downloaded = await Run("browser.click", new { target = await Find("Download note"), clickCount = 1 });
             Assert.Null(downloaded.ErrorCode);
             var file = Assert.Single(downloaded.Downloads!); Assert.Null(file.ErrorCode);
             Assert.Equal("browser-note.txt", file.FileName); Assert.Contains("Generic browser fixture note", System.Text.Encoding.UTF8.GetString(file.Bytes!));
@@ -125,7 +124,7 @@ public sealed class NativeBrowserJourneyTests
             Assert.DoesNotContain("Visible draft", (await Run("browser.session_storage", new { operation = "get", key = "draft" })).DataJson!);
             Assert.Equal("target_denied", (await Run("browser.route", new { url = "https://example.invalid/mock", action = "abort" })).ErrorCode);
             var rule = await Run("browser.route", new { url = origin + "/browser-native-data", action = "fulfill", body = "Mocked fixture data" }); Assert.Null(rule.ErrorCode);
-            var fetched = await Run("browser.click", new { @ref = await Find("Fetch data"), clickCount = 1 }); Assert.Null(fetched.ErrorCode);
+            var fetched = await Run("browser.click", new { target = await Find("Fetch data"), clickCount = 1 }); Assert.Null(fetched.ErrorCode);
             var ready = await Run("browser.wait_for", new { condition = "text", text = "Mocked fixture data" }); Assert.Null(ready.ErrorCode);
             Assert.Contains("Mocked fixture data", ready.Observation!.Content!);
             var denied = await browser.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, await Find("Denied popup"), null)); Assert.Equal("target_denied", denied.ErrorCode);
@@ -158,7 +157,7 @@ public sealed class NativeBrowserJourneyTests
             Assert.True(navigation.Observation.Content!.Length <= 8000);
             async Task<BrowserResult> Run(string name, object args)
             { using var doc = JsonDocument.Parse(JsonSerializer.Serialize(args)); return await browser.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(id, name, doc.RootElement.Clone())); }
-            async Task<string> Find(string name) => (await BrowserTestQueries.Find(browser, id, name)).Ref;
+            async Task<BrowserTarget> Find(string name) => (await BrowserTestQueries.Find(browser, id, name)).Target;
             var item = await Find("Asset 159");
             // Replace the DOM node after discovery: the ref must resolve by native locator.
             await browser.ContextFor(id)!.Pages[0].GetByRole(Microsoft.Playwright.AriaRole.Treeitem,
@@ -166,19 +165,19 @@ public sealed class NativeBrowserJourneyTests
             var clicked = await browser.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, item, null));
             Assert.Null(clicked.ErrorCode); Assert.Contains("Selected Asset 159", clicked.Observation!.Content!);
             Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, item, null))).ErrorCode);
-            var scoped = await Run("browser.snapshot", new { targetRef = await Find("Assets"), depth = 2, boxes = true });
+            var scoped = await Run("browser.snapshot", new { target = await Find("Assets"), depth = 2, boxes = true });
             Assert.Null(scoped.ErrorCode); Assert.NotEmpty(scoped.Observation!.Boxes!);
             Assert.Contains("tree \"Assets\"", scoped.Observation.Content);
             Assert.DoesNotContain("Title", scoped.Observation.Content);
-            Assert.NotEmpty(await Find("Title"));
+            Assert.NotNull(await Find("Title"));
             var frameRef = Assert.Single(scoped.Observation.Frames!).Ref;
-            var frameFound = await Run("browser.find", new { by = "role", value = "button", name = "Save frame", frameRef });
+            var frameFound = await Run("browser.find", new { target = new { by = "role", value = "button", name = "Save frame", frameRef } });
             Assert.Null(frameFound.ErrorCode);
-            var frame = JsonDocument.Parse(frameFound.DataJson!).RootElement.GetProperty("matches")[0].GetProperty("ref").GetString()!;
+            var frame = JsonDocument.Parse(frameFound.DataJson!).RootElement.GetProperty("matches")[0].GetProperty("target").Deserialize<BrowserTarget>(JsonSerializerOptions.Web)!;
             var saved = await browser.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, frame, null)); Assert.Null(saved.ErrorCode);
             Assert.Contains("Frame saved", await browser.ContextFor(id)!.Pages[0].Frames.Single(f => f != browser.ContextFor(id)!.Pages[0].MainFrame).Locator("body").InnerTextAsync());
             var title = await Find("Title"); var notes = await Find("Notes");
-            var filled = await Run("browser.fill_form", new { fields = new[] { new { @ref = title, value = "Example" }, new { @ref = notes, value = "Notes written" } } });
+            var filled = await Run("browser.fill_form", new { fields = new[] { new { target = title, value = "Example" }, new { target = notes, value = "Notes written" } } });
             Assert.Null(filled.ErrorCode); Assert.Equal("Example",(await BrowserTestQueries.Find(browser, id, "Title")).State!.Value);
             var key = await Run("browser.press_key", new { key = "Shift+Tab" }); Assert.Null(key.ErrorCode);
             var tabs = await Run("browser.tabs", new { operation = "new", url = origin + "/browser-native.html?new=1" }); Assert.Null(tabs.ErrorCode);

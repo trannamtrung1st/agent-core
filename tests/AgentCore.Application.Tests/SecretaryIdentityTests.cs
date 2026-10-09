@@ -86,22 +86,22 @@ public sealed class SecretaryIdentityTests
     public async Task Retired_general_definitions_are_absent_from_the_runtime_catalog()
     {
         var current = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
-        for (var version = 1; version <= 16; version++)
+        for (var version = 1; version <= 20; version++)
             Assert.Null(await current.GetAsync("general-assistant", version));
-        Assert.Equal(20, (await current.GetAsync("general-assistant"))!.Version);
+        Assert.Equal(21, (await current.GetAsync("general-assistant"))!.Version);
     }
 
     [Fact]
     public async Task Skill_load_does_not_add_browser_tools_to_a_definition_that_lacks_them()
     {
         var product = Assert.Single((await LoadSecretaryAsync()).SkillList, skill => skill.Id == "store.product.manage");
-        Assert.Contains("browser.find with exactly one semantic criterion", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("scope duplicate labels to a unique region", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("direct semantic targets", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("scope duplicate labels with one unique within row/group", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("Verify required values and checked states before saving", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("never blindly create a duplicate", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("browser.upload with the returned artifactId", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("A filename is not an artifactId", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("rediscover after navigation", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("observe the current page after navigation", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("Independently inspect the public product", product.Procedure, StringComparison.Ordinal);
         Assert.Contains("A Save click is not completion", product.Procedure, StringComparison.Ordinal);
         Assert.DoesNotContain("browser.click with that artifact id", product.Procedure, StringComparison.Ordinal);
@@ -420,7 +420,7 @@ public sealed class SecretaryIdentityTests
         while (dir is not null)
         {
             var agents = Path.Combine(dir.FullName, "agents");
-            if (File.Exists(Path.Combine(agents, "secretary-v3.json")))
+            if (File.Exists(Path.Combine(agents, "secretary-v8.json")))
             {
                 return agents;
             }

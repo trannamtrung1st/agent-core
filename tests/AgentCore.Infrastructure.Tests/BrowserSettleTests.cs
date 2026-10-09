@@ -32,7 +32,7 @@ public sealed class BrowserSettleTests(BrowserHostFixture fixture) : IClassFixtu
         Assert.DoesNotContain("AC-SETTLE-RESULT", home.Observation!.Content!, StringComparison.Ordinal);
         var search = (await BrowserTestQueries.Find(fixture.Session, id, "Search"));
 
-        var clicked = await fixture.Session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, search.Ref, null));
+        var clicked = await fixture.Session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, search.Target, null));
 
         Assert.Null(clicked.ErrorCode);
         Assert.Contains("AC-SETTLE-RESULT", clicked.Observation!.Content!, StringComparison.Ordinal);
@@ -52,7 +52,7 @@ public sealed class BrowserSettleTests(BrowserHostFixture fixture) : IClassFixtu
 
         var settled = await fixture.Session.ExecuteAsync(BrowserTestRequests.Inspect(
             id,
-            new BrowserOptionsData { Condition = "stable", TimeoutMs = 4000 }));
+            new BrowserWaitFor("stable", TimeoutMs: 4000)));
 
         Assert.Null(settled.ErrorCode);
         Assert.Contains("AC-SETTLE-LATE", settled.Observation!.Content!, StringComparison.Ordinal);
@@ -61,7 +61,7 @@ public sealed class BrowserSettleTests(BrowserHostFixture fixture) : IClassFixtu
     }
 
     [Fact]
-    public async Task Stable_observe_on_a_static_page_preserves_semantic_refs()
+    public async Task Stable_observe_preserves_semantic_targets_until_the_control_disappears()
     {
         var origin = fixture.Session.Fixture.Origin!;
         var id = Guid.NewGuid();
@@ -70,14 +70,14 @@ public sealed class BrowserSettleTests(BrowserHostFixture fixture) : IClassFixtu
 
         var again = await fixture.Session.ExecuteAsync(BrowserTestRequests.Inspect(
             id,
-            new BrowserOptionsData { Condition = "stable", TimeoutMs = BrowserToolLimits.DefaultObserveTimeoutMs }));
+            new BrowserWaitFor("stable", TimeoutMs: BrowserToolLimits.DefaultObserveTimeoutMs)));
 
         Assert.Null(again.ErrorCode);
         Assert.Equal(true, again.Observation!.Settled);
-        Assert.NotEmpty((await BrowserTestQueries.Find(fixture.Session, id, "Search")).Ref);
-        Assert.Null((await fixture.Session.ExecuteAsync(new(id, BrowserOperation.Click, new() { Ref = search.Ref }))).ErrorCode);
-        var stale = await fixture.Session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, search.Ref, null));
-        Assert.Equal("stale_reference", stale.ErrorCode);
+        Assert.NotNull((await BrowserTestQueries.Find(fixture.Session, id, "Search")).Target);
+        Assert.Null((await fixture.Session.ExecuteAsync(new(id, new BrowserClick(Target: search.Target)))).ErrorCode);
+        var stale = await fixture.Session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, search.Target, null));
+        Assert.Equal("target_missing", stale.ErrorCode);
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public sealed class BrowserSettleTests(BrowserHostFixture fixture) : IClassFixtu
         using var guard = new CancellationTokenSource(TimeSpan.FromSeconds(6));
         var started = Stopwatch.GetTimestamp();
 
-        var observed = await fixture.Session.ExecuteAsync(BrowserTestRequests.Inspect(id, new BrowserOptionsData { Condition = "stable", TimeoutMs = 1000 }), guard.Token);
+        var observed = await fixture.Session.ExecuteAsync(BrowserTestRequests.Inspect(id, new BrowserWaitFor("stable", TimeoutMs: 1000)), guard.Token);
 
         var elapsed = Stopwatch.GetElapsedTime(started);
         Assert.Null(observed.ErrorCode);
@@ -129,7 +129,7 @@ public sealed class BrowserSettleTests(BrowserHostFixture fixture) : IClassFixtu
 
         var note = (await BrowserTestQueries.Find(fixture.Session, id, "Empty note"));
         var started = Stopwatch.GetTimestamp();
-        var filled = await fixture.Session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Type, note.Ref, "AC-FILL"));
+        var filled = await fixture.Session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Type, note.Target, "AC-FILL"));
         var elapsed = Stopwatch.GetElapsedTime(started);
         Assert.Null(filled.ErrorCode);
         Assert.Null(filled.Observation!.Settled);
@@ -137,25 +137,25 @@ public sealed class BrowserSettleTests(BrowserHostFixture fixture) : IClassFixtu
         Assert.Equal("AC-FILL", (await BrowserTestQueries.Find(fixture.Session, id, "Empty note")).State?.Value);
 
         var published = (await BrowserTestQueries.Find(fixture.Session, id, "Published"));
-        var checkedBox = await fixture.Session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.FillForm, published.Ref, null, Checked: true));
+        var checkedBox = await fixture.Session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.FillForm, published.Target, null, Checked: true));
         Assert.Null(checkedBox.ErrorCode);
         Assert.Equal(true, checkedBox.Observation!.Settled);
         Assert.Equal(true, (await BrowserTestQueries.Find(fixture.Session, id, "Published")).State?.Checked);
 
         var featured = (await BrowserTestQueries.Find(fixture.Session, id, "Featured"));
-        var uncheckedBox = await fixture.Session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.FillForm, featured.Ref, null, Checked: false));
+        var uncheckedBox = await fixture.Session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.FillForm, featured.Target, null, Checked: false));
         Assert.Null(uncheckedBox.ErrorCode);
         Assert.Equal(true, uncheckedBox.Observation!.Settled);
         Assert.Equal(false, (await BrowserTestQueries.Find(fixture.Session, id, "Featured")).State?.Checked);
 
         var category = (await BrowserTestQueries.Find(fixture.Session, id, "Category"));
-        var selected = await fixture.Session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.SelectOption, category.Ref, "grouped"));
+        var selected = await fixture.Session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.SelectOption, category.Target, "grouped"));
         Assert.Null(selected.ErrorCode);
         Assert.Equal(true, selected.Observation!.Settled);
         Assert.Equal("Grouped", (await BrowserTestQueries.Find(fixture.Session, id, "Category")).State?.SelectedText);
 
         var pressTarget = (await BrowserTestQueries.Find(fixture.Session, id, "Empty note"));
-        var pressed = await fixture.Session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.PressKey, pressTarget.Ref, "Tab"));
+        var pressed = await fixture.Session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.PressKey, pressTarget.Target, "Tab"));
         Assert.Null(pressed.ErrorCode);
         Assert.Equal(true, pressed.Observation!.Settled);
     }
@@ -167,7 +167,7 @@ public sealed class BrowserSettleTests(BrowserHostFixture fixture) : IClassFixtu
         var id = Guid.NewGuid();
         await fixture.Session.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(origin + "/settle-churn")));
         using var cts = new CancellationTokenSource();
-        var pending = fixture.Session.ExecuteAsync(BrowserTestRequests.Inspect(id, new BrowserOptionsData { Condition = "stable", TimeoutMs = 4000 }), cts.Token).AsTask();
+        var pending = fixture.Session.ExecuteAsync(BrowserTestRequests.Inspect(id, new BrowserWaitFor("stable", TimeoutMs: 4000)), cts.Token).AsTask();
         await Task.Delay(150);
         await cts.CancelAsync();
 

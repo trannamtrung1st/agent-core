@@ -5,9 +5,9 @@ test('Recurring continuity review uses the shared Automation editor and Continui
   await page.goto('/admin');
   await page.getByRole('tab', { name: 'Instances', exact: true }).click();
   await page.getByRole('button', { name: 'New instance', exact: true }).click();
-  for (const [label, text] of [['Definition', 'general-assistant'], ['Published version', 'v17']] as const) {
+  for (const [label, text] of [['Definition', 'general-assistant'], ['Published version', 'v21']] as const) {
     const input = page.getByRole('combobox', { name: label, exact: true }); await input.click(); await input.fill(text);
-    await page.locator('.ant-select-item-option').filter({ hasText: label === 'Definition' ? 'General Assistant' : 'v17 · Built-in · Published' }).click();
+    await page.locator('.ant-select-item-option').filter({ hasText: label === 'Definition' ? 'General Assistant' : 'v21 · Built-in · Published' }).click();
   }
   await page.getByRole('button', { name: 'Create instance', exact: true }).click();
   await page.getByRole('tab', { name: 'Continuity', exact: true }).click();

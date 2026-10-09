@@ -38,9 +38,9 @@ public sealed class IdentityMaintenanceJourneyTests
         {
             var s = host.Services;
             var admin = s.GetRequiredService<AdminAgentInstanceService>();
-            firstId = (await admin.CreateManagedAsync("general-assistant", 17)).InstanceId;
-            secondId = (await admin.CreateManagedAsync("general-assistant", 17)).InstanceId;
-            var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 17))!;
+            firstId = (await admin.CreateManagedAsync("general-assistant", 21)).InstanceId;
+            secondId = (await admin.CreateManagedAsync("general-assistant", 21)).InstanceId;
+            var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 21))!;
             definition = definition with { MemoryPolicy = definition.MemoryPolicy! with { UserRetrieval = true, UserPromotion = true } };
             var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(firstId, SessionMode.Text);
             var memory = s.GetRequiredService<IStructuredMemoryService>();
@@ -86,7 +86,7 @@ public sealed class IdentityMaintenanceJourneyTests
         await using (var host = new ExperienceHost(db))
         {
             var s = host.Services;
-            var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 17))!;
+            var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 21))!;
             definition = definition with { MemoryPolicy = definition.MemoryPolicy! with { UserRetrieval = true } };
             var args = JsonSerializer.Deserialize<JsonElement>(call.ArgumentsJson);
             var grant = new ToolApprovalGrant(Guid.NewGuid(), call.Name, ToolActionHash.Compute(call.Name, args), Guid.Empty, Guid.Empty, Guid.Empty);
@@ -109,8 +109,8 @@ public sealed class IdentityMaintenanceJourneyTests
         using var metrics = new MaintenanceMetrics();
         await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"p910-preview-{Guid.NewGuid():N}.db"));
         var s = host.Services;
-        var id = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17)).InstanceId;
-        var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 17))!;
+        var id = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21)).InstanceId;
+        var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 21))!;
         var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(id, SessionMode.Text);
         var memory = s.GetRequiredService<IStructuredMemoryService>();
         var context = SessionMemoryPrompt.CreateAdmissionContext("agent_inferred", definition, await s.GetRequiredService<IMemoryStore>().LoadProfileAsync(LocalUserProfile.Id), []);
@@ -160,8 +160,8 @@ public sealed class IdentityMaintenanceJourneyTests
     {
         await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"p910-legacy-{Guid.NewGuid():N}.db"));
         var s = host.Services;
-        var id = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17)).InstanceId;
-        var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 17))!;
+        var id = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21)).InstanceId;
+        var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 21))!;
         var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(id, SessionMode.Text);
         var memory = s.GetRequiredService<IStructuredMemoryService>();
         var context = SessionMemoryPrompt.CreateAdmissionContext("agent_inferred", definition, await s.GetRequiredService<IMemoryStore>().LoadProfileAsync(LocalUserProfile.Id), []);
@@ -238,10 +238,10 @@ public sealed class IdentityMaintenanceJourneyTests
         await using (var host = new ExperienceHost(db))
         {
             var s = host.Services;
-            var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
+            var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
             id = instance.InstanceId;
             await s.GetRequiredService<IExperienceStore>().ConfigureMaintenanceAsync(id, 0, true);
-            var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 17))!;
+            var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 21))!;
             var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(id, SessionMode.Text);
             var memory = s.GetRequiredService<IStructuredMemoryService>();
             var profile = await s.GetRequiredService<IMemoryStore>().LoadProfileAsync(LocalUserProfile.Id);
@@ -293,10 +293,10 @@ public sealed class IdentityMaintenanceJourneyTests
         var db = Path.Combine(Path.GetTempPath(), $"p910-noop-{Guid.NewGuid():N}.db");
         await using var host = new ExperienceHost(db);
         var s = host.Services;
-        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
+        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
         var id = instance.InstanceId;
         await s.GetRequiredService<IExperienceStore>().ConfigureMaintenanceAsync(id, 0, true);
-        var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 17))!;
+        var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 21))!;
         var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(id, SessionMode.Text);
         var memory = s.GetRequiredService<IStructuredMemoryService>();
         var profile = await s.GetRequiredService<IMemoryStore>().LoadProfileAsync(LocalUserProfile.Id);
@@ -326,10 +326,10 @@ public sealed class IdentityMaintenanceJourneyTests
         var db = Path.Combine(Path.GetTempPath(), $"p910-validation-{Guid.NewGuid():N}.db");
         await using var host = new ExperienceHost(db);
         var s = host.Services;
-        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
+        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
         var id = instance.InstanceId;
         await s.GetRequiredService<IExperienceStore>().ConfigureMaintenanceAsync(id, 0, true);
-        var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 17))!;
+        var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 21))!;
         var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(id, SessionMode.Text);
         var memory = s.GetRequiredService<IStructuredMemoryService>();
         var profile = await s.GetRequiredService<IMemoryStore>().LoadProfileAsync(LocalUserProfile.Id);
@@ -372,7 +372,7 @@ public sealed class IdentityMaintenanceJourneyTests
         await using (var host = new ExperienceHost(db))
         {
             var s = host.Services;
-            var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
+            var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
             id = instance.InstanceId;
             var client = TestOwnerCapability.CreateOwnerClient(host);
             var path = $"/api/v2/admin/agent-instances/{id}";
@@ -466,7 +466,7 @@ public sealed class IdentityMaintenanceJourneyTests
             Assert.Equal("Superseded", (await client.GetFromJsonAsync<AdminLearnedMemoryItemResponse>(path + $"/learned-memory/{sourceId}?scope=IdentityUser"))!.Status);
             var experience = (await s.GetRequiredService<IExperienceStore>().GetAsync(id, experienceId))!;
             Assert.Equal(ExperienceSourceKind.Consolidation, experience.SourceKind);
-            var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 17))!;
+            var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 21))!;
             var tools = s.GetRequiredService<SessionToolExecutor>();
             var automation = new ToolExecutionAdmission(true, TriggerKind.ManualInvocation, AgentInstanceId: id);
             Assert.Equal(resultId, JsonSerializer.Deserialize<JsonElement>((await tools.ExecuteAsync(definition, Guid.Empty, memoryCall, 8000, admission: automation)).Text).GetProperty("memoryId").GetGuid());
