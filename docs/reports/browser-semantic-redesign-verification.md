@@ -40,10 +40,10 @@ Every row is retained with one current operation schema and one concrete neutral
 | browser.navigate | Page.Goto/GoBack/GoForward/Reload; separate destination/redirect/resource enforcement |
 | browser.snapshot | Locator.AriaSnapshot; bounded semantic subtree and allowed frame inventory |
 | browser.find | GetByRole/Text/Label/Placeholder/AltText/Title/TestId, Count and bounded observational samples |
-| browser.click | Unique Locator.Click/DblClick; live protected-control and origin checks |
+| browser.click | Unique Locator.Click with click count; live protected-control and origin checks |
 | browser.hover | Unique Locator.Hover |
 | browser.drag | Unique source/destination Locator.DragTo; both destinations checked |
-| browser.drop | Target-local native DispatchEvent with bounded structured text; artifact drop remains unsupported |
+| browser.drop | Fixed target-local SDK evaluation dispatches DragEvent with bounded structured text; artifact drop remains unsupported |
 | browser.type | Locator.Fill/PressSequentially and optional Press; password/OTP/credential-control denial |
 | browser.fill_form | Preflight every target, recheck each field, Fill or SetChecked |
 | browser.select_option | Locator.SelectOption |
@@ -110,12 +110,12 @@ Counts include lines, not a claimed complexity reduction. File separation preser
 
 | Responsibility | Baseline | Redesign candidate |
 | --- | ---: | ---: |
-| Main launch/navigation/session state | 2,771 | 871 |
+| Main launch/navigation/session state | 2,771 | 876 |
 | Profiles/close/lease owner (extracted) | in main | 521 |
 | Origin/routes/popups/page ownership (extracted) | in main | 639 |
-| Protected targets/credential/redaction (extracted) | in main | 355 |
+| Protected targets/credential/redaction (extracted) | in main | 360 |
 | Screenshot/download bounds (extracted) | in main | 447 |
-| Native operation dispatcher | 456 | 457 |
+| Native operation dispatcher | 456 | 459 |
 | Native observation/search | 134 | 87 |
 | Direct target matcher | registry in main | 72 |
 | Native state/environment | 86 / 197 | 85 / 197 |
@@ -155,12 +155,13 @@ The final schema now explicitly excludes `name` for literal targets, adds minima
 | Baseline native Chromium filter | 137 passed, 0 failed |
 | SDK + direct target + popup focused tests | 3 passed; denied-popup repetition 10/10 passed |
 | Final native/browser/credential boundary filter | 72 passed, including tab/frame generation rejection and independent effect assertions |
+| Final effect/environment and route-restoration checks | 13 passed; six journey/direct-action tests passed after confirming unroute restores the actual server response |
 | `dotnet test tests/AgentCore.Domain.Tests/... -m:1 --no-restore --nologo` | 173 passed |
 | Application full gate | 1,446 passed, 3 explicit live opt-in skips |
 | API full gate | 390 passed, 2 explicit live opt-in skips |
-| Infrastructure full gate | 925 passed, 7 explicit opt-in skips after popup cleanup fix; prior denied-popup race retained above |
+| Infrastructure full gate | 926 passed, 7 explicit opt-in skips after frame-generation fix; final effect/route corrections subsequently passed focused runtime checks, full final gate pending |
 | OrderEvents plugin full gate | 4 passed |
-| Frontend Node 22 `vitest.mjs run --maxWorkers=1` | 768 passed, 2 CPU timeout failures in one unchanged Admin test file; isolated 8/8 file tests passed; hosted full gate pending |
+| Frontend Node 22 `vitest.mjs run --maxWorkers=1` | Latest full run: 769 passed, one unchanged Event credential-dialog lookup failure; isolated 4/4 file tests passed. Earlier full run: 768 passed, two Admin continuity timeouts; isolated 8/8 file tests passed. Hosted full gate pending. |
 | Frontend `pnpm run build` | TypeScript/Vite passed; existing chunk-size warning |
 | Full Synthetic core, browser-stt, browser-browser | Final 130/130 passed (13.2m). Prior 128/130 failures were an old version assertion and a detach timing failure; both passed focused rerun. |
 | Focused Playwright recovery | 2 passed |

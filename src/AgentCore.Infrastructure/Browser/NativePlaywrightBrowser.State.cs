@@ -19,11 +19,11 @@ public sealed partial class NativePlaywrightBrowser
             if (session.Rules.Count >= 16) return new("invalid");
             var rule = new BrowserRouteRule("route_" + Guid.NewGuid().ToString("N"), uri.AbsoluteUri, args.Action!, args.Status, args.Body ?? "");
             lock (session.PopupGate) session.Rules.Add(rule);
-            return Data(new { ruleRef = rule.Id });
+            return Data(new { ruleRef = rule.Id }) with { EffectAttempted = true };
         }
-        if (command is BrowserRoute argss) { lock (session.PopupGate) return Data(new { rules = session.Rules.Select(r => new { ruleRef = r.Id, origin = SafeNetworkUrl(r.Url), action = r.Action }) }); }
-        if (command is BrowserUnroute unroute) { lock (session.PopupGate) { var removed = session.Rules.RemoveAll(r => r.Id == unroute.RuleRef); return removed == 0 ? new("invalid") : Data(new { status = "ok" }); } }
-        if (command is BrowserNetworkState networkstate) { ct.ThrowIfCancellationRequested(); await MutateContextAsync(session, session.Context.SetOfflineAsync(networkstate.Online == true == false), ct); session.Offline = !networkstate.Online == true; ct.ThrowIfCancellationRequested(); return Data(new { status = "ok" }); }
+        if (command is BrowserRoutes) { lock (session.PopupGate) return Data(new { rules = session.Rules.Select(r => new { ruleRef = r.Id, origin = SafeNetworkUrl(r.Url), action = r.Action }) }); }
+        if (command is BrowserUnroute unroute) { lock (session.PopupGate) { var removed = session.Rules.RemoveAll(r => r.Id == unroute.RuleRef); return removed == 0 ? new("invalid") : Data(new { status = "ok" }) with { EffectAttempted = true }; } }
+        if (command is BrowserNetworkState networkstate) { ct.ThrowIfCancellationRequested(); await action(MutateContextAsync(session, session.Context.SetOfflineAsync(!networkstate.Online), ct)); session.Offline = !networkstate.Online; ct.ThrowIfCancellationRequested(); return Data(new { status = "ok" }); }
         if (command is BrowserCookies cookieCommand)
         {
             var operation = cookieCommand.Operation;
@@ -43,7 +43,7 @@ public sealed partial class NativePlaywrightBrowser
             foreach (var domain in cookies.Where(c => operation == "clear" || c.Name == name).Select(c => c.Domain).Distinct(StringComparer.Ordinal))
             {
                 ct.ThrowIfCancellationRequested();
-                await MutateContextAsync(session, session.Context.ClearCookiesAsync(new BrowserContextClearCookiesOptions { Name = operation == "delete" ? name : null, Domain = domain }), ct);
+                await action(MutateContextAsync(session, session.Context.ClearCookiesAsync(new BrowserContextClearCookiesOptions { Name = operation == "delete" ? name : null, Domain = domain }), ct));
             }
             return Data(new { status = "ok" });
         }

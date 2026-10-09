@@ -26,6 +26,7 @@ public sealed class NativeBrowserSemanticActionTests
                 BrowserToolArguments.Request(id, tool, JsonSerializer.Deserialize<JsonElement>(json)));
             var opened = await browser.ExecuteAsync(new(id, new BrowserNavigate(browser.HostPolicy.NavigationOrigins.Single() + "/browser-native.html?compact=1")));
             Assert.Null(opened.ErrorCode);
+            Assert.True(opened.EffectAttempted); Assert.True(opened.EffectConfirmedBySdk); Assert.False(opened.ApplicationOutcomeVerified);
             Assert.DoesNotContain("[ref=", opened.Observation!.Content);
             Assert.Empty(opened.Observation.Targets);
             var page = browser.ContextFor(id)!.Pages[0];
@@ -53,13 +54,17 @@ public sealed class NativeBrowserSemanticActionTests
                 return ValueTask.FromResult(secret);
             });
             Assert.Null(filled.ErrorCode);
+            Assert.True(filled.EffectAttempted); Assert.True(filled.EffectConfirmedBySdk); Assert.False(filled.ApplicationOutcomeVerified);
             Assert.DoesNotContain(secret, filled.Observation!.Content);
             Assert.Equal(secret, await page.GetByLabel("Password", new() { Exact = true }).InputValueAsync());
             Assert.Equal("target_missing", (await Run("browser.click", """{"target":{"by":"role","value":"button","name":"Missing"}}""")).ErrorCode);
             Assert.False(BrowserToolArguments.TryRequest(id, "browser.click", JsonSerializer.Deserialize<JsonElement>("""{"ref":"el_bbbbbbbbbbbbbbbbbbbbbb"}"""), out _, out _));
             var closed = await Run("browser.close", "{}");
             Assert.Equal("closed", closed.Status);
+            Assert.True(closed.EffectAttempted); Assert.True(closed.EffectConfirmedBySdk); Assert.False(closed.ApplicationOutcomeVerified);
             Assert.Null(browser.ContextFor(id));
+            var again = await Run("browser.close", "{}");
+            Assert.Equal("already_closed", again.Status); Assert.False(again.EffectAttempted); Assert.False(again.EffectConfirmedBySdk);
         }
         finally { await browser.StopAsync(CancellationToken.None); }
     }

@@ -26,9 +26,11 @@ public sealed partial class NativePlaywrightBrowser
         if (command.Operation == BrowserOperation.Navigate) return await NavigateAsync(command, cancellationToken);
         if (command.Operation == BrowserOperation.Close)
         {
+            var contextWasOpen = _sessions.ContainsKey(command.SessionId);
             var closed = await CloseAsync(command.SessionId, cancellationToken);
             return closed.Status is "closed" or "already_closed" ? new(null, Status: closed.Status,
-                DataJson: JsonSerializer.Serialize(new { status = closed.Status })) : new(closed.Status, Status: closed.Status);
+                DataJson: JsonSerializer.Serialize(new { status = closed.Status }), EffectAttempted: closed.Status == "closed",
+                EffectConfirmedBySdk: closed.Status == "closed") : new(closed.Status, Status: closed.Status, EffectAttempted: contextWasOpen);
         }
         cancellationToken.ThrowIfCancellationRequested();
         if (!IsAvailable) return command.Operation == BrowserOperation.GetConfig ? Configuration(null) : new("provider_unavailable");
@@ -89,7 +91,7 @@ public sealed partial class NativePlaywrightBrowser
             switch (command.Command)
             {
                 case BrowserSetGeolocation args:
-                    return await GeolocationAsync(session, args, ct);
+                    return await GeolocationAsync(session, args, ct, Action);
                 case BrowserObserve args:
                     {
                         var scope = args.Target is null ? session.Page.Locator("body") : await Target(args.Target);
@@ -327,11 +329,11 @@ public sealed partial class NativePlaywrightBrowser
                     {
                         var operation = args.Operation;
                         if (operation is not ("show" or "hide")) return new("invalid");
-                        if (operation == "hide" && args.Target is null) await session.Page.HideHighlightAsync().WaitAsync(ct);
+                        if (operation == "hide" && args.Target is null) await Action(session.Page.HideHighlightAsync());
                         else
                         {
                             var target = await Target(args.Target); if (target is null) return new("target_missing");
-                            await (operation == "hide" ? target.HideHighlightAsync() : target.HighlightAsync()).WaitAsync(ct);
+                            await Action(operation == "hide" ? target.HideHighlightAsync() : target.HighlightAsync());
                         }
                         return Data(new { status = "ok" });
                     }
@@ -358,7 +360,7 @@ public sealed partial class NativePlaywrightBrowser
                         if (!await SafePoint(x, y)) return new("target_denied");
                         switch (args.Operation)
                         {
-                            case "move": await session.Page.Mouse.MoveAsync(x, y).WaitAsync(ct); break;
+                            case "move": await Action(session.Page.Mouse.MoveAsync(x, y)); break;
                             case "click": await Action(session.Page.Mouse.ClickAsync(x, y)); break;
                             case "down": await session.Page.Mouse.MoveAsync(x, y).WaitAsync(ct); await Action(session.Page.Mouse.DownAsync()); break;
                             case "up": await Action(session.Page.Mouse.UpAsync()); break;

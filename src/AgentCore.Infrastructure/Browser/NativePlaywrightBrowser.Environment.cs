@@ -110,7 +110,7 @@ public sealed partial class NativePlaywrightBrowser
         _ = close.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
     }
 
-    private async Task<BrowserResult> GeolocationAsync(SessionBrowser session, BrowserSetGeolocation args, CancellationToken ct)
+    private async Task<BrowserResult> GeolocationAsync(SessionBrowser session, BrowserSetGeolocation args, CancellationToken ct, Func<Task, Task> action)
     {
         var operation = args.Operation;
         if (operation is not ("set" or "clear") || !Uri.TryCreate(args.Origin, UriKind.Absolute, out var target)
@@ -136,13 +136,13 @@ public sealed partial class NativePlaywrightBrowser
         var permissionsReset = operation == "clear" || session.GeolocationOrigin is { } previous && previous != origin;
         if (permissionsReset)
         {
-            await MutateContextAsync(session, session.Context.ClearPermissionsAsync(), ct);
+            await action(MutateContextAsync(session, session.Context.ClearPermissionsAsync(), ct));
             session.GeolocationOrigin = null;
         }
-        await MutateContextAsync(session, session.Context.SetGeolocationAsync(location), ct);
+        await action(MutateContextAsync(session, session.Context.SetGeolocationAsync(location), ct));
         if (location is not null && !ct.IsCancellationRequested)
         {
-            await MutateContextAsync(session, session.Context.GrantPermissionsAsync(["geolocation"], new() { Origin = origin }), ct);
+            await action(MutateContextAsync(session, session.Context.GrantPermissionsAsync(["geolocation"], new() { Origin = origin }), ct));
             session.GeolocationOrigin = origin;
         }
         if (ct.IsCancellationRequested)

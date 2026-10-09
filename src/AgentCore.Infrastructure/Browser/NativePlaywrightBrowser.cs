@@ -196,6 +196,9 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
             }
         }
 
+        var attempted = false;
+        var confirmed = false;
+        BrowserResult Outcome(BrowserResult result) => result with { EffectAttempted = attempted, EffectConfirmedBySdk = confirmed };
         SessionBrowser? session = null;
         var entered = false;
         try
@@ -210,6 +213,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
             using var registration = cancellationToken.Register(() => CancelCall(session, call));
             try
             {
+                attempted = true;
                 if (operation == "back")
                 {
                     await session.Page.GoBackAsync(new PageGoBackOptions
@@ -252,6 +256,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
                         .WaitAsync(cancellationToken)
                         .ConfigureAwait(false);
                 }
+                confirmed = true;
             }
             catch (PlaywrightException) when (session.DeniedNavigation || session.PopupCode is not null || session.TimedOut)
             {
@@ -266,29 +271,29 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
             if (session.TimedOut)
             {
                 LogBrowserFailure("navigate", "interaction", "timeout");
-                return Result("timeout");
+                return Outcome(Result("timeout"));
             }
 
             if (session.PopupCode is not null)
             {
-                return Result(session.PopupCode);
+                return Outcome(Result(session.PopupCode));
             }
 
             if (session.DeniedNavigation || !IsAllowed(session, session.Page.Url))
             {
                 await RestoreAllowedPageAsync(session, cancellationToken).ConfigureAwait(false);
-                return Result("target_denied");
+                return Outcome(Result("target_denied"));
             }
 
             AdvanceGeneration(session);
             session.LastAllowedUrl = session.Page.Url;
-            return await CaptureWithRetryAsync(
+            return Outcome(await CaptureWithRetryAsync(
                 session,
                 request.SessionId,
                 "navigate",
                 BrowserSnapshotSettle.Automatic,
                 timeoutMs: null,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken).ConfigureAwait(false));
         }
         catch (OperationCanceledException)
         {
@@ -311,11 +316,11 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         catch (Exception ex) when (IsTimeout(ex))
         {
             LogBrowserFailure("navigate", "interaction", "timeout");
-            return Result("timeout");
+            return Outcome(Result("timeout"));
         }
         catch (BrowserProfileException ex)
         {
-            return Result(ex.Code);
+            return Outcome(Result(ex.Code));
         }
         catch (BrowserLaunchException)
         {
@@ -324,7 +329,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         }
         catch (PlaywrightException ex)
         {
-            return await FailAsync(session, "navigate", "interaction", ex).ConfigureAwait(false);
+            return Outcome(await FailAsync(session, "navigate", "interaction", ex).ConfigureAwait(false));
         }
         finally
         {

@@ -79,6 +79,9 @@ public sealed partial class NativePlaywrightBrowser
         deadline.CancelAfter(OperationTimeout);
         var token = deadline.Token;
         Task? active = null;
+        var attempted = false;
+        var confirmed = false;
+        BrowserResult Outcome(BrowserResult result) => result with { EffectAttempted = attempted, EffectConfirmedBySdk = confirmed };
         try
         {
             if (session.Dialog is not null) return Result("dialog_pending");
@@ -98,21 +101,23 @@ public sealed partial class NativePlaywrightBrowser
                 return Result("action_not_confirmed");
             if (!await locator.EvaluateAsync<bool>("el => el.matches('input[type=password]')").WaitAsync(token)
                 || await ClassifyInterventionAsync(session.Page, token) != BrowserInterventionKind.None) return Result("user_intervention_required");
+            attempted = true;
             active = locator.FillAsync(value, new() { Timeout = TimeoutMs() });
             await active.WaitAsync(token);
+            confirmed = true;
             active = null;
             return (await CaptureWithRetryAsync(session, sessionId, "credential", BrowserSnapshotSettle.None, null, token))
                 with { EffectAttempted = true, EffectConfirmedBySdk = true };
         }
-        catch (BrowserTargetException ex) { return Result(ex.Code); }
-        catch (BrowserTargetDeniedException) { return Result("target_denied"); }
+        catch (BrowserTargetException ex) { return Outcome(Result(ex.Code)); }
+        catch (BrowserTargetDeniedException) { return Outcome(Result("target_denied")); }
         catch (OperationCanceledException)
         {
             if (active is { IsCompleted: false }) await FencePageAsync(session, sessionId);
             if (ct.IsCancellationRequested) throw new OperationCanceledException(ct);
-            return Result("timeout");
+            return Outcome(Result("timeout"));
         }
-        catch (PlaywrightException ex) { return Result(BrowserFailureClassifier.Classify(ex.Message).Code); }
+        catch (PlaywrightException ex) { return Outcome(Result(BrowserFailureClassifier.Classify(ex.Message).Code)); }
         finally { session.Gate.Release(); }
     }
 
