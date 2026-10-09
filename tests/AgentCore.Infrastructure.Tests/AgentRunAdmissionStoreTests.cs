@@ -961,6 +961,52 @@ public sealed class AgentRunAdmissionStoreTests
             Owner, admitted[1].SessionId, admitted[0].AgentRunId, 2).AsTask())).Code);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Run_pages_recheck_session_visibility_and_ownership_after_reopen(bool sqlite)
+    {
+        await using var f = await Fixture.CreateAsync(sqlite);
+        var admitted = new List<AgentRun>();
+        for (var i = 0; i < 5; i++)
+        {
+            var turn = UserTurn();
+            admitted.Add((await f.Runs.AdmitAsync(turn.Snapshot, 0, turn.Run)).Run);
+        }
+        // Retained evidence must not project a Session under a different owner.
+        for (var i = 0; i < 4; i++)
+        {
+            var snapshot = (await f.Memory.LoadAsync(admitted[i].SessionId))!;
+            var updated = i switch
+            {
+                0 => snapshot with { DurablyDeletedAt = Now },
+                1 => snapshot with { AgentInstanceId = Guid.NewGuid() },
+                2 => snapshot with { ProfileId = Guid.NewGuid() },
+                _ => snapshot with { ArchivedAt = Now }
+            };
+            await f.Memory.SaveAsync(updated with { Revision = snapshot.Revision + 1 }, snapshot.Revision);
+        }
+        await f.ReopenAsync();
+        var expected = admitted.Skip(3).OrderByDescending(run => run.AgentRunId.ToString("D"), StringComparer.Ordinal).ToArray();
+        var first = await f.Runs.ListPageAsync(Owner, null, null, 1);
+        Assert.Equal(expected[0].AgentRunId, Assert.Single(first.Items).AgentRunId);
+        Assert.True(first.HasMore);
+        var last = await f.Runs.ListPageAsync(Owner, null, first.NextCursor, 1);
+        Assert.Equal(expected[1].AgentRunId, Assert.Single(last.Items).AgentRunId);
+        Assert.False(last.HasMore);
+        Assert.Null(last.NextCursor);
+        foreach (var run in admitted.Take(3))
+        {
+            Assert.NotNull(await f.Runs.GetAsync(Owner, run.AgentRunId));
+            Assert.Empty((await f.Runs.ListPageAsync(Owner, run.SessionId, null, 1)).Items);
+            var after = await f.Runs.ListPageAsync(Owner, null, run.AgentRunId, 100);
+            Assert.Equal(expected.Where(item => StringComparer.Ordinal.Compare(item.AgentRunId.ToString("D"), run.AgentRunId.ToString("D")) < 0)
+                .Select(item => item.AgentRunId), after.Items.Select(item => item.AgentRunId));
+            await Assert.ThrowsAsync<AgentCoreException>(() => f.Runs.ListPageAsync(
+                new(Owner.AgentInstanceId, Guid.NewGuid()), null, run.AgentRunId, 1).AsTask());
+        }
+    }
+
     private static async Task<AgentRun> CompleteChild(Fixture f, (SessionSnapshot Snapshot, AgentRun Run) child, bool quiet)
     {
         var running = await Claim(f, child.Run);

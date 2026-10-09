@@ -57,7 +57,8 @@ public static class BackgroundSessionEndpoints
             var profile = await profiles.GetLocalProfileAsync(ct);
             var page = await runs.ListPageAsync(new(instanceId, profile.ProfileId), null, before, limit ?? 50, ct);
             var items = new List<AgentRunResponse>();
-            foreach (var run in page.Items) items.Add(await ToRunWithSourceAsync(run, memory, ct));
+            foreach (var run in page.Items)
+                if (await TryToRunWithSourceAsync(run, memory, ct) is { } item) items.Add(item);
             return Results.Json(new AgentRunPageResponse(items, page.NextCursor?.ToString("D"), page.HasMore));
         }));
         instanceRuns.MapGet("/{runId:guid}", (Guid instanceId, Guid runId, ILocalUserProfileService profiles, IAgentRunStore runs, IMemoryStore memory, CancellationToken ct) => Safe(async () =>
@@ -132,10 +133,14 @@ public static class BackgroundSessionEndpoints
     private static AgentRunPageResponse ToPage(AgentRunPage page, Guid? automationId = null) => new(page.Items.Select(run => ToRun(run, automationId)).ToArray(), page.NextCursor?.ToString("D"), page.HasMore);
 
     private static async Task<AgentRunResponse> ToRunWithSourceAsync(AgentRun run, IMemoryStore memory, CancellationToken ct)
+        => await TryToRunWithSourceAsync(run, memory, ct).ConfigureAwait(false)
+            ?? throw AgentCoreErrors.NotFound("AgentRun was not found.");
+
+    private static async Task<AgentRunResponse?> TryToRunWithSourceAsync(AgentRun run, IMemoryStore memory, CancellationToken ct)
     {
         var session = await memory.LoadMetadataAsync(run.SessionId, ct).ConfigureAwait(false);
         if (session is null || session.AgentInstanceId != run.AgentInstanceId || session.ProfileId != run.ProfileId
-            || session.DurablyDeletedAt is not null) throw AgentCoreErrors.NotFound("AgentRun was not found.");
+            || session.DurablyDeletedAt is not null) return null;
         return ToRun(run, session.Origin.AutomationId);
     }
 

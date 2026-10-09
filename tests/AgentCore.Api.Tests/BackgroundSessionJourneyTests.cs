@@ -21,6 +21,57 @@ namespace AgentCore.Api.Tests;
 
 public sealed class BackgroundSessionJourneyTests
 {
+    [Theory(Timeout = 60000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Instance_runs_page_excludes_deleted_sessions_without_losing_live_runs(bool sqlite)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"deleted-run-page-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        await using WebApplicationFactory<Program> factory = sqlite
+            ? new StableSqliteHost(Path.Combine(root, "state.db"), root) : new PausedDispatchHost();
+        using var client = TestOwnerCapability.CreateOwnerClient(factory);
+        var instanceId = TestInstances.Create(client, "examiner", 1);
+        var sessions = factory.Services.GetRequiredService<SessionManager>();
+        var runs = factory.Services.GetRequiredService<IAgentRunStore>();
+        var admitted = new List<AgentRun>();
+        var now = DateTimeOffset.UtcNow;
+        for (var i = 0; i < 3; i++)
+        {
+            var session = await sessions.CreateForInstanceAsync(instanceId, SessionMode.Text);
+            var input = new ConversationEntry(Guid.NewGuid(), 1, Guid.NewGuid(), ConversationRole.User, "Check", null,
+                EntryStatus.Completed, SessionMode.Text, 0, 5, now.AddSeconds(i));
+            var proposed = session with { Entries = [input], LastEntrySequence = 1, Revision = session.Revision + 1 };
+            var run = AgentRunAdmissionFactory.ForAcceptedUserBatch(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+                proposed, [input], now.AddSeconds(i), []);
+            admitted.Add((await runs.AdmitAsync(proposed, session.Revision, run)).Run);
+        }
+        var path = $"/api/v2/agent-instances/{instanceId}/agent-runs";
+        var initial = (await client.GetFromJsonAsync<AgentRunPageResponse>(path + "?limit=1"))!;
+        Assert.Equal(admitted[2].AgentRunId.ToString(), Assert.Single(initial.Items).AgentRunId);
+        (await client.DeleteAsync($"/api/v2/sessions/{admitted[2].SessionId}")).EnsureSuccessStatusCode();
+        Assert.NotNull(await runs.GetAsync(admitted[2].Owner, admitted[2].AgentRunId));
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(path + $"/{admitted[2].AgentRunId}")).StatusCode);
+        (await client.PostAsync($"/api/v2/sessions/{admitted[0].SessionId}/archive", null)).EnsureSuccessStatusCode();
+
+        // A cursor already loaded before deletion remains usable and owner scoped.
+        var first = (await client.GetFromJsonAsync<AgentRunPageResponse>(path + "?limit=1"))!;
+        var afterDeleted = (await client.GetFromJsonAsync<AgentRunPageResponse>(path + $"?limit=1&before={initial.NextCursor}"))!;
+        Assert.Equal(admitted[1].AgentRunId.ToString(), Assert.Single(first.Items).AgentRunId);
+        Assert.Equal(first.Items, afterDeleted.Items);
+        Assert.True(first.HasMore);
+        var last = (await client.GetFromJsonAsync<AgentRunPageResponse>(path + $"?limit=1&before={first.NextCursor}"))!;
+        Assert.Equal(admitted[0].AgentRunId.ToString(), Assert.Single(last.Items).AgentRunId);
+        Assert.False(last.HasMore);
+        (await client.GetAsync(path + $"/{admitted[0].AgentRunId}")).EnsureSuccessStatusCode();
+        foreach (var run in admitted.Take(2))
+            (await client.DeleteAsync($"/api/v2/sessions/{run.SessionId}")).EnsureSuccessStatusCode();
+        var empty = (await client.GetFromJsonAsync<AgentRunPageResponse>(path))!;
+        Assert.Empty(empty.Items);
+        Assert.False(empty.HasMore);
+        Assert.Null(empty.NextCursor);
+    }
+
     [Fact(Timeout = 60000)]
     public async Task Owned_background_session_pages_runs_and_foregrounds_same_identity_without_admitting_a_turn()
     {

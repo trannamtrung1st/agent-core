@@ -14,6 +14,35 @@ async function create(page: Page, headers: Record<string, string>, instanceId: s
   expect((await page.request.post(`/api/v2/sessions/${sessionId}/rename`, { headers, data: { title } })).ok()).toBe(true);
   return sessionId;
 }
+test("Runs remain inspectable after another conversation is deleted", async ({ page }) => {
+  const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
+  const { headers, instanceId } = await setup(page);
+  const sessionIds: string[] = [];
+  for (const title of ["Deleted run context", "Surviving run context"]) {
+    const sessionId = await create(page, headers, instanceId, title);
+    sessionIds.push(sessionId);
+    await page.goto(`/c/${sessionId}`);
+    await expect(page.getByTestId("connection")).toHaveText("Ready");
+    await page.getByLabel("Message", { exact: true }).fill(title);
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await expect.poll(async () => (await (await page.request.get(`/api/v2/sessions/${sessionId}/agent-runs`, { headers })).json())
+      .items.filter((run: { status: string }) => run.status === "completed").length).toBe(1);
+  }
+  expect((await page.request.delete(`/api/v2/sessions/${sessionIds[0]}`, { headers })).ok()).toBe(true);
+  const path = `/admin/instances/${instanceId}/activity/runs`;
+  await page.goto(path);
+  const table = page.getByRole("table", { name: "Runs table" });
+  await expect(table.getByRole("button", { name: "Chat turn", exact: true })).toHaveCount(1);
+  await expect(table).toContainText("Completed");
+  await expect(page.getByText("AgentRun was not found.", { exact: true })).toHaveCount(0);
+  await table.getByRole("button", { name: "Chat turn", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Run details", exact: true })).toContainText("Hello from synthetic.");
+  expect((await page.request.delete(`/api/v2/sessions/${sessionIds[1]}`, { headers })).ok()).toBe(true);
+  await page.goto(path);
+  await expect(table).toContainText("No runs yet");
+  await expect(page.getByText("AgentRun was not found.", { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
 test("Activity scopes and pages sessions, preserves multi-turn diagnostics and return navigation", async ({ page }) => {
   test.setTimeout(120000);
   const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));

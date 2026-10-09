@@ -235,6 +235,11 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
                 ?? throw AgentCoreErrors.Validation("AgentRun cursor does not belong to this scope.");
             query = query.Where(row => row.CreatedAtUtc < last.CreatedAtUtc || row.CreatedAtUtc == last.CreatedAtUtc && string.Compare(row.AgentRunId, last.AgentRunId) < 0);
         }
+        // Retained Run evidence can outlive its Session. Filter before paging, but
+        // resolve cursors above so a deletion between page reads stays navigable.
+        query = query.Where(run => db.Sessions.Any(session => session.SessionId == run.SessionId
+            && session.AgentInstanceId == run.AgentInstanceId && session.Snapshot!.ProfileId == run.ProfileId
+            && session.DurablyDeletedAtUtc == null));
         var rows = await query.OrderByDescending(row => row.CreatedAtUtc).ThenByDescending(row => row.AgentRunId).Take(limit + 1).ToArrayAsync(cancellationToken).ConfigureAwait(false);
         var more = rows.Length > limit;
         return new AgentRunPage(rows.Take(limit).Select(AgentRunStoreMapping.ToDomain).ToArray(), more ? Guid.Parse(rows[limit - 1].AgentRunId) : null, more);

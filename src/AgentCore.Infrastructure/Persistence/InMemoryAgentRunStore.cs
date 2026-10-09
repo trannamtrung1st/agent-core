@@ -254,7 +254,12 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
                 .OrderByDescending(run => run.CreatedAtUtc).ThenByDescending(run => run.AgentRunId.ToString("D"), StringComparer.Ordinal).ToArray();
             var offset = before is null ? 0 : Array.FindIndex(ordered, run => run.AgentRunId == before) + 1;
             if (before is not null && offset == 0) throw AgentCoreErrors.Validation("AgentRun cursor does not belong to this scope.");
-            var page = ordered.Skip(offset).Take(limit + 1).ToArray();
+            var page = ordered.Skip(offset).Where(run =>
+            {
+                var session = sessions.LoadMetadataAsync(run.SessionId, cancellationToken).GetAwaiter().GetResult();
+                return session is not null && session.AgentInstanceId == run.AgentInstanceId
+                    && session.ProfileId == run.ProfileId && session.DurablyDeletedAt is null;
+            }).Take(limit + 1).ToArray();
             var more = page.Length > limit;
             return ValueTask.FromResult(new AgentRunPage(page.Take(limit).ToArray(), more ? page[limit - 1].AgentRunId : null, more));
         }

@@ -53,6 +53,8 @@ public interface IAgentRunStore
 
     ValueTask<AgentRun?> GetLatestForAutomationAsync(AgentRunOwner owner, Guid automationId, CancellationToken cancellationToken = default);
 
+    // Inspection pages require a matching, undeleted Session; archived Sessions remain visible.
+    // Resolve the exclusive cursor within the retained owner/Session Run scope before visibility filtering.
     ValueTask<AgentRunPage> ListPageAsync(AgentRunOwner owner, Guid? sessionId, Guid? before, int limit, CancellationToken cancellationToken = default);
 
     ValueTask<IReadOnlyList<AgentRun>> ListRunnableAsync(DateTimeOffset asOfUtc, int limit,
