@@ -44,6 +44,9 @@ test('Experience informs an authorized Instance Skill Automation; next activatio
   await experience.getByRole('switch', { name: 'Enable experience', exact: true }).click();
   await expect(experience.getByText('Enabled · completed work may be retrospected')).toBeVisible();
   await page.locator('.admin-header').getByRole('button', { name: /Chat$/ }).first().click();
+  // Returning from Admin preserves the last conversation; choose a new one for this reviewer.
+  await page.getByRole('button', { name: 'Start a new chat', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Identity', exact: true })).toBeEnabled();
   await select(page, 'Identity', reviewerName);
   await send(page, 'synthetic-fail-turn');
   await expect(page.getByText(/Synthetic turn failure|could not complete|failed/i).last()).toBeVisible({ timeout: 30_000 });

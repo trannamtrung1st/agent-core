@@ -48,7 +48,8 @@ for (const width of [1440, 390]) {
       ["Continuity", "Experience", "continuity/experience"],
       ["Automation", "Triggers", "automation/automations"],
       ["Automation", "Policies & models", "automation/controls"],
-      ["Runs", undefined, "runs"],
+      ["Activity", "Sessions", "activity/sessions"],
+      ["Activity", "Runs", "activity/runs"],
       ["Credentials", undefined, "credentials"],
       ["Effective configuration", undefined, "effective"]
     ] as const) {
