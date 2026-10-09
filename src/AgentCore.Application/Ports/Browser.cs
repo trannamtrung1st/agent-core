@@ -151,7 +151,7 @@ public sealed record BrowserTargetQuery(
     string? Role = null, string? Name = null, string? Text = null, string? Label = null,
     string? Placeholder = null, string? AltText = null, string? Title = null,
     string? TestId = null, bool Exact = true, string? ScopeRef = null, string? FrameRef = null,
-    int Limit = 10, int Offset = 0, bool? Visible = null);
+    int Limit = 10, int Offset = 0, bool? Visible = null, string? HasText = null);
 
 public sealed record BrowserFormField(string Ref, string? Value = null, bool? Checked = null);
 public sealed record BrowserUpload(string FileName, string MediaType, ReadOnlyMemory<byte> Content);

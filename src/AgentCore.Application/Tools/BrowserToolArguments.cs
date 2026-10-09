@@ -167,5 +167,6 @@ public static class BrowserToolArguments
     public static bool ValidQuery(BrowserTargetQuery? query) => query is not null
         && new[] { query.Role, query.Text, query.Label, query.Placeholder, query.AltText, query.Title, query.TestId }.Count(x => x is not null) == 1
         && (query.Name is null || query.Role is not null)
-        && (query.ScopeRef is null || query.FrameRef is null);
+        && (query.ScopeRef is null || query.FrameRef is null)
+        && (query.HasText is null || query.HasText.Length is >= 1 and <= 200);
 }

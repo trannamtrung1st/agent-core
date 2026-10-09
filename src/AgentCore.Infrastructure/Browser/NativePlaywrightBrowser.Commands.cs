@@ -140,7 +140,12 @@ public sealed partial class NativePlaywrightBrowser
                             ForgetPage(session, binding.Page); await binding.Page.CloseAsync().WaitAsync(ct);
                             if (ReferenceEquals(session.Page, binding.Page)) session.Page = OpenPages(session).First().Page;
                         }
-                        else if (operation == "select") session.Page = binding.Page;
+                        else if (operation == "select")
+                        {
+                            // Bind cancellation fencing to the page being activated, not the previous tab.
+                            session.Page = binding.Page; session.LastAllowedUrl = binding.Page.Url;
+                            await Action(ActivateTabProbe is { } activate ? activate(binding.Page) : binding.Page.BringToFrontAsync());
+                        }
                         else return new("invalid");
                         session.Generation++; return new(null, await CaptureAsync(session, command.SessionId, ct));
                     }

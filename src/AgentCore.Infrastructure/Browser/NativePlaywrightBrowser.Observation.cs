@@ -82,6 +82,7 @@ public sealed partial class NativePlaywrightBrowser
         else if (query.AltText is { } alt) locator = root.GetByAltText(alt, new() { Exact = query.Exact });
         else if (query.Title is { } title) locator = root.GetByTitle(title, new() { Exact = query.Exact });
         else locator = root.GetByTestId(query.TestId!);
+        if (query.HasText is { } containedText) locator = locator.Filter(new() { HasText = containedText });
         if (query.Visible is { } visible) locator = locator.Filter(new() { Visible = visible });
         var total = await locator.CountAsync().WaitAsync(ct);
         if (total == 0) return new("not_found");

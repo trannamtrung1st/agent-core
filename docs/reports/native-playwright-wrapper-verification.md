@@ -2,7 +2,7 @@
 
 Date: 2026-10-09. Implementation branch: `develop/branch-1`. Baseline: `75bf40aaaaba5a256d528d9e3feeb25c7a967b0d`.
 
-**Status: implemented candidate, not frozen.** The native replacement is the only registered browser path. Default provider tests remain offline. All five hosted Synthetic jobs passed on `20ae66f3d174a692cfff8519acdfa681fbef17c4` ([run 37839955829](https://github.com/trannamtrung1st/agent-core/actions/runs/37839955829)). The follow-up review below changes behavior and requires fresh exact-head CI evidence. Final acceptance also requires the explicitly authorized configured-model journey, which remains unrun. A skipped opt-in test is not model evidence; historical Browser v2 freezes do not verify this candidate.
+**Status: implemented candidate, not frozen.** The native replacement is the only registered browser path. Default provider tests remain offline. All five hosted Synthetic jobs passed on `ab6c232770255131a8c660e04ac6149a0b5dc094` ([run 37845285622](https://github.com/trannamtrung1st/agent-core/actions/runs/37845285622)). The implementation-review adoption below changes behavior and requires fresh exact-head CI evidence. Final acceptance also requires the explicitly authorized configured-model journey, which remains unrun. A skipped opt-in test is not model evidence; historical Browser v2 freezes do not verify this candidate.
 
 ## Contract and deletion audit
 
@@ -22,7 +22,7 @@ All listed tools first intersect Definition authorization, current projection, r
 | --- | --- | --- |
 | `navigate` | Goto / GoBack / GoForward / Reload | Navigation/resource/redirect policy; settled bounded observation; adapter and origin tests |
 | `snapshot` | Locator.AriaSnapshotAsync, native depth and optional BoundingBox | Target subtree reads, redaction before UTF-8 clipping; no discovery prerequisite; dense/scoped tests |
-| `find` | GetByRole, GetByText, GetByLabel, GetByPlaceholder, GetByAltText, GetByTitle, GetByTestId, Count | One primary query, exact by default, unique scope/frame, bounded informational ambiguity; native contract/dense/rerender tests |
+| `find` | GetByRole, GetByText, GetByLabel, GetByPlaceholder, GetByAltText, GetByTitle, GetByTestId, Filter(HasText), Count | One primary query, exact by default, unique scope/frame, bounded informational ambiguity; native contract/dense/rerender tests |
 | `click` | Locator.Click | Button/count/modifiers, native actionability; protected and non-actionable denial |
 | `type` | Fill / PressSequentially / Press | Ordinary text/contenteditable only; no model password bytes; native form and reclassification tests |
 | `fill_form` | Fill / SetChecked | Preflight all owned fields and recheck before each effect; protected/newly ambiguous later fields denied; ordinary rerenders still work |
@@ -103,6 +103,22 @@ The full backend run additionally exposed a SQLite fixture race in `BackgroundSe
 No frontend code changed in this follow-up. Its runtime evidence is the actual Chromium integration above; prior full frontend/MCP/Compose results remain tied to `20ae66f3`, and fresh hosted checks remain required for the new behavior head. Paid-model verification remains unrun because no outbound approval was provided.
 
 The production deletion audit still finds no retired browser dispatch, index/parser or alternative provider. Canonical contract and README/TODO/implementation-plan summaries now distinguish verified prior-head Synthetic evidence, follow-up verification and the unrun configured-model gate.
+
+## Implementation-review adoption
+
+The supplied external review assessed `ab6c2327`. All five cited jobs were independently checked through PR #4 and passed on that exact head. The review's two behavioral gaps were reproduced before changes and addressed within the native adapter:
+
+- `browser.find` now accepts bounded literal `hasText` (1–200 characters), delegating to native Locator.Filter. Row/group record text identifies a unique container, then `scopeRef` finds its descendant Edit/Delete control. Primary-query `exact` does not change the native case-insensitive substring filter. No regex, selector, positional match or executable ambiguity sample is added. Generic unnamed row and group cases verify actual Record B Edit/Delete status, ordinary replacement, literal regex-looking strings, informational remaining ambiguity and denial after a container becomes duplicated.
+- Tab selection now calls native BringToFront through the existing tracked action path after owner/origin checks. The selected page is bound before activation so cancellation fences that page, preserves the previous page, rejects the late call and recovers. The headed case failed before the fix because the logical selection left actual focus on the other tab, then passed after the native call. Playwright's default per-page focus emulation is disabled only inside the headed test; headless checks prove native delegation/identity/cancellation without claiming visible focus.
+- Seed policy is deliberate: General Assistant v17 and Secretary v5 stay retrievable for immutable pinned Definition continuity; versionless lookup selects v18/v6. Their bytes, owner instances and data are unchanged. Definition retention does not re-enable retired tools/schemas, compatibility translation or the old browser provider. Canonical decisions and the store regression state this explicitly.
+
+The first full backend rerun exposed an intermittent denied-popup leak (three pages rather than the expected opener plus allowed popup). Initial denied navigation can reach routing before Playwright exposes its Page, so abort completion alone is insufficient. The adapter now registers that native Page event before aborting, tracks closure before publishing completion, and preserves pre-existing blank tabs. The controlled test holds closure and asserts the tool cannot return until it completes; the existing external-denial/local-popup journey also passes unchanged.
+
+Focused checks: five `NativeBrowserReviewAdoptionTests`, three Definition store tests and the existing popup regression passed together (nine cases); five `NativeBrowserContractTests` passed. The isolated actual-focus command `AGENTCORE_BROWSER_HEADED_REVIEW=1 dotnet test tests/AgentCore.Infrastructure.Tests --no-build --nologo --filter FullyQualifiedName~Selecting_a_tab_activates` passed. The final full backend command `dotnet test AgentCore.sln --nologo -m:1 -p:UseSharedCompilation=false` passed: Domain 173, Application 1,360, Infrastructure 916, API 390 and OrderEvents four (2,843 total; 11 explicit provider opt-in skips; zero failures). Changed-document local links/fragments/fences, SDK boundary audit and `git diff --check` passed. No frontend code or immutable seeds changed.
+
+The options-union observation is a maintainability suggestion, not a demonstrated defect; operation enums and strict schemas remain the current typed contract. Typed grouping and repeatable performance profiling remain focused maintenance work. No overall speedup is claimed from the historical single dense sample, and no new architecture phase is started.
+
+The configured-model generic SPA test remains pending explicit outbound approval. Its planned scope is the existing local fixture, synthetic record/form content and Browser tool results through the owned runtime, with actual final DOM assertions and a five-minute test deadline; default suites make no paid calls. Prior Browser v2 model evidence does not validate the replacement.
 
 ## Maintainability and measured dense sample
 

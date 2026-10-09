@@ -25,6 +25,9 @@ public sealed class AgentDefinitionStoreTests
         Assert.Equal("Riley", general!.Identity.Name);
         var latest = await store.GetAsync("general-assistant");
         Assert.Equal(18, latest!.Version);
+        // Deliberately retained published versions remain available for pinned owners.
+        Assert.NotNull(await store.GetAsync("secretary", 5));
+        Assert.Equal(6, (await store.GetAsync("secretary"))!.Version);
         Assert.DoesNotContain("workspace.retain", latest.Environment!.ToolList);
         Assert.DoesNotContain("workspace.checkout", latest.Environment.ToolList);
         Assert.True(latest.Environment.ToolList.Count > 40);

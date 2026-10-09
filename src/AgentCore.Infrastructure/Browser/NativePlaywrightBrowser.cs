@@ -93,6 +93,9 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
 
     internal Func<Exception?>? CaptureProbe { get; set; }
     internal Func<IPage, int, int, Task>? ResizeProbe { get; set; }
+    internal Func<IPage, Task>? ActivateTabProbe { get; set; }
+    internal Func<IPage, Task>? DeniedPopupCloseProbe { get; set; }
+    internal Action? PopupCleanupWaitProbe { get; set; }
     internal Action? ActionStartedProbe { get; set; }
 
     public NativePlaywrightBrowser(
@@ -1093,6 +1096,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
                     return;
                 }
 
+                string? popupDenial = null;
                 if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
                     || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                 {
@@ -1109,17 +1113,32 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
 
                     if (string.Equals(route.Request.ResourceType, "document", StringComparison.OrdinalIgnoreCase))
                     {
-                        session.PopupCode ??= popup.Code ?? "target_denied";
+                        popupDenial = popup.Code ?? "target_denied";
                     }
                 }
 
-                await route.AbortAsync().ConfigureAwait(false);
-                if (page is not null
-                    && string.Equals(route.Request.ResourceType, "document", StringComparison.OrdinalIgnoreCase))
+                var document = string.Equals(route.Request.ResourceType, "document", StringComparison.OrdinalIgnoreCase);
+                TaskCompletionSource? cleanup = document ? new(TaskCreationOptions.RunContinuationsAsynchronously) : null;
+                // Publish the cleanup receipt before its denial. A still-about:blank popup
+                // otherwise looks allowed while the route callback is aborting/closing it.
+                if (cleanup is not null) lock (session.PopupGate) session.PopupCloses.Add(cleanup.Task);
+                if (popupDenial is not null) session.PopupCode ??= popupDenial;
+                try
                 {
-                    ForgetPage(session, page);
-                    await CloseQuietlyAsync(page).ConfigureAwait(false);
+                    // Initial popup requests can precede the SDK's Page event. Register
+                    // that event before aborting so cleanup includes the resulting blank page.
+                    var born = page is null && document
+                        ? session.Context.WaitForPageAsync(new() { Timeout = TimeoutMs(), Predicate = candidate => !session.CallPages.Contains(candidate) })
+                        : null;
+                    await route.AbortAsync().ConfigureAwait(false);
+                    if (born is not null) page = await born.ConfigureAwait(false);
+                    if (page is not null && document)
+                    {
+                        ForgetPage(session, page);
+                        await (DeniedPopupCloseProbe is { } closePopup ? closePopup(page) : CloseQuietlyAsync(page)).ConfigureAwait(false);
+                    }
                 }
+                finally { cleanup?.TrySetResult(); }
 
                 return;
             }
@@ -1681,6 +1700,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
 
     private static int BeginCall(SessionBrowser session)
     {
+        session.CallPages = session.Context.Pages.ToHashSet();
         var call = session.OperationCall + 1;
         session.OperationCall = call;
         return call;
@@ -1832,7 +1852,6 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         {
             for (var attempt = 0; attempt < 8; attempt++)
             {
-                await ClosePopupsAsync(session).ConfigureAwait(false);
                 Task[] pending;
                 lock (session.PopupGate)
                 {
@@ -1842,8 +1861,10 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
 
                 if (pending.Length > 0)
                 {
+                    PopupCleanupWaitProbe?.Invoke();
                     await Task.WhenAll(pending).ConfigureAwait(false);
                 }
+                await ClosePopupsAsync(session).ConfigureAwait(false);
 
                 var extras = session.Context.Pages.Count(page => !ReferenceEquals(page, session.Page) && !KeepPopup(session, page));
                 var stillClosing = false;
@@ -1873,7 +1894,8 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
             }
 
             ForgetPage(session, page);
-            await CloseQuietlyAsync(page).ConfigureAwait(false);
+            PopupCleanupWaitProbe?.Invoke();
+            await (DeniedPopupCloseProbe is { } closePopup ? closePopup(page) : CloseQuietlyAsync(page)).ConfigureAwait(false);
         }
     }
 
@@ -1894,7 +1916,12 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
             return false;
         }
 
-        return url.StartsWith("about:", StringComparison.OrdinalIgnoreCase) || IsAllowed(session, url);
+        // Initial popup navigation can be routed before Playwright exposes its Frame/Page.
+        // After denial, discard only newly opened blank pages from this failed call;
+        // previously owned blank tabs and successfully allowed destinations are retained.
+        if (url.StartsWith("about:", StringComparison.OrdinalIgnoreCase))
+            return session.PopupCode is null || session.CallPages.Contains(page);
+        return IsAllowed(session, url);
     }
 
     private static async Task<bool> IsAttachedAsync(ILocator handle)
@@ -2665,6 +2692,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         public object PopupGate { get; } = new();
 
         public List<Task> PopupCloses { get; } = [];
+        public HashSet<IPage> CallPages { get; set; } = [];
 
         public SemaphoreSlim Gate { get; } = new(1, 1);
 

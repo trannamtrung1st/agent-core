@@ -9,6 +9,20 @@ namespace AgentCore.Application.Tests;
 public sealed class NativeBrowserContractTests
 {
     [Fact]
+    public void Relational_text_filter_is_bounded_literal_neutral_data_and_requires_a_primary_query()
+    {
+        var id = Guid.NewGuid();
+        var args = JsonSerializer.SerializeToElement(new { role = "row", hasText = "Record.*B" });
+        Assert.True(BrowserToolArguments.TryRequest(id, ToolCatalog.BrowserFind, args, out var request, out _));
+        Assert.Equal("row", request.Options.Query!.Role);
+        Assert.Equal("Record.*B", request.Options.Query.HasText);
+        foreach (var invalid in new object[] { new { hasText = "Record B" }, new { role = "row", hasText = "" },
+            new { role = "row", hasText = new string('x', 201) }, new { role = "row", hasText = new { regex = "Record.*" } } })
+            Assert.False(BrowserToolArguments.TryRequest(id, ToolCatalog.BrowserFind, JsonSerializer.SerializeToElement(invalid), out _, out _));
+        Assert.False(BrowserToolArguments.ValidQuery(new(Role: "row", HasText: new string('x', 201))));
+    }
+
+    [Fact]
     public void Focused_catalog_preserves_authority_and_feature_metadata()
     {
         foreach(var metadata in BrowserToolCatalog.Tools.Values)
