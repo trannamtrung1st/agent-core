@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-09T01:52:57.414054+00:00",
+  "generatedAt": "2026-10-09T02:04:44.861267+00:00",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -412,11 +412,11 @@
       "css": ".ds-automation-footer{display:flex;flex-direction:column;gap:12px;padding:16px;background:var(--ac-color-container,#141414);border-top:1px solid var(--ac-color-border,#303030);color:var(--ac-color-text,rgba(255,255,255,.85));font:400 14px/1.57 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;}.ds-automation-summary{display:flex;flex-direction:column;gap:8px;overflow-wrap:anywhere}.ds-automation-secondary{color:var(--ac-color-text-secondary,rgba(255,255,255,.65))}.ds-automation-actions{display:flex;gap:8px;flex-wrap:wrap}.ds-automation-actions button{height:32px;padding:0 15px;border:0;border-radius:6px;background:var(--ac-color-primary,#1668dc);color:#fff;font:inherit;cursor:pointer}.ds-automation-actions button:hover{filter:brightness(1.08)}.ds-automation-actions button:focus-visible{outline:2px solid var(--ac-color-primary,#1668dc);outline-offset:2px}.ds-automation-actions button:active{filter:brightness(.95)}@media(max-width:767px){.ds-automation-actions button{height:40px}}"
     },
     {
-      "name": "On-demand capability disclosure",
+      "name": "Other authorized capability disclosure",
       "kind": "custom",
       "refersTo": "antd-control",
-      "description": "Initially collapsed capability overview. Native details illustrates the direct Ant Design Collapse and wrapping tags; counts describe grants without changing them. Always selected counts explicit choices; Core-managed initial context is disclosed separately.",
-      "html": "<section class=\"ds-capability-overview\"><span>Authorized: 49 · Always selected: 20</span><span class=\"ds-capability-secondary\">29 available on demand when configured and eligible.</span><span class=\"ds-capability-secondary\">Core may also include authorized, eligible browser bootstrap tools and active Skill requirements.</span><details><summary>View on-demand capabilities</summary><div class=\"ds-capability-tags\"><span title=\"Illustrative capability\">files.read</span><span title=\"Illustrative capability\">browser.navigate</span></div></details></section>",
+      "description": "Initially collapsed capability overview outside explicit Always selections. Native details illustrates the direct Ant Design Collapse and wrapping tags; counts describe grants without changing them. Always selected counts explicit choices; Core-managed initial context is disclosed separately.",
+      "html": "<section class=\"ds-capability-overview\"><span>Authorized: 49 · Always selected: 20</span><span class=\"ds-capability-secondary\">Not selected as Always available: 29. Context-only capabilities remain controlled by Core.</span><span class=\"ds-capability-secondary\">Core may also include authorized, eligible browser bootstrap tools and active Skill requirements.</span><details><summary>Other authorized capabilities</summary><div class=\"ds-capability-tags\"><span title=\"Illustrative capability\">files.read</span><span title=\"Illustrative capability\">browser.navigate</span></div></details></section>",
       "css": ".ds-capability-overview{display:flex;flex-direction:column;gap:16px;color:var(--ac-color-text,rgba(255,255,255,.85));font:400 14px/1.57 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;}.ds-capability-secondary{color:var(--ac-color-text-secondary,rgba(255,255,255,.65))}.ds-capability-overview summary{padding:12px 16px;cursor:pointer;border-radius:6px}.ds-capability-overview summary:hover{background:var(--ac-color-fill,rgba(255,255,255,.08))}.ds-capability-overview summary:focus-visible{outline:2px solid var(--ac-color-primary,#1668dc);outline-offset:-2px}.ds-capability-overview summary:active{background:var(--ac-color-fill,rgba(255,255,255,.08))}.ds-capability-tags{display:flex;flex-wrap:wrap;gap:8px;padding:12px 16px}.ds-capability-tags span{padding:0 7px;border:1px solid var(--ac-color-border,#303030);border-radius:4px;font-size:12px;background:var(--ac-color-fill,rgba(255,255,255,.08))}"
     }
   ],

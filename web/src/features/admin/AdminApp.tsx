@@ -1684,7 +1684,7 @@ function DraftEditor({
     ? allCapabilityNames
     : capabilities.toolAllowlist;
   const alwaysNames = reconcileAlwaysCapabilities(capabilities.alwaysCapabilities ?? authorizedNames, authorizedNames, capabilityCatalog);
-  const onDemandCapabilities = capabilityCatalog.filter(c => authorizedNames.includes(c.name) && c.discoverable && !alwaysNames.includes(c.name));
+  const otherAuthorizedCapabilities = capabilityCatalog.filter(c => authorizedNames.includes(c.name) && c.discoverable && !alwaysNames.includes(c.name));
   const { token } = theme.useToken();
   // Migrate an editable legacy candidate using its exact grants and fixed discoverable projection.
   // Published versions remain immutable; Core still owns context-only projection.
@@ -1967,9 +1967,9 @@ function DraftEditor({
                     </label>
                     <Typography.Text type="secondary">Core also includes authorized, eligible Browser v2 bootstrap tools and active Skill requirements. These can appear without an Always selection; permission still comes from Authorized capabilities.</Typography.Text>
                     <Typography.Text aria-live="polite">Authorized: {authorizedNames.length} · Always selected: {alwaysNames.length}</Typography.Text>
-                    <Typography.Text type="secondary">{onDemandCapabilities.length} available on demand when configured and eligible. Context-only capabilities remain controlled by Core.</Typography.Text>
-                    {onDemandCapabilities.length ? <Collapse ghost items={[{ key: "on-demand", label: "View on-demand capabilities", children: <Flex wrap gap={token.paddingXS}>
-                      {onDemandCapabilities.map(capability => <Tag key={capability.name} title={capability.summary}>{capability.name}</Tag>)}
+                    <Typography.Text type="secondary">Not selected as Always available: {otherAuthorizedCapabilities.length}. Context-only capabilities remain controlled by Core.</Typography.Text>
+                    {otherAuthorizedCapabilities.length ? <Collapse ghost items={[{ key: "on-demand", label: "Other authorized capabilities", children: <Flex wrap gap={token.paddingXS}>
+                      {otherAuthorizedCapabilities.map(capability => <Tag key={capability.name} title={capability.summary}>{capability.name}</Tag>)}
                     </Flex> }]} /> : null}
                   </>}
 

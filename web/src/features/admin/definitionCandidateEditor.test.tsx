@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { applyCandidateJson, candidateForPersistence, candidateToJson, type DefinitionCandidate } from "./definitionCandidate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -695,23 +695,24 @@ describe("definition candidate editor", () => {
 
   it("preserves capability authorization and always projection through Form save", async () => {
     mockDraft({ ...storedCandidate, environment: { ...storedCandidate.environment, toolAllowlist: undefined,
-      capabilities: { mode: "Selected", resolvedCapabilities: ["workspace.read", "knowledge.retrieve"] },
+      capabilities: { mode: "Selected", resolvedCapabilities: ["workspace.read", "knowledge.retrieve", "browser.navigate"] },
       projection: { alwaysCapabilities: ["workspace.read"] } } });
-    vi.mocked(getAdminToolRegistry).mockResolvedValue({ toolNames: ["workspace.read", "knowledge.retrieve"], maxToolAllowlistEntries: null });
+    vi.mocked(getAdminToolRegistry).mockResolvedValue({ toolNames: ["workspace.read", "knowledge.retrieve", "browser.navigate"], maxToolAllowlistEntries: null });
     await openDraft();
     setText("System instructions", "Keep this edit");
     await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Capabilities" })); });
-    expect(await screen.findByText("Authorized: 2 · Always selected: 1")).toBeInTheDocument();
+    expect(await screen.findByText("Authorized: 3 · Always selected: 1")).toBeInTheDocument();
     expect(screen.getByLabelText("Always projected capabilities")).toBeInTheDocument();
     expect(screen.getByText("Core also includes authorized, eligible Browser v2 bootstrap tools and active Skill requirements. These can appear without an Always selection; permission still comes from Authorized capabilities.")).toBeVisible();
-    expect(screen.getByText("1 available on demand when configured and eligible. Context-only capabilities remain controlled by Core.")).toBeVisible();
-    const disclosure = screen.getByRole("button", { name: "View on-demand capabilities" });
+    expect(screen.getByText("Not selected as Always available: 2. Context-only capabilities remain controlled by Core.")).toBeVisible();
+    const disclosure = screen.getByRole("button", { name: "Other authorized capabilities" });
     expect(disclosure).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(disclosure);
     expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    expect(within(disclosure.closest(".ant-collapse-item") as HTMLElement).getByText("browser.navigate", { exact: true })).toBeVisible();
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save draft" })); });
     expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(draftId, 2, expect.objectContaining({ environment: expect.objectContaining({
-      capabilities: { mode: "Selected", resolvedCapabilities: ["workspace.read", "knowledge.retrieve"] },
+      capabilities: { mode: "Selected", resolvedCapabilities: ["workspace.read", "knowledge.retrieve", "browser.navigate"] },
       projection: { alwaysCapabilities: ["workspace.read"] }
     }) }));
   });
