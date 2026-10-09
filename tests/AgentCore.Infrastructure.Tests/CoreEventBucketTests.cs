@@ -113,6 +113,59 @@ public sealed class CoreEventBucketTests
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix); }
     }
 
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Source_acknowledgment_ignores_non_string_webhook_run_ids(bool sqlite)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"core-ack-{Guid.NewGuid():N}.db");
+        var contexts = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
+        ICoreEventStore store = sqlite ? new SqliteCoreEventStore(contexts) : new InMemoryCoreEventStore();
+        var now = DateTimeOffset.UtcNow;
+        var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
+        var subscription = new EventSubscriptionSnapshot(Guid.NewGuid(), owner, 1, null, new(EventDispatchMode.CoalesceLatest, 60), TriggerSourceKind.ApplicationEvent, Guid.NewGuid());
+        var sourceId = Guid.NewGuid();
+        var reviewedEventId = Guid.NewGuid();
+        if (sqlite) { await using var db = await contexts.CreateDbContextAsync(); await db.Database.MigrateAsync(); }
+        try
+        {
+            foreach (var json in new[] { "{\"agentRunId\":123}", "{\"agentRunId\":null}", "{\"agentRunId\":{}}", "{\"agentRunId\":[]}", "{\"agentRunId\":\"invalid\"}" })
+                await store.CoalesceAsync(new(Guid.NewGuid(), owner, "orders", now, json), subscription);
+            await store.CoalesceAsync(new(reviewedEventId, owner, "orders", now, JsonSerializer.Serialize(new { agentRunId = sourceId })), subscription);
+            var bucket = Assert.Single(await store.DueBucketsAsync(now.AddSeconds(61)));
+            await store.CompleteBucketAsync(bucket.BucketId);
+            await store.MarkSourceInspectedAsync(owner, bucket.BucketId, sourceId);
+            var remaining = (await store.CoveragePageAsync(owner, subscription.AutomationId, null, 24)).Items;
+            Assert.Equal(5, remaining.Count);
+            Assert.DoesNotContain(remaining, item => item.Source.EventId == reviewedEventId);
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix); }
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Repeated_bucket_completion_preserves_first_durable_outcome(bool sqlite)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"core-completion-{Guid.NewGuid():N}.db");
+        var contexts = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
+        ICoreEventStore store = sqlite ? new SqliteCoreEventStore(contexts) : new InMemoryCoreEventStore();
+        var now = DateTimeOffset.UtcNow;
+        var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
+        var subscription = new EventSubscriptionSnapshot(Guid.NewGuid(), owner, 1, null, new(EventDispatchMode.CoalesceLatest, 60), TriggerSourceKind.ApplicationEvent, Guid.NewGuid());
+        if (sqlite) { await using var db = await contexts.CreateDbContextAsync(); await db.Database.MigrateAsync(); }
+        try
+        {
+            await store.CoalesceAsync(new(Guid.NewGuid(), owner, "orders", now, "{}"), subscription);
+            var bucket = Assert.Single(await store.DueBucketsAsync(now.AddSeconds(61)));
+            await store.CompleteBucketAsync(bucket.BucketId, code: "policy-denied");
+            await store.CompleteBucketAsync(bucket.BucketId);
+            await store.CompleteBucketAsync(bucket.BucketId, code: "model-unavailable");
+            Assert.Empty(await store.DueBucketsAsync(now.AddSeconds(61)));
+            var coverage = Assert.Single((await store.CoveragePageAsync(owner, subscription.AutomationId, null, 24)).Items);
+            Assert.Equal("policy-denied", coverage.CompletionCode);
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix); }
+    }
+
     private sealed class Factory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>
     { public AgentCoreDbContext CreateDbContext() => new(options); public Task<AgentCoreDbContext> CreateDbContextAsync(CancellationToken ct = default) => Task.FromResult(CreateDbContext()); }
 }

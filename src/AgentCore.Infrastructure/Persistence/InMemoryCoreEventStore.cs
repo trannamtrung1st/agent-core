@@ -16,10 +16,9 @@ public sealed class InMemoryCoreEventStore : ICoreEventStore
     {
         lock (gate) { if (buckets.TryGetValue(bucketId, out var b) && b.Subscription.Owner == owner)
             foreach (var prior in buckets.Values.Where(prior => prior.Subscription.Owner == owner && prior.Subscription.AutomationId == b.Subscription.AutomationId))
-                foreach (var e in prior.Sources.Where(e => SourceId(e) == sourceId)) inspected.Add((prior.BucketId, e.EventId)); }
+                foreach (var e in prior.Sources.Where(e => EventCoverage.SourceRunId(e) == sourceId)) inspected.Add((prior.BucketId, e.EventId)); }
         return ValueTask.CompletedTask;
     }
-    private static Guid? SourceId(EventBucketSource e) { using var d = System.Text.Json.JsonDocument.Parse(e.DataJson); return d.RootElement.TryGetProperty("agentRunId", out var id) && id.TryGetGuid(out var g) ? g : null; }
     private readonly Dictionary<Guid, CoreEventBucket> buckets = [];
     public ValueTask CoalesceAsync(EventBucketSource source, EventSubscriptionSnapshot subscription, CancellationToken ct = default)
     {
@@ -40,7 +39,7 @@ public sealed class InMemoryCoreEventStore : ICoreEventStore
     public ValueTask<IReadOnlyList<CoreEventBucket>> DueBucketsAsync(DateTimeOffset now, CancellationToken ct = default)
     { lock (gate) return ValueTask.FromResult<IReadOnlyList<CoreEventBucket>>(buckets.Values.Where(b => !b.Flushed && b.DueAtUtc <= now).OrderBy(b => b.DueAtUtc).Take(32).ToArray()); }
     public ValueTask CompleteBucketAsync(Guid bucketId, CancellationToken ct = default, string? code = null)
-    { lock (gate) { if (buckets.TryGetValue(bucketId, out var b)) buckets[bucketId] = b with { Flushed = true, CompletionCode = code }; } return ValueTask.CompletedTask; }
+    { lock (gate) { if (buckets.TryGetValue(bucketId, out var b) && !b.Flushed) buckets[bucketId] = b with { Flushed = true, CompletionCode = code }; } return ValueTask.CompletedTask; }
     internal void Purge(Guid instanceId)
     {
         lock (gate)

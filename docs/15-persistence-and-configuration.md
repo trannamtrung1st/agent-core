@@ -552,4 +552,8 @@ SQLite source writes stage the outbox in the same commit as terminal Run/Session
 
 Each Automation has at most 32 pending coalescing buckets; each bucket retains at most 24 references within a 5.5 KiB staging bound. Overflow is retained as flushed pending coverage with bucket-capacity, without admitting a Run. Coverage items include safe completion codes for budget/model/policy failures. Terminal and coverage history follows the Instance lifetime; Instance deletion reclaims both stores. Scheduled presets and durable intake recheck current prerequisites.
 
+Bucket completion preserves its first committed outcome in both stores, including duplicate recovery attempts. Source inspection acknowledges only a valid string Run ID; unrelated or malformed webhook `agentRunId` fields remain unreviewed and cannot interrupt acknowledgment of a valid source in the same bucket.
+
+Coalesced causation retains every distinct visited Automation ID from its trusted activation evidence, which remains limited to 8 KiB. The depth limit is four; the visited set is not truncated to four IDs, since grouping independent chains can produce a larger union. Resulting Run and Session events retain that set for same-chain suppression.
+
 The forward EventDispatchDefault migration restores the SQL everyMatch default after the Core constraints rebuild. Existing Automation values and IDs are retained, including canonical Schedule writers that omit new optional event configuration.

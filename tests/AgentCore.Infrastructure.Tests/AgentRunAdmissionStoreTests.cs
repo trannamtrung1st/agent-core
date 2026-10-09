@@ -1569,6 +1569,25 @@ public sealed class AgentRunAdmissionStoreTests
         }
     }
 
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void Coalesced_causation_preserves_all_distinct_visited_automations(bool wrapped)
+    {
+        var visited = Enumerable.Range(0, 7).Select(_ => Guid.NewGuid()).ToArray();
+        var root = Guid.NewGuid();
+        var evidence = System.Text.Json.JsonSerializer.Serialize(new { triggerContext = new { causation = new
+        { rootAgentRunId = root, triggerDepth = 2, visitedAutomationIds = visited.Concat(visited).ToArray() } } });
+        if (wrapped) evidence = System.Text.Json.JsonSerializer.Serialize(new { Text = evidence });
+        var activation = new Activation(Guid.NewGuid(), Guid.NewGuid(), ActivationKind.CoreEvent, [Guid.NewGuid()],
+            null, Guid.NewGuid(), null, null, "bucket:fixture", Now, evidence);
+        var run = NewRun(activation).TakeClaim(Guid.NewGuid(), Now, Now.AddMinutes(1));
+        var failed = run.Fail(run.Revision, run.Claim!.Generation, "safe-failure", "Safe fixture", false, Now, null, Guid.NewGuid);
+        var emitted = CoreEventPersistence.Run(run, failed)!;
+        Assert.Equal(root, emitted.RootAgentRunId);
+        Assert.Equal(2, emitted.TriggerDepth);
+        Assert.Equal(visited, emitted.VisitedAutomationIds);
+    }
+
     private static (SessionSnapshot Snapshot, AgentRun Run) UserTurn(Guid? sessionId = null)
     {
         var entries = new[] { "Check A", "Check B" }.Select((text, index) => new ConversationEntry(Guid.NewGuid(), index + 1,

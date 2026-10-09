@@ -88,7 +88,7 @@ internal static class CoreEventPersistence
                 || !d.TryGetInt32(out var depth) || depth is < 0 or > 4) return null;
             Guid? root = cause.TryGetProperty("rootAgentRunId", out var r) && r.ValueKind == JsonValueKind.String && r.TryGetGuid(out var g) ? g : null;
             var visited = cause.TryGetProperty("visitedAutomationIds", out var v) && v.ValueKind == JsonValueKind.Array
-                ? v.EnumerateArray().Where(i => i.ValueKind == JsonValueKind.String && i.TryGetGuid(out _)).Select(i => i.GetGuid()).Take(4).ToArray() : [];
+                ? v.EnumerateArray().Where(i => i.ValueKind == JsonValueKind.String && i.TryGetGuid(out _)).Select(i => i.GetGuid()).Distinct().ToArray() : [];
             return (root, depth, visited);
         }
         catch (JsonException) { return null; }

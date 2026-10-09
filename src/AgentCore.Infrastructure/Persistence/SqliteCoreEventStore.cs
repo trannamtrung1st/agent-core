@@ -26,11 +26,11 @@ public sealed class SqliteCoreEventStore(IDbContextFactory<AgentCoreDbContext> c
         var rows = await db.CoreEventBuckets.Where(b => b.AutomationId == row.AutomationId && EF.Functions.Like(b.PayloadJson, "%" + sourceId.ToString("D") + "%")).ToArrayAsync(ct);
         foreach (var prior in rows)
         {
-        bucket = JsonSerializer.Deserialize<CoreEventBucket>(prior.PayloadJson, CoreEventPersistence.Json)!;
-        if (bucket.Subscription.Owner != owner) continue;
-        var covered = (JsonSerializer.Deserialize<Guid[]>(prior.CoverageJson) ?? []).ToHashSet();
-        foreach (var e in bucket.Sources) { using var d = JsonDocument.Parse(e.DataJson); if (d.RootElement.TryGetProperty("agentRunId", out var id) && id.TryGetGuid(out var g) && g == sourceId) covered.Add(e.EventId); }
-        prior.CoverageJson = JsonSerializer.Serialize(covered.Order());
+            bucket = JsonSerializer.Deserialize<CoreEventBucket>(prior.PayloadJson, CoreEventPersistence.Json)!;
+            if (bucket.Subscription.Owner != owner) continue;
+            var covered = (JsonSerializer.Deserialize<Guid[]>(prior.CoverageJson) ?? []).ToHashSet();
+            foreach (var e in bucket.Sources.Where(e => EventCoverage.SourceRunId(e) == sourceId)) covered.Add(e.EventId);
+            prior.CoverageJson = JsonSerializer.Serialize(covered.Order());
         }
         await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
     }
@@ -61,11 +61,12 @@ public sealed class SqliteCoreEventStore(IDbContextFactory<AgentCoreDbContext> c
     { await using var db = await contexts.CreateDbContextAsync(ct); return (await db.CoreEventBuckets.AsNoTracking().Where(b => !b.Flushed && b.DueAtUtc <= now.ToUnixTimeMilliseconds()).OrderBy(b => b.DueAtUtc).Take(32).ToArrayAsync(ct)).Select(r => JsonSerializer.Deserialize<CoreEventBucket>(r.PayloadJson, CoreEventPersistence.Json)!).ToArray(); }
     public async ValueTask CompleteBucketAsync(Guid bucketId, CancellationToken ct = default, string? code = null)
     { await using var db = await contexts.CreateDbContextAsync(ct);
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
         var row = await db.CoreEventBuckets.SingleOrDefaultAsync(b => b.BucketId == bucketId.ToString("D"), ct);
         if (row is null || row.Flushed) return;
         var bucket = JsonSerializer.Deserialize<CoreEventBucket>(row.PayloadJson, CoreEventPersistence.Json)!;
         row.Flushed = true; row.PayloadJson = JsonSerializer.Serialize(bucket with { Flushed = true, CompletionCode = code }, CoreEventPersistence.Json);
-        await db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
     }
     public async ValueTask<IReadOnlyList<CoreEventReceipt>> PendingAsync(CancellationToken ct = default)
     {

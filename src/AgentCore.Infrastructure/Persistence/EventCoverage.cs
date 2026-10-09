@@ -1,8 +1,18 @@
+using System.Text.Json;
 using AgentCore.Application.Ports;
+using AgentCore.Domain.Events;
 using AgentCore.Domain.Triggers;
 namespace AgentCore.Infrastructure.Persistence;
 internal static class EventCoverage
 {
+    internal static Guid? SourceRunId(EventBucketSource source)
+    {
+        using var data = JsonDocument.Parse(source.DataJson);
+        return data.RootElement.ValueKind == JsonValueKind.Object
+            && data.RootElement.TryGetProperty("agentRunId", out var id)
+            && id.ValueKind == JsonValueKind.String && id.TryGetGuid(out var runId) ? runId : null;
+    }
+
     internal static (string Bucket, string Source) Cursor(string? cursor)
     {
         if (cursor is null) return ("", "");
