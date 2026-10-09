@@ -1,6 +1,6 @@
 # Agent Instance Activity UX verification
 
-Verified locally on 2026-10-09. This is a scoped UX enhancement; it does not change a milestone freeze or claim hosted CI acceptance.
+Initially verified locally on 2026-10-09. This is a scoped UX enhancement and does not change a milestone freeze. Hosted acceptance of the final behavior revision is recorded below; earlier validation boundaries describe those earlier verification passes.
 
 ## Delivered behavior
 
@@ -100,4 +100,19 @@ The exact Automation Run row is identified by full-ID metadata and its **Manual 
 
 Observed flows preserved draft edits, desktop/mobile URL refresh and browser history, delayed-response fences, pagination error/retry and resize retention, exact Run inspection, admitted instructions after Automation edits, source focus, and Experience-derived Skill improvement with a quiet subsequent run. Playwright MCP additionally created a disposable Instance, sent Hello and observed the completed Synthetic response, opened Activity → Runs → Chat turn details, and confirmed Start a new chat exposes an enabled Identity selector. Its console had no errors and inspected HTTP responses succeeded.
 
-`pnpm exec vitest run src/features/admin/InstanceActivitySection.test.tsx src/features/chat/chatIdentity.test.ts src/features/chat/AgentPicker.test.tsx`: **17 passed**. `pnpm run build`: **passed**, with existing SignalR annotation/chunk-size warnings. `git diff --check`: **passed**. Scope is browser-test migration; no backend behavior changed or milestone reopened. CI was not awaited as requested. Hosted-model closure classification and the historical Infrastructure Docker cleanup failure were not re-exercised by these frontend checks.
+`pnpm exec vitest run src/features/admin/InstanceActivitySection.test.tsx src/features/chat/chatIdentity.test.ts src/features/chat/AgentPicker.test.tsx`: **17 passed**. `pnpm run build`: **passed**, with existing SignalR annotation/chunk-size warnings. `git diff --check`: **passed**. Scope is browser-test migration; no backend behavior changed or milestone reopened. That local-only pass did not await CI. Hosted-model closure classification and the historical Infrastructure Docker cleanup failure were not re-exercised by those frontend checks; the subsequent Synthetic CI result is recorded below.
+
+
+### Hosted acceptance of the final behavior revision — 2026-10-09
+
+The exact pushed behavior revision `5fda69c47ec1b8274ef1f3cc4e3f7fce539281d5` passed all five gates in [Synthetic run 37879102751](https://github.com/trannamtrung1st/agent-core/actions/runs/37879102751). This revision includes the lifecycle fixes in `bd64e9db`, the remaining Activity browser-test migrations, and the corrected Manual task diagnostic selector. The prior candidate's acceptance failure was the obsolete Scheduled task label; the corrected revision passed without a browser retry failure.
+
+| Hosted gate | Result |
+| --- | --- |
+| Backend | Domain: 173 passed; Infrastructure: 900 passed, 15 skipped; Application: 1,375 passed, 2 skipped; API: 394 passed, 3 skipped. Zero failures. |
+| Frontend | 796 tests passed across 101 files, including all 31 BackgroundWorkDrawer tests; strict TypeScript and production Vite build passed. |
+| Playwright core | 134 passed, including Activity, background continuation, migrated Admin navigation, cursor paging, browser STT and browser-tool journeys. |
+| Playwright acceptance | 16 passed across faithful Manual-A, whole-phase Admin lifecycle, Admin journey, harness management, continuity, identity maintenance and Secretary projects. |
+| Compose smoke | Passed owner-capability path and SQLite volume survival. |
+
+The skipped backend cases are the existing opt-in live-provider, external-site and Docker sandbox checks; this run does not establish those behaviors or a new milestone acceptance. Both reported background lifecycle issues are fixed and verified through focused tests, live Synthetic interaction and the full hosted Synthetic workflow. The session-first Activity enhancement is ready to close within that scope. This report update changes documentation only; the hosted evidence remains tied to the exact behavior revision above.
