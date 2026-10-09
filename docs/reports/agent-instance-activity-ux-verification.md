@@ -1,6 +1,6 @@
 # Agent Instance Activity UX verification
 
-Initially verified locally on 2026-10-09. This is a scoped UX enhancement and does not change a milestone freeze. Hosted acceptance of the final behavior revision is recorded below; earlier validation boundaries describe those earlier verification passes.
+Closed/frozen on 2026-10-09 at behavior revision `5fda69c47ec1b8274ef1f3cc4e3f7fce539281d5`, following the owner's accepted review and all five green gates in [Synthetic run 37879102751](https://github.com/trannamtrung1st/agent-core/actions/runs/37879102751). This scoped enhancement preserves historical milestone freezes. Earlier validation boundaries describe those earlier verification passes; documentation-only revision `e4f13eff` records the behavior acceptance and is not its verification SHA.
 
 ## Delivered behavior
 
@@ -115,4 +115,8 @@ The exact pushed behavior revision `5fda69c47ec1b8274ef1f3cc4e3f7fce539281d5` pa
 | Playwright acceptance | 16 passed across faithful Manual-A, whole-phase Admin lifecycle, Admin journey, harness management, continuity, identity maintenance and Secretary projects. |
 | Compose smoke | Passed owner-capability path and SQLite volume survival. |
 
-The skipped backend cases are the existing opt-in live-provider, external-site and Docker sandbox checks; this run does not establish those behaviors or a new milestone acceptance. Both reported background lifecycle issues are fixed and verified through focused tests, live Synthetic interaction and the full hosted Synthetic workflow. The session-first Activity enhancement is ready to close within that scope. This report update changes documentation only; the hosted evidence remains tied to the exact behavior revision above.
+The skipped backend cases are the existing opt-in live-provider, external-site and Docker sandbox checks; this run does not establish those behaviors or a new milestone acceptance. Both reported background lifecycle issues are fixed and verified through focused tests, live Synthetic interaction and the full hosted Synthetic workflow. The Session-first Activity enhancement is closed/frozen within that scope. Documentation updates retain hosted evidence tied to the exact behavior revision above.
+
+## Closure and demo handoff
+
+The accepted review found no further required Activity changes. Freeze includes Session-first discovery, independent Run diagnostics, Activity → Chat → Back to Activity context retention, stable original background results, and stale-action fences after read failure or selection changes. Hands-on demo testing should cover several Runs in one conversation, same-Session background continuation, and Event-triggered Sessions. The separate memory-closure enhancement's real-model classification limitation remains unverified by Activity's Synthetic acceptance. P10/P11 remain unopened.

@@ -1,5 +1,9 @@
 # Implementation Plan
 
+## Session-first Agent Instance Activity enhancement
+
+Closed/frozen on behavior `5fda69c47ec1b8274ef1f3cc4e3f7fce539281d5` (2026-10-09), following the accepted review and all five [hosted Synthetic/Compose gates](https://github.com/trannamtrung1st/agent-core/actions/runs/37879102751). Scope covers Session-first Activity, independently inspectable Runs, retained navigation context, stable original background results and stale-action fences after failed reads or Session changes. Documentation-only `e4f13eff` records acceptance of that behavior SHA. [Verification and demo handoff](reports/agent-instance-activity-ux-verification.md#closure-and-demo-handoff) owns the evidence and remaining verification boundaries. Historical freezes remain unchanged; P10/P11 remain unopened.
+
 ## Activation, AgentRun and background Sessions cutover
 
 Accepted follow-on requirement reviewed against `bd44046896df6f3e0fc2e7d15d60dd479a5349cd` on 2026-10-08. This does not reopen historical freezes or start P10/P11. The approved target and migration policy are owned by [Architecture](03-system-architecture.md#accepted-activation-and-agentrun-cutover) and [Technology Decisions](10-technology-decisions.md#decision-unified-activation-agentrun-and-background-sessions).
