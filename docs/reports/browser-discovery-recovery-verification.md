@@ -1,6 +1,6 @@
 # Browser discovery recovery verification
 
-Date: 2026-10-09. Branch: `develop/branch-1`. Baseline: `a69c2aa9`. Status: correction implemented; broad local and hosted verification pending.
+Date: 2026-10-09. Branch: `develop/branch-1`. Baseline: `a69c2aa9`. Status: bounded correction verified on behavior `13ba2f59802a4f60ccb8bb821dcb522a3fadaf95`; all five hosted gates passed.
 
 ## Evidence and scope
 
@@ -21,6 +21,11 @@ Commands/logs:
 
 - Before: `dotnet test tests/AgentCore.Application.Tests/AgentCore.Application.Tests.csproj --filter 'FullyQualifiedName~Malformed_discovery|FullyQualifiedName~New_snapshot_preserves|FullyQualifiedName~Older_discoveries' -m:1 -p:UseSharedCompilation=false`; three failed. `/tmp/ahi-recovery-before.log`.
 - After: same project with filter `NativeBrowserContractTests|BrowserSnapshotCompactionTests|BrowserReliabilityRuntimeTests`; 15 passed. `/tmp/ahi-recovery-focused.log`.
-- Full backend: `dotnet test AgentCore.sln --nologo -m:1 -p:UseSharedCompilation=false`; currently running. `/tmp/ahi-recovery-backend.log`.
+- Full backend: `dotnet test AgentCore.sln --nologo -m:1 -p:UseSharedCompilation=false`; passed 2,845 cases: Domain 173, Application 1,362, Infrastructure 916, API 390 and OrderEvents four, with 11 explicit opt-in skips. `/tmp/ahi-recovery-backend.log`.
 
-Fresh hosted Synthetic verification is pending. Actual Luna recovery and external AHI authentication remain unrun; this change does not claim either outcome. Historical native cutover freeze `345e8f7a` and its prior real-model SPA evidence remain unchanged. PR #4's conflicts with main remain separate integration work.
+[Fresh hosted Synthetic run 37884386227](https://github.com/trannamtrung1st/agent-core/actions/runs/37884386227) passed all five jobs on exact behavior `13ba2f59802a4f60ccb8bb821dcb522a3fadaf95`. Actual Luna recovery and external AHI authentication remain unrun; this change does not claim either outcome. Historical native cutover freeze `345e8f7a` and its prior real-model SPA evidence remain unchanged. PR #4's conflicts with main remain separate integration work.
+
+
+Hosted results on `13ba2f59`: backend 2,835 passed with 17 explicit opt-in skips; frontend 764 tests/build; core Playwright 126/126; acceptance 16; Compose owner-capability/SQLite volume survival. Detailed hosted log: `/tmp/ahi-recovery-ci-final.log`. Documentation bookkeeping does not move this verified behavior SHA.
+
+A subsequent user-authorized extension covers the single-strategy `by`/`value` find contract, a shared malformed-call circuit breaker, trusted run-scoped progress facts and a controlled cross-model login benchmark. Those new changes require their own verification and are not covered by the `13ba2f59` results above. The Real launch profile already defaults to DeepSeek V4.1 Flash Medium; persisted per-Session selections remain authoritative.
