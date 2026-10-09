@@ -117,17 +117,20 @@ public enum ExternalEventDeliveryStatus
 {
     Pending = 0,
     Admitted = 1,
-    Skipped = 2
+    Skipped = 2,
+    Filtered = 3,
+    FilterError = 4,
+    Coalesced = 5
 }
 
-public sealed record ExternalEventTarget(Guid AutomationId, Guid AgentInstanceId, Guid ProfileId);
+public sealed record ExternalEventTarget(Guid AutomationId, Guid AgentInstanceId, Guid ProfileId, EventSubscriptionSnapshot? Snapshot = null);
 
 public sealed record ExternalEventDelivery(
     Guid EventId,
     Guid AutomationId,
     Guid AgentInstanceId,
     Guid ProfileId,
-    ExternalEventDeliveryStatus Status);
+    ExternalEventDeliveryStatus Status, EventSubscriptionSnapshot? Snapshot = null, EventFilterResult? Decision = null);
 
 public sealed class ExternalEvent
 {

@@ -42,7 +42,8 @@ public enum TriggerSourceKind
 {
     Schedule = 0,
     ApplicationEvent = 1,
-    ManualInvocation = 2
+    ManualInvocation = 2,
+    CoreEvent = 3
 }
 
 public enum TriggerAuthorizationOrigin
@@ -65,6 +66,7 @@ public enum OccurrenceRoutingDisposition
 
 public readonly record struct TriggerOwner
 {
+    [System.Text.Json.Serialization.JsonConstructor]
     public TriggerOwner(Guid agentInstanceId, Guid profileId)
     {
         if (agentInstanceId == Guid.Empty)
@@ -466,7 +468,7 @@ public sealed class TriggerProvenance
         Guid? sourceSessionId,
         Guid? sourceEventId,
         DateTimeOffset createdAt,
-        DateTimeOffset updatedAt)
+        DateTimeOffset updatedAt, string? presetId = null, int? presetVersion = null)
     {
         if (!Enum.IsDefined(authorizationOrigin))
         {
@@ -482,6 +484,9 @@ public sealed class TriggerProvenance
 
         RequireOptionalId(sourceSessionId, "Source session");
         RequireOptionalId(sourceEventId, "Source event");
+        if ((presetId is null) != (presetVersion is null) || presetVersion is < 1 || presetId is { Length: > 64 })
+            throw new ArgumentException("Preset provenance requires a valid ID and version.");
+        PresetId = presetId; PresetVersion = presetVersion;
         AuthorizationOrigin = authorizationOrigin;
         SourceSessionId = sourceSessionId;
         SourceEventId = sourceEventId;
@@ -489,6 +494,8 @@ public sealed class TriggerProvenance
         UpdatedAt = updatedAt;
     }
 
+    public string? PresetId { get; }
+    public int? PresetVersion { get; }
     public TriggerAuthorizationOrigin AuthorizationOrigin { get; }
 
     public Guid? SourceSessionId { get; }
@@ -500,7 +507,7 @@ public sealed class TriggerProvenance
     public DateTimeOffset UpdatedAt { get; }
 
     public TriggerProvenance WithUpdated(DateTimeOffset updatedAt) =>
-        new(AuthorizationOrigin, SourceSessionId, SourceEventId, CreatedAt, updatedAt);
+        new(AuthorizationOrigin, SourceSessionId, SourceEventId, CreatedAt, updatedAt, PresetId, PresetVersion);
 
     private static void RequireUtc(DateTimeOffset value, string name)
     {

@@ -21,6 +21,23 @@ internal static class AutomationRunScript
                 ? Call(ToolCatalog.ArtifactsCreateFromWorkspace, new { path = "/working/original-A.md", displayName = "original-A.md" })
                 : Call(ToolCatalog.WorkspaceWrite, new { path = "/working/original-A.md", content = "Original task Result A" });
         }
+        if (prompt.Contains("Review every owned source Run", StringComparison.Ordinal))
+        {
+            if (!Offers(ExperienceService.SourceTool) || !Offers(ExperienceService.RecordTool)) return Complete("NoAction", "Experience review is unavailable.", false);
+            var ids = System.Text.RegularExpressions.Regex.Matches(prompt, "\\\"agentRunId\\\"\\s*:\\s*\\\"([0-9a-fA-F-]{36})\\\"").Select(m => m.Groups[1].Value).Distinct().ToArray();
+            foreach (var id in ids)
+            {
+                var recorded = results.FirstOrDefault(r => r.Name == ExperienceService.RecordTool && r.ToolCallId == "review-record-" + id);
+                if (recorded is not null) continue;
+                var inspected = results.FirstOrDefault(r => r.Name == ExperienceService.SourceTool && r.ToolCallId == "review-source-" + id);
+                if (inspected is null) return NamedCall("review-source-" + id, ExperienceService.SourceTool, new { sourceKind = "AgentRun", sourceId = id });
+                using var data = JsonDocument.Parse(inspected.Text);
+                if (!data.RootElement.TryGetProperty("throughCursor", out var cursor)) continue;
+                return NamedCall("review-record-" + id, ExperienceService.RecordTool, new { sourceKind = "AgentRun", sourceId = id, throughCursor = cursor.GetInt64(),
+                    goal = "Review observable completed user work", attempts = Array.Empty<string>(), decisions = Array.Empty<string>(), outcomes = new[] { "Inspected a durable completed Run" }, corrections = Array.Empty<string>(), unresolved = Array.Empty<string>(), difficulties = Array.Empty<string>(), lessons = new[] { "Verify observable source evidence before acting" } });
+            }
+            return Complete(results.Any(r => r.Name == ExperienceService.RecordTool && r.Text.Contains("\"changed\":true", StringComparison.Ordinal)) ? "Response" : "NoAction", "Reviewed all available completed user work.", false);
+        }
         var selectedSession = System.Text.RegularExpressions.Regex.Match(prompt,
             @"synthetic-automation-review-session:\s*([0-9a-fA-F-]{36})");
         if (selectedSession.Success)
@@ -82,6 +99,8 @@ internal static class AutomationRunScript
         }
         return Complete("NoAction", "No meaningful change requires action.", false);
     }
+    private static IReadOnlyList<ModelGenerationEvent> NamedCall(string id, string name, object args) =>
+        [new ModelToolCallEvent(new(id, name, JsonSerializer.Serialize(args, new JsonSerializerOptions(JsonSerializerDefaults.Web)))), new ModelCompleted(ModelStopReason.ToolCalls)];
     private static IReadOnlyList<ModelGenerationEvent> Complete(string outcome, string summary, bool attentionRequired) =>
         Call(ToolCatalog.WorkComplete, new { outcome, summary, attentionRequired });
     private static IReadOnlyList<ModelGenerationEvent> Call(string name, object args) =>

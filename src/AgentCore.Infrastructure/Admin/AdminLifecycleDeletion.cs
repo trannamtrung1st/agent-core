@@ -19,7 +19,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
     InMemoryAdminEventStore events,
     InMemoryExperienceStore? experience = null,
     IAgentInstanceWorkspaceStore? workspace = null,
-    IAgentCredentialBindingStore? credentialBindings = null, IBrowser? browser = null) : IAdminLifecycleDeletion
+    IAgentCredentialBindingStore? credentialBindings = null, IBrowser? browser = null, InMemoryCoreEventStore? coreEvents = null) : IAdminLifecycleDeletion
 {
     private IBrowserProfileReset BrowserProfiles() => browser as IBrowserProfileReset
         ?? throw new AgentCoreException("UnsupportedOperation", "The browser provider does not support owner profile reset.", 503);
@@ -76,6 +76,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
         instances.PurgeSkills(command.InstanceId);
         experience?.Purge(command.InstanceId);
         triggers.PurgeDeletedAutomations(command.InstanceId);
+        coreEvents?.Purge(command.InstanceId);
         if (credentialBindings is not null) await credentialBindings.DeleteBindingsAsync(command.InstanceId, cancellationToken);
         if (browser is not null) await BrowserProfiles().ResetPersistentProfileAsync(command.InstanceId, cancellationToken);
         if (workspace is not null) await workspace.DeleteInstanceAsync(command.InstanceId, cancellationToken);
@@ -216,6 +217,9 @@ public sealed class SqliteAdminLifecycleDeletion(
         await db.TriggerOccurrences.Where(o => o.AgentInstanceId == key && deletedAutomations.Contains(o.AutomationId!)
             && o.Disposition == (int)OccurrenceRoutingDisposition.Rejected
             && o.AcceptedAgentRunId == null).ExecuteDeleteAsync(cancellationToken);
+        await db.CoreEventBuckets.Where(b => deletedAutomations.Contains(b.AutomationId)).ExecuteDeleteAsync(cancellationToken);
+        await db.CoreEventDeliveries.Where(d => d.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
+        await db.CoreEvents.Where(e => e.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
         await DeletedAutomations(db, key).ExecuteDeleteAsync(cancellationToken);
         db.AgentInstances.Remove(row);
         AdminEventPersistence.StageAppend(

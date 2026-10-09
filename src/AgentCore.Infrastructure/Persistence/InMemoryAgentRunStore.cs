@@ -57,6 +57,7 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
             sessions.SaveAsync(snapshot, expectedSessionRevision, cancellationToken).GetAwaiter().GetResult();
             if (draftEntryId is { } removed) sessions.RemoveResponseDraft(run.SessionId, removed);
             State.Runs[agentRunId] = updated;
+            sessions.CoreEvents.Append(CoreEventPersistence.Run(run, updated));
             SettleInbox(updated, run.Claim?.Generation);
             AgentRunStoreMapping.ObserveTransition(run, updated, completion);
             return ValueTask.FromResult(updated);
@@ -311,6 +312,7 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
                 var updated = command is AgentRunCommand.SuspendWait or AgentRunCommand.ResumeWait
                     ? AgentRunWaitExecution.Apply(run, command, WaitChildren(command is AgentRunCommand.SuspendWait suspend ? suspend.Wait.BackgroundSessionIds : run.Wait?.BackgroundSessionIds ?? [])) : command.Apply(run, diagnostics.NewId);
                 State.Runs[agentRunId] = updated;
+            sessions.CoreEvents.Append(CoreEventPersistence.Run(run, updated));
             SettleInbox(updated, run.Claim?.Generation);
                 AgentRunStoreMapping.ObserveTransition(run, updated, command);
                 return ValueTask.FromResult(updated);

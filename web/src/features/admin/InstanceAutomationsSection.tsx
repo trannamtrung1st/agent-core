@@ -1,4 +1,6 @@
 import { adminHomePath, navigateToAppPath } from "../../app/appRoute";
+import { AutomationEventFilter } from "./AutomationEventFilter";
+import type { CoreEventType, AutomationPreset } from "../../services/adminApi";
 import { EventsSection } from "./EventsSection";
 import { AdminSessionPicker } from "./AdminSessionPicker";
 import { AutomationDestination, ConversationDestination } from "../chat/AutomationDestination";
@@ -17,6 +19,7 @@ import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { runStatusLabel, runOutcomeLabel, type AutomationSelection } from "../chat/runPresentation";
 import { useAutomationSelection } from "./useAutomationSelection";
 
+const webhookExample = { schemaVersion: 1, type: "webhook.example", source: { kind: "webhook", key: "example" }, data: { status: "paid", total: 125 } };
 const activeWork = ["Queued", "Running", "WaitingForApproval", "WaitingToRetry", "WaitingForSignal"];
 const terminal = ["Completed", "Cancelled", "Expired"];
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : "Not scheduled";
@@ -46,6 +49,20 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
   const [managingEvents, setManagingEvents] = useState(false);
   const manageEventsButton = useRef<HTMLButtonElement>(null);
   const [sources, setSources] = useState<AdminWebhookEvent[]>([]);
+  const [coreTypes, setCoreTypes] = useState<CoreEventType[]>([]);
+  const [presets, setPresets] = useState<AutomationPreset[]>([]);
+  const [deliveries, setDeliveries] = useState<{ eventId: string; automationId: string; triggerRevision: number; status: string; code: string | null }[]>([]);
+  const optionsGeneration = useRef(0);
+  const deliveryGeneration = useRef(0);
+  const [deliveryError, setDeliveryError] = useState(false);
+  async function loadDeliveries() { const version = ++deliveryGeneration.current; try { const rows = await request<typeof deliveries>(instanceId, "automations/deliveries"); if (!Array.isArray(rows)) throw new Error("Invalid deliveries"); if (version !== deliveryGeneration.current) return; setDeliveries(rows); setDeliveryError(false); } catch { if (version === deliveryGeneration.current) setDeliveryError(true); } }
+  const [optionsError, setOptionsError] = useState(false);
+  const reloadOptions = useCallback(async () => {
+    const version = ++optionsGeneration.current;
+    try { const [types, recipes] = await Promise.all([request<CoreEventType[]>(instanceId, "automations/core-event-types"), request<AutomationPreset[]>(instanceId, "automations/presets")]); if (!Array.isArray(types) || !Array.isArray(recipes)) throw new Error("Invalid editor options"); if (version !== optionsGeneration.current) return; setCoreTypes(types); setPresets(recipes); setOptionsError(false); }
+    catch { if (version === optionsGeneration.current) setOptionsError(true); }
+  }, [instanceId]);
+  useEffect(() => { setCoreTypes([]); setPresets([]); setDeliveries([]); void reloadOptions(); return () => { optionsGeneration.current++; deliveryGeneration.current++; }; }, [reloadOptions]);
   const [models, setModels] = useState<ModelDescriptor[]>([]);
   const [draft, setDraft] = useState<AutomationDraft>(blank);
   const [editor, setEditor] = useState<string | null>(null);
@@ -139,6 +156,8 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
   const previewTime = (value?: string | null) => value && Number.isFinite(Date.parse(value))
     ? `${new Date(value).toLocaleString()} (${viewerZone})` : null;
   const policy = review?.policy;
+  const coreAllowed = policy?.allowCoreEvents === true;
+  const selectedCore = draft.trigger.kind === "coreEvent" ? coreTypes.find(t => t.key === (draft.trigger.kind === "coreEvent" ? draft.trigger.coreEventKey : "")) : null;
   const eventsAllowed = policy?.allowEvents === true;
   const minimum = timing.kind === "fixedInterval" ? policy?.minFixedIntervalSeconds ?? 60 : timing.kind === "weekly" ? Math.ceil((policy?.minRecurrenceDays ?? 1) / 7) : policy?.minRecurrenceDays ?? 1;
   const schedulesAllowed = !!policy && (policy.allowOneShot || policy.allowDaily || policy.allowWeekly || policy.allowFixedInterval);
@@ -153,12 +172,12 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
   const destinationValid = (draft.executionTarget.kind !== "existingSession" || !!draft.executionTarget.sessionId)
     && (draft.completionDelivery.kind !== "toSession" || !!draft.completionDelivery.sessionId);
   const valid = destinationValid && draft.name.trim().length > 0 && draft.name.trim().length <= 120 && draft.instructions.trim().length > 0 && draft.instructions.trim().length <= 2000
-    && (isSchedule ? scheduleValid : draft.trigger.kind === "event" && eventsAllowed && sources.some(source => source.eventId === (draft.trigger.kind === "event" ? draft.trigger.eventId : "") && source.status === "Active"));
+    && (isSchedule ? scheduleValid : draft.trigger.kind === "coreEvent" ? coreAllowed && !!selectedCore?.eligible : draft.trigger.kind === "event" && eventsAllowed && sources.some(source => source.eventId === (draft.trigger.kind === "event" ? draft.trigger.eventId : "") && source.status === "Active"));
   function setTiming(change: Partial<ScheduleTiming>) { setDraft({ ...draft, trigger: { kind: "schedule", schedule: { ...timing, ...change } } }); }
   function edit(item: Automation) { editorOpener.current = document.activeElement as HTMLElement; setEditorError(null); setEditor(item.automationId); setEditorOpen(true); setDraft({ expectedRevision: item.revision, enabled: item.enabled, name: item.name, instructions: item.instructions,
-    trigger: item.trigger, modelKey: item.modelKey, reasoningEffort: item.reasoningEffort, executionTarget: item.executionTarget, completionDelivery: item.completionDelivery, requiresTools: item.requiresTools, requiresVision: item.requiresVision }); }
+    presetId: item.presetId, presetVersion: item.presetVersion, trigger: item.trigger, modelKey: item.modelKey, reasoningEffort: item.reasoningEffort, executionTarget: item.executionTarget, completionDelivery: item.completionDelivery, requiresTools: item.requiresTools, requiresVision: item.requiresVision }); }
   const selectedEvent = draft.trigger.kind === "event" ? sources.find(source => source.eventId === (draft.trigger.kind === "event" ? draft.trigger.eventId : "")) : null;
-  const summaryTrigger = draft.trigger.kind === "event"
+  const summaryTrigger = draft.trigger.kind === "coreEvent" ? `When ${draft.trigger.coreEventKey} occurs` : draft.trigger.kind === "event"
     ? selectedEvent ? `When ${selectedEvent.eventKey} is received${selectedEvent.status === "Revoked" ? " · Event revoked" : ""}` : "Choose an Event to receive signals"
     : timing.kind === "oneShot" && !timing.atUtc ? "Choose when to run once" : scheduleTimingLabel(timing);
   const summaryBounds = !isSchedule || timing.kind === "oneShot" ? "" : [
@@ -220,6 +239,13 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
         <Flex vertical gap={token.padding}>
         <Flex component="section" vertical gap={token.padding} className="automation-editor-section" aria-label="General">
         <Typography.Title level={5} style={{ margin: 0 }}>General</Typography.Title>
+        {editor === "new" ? <>
+          <Form.Item label="Start from"><Select aria-label="Automation preset" value={draft.presetId ?? "custom"} disabled={busy}
+            options={[{ value: "custom", label: "Custom automation" }, ...presets.map(p => ({ value: p.presetId, label: p.name }))]}
+            onChange={presetId => { const p = presets.find(p => p.presetId === presetId); setDraft(p ? { ...blank(), enabled: false, name: p.name, instructions: p.instructions, trigger: p.trigger, presetId: p.presetId, presetVersion: p.presetVersion, requiresTools: true } : blank()); }} /></Form.Item>
+          {optionsError ? <Alert type="warning" showIcon title="Presets and Core types could not be loaded" action={<Button onClick={() => void reloadOptions()}>Retry options</Button>} /> : null}
+          {presets.find(p => p.presetId === draft.presetId)?.prerequisites.map(reason => <Alert key={reason} type="info" showIcon title={reason} />)}
+        </> : null}
         <Form.Item label="Name"><Input ref={nameInput} aria-label="Automation name" maxLength={120} value={draft.name} disabled={busy} onChange={e => setDraft({ ...draft, name: e.target.value })} /></Form.Item>
         <Form.Item label="Instructions" extra={`${draft.instructions.length} / 2000 characters`}><Input.TextArea aria-label="Automation instructions" rows={4} maxLength={2000} value={draft.instructions} disabled={busy} onChange={e => setDraft({ ...draft, instructions: e.target.value })} /></Form.Item>
         <Form.Item label="Enabled" layout="horizontal" colon={false} labelCol={{ flex: "none" }} wrapperCol={{ flex: "none" }}><Switch aria-label="Enable automation" checked={draft.enabled} disabled={busy} onChange={enabled => setDraft({ ...draft, enabled })} /></Form.Item>
@@ -227,13 +253,19 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
         <Flex component="section" vertical gap={token.padding} className="automation-editor-section" aria-label="Trigger">
         <Typography.Title level={5} style={{ margin: 0 }}>Trigger</Typography.Title>
         {policy ? <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Up to {policy.maxActiveRegistrations} active Automations. One-time schedules must be within {policy.oneShotHorizonDays} days; fixed intervals must be at least {policy.minFixedIntervalSeconds} seconds.</Typography.Paragraph> : null}
-        <Form.Item label="When"><Select aria-label="Automation trigger" value={draft.trigger.kind} disabled={busy} options={[{ value: "schedule", label: "Schedule", disabled: !schedulesAllowed }, { value: "event", label: "Event", disabled: !eventsAllowed }]}
-          onChange={kind => setDraft({ ...draft, trigger: kind === "schedule" ? { kind, schedule: defaultTiming() } : { kind: "event", eventId: "" } })} /></Form.Item>
-        {draft.trigger.kind === "event" ? <>
+        <Form.Item label="When"><Select aria-label="Automation trigger" value={draft.trigger.kind} disabled={busy} options={[{ value: "schedule", label: "Schedule", disabled: !schedulesAllowed }, { value: "event", label: "Shared Event (webhook)", disabled: !eventsAllowed }, { value: "coreEvent", label: "Core Event", disabled: !coreAllowed }]}
+          onChange={kind => setDraft({ ...draft, trigger: kind === "schedule" ? { kind, schedule: defaultTiming() } : kind === "coreEvent" ? { kind, coreEventKey: "run.completed" } : { kind: "event", eventId: "" } })} /></Form.Item>
+        {draft.trigger.kind === "coreEvent" ? <>
+          <Form.Item label="Core Event type" extra="Built-in signals from this Agent Instance only. No webhook credential is needed.">
+            <Select aria-label="Core Event type" value={draft.trigger.coreEventKey} disabled={busy} options={coreTypes.map(t => ({ value: t.key, label: t.key, disabled: !t.eligible }))}
+              onChange={coreEventKey => setDraft({ ...draft, trigger: { ...draft.trigger as Extract<AutomationDraft["trigger"], { kind: "coreEvent" }>, coreEventKey } })} />
+          </Form.Item>
+          {!coreAllowed ? <Alert showIcon type="warning" title="Allow Core Events in the active Definition to subscribe." /> : null}
+        </> : draft.trigger.kind === "event" ? <>
           <Form.Item label="Event" extra="Each received signal starts this Automation asynchronously in its selected destination, using normal approvals and authorization.">
             <Select aria-label="Automation Event" showSearch optionFilterProp="label" value={draft.trigger.eventId || undefined} disabled={busy}
               placeholder="Select an active Event" options={sources.map(event => ({ value: event.eventId, label: `${event.displayName} · ${event.eventKey}`, disabled: event.status !== "Active" }))}
-              onChange={eventId => setDraft({ ...draft, trigger: { kind: "event", eventId } })} />
+              onChange={eventId => setDraft({ ...draft, trigger: { ...draft.trigger as Extract<AutomationDraft["trigger"], { kind: "event" }>, eventId } })} />
           </Form.Item>
           {!sources.some(event => event.status === "Active") ? <Alert showIcon type="info" title="No active Events" description="Create an Event in global Connections, then subscribe this Automation. Your input stays here while you manage Events." /> : null}
           <Button ref={manageEventsButton} style={{ alignSelf: "flex-start" }} disabled={busy} onClick={() => setManagingEvents(true)}>Create or manage Events</Button>
@@ -281,6 +313,8 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
           Stops on {previewTime(timing.endAtUtc)}.
         </Typography.Paragraph> : null}
         </>}
+        {draft.trigger.kind !== "schedule" ? <AutomationEventFilter instanceId={instanceId} trigger={draft.trigger} example={selectedCore?.example ?? webhookExample} disabled={busy}
+          onChange={trigger => setDraft({ ...draft, trigger })} /> : null}
         </Flex>
         <Flex component="section" vertical gap={token.padding} className="automation-editor-section" aria-label="Execution">
         <Typography.Title level={5} style={{ margin: 0 }}>Execution</Typography.Title>
@@ -319,8 +353,14 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
       <Drawer open={managingEvents && active} title="Global Events" size={screens.md ? 640 : "100%"} getContainer={false} rootStyle={{ position: "fixed" }}
         rootClassName="admin-automation-drawer" styles={{ body: { padding: token.padding } }} onClose={() => setManagingEvents(false)}
         afterOpenChange={open => { if (!open) manageEventsButton.current?.focus(); }}>
-        <EventsSection embedded onChanged={setSources} onCreated={eventId => setDraft(current => current.trigger.kind === "event" ? { ...current, trigger: { kind: "event", eventId } } : current)} />
+        <EventsSection embedded onChanged={setSources} onCreated={eventId => setDraft(current => current.trigger.kind === "event" ? { ...current, trigger: { ...current.trigger, eventId } } : current)} />
       </Drawer>
+      <Collapse onChange={keys => { if (keys.length) void loadDeliveries(); }} items={[{ key: "deliveries", label: "Core Event deliveries", children: <Flex vertical gap={token.paddingSM}>
+        {deliveryError ? <Alert type="error" showIcon title="Event deliveries could not be loaded" action={<Button onClick={() => void loadDeliveries()}>Retry deliveries</Button>} /> : null}
+        <Table rowKey={row => `${row.eventId}:${row.automationId}`} size="small" scroll={{ x: 650 }} dataSource={deliveries}
+          columns={[{ title: "Automation", dataIndex: "automationId" }, { title: "Revision", dataIndex: "triggerRevision" }, { title: "Outcome", dataIndex: "status" }, { title: "Reason", dataIndex: "code" }]}
+          locale={{ emptyText: "No Core Event deliveries yet" }} />
+      </Flex> }]} />
       {review ? review.items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No automations yet. Create one here or ask the agent in Chat to do something later." /> :
         <>
         <AdminCollectionToolbar label="automations" value={search} onChange={setSearch} />
@@ -343,7 +383,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
               onFilter: (value, item) => item.status === value, render: (status: string) => <Tag>{status}</Tag> },
             { title: "Next run", key: "next", width: 220,
               sorter: (a, b) => (a.enabled && !terminal.includes(a.status) ? a.nextRunAt ?? "" : "").localeCompare(b.enabled && !terminal.includes(b.status) ? b.nextRunAt ?? "" : ""),
-              render: (_, item) => item.enabled && !terminal.includes(item.status) && item.trigger.kind === "event" ? "On event" : date(item.enabled && !terminal.includes(item.status) ? item.nextRunAt : null) },
+              render: (_, item) => item.enabled && !terminal.includes(item.status) && item.trigger.kind !== "schedule" ? "On event" : date(item.enabled && !terminal.includes(item.status) ? item.nextRunAt : null) },
             { title: "Last run", key: "execution", width: 240,
               filters: [...new Set(review.items.map(item => item.executionStatus ?? "Not yet"))].map(value => ({ text: runStatusLabel(value), value })),
               onFilter: (value, item) => (item.executionStatus ?? "Not yet") === value,
@@ -394,6 +434,6 @@ export function scheduleTimingLabel(timing: ScheduleTiming) {
 }
 
 function automationWhen(item: Automation, sources: AdminWebhookEvent[]) {
-  return item.trigger.kind === "schedule" ? scheduleTimingLabel(item.trigger.schedule)
+  return item.trigger.kind === "coreEvent" ? `Core Event · ${item.trigger.coreEventKey}` : item.trigger.kind === "schedule" ? scheduleTimingLabel(item.trigger.schedule)
     : (() => { const event = sources.find(e => e.eventId === (item.trigger.kind === "event" ? item.trigger.eventId : "")); return event ? `${event.displayName} · ${event.eventKey}` : "Event unavailable"; })();
 }

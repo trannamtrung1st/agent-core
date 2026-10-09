@@ -194,7 +194,8 @@ public sealed class IdentityRuntimeTests
 
             var text = File.ReadAllText(path);
             Assert.DoesNotContain("OpenAI.", text, StringComparison.Ordinal);
-            Assert.DoesNotContain("ChatCompletion", text, StringComparison.Ordinal);
+            // The provider-neutral transport enum is not a provider DTO.
+            Assert.DoesNotContain("ChatCompletion", System.Text.RegularExpressions.Regex.Replace(text, @"\bChatCompletions\b", ""), StringComparison.Ordinal);
             Assert.DoesNotContain("openrouter", text, StringComparison.OrdinalIgnoreCase);
         }
     }

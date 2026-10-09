@@ -508,3 +508,9 @@ The user-requested bounded resource/cleanup enhancement uses existing Definition
 ### Model catalog and reasoning controls refresh
 
 Authorized focused enhancement of shipped P2D selection/provider paths: five Real entries, retirement of three built-ins, shared ascending reasoning presentation and catalog-selected stateless Responses transport. No new application milestone or P10/P11 work. Historical acceptance SHAs remain unchanged. [Verification ledger](reports/model-catalog-refresh-verification.md) separates offline/runtime checks from live compatibility and remaining acceptance gaps.
+
+## Core Event and preset extension (authorized 2026-10-10)
+
+Extend the accepted unified Automation substrate in order: trigger/policy contracts; atomic source outbox; shared restricted filters/frozen subscriber delivery; causal guards and durable coalescing/coverage; editable disabled presets and current-turn Chat authoring; Admin filter/preset UX; canonical documentation and exact-SHA verification. This does not open P10/P11 or reinstate historical Thought/Retrospection engines. Old Definitions and closure reports remain immutable evidence.
+
+Acceptance requires the integrated source/review/webhook/restart/prerequisite/authoring journeys, full applicable suites, browser interaction/captures, additive migration preservation, isolated Compose survival and all configured hosted jobs on the final behavior SHA. [Current verification](reports/core-events-automation-presets-verification.md) records passes, failures and pending gates; implementation alone is not acceptance.

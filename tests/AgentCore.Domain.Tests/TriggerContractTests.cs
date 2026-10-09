@@ -136,7 +136,7 @@ public sealed class TriggerContractTests
     public void Durable_schedule_kinds_do_not_include_runtime_timers()
     {
         Assert.Equal(["OneShot", "Daily", "Weekly", "FixedInterval"], Enum.GetNames<TriggerScheduleKind>());
-        Assert.Equal(["Schedule", "ApplicationEvent", "ManualInvocation"], Enum.GetNames<TriggerSourceKind>());
+        Assert.Equal(["Schedule", "ApplicationEvent", "ManualInvocation", "CoreEvent"], Enum.GetNames<TriggerSourceKind>());
         Assert.Equal(
             ["Pending", "Claimed", "AcceptedLive", "AwaitingDurableWork", "Rejected", "LivePrepared", "AcceptedDurable"],
             Enum.GetNames<OccurrenceRoutingDisposition>());

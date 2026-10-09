@@ -1067,7 +1067,7 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder, IInitiativeE
     private Speak SpeakOccurrence(AgentContext context, Guid responseId)
     {
         var request = builder.Build(context, responseId);
-        if (context.Trigger.Kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent or TriggerKind.ManualInvocation)
+        if (context.Trigger.Kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent or TriggerKind.CoreEvent or TriggerKind.ManualInvocation)
         {
             var messages = request.Messages.ToList();
             IReadOnlyList<ModelToolDefinition>? tools = null;

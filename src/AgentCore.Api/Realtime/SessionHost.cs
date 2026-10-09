@@ -2861,6 +2861,7 @@ public static class SessionEventMapper
         "UnfinishedInteraction" => "unfinishedInteraction",
         "ScheduledOccurrence" => "scheduledOccurrence",
         "ApplicationEvent" => "applicationEvent",
+        "CoreEvent" => "coreEvent",
         _ => "userTurn"
     };
 

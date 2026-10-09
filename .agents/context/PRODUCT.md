@@ -108,3 +108,8 @@ An Automation chooses when to act and where its work belongs. Conversational rem
 A parent can explicitly inspect and use its owned initial child result while answering. A successful durable answer accounts for acknowledged evidence; remaining requested results return after the parent is available. Short duration or child waits retain the same Run and response. Chat and Admin show Ready, In use, Handled in conversation and a distinct Waiting state. Behavior remains in docs/03, docs/12–15.
 
 Current projection authoring distinguishes explicit Always selections from Core-managed initial context. Authorized, eligible Browser v2 bootstrap tools and active Skill requirements can appear without that selection; no permission is granted by disclosure. See [frontend ownership](../../docs/13-frontend-implementation-spec.md) and the [bounded Background Work review](../../docs/reports/background-work-ui-review-verification.md). This records existing behavior, not a new projection policy or hosted closure.
+
+
+### Core Event preset and filter authoring
+
+The existing Instance Triggers drawer owns Custom/preset selection, a third Core Event trigger, optional expression, dispatch/window and read-only sample testing. Presets fill disabled editable drafts and explain prerequisites. Core types are Instance-owned built-in signals; Shared Events remain webhook resources in global Connections. Preserve shared Ant Design v6 model/reasoning controls, 640px/full-mobile drawer, footer reachability, focus return and stale-result invalidation. Test status uses aria-live and a stable accessible button label. Delivery diagnostics show safe status/code/revision with independent retry. Product behavior is owned by docs/13 and docs/14; this is presentation context only.

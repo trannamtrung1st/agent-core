@@ -22,9 +22,9 @@ public sealed class TriggerSchedulerHostedService : BackgroundService
         ExternalEventIngress events,
         TimeProvider time,
         ILogger<TriggerSchedulerHostedService> logger,
-        IDiagnosticIdSource diagnostics)
+        IDiagnosticIdSource diagnostics, CoreEventDispatcher coreEvents)
         : this(
-            cancellationToken => RunProductionAsync(scheduler, router, events, time, cancellationToken),
+            cancellationToken => RunProductionAsync(scheduler, router, events, coreEvents, time, cancellationToken),
             time,
             logger,
             diagnostics)
@@ -93,9 +93,11 @@ public sealed class TriggerSchedulerHostedService : BackgroundService
         TriggerScheduler scheduler,
         TriggerOccurrenceRouter router,
         ExternalEventIngress events,
+        CoreEventDispatcher coreEvents,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
+        await coreEvents.RunOnceAsync(cancellationToken).ConfigureAwait(false);
         await events.ResumePendingAsync(cancellationToken).ConfigureAwait(false);
         var now = time.GetUtcNow();
         await scheduler.RunOnceAsync(now, cancellationToken).ConfigureAwait(false);

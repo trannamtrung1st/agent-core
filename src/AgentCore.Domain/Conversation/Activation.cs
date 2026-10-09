@@ -11,7 +11,8 @@ public enum ActivationKind
     ScheduledWork,
     ApplicationEvent,
     ManualBackground,
-    BackgroundCompleted
+    BackgroundCompleted,
+    CoreEvent
 }
 
 /// <summary>Immutable admission of one effective turn, including its ordered input batch.</summary>

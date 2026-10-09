@@ -24,6 +24,12 @@ public sealed class UnifiedAutomationMigrationTests
                 foreach (var table in new[] { "Automations", "TriggerOccurrences" })
                 {
                     await SeedRequiredColumnsAsync(connection, table);
+                    if (table == "Automations")
+                    {
+                        await using var valid = connection.CreateCommand();
+                        valid.CommandText = "UPDATE Automations SET TriggerKind = 0, ScheduleJson = '{}'";
+                        await valid.ExecuteNonQueryAsync();
+                    }
                     await using var revision = connection.CreateCommand();
                     var revisionColumn = table == "Automations" ? "Revision" : "RoutingRevision";
                     revision.CommandText = $"UPDATE \"{table}\" SET ScheduleRevision = 7, {revisionColumn} = 11";
@@ -56,6 +62,8 @@ public sealed class UnifiedAutomationMigrationTests
             var name = reader.GetName(i);
             Assert.NotEqual(oldSchema ? "TriggerRevision" : "ScheduleRevision", name);
             if (name == "EventType") continue;
+            if (name is "CoreEventKey" or "FilterExpression" or "DispatchMode" or "DispatchWindowSeconds" or "PresetId" or "PresetVersion")
+            { Assert.True(name == "DispatchMode" ? reader.GetInt32(i) == 0 : reader.IsDBNull(i)); continue; }
             if (name is "ExecutionTargetKind" or "TargetSessionId" or "ReportToSessionId" or "RequiresTools")
             {
                 Assert.True(name is "ExecutionTargetKind" or "RequiresTools" ? reader.GetInt32(i) == 0 : reader.IsDBNull(i));

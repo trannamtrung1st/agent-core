@@ -1,0 +1,80 @@
+import { expect, test } from '@playwright/test';
+import fs from 'node:fs';
+
+test('Core Event presets stay opt-in, test filters without work, and preserve responsive drafts', async ({ page }) => {
+  test.setTimeout(90000);
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  page.on('response', r => { if (r.status() >= 500) errors.push(`${r.status()} ${r.url()}`); });
+  await page.goto('/admin/instances');
+  await page.getByRole('button', { name: 'New instance', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Definition', exact: true }).click();
+  await page.locator('.ant-select-item-option').filter({ hasText: 'Secretary · secretary' }).click();
+  await page.getByRole('button', { name: 'Create instance', exact: true }).click();
+  await expect(page).toHaveURL(/admin\/instances\/[^/]+/);
+  const instanceId = new URL(page.url()).pathname.split('/')[3];
+  await page.goto(`/admin/instances/${instanceId}/automation/automations`);
+  await page.getByRole('button', { name: 'New automation', exact: true }).click();
+  const drawer = page.getByRole('dialog', { name: 'New automation', exact: true });
+  for (const name of ['Consolidate continuity', 'Improve agent harness']) {
+    await drawer.getByRole('combobox', { name: 'Automation preset' }).click();
+    await page.locator('.ant-select-item-option').filter({ hasText: new RegExp('^' + name + '$') }).click();
+    await expect(drawer.getByRole('textbox', { name: 'Automation name' })).toHaveValue(name);
+    await expect(drawer.getByRole('switch', { name: 'Enable automation' })).not.toBeChecked();
+    await expect(drawer.getByRole('combobox', { name: 'Automation trigger' })).toContainText('Schedule');
+  }
+  await drawer.getByRole('combobox', { name: 'Automation preset' }).click();
+  await page.locator('.ant-select-item-option').filter({ hasText: /^Review recent work$/ }).click();
+  await expect(drawer.getByRole('switch', { name: 'Enable automation' })).not.toBeChecked();
+  await expect(drawer.getByRole('combobox', { name: 'Core Event type' })).toBeVisible();
+  const expression = drawer.getByRole('textbox', { name: 'Event filter expression' });
+  const presetExpression = await expression.inputValue();
+  await drawer.getByRole('button', { name: 'Test filter', exact: true }).click();
+  await expect(drawer.getByRole('status')).toContainText('Matched');
+  await expression.fill('false');
+  await drawer.getByRole('button', { name: 'Test filter', exact: true }).click();
+  await expect(drawer.getByRole('status')).toContainText('Not matched');
+  await expression.fill('event.data.constructor');
+  await drawer.getByRole('button', { name: 'Test filter', exact: true }).click();
+  await expect(drawer.getByRole('status')).toContainText('Filter error');
+  const sample = drawer.getByRole('textbox', { name: 'Sample event JSON' });
+  const originalSample = await sample.inputValue();
+  await sample.fill('{broken JSON');
+  await drawer.getByRole('button', { name: 'Test filter', exact: true }).click();
+  await expect(drawer.getByRole('status')).toContainText('Check sample JSON');
+  await sample.fill(originalSample);
+  await expression.fill(presetExpression);
+  const evidence = process.env.CORE_EVENT_SCREENSHOTS;
+  if (evidence) fs.mkdirSync(evidence, { recursive: true });
+  for (const width of [1440, 768, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(async () => Math.round((await drawer.boundingBox())!.width)).toBe(width < 768 ? width : 640);
+    expect(await drawer.locator('.ant-drawer-body').evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
+    const submit = drawer.getByRole('button', { name: 'Create automation', exact: true });
+    expect((await submit.boundingBox())!.y).toBeLessThan(900);
+    if (evidence) { await expression.scrollIntoViewIfNeeded(); await page.screenshot({ path: `${evidence}/core-event-filter-${width}.png` }); }
+  }
+  const saving = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/automations'));
+  await drawer.getByRole('button', { name: 'Create automation', exact: true }).click();
+  const response = await saving;
+  expect(response.ok(), await response.text()).toBe(true);
+  const saved = await response.json();
+  expect(saved.enabled).toBe(false);
+  expect(saved.presetId).toBe('review-recent-work');
+  expect(saved.trigger.kind).toBe('coreEvent');
+  expect(saved.trigger.dispatch).toEqual({ mode: 'coalesceLatest', windowSeconds: 900 });
+  await expect(drawer).toBeHidden();
+  await expect(page.getByRole('button', { name: 'View automation: Review recent work', exact: true })).toBeFocused();
+  const token = (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))!;
+  const headers = { 'X-AgentCore-Owner-Capability': token };
+  expect((await (await page.request.get(`/api/v2/agent-instances/${instanceId}/agent-runs`, { headers })).json()).items).toHaveLength(0);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.reload();
+  await page.getByRole('button', { name: 'View automation: Review recent work', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit automation', exact: true }).click();
+  const edit = page.getByRole('dialog', { name: 'Edit automation', exact: true });
+  await expect(edit.getByRole('textbox', { name: 'Event filter expression' })).toHaveValue(presetExpression);
+  await page.keyboard.press('Escape');
+  await expect(edit).toBeHidden();
+  expect(errors).toEqual([]);
+});

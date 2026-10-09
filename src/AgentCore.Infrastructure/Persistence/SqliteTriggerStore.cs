@@ -117,7 +117,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         var instanceId = owner.AgentInstanceId.ToString("D");
         var profileId = owner.ProfileId.ToString("D");
         var query = db.Automations.AsNoTracking()
-            .Where(item => item.AgentInstanceId == instanceId && item.ProfileId == profileId && item.EventId == null);
+            .Where(item => item.AgentInstanceId == instanceId && item.ProfileId == profileId && item.TriggerKind == (int)AutomationTriggerKind.Schedule);
         if (before is Guid id)
         {
             var anchorId = id.ToString("D");
@@ -1088,6 +1088,7 @@ internal static class TriggerStoreMapping
         OccurrenceCount = registration.OccurrenceCount,
         Revision = registration.Revision,
         TriggerRevision = registration.TriggerRevision,
+        PresetId = registration.Provenance.PresetId, PresetVersion = registration.Provenance.PresetVersion,
         AuthorizationOrigin = (int)registration.Provenance.AuthorizationOrigin,
         SourceSessionId = registration.Provenance.SourceSessionId?.ToString("D"),
         SourceEventId = registration.Provenance.SourceEventId?.ToString("D"),
@@ -1099,6 +1100,10 @@ internal static class TriggerStoreMapping
         RequiresVision = registration.RequiresVision,
         RequiresTools = registration.RequiresTools,
         EventId = registration.EventId?.ToString("D"),
+        CoreEventKey = (registration.Trigger as CoreEventTrigger)?.CoreEventKey,
+        FilterExpression = (registration.Trigger as FilteredEventTrigger)?.FilterExpression,
+        DispatchMode = (int)((registration.Trigger as FilteredEventTrigger)?.Dispatch.Mode ?? EventDispatchMode.EveryMatch),
+        DispatchWindowSeconds = (registration.Trigger as FilteredEventTrigger)?.Dispatch.WindowSeconds,
     };
 
     public static Automation ToRegistration(AutomationRecord row) => new(
@@ -1106,7 +1111,13 @@ internal static class TriggerStoreMapping
         new TriggerOwner(Guid.Parse(row.AgentInstanceId), Guid.Parse(row.ProfileId)),
         (AutomationStatus)row.Status,
         row.Instructions,
-        row.TriggerKind == (int)AutomationTriggerKind.Schedule ? new ScheduleTrigger(TriggerScheduleCodec.Deserialize(row.ScheduleJson!)) : new EventTrigger(Guid.Parse(row.EventId!)),
+        row.TriggerKind switch
+        {
+            (int)AutomationTriggerKind.Schedule => new ScheduleTrigger(TriggerScheduleCodec.Deserialize(row.ScheduleJson!)),
+            (int)AutomationTriggerKind.Event => new EventTrigger(Guid.Parse(row.EventId!), row.FilterExpression, new((EventDispatchMode)row.DispatchMode, row.DispatchWindowSeconds)),
+            (int)AutomationTriggerKind.CoreEvent => new CoreEventTrigger(row.CoreEventKey!, row.FilterExpression, new((EventDispatchMode)row.DispatchMode, row.DispatchWindowSeconds)),
+            _ => throw AgentCoreErrors.Persistence("Stored Automation trigger is unavailable.")
+        },
         FromUnix(row.NextOccurrenceAtUtc),
         FromUnix(row.ExpiresAtUtc),
         row.OccurrenceCount,
@@ -1117,7 +1128,7 @@ internal static class TriggerStoreMapping
             ParseOptional(row.SourceSessionId),
             ParseOptional(row.SourceEventId),
             DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc),
-            DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc)),
+            DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc), row.PresetId, row.PresetVersion),
         row.SuspensionReason,
         row.ModelOverrideCatalogKey,
         row.ModelOverrideReasoningEffort,

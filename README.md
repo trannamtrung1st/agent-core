@@ -158,3 +158,5 @@ The scoped [native browser final reliability follow-up](docs/reports/browser-fin
 ## Configurable execution budgets
 
 Definition defaults and independent Instance overrides select bounded Standard, Interactive Browser and Unattended Bound Browser profiles. Each Run pins its effective limits; changes apply to the next Run, including the next message of an existing Session. Requested cleanup has coordinated time, step, checkpoint and reply reserves, and Activity separates verified cleanup from browser closure. See [the verification report](docs/reports/execution-budget-cleanup-verification.md) and [resource limits](docs/10-technology-decisions.md#planned-resource-limits).
+
+Core Event subscriptions, shared event filters and disabled editable Automation presets extend the existing Automation path. See the [catalog](docs/07-event-model.md#automation-core-events), [HTTP contract](docs/14-api-and-realtime-protocol.md#core-event-filter-and-preset-http-additions) and [verification status](docs/reports/core-events-automation-presets-verification.md).

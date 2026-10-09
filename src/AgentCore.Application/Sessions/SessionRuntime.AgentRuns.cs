@@ -196,7 +196,7 @@ public sealed partial class SessionRuntime
             cause.CorrelationId == Guid.Empty ? eventId : cause.CorrelationId, cause.EventId, cause.AgentRunGeneration);
         var attachments = users.SelectMany(entry => entry.Attachments ?? []).Select(item => item.AttachmentId).Distinct().ToArray();
         var kind = IsInitialBackgroundRun ? _boundAgentRun!.Admission.Activation.Kind switch
-        { ActivationKind.ScheduledWork => TriggerKind.ScheduledOccurrence, ActivationKind.ApplicationEvent => TriggerKind.ApplicationEvent, _ => TriggerKind.ManualInvocation } : TriggerKind.UserTurn;
+        { ActivationKind.ScheduledWork => TriggerKind.ScheduledOccurrence, ActivationKind.CoreEvent => TriggerKind.CoreEvent, ActivationKind.ApplicationEvent => TriggerKind.ApplicationEvent, _ => TriggerKind.ManualInvocation } : TriggerKind.UserTurn;
         var trigger = new AgentTrigger(eventId, kind, last.Text);
         var turn = ++_turnGeneration;
         _pendingUploadHold = false;

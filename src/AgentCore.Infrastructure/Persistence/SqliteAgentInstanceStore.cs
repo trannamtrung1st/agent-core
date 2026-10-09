@@ -172,6 +172,7 @@ public sealed partial class SqliteAgentInstanceStore(
             throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
         }
 
+        var current = Map(row);
         if (update.ActiveVersion is not int activeVersion)
         {
             throw AgentCoreErrors.Validation("Active version is required.");
@@ -184,6 +185,7 @@ public sealed partial class SqliteAgentInstanceStore(
         row.Revision++;
         AdminEventPersistence.StageAppend(db, historyAppend, ids.NewId());
         await InitializeSkillsAsync(db, update.InstanceId, update.DefinitionSkills, updatedAt, cancellationToken);
+        foreach (var e in CoreEventPersistence.Instance(current, Map(row))) CoreEventPersistence.Stage(db, e);
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -242,6 +244,7 @@ public sealed partial class SqliteAgentInstanceStore(
             throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
         }
 
+        var current = Map(row);
         if (update.Persona is not AgentIdentity persona)
         {
             throw AgentCoreErrors.Validation("Persona is required.");
@@ -265,6 +268,7 @@ public sealed partial class SqliteAgentInstanceStore(
         row.UpdatedAtUtc = updatedAt.ToUnixTimeMilliseconds();
         row.Revision++;
         AdminEventPersistence.StageAppend(db, historyAppend, ids.NewId());
+        foreach (var e in CoreEventPersistence.Instance(current, Map(row))) CoreEventPersistence.Stage(db, e);
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -460,9 +464,11 @@ public sealed partial class SqliteAgentInstanceStore(
             return;
         }
 
+        var previous = Map(row);
         row.ActiveVersion = activeVersion;
         row.UpdatedAtUtc = updatedAt.ToUnixTimeMilliseconds();
         row.Revision++;
+        foreach (var e in CoreEventPersistence.Instance(previous, Map(row))) CoreEventPersistence.Stage(db, e);
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -541,6 +547,7 @@ public sealed partial class SqliteAgentInstanceStore(
         if (update.History is not null)
             AdminEventPersistence.StageAppend(db, update.History, ids.NewId());
         await InitializeSkillsAsync(db, update.InstanceId, update.DefinitionSkills, updatedAt, cancellationToken);
+        foreach (var e in CoreEventPersistence.Instance(current, Map(row))) CoreEventPersistence.Stage(db, e);
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

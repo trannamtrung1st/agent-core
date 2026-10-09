@@ -199,7 +199,7 @@ internal static class AgentRunStoreMapping
                 SessionOriginKind.ImmediateBackground => a.Kind == ActivationKind.ImmediateBackground
                     && a.SourceSessionId == snapshot.Origin.OriginatingSessionId
                     && a.SourceAgentRunId == snapshot.Origin.OriginatingAgentRunId,
-                SessionOriginKind.AutomationOccurrence or SessionOriginKind.SourceOccurrence => a.Kind is ActivationKind.ScheduledWork or ActivationKind.ApplicationEvent or ActivationKind.ManualBackground
+                SessionOriginKind.AutomationOccurrence or SessionOriginKind.SourceOccurrence => a.Kind is ActivationKind.ScheduledWork or ActivationKind.ApplicationEvent or ActivationKind.CoreEvent or ActivationKind.ManualBackground
                     && a.TriggerOccurrenceId == snapshot.Origin.TriggerOccurrenceId,
                 SessionOriginKind.ManualBackground => a.Kind == ActivationKind.ManualBackground,
                 _ => false
@@ -227,7 +227,7 @@ internal static class AgentRunStoreMapping
         if (owned.Count(run => run.Admission.Activation.Kind == ActivationKind.ImmediateBackground
             && run.Admission.Activation.SourceAgentRunId == child.Admission.Activation.SourceAgentRunId) >= AgentRunLimits.MaxImmediateChildren
             || owned.Count(run => !run.IsTerminal && run.Admission.Activation.Kind is ActivationKind.ImmediateBackground
-                or ActivationKind.ManualBackground or ActivationKind.ScheduledWork or ActivationKind.ApplicationEvent) >= AgentRunLimits.MaxActiveBackgroundRuns)
+                or ActivationKind.ManualBackground or ActivationKind.ScheduledWork or ActivationKind.ApplicationEvent or ActivationKind.CoreEvent) >= AgentRunLimits.MaxActiveBackgroundRuns)
             throw AgentCoreErrors.Conflict("Background work capacity reached.");
     }
 
@@ -261,6 +261,7 @@ internal static class AgentRunStoreMapping
             || !existing && occurrence.AutomationId != snapshot.Origin.AutomationId
             || occurrence.SourceEventId != activation.SourceEventId
             || occurrence.SourceKind == TriggerSourceKind.Schedule && activation.Kind != ActivationKind.ScheduledWork
+            || occurrence.SourceKind == TriggerSourceKind.CoreEvent && activation.Kind != ActivationKind.CoreEvent
             || occurrence.SourceKind == TriggerSourceKind.ApplicationEvent && activation.Kind != ActivationKind.ApplicationEvent
             || occurrence.SourceKind == TriggerSourceKind.ManualInvocation && activation.Kind != ActivationKind.ManualBackground)
             throw AgentCoreErrors.Validation("Occurrence and child admission source/owner must match.");
@@ -292,6 +293,7 @@ internal static class AgentRunStoreMapping
             || pin is null || pin.CatalogKey != run.PinnedModel.CatalogKey || pin.ProviderAlias != run.PinnedModel.ProviderAlias
             || pin.ModelId != run.PinnedModel.ModelId || pin.ReasoningEffort != run.PinnedModel.ReasoningEffort
             || occurrence.SourceKind == TriggerSourceKind.Schedule && run.Admission.Activation.Kind != ActivationKind.ScheduledWork
+            || occurrence.SourceKind == TriggerSourceKind.CoreEvent && run.Admission.Activation.Kind != ActivationKind.CoreEvent
             || occurrence.SourceKind == TriggerSourceKind.ApplicationEvent && run.Admission.Activation.Kind != ActivationKind.ApplicationEvent
             || occurrence.SourceKind == TriggerSourceKind.ManualInvocation)
             throw AgentCoreErrors.Validation("Live occurrence admission must match its native source, Session, owner and model pin.");

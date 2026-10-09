@@ -37,7 +37,7 @@ public sealed partial class SessionToolExecutor(
     AgentCore.Application.Continuity.IdentityMaintenanceService? identityMaintenance = null,
     AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null,
     AgentCore.Application.Credentials.CredentialService? credentials = null,
-    AdminAutomationAuthoringService? automationAuthoring = null, AgentInstanceSkillService? instanceSkills = null)
+    AdminAutomationAuthoringService? automationAuthoring = null, AgentInstanceSkillService? instanceSkills = null, ICoreEventStore? eventCoverage = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -330,7 +330,7 @@ public sealed partial class SessionToolExecutor(
             {
                 if (experience is null || admission?.AgentInstanceId is not Guid ownerId || admission.AgentRunId is not Guid runId)
                     return TextResult(Error("forbidden", "Experience source inspection requires an owned Run."));
-                using var source = JsonDocument.Parse(await experience.InspectSourceAsync(ownerId, runId, args, cancellationToken));
+                using var source = JsonDocument.Parse(await experience.InspectSourceAsync(ownerId, runId, args, cancellationToken, Math.Min(remainingOutputBytes, 6000)));
                 var root = source.RootElement;
                 return TextResult(ToolJsonResults.FitJsonWithContentField(Math.Min(remainingOutputBytes, 6000), root.GetProperty("evidence").GetString() ?? "",
                     (evidence, truncated) => JsonSerializer.Serialize(new {
@@ -346,7 +346,10 @@ public sealed partial class SessionToolExecutor(
                 var automationId = Guid.Parse(args.GetProperty("automationId").GetString() ?? "");
                 var current = await triggerRegistrations.GetAsync(owner, automationId, cancellationToken)
                     ?? throw AgentCoreErrors.NotFound("Automation was not found.");
-                return FitResult(remainingOutputBytes, TriggerScheduleCommands.RegistrationJson(current));
+                var coverage = eventCoverage is null ? null : await eventCoverage.CoveragePageAsync(owner, automationId, args.TryGetProperty("coverageCursor", out var cursor) ? cursor.GetString() : null, 8, cancellationToken);
+                var projection = System.Text.Json.Nodes.JsonNode.Parse(TriggerScheduleCommands.RegistrationJson(current))!.AsObject();
+                projection["coverage"] = JsonSerializer.SerializeToNode(coverage, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                return FitResult(remainingOutputBytes, projection.ToJsonString());
             }
             if (call.Name is ToolCatalog.AutomationRun or ToolCatalog.AutomationDisable)
             {

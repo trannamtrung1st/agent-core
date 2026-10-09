@@ -152,6 +152,11 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         return rows.Select(ToDelivery).ToArray();
     }
 
+    public async ValueTask DecideDeliveryAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default)
+    { await using var db = await contexts.CreateDbContextAsync(ct);
+        await db.ExternalEventDeliveries.Where(d => d.EventId == eventId.ToString("D") && d.AutomationId == automationId.ToString("D") && d.DecisionJson == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.DecisionJson, System.Text.Json.JsonSerializer.Serialize(decision, CoreEventPersistence.Json)), ct); }
+
     public async ValueTask MarkDeliveryAsync(
         Guid eventId,
         Guid automationId,
@@ -247,7 +252,8 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         AutomationId = target.AutomationId.ToString("D"),
         AgentInstanceId = target.AgentInstanceId.ToString("D"),
         ProfileId = target.ProfileId.ToString("D"),
-        Status = (int)ExternalEventDeliveryStatus.Pending
+        Status = (int)ExternalEventDeliveryStatus.Pending,
+        SnapshotJson = target.Snapshot is null ? null : System.Text.Json.JsonSerializer.Serialize(target.Snapshot, CoreEventPersistence.Json)
     };
 
     private static ExternalEventDelivery ToDelivery(ExternalEventDeliveryRecord row) => new(
@@ -255,7 +261,9 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         Guid.Parse(row.AutomationId),
         Guid.Parse(row.AgentInstanceId),
         Guid.Parse(row.ProfileId),
-        (ExternalEventDeliveryStatus)row.Status);
+        (ExternalEventDeliveryStatus)row.Status,
+        row.SnapshotJson is null ? null : System.Text.Json.JsonSerializer.Deserialize<EventSubscriptionSnapshot>(row.SnapshotJson, CoreEventPersistence.Json),
+        row.DecisionJson is null ? null : System.Text.Json.JsonSerializer.Deserialize<EventFilterResult>(row.DecisionJson, CoreEventPersistence.Json));
 
     private static ExternalEvent ToEvent(ExternalEventRecord row) => new(
         Guid.Parse(row.EventId),

@@ -77,7 +77,7 @@ public static class OccurrenceCompatibility
     public const string ApplicationEvent = "applicationEvent";
 
     public static string SourceName(TriggerSourceKind sourceKind) =>
-        sourceKind is TriggerSourceKind.Schedule or TriggerSourceKind.ManualInvocation ? Schedule : ApplicationEvent;
+        sourceKind switch { TriggerSourceKind.CoreEvent => "coreEvent", TriggerSourceKind.ApplicationEvent => ApplicationEvent, _ => Schedule };
 
     public static bool Allows(AgentDefinition definition, TriggerSourceKind sourceKind)
     {

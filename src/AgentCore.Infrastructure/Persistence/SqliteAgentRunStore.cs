@@ -36,6 +36,7 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
         await sessions.StageSaveAsync(db, snapshot, expectedSessionRevision, cancellationToken).ConfigureAwait(false);
         if (draftRow is not null) db.Entries.Remove(draftRow);
         AgentRunStoreMapping.Apply(row, updated);
+        CoreEventPersistence.Stage(db, CoreEventPersistence.Run(run, updated));
         await SettleInboxAsync(db, updated, run.Claim?.Generation, cancellationToken).ConfigureAwait(false);
         await SaveAsync(db, cancellationToken).ConfigureAwait(false);
         await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -319,6 +320,7 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
         catch (Exception e) when (e is AgentRunTransitionException or ArgumentException)
         { throw AgentRunStoreMapping.Map(e); }
         AgentRunStoreMapping.Apply(row, updated);
+        CoreEventPersistence.Stage(db, CoreEventPersistence.Run(run, updated));
         await SettleInboxAsync(db, updated, run.Claim?.Generation, cancellationToken).ConfigureAwait(false);
         await SaveAsync(db, cancellationToken).ConfigureAwait(false);
         await tx.CommitAsync(cancellationToken).ConfigureAwait(false);

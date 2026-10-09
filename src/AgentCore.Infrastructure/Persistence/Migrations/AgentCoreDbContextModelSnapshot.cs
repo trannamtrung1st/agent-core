@@ -820,7 +820,16 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<int>("AuthorizationOrigin")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("CoreEventKey")
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("DispatchMode")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("DispatchWindowSeconds")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("EventId")
@@ -832,6 +841,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.Property<long?>("ExpiresAtUtc")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("FilterExpression")
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Instructions")
                         .IsRequired()
@@ -855,6 +867,12 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("OccurrenceCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PresetId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("PresetVersion")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("ProfileId")
@@ -917,6 +935,12 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("Automations", null, t =>
                         {
                             t.HasCheckConstraint("CK_Automations_Destination", "(ExecutionTargetKind = 0 AND TargetSessionId IS NULL) OR (ExecutionTargetKind = 1 AND TargetSessionId IS NOT NULL AND ReportToSessionId IS NULL)");
+
+                            t.HasCheckConstraint("CK_Automations_Dispatch", "(DispatchMode = 0 AND DispatchWindowSeconds IS NULL) OR (DispatchMode = 1 AND DispatchWindowSeconds BETWEEN 60 AND 3600)");
+
+                            t.HasCheckConstraint("CK_Automations_Preset", "(PresetId IS NULL AND PresetVersion IS NULL) OR (PresetId IS NOT NULL AND PresetVersion >= 1)");
+
+                            t.HasCheckConstraint("CK_Automations_Trigger", "(TriggerKind = 0 AND ScheduleJson IS NOT NULL AND EventId IS NULL AND CoreEventKey IS NULL AND FilterExpression IS NULL AND DispatchMode = 0 AND DispatchWindowSeconds IS NULL) OR (TriggerKind = 1 AND ScheduleJson IS NULL AND EventId IS NOT NULL AND CoreEventKey IS NULL) OR (TriggerKind = 2 AND ScheduleJson IS NULL AND EventId IS NULL AND CoreEventKey IS NOT NULL)");
                         });
                 });
 
@@ -976,6 +1000,113 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.HasIndex("AgentInstanceId", "ProfileId", "ParentSessionId", "CreatedAtUtc", "ChildAgentRunId");
 
                     b.ToTable("BackgroundCompletionReceipts", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.CoreEventBucketRecord", b =>
+                {
+                    b.Property<string>("BucketId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AutomationId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CoverageJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("DueAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Flushed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("TriggerRevision")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("BucketId");
+
+                    b.HasIndex("Flushed", "DueAtUtc");
+
+                    b.ToTable("CoreEventBuckets", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.CoreEventDeliveryRecord", b =>
+                {
+                    b.Property<string>("EventId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AutomationId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AgentInstanceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Code")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DecisionJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProfileId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("EventId", "AutomationId");
+
+                    b.HasIndex("AgentInstanceId", "ProfileId", "Status");
+
+                    b.ToTable("CoreEventDeliveries", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.CoreEventRecord", b =>
+                {
+                    b.Property<string>("EventId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AgentInstanceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DedupeKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProfileId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("ReceivedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Snapshotted")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("EventId");
+
+                    b.HasIndex("DedupeKey")
+                        .IsUnique();
+
+                    b.HasIndex("Snapshotted", "ReceivedAtUtc", "EventId");
+
+                    b.ToTable("CoreEvents", (string)null);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.CredentialRecord", b =>
@@ -1191,9 +1322,15 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("DecisionJson")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ProfileId")
                         .IsRequired()
                         .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SnapshotJson")
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Status")

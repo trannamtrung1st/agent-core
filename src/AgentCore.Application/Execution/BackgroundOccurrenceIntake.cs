@@ -20,7 +20,7 @@ public sealed class BackgroundOccurrenceIntake(
     IMemoryStore memory,
     IModelCatalog models,
     IIdGenerator ids,
-    TimeProvider time)
+    TimeProvider time, AutomationPresetCatalog? presets = null)
 {
     public async ValueTask<BackgroundAdmissionPass> AcceptAwaitingAsync(CancellationToken cancellationToken = default)
     {
@@ -76,6 +76,9 @@ public sealed class BackgroundOccurrenceIntake(
             if (automation is null || automation.Status is AutomationStatus.Disabled or AutomationStatus.Cancelled
                 or AutomationStatus.SuspendedPolicy)
                 return null;
+            if (automation.Provenance.PresetId is { } presetId && presets is not null
+                && !(await presets.OptionsAsync(instance.InstanceId, cancellationToken, automation.ModelOverrideCatalogKey)).Single(p => p.Template.PresetId == presetId).Eligible)
+                return null;
         }
 
         if (occurrence.ExecutionTarget.SessionId is { } targetId)
@@ -93,9 +96,9 @@ public sealed class BackgroundOccurrenceIntake(
             var catalog = await new EffectiveSkillCatalogResolver(instances).ResolveAsync(instance.InstanceId,
                 target!.Definition, cancellationToken).ConfigureAwait(false);
             var triggerKind = occurrence.SourceKind switch { TriggerSourceKind.Schedule => TriggerKind.ScheduledOccurrence,
-                TriggerSourceKind.ApplicationEvent => TriggerKind.ApplicationEvent, _ => TriggerKind.ManualInvocation };
+                TriggerSourceKind.CoreEvent => TriggerKind.CoreEvent, TriggerSourceKind.ApplicationEvent => TriggerKind.ApplicationEvent, _ => TriggerKind.ManualInvocation };
             var activationKind = occurrence.SourceKind switch { TriggerSourceKind.Schedule => ActivationKind.ScheduledWork,
-                TriggerSourceKind.ApplicationEvent => ActivationKind.ApplicationEvent, _ => ActivationKind.ManualBackground };
+                TriggerSourceKind.CoreEvent => ActivationKind.CoreEvent, TriggerSourceKind.ApplicationEvent => ActivationKind.ApplicationEvent, _ => ActivationKind.ManualBackground };
             var evidence = System.Text.Json.JsonSerializer.Serialize(new AgentRunAdmissionFactory.SignalInput(triggerKind,
                 occurrence.EvidenceJson, null));
             var activation = new Activation(ids.NewId(), targetId, activationKind, [], occurrence.SourceEventId,

@@ -24,12 +24,12 @@ public sealed class AgentDefinitionStoreTests
         Assert.NotNull(general);
         Assert.Equal("Riley", general!.Identity.Name);
         var latest = await store.GetAsync("general-assistant");
-        Assert.Equal(21, latest!.Version);
+        Assert.Equal(22, latest!.Version);
         // Retired browser instructions are absent from the executable catalog.
         Assert.Null(await store.GetAsync("general-assistant", 20));
         Assert.Null(await store.GetAsync("secretary", 7));
         Assert.NotNull(await store.GetAsync("secretary", 8));
-        Assert.Equal(8, (await store.GetAsync("secretary"))!.Version);
+        Assert.Equal(9, (await store.GetAsync("secretary"))!.Version);
         Assert.DoesNotContain("workspace.retain", latest.Environment!.ToolList);
         Assert.DoesNotContain("workspace.checkout", latest.Environment.ToolList);
         Assert.True(latest.Environment.ToolList.Count > 40);
