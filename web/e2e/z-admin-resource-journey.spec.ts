@@ -1,3 +1,4 @@
+import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 import { startSyntheticChat } from "./admin-managed-helpers";
 import { expect, test } from "@playwright/test";
 import {
@@ -37,7 +38,7 @@ test("admin resource publish managed chat exposes publication under agent", asyn
     }
   });
   page.on("requestfailed", (request) => {
-    failedRequests.push(`${request.method()} ${request.url()}`);
+    if (!isCanceledDraftEvidenceRead(request)) failedRequests.push(`${request.method()} ${request.url()}`);
   });
 
   const resourceBody = `e2e-resource-${Date.now()}`;

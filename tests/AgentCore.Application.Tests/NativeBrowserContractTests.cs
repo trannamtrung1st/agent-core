@@ -1,3 +1,4 @@
+using AgentCore.Tests.Shared;
 using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Definitions;
@@ -5,8 +6,61 @@ using AgentCore.Application.Tools;
 using AgentCore.Infrastructure.Browser;
 using AgentCore.Infrastructure.Tools;
 namespace AgentCore.Application.Tests;
-public sealed class BrowserV2ContractTests
+public sealed class NativeBrowserContractTests
 {
+    [Fact]
+    public async Task Malformed_configuration_is_rejected_before_provider_execution_using_the_empty_object_schema()
+    {
+        var browser = new Subset(true);
+        var executor = new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll);
+        var definition = Definition(ToolCatalog.BrowserConfiguration);
+        foreach (var args in new[] { "[]", "\"bad\"", "{bad", "{\"unknown\":true}" })
+        {
+            var result = await executor.ExecuteAsync(definition, Guid.NewGuid(), new("config", ToolCatalog.BrowserConfiguration, args), ToolLimits.MaxOutputBytes,
+                admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn));
+            Assert.Contains("invalid", result.Text);
+            Assert.Contains("message", result.Text);
+        }
+        Assert.Equal(0, browser.Commands);
+        Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("valid", ToolCatalog.BrowserConfiguration, "{}"), ToolLimits.MaxOutputBytes,
+            admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn))).Text);
+        Assert.Equal(1, browser.Commands);
+    }
+
+    [Theory]
+    [InlineData("role", "textbox")]
+    [InlineData("text", "Email")]
+    [InlineData("label", "Email")]
+    [InlineData("placeholder", "Your email")]
+    [InlineData("altText", "Logo")]
+    [InlineData("title", "Help")]
+    [InlineData("testId", "email")]
+    public void Direct_target_is_shared_by_discovery_and_actions(string by, string value)
+    {
+        var target = new BrowserTarget(by, value);
+        Assert.True(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserClick, JsonSerializer.SerializeToElement(new { target }), out var click, out _));
+        Assert.Equal(target, Assert.IsType<BrowserClick>(click.Command).Target);
+        Assert.True(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserFind, JsonSerializer.SerializeToElement(new { target }), out var find, out _));
+        Assert.Equal(target, Assert.IsType<BrowserFind>(find.Command).Target);
+    }
+
+    [Theory]
+    [InlineData("{\"ref\":\"el_0123456789abcdefghijkl\"}")]
+    [InlineData("{\"target\":{\"by\":\"css\",\"value\":\"#password\"}}")]
+    [InlineData("{\"target\":{\"by\":\"label\",\"value\":\"Email\",\"name\":\"Email\"}}")]
+    [InlineData("{\"target\":{\"by\":\"role\",\"value\":\"button\",\"within\":{\"by\":\"text\",\"value\":\"row\",\"within\":{}}}}")]
+    public void Retired_refs_selectors_incompatible_names_and_recursive_scopes_fail_before_dispatch(string json) =>
+        Assert.False(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserClick, JsonSerializer.Deserialize<JsonElement>(json), out _, out _));
+
+    [Fact]
+    public void Relational_filter_is_bounded_literal_data()
+    {
+        var target = new BrowserTarget("role", "button", Name: "Edit", Within: new("role", "row", HasText: "Record.*B"));
+        Assert.True(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserClick, JsonSerializer.SerializeToElement(new { target }), out var request, out _));
+        Assert.Equal("Record.*B", Assert.IsType<BrowserClick>(request.Command).Target.Within!.HasText);
+        Assert.False(BrowserToolArguments.ValidTarget(target with { HasText = new string('x', 201) }));
+    }
+
     [Fact]
     public void Focused_catalog_preserves_authority_and_feature_metadata()
     {
@@ -18,7 +72,7 @@ public sealed class BrowserV2ContractTests
             Assert.Equal(metadata.Effect,tool.Effect);
             Assert.Equal(ToolResourceScope.Session,tool.Scope);
             Assert.Equal(metadata.Feature == BrowserFeature.Close ? ToolReplaySafety.IntegrationIdempotent : ToolReplaySafety.NonReplayable,tool.ReplaySafety);
-            Assert.DoesNotContain("oneOf",tool.ModelDefinition.ParametersJson);
+            Assert.False(doc.RootElement.TryGetProperty("oneOf", out _));
         }
         foreach(var retired in new[]{"observe","act","pages","capture"}) Assert.False(ToolRegistry.TryGet("browser."+retired,out _));
         Assert.Equal(ToolEffect.SensitiveWrite,ToolCatalog.EffectOf("browser.route"));
@@ -29,17 +83,17 @@ public sealed class BrowserV2ContractTests
     public async Task Subset_provider_filters_unsupported_tools_without_losing_navigation()
     {
         var subset=new Subset();var gate=new ToolConfigurationGate(null,null,null,subset,true);
-        Assert.True(gate.IsConfigured("browser.navigate"));Assert.False(gate.IsConfigured("browser.trace"));
-        var result=await subset.ExecuteAsync(new(Guid.NewGuid(),"browser.trace",JsonSerializer.SerializeToElement(new{operation="start"})));
+        Assert.True(gate.IsConfigured("browser.navigate"));Assert.False(gate.IsConfigured("browser.hover"));
+        var result=await subset.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(Guid.NewGuid(),"browser.hover",JsonSerializer.SerializeToElement(new { target = new { by = "role", value = "button", name = "Submit" } })));
         Assert.Equal("unsupported_operation",result.ErrorCode);
-        Assert.Null((await subset.NavigateAsync(new(Guid.NewGuid(),new Uri("http://127.0.0.1/")))).ErrorCode);
-        var definition = Definition("browser.navigate", "browser.trace");
+        Assert.Null((await subset.ExecuteAsync(BrowserTestRequests.Navigate(Guid.NewGuid(),new Uri("http://127.0.0.1/")))).ErrorCode);
+        var definition = Definition("browser.navigate", "browser.hover");
         var executor = new SessionToolExecutor(browser: subset, configurationGate: gate);
-        var forced = await executor.ExecuteAsync(definition, Guid.NewGuid(), new("trace", "browser.trace", "{\"operation\":\"start\"}"),
+        var forced = await executor.ExecuteAsync(definition, Guid.NewGuid(), new("trace", "browser.hover", "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_0123456789abcdefghijkl\"}}"),
             ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn));
         Assert.Contains("unsupported_operation", forced.Text);
         var unauthorized = await executor.ExecuteAsync(definition with { Environment = new RoleEnvironment(ToolAllowlist: ["browser.navigate"]) },
-            Guid.NewGuid(), new("trace", "browser.trace", "{\"operation\":\"start\"}"), ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn));
+            Guid.NewGuid(), new("trace", "browser.hover", "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_0123456789abcdefghijkl\"}}"), ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn));
         Assert.Contains("forbidden", unauthorized.Text);
     }
     [Fact]
@@ -87,8 +141,8 @@ public sealed class BrowserV2ContractTests
             Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("media", ToolCatalog.BrowserMedia, json), ToolLimits.MaxOutputBytes, admission: admission)).Text);
         foreach (var json in new[] { "{\"colorScheme\":true}", "{\"contrast\":\"wrong\"}", "{\"colorScheme\":null,\"colorScheme\":\"light\"}" })
             Assert.Contains("invalid", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("media", ToolCatalog.BrowserMedia, json), ToolLimits.MaxOutputBytes, admission: admission)).Text);
-        Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("type", ToolCatalog.BrowserType, "{\"ref\":\"el_0123456789012345678901\",\"text\":\"abc\",\"slowly\":true}"), ToolLimits.MaxOutputBytes, admission: admission)).Text);
-        Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("type", ToolCatalog.BrowserType, "{\"ref\":\"el_0123456789012345678901\",\"text\":\"abc\",\"slowly\":false}"), ToolLimits.MaxOutputBytes, admission: admission)).Text);
+        Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("type", ToolCatalog.BrowserType, "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_0123456789012345678901\"},\"text\":\"abc\",\"slowly\":true}"), ToolLimits.MaxOutputBytes, admission: admission)).Text);
+        Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("type", ToolCatalog.BrowserType, "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_0123456789012345678901\"},\"text\":\"abc\",\"slowly\":false}"), ToolLimits.MaxOutputBytes, admission: admission)).Text);
         Assert.Contains("forbidden", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("config", ToolCatalog.BrowserConfiguration, "{\"enabled\":true}"), ToolLimits.MaxOutputBytes, admission: admission)).Text);
         Assert.Contains("forbidden", (await executor.ExecuteAsync(definition with { Environment = new RoleEnvironment(ToolAllowlist: []) }, Guid.NewGuid(), new("config", ToolCatalog.BrowserConfiguration, "{}"), ToolLimits.MaxOutputBytes, admission: admission)).Text);
     }
@@ -108,13 +162,13 @@ public sealed class BrowserV2ContractTests
         public BrowserProviderDescriptor Provider{get;}=new("subset","Subset", advanced ? new HashSet<BrowserFeature>{BrowserFeature.Navigate,BrowserFeature.NetworkControl,BrowserFeature.VisionMouse,BrowserFeature.Configuration,BrowserFeature.Geolocation,BrowserFeature.Media,BrowserFeature.Type} : new HashSet<BrowserFeature>{BrowserFeature.Navigate,BrowserFeature.Snapshot,BrowserFeature.Click});
         public BrowserHostPolicy HostPolicy{get;}=new(true,true,BrowserInteractionMode.InteractiveDemo,["http://127.0.0.1"]);
         public ValueTask<Uri?> GetCurrentUrlAsync(Guid id,CancellationToken ct=default)=>new(new Uri("http://127.0.0.1/"));
-        public ValueTask<BrowserOperationResult> NavigateAsync(BrowserNavigateRequest r,CancellationToken ct=default)=>new(new BrowserOperationResult(null,new("http://127.0.0.1/","Subset","Ready",false,[])));
-        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid id,CancellationToken ct=default)=>new(new BrowserOperationResult(null,new("http://127.0.0.1/","Subset","Ready",false,[])));
-        public ValueTask<BrowserOperationResult> InteractAsync(BrowserInteractionRequest r,CancellationToken ct=default)=>new(new BrowserOperationResult(null,new("http://127.0.0.1/","Subset","Ready",false,[])));
-        public ValueTask<BrowserCommandResult> ExecuteAsync(BrowserCommand c,CancellationToken ct=default)
+        public ValueTask<BrowserResult> NavigateAsync(BrowserRequest r,CancellationToken ct=default)=>new(new BrowserResult(null,new("http://127.0.0.1/","Subset","Ready",false,[])));
+        public ValueTask<BrowserResult> SnapshotAsync(Guid id,CancellationToken ct=default)=>new(new BrowserResult(null,new("http://127.0.0.1/","Subset","Ready",false,[])));
+        public ValueTask<BrowserResult> InteractAsync(BrowserRequest r,CancellationToken ct=default)=>new(new BrowserResult(null,new("http://127.0.0.1/","Subset","Ready",false,[])));
+        public ValueTask<BrowserResult> ExecuteAsync(BrowserRequest c,CancellationToken ct=default)
         {
-            if (!BrowserToolCatalog.TryGet(c.Tool, out var metadata) || !Provider.Supports(metadata.Feature)) return new(new BrowserCommandResult("unsupported_operation"));
-            Commands++; return new(new BrowserCommandResult(null, DataJson: "{\"status\":\"ok\"}"));
+            if (!BrowserToolCatalog.TryGet(AgentCore.Application.Tools.BrowserToolArguments.ToolName(c.Operation), out var metadata) || !Provider.Supports(metadata.Feature)) return new(new BrowserResult("unsupported_operation"));
+            Commands++; return new(new BrowserResult(null, DataJson: "{\"status\":\"ok\"}"));
         }
     }
 }

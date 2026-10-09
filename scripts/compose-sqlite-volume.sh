@@ -193,7 +193,7 @@ assert resource_bytes.decode("utf-8") in workspace_text, workspace_text
 
 # New-mode binary home writes and scratch retain their distinct lifetimes after recreation.
 status, v2_owner_body = request(f"http://127.0.0.1:{port}/api/v2/admin/agent-instances", method="POST",
-    data=json.dumps({"definitionId": "general-assistant", "version": 17}).encode(), headers=owner_headers)
+    data=json.dumps({"definitionId": "general-assistant", "version": 21}).encode(), headers=owner_headers)
 v2_owner = json.loads(v2_owner_body)["instanceId"]
 skills_url = f"http://127.0.0.1:{port}/api/v2/admin/agent-instances/{v2_owner}/skills"
 _, skill_body = request(skills_url, headers=owner_headers)

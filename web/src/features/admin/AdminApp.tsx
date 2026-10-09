@@ -2,7 +2,7 @@ import { groupedCapabilityOptions, reconcileAlwaysCapabilities } from "./capabil
 import { InstanceSkillsSection } from "./InstanceSkillsSection";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { updateHarness } from "../../services/adminApi";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type Ref } from "react";
 import {
   Alert,
   App,
@@ -49,7 +49,7 @@ import { DefinitionCandidateEditor, type DefinitionEditorView } from "./definiti
 import { HarnessManagementSection, HarnessPolicyModeScopes } from "./HarnessManagementSection";
 import { CredentialsSection, InstanceCredentialsSection } from "./CredentialsSection";
 import { EventsSection } from "./EventsSection";
-import { DefinitionDraftPublishGatePanel } from "./definitionDraftPublishGatePanel";
+import { DefinitionDraftPublishGatePanel, type DefinitionDraftEvidenceHandle } from "./definitionDraftPublishGatePanel";
 import { ResourceImportPanel } from "./resourceImportPanel";
 import {
   type AdminDefinitionDraft,
@@ -1007,6 +1007,7 @@ function DefinitionDetail({
     };
   }, []);
   const editorSurfaceRef = useRef<HTMLElement | null>(null);
+  const draftEvidenceRef = useRef<DefinitionDraftEvidenceHandle | null>(null);
   const openedUnpublishedDraftRef = useRef(false);
 
   const dirtyCandidate = activeDraft !== null && !candidatesEqual(candidate, activeDraft.candidate);
@@ -1100,6 +1101,7 @@ function DefinitionDetail({
   }, [activeDraft?.draftId]);
 
   const closeDraftEditor = () => {
+    draftEvidenceRef.current?.pause();
     setDetailTab("drafts");
     setActiveDraft(null);
     loadCandidate({});
@@ -1188,6 +1190,7 @@ function DefinitionDetail({
     setBusy(true);
     setLifecycleError(null);
     try {
+      if (activeDraft?.draftId === draft.draftId) draftEvidenceRef.current?.pause();
       await deleteAdminDefinitionDraft(draft.draftId, expectedRevision);
       if (activeDraft?.draftId === draft.draftId) {
         setActiveDraft(null);
@@ -1199,6 +1202,7 @@ function DefinitionDetail({
     } catch (error) {
       reportLifecycleError(error, "Draft could not be deleted.");
       showAdminFailure(message, error, "Draft could not be deleted.");
+      if (activeDraft?.draftId === draft.draftId) draftEvidenceRef.current?.resume();
     } finally {
       setBusy(false);
     }
@@ -1317,6 +1321,7 @@ function DefinitionDetail({
             setActiveDraft(draft);
             loadCandidate(draft.candidate);
           }
+          draftEvidenceRef.current?.pause();
           const publication = await publishAdminDefinitionDraft(draft.draftId, draft.revision);
           message.success(`Published version ${publication.version}.`);
           setDetailTab("versions");
@@ -1327,6 +1332,7 @@ function DefinitionDetail({
         } catch (error) {
           reportLifecycleError(error, "Publish failed.");
           showAdminFailure(message, error, "Publish failed.");
+          draftEvidenceRef.current?.resume();
         } finally {
           setBusy(false);
         }
@@ -1441,6 +1447,7 @@ function DefinitionDetail({
             />
           ) : null}
           <DraftEditor
+            evidenceRef={draftEvidenceRef}
             activeDraft={activeDraft}
             candidate={candidate}
             jsonText={jsonText}
@@ -1630,6 +1637,7 @@ function KnowledgeResourceBinding({
 
 function DraftEditor({
   activeDraft,
+  evidenceRef,
   candidate,
   jsonText,
   jsonError,
@@ -1645,6 +1653,7 @@ function DraftEditor({
   onDraftRevisionChange,
   onError
 }: {
+  evidenceRef: Ref<DefinitionDraftEvidenceHandle>;
   activeDraft: AdminDefinitionDraft;
   candidate: DefinitionCandidate;
   jsonText: string;
@@ -2215,6 +2224,7 @@ function DraftEditor({
             destroyOnHidden: false,
             children: (
               <DefinitionDraftPublishGatePanel
+                evidenceRef={evidenceRef}
                 key={activeDraft.draftId}
                 activeDraft={activeDraft}
                 dirty={dirty}
@@ -3075,7 +3085,7 @@ export function EffectiveConfigView({
             <Descriptions.Item label="Profile mode">{config.browser.profileMode}</Descriptions.Item>
             <Descriptions.Item label="Policy mode">{config.browser.policyMode}</Descriptions.Item>
             <Descriptions.Item label="Supported features">{config.browser.supportedFeatures.join(", ") || "None"}</Descriptions.Item>
-            <Descriptions.Item label="Output limits">Snapshot {config.browser.maxSnapshotChars} characters; screenshot {config.browser.maxCaptureBytes} bytes; download {config.browser.maxDownloadBytes} bytes</Descriptions.Item>
+            <Descriptions.Item label="Output limits">Snapshot {config.browser.maxSnapshotBytes} UTF-8 bytes; screenshot {config.browser.maxCaptureBytes} bytes; download {config.browser.maxDownloadBytes} bytes</Descriptions.Item>
           </Descriptions>
         </section>
       ) : null}

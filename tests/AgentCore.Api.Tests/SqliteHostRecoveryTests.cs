@@ -32,7 +32,7 @@ public sealed class SqliteHostRecoveryTests
         await using (var first = new DurableSqliteHostFactory(db, runScheduler: false))
         {
             using var client = TestOwnerCapability.CreateOwnerClient(first);
-            var instanceId = TestInstances.Create(client, "secretary", 3);
+            var instanceId = TestInstances.Create(client, "secretary", 8);
             var sourceResponse = await client.PostAsJsonAsync("/api/v2/admin/connections/events",
                 new { displayName = "Orders", eventKey = "order.placed" });
             sourceResponse.EnsureSuccessStatusCode();

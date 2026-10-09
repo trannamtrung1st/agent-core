@@ -215,7 +215,7 @@ public sealed class BrowserToolTests
         var executor = Executor(fake);
         var definition = BrowserDefinition();
         var sessionId = Guid.NewGuid();
-        var reference = OpaqueRef();
+        var reference = TargetName();
 
         var cases = new[]
         {
@@ -226,15 +226,15 @@ public sealed class BrowserToolTests
             (ToolCatalog.BrowserSnapshot, """{"waitFor":"networkidle"}"""),
             (ToolCatalog.BrowserSnapshot, """{"waitFor":"stable","timeoutMs":9000}"""),
             (ToolCatalog.BrowserSnapshot, """{"waitFor":"stable","selector":"#rows"}"""),
-            (ToolCatalog.BrowserClick, """{"operation":"evaluate","ref":"el_aaaaaaaaaaaaaaaaaaaaaa"}"""),
+            (ToolCatalog.BrowserClick, """{"operation":"evaluate","target":{"by":"role","value":"button","name":"el_aaaaaaaaaaaaaaaaaaaaaa"}}"""),
             (ToolCatalog.BrowserClick, """{"operation":"click","selector":"#search"}"""),
-            (ToolCatalog.BrowserClick, """{"operation":"click","xpath":"//*","ref":"el_aaaaaaaaaaaaaaaaaaaaaa"}"""),
-            (ToolCatalog.BrowserClick, """{"operation":"click","script":"alert(1)","ref":"el_aaaaaaaaaaaaaaaaaaaaaa"}"""),
-            (ToolCatalog.BrowserClick, $$"""{"ref":"{{reference}}","javascript":"1"}"""),
-            (ToolCatalog.BrowserClick, """{"ref":"#search"}"""),
-            (ToolCatalog.BrowserClick, $$"""{"operation":"press","ref":"{{reference}}","key":"a"}"""),
-            (ToolCatalog.BrowserClick, $$"""{"operation":"fill","ref":"{{reference}}","value":"{{new string('x', BrowserToolLimits.MaxFillLength + 1)}}"}"""),
-            (ToolCatalog.BrowserClick, $$"""{"ref":"{{reference}}","path":"/tmp/secret"}""")
+            (ToolCatalog.BrowserClick, """{"operation":"click","xpath":"//*","target":{"by":"role","value":"button","name":"el_aaaaaaaaaaaaaaaaaaaaaa"}}"""),
+            (ToolCatalog.BrowserClick, """{"operation":"click","script":"alert(1)","target":{"by":"role","value":"button","name":"el_aaaaaaaaaaaaaaaaaaaaaa"}}"""),
+            (ToolCatalog.BrowserClick, $$"""{"target":{"by":"role","value":"button","name":"{{reference}}"},"javascript":"1"}"""),
+            (ToolCatalog.BrowserClick, """{"target":{"by":"selector","value":"#search"}}"""),
+            (ToolCatalog.BrowserClick, $$"""{"operation":"press","target":{"by":"role","value":"button","name":"{{reference}}"},"key":"a"}"""),
+            (ToolCatalog.BrowserClick, $$"""{"operation":"fill","target":{"by":"role","value":"button","name":"{{reference}}"},"value":"{{new string('x', BrowserToolLimits.MaxFillLength + 1)}}"}"""),
+            (ToolCatalog.BrowserClick, $$"""{"target":{"by":"role","value":"button","name":"{{reference}}"},"path":"/tmp/secret"}""")
         };
 
         foreach (var (name, arguments) in cases)
@@ -276,8 +276,8 @@ public sealed class BrowserToolTests
             Call(ToolCatalog.BrowserWait, """{"condition":"stable","timeoutMs":3000}"""),
             ToolLimits.MaxOutputBytes,
             admission: UserTurn());
-        Assert.Equal("stable", fake.LastObserve?.WaitFor);
-        Assert.Equal(3000, fake.LastObserve?.TimeoutMs);
+        Assert.Equal("stable", (fake.LastObserve as BrowserWaitFor)?.Condition);
+        Assert.Equal(3000, (fake.LastObserve as BrowserWaitFor)?.TimeoutMs);
         Assert.Contains("\"settled\":true", stable.Text, StringComparison.Ordinal);
 
         fake.Observation = fake.Observation with { Settled = null };
@@ -301,10 +301,10 @@ public sealed class BrowserToolTests
             Observation = new BrowserSnapshot(
                 "http://127.0.0.1:5091/",
                 new string('t', BrowserToolLimits.MaxTitleLength + 20),
-                hostile + new string('v', BrowserToolLimits.MaxVisibleTextLength),
+                hostile + new string('v', BrowserToolLimits.MaxSnapshotBytes),
                 false,
                 Enumerable.Range(0, 50)
-                    .Select(index => new BrowserElement(OpaqueRef(index), "button", new string('n', 240)))
+                    .Select(index => new BrowserElement(new BrowserTarget("role", "button", Name: new string('n', 240)), "button", new string('n', 240)))
                     .ToArray())
         };
         var executor = Executor(fake);
@@ -319,13 +319,13 @@ public sealed class BrowserToolTests
         var root = document.RootElement;
         Assert.True(root.GetProperty("untrustedBrowserContent").GetBoolean());
         Assert.Equal(BrowserToolLimits.MaxTitleLength, root.GetProperty("title").GetString()!.Length);
-        Assert.True(root.GetProperty("textTruncated").GetBoolean());
-        Assert.Equal(BrowserToolLimits.MaxVisibleTextLength, root.GetProperty("visibleText").GetString()!.Length);
-        Assert.StartsWith(hostile, root.GetProperty("visibleText").GetString(), StringComparison.Ordinal);
-        Assert.InRange(root.GetProperty("elements").GetArrayLength(), 1, BrowserToolLimits.MaxSnapshotChars);
+        Assert.True(root.GetProperty("truncated").GetBoolean());
+        Assert.Equal(BrowserToolLimits.MaxSnapshotBytes, root.GetProperty("content").GetString()!.Length);
+        Assert.StartsWith(hostile, root.GetProperty("content").GetString(), StringComparison.Ordinal);
+        Assert.InRange(root.GetProperty("targets").GetArrayLength(), 1, BrowserToolLimits.MaxSnapshotBytes);
         Assert.Equal(
             BrowserToolLimits.MaxAccessibleNameLength,
-            root.GetProperty("elements")[0].GetProperty("name").GetString()!.Length);
+            root.GetProperty("targets")[0].GetProperty("name").GetString()!.Length);
         Assert.DoesNotContain("cookie", result.Text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("localStorage", result.Text, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(FixtureOrigin, fake.HostPolicy.TargetOrigins);
@@ -351,11 +351,11 @@ public sealed class BrowserToolTests
                 "Empty note",
                 false,
                 [
-                    new BrowserElement("el_name", "textbox", "Product name", ["fill", "press"], new BrowserControlState(Value: "AC Probe")),
-                    new BrowserElement("el_published", "checkbox", "Published", ["check", "uncheck"], new BrowserControlState(Checked: true)),
-                    new BrowserElement("el_category", "combobox", "Category", ["select"], new BrowserControlState(SelectedText: "Simple")),
-                    new BrowserElement("el_picture", "button", "Picture file", ["upload"]),
-                    new BrowserElement("el_long", "textbox", "Long note", ["fill"], new BrowserControlState(Value: new string('A', BrowserToolLimits.MaxFillLength + 40)))
+                    new BrowserElement(new BrowserTarget("role", "textbox", Name: "Product name"), "textbox", "Product name", ["fill", "press"], new BrowserControlState(Value: "AC Probe")),
+                    new BrowserElement(new BrowserTarget("role", "checkbox", Name: "Published"), "checkbox", "Published", ["check", "uncheck"], new BrowserControlState(Checked: true)),
+                    new BrowserElement(new BrowserTarget("role", "combobox", Name: "Category"), "combobox", "Category", ["select"], new BrowserControlState(SelectedText: "Simple")),
+                    new BrowserElement(new BrowserTarget("role", "button", Name: "Picture file"), "button", "Picture file", ["upload"]),
+                    new BrowserElement(new BrowserTarget("role", "textbox", Name: "Long note"), "textbox", "Long note", ["fill"], new BrowserControlState(Value: new string('A', BrowserToolLimits.MaxFillLength + 40)))
                 ])
         };
         var serialized = await Executor(fake).ExecuteAsync(
@@ -365,43 +365,43 @@ public sealed class BrowserToolTests
             ToolLimits.MaxOutputBytes,
             admission: UserTurn());
         using var document = JsonDocument.Parse(serialized.Text);
-        var elements = document.RootElement.GetProperty("elements").EnumerateArray().ToDictionary(e => e.GetProperty("ref").GetString()!);
-        Assert.Equal("AC Probe", elements["el_name"].GetProperty("state").GetProperty("value").GetString());
-        Assert.False(elements["el_name"].GetProperty("state").TryGetProperty("checked", out _));
-        Assert.False(elements["el_name"].GetProperty("state").TryGetProperty("selectedText", out _));
-        Assert.True(elements["el_published"].GetProperty("state").GetProperty("checked").GetBoolean());
-        Assert.False(elements["el_published"].GetProperty("state").TryGetProperty("value", out _));
-        Assert.Equal("Simple", elements["el_category"].GetProperty("state").GetProperty("selectedText").GetString());
-        Assert.False(elements["el_picture"].TryGetProperty("state", out _));
-        Assert.Equal(BrowserToolLimits.MaxFillLength, elements["el_long"].GetProperty("state").GetProperty("value").GetString()!.Length);
+        var targets = document.RootElement.GetProperty("targets").EnumerateArray().ToDictionary(e => e.GetProperty("name").GetString()!);
+        Assert.Equal("AC Probe", targets["Product name"].GetProperty("state").GetProperty("value").GetString());
+        Assert.False(targets["Product name"].GetProperty("state").TryGetProperty("checked", out _));
+        Assert.False(targets["Product name"].GetProperty("state").TryGetProperty("selectedText", out _));
+        Assert.True(targets["Published"].GetProperty("state").GetProperty("checked").GetBoolean());
+        Assert.False(targets["Published"].GetProperty("state").TryGetProperty("value", out _));
+        Assert.Equal("Simple", targets["Category"].GetProperty("state").GetProperty("selectedText").GetString());
+        Assert.False(targets["Picture file"].TryGetProperty("state", out _));
+        Assert.Equal(BrowserToolLimits.MaxFillLength, targets["Long note"].GetProperty("state").GetProperty("value").GetString()!.Length);
         Assert.DoesNotContain("selector", serialized.Text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("playwright", serialized.Text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("\"html\"", serialized.Text, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task Stale_and_cross_session_refs_do_not_click()
+    public async Task Unconfirmed_actions_and_controls_absent_from_the_owned_session_do_not_click()
     {
-        var reference = OpaqueRef();
+        var reference = TargetName();
         var owner = Guid.NewGuid();
         var other = Guid.NewGuid();
         var fake = new FakeBrowser
         {
             CurrentUrl = new Uri("http://127.0.0.1:5091/"),
-            Refs = { [reference] = owner }
+            TargetsBySession = { [reference] = owner }
         };
         var executor = Executor(fake);
         var definition = BrowserDefinition();
-        var click = $$"""{"ref":"{{reference}}"}""";
+        var click = $$"""{"target":{"by":"role","value":"button","name":"{{reference}}"} }""";
 
-        fake.ForcedActError = "stale_reference";
+        fake.ForcedActError = "action_not_confirmed";
         var stale = await executor.ExecuteAsync(
             definition,
             owner,
             Call(ToolCatalog.BrowserClick, click),
             ToolLimits.MaxOutputBytes,
             admission: UserTurn());
-        Assert.Contains("stale_reference", stale.Text, StringComparison.Ordinal);
+        Assert.Contains("action_not_confirmed", stale.Text, StringComparison.Ordinal);
         Assert.Equal(0, fake.ClickCalls);
         Assert.DoesNotContain("Playwright", stale.Text, StringComparison.Ordinal);
 
@@ -729,7 +729,7 @@ public sealed class BrowserToolTests
     [InlineData("already_closed")]
     public async Task Close_routes_to_the_browser_port_and_serializes_status(string status)
     {
-        var fake = new FakeBrowser { CloseResult = new BrowserCloseResult(status) };
+        var fake = new FakeBrowser { CloseResult = new BrowserResult(status is "closed" or "already_closed" ? null : status, Status: status) };
         var sessionId = Guid.NewGuid();
         var result = await Executor(fake).ExecuteAsync(
             BrowserDefinitionV12(),
@@ -747,7 +747,6 @@ public sealed class BrowserToolTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("null")]
-    [InlineData("""{"browser":"current"}""")]
     public async Task Close_canonicalizes_harmless_argument_shapes(string arguments)
     {
         var fake = new FakeBrowser();
@@ -796,7 +795,7 @@ public sealed class BrowserToolTests
     [Fact]
     public async Task Close_maps_port_provider_unavailable_to_tool_failure()
     {
-        var fake = new FakeBrowser { CloseResult = new BrowserCloseResult("provider_unavailable") };
+        var fake = new FakeBrowser { CloseResult = new BrowserResult(null, Status: "provider_unavailable", DataJson: System.Text.Json.JsonSerializer.Serialize(new { status = "provider_unavailable" })) };
         var result = await Executor(fake).ExecuteAsync(
             BrowserDefinitionV12(),
             Guid.NewGuid(),
@@ -832,16 +831,16 @@ public sealed class BrowserToolTests
     public async Task Unsupported_operation_returns_only_the_advertised_actions()
     {
         var fake = new FakeBrowser { CurrentUrl = new Uri("http://127.0.0.1:5091/") };
-        var reference = OpaqueRef();
-        fake.Refs[reference] = Guid.Empty;
+        var reference = TargetName();
+        fake.TargetsBySession[reference] = Guid.Empty;
         fake.ForcedActError = "unsupported_operation";
         fake.ForcedAllowedActions = ["fill", "press", "<selector>"];
         var session = Guid.NewGuid();
-        fake.Refs[reference] = session;
+        fake.TargetsBySession[reference] = session;
         var result = await Executor(fake).ExecuteAsync(
             BrowserDefinition(),
             session,
-            Call(ToolCatalog.BrowserClick, $$"""{"ref":"{{reference}}"}"""),
+            Call(ToolCatalog.BrowserClick, $$"""{"target":{"by":"role","value":"button","name":"{{reference}}"} }"""),
             ToolLimits.MaxOutputBytes,
             admission: UserTurn());
         using var document = JsonDocument.Parse(result.Text);
@@ -898,15 +897,15 @@ public sealed class BrowserToolTests
             admission: UserTurn());
         using var createdDoc = JsonDocument.Parse(created.Text);
         var artifactId = createdDoc.RootElement.GetProperty("artifactId").GetGuid();
-        var reference = OpaqueRef(9);
-        browser.Refs[reference] = session;
+        var reference = TargetName(9);
+        browser.TargetsBySession[reference] = session;
         var uploaded = await executor.ExecuteAsync(
             definition,
             session,
             new ModelToolCall(
                 "c2",
                 ToolCatalog.BrowserUpload,
-                $$"""{"ref":"{{reference}}","artifactIds":["{{artifactId:D}}"]}"""),
+                $$"""{"target":{"by":"role","value":"button","name":"{{reference}}"},"artifactIds":["{{artifactId:D}}"]}"""),
             ToolLimits.MaxOutputBytes,
             admission: UserTurn());
         using var uploadedDoc = JsonDocument.Parse(uploaded.Text);
@@ -922,7 +921,7 @@ public sealed class BrowserToolTests
             new ModelToolCall(
                 "c3",
                 ToolCatalog.BrowserUpload,
-                $$"""{"ref":"{{reference}}","artifactIds":["ac-keyboard.png"]}"""),
+                $$"""{"target":{"by":"role","value":"button","name":"{{reference}}"},"artifactIds":["ac-keyboard.png"]}"""),
             ToolLimits.MaxOutputBytes,
             admission: UserTurn());
         Assert.Contains("\"error\":\"invalid\"", rejected.Text, StringComparison.Ordinal);
@@ -1069,14 +1068,7 @@ public sealed class BrowserToolTests
         throw new InvalidOperationException("agents directory was not found.");
     }
 
-    private static string OpaqueRef(int seed = 1)
-    {
-        var tail = Convert.ToBase64String(new byte[] { (byte)seed, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 })
-            .TrimEnd('=')
-            .Replace('+', '-')
-            .Replace('/', '_');
-        return "el_" + tail;
-    }
+    private static string TargetName(int seed = 1) => "Fixture button " + seed;
 
     private sealed class ReadyBrowser : FakeBrowser, IBrowserRuntimeReadiness
     {
@@ -1097,7 +1089,7 @@ public sealed class BrowserToolTests
             "Record lookup",
             "Search",
             false,
-            [new BrowserElement("el_aaaaaaaaaaaaaaaaaaaaaa", "button", "Search")]);
+            [new BrowserElement(new BrowserTarget("role", "button", Name: "Search"), "button", "Search")]);
 
         public string? ForcedActError { get; set; }
 
@@ -1107,7 +1099,7 @@ public sealed class BrowserToolTests
 
         public int ObserveCalls { get; private set; }
 
-        public BrowserWaitOptions? LastObserve { get; private set; }
+        public BrowserCommand? LastObserve { get; private set; }
 
         public int ActCalls { get; private set; }
 
@@ -1121,11 +1113,11 @@ public sealed class BrowserToolTests
 
         public Guid? LastActSession { get; private set; }
 
-        public BrowserCloseResult CloseResult { get; set; } = new("closed");
+        public BrowserResult CloseResult { get; set; } = new(null, Status: "closed", DataJson: "{\"status\":\"closed\"}");
 
         public int CloseCalls { get; private set; }
 
-        public Dictionary<string, Guid> Refs { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, Guid> TargetsBySession { get; } = new(StringComparer.Ordinal);
 
         public ValueTask<Uri?> GetCurrentUrlAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
@@ -1133,8 +1125,8 @@ public sealed class BrowserToolTests
             return new(CurrentUrl);
         }
 
-        public ValueTask<BrowserOperationResult> NavigateAsync(
-            BrowserNavigateRequest request,
+        public ValueTask<BrowserResult> NavigateAsync(
+            BrowserRequest request,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1145,63 +1137,72 @@ public sealed class BrowserToolTests
 
             NavigateCalls++;
             LastSessionId = request.SessionId;
-            CurrentUrl = request.Url;
-            return new(new BrowserOperationResult(null, Observation with { Url = request.Url!.AbsoluteUri }));
+            CurrentUrl = new Uri(((BrowserNavigate)request.Command).Url!);
+            return new(new BrowserResult(null, Observation with { Url = ((BrowserNavigate)request.Command).Url! }));
         }
 
-        public ValueTask<BrowserOperationResult> SnapshotAsync(
+        public ValueTask<BrowserResult> SnapshotAsync(
             Guid sessionId,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ObserveCalls++;
             LastSessionId = sessionId;
-            return new(new BrowserOperationResult(null, Observation));
+            return new(new BrowserResult(null, Observation));
         }
 
-        public ValueTask<BrowserOperationResult> SnapshotAsync(
+        public ValueTask<BrowserResult> SnapshotAsync(
             Guid sessionId,
-            BrowserWaitOptions options,
+            BrowserCommand options,
             CancellationToken cancellationToken = default)
         {
             LastObserve = options;
             return SnapshotAsync(sessionId, cancellationToken);
         }
 
-        public ValueTask<BrowserOperationResult> InteractAsync(
-            BrowserInteractionRequest request,
+        public ValueTask<BrowserResult> InteractAsync(
+            BrowserRequest request,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ActCalls++;
             LastActSession = request.SessionId;
-            LastUpload = request.Upload ?? request.Uploads?.FirstOrDefault();
+            LastUpload = (request.Command as BrowserUploadCommand)?.Uploads?.FirstOrDefault();
             if (ForcedActError is not null)
             {
-                return new(new BrowserOperationResult(ForcedActError, null, ForcedAllowedActions));
+                return new(new BrowserResult(ForcedActError, null, ForcedAllowedActions));
             }
 
-            if (!Refs.TryGetValue(request.Ref, out var owner) || owner != request.SessionId)
+            if (!TargetsBySession.TryGetValue((request.Command switch { BrowserClick click => click.Target, BrowserTypeText type => type.Target, BrowserHover hover => hover.Target, BrowserUploadCommand upload => upload.Target, _ => null })?.Name ?? "", out var owner) || owner != request.SessionId)
             {
-                return new(new BrowserOperationResult("forbidden", null));
+                return new(new BrowserResult("forbidden", null));
             }
 
-            if (string.Equals(request.Operation, "click", StringComparison.Ordinal))
+            if (string.Equals(AgentCore.Application.Tools.BrowserToolArguments.ToolName(request.Operation)[8..], "click", StringComparison.Ordinal))
             {
                 ClickCalls++;
             }
 
-            return new(new BrowserOperationResult(null, Observation));
+            return new(new BrowserResult(null, Observation));
         }
 
-        public ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        public ValueTask<BrowserResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             CloseCalls++;
             LastSessionId = sessionId;
             return new(CloseResult);
         }
-    }
+
+        public virtual ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default) => request.Operation switch
+        {
+            BrowserOperation.Navigate => NavigateAsync(request, ct),
+            BrowserOperation.Snapshot or BrowserOperation.WaitFor => SnapshotAsync(request.SessionId, request.Command, ct),
+            BrowserOperation.Close => CloseAsync(request.SessionId, ct),
+            BrowserOperation.Click or BrowserOperation.Type or BrowserOperation.Hover or BrowserOperation.Drag or BrowserOperation.Upload or BrowserOperation.FillForm => InteractAsync(request, ct),
+            _ => new(new BrowserResult("unsupported_operation")),
+        };
+}
 
     private sealed class CapturingBrowser : FakeBrowser, IBrowser
     {
@@ -1209,13 +1210,11 @@ public sealed class BrowserToolTests
 
         public byte[] Png { get; set; } = [0x89, 0x50, 0x4E, 0x47, 1, 2, 3];
 
-        ValueTask<BrowserScreenshotResult> IBrowser.CaptureViewportAsync(
-            BrowserScreenshotRequest request,
-            CancellationToken cancellationToken)
+        public override ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            Captures++;
-            return new(new BrowserScreenshotResult(null, Png, 1, 8, 8));
+            if (request.Operation != BrowserOperation.Screenshot) return base.ExecuteAsync(request, ct);
+            ct.ThrowIfCancellationRequested(); Captures++;
+            return new(new BrowserResult(null, Bytes: Png, ContentType: "image/png", RedactionCount: 1, Width: 8, Height: 8));
         }
     }
 

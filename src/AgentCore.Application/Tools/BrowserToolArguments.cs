@@ -6,503 +6,251 @@ namespace AgentCore.Application.Tools;
 
 public static class BrowserToolArguments
 {
-    private static readonly Regex OpaqueRef = new(
-        "^el_[A-Za-z0-9_-]{22}$",
-        RegexOptions.CultureInvariant | RegexOptions.Compiled);
-
-    private static readonly Regex PageRef = new(
-        "^pg_[A-Za-z0-9_-]{22}$",
-        RegexOptions.CultureInvariant | RegexOptions.Compiled);
-
-    private static readonly HashSet<string> AuthorityProperties = new(StringComparer.OrdinalIgnoreCase)
+    internal const string TargetGuidance = "Use a minimal target object. For a label: {\"target\":{\"by\":\"label\",\"value\":\"Email\"}}. For role, value is an ARIA role and name is its accessible name. Example: {\"target\":{\"by\":\"role\",\"value\":\"textbox\",\"name\":\"Email\"}}. exact defaults to true. For repeated Edit buttons use within={by:role,value:row,hasText:Pump 002}. Omit unused fields, including name for non-role targets and frameRef for the main page. One bounded within scope only. Actions need no browser.find call. Never invent frameRef; use only a current snapshot frame ID.";
+    internal static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new()
     {
-        "headless",
-        "interactionMode",
-        "targetOrigins",
-        "origins",
-        "allowlist",
-        "enabled",
-        "fixturePort",
-        "mode"
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
     };
 
-    private static readonly HashSet<string> ScriptProperties = new(StringComparer.OrdinalIgnoreCase)
+    public static string ToolName(BrowserOperation operation) => operation switch
     {
-        "script",
-        "selector",
-        "xpath",
-        "javascript",
-        "evaluate",
-        "path",
-        "file",
-        "filepath",
-        "filename",
-        "command"
+        BrowserOperation.Navigate => "browser.navigate",
+        BrowserOperation.Snapshot => "browser.snapshot",
+        BrowserOperation.Find => "browser.find",
+        BrowserOperation.Click => "browser.click",
+        BrowserOperation.Hover => "browser.hover",
+        BrowserOperation.Drag => "browser.drag",
+        BrowserOperation.Drop => "browser.drop",
+        BrowserOperation.Type => "browser.type",
+        BrowserOperation.FillForm => "browser.fill_form",
+        BrowserOperation.SelectOption => "browser.select_option",
+        BrowserOperation.PressKey => "browser.press_key",
+        BrowserOperation.Upload => "browser.upload",
+        BrowserOperation.FillCredential => "browser.fill_credential",
+        BrowserOperation.WaitFor => "browser.wait_for",
+        BrowserOperation.Tabs => "browser.tabs",
+        BrowserOperation.Dialog => "browser.dialog",
+        BrowserOperation.Resize => "browser.resize",
+        BrowserOperation.Close => "browser.close",
+        BrowserOperation.Screenshot => "browser.screenshot",
+        BrowserOperation.ConsoleMessages => "browser.console_messages",
+        BrowserOperation.NetworkRequests => "browser.network_requests",
+        BrowserOperation.NetworkRequest => "browser.network_request",
+        BrowserOperation.Route => "browser.route",
+        BrowserOperation.Routes => "browser.routes",
+        BrowserOperation.Unroute => "browser.unroute",
+        BrowserOperation.NetworkState => "browser.network_state",
+        BrowserOperation.Cookies => "browser.cookies",
+        BrowserOperation.LocalStorage => "browser.local_storage",
+        BrowserOperation.SessionStorage => "browser.session_storage",
+        BrowserOperation.Verify => "browser.verify",
+        BrowserOperation.GenerateLocator => "browser.generate_locator",
+        BrowserOperation.Mouse => "browser.mouse",
+        BrowserOperation.Highlight => "browser.highlight",
+        BrowserOperation.EmulateMedia => "browser.emulate_media",
+        BrowserOperation.GetConfig => "browser.get_config",
+        BrowserOperation.SetGeolocation => "browser.set_geolocation",
+        BrowserOperation.Scroll => "browser.scroll",
+        _ => ""
     };
 
-    public static bool IsOpaqueReference(string? value) => value is not null && OpaqueRef.IsMatch(value);
-
-    public static bool TryNavigate(JsonElement args, out string url, out string errorJson)
+    private static BrowserRequest Parse(Guid sessionId, string tool, JsonElement args)
     {
-        if (!TryNavigate(args, out var operation, out var parsed, out errorJson)
-            || operation != "goto"
-            || parsed is null)
+        var operation = Enum.GetValues<BrowserOperation>().Single(o => ToolName(o) == tool);
+        var type = operation switch
         {
-            url = string.Empty;
-            return false;
-        }
-
-        url = parsed;
-        return true;
+            BrowserOperation.Navigate => typeof(BrowserNavigate),
+            BrowserOperation.Snapshot => typeof(BrowserObserve),
+            BrowserOperation.Find => typeof(BrowserFind),
+            BrowserOperation.Click => typeof(BrowserClick),
+            BrowserOperation.Hover => typeof(BrowserHover),
+            BrowserOperation.Drag => typeof(BrowserDrag),
+            BrowserOperation.Drop => typeof(BrowserDrop),
+            BrowserOperation.Type => typeof(BrowserTypeText),
+            BrowserOperation.FillForm => typeof(BrowserFillForm),
+            BrowserOperation.SelectOption => typeof(BrowserSelectOption),
+            BrowserOperation.PressKey => typeof(BrowserPressKey),
+            BrowserOperation.Upload => typeof(BrowserUploadCommand),
+            BrowserOperation.FillCredential => typeof(BrowserFillCredential),
+            BrowserOperation.WaitFor => typeof(BrowserWaitFor),
+            BrowserOperation.Tabs => typeof(BrowserTabs),
+            BrowserOperation.Dialog => typeof(BrowserDialog),
+            BrowserOperation.Resize => typeof(BrowserResize),
+            BrowserOperation.Close => typeof(BrowserClose),
+            BrowserOperation.Screenshot => typeof(BrowserScreenshot),
+            BrowserOperation.ConsoleMessages => typeof(BrowserConsoleMessages),
+            BrowserOperation.NetworkRequests => typeof(BrowserNetworkRequests),
+            BrowserOperation.NetworkRequest => typeof(BrowserNetworkRequest),
+            BrowserOperation.Route => typeof(BrowserRoute),
+            BrowserOperation.Routes => typeof(BrowserRoutes),
+            BrowserOperation.Unroute => typeof(BrowserUnroute),
+            BrowserOperation.NetworkState => typeof(BrowserNetworkState),
+            BrowserOperation.Cookies => typeof(BrowserCookies),
+            BrowserOperation.LocalStorage => typeof(BrowserLocalStorage),
+            BrowserOperation.SessionStorage => typeof(BrowserSessionStorage),
+            BrowserOperation.Verify => typeof(BrowserVerify),
+            BrowserOperation.GenerateLocator => typeof(BrowserGenerateLocator),
+            BrowserOperation.Mouse => typeof(BrowserMouse),
+            BrowserOperation.Highlight => typeof(BrowserHighlight),
+            BrowserOperation.EmulateMedia => typeof(BrowserEmulateMedia),
+            BrowserOperation.GetConfig => typeof(BrowserGetConfig),
+            BrowserOperation.SetGeolocation => typeof(BrowserSetGeolocation),
+            BrowserOperation.Scroll => typeof(BrowserScroll),
+            _ => throw new ArgumentException("Unknown browser operation.")
+        };
+        var command = (BrowserCommand)JsonSerializer.Deserialize(args, type, JsonOptions)!;
+        if (command is BrowserEmulateMedia media)
+            command = media with
+            {
+                MediaSpecified = args.TryGetProperty("media", out _),
+                ColorSchemeSpecified = args.TryGetProperty("colorScheme", out _),
+                ReducedMotionSpecified = args.TryGetProperty("reducedMotion", out _),
+                ForcedColorsSpecified = args.TryGetProperty("forcedColors", out _),
+                ContrastSpecified = args.TryGetProperty("contrast", out _)
+            };
+        return new(sessionId, command);
     }
 
-    public static bool TryNavigate(JsonElement args, out string operation, out string? url, out string errorJson)
+    public static BrowserRequest Request(Guid sessionId, string tool, JsonElement args) =>
+        TryRequest(sessionId, tool, args, out var request, out var error) ? request
+            : throw new ArgumentException(error + ": " + TargetGuidance);
+
+    public static bool TryCanonicalizeClose(string? json, out string errorJson)
     {
-        operation = "goto";
-        url = null;
-        if (!TryRejectProperties(args, out errorJson))
-        {
-            return false;
-        }
-
-        if (args.TryGetProperty("operation", out var operationProperty))
-        {
-            if (operationProperty.ValueKind != JsonValueKind.String
-                || operationProperty.GetString() is not { Length: > 0 } named
-                || !BrowserToolLimits.NavigateOperations.Contains(named, StringComparer.Ordinal))
-            {
-                errorJson = Error("unsupported_operation", "Browser navigation is not supported.", "unsupported_operation");
-                return false;
-            }
-
-            operation = named;
-        }
-
-        var history = operation is "back" or "forward" or "reload";
-        if (!HasOnly(args, history ? ["operation"] : args.TryGetProperty("operation", out _) ? ["operation", "url"] : ["url"], out errorJson))
-        {
-            return false;
-        }
-
-        if (history)
-        {
-            return true;
-        }
-
-        if (!TryString(args, "url", out var parsedUrl))
-        {
-            errorJson = Error("invalid", "url is required.");
-            return false;
-        }
-
-        if (parsedUrl.Length > BrowserToolLimits.MaxUrlLength)
-        {
-            errorJson = Error("invalid", "url must be at most 2048 characters.");
-            return false;
-        }
-
-        url = parsedUrl;
-        return true;
-    }
-
-    public static bool TrySnapshot(JsonElement args, out BrowserWaitOptions? options, out string errorJson)
-    {
-        options = null;
-        if (!TryRejectProperties(args, out errorJson))
-        {
-            return false;
-        }
-
-        if (!HasOnly(args, ["waitFor", "timeoutMs", "role", "name"], out errorJson))
-        {
-            return false;
-        }
-
-        string? waitFor = null;
-        if (args.TryGetProperty("waitFor", out var waitProperty))
-        {
-            if (waitProperty.ValueKind != JsonValueKind.String
-                || waitProperty.GetString() is not { Length: > 0 } mode
-                || !BrowserToolLimits.ObserveWaitModes.Contains(mode, StringComparer.Ordinal))
-            {
-                errorJson = Error("invalid", "Browser wait is not supported.", "unsupported_wait");
-                return false;
-            }
-
-            waitFor = mode;
-        }
-
-        int? timeout = null;
-        if (args.TryGetProperty("timeoutMs", out var timeoutProperty))
-        {
-            if (waitFor is null)
-            {
-                errorJson = Error("invalid", "timeoutMs requires waitFor.", "timeout_without_wait");
-                return false;
-            }
-
-            if (timeoutProperty.ValueKind != JsonValueKind.Number
-                || !timeoutProperty.TryGetInt32(out var parsed)
-                || parsed < BrowserToolLimits.MinObserveTimeoutMs
-                || parsed > BrowserToolLimits.MaxObserveTimeoutMs)
-            {
-                errorJson = Error("invalid", "timeoutMs must be from 100 to 5000.", "timeout_out_of_range");
-                return false;
-            }
-
-            timeout = parsed;
-        }
-
-        string? role = null;
-        string? name = null;
-        if (string.Equals(waitFor, "role", StringComparison.Ordinal))
-        {
-            if (!TryString(args, "role", out var parsedRole)
-                || parsedRole.Length > BrowserToolLimits.MaxRoleLength
-                || !Regex.IsMatch(parsedRole, "^[a-z]+$", RegexOptions.CultureInvariant))
-            {
-                errorJson = Error("invalid", "role is required for this wait.", "missing_role");
-                return false;
-            }
-
-            role = parsedRole;
-            if (args.TryGetProperty("name", out _))
-            {
-                if (!TryString(args, "name", out var parsedName)
-                    || parsedName.Length > BrowserToolLimits.MaxAccessibleNameLength)
-                {
-                    errorJson = Error("invalid", "name must be a bounded accessible name.", "invalid_name");
-                    return false;
-                }
-
-                name = parsedName;
-            }
-        }
-        else if (args.TryGetProperty("role", out _) || args.TryGetProperty("name", out _))
-        {
-            errorJson = Error("invalid", "role is only valid when waitFor is role.", "unsupported_property");
-            return false;
-        }
-
-        if (waitFor is not null)
-        {
-            options = new BrowserWaitOptions(waitFor, timeout, role, name);
-        }
-
-        return true;
-    }
-
-    public static bool TryCanonicalizeClose(string? argumentsJson, out string errorJson)
-    {
-        errorJson = string.Empty;
-        if (string.IsNullOrWhiteSpace(argumentsJson))
-        {
-            return true;
-        }
-
+        errorJson = "";
+        if (string.IsNullOrWhiteSpace(json)) return true;
         try
         {
-            using var document = JsonDocument.Parse(argumentsJson);
-            if (document.RootElement.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
-            {
-                return true;
-            }
-
-            if (document.RootElement.ValueKind != JsonValueKind.Object)
-            {
-                errorJson = Error("invalid", "close accepts an object.");
-                return false;
-            }
-
-            return TryClose(document.RootElement, out errorJson);
+            using var document = JsonDocument.Parse(json);
+            var value = document.RootElement;
+            if (value.ValueKind == JsonValueKind.Null || value.ValueKind == JsonValueKind.Object && !value.EnumerateObject().Any()) return true;
         }
-        catch (JsonException)
-        {
-            errorJson = Error("invalid", "Tool arguments were malformed.");
-            return false;
-        }
+        catch (JsonException) { }
+        errorJson = "{\"error\":\"invalid\",\"message\":\"close accepts an empty object.\"}";
+        return false;
     }
 
-    public static bool TryClose(JsonElement args, out string errorJson)
+    public static bool TryRequest(Guid sessionId, string tool, JsonElement args, out BrowserRequest request, out string error)
     {
-        if (args.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
-        {
-            errorJson = string.Empty;
-            return true;
-        }
-
-        if (args.ValueKind != JsonValueKind.Object)
-        {
-            errorJson = Error("invalid", "close accepts an object.");
-            return false;
-        }
-
-        return TryRejectProperties(args, out errorJson);
+        request = null!; error = "invalid";
+        if (!BrowserToolCatalog.TryGet(tool, out var metadata)) { error = "unsupported_operation"; return false; }
+        if (args.ValueKind == JsonValueKind.Object && args.EnumerateObject().Any(p => p.Name is "origins" or "targetOrigins" or "headless" or "enabled" or "interactionMode"))
+        { error = "forbidden"; return false; }
+        using var schema = JsonDocument.Parse(metadata.ParametersJson);
+        if (!ValidateBrowserShape(args, schema.RootElement)) { if (InvalidTargetReason(args) is not null) error = "invalid_target"; return false; }
+        try { request = Parse(sessionId, tool, args); }
+        catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidOperationException) { return false; }
+        if (request.Command is BrowserNavigate { Operation: "goto", Url: null or "" }) return false;
+        if (!ValidTargets(args)) { error = "invalid_target"; return false; }
+        if (request.Command is BrowserFillForm form && form.Fields.Any(f => (f.Value is not null) == (f.Checked is not null))) return false;
+        if (request.Command is BrowserWaitFor wait && (wait.Condition == "target" && wait.Target is null
+            || wait.Condition is "text" or "textGone" && wait.Text is null || wait.Condition == "url" && wait.Url is null)) return false;
+        if (request.Command is BrowserVerify verify && verify.Target is null && string.IsNullOrWhiteSpace(verify.Text)) return false;
+        error = ""; return true;
     }
 
-    public static bool TryInteraction(
-        JsonElement args,
-        out string operation,
-        out string reference,
-        out string? value,
-        out string errorJson) =>
-        TryInteraction(args, out operation, out reference, out value, out _, out _, out _, out errorJson);
-
-    public static bool TryInteraction(
-        JsonElement args,
-        out string operation,
-        out string reference,
-        out string? value,
-        out string? direction,
-        out int delta,
-        out string? targetRef,
-        out string errorJson)
+    private static bool ValidTargets(JsonElement value)
     {
-        operation = string.Empty;
-        reference = string.Empty;
-        value = null;
-        direction = null;
-        delta = 0;
-        targetRef = null;
-        if (!TryRejectProperties(args, out errorJson))
-        {
-            return false;
-        }
-
-        if (!TryString(args, "operation", out operation)
-            || !BrowserToolLimits.Operations.Contains(operation, StringComparer.Ordinal))
-        {
-            errorJson = Error("unsupported_operation", "Browser operation is not supported.");
-            return false;
-        }
-
-        var allowed = operation switch
-        {
-            "fill_credential" => new[] { "operation", "ref", "credentialRef" },
-            "fill" or "select" => new[] { "operation", "ref", "value" },
-            "press" => new[] { "operation", "ref", "key" },
-            "upload" => new[] { "operation", "ref", "artifactId" },
-            "scroll" => new[] { "operation", "direction", "delta", "ref" },
-            "drag" => new[] { "operation", "ref", "targetRef" },
-            _ => new[] { "operation", "ref" }
-        };
-        if (!HasOnly(args, allowed, out errorJson))
-        {
-            return false;
-        }
-
-        if (operation == "scroll")
-        {
-            if (!TryString(args, "direction", out var parsedDirection)
-                || !BrowserToolLimits.ScrollDirections.Contains(parsedDirection, StringComparer.Ordinal))
+        if (value.ValueKind == JsonValueKind.Object)
+            foreach (var property in value.EnumerateObject())
             {
-                errorJson = Error("invalid", "direction is required.", "missing_direction");
-                return false;
+                if (property.Name is "target" or "destination" && !ValidTarget(JsonSerializer.Deserialize<BrowserTarget>(property.Value, JsonOptions))) return false;
+                if (!ValidTargets(property.Value)) return false;
             }
+        if (value.ValueKind == JsonValueKind.Array)
+            foreach (var item in value.EnumerateArray()) if (!ValidTargets(item)) return false;
+        return true;
+    }
 
-            direction = parsedDirection;
-            delta = BrowserToolLimits.DefaultScrollDelta;
-            if (args.TryGetProperty("delta", out var deltaProperty))
+    private static bool ValidateBrowserShape(JsonElement value, JsonElement schema)
+    {
+        if (schema.TryGetProperty("oneOf", out var variants))
+            return variants.EnumerateArray().Count(variant => ValidateBrowserShape(value, variant)) == 1;
+        var types = schema.GetProperty("type");
+        if (types.ValueKind == JsonValueKind.Array && value.ValueKind == JsonValueKind.Null)
+            return types.EnumerateArray().Any(t => t.GetString() == "null");
+        var type = types.ValueKind == JsonValueKind.Array ? types.EnumerateArray().First(t => t.GetString() != "null").GetString() : types.GetString();
+        if (type == "object")
+        {
+            if (value.ValueKind != JsonValueKind.Object) return false;
+            if (schema.TryGetProperty("required", out var required) && required.EnumerateArray().Any(r => !value.TryGetProperty(r.GetString()!, out _))) return false;
+            var properties = schema.GetProperty("properties");
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var property in value.EnumerateObject())
+                if (!seen.Add(property.Name) || !properties.TryGetProperty(property.Name, out var child) || !ValidateBrowserShape(property.Value, child)) return false;
+        }
+        else if (type == "string")
+        {
+            if (value.ValueKind != JsonValueKind.String) return false;
+            var length = value.GetString()!.Length;
+            if (schema.TryGetProperty("maxLength", out var max) && length > max.GetInt32() || schema.TryGetProperty("minLength", out var min) && length < min.GetInt32()) return false;
+            if (schema.TryGetProperty("enum", out var choices) && !choices.EnumerateArray().Any(c => c.GetString() == value.GetString())) return false;
+        }
+        else if (type is "integer" or "number")
+        {
+            if (value.ValueKind != JsonValueKind.Number || !value.TryGetDouble(out var number) || !double.IsFinite(number)) return false;
+            if (type == "integer" && !value.TryGetInt32(out _)) return false;
+            if (schema.TryGetProperty("minimum", out var min) && number < min.GetDouble() || schema.TryGetProperty("maximum", out var max) && number > max.GetDouble()) return false;
+        }
+        else if (type == "boolean" && value.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return false;
+        else if (type == "array")
+        {
+            if (value.ValueKind != JsonValueKind.Array) return false;
+            if (schema.TryGetProperty("minItems", out var min) && value.GetArrayLength() < min.GetInt32() || schema.TryGetProperty("maxItems", out var max) && value.GetArrayLength() > max.GetInt32()) return false;
+            foreach (var item in value.EnumerateArray()) if (!ValidateBrowserShape(item, schema.GetProperty("items"))) return false;
+        }
+        return true;
+    }
+
+    public static bool ValidTarget(BrowserTarget? target) => TargetError(target) is null;
+
+    private static string? TargetError(BrowserTarget? target)
+    {
+        if (target is null) return "target_missing_fields";
+        if (target.Name is not null && target.By != "role" || target.Within is { Name: not null, By: not "role" }) return "name_requires_role";
+        if (!ValidCriterion(target.By, target.Value, target.Name, target.HasText)
+            || target.Within is { } scope && !ValidCriterion(scope.By, scope.Value, scope.Name, scope.HasText)) return "target_invalid_criterion";
+        return target.FrameRef is not null && !Regex.IsMatch(target.FrameRef, "^fr_[a-f0-9]{32}$", RegexOptions.CultureInvariant) ? "frame_requires_current_id" : null;
+    }
+
+    internal static string? InvalidTargetReason(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Object)
+            foreach (var property in value.EnumerateObject())
             {
-                if (deltaProperty.ValueKind != JsonValueKind.Number
-                    || !deltaProperty.TryGetInt32(out var parsedDelta)
-                    || parsedDelta < 1
-                    || parsedDelta > BrowserToolLimits.MaxScrollDelta)
+                if (property.Name is "target" or "destination")
                 {
-                    errorJson = Error("invalid", "delta must be from 1 to 2000.", "delta_out_of_range");
-                    return false;
+                    try
+                    {
+                        var error = TargetError(JsonSerializer.Deserialize<BrowserTarget>(property.Value, JsonOptions));
+                        if (error is not null) return error;
+                    }
+                    catch (JsonException) { return "target_invalid_shape"; }
                 }
-
-                delta = parsedDelta;
+                var nested = InvalidTargetReason(property.Value);
+                if (nested is not null) return nested;
             }
-
-            if (!args.TryGetProperty("ref", out _))
+        if (value.ValueKind == JsonValueKind.Array)
+            foreach (var item in value.EnumerateArray())
             {
-                return true;
+                var error = InvalidTargetReason(item);
+                if (error is not null) return error;
             }
-        }
-
-        if (!TryString(args, "ref", out reference))
-        {
-            errorJson = Error("invalid", "ref is required.", "missing_ref");
-            return false;
-        }
-
-        if (reference.Length > BrowserToolLimits.MaxRefLength
-            || LooksLikeSelector(reference)
-            || !OpaqueRef.IsMatch(reference))
-        {
-            errorJson = LooksLikeSelector(reference)
-                ? Error("unsupported_operation", "Browser selectors are not supported.", "invalid_ref")
-                : Error("invalid", reference.Length > BrowserToolLimits.MaxRefLength
-                    ? "ref must be at most 128 characters."
-                    : "ref must be an opaque element reference.", "invalid_ref");
-            return false;
-        }
-
-        if (operation == "fill_credential")
-        {
-            if (!TryString(args, "credentialRef", out var alias) || alias.Length > 64)
-            { errorJson = Error("invalid", "credentialRef is required."); return false; }
-            value = alias;
-        }
-        else if (operation is "fill" or "select")
-        {
-            if (!args.TryGetProperty("value", out var rawValue) || rawValue.ValueKind != JsonValueKind.String
-                || operation == "select" && rawValue.GetString()!.Length == 0)
-            {
-                errorJson = Error("invalid", "value is required.", "missing_value");
-                return false;
-            }
-
-            var text = rawValue.GetString()!;
-            var max = operation == "fill" ? BrowserToolLimits.MaxFillLength : BrowserToolLimits.MaxSelectLength;
-            if (text.Length > max)
-            {
-                errorJson = Error("invalid", $"value must be at most {max} characters.", "value_too_long");
-                return false;
-            }
-
-            value = text;
-        }
-        else if (operation == "press")
-        {
-            if (!TryString(args, "key", out var key))
-            {
-                errorJson = Error("unsupported_operation", "Browser key is not supported.", "missing_key");
-                return false;
-            }
-
-            if (key.Length > 80 || !Regex.IsMatch(key, "^[A-Za-z0-9+_-]+$", RegexOptions.CultureInvariant))
-            {
-                errorJson = Error("unsupported_operation", "Browser key is not supported.", "unsupported_key");
-                return false;
-            }
-
-            value = key;
-        }
-        else if (operation == "upload")
-        {
-            if (!TryString(args, "artifactId", out var artifactId))
-            {
-                errorJson = Error("invalid", "artifactId is required.", "missing_artifact_id");
-                return false;
-            }
-
-            if (artifactId.Length > 80
-                || artifactId.Contains('/')
-                || artifactId.Contains('\\')
-                || artifactId.Contains(':')
-                || Uri.TryCreate(artifactId, UriKind.Absolute, out _))
-            {
-                errorJson = Error("invalid", "artifactId must be an artifact or definition resource id.", "invalid_artifact_id");
-                return false;
-            }
-
-            value = artifactId;
-        }
-        else if (operation == "drag")
-        {
-            if (!TryString(args, "targetRef", out var parsedTarget)
-                || parsedTarget.Length > BrowserToolLimits.MaxRefLength
-                || LooksLikeSelector(parsedTarget)
-                || !OpaqueRef.IsMatch(parsedTarget))
-            {
-                errorJson = Error("invalid", "targetRef must be an opaque element reference.", "invalid_ref");
-                return false;
-            }
-
-            targetRef = parsedTarget;
-        }
-
-        return true;
+        return null;
     }
 
-    public static bool TryCapture(JsonElement args, out string errorJson)
+    internal static string ArgumentGuidance(JsonElement args) => InvalidTargetReason(args) switch
     {
-        if (!TryRejectProperties(args, out errorJson))
-        {
-            return false;
-        }
+        "name_requires_role" => "For by=label/text/placeholder/altText/title/testId, put the literal label in value and omit name. Example: {\"target\":{\"by\":\"label\",\"value\":\"Email\"}}.",
+        "frame_requires_current_id" => "Omit frameRef for the main page. For an iframe, use only its current snapshot fr_ ID; never a label, URL, main or guessed ID.",
+        _ => TargetGuidance
+    };
 
-        return HasOnly(args, [], out errorJson);
-    }
-
-    private static bool TryRejectProperties(JsonElement args, out string errorJson)
-    {
-        foreach (var property in args.EnumerateObject())
-        {
-            if (AuthorityProperties.Contains(property.Name))
-            {
-                errorJson = Error("forbidden", "Browser arguments cannot change host policy.");
-                return false;
-            }
-
-            if (ScriptProperties.Contains(property.Name))
-            {
-                errorJson = Error("unsupported_operation", "Browser scripting and selectors are not supported.", "unsupported_property");
-                return false;
-            }
-
-            if (property.Value.ValueKind == JsonValueKind.String
-                && LooksLikePlaywrightCommand(property.Value.GetString()))
-            {
-                errorJson = Error("unsupported_operation", "Browser scripting is not supported.");
-                return false;
-            }
-        }
-
-        errorJson = string.Empty;
-        return true;
-    }
-
-    private static bool HasOnly(JsonElement args, string allowed, out string errorJson) =>
-        HasOnly(args, [allowed], out errorJson);
-
-    private static bool HasOnly(JsonElement args, string[] allowed, out string errorJson)
-    {
-        foreach (var property in args.EnumerateObject())
-        {
-            if (!allowed.Contains(property.Name, StringComparer.Ordinal))
-            {
-                errorJson = Error("invalid", "Browser arguments contain an unsupported property.", "unsupported_property");
-                return false;
-            }
-        }
-
-        errorJson = string.Empty;
-        return true;
-    }
-
-    private static bool TryString(JsonElement args, string name, out string value)
-    {
-        value = string.Empty;
-        if (!args.TryGetProperty(name, out var property) || property.ValueKind != JsonValueKind.String)
-        {
-            return false;
-        }
-
-        value = property.GetString() ?? string.Empty;
-        return !string.IsNullOrWhiteSpace(value);
-    }
-
-    private static bool LooksLikeSelector(string value) =>
-        value.Contains('#', StringComparison.Ordinal)
-        || value.Contains("//", StringComparison.Ordinal)
-        || value.StartsWith('.')
-        || value.Contains('[')
-        || value.Contains('>')
-        || value.Contains("xpath", StringComparison.OrdinalIgnoreCase);
-
-    private static bool LooksLikePlaywrightCommand(string? value) =>
-        !string.IsNullOrEmpty(value)
-        && (value.Contains("page.evaluate", StringComparison.OrdinalIgnoreCase)
-            || value.Contains("locator(", StringComparison.OrdinalIgnoreCase)
-            || value.Contains("querySelector", StringComparison.OrdinalIgnoreCase)
-            || value.Contains("Playwright", StringComparison.OrdinalIgnoreCase));
-
-    private static string Error(string code, string message, string? reason = null) =>
-        reason is null
-            ? JsonSerializer.Serialize(new { error = code, message })
-            : JsonSerializer.Serialize(new { error = code, message, reason });
+    private static bool ValidCriterion(string by, string value, string? name, string? hasText) =>
+        by is "role" or "text" or "label" or "placeholder" or "altText" or "title" or "testId"
+        && !string.IsNullOrWhiteSpace(value) && value.Length <= 200
+        && (name is null || by == "role" && !string.IsNullOrWhiteSpace(name) && name.Length <= 200)
+        && (hasText is null || !string.IsNullOrWhiteSpace(hasText) && hasText.Length <= 200);
 }

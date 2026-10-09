@@ -18,7 +18,7 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Application.Tests;
 
-public sealed class TerminalDisplayRepairTests
+public sealed partial class TerminalDisplayRepairTests
 {
     [Fact]
     public async Task Oversized_pending_write_is_rejected_before_any_workspace_effect()
@@ -522,7 +522,8 @@ public sealed class TerminalDisplayRepairTests
         FakeTimeProvider? clock,
         string[] tools,
         SessionToolExecutor? executor = null,
-        IArtifactReferenceAuthorizer? artifactAuthorizer = null)
+        IArtifactReferenceAuthorizer? artifactAuthorizer = null,
+        Microsoft.Extensions.Logging.ILogger? logger = null, RoleEnvironment? environment = null)
     {
         var time = clock ?? new FakeTimeProvider(DateTimeOffset.Parse("2026-10-02T12:00:00Z"));
         var ids = new DeterministicIdGenerator(
@@ -542,7 +543,7 @@ public sealed class TerminalDisplayRepairTests
             new VoiceConfiguration(false, "default", 1.0),
             new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
             new Dictionary<string, string>(StringComparer.Ordinal),
-            new RoleEnvironment(ToolAllowlist: tools));
+            environment ?? new RoleEnvironment(ToolAllowlist: tools));
         var snapshot = new SessionSnapshot(
             1,
             ids.NewSessionId(),
@@ -574,7 +575,7 @@ public sealed class TerminalDisplayRepairTests
             new CapturingSessionOutput(),
             ids,
             time,
-            NullLogger<SessionRuntime>.Instance,
+            logger ?? NullLogger<SessionRuntime>.Instance,
             artifacts: artifactAuthorizer,
             tools: executor ?? new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll));
     }
@@ -756,6 +757,7 @@ public sealed class TerminalDisplayRepairTests
         public int ObserveCalls { get; private set; }
 
         public int CloseCalls { get; private set; }
+        public Action? OnClose { get; set; }
 
         public bool IsAvailable => true;
 
@@ -768,30 +770,40 @@ public sealed class TerminalDisplayRepairTests
         public ValueTask<Uri?> GetCurrentUrlAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             new(Navigated.Count == 0 ? null : new Uri(Navigated[^1]));
 
-        public ValueTask<BrowserOperationResult> NavigateAsync(
-            BrowserNavigateRequest request,
+        public ValueTask<BrowserResult> NavigateAsync(
+            BrowserRequest request,
             CancellationToken cancellationToken = default)
         {
-            Navigated.Add(request.Url!.AbsoluteUri);
-            return new(new BrowserOperationResult(
+            Navigated.Add(((BrowserNavigate)request.Command).Url!);
+            return new(new BrowserResult(
                 null,
-                new BrowserSnapshot(request.Url!.AbsoluteUri, "Zigwheels", "Open", false, [])));
+                new BrowserSnapshot(((BrowserNavigate)request.Command).Url!, "Zigwheels", "Open", false, [])));
         }
 
-        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        public ValueTask<BrowserResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             ObserveCalls++;
             var url = Navigated.Count == 0 ? "https://zigwheels.test/" : Navigated[^1];
-            return new(new BrowserOperationResult(null, new BrowserSnapshot(url, "Zigwheels", "Open", false, [])));
+            return new(new BrowserResult(null, new BrowserSnapshot(url, "Zigwheels", "Open", false, [])));
         }
 
-        public ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        public ValueTask<BrowserResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             CloseCalls++;
-            return new(new BrowserCloseResult("closed"));
+            OnClose?.Invoke();
+            return new(new BrowserResult(null, Status: "closed", DataJson: System.Text.Json.JsonSerializer.Serialize(new { status = "closed" })));
         }
 
-        public ValueTask<BrowserOperationResult> InteractAsync(BrowserInteractionRequest request, CancellationToken cancellationToken = default) =>
+        public ValueTask<BrowserResult> InteractAsync(BrowserRequest request, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
-    }
+
+        public ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default) => request.Operation switch
+        {
+            BrowserOperation.Navigate => NavigateAsync(request, ct),
+            BrowserOperation.Snapshot or BrowserOperation.WaitFor => SnapshotAsync(request.SessionId, ct),
+            BrowserOperation.Close => CloseAsync(request.SessionId, ct),
+            BrowserOperation.Click or BrowserOperation.Type or BrowserOperation.Hover or BrowserOperation.Drag or BrowserOperation.Upload or BrowserOperation.FillForm => InteractAsync(request, ct),
+            _ => new(new BrowserResult("unsupported_operation")),
+        };
+}
 }

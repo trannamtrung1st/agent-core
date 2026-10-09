@@ -8,6 +8,7 @@ internal static class BrowserSnapshotCompaction
     internal const int RecentFullObservations = 1;
     internal const int DuplicateReceiptChars = 240;
     internal const int PageEvidenceChars = 1200;
+    internal const int RecentDiscoveries = 8;
 
     internal static void Compact(List<ModelMessage> messages)
     {
@@ -20,13 +21,11 @@ internal static class BrowserSnapshotCompaction
             }
         }
 
-        if (full.Count > 0)
-        {
-            // A newer snapshot invalidates refs in older discovery receipts too.
-            for (var index = 0; index < full[^1]; index++)
-                if (messages[index] is { Role: ModelRole.Tool, Name: "browser.find" } found)
-                    messages[index] = found with { Text = Receipt(found.Text, false), Parts = null };
-        }
+        // Direct semantic actions need no stored refs. Keep recent discoveries
+        // available across observations; failures and ambiguity retain their repair evidence.
+        var discoveries = Enumerable.Range(0, messages.Count).Where(i => IsSuccessfulDiscovery(messages[i])).ToArray();
+        foreach (var index in discoveries.Take(Math.Max(0, discoveries.Length - RecentDiscoveries)))
+            messages[index] = messages[index] with { Text = DiscoveryReceipt(messages[index].Text), Parts = null };
 
         if (full.Count <= RecentFullObservations)
         {
@@ -51,6 +50,32 @@ internal static class BrowserSnapshotCompaction
         }
     }
 
+    private static bool IsSuccessfulDiscovery(ModelMessage message)
+    {
+        if (message is not { Role: ModelRole.Tool, Name: "browser.find" }) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(message.Text);
+            var root = document.RootElement;
+            return root.ValueKind == JsonValueKind.Object && !root.TryGetProperty("error", out _)
+                && (!root.TryGetProperty("status", out var status) || status.ValueKind == JsonValueKind.String && status.GetString() == "ok")
+                && root.TryGetProperty("matches", out var matches) && matches.ValueKind == JsonValueKind.Array && matches.GetArrayLength() > 0;
+        }
+        catch (JsonException) { return false; }
+    }
+
+    private static string DiscoveryReceipt(string text)
+    {
+        using var document = JsonDocument.Parse(text);
+        var root = document.RootElement;
+        return JsonSerializer.Serialize(new
+        {
+            untrustedBrowserContent = true, compacted = true, status = "ok",
+            matchCount = root.TryGetProperty("matchCount", out var count) && count.ValueKind == JsonValueKind.Number && count.TryGetInt32(out var value) ? value : root.GetProperty("matches").GetArrayLength(),
+            guidance = "An earlier browser.find search succeeded; its detailed evidence was compacted. Observe or act using current direct semantic targets."
+        });
+    }
+
     private static bool IsFullObservation(ModelMessage message)
     {
         if (message.Role != ModelRole.Tool
@@ -68,7 +93,7 @@ internal static class BrowserSnapshotCompaction
             var root = document.RootElement;
             return root.TryGetProperty("untrustedBrowserContent", out var marker)
                 && marker.ValueKind == JsonValueKind.True
-                && root.TryGetProperty("elements", out var elements)
+                && root.TryGetProperty("targets", out var elements)
                 && elements.ValueKind == JsonValueKind.Array;
         }
         catch (JsonException)
@@ -93,18 +118,23 @@ internal static class BrowserSnapshotCompaction
 
     private static string Receipt(string text, bool rich)
     {
+        var status = "unknown";
         var url = string.Empty;
         var title = string.Empty;
         var visible = string.Empty;
         bool? settled = null;
+        bool? effectAttempted = null, effectConfirmedBySdk = null, applicationOutcomeVerified = null;
         try
         {
             using var document = JsonDocument.Parse(text);
             var root = document.RootElement;
+            status = Read(root, "status") == "ok" ? "ok" : "unknown";
             url = Read(root, "url");
             title = Read(root, "title");
-            visible = Read(root, "visibleText");
-            if (visible.Length == 0) visible = System.Text.RegularExpressions.Regex.Replace(Read(root, "content"), @"\s*\[ref=[^\]]+\]", "");
+            visible = Read(root, "content");
+            effectAttempted = ReadBoolean(root, "effectAttempted");
+            effectConfirmedBySdk = ReadBoolean(root, "effectConfirmedBySdk");
+            applicationOutcomeVerified = ReadBoolean(root, "applicationOutcomeVerified");
             if (root.TryGetProperty("settled", out var settledProperty)
                 && settledProperty.ValueKind is JsonValueKind.True or JsonValueKind.False)
             {
@@ -119,20 +149,22 @@ internal static class BrowserSnapshotCompaction
         return settled is bool settledValue
             ? JsonSerializer.Serialize(new
             {
+                status, effectAttempted, effectConfirmedBySdk, applicationOutcomeVerified,
                 untrustedBrowserContent = true,
                 compacted = true,
                 url,
                 title,
                 settled = settledValue,
-                visibleTextExcerpt = excerpt
+                contentExcerpt = excerpt
             })
             : JsonSerializer.Serialize(new
             {
+                status, effectAttempted, effectConfirmedBySdk, applicationOutcomeVerified,
                 untrustedBrowserContent = true,
                 compacted = true,
                 url,
                 title,
-                visibleTextExcerpt = excerpt
+                contentExcerpt = excerpt
             });
     }
 
@@ -153,6 +185,9 @@ internal static class BrowserSnapshotCompaction
         var edge = (budget - marker.Length) / 2;
         return visible[..edge] + marker + visible[^edge..];
     }
+
+    private static bool? ReadBoolean(JsonElement root, string name) => root.TryGetProperty(name, out var value)
+        && value.ValueKind is JsonValueKind.True or JsonValueKind.False ? value.GetBoolean() : null;
 
     private static string Read(JsonElement root, string name) =>
         root.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String

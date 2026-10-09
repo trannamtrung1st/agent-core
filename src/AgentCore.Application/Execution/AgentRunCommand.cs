@@ -22,6 +22,8 @@ public abstract record AgentRunCommand(long ExpectedRevision, DateTimeOffset AtU
     public sealed record Fail(long Revision, DateTimeOffset At, Guid Generation, string Code, string Summary,
         bool ReplaySafe, DateTimeOffset? RetryAt)
         : AgentRunCommand(Revision, At);
+    // Terminal only: cannot revive a lease, retry work or commit an external effect.
+    public sealed record DeadlineExceeded(long Revision, DateTimeOffset At, Guid Generation) : AgentRunCommand(Revision, At);
     public sealed record RequestCancellation(long Revision, DateTimeOffset At, string? KnownEffect)
         : AgentRunCommand(Revision, At);
     public sealed record CommitCancellation(long Revision, DateTimeOffset At, Guid Generation, string? KnownEffect)
@@ -41,6 +43,7 @@ public abstract record AgentRunCommand(long ExpectedRevision, DateTimeOffset AtU
         : AgentRunCommand(Revision, At);
     public sealed record LoadSkills(long Revision, DateTimeOffset At, Guid Generation, IReadOnlyList<string> Keys)
         : AgentRunCommand(Revision, At);
+    public sealed record ProjectBrowserDialog(long Revision, DateTimeOffset At, Guid Generation) : AgentRunCommand(Revision, At);
     public sealed record LoadCapabilities(long Revision, DateTimeOffset At, Guid Generation, IReadOnlyList<string> Names)
         : AgentRunCommand(Revision, At);
 
@@ -54,7 +57,7 @@ public abstract record AgentRunCommand(long ExpectedRevision, DateTimeOffset AtU
         if (AtUtc.Offset != TimeSpan.Zero || AtUtc < run.UpdatedAtUtc)
             throw new ArgumentException("AgentRun command requires monotonic UTC time.");
         if (run.Claim is { } claim && claim.LeaseExpiresAtUtc <= AtUtc
-            && this is not (Recover or RequestCancellation))
+            && this is not (Recover or RequestCancellation or DeadlineExceeded))
             throw new AgentRunTransitionException(AgentRunTransitionFailure.StaleGeneration, "AgentRun lease has expired.");
         return this switch
         {
@@ -67,6 +70,8 @@ public abstract record AgentRunCommand(long ExpectedRevision, DateTimeOffset AtU
             Complete c => run.Complete(c.ExpectedRevision, c.Generation, c.Summary, c.AtUtc,
                 c.OutcomeKind == AgentRunOutcomeKind.NeedsAttention, c.OutcomeKind, c.OutcomeEntryId),
             Fail c => run.Fail(c.ExpectedRevision, c.Generation, c.Code, c.Summary, c.ReplaySafe, c.AtUtc, c.RetryAt, allocateDiagnosticId),
+            DeadlineExceeded c => run.Fail(c.ExpectedRevision, c.Generation, "run-deadline",
+                "The Run deadline expired before the reply completed. Recorded actions were preserved.", false, c.AtUtc, null, allocateDiagnosticId),
             RequestCancellation c => run.RequestCancellation(c.ExpectedRevision, c.KnownEffect, c.AtUtc),
             CommitCancellation c => run.CommitCancellation(c.ExpectedRevision, c.Generation, c.KnownEffect, c.AtUtc),
             Recover c => run.RecoverExpiredClaim(c.AtUtc, allocateDiagnosticId),
@@ -79,6 +84,7 @@ public abstract record AgentRunCommand(long ExpectedRevision, DateTimeOffset AtU
             ClearSideEffect c => run.ClearSideEffect(c.ExpectedRevision, c.Generation, c.AtUtc, c.RecordExternalEffect),
             AcceptBrowserSnapshot c => run.AcceptBrowserSnapshot(c.ExpectedRevision, c.Generation, c.AtUtc),
             LoadSkills c => run.AdmitActiveSkills(c.ExpectedRevision, c.Generation, c.Keys, c.AtUtc),
+            ProjectBrowserDialog c => run.AdmitRecoveryCapability(c.ExpectedRevision, c.Generation, AgentCore.Application.Tools.ToolCatalog.BrowserDialog, c.AtUtc),
             LoadCapabilities c => run.AdmitCapabilities(c.ExpectedRevision, c.Generation, c.Names, c.AtUtc),
             _ => throw new ArgumentException("AgentRun transition is unsupported.")
         };

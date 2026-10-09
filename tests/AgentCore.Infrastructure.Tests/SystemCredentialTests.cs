@@ -87,7 +87,7 @@ public sealed class SystemCredentialTests
             await owners.InsertAsync(owner);
             var service = new CredentialService(store, bindings, new LocalCredentialProtector(Path.Combine(root, "keys")), owners, new SystemIdGenerator(TimeProvider.System), TimeProvider.System);
             var dir = new DirectoryInfo(AppContext.BaseDirectory); while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "AgentCore.sln"))) dir = dir.Parent;
-            var definition = (await new FileAgentDefinitionStore(Path.Combine(dir!.FullName, "agents"), SyntheticProviderAliases.Default).GetAsync("secretary", 5))!;
+            var definition = (await new FileAgentDefinitionStore(Path.Combine(dir!.FullName, "agents"), SyntheticProviderAliases.Default).GetAsync("secretary", 8))!;
             var draft = AgentDefinitionCandidate.FromDefinition(definition) with { Environment = definition.Environment! with { ToolAllowlist = null, Capabilities = new("All", []), Projection = new([]) } };
             var before = CapabilityAuthorizationResolver.ResolveCandidate(draft).Environment!.Capabilities!;
             Assert.DoesNotContain(ToolCatalog.CredentialsList, before.ResolvedCapabilities);
@@ -218,7 +218,7 @@ public sealed class SystemCredentialTests
         }
         finally { SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }
-    private static AgentInstance NewInstance() => new(Guid.NewGuid(), "secretary", 3, new("Test", "Secretary", "Testing", "neutral"), AgentInstanceLifecycle.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+    private static AgentInstance NewInstance() => new(Guid.NewGuid(), "secretary", 8, new("Test", "Secretary", "Testing", "neutral"), AgentInstanceLifecycle.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
     private static SqliteFactory Factory(string root) => new(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={Path.Combine(root,"credentials.db")}").Options);
     private sealed class SqliteFactory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext> { public AgentCoreDbContext CreateDbContext() => new(options); }
 }

@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><title>Generic Browser v2 SPA</title>
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Generic Native Browser SPA</title>
 <style>body{font:16px system-ui} #visual{width:80px;height:80px;background:#236ddd} [role=treeitem]{padding:4px;cursor:pointer}</style>
 <h1>Browser workspace</h1><div role="tree" aria-label="Assets" id="assets"></div>
 <p id="result" role="status">Nothing selected</p>
@@ -11,10 +11,10 @@
 <button disabled>Waiting action</button>
 <div role="button" aria-label="Drop zone" tabindex="0" ondrop="event.preventDefault();document.querySelector('#result').textContent=event.dataTransfer.getData('text/plain')" ondragover="event.preventDefault()">Drop zone</div>
 <button onclick="alert('Hello from fixture')">Alert</button><button onclick="document.querySelector('#result').textContent=confirm('Continue?')?'Confirmed':'Dismissed'">Confirm</button><button onclick="document.querySelector('#result').textContent=prompt('Your label?')||'No label'">Prompt</button>
-<button onclick="window.open('/browser-v2.html?popup=1')">Popup</button><button onclick="window.open('https://example.invalid/denied')">Denied popup</button>
-<iframe title="Embedded controls" src="/browser-v2-frame.html"></iframe>
+<button onclick="window.open('/browser-native.html?popup=1')">Popup</button><button onclick="window.open('https://example.invalid/denied')">Denied popup</button>
+<iframe title="Embedded controls" src="/browser-native-frame.html"></iframe>
 <label>File <input type="file" aria-label="Upload file" onchange="document.querySelector('#result').textContent=this.files[0].name"></label>
-<a href="/browser-v2-download" download>Download note</a><button onclick="fetch('/browser-v2-data').then(r=>r.text()).then(t=>document.querySelector('#result').textContent=t);console.log('Loaded fixture data')">Fetch data</button>
+<a href="/browser-native-download" download>Download note</a><button onclick="fetch('/browser-native-data').then(r=>r.text()).then(t=>document.querySelector('#result').textContent=t);console.log('Loaded fixture data')">Fetch data</button>
 <canvas id="visual" width="80" height="80" onclick="document.querySelector('#result').textContent='Visual target clicked'"></canvas>
 <script>
 const assets=document.querySelector('#assets');for(let i=0;i<(location.search.includes('compact')?3:160);i++){const item=document.createElement('div');item.setAttribute('role','treeitem');item.setAttribute('aria-label','Asset '+i);item.tabIndex=0;item.textContent='Asset '+i;item.onclick=()=>{document.querySelector('#result').textContent='Selected Asset '+i;const clone=item.cloneNode(true);clone.onclick=item.onclick;item.replaceWith(clone)};assets.appendChild(item)}

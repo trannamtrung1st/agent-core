@@ -200,6 +200,71 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
         var diagnosticUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        if (diagnosticUser.Contains("synthetic-browser-cleanup", StringComparison.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var results = request.Messages.Skip(request.Messages.ToList().FindLastIndex(m => m.Role == ModelRole.User) + 1).Where(m => m.Role == ModelRole.Tool).ToArray();
+            var origin = System.Text.RegularExpressions.Regex.Match(diagnosticUser, @"http://127\.0\.0\.1:\d+").Value;
+            BrowserTarget Target() { using var json = JsonDocument.Parse(results.Last().Text); return json.RootElement.GetProperty("matches")[0].GetProperty("target").Deserialize<BrowserTarget>(JsonSerializerOptions.Web)!; }
+            (string, object) plan = results.Length switch
+            {
+                0 when origin.Length > 0 => (ToolCatalog.BrowserNavigate, new { url = origin + "/credential-login" }),
+                1 => (ToolCatalog.BrowserFind, new { target = new { by = "role", value = "button", name = "Sign in" } }),
+                2 => (ToolCatalog.BrowserClick, new { target = Target() }),
+                3 => (ToolCatalog.BrowserFind, new { target = new { by = "role", value = "button", name = "Sign out" } }),
+                4 => (ToolCatalog.BrowserClick, new { target = Target() }),
+                5 => (ToolCatalog.BrowserDialog, new { operation = "inspect" }),
+                6 => (ToolCatalog.BrowserDialog, new { operation = "accept" }),
+                7 => (ToolCatalog.BrowserFind, new { target = new { by = "role", value = "button", name = "Sign in" } }),
+                8 => (ToolCatalog.BrowserClose, new { }),
+                _ => ("", new { })
+            };
+            if (plan.Item1.Length > 0)
+            {
+                yield return new ModelToolCallEvent(new("cleanup-" + results.Length, plan.Item1, JsonSerializer.Serialize(plan.Item2)));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            }
+            else
+            {
+                var verified = results.Length == 9 && results[7].Text.Contains("Sign in") && !results[7].Text.Contains("\"error\"");
+                yield return new ModelSemanticResponseReady(new(verified ? "Sign-out verified at the login screen; browser closure recorded." : "Cleanup incomplete; sign-out unverified.", new(ModelSpeechMode.Same, null), []));
+                yield return new ModelCompleted(ModelStopReason.Completed);
+            }
+            yield break;
+        }
+        if (diagnosticUser.Contains("synthetic-finalization-", StringComparison.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var results = request.Messages.Skip(request.Messages.ToList().FindLastIndex(m => m.Role == ModelRole.User) + 1).Where(m => m.Role == ModelRole.Tool).ToArray();
+            var origin = System.Text.RegularExpressions.Regex.Match(diagnosticUser, @"http://127\.0\.0\.1:\d+").Value;
+            if (!results.Any(m => m.Name == ToolCatalog.BrowserNavigate) && origin.Length > 0)
+            {
+                yield return new ModelToolCallEvent(new("finalize-navigate", ToolCatalog.BrowserNavigate, JsonSerializer.Serialize(new { url = origin + "/" })));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            }
+            else if (!results.Any(m => m.Name == ToolCatalog.BrowserClose))
+            {
+                yield return new ModelToolCallEvent(new("finalize-close", ToolCatalog.BrowserClose, "{}"));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            }
+            else if (!request.Messages.Any(m => m.Role == ModelRole.System && m.Text.StartsWith("Core finalization phase: "))
+                || diagnosticUser.Contains("synthetic-finalization-fail", StringComparison.Ordinal))
+                yield return new ModelFailed(new(ProviderErrorCode.Timeout, "Synthetic final reply timed out.", FailureReason: "totalTimeout"));
+            else
+            {
+                yield return new ModelSemanticResponseReady(new("Browser closure is recorded. Sign-out was not verified.", new(ModelSpeechMode.Same, null), []));
+                yield return new ModelCompleted(ModelStopReason.Completed);
+            }
+            yield break;
+        }
+        if (diagnosticUser.Contains("synthetic-invalid-tool-turn", StringComparison.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return new ModelToolCallEvent(new("invalid-" + request.Messages.Count, ToolCatalog.BrowserFind,
+                "{\"role\":\"textbox\",\"text\":\"Email\"}"));
+            yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            yield break;
+        }
         if (diagnosticUser.Contains(DiagnosticFailureMarker, StringComparison.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1542,19 +1607,12 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                     JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = origin + "/" }));
                 return true;
             case 2:
-                events = ToolTurn("product-observe", ToolCatalog.BrowserSnapshot, "{}");
-                return true;
-            case 3:
-                return TryInteraction("product-publish", "click", ElementRef(request.Messages, "Publish"), null, out events);
+                return TryInteraction("product-publish", "click", new BrowserTarget("role", "button", "Publish"), null, out events);
+            case 3 when !stopAfterClick:
+                events = ToolTurn("product-storefront", ToolCatalog.BrowserNavigate,
+                    JsonSerializer.Serialize(new { url = origin + "/storefront" })); return true;
             case 4 when !stopAfterClick:
-                events = ToolTurn(
-                    "product-storefront",
-                    ToolCatalog.BrowserNavigate,
-                    JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = origin + "/storefront" }));
-                return true;
-            case 5 when !stopAfterClick:
-                events = ToolTurn("product-storefront-observe", ToolCatalog.BrowserSnapshot, "{}");
-                return true;
+                events = ToolTurn("product-storefront-observe", ToolCatalog.BrowserSnapshot, "{}"); return true;
             default:
                 events = ProductPublishAnswer(login: false, stopAfterClick);
                 return true;
@@ -1588,41 +1646,21 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         switch (rounds)
         {
             case 0:
-                events = ToolTurn(
-                    "p9-navigate",
-                    ToolCatalog.BrowserNavigate,
-                    JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = startUrl }));
-                return true;
+                events = ToolTurn("p9-navigate", ToolCatalog.BrowserNavigate, JsonSerializer.Serialize(new { url = startUrl })); return true;
             case 1:
-            case 6:
-            case 8:
-                events = ToolTurn($"p9-observe-{rounds}", ToolCatalog.BrowserSnapshot, "{}");
-                return true;
-            case 2:
-                events = ToolTurn(
-                    "p9-skill",
-                    ToolCatalog.SkillsLoad,
-                    JsonSerializer.Serialize(new { ids = new[] { "definition:" + BrowserRecordSkillId } }));
-                return true;
-            case 3 when Offers(request, ToolCatalog.AppMessageSend):
-                events = ToolTurn(
-                    "p9-message",
-                    ToolCatalog.AppMessageSend,
-                    JsonSerializer.Serialize(new { text = BrowserRecordMessage }));
-                return true;
+                events = ToolTurn("p9-skill", ToolCatalog.SkillsLoad, JsonSerializer.Serialize(new { ids = new[] { "definition:" + BrowserRecordSkillId } })); return true;
+            case 2 when Offers(request, ToolCatalog.AppMessageSend):
+                events = ToolTurn("p9-message", ToolCatalog.AppMessageSend, JsonSerializer.Serialize(new { text = BrowserRecordMessage })); return true;
+            case 3:
+                return TryInteraction("fill", "fill", new BrowserTarget("label", "Record"), "AC-1042", out events);
             case 4:
-                return TryInteraction("fill", "fill", ElementRef(request.Messages, "Record"), "AC-1042", out events);
+                return TryInteraction("search", "click", new BrowserTarget("role", "button", "Search"), null, out events);
             case 5:
-                return TryInteraction("search", "click", ElementRef(request.Messages, "Search"), null, out events);
-            case 7:
-                return TryInteraction("open", "click", ElementRef(request.Messages, "AC-1042"), null, out events);
+                return TryInteraction("open", "click", new BrowserTarget("role", "link", "AC-1042"), null, out events);
+            case 6:
+                events = ToolTurn("p9-observe-result", ToolCatalog.BrowserSnapshot, "{}"); return true;
             default:
-                events =
-                [
-                    new ModelTextDelta(BrowserRecordAnswer),
-                    new ModelCompleted(ModelStopReason.Completed)
-                ];
-                return true;
+                events = [new ModelTextDelta(BrowserRecordAnswer), new ModelCompleted(ModelStopReason.Completed)]; return true;
         }
     }
 
@@ -1659,25 +1697,25 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     private static bool TryInteraction(
         string callId,
         string operation,
-        string? reference,
+        BrowserTarget? target,
         string? value,
         out IReadOnlyList<ModelGenerationEvent> events)
     {
-        if (string.IsNullOrEmpty(reference))
+        if (target is null)
         {
             events =
             [
                 new ModelFailed(new ProviderFailure(
                     ProviderErrorCode.InvalidResponse,
-                    "Synthetic browser journey missed an element reference."))
+                    "Synthetic browser journey missed a semantic target."))
             ];
             return true;
         }
 
-        var arguments = new Dictionary<string, string>
+        var arguments = new Dictionary<string, object>
         {
             ["operation"] = operation,
-            ["ref"] = reference
+            ["target"] = target
         };
         if (value is not null)
         {
@@ -1688,11 +1726,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         var tool = operation switch { "fill" => ToolCatalog.BrowserType, "press" => ToolCatalog.BrowserPressKey, "fill_credential" => ToolCatalog.BrowserFillCredential, _ => ToolCatalog.BrowserClick };
         if (operation == "fill" && arguments.Remove("value", out var text)) arguments["text"] = text;
         if (operation == "press" && arguments.Remove("value", out var key)) arguments["key"] = key;
-        events = ToolTurn("p9-" + callId, tool, JsonSerializer.Serialize(arguments));
+        events = ToolTurn("p9-" + callId, tool, JsonSerializer.Serialize(arguments, JsonSerializerOptions.Web));
         return true;
     }
 
-    private static string? ElementRef(IReadOnlyList<ModelMessage> messages, string name)
+    private static BrowserTarget? ElementTarget(IReadOnlyList<ModelMessage> messages, string name)
     {
         for (var index = messages.Count - 1; index >= 0; index--)
         {
@@ -1710,7 +1748,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             try
             {
                 using var document = JsonDocument.Parse(message.Text);
-                if (!document.RootElement.TryGetProperty("elements", out var elements)
+                if (!document.RootElement.TryGetProperty("matches", out var elements)
                     || elements.ValueKind != JsonValueKind.Array)
                 {
                     continue;
@@ -1720,10 +1758,10 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                 {
                     if (element.TryGetProperty("name", out var elementName)
                         && string.Equals(elementName.GetString(), name, StringComparison.Ordinal)
-                        && element.TryGetProperty("ref", out var reference)
-                        && reference.GetString() is { Length: > 0 } token)
+                        && element.TryGetProperty("target", out var target)
+                        && target.ValueKind == JsonValueKind.Object)
                     {
-                        return token;
+                        return target.Deserialize<BrowserTarget>(JsonSerializerOptions.Web);
                     }
                 }
             }

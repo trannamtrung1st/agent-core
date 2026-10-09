@@ -1,6 +1,7 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { DefinitionDraftPublishGatePanel } from "./definitionDraftPublishGatePanel";
+import { createRef } from "react";
+import { DefinitionDraftPublishGatePanel, type DefinitionDraftEvidenceHandle } from "./definitionDraftPublishGatePanel";
 
 vi.mock("../../services/adminApi", () => ({
   listAdminDefinitionEvaluationScenarios: vi.fn(),
@@ -80,4 +81,38 @@ describe("DefinitionDraftPublishGatePanel evidence loading", () => {
     });
     expect(screen.getByText(/could not be loaded/i)).toBeInTheDocument();
   });
+
+  it("aborts superseded evidence and invalidates reads before publication or editor closure", async () => {
+    const signals: AbortSignal[] = [];
+    const completions: Array<() => void> = [];
+    vi.mocked(listAdminDefinitionEvaluationScenarios).mockImplementation((_draftId, signal) => {
+      signals.push(signal!);
+      return new Promise(resolve => completions.push(() => resolve([])));
+    });
+    vi.mocked(listAdminDefinitionEvaluationResults).mockResolvedValue([]);
+    const ref = createRef<DefinitionDraftEvidenceHandle>();
+    const onError = vi.fn();
+    const onEligibilityChange = vi.fn();
+    const props = { dirty: false, busy: false, toolNames: [], onDraftRevisionChange: vi.fn(), onError, onEligibilityChange };
+    const view = render(<DefinitionDraftPublishGatePanel {...props} activeDraft={draft} evidenceRef={ref} />);
+    await waitFor(() => expect(signals).toHaveLength(1));
+    view.rerender(<DefinitionDraftPublishGatePanel {...props} activeDraft={{ ...draft, draftId: "other-draft" }} evidenceRef={ref} />);
+    await waitFor(() => expect(signals).toHaveLength(2));
+    expect(signals[0].aborted).toBe(true);
+    expect(signals[1].aborted).toBe(false);
+    act(() => ref.current!.pause());
+    expect(signals[1].aborted).toBe(true);
+    await act(async () => { completions[0](); completions[1](); });
+    expect(onEligibilityChange).toHaveBeenLastCalledWith(false);
+    expect(onError.mock.calls.every(([message]) => message === null)).toBe(true);
+    // A rejected publish must resume fresh evidence rather than leave a paused gate.
+    const errorCallsBeforeResume = onError.mock.calls.length;
+    act(() => ref.current!.resume());
+    await waitFor(() => expect(signals).toHaveLength(3));
+    expect(signals[2].aborted).toBe(false);
+    expect(onError.mock.calls).toHaveLength(errorCallsBeforeResume);
+    view.unmount();
+    expect(signals[2].aborted).toBe(true);
+  });
+
 });

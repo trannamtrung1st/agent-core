@@ -19,14 +19,14 @@ public sealed class HarnessChatAuthoringTests
         await using var factory = new AgentCoreApiFactory();
         var services = factory.Services;
         var authoring = services.GetRequiredService<HarnessManagementService>();
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
         instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
             new(HarnessManagementMode.Managed, [HarnessManagementScope.ToolSelection], [], []));
         var sessions = services.GetRequiredService<AgentCore.Application.Sessions.SessionManager>();
         var current = await sessions.CreateForInstanceAsync(instance.InstanceId, AgentCore.Domain.Conversation.SessionMode.Text);
         var executor = services.GetRequiredService<SessionToolExecutor>();
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId);
-        var args = JsonSerializer.Serialize(new { expectedVersion = 17, policyRevision = instance.HarnessManagement!.PolicyRevision,
+        var args = JsonSerializer.Serialize(new { expectedVersion = 21, policyRevision = instance.HarnessManagement!.PolicyRevision,
             id = ToolCatalog.WorkspaceMove, enabled = false, expected = "Future sessions omit move.", observed = "Owner removes the capability." });
         using var action = JsonDocument.Parse(args);
         var grant = new ToolApprovalGrant(Guid.NewGuid(), "harness.tool.select", ToolActionHash.Compute("harness.tool.select", action.RootElement), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
@@ -35,14 +35,14 @@ public sealed class HarnessChatAuthoringTests
         var inspection = await executor.ExecuteAsync(current.Definition, current.SessionId, new("inspect", "harness.inspect", "{}"), 100000, admission: admission);
         using var json = JsonDocument.Parse(inspection.Text);
         var root = json.RootElement;
-        Assert.Equal(18, root.GetProperty("activeDefinitionVersion").GetInt32());
-        Assert.Equal(17, root.GetProperty("currentSessionPinnedDefinitionVersion").GetInt32());
+        Assert.Equal(22, root.GetProperty("activeDefinitionVersion").GetInt32());
+        Assert.Equal(21, root.GetProperty("currentSessionPinnedDefinitionVersion").GetInt32());
         Assert.True(root.GetProperty("changesApplyToFutureSessions").GetBoolean());
         Assert.True(root.TryGetProperty("authoringEligibleTools", out _));
         Assert.DoesNotContain(ToolCatalog.WorkspaceMove, root.GetProperty("activeDefinitionAuthorizedCapabilities").EnumerateArray().Select(v => v.GetString()));
         Assert.Contains(ToolCatalog.WorkspaceMove, RoleEnvironments.Of((await sessions.GetAsync(current.SessionId)).Definition).ToolList);
         var fresh = await sessions.CreateForInstanceAsync(instance.InstanceId, AgentCore.Domain.Conversation.SessionMode.Text);
-        Assert.Equal(18, fresh.Definition.Version);
+        Assert.Equal(22, fresh.Definition.Version);
         Assert.DoesNotContain(ToolCatalog.WorkspaceMove, RoleEnvironments.Of(fresh.Definition).ToolList);
     }
 
@@ -70,25 +70,25 @@ public sealed class HarnessChatAuthoringTests
         await using var factory = new AgentCoreApiFactory();
         var services = factory.Services;
         var service = services.GetRequiredService<HarnessManagementService>();
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
         instance = await service.ConfigureAsync(instance.InstanceId, instance.Revision, new(mode, [scope], [], []));
-        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 17))!;
+        var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 21))!;
         var tools = services.GetRequiredService<SessionToolExecutor>();
         var context = await tools.HarnessContextAsync(instance.InstanceId, default);
-        var args = JsonSerializer.Serialize(new { expectedVersion = 17, policyRevision = context!.PolicyRevision,
+        var args = JsonSerializer.Serialize(new { expectedVersion = 21, policyRevision = context!.PolicyRevision,
             id = name == "harness.tool.configure" ? "attachments.read" : name == "harness.tool.select" ? "web.fetch" : "policy",
             enabled = false, allowUnreadUnsupportedTypes = true, content = "Reusable owner policy.", source = "conversation:user", expected = "Retain policy", observed = "Owner supplied it." });
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId, OwnerTurnText: "Retain this policy.");
         var call = new ModelToolCall("change", name, args);
         Assert.Contains("approval_required", (await tools.ExecuteAsync(pinned, Guid.NewGuid(), call, 100000, admission: admission)).Text);
-        Assert.Equal(17, (await service.ReviewAsync(instance.InstanceId)).ActiveVersion);
+        Assert.Equal(21, (await service.ReviewAsync(instance.InstanceId)).ActiveVersion);
         using var json = JsonDocument.Parse(args);
         var grant = new ToolApprovalGrant(Guid.NewGuid(), name, ToolActionHash.Compute(name, json.RootElement), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         Assert.Contains("stale_approval", (await tools.ExecuteAsync(pinned, Guid.NewGuid(), call, 100000, approvalGrant: grant with { ActionHash = "altered" }, admission: admission)).Text);
         instance = await service.ConfigureAsync(instance.InstanceId, instance.Revision, instance.HarnessManagement!.Policy);
         var stale = await tools.ExecuteAsync(pinned, Guid.NewGuid(), call, 100000, approvalGrant: grant, admission: admission);
         Assert.Contains("changed", stale.Text);
-        Assert.Equal(17, (await service.ReviewAsync(instance.InstanceId)).ActiveVersion);
+        Assert.Equal(21, (await service.ReviewAsync(instance.InstanceId)).ActiveVersion);
         var freshArgs = args.Replace($"\"policyRevision\":{context.PolicyRevision}", $"\"policyRevision\":{instance.HarnessManagement!.PolicyRevision}");
         using var freshJson = JsonDocument.Parse(freshArgs);
         var result = await tools.ExecuteAsync(pinned, Guid.NewGuid(), call with { ArgumentsJson = freshArgs }, 100000,
@@ -100,7 +100,7 @@ public sealed class HarnessChatAuthoringTests
     [Fact]
     public void Harness_approval_shows_the_actual_semantic_operation_and_untruncated_change()
     {
-        using var content = JsonDocument.Parse(JsonSerializer.Serialize(new { content = new string('x', 600) + " exact tail", expectedVersion = 17, policyRevision = 1 }));
+        using var content = JsonDocument.Parse(JsonSerializer.Serialize(new { content = new string('x', 600) + " exact tail", expectedVersion = 21, policyRevision = 1 }));
         Assert.EndsWith("exact tail", ToolApprovalPreview.Build("harness.instructions.update", content.RootElement).Details["Change"]);
         using var tool = JsonDocument.Parse("""{"id":"http.request","enabled":false,"content":"misleading unrelated content","expectedVersion":7,"policyRevision":1}""");
         var preview = ToolApprovalPreview.Build("harness.tool.select", tool.RootElement);

@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using System.Text.Encodings.Web;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
 using AgentCore.Application.Work;
 using AgentCore.Domain.Definitions;
@@ -116,7 +117,7 @@ public static class AgentRunToolCallCheckpoint
             Phase,
             messages.Select(MessageDto.From).ToArray(),
             observationRequired,
-            blockedActionHash, loadedCapabilityIds, capabilityLoadCount, skillState, protocolRepairReason), CheckpointJson);
+            blockedActionHash, loadedCapabilityIds, capabilityLoadCount, skillState, protocolRepairReason, BrowserContractCutover.Version), CheckpointJson);
 
     public static bool TryWrite(IReadOnlyList<ModelMessage> messages, bool observationRequired,
         string? blockedActionHash, out string payload, IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null, string? protocolRepairReason = null)
@@ -205,6 +206,23 @@ public static class AgentRunToolCallCheckpoint
         }
     }
 
+    public static void EnsureCurrentBrowserContract(AgentRunCheckpoint? checkpoint)
+    {
+        if (checkpoint is null || !checkpoint.PayloadJson.Contains(Phase, StringComparison.Ordinal)) return;
+        Document? document;
+        try { document = JsonSerializer.Deserialize<Document>(checkpoint.PayloadJson); }
+        catch (JsonException)
+        {
+            if (checkpoint.PayloadJson.Contains("browser.", StringComparison.Ordinal))
+                throw AgentCoreErrors.Conflict("An unreadable browser checkpoint cannot resume; retain its historical evidence and start a new Session.");
+            return;
+        }
+        if (document is not { Phase: Phase, Messages: not null } || document.BrowserContractVersion == BrowserContractCutover.Version) return;
+        if (document.Messages.Any(message => message.Name?.StartsWith("browser.", StringComparison.Ordinal) == true
+            || message.ToolCalls?.Any(call => call.Name.StartsWith("browser.", StringComparison.Ordinal)) == true))
+            throw AgentCore.Application.Sessions.AgentCoreErrors.Conflict("A browser Run from the retired contract cannot resume. Cancel it and start a new Session; its receipts remain historical evidence.");
+    }
+
     public static (IReadOnlyList<string> Ids, int Calls) ReadCapabilityState(AgentRunCheckpoint? checkpoint)
     {
         if (checkpoint is null) return ([], 0);
@@ -243,7 +261,7 @@ public static class AgentRunToolCallCheckpoint
         string? BlockedActionHash = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? LoadedCapabilityIds = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int CapabilityLoadCount = 0, ExecutionSkillState? SkillState = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ProtocolRepairReason = null);
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ProtocolRepairReason = null, int? BrowserContractVersion = null);
 
     private sealed record MessageDto(
         string Role,

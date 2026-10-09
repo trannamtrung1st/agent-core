@@ -1,6 +1,7 @@
 using AgentCore.Application.Execution;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Identity;
@@ -48,6 +49,13 @@ public sealed class SkillPinStoreTests
         var generation = run.Claim!.Generation;
         run = await f.Store.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.LoadSkills(run.Revision, Now, generation, ["definition:refund.handle"]));
         run = await f.Store.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.LoadCapabilities(run.Revision, Now, generation, ["workspace.read", "email.search"]));
+        var call = new ModelToolCall("discovery", ToolCatalog.CapabilitiesLoad, """{"query":"browser teleport"}""");
+        var recovery = new InvalidToolCallRecovery([]);
+        var receipt = recovery.Note(call, """{"outcome":"load_no_match"}""", out _);
+        receipt = recovery.Note(call, """{"outcome":"load_no_match"}""", out _);
+        var checkpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([
+            new(ModelRole.Assistant, "", ToolCalls: [call]), new(ModelRole.Tool, receipt, Name: call.Name, ToolCallId: call.Id)]), 2, 0, 1000);
+        run = await f.Store.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Checkpoint(run.Revision, Now, generation, checkpoint, null));
         var reopened = new SqliteAgentRunStore(f.Factory!, (SqliteMemoryStore)f.Memory, new SystemDiagnosticIdSource());
         var loaded = (await reopened.GetAsync(Owner, run.AgentRunId))!;
         Assert.Equal(Catalog.Select(s => s.Procedure), loaded.PinnedSkillCatalog.Select(s => s.Procedure));
@@ -58,6 +66,16 @@ public sealed class SkillPinStoreTests
             new AgentRunCommand.LoadCapabilities(run.Revision - 1, Now, generation, ["workspace.write"])).AsTask());
         run = await reopened.ApplyAsync(Owner, loaded.AgentRunId, new AgentRunCommand.Recover(loaded.Revision, Now.AddMinutes(6)));
         run = await reopened.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Claim(run.Revision, Now.AddMinutes(6), Guid.NewGuid(), Now.AddMinutes(11)));
+        Assert.Equal(["workspace.read", "email.search"], run.LoadedCapabilityIds);
+        Assert.True(AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var messages));
+        Assert.NotNull(new InvalidToolCallRecovery(messages!).Refuse(call));
+        var authorized = Definition with { Environment = new RoleEnvironment(Capabilities: new("Selected", [ToolCatalog.CapabilitiesLoad, "workspace.read", "email.search"]), Projection: new([])) };
+        var context = new AgentContext(authorized, [], "", null, SessionMode.Text, null, false, null,
+            new(Guid.NewGuid(), TriggerKind.UserTurn, "continue"), AgentInstanceId: Owner.AgentInstanceId,
+            AgentWorkspaceAvailable: true, LoadedCapabilityIds: run.LoadedCapabilityIds);
+        var offered = ToolCatalog.For(authorized, context, ToolConfigurationGates.AllowAll);
+        Assert.Contains(offered, t => t.Name == "workspace.read");
+        Assert.Contains(offered, t => t.Name == "email.search");
         await Assert.ThrowsAsync<AgentCoreException>(() => reopened.ApplyAsync(Owner, run.AgentRunId,
             new AgentRunCommand.LoadSkills(run.Revision, Now.AddMinutes(7), generation, ["definition:billing.note"])).AsTask());
         run = await reopened.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.RequestCancellation(run.Revision, Now.AddMinutes(7), null));

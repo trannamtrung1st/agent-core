@@ -62,7 +62,7 @@ test("Activity scopes and pages sessions, preserves multi-turn diagnostics and r
 });
 test("Activity preserves the original background result and continues its exact Session", async ({ page }) => {
   test.setTimeout(120000);
-  const { headers, instanceId } = await setup(page, "general-assistant", 17);
+  const { headers, instanceId } = await setup(page, "general-assistant", 21);
   const parentId = await create(page, headers, instanceId, "Parent conversation");
   await page.goto(`/c/${parentId}`); await expect(page.getByTestId("connection")).toHaveText("Ready");
   await page.getByLabel("Message", { exact: true }).fill("[test:background-start] [test:background-files] Check progress.");

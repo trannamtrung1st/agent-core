@@ -142,8 +142,8 @@ public sealed class BackgroundSessionJourneyTests
             await artifacts.CreateAsync(child.Session.SessionId, summary + ".txt", "text/plain", "later"u8.ToArray(), null, null, agentRunId: followup.AgentRunId);
         }
         await artifacts.CreateAsync(child.Session.SessionId, "legacy.txt", "text/plain", "unknown"u8.ToArray(), null, null);
-        // Direct-store arrangement must finish before foregrounding creates a
-        // mailbox-owned runtime which may persist its own detach checkpoint.
+        // This fixture arranges history through the stores. Finish those writes before
+        // foregrounding creates a mailbox-owned runtime with its own detach checkpoint.
         (await client.PostAsJsonAsync(path + "/continue-in-chat", new { })).EnsureSuccessStatusCode();
         await Check(client);
         if (sqlite)

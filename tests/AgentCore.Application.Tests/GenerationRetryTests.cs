@@ -413,26 +413,35 @@ public sealed class GenerationRetryTests
         public ValueTask<Uri?> GetCurrentUrlAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             new(Navigated.Count == 0 ? null : new Uri(Navigated[^1]));
 
-        public ValueTask<BrowserOperationResult> NavigateAsync(
-            BrowserNavigateRequest request,
+        public ValueTask<BrowserResult> NavigateAsync(
+            BrowserRequest request,
             CancellationToken cancellationToken = default)
         {
-            Navigated.Add(request.Url!.AbsoluteUri);
-            return new(new BrowserOperationResult(
+            Navigated.Add(((BrowserNavigate)request.Command).Url!);
+            return new(new BrowserResult(
                 null,
-                new BrowserSnapshot(request.Url!.AbsoluteUri, "Zigwheels", "Open", false, [])));
+                new BrowserSnapshot(((BrowserNavigate)request.Command).Url!, "Zigwheels", "Open", false, [])));
         }
 
-        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+        public ValueTask<BrowserResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public ValueTask<BrowserOperationResult> InteractAsync(BrowserInteractionRequest request, CancellationToken cancellationToken = default) =>
+        public ValueTask<BrowserResult> InteractAsync(BrowserRequest request, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public ValueTask<BrowserCloseResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        public ValueTask<BrowserResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             CloseCalls++;
-            return new(new BrowserCloseResult("closed"));
+            return new(new BrowserResult(null, Status: "closed", DataJson: System.Text.Json.JsonSerializer.Serialize(new { status = "closed" })));
         }
-    }
+
+        public ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default) => request.Operation switch
+        {
+            BrowserOperation.Navigate => NavigateAsync(request, ct),
+            BrowserOperation.Snapshot or BrowserOperation.WaitFor => SnapshotAsync(request.SessionId, ct),
+            BrowserOperation.Close => CloseAsync(request.SessionId, ct),
+            BrowserOperation.Click or BrowserOperation.Type or BrowserOperation.Hover or BrowserOperation.Drag or BrowserOperation.Upload or BrowserOperation.FillForm => InteractAsync(request, ct),
+            _ => new(new BrowserResult("unsupported_operation")),
+        };
+}
 }

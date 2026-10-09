@@ -9,7 +9,7 @@ test("immediate child reports once, then continues as the same Session with a ne
   page.on("pageerror", error => errors.push(error.message));
   await page.goto("/");
   await expect.poll(() => page.evaluate(() => localStorage.getItem("agent-core.owner-capability"))).not.toBeNull();
-  await selectInstanceIdentity(page, { id: "general-assistant", version: 17 });
+  await selectInstanceIdentity(page, { id: "general-assistant", version: 21 });
   await expect(page.getByTestId("connection")).toHaveText("Ready");
   await page.getByLabel("Message", { exact: true }).fill("[test:background-start] [test:background-files] Check the progress in the background.");
   await page.getByRole("button", { name: "Send", exact: true }).click();

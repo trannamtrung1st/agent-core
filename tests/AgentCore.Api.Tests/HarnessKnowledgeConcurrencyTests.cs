@@ -19,7 +19,7 @@ public sealed class HarnessKnowledgeConcurrencyTests
     {
         await using var factory = new InterleavingFactory();
         var service = factory.Services.GetRequiredService<HarnessManagementService>();
-        var instance = await factory.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
+        var instance = await factory.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
         instance = await service.ConfigureAsync(instance.InstanceId, instance.Revision,
             new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources], ["knowledge:support-order-policy"], []));
         instance = await service.StartAsync(instance.InstanceId, instance.Revision, "Prepare knowledge.");
@@ -34,7 +34,7 @@ public sealed class HarnessKnowledgeConcurrencyTests
                 : new("knowledge.upsert", review.Draft!.Revision, Id: "reference", Content: "Updated policy", Source: "knowledge:support-order-policy")));
         review = await service.ReviewAsync(instance.InstanceId);
         Assert.True(review.Draft!.Candidate.Environment!.Attachments!.AllowUnreadUnsupportedTypes);
-        Assert.Equal(17, review.ActiveVersion);
+        Assert.Equal(21, review.ActiveVersion);
     }
 
     private sealed class InterleavingFactory : AgentCoreApiFactory

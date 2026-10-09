@@ -26,7 +26,7 @@ public sealed class HarnessManagementRecoveryTests
             {
                 var services = factory.Services;
                 var service = services.GetRequiredService<HarnessManagementService>();
-                var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
+                var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
                 id = instance.InstanceId;
                 instance = await service.ConfigureAsync(id, instance.Revision, new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources], ["knowledge:support-order-policy"], []));
                 var contexts = services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>();
@@ -36,8 +36,8 @@ public sealed class HarnessManagementRecoveryTests
                         WHEN NEW.ActiveVersion != OLD.ActiveVersion
                         BEGIN SELECT RAISE(ABORT, 'private injected fault'); END;
                         """);
-                var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 17))!;
-                var args = System.Text.Json.JsonSerializer.Serialize(new { expectedVersion = 17, policyRevision = instance.HarnessManagement!.PolicyRevision,
+                var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 21))!;
+                var args = System.Text.Json.JsonSerializer.Serialize(new { expectedVersion = 21, policyRevision = instance.HarnessManagement!.PolicyRevision,
                     id = "chat-recovered", content = "Durable order policy", source = "conversation:user", expected = "Retain policy", observed = "Owner supplied role knowledge" });
                 var call = new AgentCore.Application.Ports.ModelToolCall("chat", "harness.knowledge.upsert", args);
                 var executor = services.GetRequiredService<AgentCore.Application.Tools.SessionToolExecutor>();
@@ -46,7 +46,7 @@ public sealed class HarnessManagementRecoveryTests
                 Assert.DoesNotContain("private injected fault", failed.Text);
                 Assert.DoesNotContain("\"saved\":true", failed.Text);
                 var review = await service.ReviewAsync(id);
-                Assert.Equal(17, review.ActiveVersion);
+                Assert.Equal(21, review.ActiveVersion);
                 Assert.Equal(HarnessPreparationStatus.Failed, review.State.Preparation!.Status);
                 await using (var db = await contexts.CreateDbContextAsync()) await db.Database.ExecuteSqlRawAsync("DROP TRIGGER P97ChatFail;");
                 var recovered = await executor.ExecuteAsync(pinned, Guid.NewGuid(), call, 100000, admission: admission);
@@ -71,7 +71,7 @@ public sealed class HarnessManagementRecoveryTests
         try
         {
             await using var factory = new HarnessSqliteFactory(root);
-            var instance = await factory.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
+            var instance = await factory.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
             var service = factory.Services.GetRequiredService<HarnessManagementService>();
             instance = await service.ConfigureAsync(instance.InstanceId, instance.Revision,
                 new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources], ["knowledge:support-order-policy"], []));
@@ -88,7 +88,7 @@ public sealed class HarnessManagementRecoveryTests
                     """);
             await Assert.ThrowsAsync<AgentCoreException>(async () => await service.PromoteAsync(instance.InstanceId, review.InstanceRevision, review.Draft!.Revision));
             var unchanged = await service.ReviewAsync(instance.InstanceId);
-            Assert.Equal(17, unchanged.ActiveVersion);
+            Assert.Equal(21, unchanged.ActiveVersion);
             Assert.Equal(review.InstanceRevision, unchanged.InstanceRevision);
             Assert.Equal(HarnessPreparationStatus.Ready, unchanged.State.Preparation!.Status);
             Assert.Null(unchanged.State.Preparation.PublishedVersion);
@@ -120,7 +120,7 @@ public sealed class HarnessManagementRecoveryTests
             await using (var first = new HarnessSqliteFactory(root))
             {
                 Assert.IsType<SqliteAgentInstanceStore>(first.Services.GetRequiredService<IAgentInstanceStore>());
-                var instance = await first.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
+                var instance = await first.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
                 id = instance.InstanceId;
                 var service = first.Services.GetRequiredService<HarnessManagementService>();
                 instance = await service.ConfigureAsync(id, instance.Revision,

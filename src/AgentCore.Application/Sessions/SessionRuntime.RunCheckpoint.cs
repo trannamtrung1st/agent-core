@@ -27,13 +27,20 @@ public sealed partial class SessionRuntime
             throw AgentCoreErrors.Conflict("Model request generation is superseded.");
     }
 
-    private async Task<bool> OwnsWorkerAsync(EventContext context, Guid responseId, CancellationToken ct)
+    private async Task<bool> OwnsWorkerAsync(EventContext context, Guid responseId, CancellationToken ct, bool terminalDeadline = false)
     {
         if (_boundAgentRun is not { Status: AgentRunStatus.Running, Claim: { } claim } bound
             || bound.ResponseId != responseId || context.AgentRunGeneration != claim.Generation) return false;
         var current = await _agentRuns.GetAsync(bound.Owner, bound.AgentRunId, ct).ConfigureAwait(false);
         if (current is not { Status: AgentRunStatus.Running, Claim: { } currentClaim, CancellationRequested: false }
-            || currentClaim.Generation != context.AgentRunGeneration || currentClaim.LeaseExpiresAtUtc <= _time.GetUtcNow()) return false;
+            || currentClaim.Generation != context.AgentRunGeneration || !terminalDeadline && currentClaim.LeaseExpiresAtUtc <= _time.GetUtcNow()) return false;
+        // Only a terminal deadline failure may settle an expired, still-current generation.
+        // No model output or effect is admitted, and a reclaimed/cancelled Run still fails the fences above.
+        if (terminalDeadline && currentClaim.LeaseExpiresAtUtc <= _time.GetUtcNow())
+        {
+            _boundAgentRun = current;
+            return true;
+        }
         if (currentClaim.LeaseExpiresAtUtc - _time.GetUtcNow() < TimeSpan.FromMinutes(1))
             current = await _agentRuns.ApplyAsync(current.Owner, current.AgentRunId,
                 new AgentRunCommand.Renew(current.Revision, _time.GetUtcNow(), currentClaim.Generation,
@@ -66,6 +73,13 @@ public sealed partial class SessionRuntime
         string hash, AgentRunSideEffectDisposition disposition, CancellationToken ct) =>
         RequestAgentRunCommandAsync(cause, responseId, (run, now) => new AgentRunCommand.MarkSideEffect(
             run.Revision, now, run.Claim!.Generation, disposition, call.Id, hash), ct);
+
+    private static bool BrowserDialogPending(string text)
+    {
+        try { using var json = JsonDocument.Parse(text); return json.RootElement.ValueKind == JsonValueKind.Object
+            && json.RootElement.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String && error.GetString() == "dialog_pending"; }
+        catch (JsonException) { return false; }
+    }
 
     private static bool RejectedEffect(string text)
     {

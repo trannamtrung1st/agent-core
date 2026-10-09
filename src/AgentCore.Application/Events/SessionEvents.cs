@@ -661,5 +661,5 @@ public static class PublicHistory
 }
 
 public sealed record CapabilityLoadRequested(EventContext Context, Guid ResponseId, Guid Epoch, string ArgumentsJson,
-    AgentContext ProjectionContext, CancellationToken RequestCancellation, TaskCompletionSource<CapabilityLoadMailboxResult> Completed) : SessionInput(Context);
+    AgentContext ProjectionContext, CancellationToken RequestCancellation, TaskCompletionSource<CapabilityLoadMailboxResult> Completed, bool DialogRecovery = false) : SessionInput(Context);
 public sealed record CapabilityLoadMailboxResult(string ToolResultJson, IReadOnlyList<string>? LoadedIds, string Outcome);

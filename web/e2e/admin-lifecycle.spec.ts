@@ -1,3 +1,4 @@
+import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 /**
  * Frozen P7G §8 whole-phase deterministic Admin lifecycle (26 steps).
  * Requires disposable SQLite for memory/trigger/work seeds: PLAYWRIGHT_SQLITE_PATH=<path>.
@@ -131,7 +132,7 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
     }
   });
   page.on("requestfailed", (request) => {
-    failedRequests.push(`${request.method()} ${request.url()}`);
+    if (!isCanceledDraftEvidenceRead(request)) failedRequests.push(`${request.method()} ${request.url()}`);
   });
 
   const personaName = `P7G Persona ${Date.now()}`;

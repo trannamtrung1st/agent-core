@@ -6,7 +6,7 @@ using Microsoft.Playwright;
 
 namespace AgentCore.Infrastructure.Browser;
 
-public sealed partial class PlaywrightBrowser
+public sealed partial class NativePlaywrightBrowser
 {
     private BrowserNewContextOptions ContextOptions(IPlaywright driver)
     {
@@ -58,7 +58,7 @@ public sealed partial class PlaywrightBrowser
         _options.Environment.Device, options.Locale ?? "en-US", options.TimezoneId ?? TimeZoneInfo.Local.Id,
         options.IsMobile ?? false, options.HasTouch ?? false, options.DeviceScaleFactor ?? 1);
 
-    private BrowserCommandResult Configuration(SessionBrowser? session)
+    private BrowserResult Configuration(SessionBrowser? session)
     {
         PageEmulateMediaOptions? media = null;
         if (session is not null) lock (session.PopupGate) session.Media.TryGetValue(session.Page, out media);
@@ -89,7 +89,7 @@ public sealed partial class PlaywrightBrowser
                 originRestrictionsApply = true, permissions = "Geolocation requires exact-origin approval. Initial/same-origin set preserves overrides; clear or origin change resets all permission overrides (Playwright limitation).",
                 contextSettings = "Device, locale, timezone and touch settings apply at context creation; active contexts are retained."
             },
-            limits = new { snapshotChars = BrowserToolLimits.MaxSnapshotChars, captureBytes = BrowserToolLimits.MaxCaptureBytes, downloadBytes = BrowserToolLimits.MaxDownloadBytes }
+            limits = new { snapshotBytes = BrowserToolLimits.MaxSnapshotBytes, captureBytes = BrowserToolLimits.MaxCaptureBytes, downloadBytes = BrowserToolLimits.MaxDownloadBytes }
         }, JsonSerializerOptions.Web));
     }
 
@@ -110,10 +110,10 @@ public sealed partial class PlaywrightBrowser
         _ = close.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
     }
 
-    private async Task<BrowserCommandResult> GeolocationAsync(SessionBrowser session, JsonElement args, CancellationToken ct)
+    private async Task<BrowserResult> GeolocationAsync(SessionBrowser session, BrowserSetGeolocation args, CancellationToken ct, Func<Task, Task> action)
     {
-        var operation = String(args, "operation");
-        if (operation is not ("set" or "clear") || !Uri.TryCreate(String(args, "origin"), UriKind.Absolute, out var target)
+        var operation = args.Operation;
+        if (operation is not ("set" or "clear") || !Uri.TryCreate(args.Origin, UriKind.Absolute, out var target)
             || target.UserInfo.Length != 0 || target.PathAndQuery != "/" || target.Fragment.Length != 0) return new("invalid");
         var origin = target.GetLeftPart(UriPartial.Authority);
         if (!Uri.TryCreate(session.Page.Url, UriKind.Absolute, out var current)
@@ -122,14 +122,13 @@ public sealed partial class PlaywrightBrowser
         Geolocation? location = null;
         if (operation == "set")
         {
-            if (!args.TryGetProperty("latitude", out var latitude) || !args.TryGetProperty("longitude", out var longitude)
-                || !latitude.TryGetSingle(out var lat) || !longitude.TryGetSingle(out var lon)
-                || !float.IsFinite(lat) || !float.IsFinite(lon) || lat is < -90 or > 90 || lon is < -180 or > 180) return new("invalid");
-            var accuracy = args.TryGetProperty("accuracy", out var value) ? value.GetSingle() : 0;
-            if (!float.IsFinite(accuracy) || accuracy is < 0 or > 10000) return new("invalid");
-            location = new() { Latitude = lat, Longitude = lon, Accuracy = accuracy };
+            if (args.Latitude is not double latitude || args.Longitude is not double longitude
+                || !double.IsFinite(latitude) || !double.IsFinite(longitude) || latitude is < -90 or > 90 || longitude is < -180 or > 180) return new("invalid");
+            var accuracy = args.Accuracy ?? 0;
+            if (!double.IsFinite(accuracy) || accuracy is < 0 or > 10000) return new("invalid");
+            location = new() { Latitude = (float)latitude, Longitude = (float)longitude, Accuracy = (float)accuracy };
         }
-        else if (args.TryGetProperty("latitude", out _) || args.TryGetProperty("longitude", out _) || args.TryGetProperty("accuracy", out _)) return new("invalid");
+        else if (args.Latitude is not null || args.Longitude is not null || args.Accuracy is not null) return new("invalid");
 
         // A later grant must never finish after cancellation releases the owner gate.
         ct.ThrowIfCancellationRequested();
@@ -137,13 +136,13 @@ public sealed partial class PlaywrightBrowser
         var permissionsReset = operation == "clear" || session.GeolocationOrigin is { } previous && previous != origin;
         if (permissionsReset)
         {
-            await MutateContextAsync(session, session.Context.ClearPermissionsAsync(), ct);
+            await action(MutateContextAsync(session, session.Context.ClearPermissionsAsync(), ct));
             session.GeolocationOrigin = null;
         }
-        await MutateContextAsync(session, session.Context.SetGeolocationAsync(location), ct);
+        await action(MutateContextAsync(session, session.Context.SetGeolocationAsync(location), ct));
         if (location is not null && !ct.IsCancellationRequested)
         {
-            await MutateContextAsync(session, session.Context.GrantPermissionsAsync(["geolocation"], new() { Origin = origin }), ct);
+            await action(MutateContextAsync(session, session.Context.GrantPermissionsAsync(["geolocation"], new() { Origin = origin }), ct));
             session.GeolocationOrigin = origin;
         }
         if (ct.IsCancellationRequested)
@@ -170,16 +169,17 @@ public sealed partial class PlaywrightBrowser
         }
     }
 
-    private async Task EmulateMediaAsync(SessionBrowser session, JsonElement args, CancellationToken ct, Func<Task, Task> action)
+    private async Task EmulateMediaAsync(SessionBrowser session, BrowserEmulateMedia args, CancellationToken ct, Func<Task, Task> action)
     {
-        T? Setting<T>(string key) where T : struct, Enum => !args.TryGetProperty(key, out var value) ? null
-            : value.ValueKind == JsonValueKind.Null ? Enum.Parse<T>("Null")
-            : Enum.Parse<T>(value.GetString()!.Replace("-", ""), true);
+        static T? Setting<T>(bool specified, string? value) where T : struct, Enum => !specified ? null
+            : value is null ? Enum.Parse<T>("Null") : Enum.Parse<T>(value.Replace("-", ""), true);
         var change = new PageEmulateMediaOptions
         {
-            Media = Setting<Media>("media"), ColorScheme = Setting<ColorScheme>("colorScheme"),
-            ReducedMotion = Setting<ReducedMotion>("reducedMotion"), ForcedColors = Setting<ForcedColors>("forcedColors"),
-            Contrast = Setting<Contrast>("contrast")
+            Media = Setting<Media>(args.MediaSpecified, args.Media),
+            ColorScheme = Setting<ColorScheme>(args.ColorSchemeSpecified, args.ColorScheme),
+            ReducedMotion = Setting<ReducedMotion>(args.ReducedMotionSpecified, args.ReducedMotion),
+            ForcedColors = Setting<ForcedColors>(args.ForcedColorsSpecified, args.ForcedColors),
+            Contrast = Setting<Contrast>(args.ContrastSpecified, args.Contrast),
         };
         ct.ThrowIfCancellationRequested();
         await action(session.Page.EmulateMediaAsync(change));

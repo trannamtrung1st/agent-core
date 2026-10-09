@@ -1,3 +1,4 @@
+import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import {
   expectManagedIdentityOptionAbsent,
@@ -61,7 +62,7 @@ test("p7d managed instance persona form json chat archive and history", async ({
     }
   });
   page.on("requestfailed", (request) => {
-    failedRequests.push(`${request.method()} ${request.url()}`);
+    if (!isCanceledDraftEvidenceRead(request)) failedRequests.push(`${request.method()} ${request.url()}`);
   });
 
   const personaName = `P7D Persona ${Date.now()}`;

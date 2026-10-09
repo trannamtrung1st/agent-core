@@ -25,7 +25,7 @@ public sealed class UnifiedAutomationJourneyTests
         await using (var host = new ExperienceHost(db))
         {
             var s = host.Services;
-            instanceId = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("secretary", 3)).InstanceId;
+            instanceId = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("secretary", 8)).InstanceId;
             using var client = TestOwnerCapability.CreateOwnerClient(host);
             var path = $"/api/v2/admin/agent-instances/{instanceId}/automations";
             var draft = new AutomationRequest(0, true, "Quiet review", "Inspect current state; do nothing if no work needs action.",
@@ -87,7 +87,7 @@ public sealed class UnifiedAutomationJourneyTests
     {
         await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"automation-review-{Guid.NewGuid():N}.db"));
         var services = host.Services;
-        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
         var experience = services.GetRequiredService<ExperienceService>();
         await services.GetRequiredService<IExperienceStore>().ConfigureAsync(instance.InstanceId, 0, true);
         var source = await ExperienceJourneyTests.SeedAsync(services, instance.InstanceId);

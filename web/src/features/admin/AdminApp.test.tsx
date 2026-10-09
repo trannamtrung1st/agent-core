@@ -477,7 +477,7 @@ describe("AdminApp", () => {
     render(<EffectiveConfigView config={{ ...sampleEffective, browser: {
       providerId: "subset", displayName: "Test browser", engine: "chromium", enabled: true, ready: false,
       profileMode: "EphemeralSession", policyMode: "Restricted", supportedFeatures: ["Navigate", "Snapshot", "Click"],
-      maxSnapshotChars: 8000, maxCaptureBytes: 1500000, maxDownloadBytes: 5242880
+      maxSnapshotBytes: 8000, maxCaptureBytes: 1500000, maxDownloadBytes: 5242880
     } }} />);
     const browser = screen.getByRole("region", { name: "Browser provider" });
     expect(within(browser).getByText("chromium")).toBeInTheDocument();

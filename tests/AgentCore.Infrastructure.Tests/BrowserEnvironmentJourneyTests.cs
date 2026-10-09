@@ -1,3 +1,4 @@
+using AgentCore.Tests.Shared;
 using System.Text.Json;
 using System.Text;
 using System.Net.WebSockets;
@@ -26,7 +27,7 @@ public sealed class BrowserEnvironmentJourneyTests
     public async Task Authorized_configuration_inspection_reports_disabled_or_missing_engine_without_opening_context(bool enabled)
     {
         var probes = 0;
-        var browser = new PlaywrightBrowser(new BrowserOptions { Enabled = enabled, FixtureEnabled = false,
+        var browser = new NativePlaywrightBrowser(new BrowserOptions { Enabled = enabled, FixtureEnabled = false,
             ProfileRoot = "private-profile-must-not-be-exposed" }, null, _ => { probes++; return Task.FromResult(false); });
         await browser.StartAsync(CancellationToken.None);
         var gate = new ToolConfigurationGate(null, null, null, browser, enabled);
@@ -65,7 +66,7 @@ public sealed class BrowserEnvironmentJourneyTests
     public async Task Context_creation_environment_and_runtime_media_are_observed_without_replacing_owner_state(bool persistent)
     {
         var root = Path.Combine(Path.GetTempPath(), "browser-environment-" + Guid.NewGuid().ToString("N"));
-        var browser = new PlaywrightBrowser(new BrowserOptions
+        var browser = new NativePlaywrightBrowser(new BrowserOptions
         {
             Enabled = true, Headless = true, FixturePort = 0, ProfileRoot = root,
             ProfileMode = persistent ? "PersistentAgent" : "EphemeralSession",
@@ -74,7 +75,7 @@ public sealed class BrowserEnvironmentJourneyTests
         await browser.StartAsync(CancellationToken.None);
         var id = Guid.NewGuid();
         browser.BindSession(id, Guid.NewGuid());
-        async Task<BrowserCommandResult> Run(string tool, object args) => await browser.ExecuteAsync(new(id, tool, JsonSerializer.SerializeToElement(args)));
+        async Task<BrowserResult> Run(string tool, object args) => BrowserToolArguments.TryRequest(id, tool, JsonSerializer.SerializeToElement(args), out var request, out _) ? await browser.ExecuteAsync(request) : new("invalid");
         try
         {
             var closed = await Run(ToolCatalog.BrowserConfiguration, new { });
@@ -82,7 +83,7 @@ public sealed class BrowserEnvironmentJourneyTests
             Assert.Contains("\"contextOpen\":false", closed.DataJson);
             Assert.Null(browser.ContextFor(id));
             var origin = browser.HostPolicy.NavigationOrigins.Single();
-            Assert.Null((await browser.NavigateAsync(new(id, new Uri(origin + "/browser-v2.html?compact=1")))).ErrorCode);
+            Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(origin + "/browser-native.html?compact=1")))).ErrorCode);
             var context = browser.ContextFor(id)!;
             var page = context.Pages[0];
             Assert.Equal("fr-FR", await page.EvaluateAsync<string>("navigator.language"));
@@ -119,16 +120,17 @@ public sealed class BrowserEnvironmentJourneyTests
             Assert.Same(context, browser.ContextFor(id));
             Assert.Equal("preserved", await page.EvaluateAsync<string>("localStorage.getItem('draft')"));
             await page.GetByRole(AriaRole.Textbox, new() { Name = "Title", Exact = true }).EvaluateAsync("el => { window.keys=[]; el.addEventListener('keydown', event => { if (event.key.length === 1) window.keys.push(event.key); }); }");
-            var snapshot = await browser.SnapshotAsync(id);
-            var reference = snapshot.Observation!.Elements.Single(e => e.Name == "Title").Ref;
-            Assert.Null((await Run(ToolCatalog.BrowserType, new { @ref = reference, text = "abc", slowly = true })).ErrorCode);
+            var snapshot = await browser.ExecuteAsync(BrowserTestRequests.Inspect(id));
+            var reference = (await BrowserTestQueries.Find(browser, id, "Title")).Target;
+            Assert.Null((await Run(ToolCatalog.BrowserType, new { target = reference, text = "abc", slowly = true })).ErrorCode);
             Assert.Equal(new[] { "a", "b", "c" }, await page.EvaluateAsync<string[]>("window.keys"));
             Assert.Equal("abc", await page.GetByRole(AriaRole.Textbox, new() { Name = "Title", Exact = true }).InputValueAsync());
-            reference = (await browser.SnapshotAsync(id)).Observation!.Elements.Single(e => e.Name == "Title").Ref;
-            Assert.Null((await Run(ToolCatalog.BrowserHighlight, new { @ref = reference })).ErrorCode);
+            await browser.ExecuteAsync(BrowserTestRequests.Inspect(id));
+            reference = (await BrowserTestQueries.Find(browser, id, "Title")).Target;
+            Assert.Null((await Run(ToolCatalog.BrowserHighlight, new { target = reference })).ErrorCode);
             Assert.Null((await Run(ToolCatalog.BrowserHighlight, new { operation = "hide" })).ErrorCode);
             Assert.Equal(0, await page.Locator("x-pw-tooltip").CountAsync());
-            var worker = await page.EvaluateAsync<bool>("async () => { try { return !!(await navigator.serviceWorker.register('/browser-v2-worker.js')); } catch { return false; } }");
+            var worker = await page.EvaluateAsync<bool>("async () => { try { return !!(await navigator.serviceWorker.register('/browser-native-worker.js')); } catch { return false; } }");
             Assert.False(worker);
             Assert.Equal(0, await page.EvaluateAsync<int>("async () => (await navigator.serviceWorker.getRegistrations()).length"));
         }
@@ -142,13 +144,13 @@ public sealed class BrowserEnvironmentJourneyTests
     [Fact]
     public async Task Wheel_uses_signed_deltas_at_a_safe_target_and_rejects_missing_or_unbounded_distances()
     {
-        var browser = new PlaywrightBrowser(new BrowserOptions { Enabled = true, Headless = true, FixturePort = 0 }, null);
+        var browser = new NativePlaywrightBrowser(new BrowserOptions { Enabled = true, Headless = true, FixturePort = 0 }, null);
         await browser.StartAsync(CancellationToken.None);
         var id = Guid.NewGuid();
-        async Task<BrowserCommandResult> Run(object args) => await browser.ExecuteAsync(new(id, "browser.mouse", JsonSerializer.SerializeToElement(args)));
+        async Task<BrowserResult> Run(object args) => AgentCore.Application.Tools.BrowserToolArguments.TryRequest(id, "browser.mouse", JsonSerializer.SerializeToElement(args), out var request, out _) ? await browser.ExecuteAsync(request) : new("invalid");
         try
         {
-            Assert.Null((await browser.NavigateAsync(new(id, new Uri(browser.HostPolicy.NavigationOrigins.Single() + "/browser-v2.html?compact=1")))).ErrorCode);
+            Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(browser.HostPolicy.NavigationOrigins.Single() + "/browser-native.html?compact=1")))).ErrorCode);
             var page = browser.ContextFor(id)!.Pages[0];
             // A generic scrollable surface needs no application-specific selectors or fixture behavior.
             await page.EvaluateAsync("() => { const panel=document.createElement('div'); panel.id='wheel-probe'; panel.style='position:fixed;inset:100px auto auto 100px;width:300px;height:300px;overflow:scroll;z-index:999;background:white'; panel.innerHTML='<div style=\"width:2000px;height:2000px\">Scroll surface</div>'; document.body.append(panel); }");
@@ -170,18 +172,18 @@ public sealed class BrowserEnvironmentJourneyTests
         await main.StartAsync(0, CancellationToken.None);
         await using var other = new LoopbackBrowserFixtureHost(NullLogger.Instance);
         await other.StartAsync(0, CancellationToken.None);
-        var browser = new PlaywrightBrowser(new BrowserOptions
+        var browser = new NativePlaywrightBrowser(new BrowserOptions
         {
             Enabled = true, Headless = true, FixtureEnabled = false,
             NavigationOrigins = [main.Origin!, other.Origin!], InteractionOrigins = [main.Origin!, other.Origin!]
         }, loggerFactory: null);
         await browser.StartAsync(CancellationToken.None);
         var id = Guid.NewGuid();
-        async Task<BrowserCommandResult> Run(object args) => await browser.ExecuteAsync(new(id, ToolCatalog.BrowserGeolocation, JsonSerializer.SerializeToElement(args)));
+        async Task<BrowserResult> Run(object args) => AgentCore.Application.Tools.BrowserToolArguments.TryRequest(id, ToolCatalog.BrowserGeolocation, JsonSerializer.SerializeToElement(args), out var request, out _) ? await browser.ExecuteAsync(request) : new("invalid");
         try
         {
             var origin = browser.HostPolicy.NavigationOrigins[0];
-            Assert.Null((await browser.NavigateAsync(new(id, new Uri(origin + "/browser-v2.html?compact=1")))).ErrorCode);
+            Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(origin + "/browser-native.html?compact=1")))).ErrorCode);
             var page = browser.ContextFor(id)!.Pages[0];
             Assert.Equal("target_denied", (await Run(new { operation = "set", origin = other.Origin, latitude = 10, longitude = 20 })).ErrorCode);
             Assert.Equal("invalid", (await Run(new { operation = "set", origin = origin + "/path", latitude = 10, longitude = 20 })).ErrorCode);
@@ -197,7 +199,7 @@ public sealed class BrowserEnvironmentJourneyTests
             var position = await page.EvaluateAsync<double[]>("() => new Promise((resolve,reject) => navigator.geolocation.getCurrentPosition(p => resolve([p.coords.latitude, p.coords.longitude]), reject))");
             Assert.Equal(new[] { 10.75, 20.5 }, position);
             var otherPage = await browser.ContextFor(id)!.NewPageAsync();
-            await otherPage.GotoAsync(other.Origin + "/browser-v2-frame.html");
+            await otherPage.GotoAsync(other.Origin + "/browser-native-frame.html");
             Assert.Equal("prompt", await otherPage.EvaluateAsync<string>("async () => (await navigator.permissions.query({name:'geolocation'})).state"));
             var cleared = await Run(new { operation = "clear", origin });
             Assert.Null(cleared.ErrorCode);
@@ -205,10 +207,10 @@ public sealed class BrowserEnvironmentJourneyTests
             Assert.Equal("prompt", await page.EvaluateAsync<string>("async () => (await navigator.permissions.query({name:'notifications'})).state"));
             Assert.Equal("prompt", await page.EvaluateAsync<string>("async () => (await navigator.permissions.query({name:'geolocation'})).state"));
             using var cancel = new CancellationTokenSource(); cancel.Cancel();
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await browser.ExecuteAsync(new(id, ToolCatalog.BrowserGeolocation,
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await browser.ExecuteAsync(AgentCore.Application.Tools.BrowserToolArguments.Request(id, ToolCatalog.BrowserGeolocation,
                 JsonSerializer.SerializeToElement(new { operation = "set", origin, latitude = 10, longitude = 20 })), cancel.Token));
             Assert.Equal("prompt", await page.EvaluateAsync<string>("async () => (await navigator.permissions.query({name:'geolocation'})).state"));
-            Assert.Null((await browser.SnapshotAsync(id)).ErrorCode);
+            Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Inspect(id))).ErrorCode);
         }
         finally { await browser.StopAsync(CancellationToken.None); }
     }
@@ -241,13 +243,13 @@ public sealed class BrowserEnvironmentJourneyTests
         string Origin(WebApplication app) => app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
         await using var main = new LoopbackBrowserFixtureHost(NullLogger.Instance);
         await main.StartAsync(0, CancellationToken.None);
-        var browser = new PlaywrightBrowser(new BrowserOptions { Enabled = true, Headless = true, FixtureEnabled = false,
+        var browser = new NativePlaywrightBrowser(new BrowserOptions { Enabled = true, Headless = true, FixtureEnabled = false,
             NavigationOrigins = [main.Origin!], ResourceOrigins = [Origin(allowed)] }, loggerFactory: null);
         await browser.StartAsync(CancellationToken.None);
         var id = Guid.NewGuid();
         try
         {
-            Assert.Null((await browser.NavigateAsync(new(id, new Uri(main.Origin + "/browser-v2.html?compact=1")))).ErrorCode);
+            Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(main.Origin + "/browser-native.html?compact=1")))).ErrorCode);
             var page = browser.ContextFor(id)!.Pages[0];
             var messages = new List<string>();
             page.Console += (_, message) => messages.Add(message.Text);
@@ -259,7 +261,7 @@ public sealed class BrowserEnvironmentJourneyTests
             Assert.True(received == "allowed", $"received={received}; server connections={connections["allowed"]}; console={string.Join(";", messages)}; resource origins={string.Join(',', browser.HostPolicy.EffectiveResourceOrigins)}");
             Assert.NotEqual("denied", await Connect(Origin(denied)));
             lock (connections) { Assert.Equal(1, connections["allowed"]); Assert.Equal(0, connections["denied"]); }
-            Assert.Null((await browser.SnapshotAsync(id)).ErrorCode);
+            Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Inspect(id))).ErrorCode);
         }
         finally { await browser.StopAsync(CancellationToken.None); }
     }

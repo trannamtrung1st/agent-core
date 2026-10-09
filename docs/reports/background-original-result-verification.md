@@ -80,6 +80,10 @@ Local checks on this cleanup:
 
 Logs: `/private/tmp/background-final-acceptance.log`, `/private/tmp/background-final-ci.json`, `/private/tmp/background-final-api-wire.log`, `/private/tmp/background-final-unit.log`, `/private/tmp/background-final-build.log`, `/private/tmp/background-final-playwright.log`. This is verified local cleanup on top of `afe01cef`, not a claim that its earlier hosted workflow covers these edits or that all five jobs passed. Earlier full-suite results remain historical; applicable affected-scope checks were repeated here.
 
+## Later native-browser consistency review (2026-10-09)
+
+All five hosted Synthetic/Compose jobs passed on `20ae66f3d174a692cfff8519acdfa681fbef17c4` ([37839955829](https://github.com/trannamtrung1st/agent-core/actions/runs/37839955829)), including the corrected Admin acceptance and original-result browser/API journeys. The subsequent native-browser review exposed a SQLite race in this ledger's HTTP fixture: it arranged B/C history directly in the stores after Continue in chat had created a runtime, competing with that runtime's detach checkpoint. The fixture now completes direct-store history arrangement before foregrounding; original result, files, title, origin, history and reopen assertions remain intact. All three focused `BackgroundSessionJourneyTests` pass. The [native review ledger](native-playwright-wrapper-verification.md#follow-up-consistency-and-behavior-review) records the initial broad failure and final API rerun; fresh exact-head hosted checks are required for this follow-up. No background-result production behavior or persistence revision policy changed.
+
 ## Non-UI CI fixture repair (2026-10-09)
 
 Started on main `3947e51af21486f6b16b1f7e568f3f2bdef17cb7`. Read failed [workflow 37829186299](https://github.com/trannamtrung1st/agent-core/actions/runs/37829186299) and compared the targeted corrections in [PR #4](https://github.com/trannamtrung1st/agent-core/pull/4), without merging its wider browser refactor. The user explicitly assigned only non-UI/UX failures to this session; credential/background title selectors and durable retry navigation are handled separately.

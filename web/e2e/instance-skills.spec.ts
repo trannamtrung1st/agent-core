@@ -57,7 +57,7 @@ test('Instance Skills: authorized Chat creation, next-turn load, owner editor an
   await expect(page.getByRole('dialog')).toContainText('independent Instance Skill');
   await page.getByRole('dialog').getByRole('button', { name: 'Customize', exact: true }).click();
   await expect(page.getByRole('switch', { name: 'Enable Definition Skill Record lookup', exact: true })).not.toBeChecked();
-  await expect(local.getByText('Copied from general-assistant v17 · browser.record.lookup', { exact: true })).toBeVisible();
+  await expect(local.getByText('Copied from general-assistant v21 · browser.record.lookup', { exact: true })).toBeVisible();
   await page.getByRole('switch', { name: 'Enable Instance Skill Accounting', exact: true }).click();
   await expect(page.getByRole('switch', { name: 'Enable Instance Skill Accounting', exact: true })).not.toBeChecked();
   await page.reload(); await expect(page.getByRole('switch', { name: 'Enable Instance Skill Accounting', exact: true })).not.toBeChecked();

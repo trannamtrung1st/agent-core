@@ -11,7 +11,7 @@ test("closing research preserves memory and report, while envelope deletion requ
   await expect.poll(() => page.evaluate(() => localStorage.getItem("agent-core.owner-capability"))).not.toBeNull();
   const token = await page.evaluate(() => localStorage.getItem("agent-core.owner-capability"));
   const headers = { "X-AgentCore-Owner-Capability": token! };
-  const create = await page.request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "general-assistant", version: 17 } });
+  const create = await page.request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "general-assistant", version: 21 } });
   expect(create.ok(), await create.text()).toBe(true);
   const instanceId = (await create.json()).instanceId as string;
   const newSession = await page.request.post("/api/v2/sessions", { headers, data: { agentInstanceId: instanceId, mode: "text", modelCatalogKey: "scripted-alpha" } });

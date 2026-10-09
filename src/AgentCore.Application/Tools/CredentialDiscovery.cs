@@ -12,14 +12,16 @@ public static class CredentialDiscovery
 {
     public static CredentialDiscoveryRequest Parse(JsonElement args)
     {
-        if (args.EnumerateObject().Any(p => p.Name is not "cursor" and not "limit"))
+        if (args.ValueKind != JsonValueKind.Object || args.EnumerateObject().Select(p => p.Name).Distinct(StringComparer.Ordinal).Count() != args.EnumerateObject().Count()
+            || args.EnumerateObject().Any(p => p.Name is not "cursor" and not "limit"))
             throw AgentCoreErrors.Validation("Credential listing accepts only cursor and limit.");
         var limit = 20;
-        if (args.TryGetProperty("limit", out var count)
+        if (args.TryGetProperty("limit", out var count) && count.ValueKind != JsonValueKind.Null
             && (count.ValueKind != JsonValueKind.Number || !count.TryGetInt32(out limit) || limit is < 1 or > 100))
             throw AgentCoreErrors.Validation("Credential listing limit must be between 1 and 100.");
         string? cursor = null;
-        if (args.TryGetProperty("cursor", out var after))
+        if (args.TryGetProperty("cursor", out var after) && after.ValueKind != JsonValueKind.Null
+            && !(after.ValueKind == JsonValueKind.String && string.IsNullOrWhiteSpace(after.GetString())))
         {
             if (after.ValueKind != JsonValueKind.String) throw AgentCoreErrors.Validation("Credential cursor must be an alias.");
             try { cursor = CredentialRules.Reference(after.GetString()!); }

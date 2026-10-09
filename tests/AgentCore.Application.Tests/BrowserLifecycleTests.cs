@@ -180,7 +180,7 @@ public sealed class BrowserLifecycleTests
         var run = (await runs.AdmitAsync(snapshot, 0, AgentRunTestFixtures.Run(snapshot, now))).Run;
         var generation = Guid.NewGuid();
         run = await runs.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.Claim(run.Revision, now, generation, now.AddMinutes(5)));
-        var original = new ModelToolCall("original", ToolCatalog.BrowserClick, "{\"ref\":\"el_aaaaaaaaaaaaaaaaaaaaaa\"}");
+        var original = new ModelToolCall("original", ToolCatalog.BrowserClick, "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_aaaaaaaaaaaaaaaaaaaaaa\"}}");
         var hash = ToolActionHash.Compute(original.Name, JsonDocument.Parse(original.ArgumentsJson).RootElement);
         run = await runs.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.Checkpoint(run.Revision, now, generation,
             new(AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [original])]), 1, 0, 180000), null));
@@ -283,7 +283,7 @@ public sealed class BrowserLifecycleTests
             {
                 0 => new ModelToolCall("snapshot", ToolCatalog.BrowserSnapshot, "{}"),
                 1 => original with { Id = "repeat" },
-                2 => new ModelToolCall("new", ToolCatalog.BrowserClick, "{\"ref\":\"el_bbbbbbbbbbbbbbbbbbbbbb\"}"),
+                2 => new ModelToolCall("new", ToolCatalog.BrowserClick, "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_bbbbbbbbbbbbbbbbbbbbbb\"}}"),
                 _ => null
             };
             if (call is not null)
@@ -436,8 +436,8 @@ public sealed class BrowserLifecycleTests
         public ValueTask<Uri?> GetCurrentUrlAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             new(SuccessfulSnapshot ? new Uri(FixtureOrigin[0]) : null);
 
-        public async ValueTask<BrowserOperationResult> NavigateAsync(
-            BrowserNavigateRequest request,
+        public async ValueTask<BrowserResult> NavigateAsync(
+            BrowserRequest request,
             CancellationToken cancellationToken = default)
         {
             NavigateCalls++;
@@ -450,28 +450,36 @@ public sealed class BrowserLifecycleTests
             cancellationToken.ThrowIfCancellationRequested();
             if (ErrorCode is not null)
             {
-                return new BrowserOperationResult(ErrorCode, null);
+                return new BrowserResult(ErrorCode, null);
             }
 
-            return new BrowserOperationResult(
+            return new BrowserResult(
                 null,
-                new BrowserSnapshot(request.Url!.AbsoluteUri, LateTitle, "Search", false, []));
+                new BrowserSnapshot(((BrowserNavigate)request.Command).Url!, LateTitle, "Search", false, []));
         }
 
-        public ValueTask<BrowserOperationResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        public ValueTask<BrowserResult> SnapshotAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             SnapshotCalls++;
             return new(SuccessfulSnapshot ? new(null, new BrowserSnapshot(FixtureOrigin[0], "Fresh page", "Record " + SnapshotCalls, false,
-                [new("el_bbbbbbbbbbbbbbbbbbbbbb", "button", "Save", ["click"])])) : new BrowserOperationResult("provider_unavailable", null));
+                [new(new BrowserTarget("role", "button", Name: "Save"), "button", "Save", ["click"])])) : new BrowserResult("provider_unavailable", null));
         }
 
-        public ValueTask<BrowserOperationResult> InteractAsync(BrowserInteractionRequest request, CancellationToken cancellationToken = default)
+        public ValueTask<BrowserResult> InteractAsync(BrowserRequest request, CancellationToken cancellationToken = default)
         {
             InteractCalls++;
-            LastInteractionRef = request.Ref;
-            return new(new BrowserOperationResult(null, new BrowserSnapshot(FixtureOrigin[0], "Saved", "Saved", false, [])));
+            LastInteractionRef = ((BrowserClick)request.Command).Target.Name;
+            return new(new BrowserResult(null, new BrowserSnapshot(FixtureOrigin[0], "Saved", "Saved", false, [])));
         }
-    }
+
+        public ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default) => request.Operation switch
+        {
+            BrowserOperation.Navigate => NavigateAsync(request, ct),
+            BrowserOperation.Snapshot or BrowserOperation.WaitFor => SnapshotAsync(request.SessionId, ct),
+            BrowserOperation.Click or BrowserOperation.Type or BrowserOperation.Hover or BrowserOperation.Drag or BrowserOperation.Upload or BrowserOperation.FillForm => InteractAsync(request, ct),
+            _ => new(new BrowserResult("unsupported_operation")),
+        };
+}
 
     private sealed class OneNavigateModel : ILanguageModel
     {

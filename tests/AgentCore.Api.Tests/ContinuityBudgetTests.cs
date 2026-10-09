@@ -30,7 +30,7 @@ public sealed class ContinuityBudgetTests
                     ?? original.ImplementationFactory?.Invoke(sp) ?? ActivatorUtilities.CreateInstance(sp, original.ImplementationType!))));
             });
         var s = host.Services;
-        var id = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17)).InstanceId;
+        var id = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21)).InstanceId;
         var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(id, SessionMode.Text);
         var now = DateTimeOffset.UtcNow;
         var memory = s.GetRequiredService<IStructuredMemoryStore>();
@@ -95,7 +95,7 @@ public sealed class ContinuityBudgetTests
     {
         await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"continuity-budget-{Guid.NewGuid():N}.db"));
         var s = host.Services;
-        var id = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17)).InstanceId;
+        var id = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21)).InstanceId;
         var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(id, SessionMode.Text);
         var definition = session.Definition;
         definition = definition with { MemoryPolicy = definition.MemoryPolicy! with { UserRetrieval = true } };

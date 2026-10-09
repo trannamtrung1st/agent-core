@@ -10,17 +10,100 @@ namespace AgentCore.Application.Tools;
 
 public sealed partial class SessionToolExecutor
 {
+    private async ValueTask<ToolExecutionResult> ExecuteBrowserAsync(AgentDefinition definition, Guid sessionId,
+        string name, JsonElement args, ToolExecutionAdmission? admission, int remainingOutputBytes, CancellationToken ct)
+    {
+        var started = Stopwatch.GetTimestamp();
+        ToolExecutionResult Fail(string code, string message) => FitResult(remainingOutputBytes, FinishBrowser(name, started, Error(code, message)));
+        if (BrowserContractCutover.Retired(definition.SystemInstructions) || definition.SkillList.Any(skill => BrowserContractCutover.Retired(skill.Procedure)))
+            return Fail("browser_contract_retired", BrowserContractCutover.Message);
+        if (!BrowserToolCatalog.TryGet(name, out var metadata)) return Fail("unsupported_operation", "Unknown browser feature.");
+        if (!BrowserToolArguments.TryRequest(sessionId, name, args, out var request, out var argumentError))
+            return Fail(argumentError, BrowserToolArguments.ArgumentGuidance(args));
+        var denied = await BindBrowserAsync(sessionId, admission, ct).ConfigureAwait(false);
+        if (denied is not null) return TextResult(FinishBrowser(name, started, denied));
+        if (browser is null || !browser.IsAvailable && metadata.Feature != BrowserFeature.Configuration) return Fail("provider_unavailable", "Browser is unavailable.");
+        if (!browser.Provider.Supports(metadata.Feature)) return Fail("unsupported_operation", "The active provider does not support this feature.");
+        if (metadata.Feature == BrowserFeature.VisionMouse && admission?.SupportsVision != true) return Fail("forbidden", "Coordinate actions require a vision model.");
+        if (metadata.Feature is BrowserFeature.FillCredential or BrowserFeature.Geolocation
+            && admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn }) return Fail("forbidden", "This feature requires a direct attached user turn.");
+        if (request.Command is BrowserNavigate { Operation: "goto" } navigate
+            && !BrowserTargetPolicy.EvaluateDestination(navigate.Url, browser.HostPolicy.NavigationOrigins, browser.HostPolicy.PolicyMode).Allowed)
+            return Fail("target_denied", BrowserFailureMessage("target_denied"));
+        if (name == ToolCatalog.BrowserScreenshot)
+            return await CaptureBrowserAsync(sessionId, args, admission, ct);
+        if (name == ToolCatalog.BrowserUpload)
+        {
+            var uploads = new List<BrowserUpload>();
+            foreach (var id in args.GetProperty("artifactIds").EnumerateArray())
+            {
+                var resolved = await ResolveBrowserUploadAsync(definition, sessionId, id.GetString(), ct);
+                if (resolved.ErrorJson is not null) return Fail("invalid", "The Artifact cannot be uploaded.");
+                uploads.Add(resolved.Upload!);
+            }
+            request = request with { Command = ((BrowserUploadCommand)request.Command) with { Uploads = uploads } };
+        }
+        if (name == ToolCatalog.BrowserFillCredential)
+        {
+            if (admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn, AgentInstanceId: Guid owner }
+                || credentials is null || browser is not IBrowserPasswordSink sink)
+                return Fail("forbidden", "Protected credential use requires direct Chat.");
+            var filled = await sink.FillCredentialAsync(sessionId, ((BrowserFillCredential)request.Command).Target,
+                (origin, token) => credentials.ResolvePasswordAsync(owner, ((BrowserFillCredential)request.Command).CredentialRef, origin, token), ct);
+            return FitResult(remainingOutputBytes, FinishBrowser(name, started,
+                await PresentBrowserAsync(sessionId, admission, filled, ct)));
+        }
+        return await Command();
+
+        async ValueTask<ToolExecutionResult> Command()
+        {
+            BrowserResult result;
+            try
+            {
+                result = await browser.ExecuteAsync(request, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                RecordBrowser(name, started, "canceled");
+                throw;
+            }
+            if (result.ErrorCode is not null)
+            {
+                if (result.ErrorCode == "ambiguous_target" && result.DataJson is not null)
+                {
+                    var detail = System.Text.Json.Nodes.JsonNode.Parse(result.DataJson)!.AsObject(); detail["error"] = result.ErrorCode;
+                    detail["untrustedBrowserContent"] = true;
+                    return FitResult(remainingOutputBytes, FinishBrowser(name, started, detail.ToJsonString()));
+                }
+                return FitResult(remainingOutputBytes, FinishBrowser(name, started, FromBrowserProvider(result)));
+            }
+            if (result.Bytes is { Length: > 0 } bytes)
+            {
+                if (bytes.Length > BrowserToolLimits.MaxDownloadBytes) return Fail("capture_too_large", "Browser output exceeds the byte budget.");
+                var stored = await StoreBrowserBytesAsync(sessionId, admission, result.FileName ?? "browser-output", result.ContentType ?? "application/octet-stream", bytes, ct);
+                if (stored.Error is not null) return TextResult(FinishBrowser(name, started, stored.Error));
+                var json = JsonSerializer.Serialize(new { status = "ok", artifactId = stored.ArtifactId, byteSize = bytes.Length, contentType = result.ContentType });
+                return new ToolExecutionResult(FinishBrowser(name, started, json), admission?.SupportsVision == true && result.ContentType?.StartsWith("image/", StringComparison.Ordinal) == true
+                    ? [new ModelImageContent(result.ContentType, bytes, result.FileName ?? "browser-output")] : []);
+            }
+            if (result.Observation is not null)
+                return FitResult(remainingOutputBytes, FinishBrowser(name, started, await PresentBrowserAsync(sessionId, admission, result, ct)));
+            return FitResult(remainingOutputBytes, FinishBrowser(name, started, SerializeBrowserData(result)));
+        }
+    }
+
     private static readonly HashSet<string> BrowserErrorCodes = new(StringComparer.Ordinal)
     {
         "forbidden",
         "invalid",
         "target_denied",
-        "stale_reference",
-        "invalid_reference",
-        "unknown_reference",
-        "wrong_session_reference",
         "target_missing",
-        "ambiguous_reference",
+        "invalid_target",
+        "credential_target_invalid",
+        "stale_frame",
+        "action_not_confirmed",
+        "ambiguous_target",
+        "not_found",
         "non_actionable_target",
         "timeout",
         "provider_unavailable",
@@ -32,6 +115,8 @@ public sealed partial class SessionToolExecutor
         "stale_tab",
         "dialog_pending",
         "dialog_missing",
+        "close_failed",
+        "close_uncertain",
         "last_tab",
         "no_popup",
         "capture_too_large",
@@ -57,243 +142,7 @@ public sealed partial class SessionToolExecutor
         return null;
     }
 
-    private async Task<string> NavigateBrowserAsync(
-        Guid sessionId,
-        JsonElement args,
-        ToolExecutionAdmission? admission,
-        CancellationToken cancellationToken)
-    {
-        var started = Stopwatch.GetTimestamp();
-        var denied = await BindBrowserAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
-        if (denied is not null)
-        {
-            return FinishBrowser(ToolCatalog.BrowserNavigate, started, denied);
-        }
-
-        if (!BrowserToolArguments.TryNavigate(args, out var operation, out var url, out var errorJson))
-        {
-            return FinishBrowser(ToolCatalog.BrowserNavigate, started, errorJson);
-        }
-
-        if (browser is null)
-        {
-            return FinishBrowser(
-                ToolCatalog.BrowserNavigate,
-                started,
-                Error("provider_unavailable", "Browser is unavailable."));
-        }
-
-        Uri? destination = null;
-        if (operation == "goto")
-        {
-            var decision = BrowserTargetPolicy.EvaluateDestination(
-                url,
-                browser.HostPolicy.NavigationOrigins,
-                browser.HostPolicy.PolicyMode);
-            if (!decision.Allowed)
-            {
-                return FinishBrowser(
-                    ToolCatalog.BrowserNavigate,
-                    started,
-                    Error(decision.Code ?? "target_denied", decision.Message ?? "Browser target is not allowed."));
-            }
-
-            if (!Uri.TryCreate(url, UriKind.Absolute, out destination))
-            {
-                return FinishBrowser(
-                    ToolCatalog.BrowserNavigate,
-                    started,
-                    Error("invalid", "url must be an absolute http or https URL."));
-            }
-        }
-
-        if (!browser.IsAvailable)
-        {
-            return FinishBrowser(
-                ToolCatalog.BrowserNavigate,
-                started,
-                Error("provider_unavailable", "Browser is unavailable."));
-        }
-
-        try
-        {
-            var result = await browser
-                .NavigateAsync(new BrowserNavigateRequest(sessionId, destination, operation), cancellationToken)
-                .ConfigureAwait(false);
-            return FinishBrowser(
-                ToolCatalog.BrowserNavigate,
-                started,
-                await PresentBrowserAsync(sessionId, admission, result, cancellationToken).ConfigureAwait(false));
-        }
-        catch (OperationCanceledException)
-        {
-            RecordBrowser(ToolCatalog.BrowserNavigate, started, "canceled");
-            throw;
-        }
-    }
-
-    private async Task<string> SnapshotBrowserAsync(
-        Guid sessionId,
-        JsonElement args,
-        ToolExecutionAdmission? admission,
-        CancellationToken cancellationToken)
-    {
-        var started = Stopwatch.GetTimestamp();
-        var denied = await BindBrowserAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
-        if (denied is not null)
-        {
-            return FinishBrowser(ToolCatalog.BrowserSnapshot, started, denied);
-        }
-
-        if (!BrowserToolArguments.TrySnapshot(args, out var observeOptions, out var errorJson))
-        {
-            return FinishBrowser(ToolCatalog.BrowserSnapshot, started, errorJson);
-        }
-
-        if (browser is not { IsAvailable: true })
-        {
-            return FinishBrowser(
-                ToolCatalog.BrowserSnapshot,
-                started,
-                Error("provider_unavailable", "Browser is unavailable."));
-        }
-
-        try
-        {
-            var result = observeOptions is null
-                ? await browser.SnapshotAsync(sessionId, cancellationToken).ConfigureAwait(false)
-                : await browser.SnapshotAsync(sessionId, observeOptions, cancellationToken).ConfigureAwait(false);
-            return FinishBrowser(
-                ToolCatalog.BrowserSnapshot,
-                started,
-                await PresentBrowserAsync(sessionId, admission, result, cancellationToken).ConfigureAwait(false));
-        }
-        catch (OperationCanceledException)
-        {
-            RecordBrowser(ToolCatalog.BrowserSnapshot, started, "canceled");
-            throw;
-        }
-    }
-
     private const int MaxBrowserUploadBytes = 8 * 1024 * 1024;
-
-    private async Task<string> InteractBrowserAsync(
-        string toolName,
-        AgentDefinition definition,
-        Guid sessionId,
-        JsonElement args,
-        ToolExecutionAdmission? admission,
-        CancellationToken cancellationToken)
-    {
-        var started = Stopwatch.GetTimestamp();
-        var denied = await BindBrowserAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
-        if (denied is not null)
-        {
-            return FinishBrowser(toolName, started, denied);
-        }
-
-        if (!BrowserToolArguments.TryInteraction(
-                args,
-                out var operation,
-                out var reference,
-                out var value,
-                out var direction,
-                out var delta,
-                out var targetRef,
-                out var errorJson))
-        {
-            return FinishBrowser(toolName, started, errorJson);
-        }
-
-        if (browser is null)
-        {
-            return FinishBrowser(
-                toolName,
-                started,
-                Error("provider_unavailable", "Browser is unavailable."));
-        }
-
-        if (browser.HostPolicy.InteractionMode != BrowserInteractionMode.InteractiveDemo)
-        {
-            return FinishBrowser(
-                toolName,
-                started,
-                Error("forbidden", "Browser actions are not allowed in this interaction mode."));
-        }
-
-        if (!browser.IsAvailable)
-        {
-            return FinishBrowser(
-                toolName,
-                started,
-                Error("provider_unavailable", "Browser is unavailable."));
-        }
-
-        try
-        {
-            var current = await browser.GetCurrentUrlAsync(sessionId, cancellationToken).ConfigureAwait(false);
-            if (current is null)
-            {
-                return FinishBrowser(
-                    toolName,
-                    started,
-                    Error("provider_unavailable", "Browser is unavailable."));
-            }
-
-            var decision = BrowserTargetPolicy.EvaluateAct(
-                browser.HostPolicy.InteractionMode,
-                current.AbsoluteUri,
-                browser.HostPolicy.EffectiveInteractionOrigins,
-                browser.HostPolicy.PolicyMode);
-            if (!decision.Allowed)
-            {
-                return FinishBrowser(
-                    toolName,
-                    started,
-                    Error(decision.Code ?? "forbidden", decision.Message ?? "Browser actions are not permitted."));
-            }
-
-            if (operation == "fill_credential")
-            {
-                if (admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn, AgentInstanceId: Guid owner }
-                    || credentials is null || browser is not IBrowserPasswordSink sink)
-                    return FinishBrowser(toolName, started, Error("forbidden", "Protected credential use requires direct Chat."));
-                var alias = value!;
-                var filled = await sink.FillCredentialAsync(sessionId, reference,
-                    (origin, ct) => credentials.ResolvePasswordAsync(owner, alias, origin, ct), cancellationToken);
-                return FinishBrowser(toolName, started, await PresentBrowserAsync(sessionId, admission, filled, cancellationToken));
-            }
-
-            BrowserUpload? upload = null;
-            if (operation == "upload")
-            {
-                var resolved = await ResolveBrowserUploadAsync(definition, sessionId, value, cancellationToken)
-                    .ConfigureAwait(false);
-                if (resolved.ErrorJson is not null)
-                {
-                    return FinishBrowser(toolName, started, resolved.ErrorJson);
-                }
-
-                upload = resolved.Upload;
-                value = null;
-            }
-
-            var result = await browser
-                .InteractAsync(
-                    new BrowserInteractionRequest(sessionId, operation, reference, value, upload, direction, delta, targetRef),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            return FinishBrowser(
-                toolName,
-                started,
-                await PresentBrowserAsync(sessionId, admission, result, cancellationToken).ConfigureAwait(false));
-        }
-        catch (OperationCanceledException)
-        {
-            RecordBrowser(toolName, started, "canceled");
-            throw;
-        }
-    }
 
     private async Task<(BrowserUpload? Upload, string? ErrorJson)> ResolveBrowserUploadAsync(
         AgentDefinition definition,
@@ -408,43 +257,6 @@ public sealed partial class SessionToolExecutor
         return value;
     }
 
-    private async Task<string> CloseBrowserAsync(
-        Guid sessionId,
-        JsonElement args,
-        CancellationToken cancellationToken)
-    {
-        var started = Stopwatch.GetTimestamp();
-        if (!BrowserToolArguments.TryClose(args, out var errorJson))
-        {
-            return FinishBrowser(ToolCatalog.BrowserClose, started, errorJson);
-        }
-
-        if (browser is not { IsAvailable: true })
-        {
-            return FinishBrowser(
-                ToolCatalog.BrowserClose,
-                started,
-                Error("provider_unavailable", "Browser is unavailable."));
-        }
-
-        try
-        {
-            var result = await browser.CloseAsync(sessionId, cancellationToken).ConfigureAwait(false);
-            var status = result.Status is "closed" or "already_closed" or "busy" or "provider_unavailable"
-                ? result.Status
-                : "provider_unavailable";
-            var json = status == "provider_unavailable"
-                ? Error("provider_unavailable", "Browser is unavailable.")
-                : JsonSerializer.Serialize(new { status });
-            return FinishBrowser(ToolCatalog.BrowserClose, started, json);
-        }
-        catch (OperationCanceledException)
-        {
-            RecordBrowser(ToolCatalog.BrowserClose, started, "canceled");
-            throw;
-        }
-    }
-
     private async Task<ToolExecutionResult> CaptureBrowserAsync(
         Guid sessionId,
         JsonElement args,
@@ -477,10 +289,9 @@ public sealed partial class SessionToolExecutor
 
         try
         {
-            var captured = await browser
-                .CaptureViewportAsync(new BrowserScreenshotRequest(sessionId, args.TryGetProperty("format", out var format) ? format.GetString()! : "png", args.TryGetProperty("fullPage", out var full) && full.GetBoolean(), args.TryGetProperty("targetRef", out var target) ? target.GetString() : null), cancellationToken)
-                .ConfigureAwait(false);
-            if (!string.IsNullOrEmpty(captured.ErrorCode) || captured.Png is not { Length: > 0 })
+            var captured = await browser.ExecuteAsync(BrowserToolArguments.Request(sessionId,
+                ToolCatalog.BrowserScreenshot, args), cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrEmpty(captured.ErrorCode) || captured.Bytes is not { Length: > 0 })
             {
                 ReleaseCapture(admission, sessionId);
                 var code = captured.ErrorCode is not null && BrowserErrorCodes.Contains(captured.ErrorCode)
@@ -489,7 +300,7 @@ public sealed partial class SessionToolExecutor
                 return TextResult(FinishBrowser(ToolCatalog.BrowserScreenshot, started, Error(code, "Browser capture failed.")));
             }
 
-            if (captured.Png.Length > BrowserToolLimits.MaxCaptureBytes)
+            if (captured.Bytes.Length > BrowserToolLimits.MaxCaptureBytes)
             {
                 ReleaseCapture(admission, sessionId);
                 return TextResult(FinishBrowser(
@@ -498,7 +309,7 @@ public sealed partial class SessionToolExecutor
                     Error("capture_too_large", "The captured image exceeds the byte cap.")));
             }
 
-            var stored = await StoreBrowserBytesAsync(sessionId, admission, "screenshot." + captured.ContentType.Split('/')[1], captured.ContentType, captured.Png, cancellationToken).ConfigureAwait(false);
+            var stored = await StoreBrowserBytesAsync(sessionId, admission, "screenshot." + (captured.ContentType ?? "image/png").Split('/')[1], captured.ContentType ?? "image/png", captured.Bytes, cancellationToken).ConfigureAwait(false);
             if (stored.Error is not null)
             {
                 ReleaseCapture(admission, sessionId);
@@ -508,7 +319,7 @@ public sealed partial class SessionToolExecutor
             var text = JsonSerializer.Serialize(new
             {
                 contentType = captured.ContentType,
-                byteSize = captured.Png.Length,
+                byteSize = captured.Bytes.Length,
                 width = captured.Width,
                 height = captured.Height,
                 redactions = captured.RedactionCount,
@@ -516,7 +327,7 @@ public sealed partial class SessionToolExecutor
             });
             return new ToolExecutionResult(
                 FinishBrowser(ToolCatalog.BrowserScreenshot, started, text),
-                admission?.SupportsVision == true ? [new ModelImageContent(captured.ContentType, captured.Png, "screenshot")] : []);
+                admission?.SupportsVision == true ? [new ModelImageContent(captured.ContentType ?? "image/png", captured.Bytes, "screenshot")] : []);
         }
         catch (OperationCanceledException)
         {
@@ -564,10 +375,10 @@ public sealed partial class SessionToolExecutor
     private async Task<string> PresentBrowserAsync(
         Guid sessionId,
         ToolExecutionAdmission? admission,
-        BrowserOperationResult result,
+        BrowserResult result,
         CancellationToken cancellationToken)
     {
-        if (admission?.Detached == true && result.Observation?.Elements.Any(e => e.Actions.Contains("fill_credential")) == true)
+        if (admission?.Detached == true && result.Observation?.HasPasswordField == true)
             result = result with { Observation = result.Observation with { Intervention = BrowserInterventionKind.AuthenticationRequired } };
         var json = FromBrowserProvider(result);
         if (result.Downloads is not { Count: > 0 } downloads)
@@ -713,7 +524,8 @@ public sealed partial class SessionToolExecutor
 
     private static readonly JsonSerializerOptions DownloadJson = new()
     {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
     private sealed record DownloadReceipt(
@@ -723,7 +535,17 @@ public sealed partial class SessionToolExecutor
         int? byteSize,
         string? artifactId);
 
-    private static string FromBrowserProvider(BrowserOperationResult result)
+    private static string SerializeBrowserData(BrowserResult result)
+    {
+        var data = result.DataJson is null ? new System.Text.Json.Nodes.JsonObject { ["status"] = result.Status ?? "ok" }
+            : System.Text.Json.Nodes.JsonNode.Parse(result.DataJson)!.AsObject();
+        data["effectAttempted"] = result.EffectAttempted;
+        data["effectConfirmedBySdk"] = result.EffectConfirmedBySdk;
+        data["applicationOutcomeVerified"] = result.ApplicationOutcomeVerified;
+        return data.ToJsonString();
+    }
+
+    private static string FromBrowserProvider(BrowserResult result)
     {
         if (string.IsNullOrEmpty(result.ErrorCode))
         {
@@ -734,19 +556,25 @@ public sealed partial class SessionToolExecutor
 
             if (result.Observation.Intervention != BrowserInterventionKind.None)
             {
-                return SerializeBrowserIntervention(result.Observation);
+                return SerializeBrowserIntervention(result.Observation, result);
             }
 
-            return SerializeBrowserSnapshot(result.Observation);
+            return SerializeBrowserSnapshot(result.Observation, result);
         }
 
         var code = BrowserErrorCodes.Contains(result.ErrorCode) ? result.ErrorCode : "provider_unavailable";
+        if (code == "credential_target_invalid")
+            return JsonSerializer.Serialize(new { error = code, failureScope = "target", capabilitySupported = true,
+                message = "Protected credential fill is supported, but the selected element is not a password input.",
+                nextStep = "Observe the sign-in form and target its existing-account password input by label or placeholder, then use browser.fill_credential. Never enter passwords using ordinary text tools.",
+                effectAttempted = result.EffectAttempted, effectConfirmedBySdk = result.EffectConfirmedBySdk,
+                applicationOutcomeVerified = result.ApplicationOutcomeVerified });
         if (code == "unsupported_operation" && result.AllowedActions is { Count: > 0 })
         {
             var allowed = result.AllowedActions
-                .Where(action => BrowserToolLimits.Operations.Contains(action, StringComparer.Ordinal))
+                .Where(action => BrowserToolLimits.TargetActions.Contains(action, StringComparer.Ordinal))
                 .Distinct(StringComparer.Ordinal)
-                .Take(BrowserToolLimits.Operations.Length)
+                .Take(BrowserToolLimits.TargetActions.Length)
                 .ToArray();
             if (allowed.Length > 0)
             {
@@ -754,101 +582,30 @@ public sealed partial class SessionToolExecutor
                 {
                     error = "unsupported_operation",
                     message = "This element does not support that operation.",
-                    allowedActions = allowed
+                    allowedActions = allowed, effectAttempted = result.EffectAttempted,
+                    effectConfirmedBySdk = result.EffectConfirmedBySdk, applicationOutcomeVerified = result.ApplicationOutcomeVerified
                 });
             }
         }
 
-        return Error(code, BrowserFailureMessage(code));
+        return JsonSerializer.Serialize(new { error = code, message = BrowserFailureMessage(code),
+            effectAttempted = result.EffectAttempted, effectConfirmedBySdk = result.EffectConfirmedBySdk,
+            applicationOutcomeVerified = result.ApplicationOutcomeVerified });
     }
 
-    private static string SerializeBrowserSnapshot(BrowserSnapshot observation)
+    private static string SerializeBrowserSnapshot(BrowserSnapshot observation, BrowserResult result) => JsonSerializer.Serialize(new
     {
-        var elements = (observation.Elements ?? [])
-            .OrderByDescending(e => e.State is not null ? 3 : e.Role is "button" or "link" or "textbox" or "searchbox" or "combobox" ? 2 : e.Actions.Count > 0 ? 1 : 0)
-            .Select(element =>
-            {
-                var item = new Dictionary<string, object?>
-                {
-                    ["ref"] = ClipBrowser(element.Ref, BrowserToolLimits.MaxRefLength),
-                    ["role"] = ClipBrowser(element.Role, BrowserToolLimits.MaxRoleLength),
-                    ["name"] = ClipBrowser(element.Name, BrowserToolLimits.MaxAccessibleNameLength),
-                    ["actions"] = (element.Actions ?? [])
-                        .Where(action => BrowserToolLimits.Operations.Contains(action, StringComparer.Ordinal))
-                        .Distinct(StringComparer.Ordinal)
-                        .Take(BrowserToolLimits.Operations.Length)
-                        .ToArray()
-                };
-                var state = ControlState(element.State);
-                if (state is not null)
-                {
-                    item["state"] = state;
-                }
+        status = "ok", effectAttempted = result.EffectAttempted, effectConfirmedBySdk = result.EffectConfirmedBySdk, applicationOutcomeVerified = result.ApplicationOutcomeVerified, untrustedBrowserContent = true, snapshotId = observation.SnapshotId,
+        tabRef = observation.TabRef, url = ClipBrowser(observation.Url, BrowserToolLimits.MaxUrlLength), title = ClipBrowser(observation.Title, BrowserToolLimits.MaxTitleLength),
+        content = ToolJsonResults.ClipUtf8Prefix(observation.Content, BrowserToolLimits.MaxSnapshotBytes),
+        targets = observation.Targets.Select(e => new { target = e.Target, role = e.Role, name = ClipBrowser(e.Name, BrowserToolLimits.MaxAccessibleNameLength), actions = e.Actions, state = ControlState(e.State) }),
+        truncated = observation.ContentTruncated || Encoding.UTF8.GetByteCount(observation.Content) > BrowserToolLimits.MaxSnapshotBytes,
+        hasMore = observation.ContentTruncated || Encoding.UTF8.GetByteCount(observation.Content) > BrowserToolLimits.MaxSnapshotBytes,
+        settled = observation.Settled, scope = observation.Scope, frames = observation.Frames, boxes = observation.Boxes,
+        guidance = BrowserToolArguments.TargetGuidance
+    }, DownloadJson);
 
-                return item;
-            })
-            .ToArray();
-        // Bound the serialized response, not the provider's complete discovery index.
-        var elementBytes = 2;
-        elements = elements.TakeWhile(element =>
-        {
-            elementBytes += System.Text.Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(element)) + 1;
-            return elementBytes <= BrowserToolLimits.MaxSnapshotChars;
-        }).ToArray();
-        var text = observation.VisibleText ?? string.Empty;
-        var truncated = observation.TextTruncated || text.Length > BrowserToolLimits.MaxVisibleTextLength;
-        var url = ClipBrowser(observation.Url, BrowserToolLimits.MaxUrlLength);
-        var title = ClipBrowser(observation.Title, BrowserToolLimits.MaxTitleLength);
-        var visibleText = ClipBrowser(text, BrowserToolLimits.MaxVisibleTextLength);
-        return observation.Settled is bool settled
-            ? JsonSerializer.Serialize(new
-            {
-                untrustedBrowserContent = true,
-                status = "ok",
-                snapshotId = observation.SnapshotId,
-                tabRef = observation.TabRef,
-                content = ClipBrowser(observation.Content, BrowserToolLimits.MaxSnapshotChars),
-                boxes = observation.Boxes?.Select(b => new { @ref = b.Ref, x = b.X, y = b.Y, width = b.Width, height = b.Height }),
-                url,
-                title,
-                visibleText,
-                textTruncated = truncated,
-                truncated = truncated || observation.ContentTruncated || observation.IndexTruncated || elements.Length < (observation.Elements?.Count ?? 0),
-                hasMore = truncated || observation.ContentTruncated || observation.IndexTruncated || elements.Length < (observation.Elements?.Count ?? 0),
-                indexAvailable = observation.SnapshotId is not null,
-                indexTruncated = observation.IndexTruncated,
-                indexedCount = observation.IndexedCount ?? (observation.Elements?.Count ?? 0),
-                capturedNodeCount = observation.CapturedNodeCount,
-                scope = observation.Scope,
-                guidance = "Use browser.find for targets beyond this projection; depth and targetRef narrow inspection.",
-                settled,
-                elements
-            })
-            : JsonSerializer.Serialize(new
-            {
-                untrustedBrowserContent = true,
-                status = "ok",
-                snapshotId = observation.SnapshotId,
-                tabRef = observation.TabRef,
-                content = ClipBrowser(observation.Content, BrowserToolLimits.MaxSnapshotChars),
-                boxes = observation.Boxes?.Select(b => new { @ref = b.Ref, x = b.X, y = b.Y, width = b.Width, height = b.Height }),
-                url,
-                title,
-                visibleText,
-                textTruncated = truncated,
-                truncated = truncated || observation.ContentTruncated || observation.IndexTruncated || elements.Length < (observation.Elements?.Count ?? 0),
-                hasMore = truncated || observation.ContentTruncated || observation.IndexTruncated || elements.Length < (observation.Elements?.Count ?? 0),
-                indexAvailable = observation.SnapshotId is not null,
-                indexTruncated = observation.IndexTruncated,
-                indexedCount = observation.IndexedCount ?? (observation.Elements?.Count ?? 0),
-                capturedNodeCount = observation.CapturedNodeCount,
-                scope = observation.Scope,
-                guidance = "Use browser.find for targets beyond this projection; depth and targetRef narrow inspection.",
-                elements
-            });
-    }
-
-    private static string SerializeBrowserIntervention(BrowserSnapshot observation)
+    private static string SerializeBrowserIntervention(BrowserSnapshot observation, BrowserResult result)
     {
         var kind = observation.Intervention switch
         {
@@ -859,6 +616,8 @@ public sealed partial class SessionToolExecutor
         return JsonSerializer.Serialize(new
         {
             error = "user_intervention_required",
+            effectAttempted = result.EffectAttempted, effectConfirmedBySdk = result.EffectConfirmedBySdk,
+            applicationOutcomeVerified = result.ApplicationOutcomeVerified,
             kind,
             url = ClipBrowser(observation.Url, BrowserToolLimits.MaxUrlLength),
             title = ClipBrowser(observation.Title, BrowserToolLimits.MaxTitleLength),
@@ -904,14 +663,18 @@ public sealed partial class SessionToolExecutor
             "forbidden" => "Browser operation is not permitted.",
             "invalid" => "Browser arguments are invalid.",
             "target_denied" => "Browser target is not allowed.",
-            "stale_reference" => "The snapshot was invalidated. Refresh and use browser.find to rediscover; do not replay an uncertain effect.",
-            "invalid_reference" => "Use an opaque el_ reference returned by browser.find or browser.snapshot; selectors and invented strings are invalid.",
-            "unknown_reference" => "This opaque reference is unknown. Obtain a current reference with browser.find or browser.snapshot.",
-            "wrong_session_reference" => "This reference belongs to a different Session. Discover a target in this Session.",
-            "target_missing" => "The locator no longer resolves. Refresh and rediscover with browser.find before acting.",
-            "ambiguous_reference" => "The target is ambiguous. Narrow browser.find by role, name or targetRef.",
+            "invalid_target" => BrowserToolArguments.TargetGuidance,
+            "stale_frame" => "This frame is no longer current. Observe the current permitted frame inventory.",
+            "action_not_confirmed" => "The page changed during the operation. Observe current state; do not replay an uncertain effect.",
+            "target_missing" => "No current rendered target matches. Observe the page, narrow the semantics or render virtualized content before acting.",
+            "ambiguous_target" => "The target is ambiguous. Narrow role/name or use within with a unique row/group and literal hasText.",
+            "not_found" => "No rendered target matches. Change the query or scroll the region to reveal virtualized content.",
             "non_actionable_target" => "The target has no actions. Search for its actionable descendant with browser.find.",
             "target_unreachable" => "The host refused the connection. Do not retry that host.",
+            "dialog_pending" => "A native dialog is pending. Use authorized browser.dialog inspect to see its redacted type, then accept or dismiss only when justified by the requested action. Do not repeat the triggering click. Verify the application state afterwards; close does not prove sign-out.",
+            "dialog_missing" => "No native dialog is pending. Observe the page before continuing; do not repeat an uncertain action.",
+            "close_failed" => "Native browser closure failed. The owned context was retained; closure and sign-out are not confirmed. Inspect or explicitly retry cleanup within the remaining budget.",
+            "close_uncertain" => "Native browser closure was not confirmed within the bound. Do not claim closure or sign-out. Observe the owned context before deciding whether further cleanup is safe.",
             "timeout" => "Browser operation timed out.",
             "unsupported_operation" => "Browser operation is not supported.",
             "profile_busy" => "The browser profile is already in use.",

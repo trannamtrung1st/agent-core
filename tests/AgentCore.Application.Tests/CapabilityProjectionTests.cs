@@ -89,7 +89,7 @@ public sealed class CapabilityProjectionTests
     internal static async Task<AgentDefinition> Definition(params string[] names)
     {
         var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../agents"));
-        var baseline = (await new FileAgentDefinitionStore(path, SyntheticProviderAliases.Default).GetAsync("general-assistant", 17))!;
+        var baseline = (await new FileAgentDefinitionStore(path, SyntheticProviderAliases.Default).GetAsync("general-assistant", 21))!;
         return baseline with { Skills = [], Environment = baseline.Environment! with { ToolAllowlist = null,
             Capabilities = new("Selected", names), Projection = new([]) } };
     }
@@ -231,7 +231,7 @@ public sealed class CapabilityProjectionTests
         var d = await Definition(ToolRegistry.All.Select(t => t.Name).ToArray());
         using var broad = JsonDocument.Parse("{\"query\":\"workspace browser email\",\"limit\":2}");
         var first = CapabilityDiscoveryMatcher.Load(d, Context(d), ToolConfigurationGates.AllowAll, broad.RootElement, 0);
-        Assert.Equal(2, first.Loaded.Count);
+        Assert.Equal(2, first.Loaded.Count + first.AlreadyProjected.Count);
         Assert.Equal(first, CapabilityDiscoveryMatcher.Load(d, Context(d), ToolConfigurationGates.AllowAll, broad.RootElement, 0), new LoadComparer());
         Assert.All(first.Loaded, n => Assert.True(ToolRegistry.Get(n).Discoverable));
         using var longQuery = JsonDocument.Parse(JsonSerializer.Serialize(new { query = new string('x', 201) }));
@@ -276,6 +276,81 @@ public sealed class CapabilityProjectionTests
         Assert.DoesNotContain("checkout", tool.Description);
         Assert.DoesNotContain("workspace.retain", ToolRegistry.AllKnownNames());
         Assert.DoesNotContain("workspace.checkout", ToolRegistry.AllKnownNames());
+    }
+
+    [Theory]
+    [InlineData("handle browser confirmation dialog", ToolCatalog.BrowserDialog)]
+    [InlineData("Handle BROWSER MODAL", ToolCatalog.BrowserDialog)]
+    [InlineData("fill a form", ToolCatalog.BrowserFillForm)]
+    [InlineData("inspect network requests", "browser.network_requests")]
+    [InlineData("search my workspace", ToolCatalog.WorkspaceSearch)]
+    public async Task Concrete_intents_rank_relevant_registered_capabilities_first(string query, string expected)
+    {
+        var d = await Definition(ToolRegistry.All.Where(t => t.Discoverable).Select(t => t.Name).Append(ToolCatalog.CapabilitiesLoad).ToArray());
+        var c = Context(d) with { AgentInstanceId = Guid.NewGuid() };
+        using var args = JsonDocument.Parse(JsonSerializer.Serialize(new { query, limit = 1 }));
+        var result = CapabilityDiscoveryMatcher.Load(d, c, ToolConfigurationGates.AllowAll, args.RootElement, 0);
+        Assert.Equal([expected], result.Loaded.Concat(result.AlreadyProjected));
+        Assert.Equal(result, CapabilityDiscoveryMatcher.Load(d, c, ToolConfigurationGates.AllowAll, args.RootElement, 0), new LoadComparer());
+    }
+
+    [Fact]
+    public async Task Exact_unavailable_result_never_leaks_unauthorized_names_or_falls_back_to_family()
+    {
+        var d = await Definition(ToolCatalog.CapabilitiesLoad, ToolCatalog.EmailSearch);
+        using var exact = JsonDocument.Parse("""{"query":"Please use EMAIL.SEARCH."}""");
+        var result = CapabilityDiscoveryMatcher.Load(d, Context(d), ToolConfigurationGates.Unconfigured, exact.RootElement, 0);
+        Assert.Equal("load_unavailable", result.Outcome);
+        Assert.Equal([ToolCatalog.EmailSearch], result.Unavailable);
+        Assert.Empty(result.Loaded);
+        using var denied = JsonDocument.Parse("""{"query":"email email.send"}""");
+        result = CapabilityDiscoveryMatcher.Load(d, Context(d), ToolConfigurationGates.AllowAll, denied.RootElement, 0);
+        Assert.Equal("load_no_match", result.Outcome);
+        Assert.Empty(result.Unavailable);
+        Assert.DoesNotContain(ToolCatalog.EmailSend, result.ToJson());
+    }
+
+    [Fact]
+    public async Task One_limit_bounds_all_results_and_envelope_explains_next_selection()
+    {
+        var d = await Definition(ToolCatalog.CapabilitiesLoad, ToolCatalog.WorkspaceRead, ToolCatalog.WorkspaceWrite);
+        var c = Context(d) with { LoadedCapabilityIds = [ToolCatalog.WorkspaceRead] };
+        using var args = JsonDocument.Parse("""{"query":"workspace.read workspace.write","limit":1}""");
+        var result = CapabilityDiscoveryMatcher.Load(d, c, ToolConfigurationGates.AllowAll, args.RootElement, 1);
+        Assert.Equal("load_already_projected", result.Outcome);
+        Assert.Empty(result.Loaded);
+        using var envelope = JsonDocument.Parse(result.ToJson());
+        Assert.Equal(ToolCatalog.WorkspaceRead, envelope.RootElement.GetProperty("alreadyProjected")[0].GetProperty("name").GetString());
+        Assert.NotEmpty(envelope.RootElement.GetProperty("alreadyProjected")[0].GetProperty("summary").GetString()!);
+        Assert.Contains("directly", envelope.RootElement.GetProperty("nextStep").GetString());
+        result = CapabilityDiscoveryMatcher.Load(d, c, ToolConfigurationGates.AllowAll, args.RootElement, 8);
+        Assert.Equal("load_over_budget", result.Outcome);
+        Assert.Contains("exhausted", result.NextStep);
+        Assert.Empty(result.Loaded);
+    }
+
+    [Fact]
+    public void Tight_output_budget_retains_readiness_and_next_step_as_valid_json()
+    {
+        var result = new CapabilityLoadResult([ToolCatalog.WorkspaceWrite, ToolCatalog.WorkspaceRead], [], "load_matched");
+        var compact = CapabilityLoadResult.FitReceipt(result.ToJson(), 256);
+        Assert.NotNull(compact);
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(compact!) <= 256);
+        using var json = JsonDocument.Parse(compact!);
+        Assert.Equal("load_matched", json.RootElement.GetProperty("outcome").GetString());
+        Assert.True(json.RootElement.GetProperty("truncated").GetBoolean());
+        Assert.Contains("next request", json.RootElement.GetProperty("nextStep").GetString());
+    }
+
+    [Fact]
+    public async Task Category_context_prevents_cross_family_action_noise()
+    {
+        var d = await Definition(ToolCatalog.CapabilitiesLoad, ToolCatalog.WorkspaceSearch, ToolCatalog.EmailSearch);
+        using var query = JsonDocument.Parse("""{"query":"search my workspace"}""");
+        var result = CapabilityDiscoveryMatcher.Load(d, Context(d), ToolConfigurationGates.AllowAll, query.RootElement, 0);
+        Assert.Equal([ToolCatalog.WorkspaceSearch], result.Loaded);
+        using var unrelated = JsonDocument.Parse("""{"query":"workspace teleport"}""");
+        Assert.Equal("load_no_match", CapabilityDiscoveryMatcher.Load(d, Context(d), ToolConfigurationGates.AllowAll, unrelated.RootElement, 0).Outcome);
     }
 
     private sealed class LoadComparer : IEqualityComparer<CapabilityLoadResult>

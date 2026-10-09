@@ -303,25 +303,25 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
                 return;
             }
 
-            if (path is "/browser-v2.html" or "/browser-v2-frame.html" or "/browser-dense.html" or "/browser-custom-tree.html")
+            if (path is "/browser-native.html" or "/browser-native-frame.html" or "/browser-dense.html" or "/browser-custom-tree.html")
             {
                 await WriteResourceAsync(context, "AgentCore.Infrastructure.Browser.Fixture." + path[1..], 200).ConfigureAwait(false);
                 return;
             }
-            if (path == "/browser-v2-data")
+            if (path == "/browser-native-data")
             {
                 var bytes = Encoding.UTF8.GetBytes("Async fixture loaded");
                 context.Response.ContentType = "text/plain";
                 await context.Response.OutputStream.WriteAsync(bytes).ConfigureAwait(false);
                 return;
             }
-            if (path == "/browser-v2-worker.js")
+            if (path == "/browser-native-worker.js")
             {
                 context.Response.ContentType = "application/javascript";
                 await context.Response.OutputStream.WriteAsync(Encoding.UTF8.GetBytes("self.addEventListener('fetch', event => event.respondWith(new Response('worker intercepted')));"));
                 return;
             }
-            if (path == "/browser-v2-download")
+            if (path == "/browser-native-download")
             {
                 context.Response.ContentType = "text/plain";
                 context.Response.AddHeader("Content-Disposition", "attachment; filename=browser-note.txt");

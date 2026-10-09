@@ -140,11 +140,15 @@ describe("failed assistant details", () => {
             code: "Unavailable"
           }),
           text: "",
-          effectReceipts: [{ tool: "browser.close", status: "closed", label: "Browser closed" }]
+          effectReceipts: [
+            { tool: "browser.close", status: "closed", label: "Browser closed" },
+            { tool: "browser.fill_credential", status: "ok", label: "Protected browser field filled; sign-in not confirmed" }
+          ]
         }}
       />
     );
     expect(screen.getByText("✓ Browser closed")).toBeInTheDocument();
+    expect(screen.getByText("✓ Protected browser field filled; sign-in not confirmed")).toBeInTheDocument();
     expect(screen.getByText("Reply failed")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reply failed — show error details" })).toBeInTheDocument();
     expect(screen.queryByText("Failed")).not.toBeInTheDocument();
@@ -192,7 +196,7 @@ describe("failed assistant details", () => {
     expect(screen.queryByTestId("diagnostic-channel")).not.toBeInTheDocument();
   });
 
-  it.each(["setupTimeout", "streamIdle", "totalTimeout"])("shows and copies timeout reason %s", async (reason) => {
+  it.each(["setupTimeout", "streamIdle", "totalTimeout", "invalidToolStrategy", "runDeadline", "providerCancelled", "toolTimeout", "finalizationToolCall"])("shows and copies registered failure reason %s", async (reason) => {
     render(<ChatMessage agentName="Alex" sessionId="session-1" entry={failedEntry({
       diagnosticId: "diag-timeout", correlationId: null, category: "provider", code: "Timeout",
       failureReason: reason

@@ -3,7 +3,7 @@ import { expect, type Page } from "@playwright/test";
 export const INSTANCE_DEFINITIONS = {
   examiner: { id: "examiner", version: 1 },
   customerSupport: { id: "customer-support", version: 3 },
-  generalAssistant: { id: "general-assistant", version: 17 },
+  generalAssistant: { id: "general-assistant", version: 21 },
   approvalHarness: { id: "approval-demo", version: 1 }
 } as const;
 

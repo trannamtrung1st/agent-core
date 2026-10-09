@@ -61,6 +61,19 @@ public sealed class EffectReceiptTests
     }
 
     [Fact]
+    public void Protected_fill_and_click_receipts_never_claim_authentication_or_submission()
+    {
+        foreach (var tool in new[] { ToolCatalog.BrowserFillCredential, ToolCatalog.BrowserClick, ToolCatalog.BrowserType, ToolCatalog.BrowserFillForm })
+        {
+            Assert.True(EffectReceipts.TryFromToolResult(tool, "{\"status\":\"ok\",\"password\":\"private\"}", out var receipt));
+            Assert.DoesNotContain("private", receipt.Label);
+            Assert.False(EffectReceipts.TryFromToolResult(tool, "{\"status\":\"ok\",\"error\":\"forbidden\"}", out _));
+        }
+        var safe = EffectReceipts.ModelSafe([new(ToolCatalog.BrowserFillCredential, "ok", "Signed in")]);
+        Assert.Contains("sign-in not confirmed", Assert.Single(safe).Label);
+    }
+
+    [Fact]
     public void Effect_receipts_round_trip_beside_an_empty_display()
     {
         var envelope = new ResponseEnvelope(

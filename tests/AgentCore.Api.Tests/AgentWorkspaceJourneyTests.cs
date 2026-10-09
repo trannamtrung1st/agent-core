@@ -47,7 +47,7 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
     [Fact]
     public async Task Native_structure_checks_exact_approval_generation_scope_and_archive()
     {
-        var client = Owner(); var owner = await CreateInstance(client, 17); var session = await CreateSession(client, owner);
+        var client = Owner(); var owner = await CreateInstance(client, 21); var session = await CreateSession(client, owner);
         (await client.PutAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/inbox/report.txt", new ByteArrayContent("exact"u8.ToArray()))).EnsureSuccessStatusCode();
         var executor = _factory.Services.GetRequiredService<SessionToolExecutor>();
         var definition = (await _factory.Services.GetRequiredService<IMemoryStore>().LoadAsync(session))!.Definition;
@@ -77,7 +77,7 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
     [Fact]
     public async Task Home_tool_listing_does_not_hide_later_folders_after_a_large_first_folder()
     {
-        var client = Owner(); var owner = await CreateInstance(client, 17); var session = await CreateSession(client, owner);
+        var client = Owner(); var owner = await CreateInstance(client, 21); var session = await CreateSession(client, owner);
         var store = _factory.Services.GetRequiredService<IAgentInstanceWorkspaceStore>();
         for (var i=0; i<270; i++) await store.WriteFileAsync(owner, $"/home/a/file{i:D3}.txt", "text/plain", "x"u8.ToArray(), null, null, null);
         await store.WriteFileAsync(owner, "/home/z/last.txt", "text/plain", "last"u8.ToArray(), null, null, null);
@@ -98,7 +98,7 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
     [Fact]
     public async Task Managed_workspace_uses_cwd_direct_CAS_tree_copy_and_home_artifacts()
     {
-        var client = Owner(); var owner = await CreateInstance(client, 17); var session = await CreateSession(client, owner);
+        var client = Owner(); var owner = await CreateInstance(client, 21); var session = await CreateSession(client, owner);
         var executor = _factory.Services.GetRequiredService<SessionToolExecutor>();
         var snapshot = (await _factory.Services.GetRequiredService<IMemoryStore>().LoadAsync(session))!;
         string cwd = "/home";
@@ -180,12 +180,12 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
         (await client.DeleteAsync($"/api/v2/sessions/{session}")).EnsureSuccessStatusCode();
         Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/sessions/{fresh}/workspace/content?path=/home/binary-tree/raw.bin"));
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/sessions/{fresh}/workspace/content?path=/working/scratch.md")).StatusCode);
-        var other = await CreateInstance(client, 17); var otherSession = await CreateSession(client, other);
+        var other = await CreateInstance(client, 21); var otherSession = await CreateSession(client, other);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/sessions/{otherSession}/workspace/content?path=/home/project/notes.md")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/api/v2/sessions/{fresh}/workspace/content?path=/working/{session}/scratch.md")).StatusCode);
     }
 
-    private static async Task<Guid> CreateInstance(HttpClient client, int version = 17)
+    private static async Task<Guid> CreateInstance(HttpClient client, int version = 21)
     {
         var response = await client.PostAsJsonAsync("/api/v2/admin/agent-instances", new AdminCreateAgentInstanceRequest("general-assistant", version)); response.EnsureSuccessStatusCode();
         return Guid.Parse((await response.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>())!.InstanceId);
@@ -205,7 +205,7 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
         {
             using (var first = new SqliteFactory(root))
             {
-                var client = OwnerOf(first); owner = await CreateInstance(client, 17); session = await CreateSession(client, owner);
+                var client = OwnerOf(first); owner = await CreateInstance(client, 21); session = await CreateSession(client, owner);
                 (await client.PutAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/binary.dat", new ByteArrayContent(bytes))).EnsureSuccessStatusCode();
                 (await client.PutAsync($"/api/v2/sessions/{session}/workspace/content?path=/working/binary.dat", new ByteArrayContent(bytes))).EnsureSuccessStatusCode();
                 Assert.True(Directory.Exists(AgentWorkspacePhysicalPaths.WorkingDirectory(Path.Combine(root, "workspaces"), owner, session)));
@@ -244,7 +244,7 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
         {
             using (var first = new SqliteFactory(root))
             {
-                var client = OwnerOf(first); owner = await CreateInstance(client, 17);
+                var client = OwnerOf(first); owner = await CreateInstance(client, 21);
                 var services = first.Services;
                 await services.GetRequiredService<IAgentInstanceWorkspaceStore>().WriteFileAsync(owner,
                     "/home/leftover.bin", "application/octet-stream", new byte[] { 0, 255, 128 }, null, null, null);

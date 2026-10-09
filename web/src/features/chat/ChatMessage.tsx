@@ -112,7 +112,7 @@ export function ChatMessage({
         </Flex>
       ) : null}
       {entry.effectReceipts?.length ? (
-        <Flex wrap gap={token.paddingXS} className="chat-message-receipts">
+        <Flex wrap gap={token.paddingXS} className="chat-message-receipts" aria-label="Recorded actions">
           {entry.effectReceipts.map((receipt) => (
             <Typography.Text key={`${receipt.tool}-${receipt.status}`} type="secondary" className="chat-message-receipt">
               {`✓ ${receipt.label}`}

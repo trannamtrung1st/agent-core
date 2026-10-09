@@ -18,13 +18,18 @@ public sealed class AgentDefinitionStoreTests
         Assert.Equal("Alex", examiner!.Identity.Name);
         var support = await store.GetAsync("customer-support", 3);
         var compliance = await store.GetAsync("compliance", 2);
-        var general = await store.GetAsync("general-assistant", 17);
+        var general = await store.GetAsync("general-assistant", 21);
         Assert.NotNull(support);
         Assert.NotNull(compliance);
         Assert.NotNull(general);
         Assert.Equal("Riley", general!.Identity.Name);
         var latest = await store.GetAsync("general-assistant");
-        Assert.Equal(17, latest!.Version);
+        Assert.Equal(21, latest!.Version);
+        // Retired browser instructions are absent from the executable catalog.
+        Assert.Null(await store.GetAsync("general-assistant", 20));
+        Assert.Null(await store.GetAsync("secretary", 7));
+        Assert.NotNull(await store.GetAsync("secretary", 8));
+        Assert.Equal(8, (await store.GetAsync("secretary"))!.Version);
         Assert.DoesNotContain("workspace.retain", latest.Environment!.ToolList);
         Assert.DoesNotContain("workspace.checkout", latest.Environment.ToolList);
         Assert.True(latest.Environment.ToolList.Count > 40);
@@ -49,7 +54,7 @@ public sealed class AgentDefinitionStoreTests
         Assert.Contains(ToolCatalog.BrowserSnapshot, environment.ToolList);
         Assert.Contains(ToolCatalog.BrowserClick, environment.ToolList);
         Assert.Contains(ToolCatalog.BrowserClose, environment.ToolList);
-        Assert.Equal(69, environment.ToolList.Count);
+        Assert.Equal(71, environment.ToolList.Count);
         Assert.Contains(ToolCatalog.WorkspaceCwd, environment.ToolList);
         Assert.Equal("browser.record.lookup", Assert.Single(latest.SkillList).Id);
         Assert.Equal(SkillProjection.OnDemand, latest.SkillList[0].Projection);

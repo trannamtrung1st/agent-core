@@ -48,7 +48,7 @@ public sealed record ToolDescriptor(
     public string Name => ModelDefinition.Name;
     public string Category => Name.Split('.')[0];
     public string Summary => ModelDefinition.Description.Length <= 240 ? ModelDefinition.Description : ModelDefinition.Description[..240];
-    public IReadOnlyList<string> Tags => Category switch { "browser" => BrowserToolCatalog.TryGet(Name, out var browser) ? browser.DiscoveryTags : ["browser"], "email" => ["mail", "messages", "draft", "send"], "automation" => ["schedule", "event", "reminder"], _ => [Category] };
+    public IReadOnlyList<string> Tags => Category switch { "browser" => BrowserToolCatalog.TryGet(Name, out var browser) ? browser.DiscoveryTags : ["browser"], "email" => ["mail", "messages"], "automation" => ["schedule", "event", "reminder"], _ => [Category] };
     public bool DefinitionAuthorizable => OfferRule is ToolOfferRule.RoleAllowlist
         or ToolOfferRule.ConfigurationWhenRoleAllows or ToolOfferRule.SessionAttachmentsWhenRoleAllows;
     public bool Discoverable => OfferRule is ToolOfferRule.RoleAllowlist or ToolOfferRule.ConfigurationWhenRoleAllows;

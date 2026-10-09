@@ -468,8 +468,9 @@ public sealed class OpenAICompatibleLanguageModelTests
         {
             Assert.False(fields.TryGetProperty("operation", out _));
             Assert.False(fields.TryGetProperty("value", out _));
-            Assert.Equal(["ref"], schema.GetProperty("required").EnumerateArray().Select(field => field.GetString()));
-            Assert.Equal(128, fields.GetProperty("ref").GetProperty("maxLength").GetInt32());
+            Assert.Equal(["target"], schema.GetProperty("required").EnumerateArray().Select(field => field.GetString()));
+            foreach (var variant in fields.GetProperty("target").GetProperty("oneOf").EnumerateArray())
+                Assert.Equal(["by", "value"], variant.GetProperty("required").EnumerateArray().Select(field => field.GetString()));
         }
         using var original = JsonDocument.Parse(definition.ParametersJson);
         Assert.False(original.RootElement.TryGetProperty("oneOf", out _));

@@ -1,3 +1,4 @@
+import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 import { startSyntheticChat } from "./admin-managed-helpers";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
@@ -37,7 +38,7 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
     }
   });
   page.on("requestfailed", (request) => {
-    failedRequests.push(`${request.method()} ${request.url()}`);
+    if (!isCanceledDraftEvidenceRead(request)) failedRequests.push(`${request.method()} ${request.url()}`);
   });
 
   const definitionId = `p76-${Date.now()}`;

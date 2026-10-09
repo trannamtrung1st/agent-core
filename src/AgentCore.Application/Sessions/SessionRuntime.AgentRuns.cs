@@ -257,6 +257,7 @@ public sealed partial class SessionRuntime
             AgentRunCommand command = assistant.Status switch
             {
                 EntryStatus.Interrupted => new AgentRunCommand.CommitCancellation(run.Revision, now, claim.Generation, null),
+                EntryStatus.Failed when assistant.Failure?.FailureReason == "runDeadline" => new AgentRunCommand.DeadlineExceeded(run.Revision, now, claim.Generation),
                 EntryStatus.Failed => new AgentRunCommand.Fail(run.Revision, now, claim.Generation,
                     AgentRunFailureCode(_agentRunProviderFailure), AgentRunFailureSummary(_agentRunProviderFailure), false, null),
                 _ => new AgentRunCommand.Complete(run.Revision, now, claim.Generation,
@@ -279,7 +280,10 @@ public sealed partial class SessionRuntime
 
     private static string AgentRunFailureCode(ProviderFailure? failure) => failure?.SafeMessage switch
     {
+        "Run deadline reached." => "run-deadline",
+        "Tool execution timed out." => "tool-timeout",
         "Tool step limit reached." => "tool-step-limit",
+        "Repeated invalid tool strategy blocked." => "invalid-tool-strategy",
         "Tool output limit reached." => "tool-output-limit",
         "Tool deadline reached." => "tool-deadline",
         "Background work requires an explicit completion outcome." => "completion-required",
@@ -288,7 +292,10 @@ public sealed partial class SessionRuntime
 
     private static string AgentRunFailureSummary(ProviderFailure? failure) => AgentRunFailureCode(failure) switch
     {
+        "run-deadline" => "The Run deadline expired before the reply completed. Recorded actions were preserved.",
+        "tool-timeout" => "A tool timed out; an unconfirmed effect was not replayed.",
         "tool-step-limit" => "Tool step limit reached.",
+        "invalid-tool-strategy" => "Repeated invalid tool strategy blocked.",
         "tool-output-limit" => "Tool output limit reached.",
         "tool-deadline" => "Tool deadline reached.",
         "completion-required" => "Background work requires an explicit completion outcome.",

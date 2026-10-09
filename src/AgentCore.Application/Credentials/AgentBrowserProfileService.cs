@@ -11,7 +11,8 @@ public sealed class AgentBrowserProfileService(IAgentInstanceStore instances, IB
         var instance = await instances.FindAsync(id, ct) ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
         if (instance.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Forbidden("Archived instance is read-only.");
         if (instance.Revision != expectedRevision) throw AgentCoreErrors.Conflict("Agent instance revision is stale.");
-        try { await browser.ResetPersistentProfileAsync(id, ct); }
+        if (browser is not IBrowserProfileReset profiles) throw new AgentCoreException("unsupported_operation", "Browser profile reset is unavailable.", 503);
+        try { await profiles.ResetPersistentProfileAsync(id, ct); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         { throw new AgentCoreException("profile_unavailable", "Browser profile could not be reset.", 503); }
     }

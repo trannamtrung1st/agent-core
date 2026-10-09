@@ -381,7 +381,9 @@ public sealed class ApplicationMessageTests
         await runtime.WaitUntilIdleAsync();
 
         Assert.Equal(12, runtime.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.ApplicationMessage));
-        Assert.Contains("over_budget", Text(model.Requests[^2]), StringComparison.Ordinal);
+        Assert.Contains(model.Requests.SelectMany(request => request.Messages), message =>
+            message.Role == ModelRole.Tool && message.Name == ToolCatalog.AppMessageSend
+            && message.Text.Contains("over_budget", StringComparison.Ordinal));
         Assert.DoesNotContain(
             ToolCatalog.AppMessageSend,
             model.Requests[^1].Tools?.Select(tool => tool.Name) ?? []);

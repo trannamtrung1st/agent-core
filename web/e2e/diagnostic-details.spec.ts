@@ -31,6 +31,69 @@ test("failed assistant details copy and survive reload", async ({ page }) => {
   await expect(page.getByTestId("diagnostic-id")).toHaveText(diagnosticId);
 });
 
+test("invalid tool strategy is bounded and its diagnostic survives reload", async ({ page }) => {
+  await page.goto("/");
+  await selectInstanceIdentity(page, { id: "general-assistant", version: 21 });
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await page.getByLabel("Message").fill("synthetic-invalid-tool-turn");
+  await page.getByRole("button", { name: "Send" }).click();
+  const row = page.locator(".chat-message-assistant").last();
+  await expect(row.getByText("Failed")).toBeVisible({ timeout: 15_000 });
+  await row.getByRole("button", { name: "Failed — show error details" }).click();
+  await expect(page.getByTestId("diagnostic-reason")).toHaveText("invalidToolStrategy");
+  const id = await page.getByTestId("diagnostic-id").innerText();
+  await page.getByRole("button", { name: "Copy details" }).click();
+  await expect(page.getByRole("status")).toHaveText("Copied");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("Reason: invalidToolStrategy");
+  await page.reload();
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await page.locator(".chat-message-assistant").last().getByRole("button", { name: "Failed — show error details" }).click();
+  await expect(page.getByTestId("diagnostic-id")).toHaveText(id);
+  await expect(page.getByTestId("diagnostic-reason")).toHaveText("invalidToolStrategy");
+});
+
+for (const replyFails of [false, true]) {
+  test(`browser actions survive ${replyFails ? "failed" : "recovered"} finalization`, async ({ page }) => {
+    await page.goto("/");
+    await selectInstanceIdentity(page, { id: "general-assistant", version: 21 });
+    await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+    const origin = `http://127.0.0.1:${process.env.PLAYWRIGHT_FIXTURE_PORT ?? "5091"}`;
+    await page.getByLabel("Message").fill(`synthetic-finalization-${replyFails ? "fail" : "recover"} ${origin}/`);
+    await page.getByRole("button", { name: "Send" }).click();
+    const row = page.locator(".chat-message-assistant").last();
+    await expect(row.getByText("✓ Browser closed", { exact: true })).toBeVisible({ timeout: 15_000 });
+    if (replyFails) {
+      await expect(row.getByText("Reply failed", { exact: true })).toBeVisible();
+      await row.getByRole("button", { name: "Reply failed — show error details" }).click();
+      await expect(page.getByTestId("diagnostic-reason")).toHaveText("totalTimeout");
+      const id = await page.getByTestId("diagnostic-id").innerText();
+      await page.reload();
+      await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+      await expect(page.locator(".chat-message-assistant").last().getByText("✓ Browser closed", { exact: true })).toBeVisible();
+      await page.locator(".chat-message-assistant").last().getByRole("button", { name: "Reply failed — show error details" }).click();
+      await expect(page.getByTestId("diagnostic-id")).toHaveText(id);
+    } else {
+      await expect(row).toContainText("Sign-out was not verified.");
+      await expect(row.getByText("Reply failed", { exact: true })).toHaveCount(0);
+    }
+  });
+}
+
+test("native sign-out confirmation completes before closure and final reply", async ({ page }) => {
+  await page.goto("/");
+  await selectInstanceIdentity(page, { id: "general-assistant", version: 21 });
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await page.getByLabel("Message").fill(`synthetic-browser-cleanup http://127.0.0.1:${process.env.PLAYWRIGHT_FIXTURE_PORT ?? "5091"}/`);
+  await page.getByRole("button", { name: "Send" }).click();
+  const row = page.locator(".chat-message-assistant").last();
+  await expect(row).toContainText("Sign-out verified at the login screen", { timeout: 30_000 });
+  await expect(row.getByText("✓ Browser closed", { exact: true })).toBeVisible();
+  await expect(row.getByText("Reply failed", { exact: true })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(page.locator(".chat-message-assistant").last()).toContainText("Sign-out verified at the login screen");
+});
+
 test("background work shows a seeded terminal diagnostic", async ({ page }) => {
   await page.goto("/");
   await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);

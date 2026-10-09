@@ -30,7 +30,7 @@ public sealed class AutomationDestinationJourneyTests
         await using (var host = new ExperienceHost(db, clock: clock))
         {
             var s = host.Services;
-            instanceId = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17)).InstanceId;
+            instanceId = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21)).InstanceId;
             var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(instanceId, SessionMode.Text);
             sessionId = session.SessionId;
             var unrelated = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(instanceId, SessionMode.Text);
@@ -81,7 +81,7 @@ public sealed class AutomationDestinationJourneyTests
         var clock = new AutomationClock(Now);
         await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"target-unavailable-{Guid.NewGuid():N}.db"), clock: clock);
         var s = host.Services;
-        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
+        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
         var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(instance.InstanceId, SessionMode.Text);
         var authoring = s.GetRequiredService<AdminAutomationAuthoringService>();
         var automation = await authoring.SaveAsync(instance.InstanceId, null, 0, true, "Greeting", "Say hello",
@@ -114,7 +114,7 @@ public sealed class AutomationDestinationJourneyTests
         var clock = new AutomationClock(Now);
         await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"report-target-{Guid.NewGuid():N}.db"), clock: clock);
         var s = host.Services;
-        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
+        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
         var parent = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(instance.InstanceId, SessionMode.Text);
         Assert.False(parent.Definition.InitiativePolicy.Enabled);
         var a = await s.GetRequiredService<AdminAutomationAuthoringService>().SaveAsync(instance.InstanceId, null, 0, true,
@@ -149,7 +149,7 @@ public sealed class AutomationDestinationJourneyTests
         var clock = new AutomationClock(Now);
         await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"recurring-target-{Guid.NewGuid():N}.db"), clock: clock);
         var s = host.Services;
-        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
+        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
         var target = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(instance.InstanceId, SessionMode.Text);
         await s.GetRequiredService<AdminAutomationAuthoringService>().SaveAsync(instance.InstanceId, null, 0, true, "Greeting", "Say hello",
             new ScheduleTrigger(new FixedIntervalSchedule(60, Now.AddSeconds(60))), null, null,
@@ -183,7 +183,7 @@ public sealed class AutomationDestinationJourneyTests
         { services.RemoveAll<IModelCatalog>(); services.AddSingleton<IModelCatalog>(catalog); } : null;
         await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"report-disposition-{Guid.NewGuid():N}.db"), clock: clock, configure: configure);
         var s = host.Services;
-        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
+        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
         var parent = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(instance.InstanceId, SessionMode.Text);
         if (disposition == "model-unavailable")
         {
@@ -241,8 +241,8 @@ public sealed class AutomationDestinationJourneyTests
         await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"target-authority-{Guid.NewGuid():N}.db"));
         var s = host.Services;
         var admin = s.GetRequiredService<AdminAgentInstanceService>();
-        var a = await admin.CreateManagedAsync("general-assistant", 17);
-        var b = await admin.CreateManagedAsync("general-assistant", 17);
+        var a = await admin.CreateManagedAsync("general-assistant", 21);
+        var b = await admin.CreateManagedAsync("general-assistant", 21);
         var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(b.InstanceId, SessionMode.Text);
         using var client = TestOwnerCapability.CreateOwnerClient(host);
         var draft = new AutomationRequest(0, true, "Greeting", "Say hello", new("schedule", new("oneShot", AtUtc: DateTimeOffset.UtcNow.AddHours(1).ToString("O"))),
@@ -268,7 +268,7 @@ public sealed class AutomationDestinationJourneyTests
                     new("text-only", "Text only", "primary-llm", "scripted-alpha", false, false, true, false, [], null)]));
             });
         var s = host.Services;
-        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17);
+        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
         var parent = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(instance.InstanceId, SessionMode.Text);
         var authoring = s.GetRequiredService<AdminAutomationAuthoringService>();
         await Assert.ThrowsAsync<AgentCoreException>(() => authoring.SaveAsync(instance.InstanceId, null, 0, true,

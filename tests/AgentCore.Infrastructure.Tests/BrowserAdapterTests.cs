@@ -1,3 +1,4 @@
+using AgentCore.Tests.Shared;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -15,11 +16,11 @@ public sealed class BrowserFailureClassifierTests
 {
     [Theory]
     [InlineData("Element is not a <select> element", "unsupported_operation", "providerUnsupportedOperation")]
-    [InlineData("Element is not attached to the DOM", "stale_reference", "staleElement")]
+    [InlineData("Element is not attached to the DOM", "action_not_confirmed", "staleElement")]
     [InlineData("Timeout 30000ms exceeded.", "timeout", "timeout")]
     [InlineData("net::ERR_CONNECTION_REFUSED at http://127.0.0.1:9/", "target_unreachable", "connectionRefused")]
-    [InlineData("Execution context was destroyed, most likely because of a navigation.", "stale_reference", "pageChanged")]
-    [InlineData("Target page, context or browser has been closed", "stale_reference", "pageClosed")]
+    [InlineData("Execution context was destroyed, most likely because of a navigation.", "action_not_confirmed", "pageChanged")]
+    [InlineData("Target page, context or browser has been closed", "action_not_confirmed", "pageClosed")]
     [InlineData("Browser closed", "provider_unavailable", "browserDisconnected")]
     public void Playwright_messages_do_not_all_mean_the_browser_died(string message, string code, string reason)
     {
@@ -95,7 +96,7 @@ public sealed class LoopbackBrowserFixtureHostTests
     [Fact]
     public async Task Port_zero_replaces_the_configured_origin_with_the_assigned_one()
     {
-        var session = new PlaywrightBrowser(DemoOptions(headless: true), loggerFactory: null);
+        var session = new NativePlaywrightBrowser(DemoOptions(headless: true), loggerFactory: null);
         await session.StartAsync(CancellationToken.None);
         try
         {
@@ -115,16 +116,16 @@ public sealed class LoopbackBrowserFixtureHostTests
     [Fact]
     public async Task Same_origin_bounce_returns_the_landed_page()
     {
-        var session = new PlaywrightBrowser(DemoOptions(headless: true), loggerFactory: null);
+        var session = new NativePlaywrightBrowser(DemoOptions(headless: true), loggerFactory: null);
         await session.StartAsync(CancellationToken.None);
         try
         {
             var origin = session.Fixture.Origin!;
-            var result = await session.NavigateAsync(new BrowserNavigateRequest(
+            var result = await session.ExecuteAsync(BrowserTestRequests.Navigate(
                 Guid.NewGuid(),
                 new Uri(origin + "/bounce")));
             Assert.Null(result.ErrorCode);
-            Assert.Contains("Record lookup", result.Observation!.VisibleText, StringComparison.Ordinal);
+            Assert.Contains("Record lookup", result.Observation!.Content!, StringComparison.Ordinal);
             Assert.StartsWith(origin, result.Observation.Url, StringComparison.Ordinal);
         }
         finally
@@ -136,34 +137,34 @@ public sealed class LoopbackBrowserFixtureHostTests
     [Fact]
     public async Task Attachment_downloads_are_returned_without_their_bytes_in_the_page_text()
     {
-        var session = new PlaywrightBrowser(DemoOptions(headless: true), loggerFactory: null);
+        var session = new NativePlaywrightBrowser(DemoOptions(headless: true), loggerFactory: null);
         await session.StartAsync(CancellationToken.None);
         try
         {
             var origin = session.Fixture.Origin!;
             var id = Guid.NewGuid();
-            var home = await session.NavigateAsync(new BrowserNavigateRequest(id, new Uri(origin + "/")));
+            var home = await session.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(origin + "/")));
             Assert.Null(home.ErrorCode);
-            var csv = await session.NavigateAsync(new BrowserNavigateRequest(id, new Uri(origin + "/files/notes.csv")));
+            var csv = await session.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(origin + "/files/notes.csv")));
             Assert.Null(csv.ErrorCode);
             var accepted = Assert.Single(csv.Downloads!);
             Assert.Null(accepted.ErrorCode);
             Assert.Equal("notes.csv", accepted.FileName);
             Assert.Equal("text/csv", accepted.ContentType);
             Assert.Contains("sku,name", System.Text.Encoding.UTF8.GetString(accepted.Bytes!), StringComparison.Ordinal);
-            Assert.DoesNotContain("sku,name", csv.Observation!.VisibleText, StringComparison.Ordinal);
-            var rejected = await session.NavigateAsync(new BrowserNavigateRequest(id, new Uri(origin + "/files/payload.exe")));
+            Assert.DoesNotContain("sku,name", csv.Observation!.Content!, StringComparison.Ordinal);
+            var rejected = await session.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(origin + "/files/payload.exe")));
             Assert.Null(rejected.ErrorCode);
             var blocked = Assert.Single(rejected.Downloads!);
             Assert.Equal("download_rejected", blocked.ErrorCode);
             Assert.Null(blocked.Bytes);
-            Assert.DoesNotContain("MZ-not-allowed", rejected.Observation!.VisibleText, StringComparison.Ordinal);
-            var oversized = await session.NavigateAsync(new BrowserNavigateRequest(id, new Uri(origin + "/files/oversized.pdf")));
+            Assert.DoesNotContain("MZ-not-allowed", rejected.Observation!.Content!, StringComparison.Ordinal);
+            var oversized = await session.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(origin + "/files/oversized.pdf")));
             Assert.Null(oversized.ErrorCode);
             var tooLarge = Assert.Single(oversized.Downloads!);
             Assert.Equal("download_too_large", tooLarge.ErrorCode);
             Assert.Null(tooLarge.Bytes);
-            Assert.DoesNotContain("%PDF", oversized.Observation!.VisibleText, StringComparison.Ordinal);
+            Assert.DoesNotContain("%PDF", oversized.Observation!.Content!, StringComparison.Ordinal);
             var written = session.Fixture.ChunkedAttachmentBytesWritten;
             Assert.Equal(
                 BrowserToolLimits.MaxDownloadBytes + LoopbackBrowserFixtureHost.ChunkedOversizedTailBytes,
@@ -181,11 +182,11 @@ public sealed class LoopbackBrowserFixtureHostTests
     [Fact]
     public async Task Denied_url_does_not_launch_the_browser()
     {
-        var session = new PlaywrightBrowser(DemoOptions(headless: true), loggerFactory: null);
+        var session = new NativePlaywrightBrowser(DemoOptions(headless: true), loggerFactory: null);
         await session.StartAsync(CancellationToken.None);
         try
         {
-            var result = await session.NavigateAsync(new BrowserNavigateRequest(
+            var result = await session.ExecuteAsync(BrowserTestRequests.Navigate(
                 Guid.NewGuid(),
                 new Uri("https://example.invalid/escape")));
             Assert.Equal("target_denied", result.ErrorCode);
@@ -275,11 +276,11 @@ public sealed class BrowserChromiumCollection
 
 public sealed class BrowserHostFixture : IAsyncLifetime
 {
-    public PlaywrightBrowser Session { get; private set; } = null!;
+    public NativePlaywrightBrowser Session { get; private set; } = null!;
 
     public async Task InitializeAsync()
     {
-        Session = new PlaywrightBrowser(
+        Session = new NativePlaywrightBrowser(
             new BrowserOptions
             {
                 Enabled = true,
@@ -296,12 +297,12 @@ public sealed class BrowserHostFixture : IAsyncLifetime
 }
 
 [Collection(BrowserChromiumCollection.Name)]
-public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : IClassFixture<BrowserHostFixture>
+public sealed class NativePlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : IClassFixture<BrowserHostFixture>
 {
     [Fact]
     public async Task Missing_chromium_closes_the_configuration_gate_and_does_not_navigate()
     {
-        var session = new PlaywrightBrowser(
+        var session = new NativePlaywrightBrowser(
             new BrowserOptions
             {
                 Enabled = true,
@@ -321,7 +322,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
             Assert.False(gate.IsConfigured(ToolCatalog.BrowserNavigate));
             Assert.False(gate.IsConfigured(ToolCatalog.BrowserSnapshot));
             Assert.False(gate.IsConfigured(ToolCatalog.BrowserClick));
-            var navigated = await session.NavigateAsync(new BrowserNavigateRequest(Guid.NewGuid(), new Uri("http://127.0.0.1/")));
+            var navigated = await session.ExecuteAsync(BrowserTestRequests.Navigate(Guid.NewGuid(), new Uri("http://127.0.0.1/")));
             Assert.Equal("provider_unavailable", navigated.ErrorCode);
             Assert.Null(session.LaunchedHeadless);
         }
@@ -341,7 +342,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         var origin = $"http://127.0.0.1:{port}";
         using var stop = new CancellationTokenSource();
         var serving = ServeDocsAsync(listener, stop.Token);
-        var session = new PlaywrightBrowser(
+        var session = new NativePlaywrightBrowser(
             new BrowserOptions
             {
                 Enabled = true,
@@ -359,17 +360,14 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
             Assert.True(session.IsAvailable);
             Assert.Equal([origin], session.HostPolicy.NavigationOrigins);
             Assert.Empty(session.HostPolicy.EffectiveInteractionOrigins);
-            var denied = await session.NavigateAsync(
-                new BrowserNavigateRequest(Guid.NewGuid(), new Uri("https://example.invalid/escape")));
+            var denied = await session.ExecuteAsync(BrowserTestRequests.Navigate(Guid.NewGuid(), new Uri("https://example.invalid/escape")));
             Assert.Equal("target_denied", denied.ErrorCode);
-            var cdn = await session.NavigateAsync(
-                new BrowserNavigateRequest(Guid.NewGuid(), new Uri("https://cdn.example/app.js")));
+            var cdn = await session.ExecuteAsync(BrowserTestRequests.Navigate(Guid.NewGuid(), new Uri("https://cdn.example/app.js")));
             Assert.Equal("target_denied", cdn.ErrorCode);
-            var home = await session.NavigateAsync(
-                new BrowserNavigateRequest(Guid.NewGuid(), new Uri(origin + "/")));
+            var home = await session.ExecuteAsync(BrowserTestRequests.Navigate(Guid.NewGuid(), new Uri(origin + "/")));
             Assert.Null(home.ErrorCode);
             Assert.Equal("Docs home", home.Observation!.Title);
-            Assert.Contains("Application structure", home.Observation.VisibleText, StringComparison.Ordinal);
+            Assert.Contains("Application structure", home.Observation.Content!, StringComparison.Ordinal);
             Assert.DoesNotContain("Record lookup", home.Observation.Title, StringComparison.Ordinal);
         }
         finally
@@ -391,7 +389,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         var origin = $"http://127.0.0.1:{port}";
         using var stop = new CancellationTokenSource();
         var serving = ServeOpenWebAsync(listener, stop.Token);
-        var session = new PlaywrightBrowser(
+        var session = new NativePlaywrightBrowser(
             new BrowserOptions
             {
                 Enabled = true,
@@ -407,34 +405,33 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         {
             Assert.False(session.Fixture.IsAvailable);
             Assert.Equal(BrowserPolicyMode.OpenWeb, session.HostPolicy.PolicyMode);
-            var denied = await session.NavigateAsync(
-                new BrowserNavigateRequest(Guid.NewGuid(), new Uri("file:///tmp/secret")));
+            var denied = await session.ExecuteAsync(BrowserTestRequests.Navigate(Guid.NewGuid(), new Uri("file:///tmp/secret")));
             Assert.Equal("target_denied", denied.ErrorCode);
             var id = Guid.NewGuid();
-            var home = await session.NavigateAsync(new BrowserNavigateRequest(id, new Uri(origin + "/")));
+            var home = await session.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(origin + "/")));
             Assert.Null(home.ErrorCode);
             Assert.Equal("Open page", home.Observation!.Title);
-            var link = Assert.Single(home.Observation.Elements, element => element.Name == "Open next");
-            var next = await session.InteractAsync(new BrowserInteractionRequest(id, "click", link.Ref, null));
+            var link = (await BrowserTestQueries.Find(session, id, "Open next"));
+            var next = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, link.Target, null));
             Assert.Null(next.ErrorCode);
-            var again = await session.SnapshotAsync(id);
+            var again = await session.ExecuteAsync(BrowserTestRequests.Inspect(id));
             Assert.Null(again.ErrorCode);
             Assert.Equal("Next page", again.Observation!.Title);
-            var stayed = await session.SnapshotAsync(id);
+            var stayed = await session.ExecuteAsync(BrowserTestRequests.Inspect(id));
             Assert.Equal("Next page", stayed.Observation!.Title);
-            var oldRef = link.Ref;
-            var thirdButton = Assert.Single(stayed.Observation.Elements, element => element.Name == "Open third");
-            var openedThird = await session.InteractAsync(new BrowserInteractionRequest(id, "click", thirdButton.Ref, null));
+            var oldRef = link.Target;
+            var thirdButton = (await BrowserTestQueries.Find(session, id, "Open third"));
+            var openedThird = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, thirdButton.Target, null));
             Assert.Null(openedThird.ErrorCode);
-            var stale = await session.InteractAsync(new BrowserInteractionRequest(id, "click", oldRef, null));
-            Assert.Equal("stale_reference", stale.ErrorCode);
-            var third = await session.SnapshotAsync(id);
+            var stale = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, oldRef, null));
+            Assert.Equal("target_missing", stale.ErrorCode);
+            var third = await session.ExecuteAsync(BrowserTestRequests.Inspect(id));
             Assert.Equal("Third page", third.Observation!.Title);
-            var thirdAgain = await session.SnapshotAsync(id);
+            var thirdAgain = await session.ExecuteAsync(BrowserTestRequests.Inspect(id));
             Assert.Equal("Third page", thirdAgain.Observation!.Title);
             var active = session.ContextFor(id)!.Pages.Single(page => page.Url.Contains("/third", StringComparison.Ordinal));
             await active.GotoAsync(origin + "/");
-            var human = await session.SnapshotAsync(id);
+            var human = await session.ExecuteAsync(BrowserTestRequests.Inspect(id));
             Assert.Equal("Open page", human.Observation!.Title);
         }
         finally
@@ -459,17 +456,17 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         var root = Path.Combine(Path.GetTempPath(), "agent-core-profiles-" + Guid.NewGuid().ToString("N"));
         var tommy = Guid.NewGuid();
         var other = Guid.NewGuid();
-        PlaywrightBrowser? first = NewPersistent(root);
+        NativePlaywrightBrowser? first = NewPersistent(root);
         await first.StartAsync(CancellationToken.None);
         var sessionA = Guid.NewGuid();
-        PlaywrightBrowser? restarted = null;
-        PlaywrightBrowser? rival = null;
+        NativePlaywrightBrowser? restarted = null;
+        NativePlaywrightBrowser? rival = null;
         try
         {
             first.BindSession(sessionA, tommy);
-            var home = await first.NavigateAsync(new BrowserNavigateRequest(sessionA, new Uri(origin + "/")));
+            var home = await first.ExecuteAsync(BrowserTestRequests.Navigate(sessionA, new Uri(origin + "/")));
             Assert.Null(home.ErrorCode);
-            var button = Assert.Single(home.Observation!.Elements, element => element.Name == "Go");
+            var button = (await BrowserTestQueries.Find(first, sessionA, "Go"));
             await first.ContextFor(sessionA)!.AddCookiesAsync(
             [
                 new Microsoft.Playwright.Cookie
@@ -485,7 +482,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
 
             var sessionB = Guid.NewGuid();
             first.BindSession(sessionB, tommy);
-            var again = await first.NavigateAsync(new BrowserNavigateRequest(sessionB, new Uri(origin + "/")));
+            var again = await first.ExecuteAsync(BrowserTestRequests.Navigate(sessionB, new Uri(origin + "/")));
             Assert.Null(again.ErrorCode);
             Assert.Contains(
                 await first.ContextFor(sessionB)!.CookiesAsync(),
@@ -493,12 +490,17 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
             Assert.Equal(
                 "beta",
                 await first.ContextFor(sessionB)!.Pages.First().EvaluateAsync<string?>("() => localStorage.getItem('persistKey')"));
-            var stale = await first.InteractAsync(new BrowserInteractionRequest(sessionB, "click", button.Ref, null));
-            Assert.Equal("wrong_session_reference", stale.ErrorCode);
+            var ownedPage = first.ContextFor(sessionB)!.Pages.First();
+            await ownedPage.GetByRole(Microsoft.Playwright.AriaRole.Button, new() { Name = "Go" }).EvaluateAsync("el => el.onclick = () => globalThis.ownedClickCount = (globalThis.ownedClickCount ?? 0) + 1");
+            var current = await first.ExecuteAsync(BrowserTestRequests.Interaction(sessionB, BrowserOperation.Click, button.Target, null));
+            Assert.Null(current.ErrorCode); // A literal target resolves only inside the new owned context.
+            Assert.Equal(origin + "/", first.ContextFor(sessionB)!.Pages.First().Url);
+            Assert.Equal(1, await ownedPage.EvaluateAsync<int>("() => globalThis.ownedClickCount"));
+            Assert.Null(first.ContextFor(sessionA));
 
             var sessionOther = Guid.NewGuid();
             first.BindSession(sessionOther, other);
-            var foreign = await first.NavigateAsync(new BrowserNavigateRequest(sessionOther, new Uri(origin + "/")));
+            var foreign = await first.ExecuteAsync(BrowserTestRequests.Navigate(sessionOther, new Uri(origin + "/")));
             Assert.Null(foreign.ErrorCode);
             Assert.DoesNotContain(
                 await first.ContextFor(sessionOther)!.CookiesAsync(),
@@ -508,7 +510,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
             await rival.StartAsync(CancellationToken.None);
             var rivalSession = Guid.NewGuid();
             rival.BindSession(rivalSession, tommy);
-            var busy = await rival.NavigateAsync(new BrowserNavigateRequest(rivalSession, new Uri(origin + "/")));
+            var busy = await rival.ExecuteAsync(BrowserTestRequests.Navigate(rivalSession, new Uri(origin + "/")));
             Assert.Equal("profile_busy", busy.ErrorCode);
 
             await first.StopAsync(CancellationToken.None);
@@ -517,7 +519,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
             await restarted.StartAsync(CancellationToken.None);
             var sessionC = Guid.NewGuid();
             restarted.BindSession(sessionC, tommy);
-            var restored = await restarted.NavigateAsync(new BrowserNavigateRequest(sessionC, new Uri(origin + "/")));
+            var restored = await restarted.ExecuteAsync(BrowserTestRequests.Navigate(sessionC, new Uri(origin + "/")));
             Assert.Null(restored.ErrorCode);
             Assert.Contains(
                 await restarted.ContextFor(sessionC)!.CookiesAsync(),
@@ -576,8 +578,8 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         {
             session.BindSession(sessionA, agent);
             session.BindSession(sessionB, agent);
-            var navA = session.NavigateAsync(new BrowserNavigateRequest(sessionA, new Uri(origin + "/"))).AsTask();
-            var navB = session.NavigateAsync(new BrowserNavigateRequest(sessionB, new Uri(origin + "/"))).AsTask();
+            var navA = session.ExecuteAsync(BrowserTestRequests.Navigate(sessionA, new Uri(origin + "/"))).AsTask();
+            var navB = session.ExecuteAsync(BrowserTestRequests.Navigate(sessionB, new Uri(origin + "/"))).AsTask();
             var results = await Task.WhenAll(navA, navB);
             Assert.All(results, result => Assert.Null(result.ErrorCode));
             Assert.Same(session.ContextFor(sessionA), session.ContextFor(sessionB));
@@ -619,7 +621,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         {
             session.BindSession(sessionA, agent);
             session.BindSession(sessionB, agent);
-            var home = await session.NavigateAsync(new BrowserNavigateRequest(sessionA, new Uri(origin + "/")));
+            var home = await session.ExecuteAsync(BrowserTestRequests.Navigate(sessionA, new Uri(origin + "/")));
             Assert.Null(home.ErrorCode);
             await session.ContextFor(sessionA)!.AddCookiesAsync(
             [
@@ -632,13 +634,13 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
                 }
             ]);
 
-            var closed = await session.CloseAsync(sessionB);
+            var closed = await session.ExecuteAsync(BrowserTestRequests.Close(sessionB));
             Assert.Equal("closed", closed.Status);
             Assert.Null(session.ContextFor(sessionA));
             Assert.Null(session.ContextFor(sessionB));
-            Assert.Equal("already_closed", (await session.CloseAsync(sessionA)).Status);
+            Assert.Equal("already_closed", (await session.ExecuteAsync(BrowserTestRequests.Close(sessionA))).Status);
 
-            var reopened = await session.NavigateAsync(new BrowserNavigateRequest(sessionA, new Uri(origin + "/")));
+            var reopened = await session.ExecuteAsync(BrowserTestRequests.Navigate(sessionA, new Uri(origin + "/")));
             Assert.Null(reopened.ErrorCode);
             Assert.Contains(
                 await session.ContextFor(sessionA)!.CookiesAsync(),
@@ -646,7 +648,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
 
             await session.ContextFor(sessionA)!.CloseAsync();
             Assert.Null(session.ContextFor(sessionA));
-            var afterWindowClose = await session.NavigateAsync(new BrowserNavigateRequest(sessionB, new Uri(origin + "/")));
+            var afterWindowClose = await session.ExecuteAsync(BrowserTestRequests.Navigate(sessionB, new Uri(origin + "/")));
             Assert.Null(afterWindowClose.ErrorCode);
             Assert.Contains(
                 await session.ContextFor(sessionB)!.CookiesAsync(),
@@ -678,10 +680,10 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         Assert.Null(home.ErrorCode);
         Assert.NotNull(session.ContextFor(id));
 
-        var closed = await session.CloseAsync(id);
+        var closed = await session.ExecuteAsync(BrowserTestRequests.Close(id));
         Assert.Equal("closed", closed.Status);
         Assert.Null(session.ContextFor(id));
-        Assert.Equal("already_closed", (await session.CloseAsync(id)).Status);
+        Assert.Equal("already_closed", (await session.ExecuteAsync(BrowserTestRequests.Close(id))).Status);
 
         var again = await Navigate(session, id, "/");
         Assert.Null(again.ErrorCode);
@@ -699,7 +701,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         using var stop = new CancellationTokenSource();
         var serving = ServeButtonAsync(listener, stop.Token);
         var root = Path.Combine(Path.GetTempPath(), "agent-core-profiles-" + Guid.NewGuid().ToString("N"));
-        var session = new PlaywrightBrowser(
+        var session = new NativePlaywrightBrowser(
             new BrowserOptions
             {
                 Enabled = true,
@@ -717,7 +719,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         try
         {
             session.BindSession(first, owner);
-            var home = await session.NavigateAsync(new BrowserNavigateRequest(first, new Uri(origin + "/")));
+            var home = await session.ExecuteAsync(BrowserTestRequests.Navigate(first, new Uri(origin + "/")));
             Assert.Null(home.ErrorCode);
             await session.ContextFor(first)!.AddCookiesAsync(
             [
@@ -732,7 +734,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
             await session.ReleaseAsync(first);
             var second = Guid.NewGuid();
             session.BindSession(second, owner);
-            var again = await session.NavigateAsync(new BrowserNavigateRequest(second, new Uri(origin + "/")));
+            var again = await session.ExecuteAsync(BrowserTestRequests.Navigate(second, new Uri(origin + "/")));
             Assert.Null(again.ErrorCode);
             Assert.DoesNotContain(
                 await session.ContextFor(second)!.CookiesAsync(),
@@ -784,29 +786,27 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
             session.BindSession(interactiveSession, agent);
             await using var lease = await session.EnterUnattendedAsync(agent, [storeOrigin]);
             session.AdoptUnattendedFlow(agent);
-            var redirected = await session.NavigateAsync(
-                new BrowserNavigateRequest(workSession, new Uri(storeOrigin + "/redirect")));
+            var redirected = await session.ExecuteAsync(BrowserTestRequests.Navigate(workSession, new Uri(storeOrigin + "/redirect")));
             Assert.Equal("target_denied", redirected.ErrorCode);
-            var afterRedirect = await session.GetCurrentUrlAsync(workSession);
+            var afterRedirect = new Uri(session.ContextFor(workSession)!.Pages[0].Url);
             Assert.DoesNotContain(otherOrigin, afterRedirect?.AbsoluteUri ?? string.Empty, StringComparison.Ordinal);
 
-            var page = await session.NavigateAsync(new BrowserNavigateRequest(workSession, new Uri(storeOrigin + "/")));
+            var page = await session.ExecuteAsync(BrowserTestRequests.Navigate(workSession, new Uri(storeOrigin + "/")));
             Assert.Null(page.ErrorCode);
-            Assert.Contains("Store page", page.Observation!.VisibleText, StringComparison.Ordinal);
+            Assert.Contains("Store page", page.Observation!.Content!, StringComparison.Ordinal);
             Assert.Equal(0, otherHits);
-            var pop = Assert.Single(page.Observation.Elements, element => element.Name == "Pop");
-            var popped = await session.InteractAsync(new BrowserInteractionRequest(workSession, "click", pop.Ref, null));
+            var pop = (await BrowserTestQueries.Find(session, workSession, "Pop"));
+            var popped = await session.ExecuteAsync(BrowserTestRequests.Interaction(workSession, BrowserOperation.Click, pop.Target, null));
             Assert.NotEqual("provider_unavailable", popped.ErrorCode);
-            var current = await session.GetCurrentUrlAsync(workSession);
+            var current = new Uri(session.ContextFor(workSession)!.Pages[0].Url);
             Assert.StartsWith(storeOrigin, current?.AbsoluteUri ?? string.Empty, StringComparison.Ordinal);
             Assert.Single(session.ContextFor(workSession)!.Pages.ToArray());
 
             session.ExpectInteractive(agent);
-            Task<BrowserOperationResult> waiting;
+            Task<BrowserResult> waiting;
             using (ExecutionContext.SuppressFlow())
             {
-                waiting = Task.Run(() => session.NavigateAsync(
-                    new BrowserNavigateRequest(interactiveSession, new Uri(otherOrigin + "/"))).AsTask());
+                waiting = Task.Run(() => session.ExecuteAsync(BrowserTestRequests.Navigate(interactiveSession, new Uri(otherOrigin + "/"))).AsTask());
             }
 
             await session.InteractiveEntered(agent).WaitAsync(TimeSpan.FromSeconds(5));
@@ -857,18 +857,17 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         try
         {
             session.BindSession(workSession, agent);
-            var outside = await session.NavigateAsync(new BrowserNavigateRequest(workSession, new Uri(otherOrigin + "/")));
+            var outside = await session.ExecuteAsync(BrowserTestRequests.Navigate(workSession, new Uri(otherOrigin + "/")));
             Assert.Null(outside.ErrorCode);
             await using var lease = await session.EnterUnattendedAsync(agent, [storeOrigin]);
             session.AdoptUnattendedFlow(agent);
-            var observed = await session.SnapshotAsync(workSession);
+            var observed = await session.ExecuteAsync(BrowserTestRequests.Inspect(workSession));
             Assert.Equal("target_denied", observed.ErrorCode);
             Assert.Null(observed.Observation);
-            var hidden = await session.GetCurrentUrlAsync(workSession);
-            Assert.Null(hidden);
-            var home = await session.NavigateAsync(new BrowserNavigateRequest(workSession, new Uri(storeOrigin + "/")));
+            Assert.Null(observed.Observation);
+            var home = await session.ExecuteAsync(BrowserTestRequests.Navigate(workSession, new Uri(storeOrigin + "/")));
             Assert.Null(home.ErrorCode);
-            Assert.Contains("Store page", home.Observation!.VisibleText, StringComparison.Ordinal);
+            Assert.Contains("Store page", home.Observation!.Content!, StringComparison.Ordinal);
             Assert.Equal(BrowserPolicyMode.OpenWeb, session.HostPolicy.PolicyMode);
             Assert.Single(Directory.GetDirectories(root));
             await lease.DisposeAsync();
@@ -888,7 +887,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         }
     }
 
-    private static PlaywrightBrowser NewPersistent(string root) =>
+    private static NativePlaywrightBrowser NewPersistent(string root) =>
         new(
             new BrowserOptions
             {
@@ -1053,32 +1052,28 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         Assert.True(session.IsRuntimeReady);
         Assert.True(session.LaunchedHeadless);
         Assert.Equal("Record lookup", home.Observation!.Title);
-        Assert.Contains("Ignore previous instructions", home.Observation.VisibleText, StringComparison.Ordinal);
+        Assert.Contains("Ignore previous instructions", home.Observation.Content!, StringComparison.Ordinal);
 
-        var filled = await session.InteractAsync(new BrowserInteractionRequest(id, "fill", Ref(home.Observation, "Record"), "AC-1042"));
+        var filled = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Type, (await BrowserTestQueries.Find(fixture.Session, id, "Record")).Target, "AC-1042"));
         Assert.Null(filled.ErrorCode);
-        var searched = await session.InteractAsync(new BrowserInteractionRequest(id, "click", Ref(filled.Observation!, "Search"), null));
+        var searched = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, (await BrowserTestQueries.Find(fixture.Session, id, "Search")).Target, null));
         Assert.Null(searched.ErrorCode);
-        Assert.Contains("AC-1042", searched.Observation!.VisibleText, StringComparison.Ordinal);
-        Assert.Contains("In review", searched.Observation.VisibleText, StringComparison.Ordinal);
+        Assert.Contains("AC-1042", searched.Observation!.Content!, StringComparison.Ordinal);
+        Assert.Contains("In review", searched.Observation.Content!, StringComparison.Ordinal);
         Assert.EndsWith("/records/AC-1042", searched.Observation.Url, StringComparison.Ordinal);
 
-        var opened = await session.InteractAsync(new BrowserInteractionRequest(
-            id,
-            "click",
-            Ref(searched.Observation, "AC-1042"),
-            null));
+        var opened = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, (await BrowserTestQueries.Find(fixture.Session, id, "AC-1042")).Target, null));
         Assert.Null(opened.ErrorCode);
-        Assert.Contains("In review", opened.Observation!.VisibleText, StringComparison.Ordinal);
+        Assert.Contains("In review", opened.Observation!.Content!, StringComparison.Ordinal);
 
-        var selected = await session.InteractAsync(new BrowserInteractionRequest(id, "select", Ref(opened.Observation, "Stage"), "closed"));
+        var selected = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.SelectOption, (await BrowserTestQueries.Find(fixture.Session, id, "Stage")).Target, "closed"));
         Assert.Null(selected.ErrorCode);
-        var stage = Assert.Single(selected.Observation!.Elements, element => element.Name == "Stage");
+        var stage = (await BrowserTestQueries.Find(fixture.Session, id, "Stage"));
         Assert.Equal(["select"], stage.Actions);
 
         var isolate = await Navigate(session, id, "/isolate");
-        var rendered = isolate.Observation!.Title + isolate.Observation.VisibleText
-            + string.Join('\n', isolate.Observation.Elements.Select(element => element.Role + element.Name));
+        var rendered = isolate.Observation!.Title + isolate.Observation.Content!
+            + string.Join('\n', isolate.Observation.Targets.Select(element => element.Role + element.Name));
         Assert.DoesNotContain("alpha", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("p9_local_value", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("p9_session_storage_value", rendered, StringComparison.Ordinal);
@@ -1104,7 +1099,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         var login = await Navigate(session, id, "/login");
         Assert.Null(login.ErrorCode);
         Assert.Equal(BrowserInterventionKind.None, login.Observation!.Intervention);
-        Assert.Equal(["fill_credential"], Field(login.Observation, "Password").Actions);
+        Assert.Equal(["fill_credential"], (await BrowserTestQueries.Find(fixture.Session, id, "Password")).Actions);
 
         var signup = await Navigate(session, id, "/signup");
         Assert.Null(signup.ErrorCode);
@@ -1113,7 +1108,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         var challenge = await Navigate(session, id, "/challenge");
         Assert.Null(challenge.ErrorCode);
         Assert.Equal(BrowserInterventionKind.HumanVerificationRequired, challenge.Observation!.Intervention);
-        Assert.DoesNotContain("password", challenge.Observation.VisibleText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("password", challenge.Observation.Content!, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -1124,7 +1119,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         var page = await Navigate(session, id, "/hidden-auth");
         Assert.Null(page.ErrorCode);
         Assert.Equal(BrowserInterventionKind.None, page.Observation!.Intervention);
-        Assert.Contains("Public catalog", page.Observation.VisibleText, StringComparison.Ordinal);
+        Assert.Contains("Public catalog", page.Observation.Content!, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1135,11 +1130,11 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         var login = await Navigate(session, id, "/login-below-fold");
         Assert.Null(login.ErrorCode);
         Assert.Equal(BrowserInterventionKind.None, login.Observation!.Intervention);
-        Assert.Equal(["fill_credential"], Field(login.Observation, "Password").Actions);
+        Assert.Equal(["fill_credential"], (await BrowserTestQueries.Find(fixture.Session, id, "Password")).Actions);
     }
 
     [Fact]
-    public async Task Contexts_do_not_share_cookies_storage_or_element_refs()
+    public async Task Contexts_do_not_share_cookies_storage_or_target_effects()
     {
         var session = fixture.Session;
         var first = Guid.NewGuid();
@@ -1167,11 +1162,9 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         Assert.Equal("p9_session_storage_value", firstSession);
         Assert.Null(secondSession);
 
-        var stolen = await session.InteractAsync(new BrowserInteractionRequest(second, "click", Ref(
-            (await session.SnapshotAsync(first)).Observation!,
-            "Password"), null));
-        Assert.Equal("wrong_session_reference", stolen.ErrorCode);
-        var firstUrl = await session.GetCurrentUrlAsync(first);
+        var stolen = await session.ExecuteAsync(BrowserTestRequests.Interaction(second, BrowserOperation.Click, (await BrowserTestQueries.Find(session, first, "Password")).Target, null));
+        Assert.Equal("target_missing", stolen.ErrorCode);
+        var firstUrl = new Uri(session.ContextFor(first)!.Pages[0].Url);
         Assert.EndsWith("/isolate", firstUrl!.AbsolutePath, StringComparison.Ordinal);
     }
 
@@ -1182,43 +1175,43 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         var redirected = Guid.NewGuid();
         var redirect = await Navigate(session, redirected, "/redirect-out");
         Assert.Equal("target_denied", redirect.ErrorCode);
-        var afterRedirect = await session.GetCurrentUrlAsync(redirected);
+        var afterRedirect = new Uri(session.ContextFor(redirected)!.Pages[0].Url);
         Assert.NotEqual("example.invalid", afterRedirect?.Host);
 
         var id = Guid.NewGuid();
         var home = await Navigate(session, id, "/");
-        var external = await session.InteractAsync(new BrowserInteractionRequest(id, "click", Ref(home.Observation!, "Open external"), null));
+        var external = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, (await BrowserTestQueries.Find(fixture.Session, id, "Open external")).Target, null));
         Assert.Equal("target_denied", external.ErrorCode);
-        var local = await session.InteractAsync(new BrowserInteractionRequest(id, "click", Ref(home.Observation!, "Open local"), null));
+        var local = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, (await BrowserTestQueries.Find(fixture.Session, id, "Open local")).Target, null));
         Assert.Null(local.ErrorCode);
-        var current = await session.GetCurrentUrlAsync(id);
+        var current = new Uri(session.ContextFor(id)!.Pages[0].Url);
         Assert.DoesNotContain("example.invalid", current?.AbsoluteUri ?? string.Empty, StringComparison.Ordinal);
         Assert.EndsWith("/", current!.AbsolutePath, StringComparison.Ordinal);
         Assert.Equal(2, session.ContextFor(id)!.Pages.Count);
-        var pages = await session.TabsAsync(new BrowserTabsRequest(id, "list"));
-        var popup = Assert.Single(pages.Pages, page => !page.Active);
-        var adopted = await session.TabsAsync(new BrowserTabsRequest(id, "select", popup.PageId));
+        var pages = await session.ExecuteAsync(BrowserTestRequests.Tabs(id, "list"));
+        var popup = Assert.Single(pages.Pages!, page => !page.Active);
+        var adopted = await session.ExecuteAsync(BrowserTestRequests.Tabs(id, "select", popup.PageId));
         Assert.Null(adopted.ErrorCode);
         Assert.EndsWith("/records/AC-1042", new Uri(adopted.Observation!.Url).AbsolutePath, StringComparison.Ordinal);
-        var opener = Assert.Single(pages.Pages, page => page.Active);
-        var switched = await session.TabsAsync(new BrowserTabsRequest(id, "select", opener.PageId));
+        var opener = Assert.Single(pages.Pages!, page => page.Active);
+        var switched = await session.ExecuteAsync(BrowserTestRequests.Tabs(id, "select", opener.PageId));
         Assert.Null(switched.ErrorCode);
         Assert.EndsWith("/", new Uri(switched.Observation!.Url).AbsolutePath, StringComparison.Ordinal);
-        var closed = await session.TabsAsync(new BrowserTabsRequest(id, "close", popup.PageId));
+        var closed = await session.ExecuteAsync(BrowserTestRequests.Tabs(id, "close", popup.PageId));
         Assert.Null(closed.ErrorCode);
         Assert.Single(session.ContextFor(id)!.Pages);
     }
 
     [Fact]
-    public async Task Stale_ref_is_rejected_after_navigation()
+    public async Task Missing_current_page_target_is_rejected_after_navigation()
     {
         var session = fixture.Session;
         var id = Guid.NewGuid();
         var home = await Navigate(session, id, "/");
-        var search = Ref(home.Observation!, "Search");
+        var search = (await BrowserTestQueries.Find(fixture.Session, id, "Search")).Target;
         await Navigate(session, id, "/records/AC-1042");
-        var stale = await session.InteractAsync(new BrowserInteractionRequest(id, "click", search, null));
-        Assert.Equal("stale_reference", stale.ErrorCode);
+        var stale = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, search, null));
+        Assert.Equal("target_missing", stale.ErrorCode);
     }
 
     [Fact]
@@ -1245,7 +1238,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
             await cancelledSession.Fixture.DelayEntered.WaitAsync(TimeSpan.FromSeconds(5));
             await cancel.CancelAsync();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => navigating);
-            var cancelledUrl = await cancelledSession.GetCurrentUrlAsync(cancelledSessionId);
+            var cancelledUrl = cancelledSession.ContextFor(cancelledSessionId)?.Pages.FirstOrDefault() is { } canceledPage && Uri.TryCreate(canceledPage.Url, UriKind.Absolute, out var canceledUri) ? canceledUri : null;
             Assert.True(cancelledUrl is null || !cancelledUrl.AbsolutePath.Contains("/delay", StringComparison.Ordinal));
         }
         finally
@@ -1263,21 +1256,21 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         await Navigate(session, kept, "/");
         await Navigate(session, dropped, "/");
         await session.ContextFor(dropped)!.CloseAsync();
-        var crashed = await session.SnapshotAsync(dropped);
+        var crashed = await session.ExecuteAsync(BrowserTestRequests.Inspect(dropped));
         Assert.Equal("provider_unavailable", crashed.ErrorCode);
-        Assert.Null((await session.SnapshotAsync(kept)).ErrorCode);
+        Assert.Null((await session.ExecuteAsync(BrowserTestRequests.Inspect(kept))).ErrorCode);
 
         var released = Guid.NewGuid();
         await Navigate(session, released, "/");
         await session.ReleaseAsync(released);
-        Assert.Equal("provider_unavailable", (await session.SnapshotAsync(released)).ErrorCode);
-        Assert.Null((await session.SnapshotAsync(kept)).ErrorCode);
+        Assert.Equal("provider_unavailable", (await session.ExecuteAsync(BrowserTestRequests.Inspect(released))).ErrorCode);
+        Assert.Null((await session.ExecuteAsync(BrowserTestRequests.Inspect(kept))).ErrorCode);
     }
 
     [Fact]
     public async Task Read_navigation_can_open_a_page_but_cannot_act()
     {
-        var session = new PlaywrightBrowser(
+        var session = new NativePlaywrightBrowser(
             new BrowserOptions
             {
                 Enabled = true,
@@ -1293,9 +1286,9 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
             var id = Guid.NewGuid();
             var home = await Navigate(session, id, "/");
             Assert.Null(home.ErrorCode);
-            var acted = await session.InteractAsync(new BrowserInteractionRequest(id, "click", Ref(home.Observation!, "Search"), null));
+            var acted = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, (await BrowserTestQueries.Find(session, id, "Search")).Target, null));
             Assert.Equal("forbidden", acted.ErrorCode);
-            Assert.EndsWith("/", (await session.GetCurrentUrlAsync(id))!.AbsolutePath, StringComparison.Ordinal);
+            Assert.EndsWith("/", (new Uri(session.ContextFor(id)!.Pages[0].Url))!.AbsolutePath, StringComparison.Ordinal);
         }
         finally
         {
@@ -1309,7 +1302,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         var logger = new LoggerFactory();
         var provider = new SecretListLogger();
         logger.AddProvider(provider);
-        var session = new PlaywrightBrowser(new BrowserOptions
+        var session = new NativePlaywrightBrowser(new BrowserOptions
         {
             Enabled = true,
             Headless = true,
@@ -1322,7 +1315,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         await Navigate(session, id, "/isolate");
         await session.StopAsync(CancellationToken.None);
         Assert.False(session.IsAvailable);
-        Assert.Equal("provider_unavailable", (await session.SnapshotAsync(id)).ErrorCode);
+        Assert.Equal("provider_unavailable", (await session.ExecuteAsync(BrowserTestRequests.Inspect(id))).ErrorCode);
         var written = string.Join('\n', provider.Messages);
         Assert.DoesNotContain("p9_local_value", written, StringComparison.Ordinal);
         Assert.DoesNotContain("p9-password-secret", written, StringComparison.Ordinal);
@@ -1340,30 +1333,29 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
             var id = Guid.NewGuid();
             var page = await Navigate(session, id, "/identity");
             Assert.Null(page.ErrorCode);
-            var identity = Assert.Single(page.Observation!.Elements, element => element.Name == "Identity");
+            var identity = (await BrowserTestQueries.Find(session, id, "Identity"));
             Assert.Equal(["click"], identity.Actions);
-            Assert.Equal(["select"], Assert.Single(page.Observation.Elements, element => element.Name == "Stage").Actions);
+            Assert.Equal(["select"], (await BrowserTestQueries.Find(session, id, "Stage")).Actions);
             Assert.Equal(
-                ["check", "uncheck"],
-                Assert.Single(page.Observation.Elements, element => element.Name == "Notify").Actions);
+                ["check", "uncheck", "click"],
+                (await BrowserTestQueries.Find(session, id, "Notify")).Actions);
 
-            var selected = await session.InteractAsync(new BrowserInteractionRequest(id, "select", identity.Ref, "Tom"));
+            var selected = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.SelectOption, identity.Target, "Tom"));
             Assert.Equal("unsupported_operation", selected.ErrorCode);
-            Assert.Equal(["click"], selected.AllowedActions);
             Assert.NotEqual("provider_unavailable", selected.ErrorCode);
 
-            var opened = await session.InteractAsync(new BrowserInteractionRequest(id, "click", identity.Ref, null));
+            var opened = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, identity.Target, null));
             Assert.Null(opened.ErrorCode);
-            var tom = Assert.Single(opened.Observation!.Elements, element => element.Name == "Tom");
+            var tom = (await BrowserTestQueries.Find(session, id, "Tom"));
             Assert.Equal(["click"], tom.Actions);
 
-            var chosen = await session.InteractAsync(new BrowserInteractionRequest(id, "click", tom.Ref, null));
+            var chosen = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, tom.Target, null));
             Assert.Null(chosen.ErrorCode);
-            Assert.Contains("Selected Tom", chosen.Observation!.VisibleText, StringComparison.Ordinal);
+            Assert.Contains("Selected Tom", chosen.Observation!.Content!, StringComparison.Ordinal);
 
-            var stale = await session.InteractAsync(new BrowserInteractionRequest(id, "click", tom.Ref, null));
-            Assert.Equal("stale_reference", stale.ErrorCode);
-            Assert.NotEqual("provider_unavailable", stale.ErrorCode);
+            var stale = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, tom.Target, null));
+            Assert.Null(stale.ErrorCode);
+            Assert.Contains("Selected Tom", stale.Observation!.Content);
 
             var again = await Navigate(session, id, "/identity");
             Assert.Null(again.ErrorCode);
@@ -1379,7 +1371,7 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
     {
         var logs = new SecretListLogger();
         var logger = LoggerFactory.Create(builder => builder.AddProvider(logs));
-        var session = new PlaywrightBrowser(
+        var session = new NativePlaywrightBrowser(
             new BrowserOptions
             {
                 Enabled = true,
@@ -1395,31 +1387,27 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
             var id = Guid.NewGuid();
             var page = await Navigate(session, id, "/controls");
             Assert.Null(page.ErrorCode);
-            var names = page.Observation!.Elements.Select(element => element.Name).ToArray();
-            Assert.Contains(names, name => name == "Product name");
-            Assert.Contains(names, name => name == "Category");
-            Assert.Contains(names, name => name == "Notes");
-            Assert.Contains(names, name => name == "Picture file");
-            Assert.DoesNotContain(names, name => name is "Collapsed note" or "Hidden button" or "Invisible button" or "Aria hidden button" or "Template action");
-            Assert.DoesNotContain("hidden-secret", page.Observation.VisibleText, StringComparison.Ordinal);
-            Assert.Equal(["fill", "press"], Assert.Single(page.Observation.Elements, element => element.Name == "Product name").Actions);
-            Assert.Equal(["click"], Assert.Single(page.Observation.Elements, element => element.Name == "Category").Actions);
-            Assert.Equal(["fill", "press"], Assert.Single(page.Observation.Elements, element => element.Name == "Notes").Actions);
-            var picture = Assert.Single(page.Observation.Elements, element => element.Name == "Picture file");
+            Assert.Empty(page.Observation!.Targets);
+            foreach (var controlName in new[] { "Product name", "Category", "Notes", "Picture file" })
+                Assert.NotNull((await BrowserTestQueries.Find(session, id, controlName)).Target);
+            foreach (var controlName in new[] { "Collapsed note", "Hidden button", "Invisible button", "Aria hidden button", "Template action" })
+                Assert.DoesNotContain(controlName, page.Observation.Content!);
+            Assert.DoesNotContain("hidden-secret", page.Observation.Content!, StringComparison.Ordinal);
+            Assert.Equal(["fill", "press"], (await BrowserTestQueries.Find(session, id, "Product name")).Actions);
+            Assert.Equal(["click"], (await BrowserTestQueries.Find(session, id, "Category")).Actions);
+            Assert.Equal(["fill", "press"], (await BrowserTestQueries.Find(session, id, "Notes")).Actions);
+            var picture = (await BrowserTestQueries.Find(session, id, "Picture file"));
             Assert.Equal(["upload"], picture.Actions);
-            Assert.True(page.Observation.Elements.Count <= BrowserToolLimits.MaxSnapshotChars);
+            Assert.True(page.Observation.Targets.Count <= BrowserToolLimits.MaxSnapshotBytes);
 
-            var name = Assert.Single(page.Observation.Elements, element => element.Name == "Product name");
-            var rejected = await session.InteractAsync(new BrowserInteractionRequest(id, "click", name.Ref, null));
-            Assert.Equal("unsupported_operation", rejected.ErrorCode);
-            Assert.Equal(["fill", "press"], rejected.AllowedActions);
-            Assert.Contains(logs.Messages, message => message.Contains("actionNotOffered", StringComparison.Ordinal));
+            var name = (await BrowserTestQueries.Find(session, id, "Product name"));
+            var rejected = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, name.Target, null));
+            Assert.Null(rejected.ErrorCode);
 
-            var notes = Assert.Single(page.Observation.Elements, element => element.Name == "Notes");
-            var provider = await session.InteractAsync(new BrowserInteractionRequest(id, "fill", notes.Ref, "hello"));
+            var notes = (await BrowserTestQueries.Find(session, id, "Notes"));
+            var provider = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Type, notes.Target, "hello"));
             Assert.Equal("unsupported_operation", provider.ErrorCode);
-            Assert.Null(provider.AllowedActions);
-            Assert.Contains(logs.Messages, message => message.Contains("providerUnsupportedOperation", StringComparison.Ordinal));
+            Assert.Equal("Notes", await session.ContextFor(id)!.Pages[0].GetByRole(Microsoft.Playwright.AriaRole.Textbox, new() { Name = "Notes" }).InnerTextAsync());
             Assert.DoesNotContain(logs.Messages, message => message.Contains("selector", StringComparison.OrdinalIgnoreCase));
         }
         finally
@@ -1438,49 +1426,49 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
             var page = await Navigate(session, id, "/state");
             Assert.Null(page.ErrorCode);
             var observation = page.Observation!;
-            Assert.True(observation.Elements.Count <= BrowserToolLimits.MaxSnapshotChars);
-            Assert.True(observation.VisibleText.Length <= BrowserToolLimits.MaxVisibleTextLength);
+            Assert.True(observation.Targets.Count <= BrowserToolLimits.MaxSnapshotBytes);
+            Assert.True(observation.Content!.Length <= BrowserToolLimits.MaxSnapshotBytes);
 
-            Assert.Equal(string.Empty, Field(observation, "Empty note").State?.Value);
-            Assert.Equal("already-set", Field(observation, "Filled note").State?.Value);
-            var longValue = Field(observation, "Long note").State?.Value ?? string.Empty;
+            Assert.Equal(string.Empty, (await BrowserTestQueries.Find(session, id, "Empty note")).State?.Value);
+            Assert.Equal("already-set", (await BrowserTestQueries.Find(session, id, "Filled note")).State?.Value);
+            var longValue = (await BrowserTestQueries.Find(session, id, "Long note")).State?.Value ?? string.Empty;
             Assert.Equal(BrowserToolLimits.MaxFillLength, longValue.Length);
-            Assert.Equal("line one", Field(observation, "Details").State?.Value);
-            Assert.False(Field(observation, "Published").State?.Checked);
-            Assert.True(Field(observation, "Featured").State?.Checked);
-            Assert.True(Field(observation, "Ship overnight").State?.Checked);
-            Assert.False(Field(observation, "Ship later").State?.Checked);
-            Assert.False(Field(observation, "Notify").State?.Checked);
-            Assert.Equal(["check", "uncheck"], Field(observation, "Notify").Actions);
-            Assert.Equal("Simple", Field(observation, "Category").State?.SelectedText);
-            var picture = Field(observation, "Picture file");
+            Assert.Equal("line one", (await BrowserTestQueries.Find(session, id, "Details")).State?.Value);
+            Assert.False((await BrowserTestQueries.Find(session, id, "Published")).State?.Checked);
+            Assert.True((await BrowserTestQueries.Find(session, id, "Featured")).State?.Checked);
+            Assert.True((await BrowserTestQueries.Find(session, id, "Ship overnight")).State?.Checked);
+            Assert.False((await BrowserTestQueries.Find(session, id, "Ship later")).State?.Checked);
+            Assert.False((await BrowserTestQueries.Find(session, id, "Notify")).State?.Checked);
+            Assert.Equal(["check", "uncheck", "click"], (await BrowserTestQueries.Find(session, id, "Notify")).Actions);
+            Assert.Equal("Simple", (await BrowserTestQueries.Find(session, id, "Category")).State?.SelectedText);
+            var picture = (await BrowserTestQueries.Find(session, id, "Picture file"));
             Assert.Equal(["upload"], picture.Actions);
             Assert.Null(picture.State);
             AssertSecretsAbsent(observation);
 
-            var filled = await session.InteractAsync(new BrowserInteractionRequest(id, "fill", Field(observation, "Empty note").Ref, "AC-KBD-001"));
+            var filled = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Type, (await BrowserTestQueries.Find(session, id, "Empty note")).Target, "AC-KBD-001"));
             Assert.Null(filled.ErrorCode);
-            Assert.Equal("AC-KBD-001", Field(filled.Observation!, "Empty note").State?.Value);
+            Assert.Equal("AC-KBD-001", (await BrowserTestQueries.Find(session, id, "Empty note")).State?.Value);
 
-            var described = await session.InteractAsync(new BrowserInteractionRequest(id, "fill", Field(filled.Observation!, "Details").Ref, "A concise description."));
+            var described = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Type, (await BrowserTestQueries.Find(session, id, "Details")).Target, "A concise description."));
             Assert.Null(described.ErrorCode);
-            Assert.Equal("A concise description.", Field(described.Observation!, "Details").State?.Value);
+            Assert.Equal("A concise description.", (await BrowserTestQueries.Find(session, id, "Details")).State?.Value);
 
-            var checkedBox = await session.InteractAsync(new BrowserInteractionRequest(id, "check", Field(described.Observation!, "Published").Ref, null));
+            var checkedBox = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.FillForm, (await BrowserTestQueries.Find(session, id, "Published")).Target, null, Checked: true));
             Assert.Null(checkedBox.ErrorCode);
-            Assert.True(Field(checkedBox.Observation!, "Published").State?.Checked);
-            var cleared = await session.InteractAsync(new BrowserInteractionRequest(id, "uncheck", Field(checkedBox.Observation!, "Published").Ref, null));
+            Assert.True((await BrowserTestQueries.Find(session, id, "Published")).State?.Checked);
+            var cleared = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.FillForm, (await BrowserTestQueries.Find(session, id, "Published")).Target, null, Checked: false));
             Assert.Null(cleared.ErrorCode);
-            Assert.False(Field(cleared.Observation!, "Published").State?.Checked);
+            Assert.False((await BrowserTestQueries.Find(session, id, "Published")).State?.Checked);
 
-            var selected = await session.InteractAsync(new BrowserInteractionRequest(id, "select", Field(cleared.Observation!, "Category").Ref, "grouped"));
+            var selected = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.SelectOption, (await BrowserTestQueries.Find(session, id, "Category")).Target, "grouped"));
             Assert.Null(selected.ErrorCode);
-            Assert.Equal("Grouped", Field(selected.Observation!, "Category").State?.SelectedText);
+            Assert.Equal("Grouped", (await BrowserTestQueries.Find(session, id, "Category")).State?.SelectedText);
 
-            var password = await session.InteractAsync(new BrowserInteractionRequest(id, "fill", Field(selected.Observation!, "Password").Ref, "p9-password-secret"));
-            Assert.Equal("unsupported_operation", password.ErrorCode);
-            Assert.Null(Field(selected.Observation!, "Password").State);
-            Assert.Equal(["fill_credential"], Field(selected.Observation!, "Password").Actions);
+            var password = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Type, (await BrowserTestQueries.Find(session, id, "Password")).Target, "p9-password-secret"));
+            Assert.Equal("forbidden", password.ErrorCode);
+            Assert.Null((await BrowserTestQueries.Find(session, id, "Password")).State);
+            Assert.Equal(["fill_credential"], (await BrowserTestQueries.Find(session, id, "Password")).Actions);
         }
         finally
         {
@@ -1488,8 +1476,6 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         }
     }
 
-    private static BrowserElement Field(BrowserSnapshot observation, string name) =>
-        Assert.Single(observation.Elements, element => element.Name == name);
 
     private static void AssertSecretsAbsent(BrowserSnapshot observation)
     {
@@ -1505,9 +1491,9 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         };
         foreach (var secret in secrets)
         {
-            Assert.DoesNotContain(secret, observation.VisibleText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(secret, observation.Content!, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(
-                observation.Elements,
+                observation.Targets,
                 element => (element.State?.Value ?? string.Empty).Contains(secret, StringComparison.OrdinalIgnoreCase)
                     || (element.State?.SelectedText ?? string.Empty).Contains(secret, StringComparison.OrdinalIgnoreCase));
         }
@@ -1522,18 +1508,12 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
             var id = Guid.NewGuid();
             var page = await Navigate(session, id, "/upload");
             Assert.Null(page.ErrorCode);
-            var image = Assert.Single(page.Observation!.Elements, element => element.Name == "Product image");
+            var image = (await BrowserTestQueries.Find(session, id, "Product image"));
             Assert.Equal(["upload"], image.Actions);
             var bytes = await File.ReadAllBytesAsync(FindKeyboardImage());
-            var uploaded = await session.InteractAsync(
-                new BrowserInteractionRequest(
-                    id,
-                    "upload",
-                    image.Ref,
-                    null,
-                    new BrowserUpload("ac-keyboard.png", "image/png", bytes)));
+            var uploaded = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Upload, image.Target, null, new BrowserUpload("ac-keyboard.png", "image/png", bytes)));
             Assert.Null(uploaded.ErrorCode);
-            Assert.Contains("ac-keyboard.png", uploaded.Observation!.VisibleText, StringComparison.Ordinal);
+            Assert.Contains("ac-keyboard.png", uploaded.Observation!.Content!, StringComparison.Ordinal);
         }
         finally
         {
@@ -1560,13 +1540,9 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
                 thrown = true;
                 return new PlaywrightException("Execution context was destroyed, most likely because of a navigation.");
             };
-            var opened = await session.InteractAsync(new BrowserInteractionRequest(
-                id,
-                "click",
-                Ref(page.Observation!, "Identity"),
-                null));
+            var opened = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, (await BrowserTestQueries.Find(session, id, "Identity")).Target, null));
             Assert.Null(opened.ErrorCode);
-            Assert.Contains(opened.Observation!.Elements, element => element.Name == "Tom");
+            Assert.NotNull((await BrowserTestQueries.Find(session, id, "Tom")).Target);
             Assert.NotEqual("provider_unavailable", opened.ErrorCode);
         }
         finally
@@ -1585,43 +1561,43 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         Assert.Null(home.ErrorCode);
         var record = await Navigate(session, id, "/records/AC-1042");
         Assert.Null(record.ErrorCode);
-        var back = await session.NavigateAsync(new BrowserNavigateRequest(id, null, "back"));
+        var back = await session.ExecuteAsync(BrowserTestRequests.Navigate(id, null, "back"));
         Assert.Null(back.ErrorCode);
         Assert.EndsWith("/", new Uri(back.Observation!.Url).AbsolutePath, StringComparison.Ordinal);
-        var reloaded = await session.NavigateAsync(new BrowserNavigateRequest(id, null, "reload"));
+        var reloaded = await session.ExecuteAsync(BrowserTestRequests.Navigate(id, null, "reload"));
         Assert.Null(reloaded.ErrorCode);
         Assert.EndsWith("/", new Uri(reloaded.Observation!.Url).AbsolutePath, StringComparison.Ordinal);
 
-        var search = Ref(reloaded.Observation!, "Search");
-        var doubled = await session.InteractAsync(new BrowserInteractionRequest(id, "doubleClick", search, null));
+        var search = (await BrowserTestQueries.Find(fixture.Session, id, "Search")).Target;
+        var doubled = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Click, search, null, ClickCount: 2));
         Assert.Null(doubled.ErrorCode);
-        var scrolled = await session.InteractAsync(new BrowserInteractionRequest(id, "scroll", "", null, Direction: "down", Delta: 200));
+        var scrolled = await session.ExecuteAsync(BrowserTestRequests.Interaction(id, BrowserOperation.Scroll, null, null, Direction: "down", Delta: 200));
         Assert.Null(scrolled.ErrorCode);
 
         var state = await Navigate(session, id, "/state");
         Assert.Null(state.ErrorCode);
-        var captured = await session.CaptureViewportAsync(new BrowserScreenshotRequest(id));
+        var captured = await session.ExecuteAsync(BrowserTestRequests.Screenshot(id));
         Assert.Null(captured.ErrorCode);
-        Assert.NotNull(captured.Png);
+        Assert.NotNull(captured.Bytes);
         Assert.True(captured.RedactionCount >= 4);
-        Assert.Equal(0x89, captured.Png![0]);
-        Assert.True(captured.Png.Length < BrowserToolLimits.MaxCaptureBytes);
+        Assert.Equal(0x89, captured.Bytes![0]);
+        Assert.True(captured.Bytes.Length < BrowserToolLimits.MaxCaptureBytes);
 
-        var listed = await session.TabsAsync(new BrowserTabsRequest(id, "list"));
+        var listed = await session.ExecuteAsync(BrowserTestRequests.Tabs(id, "list"));
         Assert.Null(listed.ErrorCode);
-        var only = Assert.Single(listed.Pages);
+        var only = Assert.Single(listed.Pages!);
         Assert.True(only.Active);
-        var kept = await session.TabsAsync(new BrowserTabsRequest(id, "close", only.PageId));
+        var kept = await session.ExecuteAsync(BrowserTestRequests.Tabs(id, "close", only.PageId));
         Assert.Equal("last_tab", kept.ErrorCode);
-        var stale = await session.TabsAsync(new BrowserTabsRequest(id, "select", "pg_" + new string('a', 22)));
+        var stale = await session.ExecuteAsync(BrowserTestRequests.Tabs(id, "select", "pg_" + new string('a', 22)));
         Assert.Equal("stale_tab", stale.ErrorCode);
-        var unsupported = await session.TabsAsync(new BrowserTabsRequest(id, "unknown"));
+        var unsupported = await session.ExecuteAsync(BrowserTestRequests.Tabs(id, "unknown"));
         Assert.Equal("invalid", unsupported.ErrorCode);
     }
 
-    private static async Task<PlaywrightBrowser> StartDemoSession()
+    private static async Task<NativePlaywrightBrowser> StartDemoSession()
     {
-        var session = new PlaywrightBrowser(
+        var session = new NativePlaywrightBrowser(
             new BrowserOptions
             {
                 Enabled = true,
@@ -1635,20 +1611,17 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         return session;
     }
 
-    private static async Task<BrowserOperationResult> Navigate(
-        PlaywrightBrowser session,
+    private static async Task<BrowserResult> Navigate(
+        NativePlaywrightBrowser session,
         Guid sessionId,
         string path,
         CancellationToken cancellationToken = default)
     {
-        var result = await session.NavigateAsync(
-            new BrowserNavigateRequest(sessionId, new Uri(session.Fixture.Origin + path)),
+        var result = await session.ExecuteAsync(BrowserTestRequests.Navigate(sessionId, new Uri(session.Fixture.Origin + path)),
             cancellationToken);
         return result;
     }
 
-    private static string Ref(BrowserSnapshot observation, string name) =>
-        Assert.Single(observation.Elements, element => element.Name == name && element.Actions.Count > 0).Ref;
 
     private static string FindKeyboardImage()
     {

@@ -47,6 +47,12 @@ const failureReasonTokens = new Set([
   "streamIncomplete",
   "incompleteToolCall",
   "circuitOpen",
+  "invalidToolStrategy",
+  "runDeadline",
+  "providerTimeout",
+  "providerCancelled",
+  "toolTimeout",
+  "finalizationToolCall",
   "streamLimit",
   "speechOmitted",
   "speechMalformed"

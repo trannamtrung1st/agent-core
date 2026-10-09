@@ -51,8 +51,10 @@ public sealed class SecretaryIdentityTests
         var signin = secretary.SkillList.Single(skill => skill.Id == "store.signin");
         Assert.Contains("credentials.list", signin.Procedure, StringComparison.Ordinal);
         Assert.Contains("fill_credential", signin.Procedure, StringComparison.Ordinal);
-        Assert.Contains("store-admin", signin.Procedure, StringComparison.Ordinal);
-        Assert.Contains("http://127.0.0.1:5088/Admin", signin.Procedure, StringComparison.Ordinal);
+        Assert.Contains("bound credentialRef", signin.Procedure, StringComparison.Ordinal);
+        Assert.Contains("location supplied by the owner or approved knowledge", signin.Procedure, StringComparison.Ordinal);
+        Assert.Contains("browser.find", signin.Procedure, StringComparison.Ordinal);
+        Assert.DoesNotContain("browser.click fill_credential", signin.Procedure, StringComparison.Ordinal);
         Assert.Contains("Detached work cannot fill credentials", signin.Procedure, StringComparison.Ordinal);
         Assert.DoesNotContain(ToolCatalog.CredentialsList, RoleEnvironments.Of(secretary).ToolList);
         var daily = secretary.SkillList.Single(skill => skill.Id == "store.daily.review");
@@ -84,49 +86,30 @@ public sealed class SecretaryIdentityTests
     public async Task Retired_general_definitions_are_absent_from_the_runtime_catalog()
     {
         var current = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
-        for (var version = 1; version <= 16; version++)
+        for (var version = 1; version <= 20; version++)
             Assert.Null(await current.GetAsync("general-assistant", version));
-        Assert.Equal(17, (await current.GetAsync("general-assistant"))!.Version);
+        Assert.Equal(21, (await current.GetAsync("general-assistant"))!.Version);
     }
 
     [Fact]
     public async Task Skill_load_does_not_add_browser_tools_to_a_definition_that_lacks_them()
     {
         var product = Assert.Single((await LoadSecretaryAsync()).SkillList, skill => skill.Id == "store.product.manage");
-        Assert.Contains("AC-KBD-001", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("ac-keyboard.png", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("$99", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("concise product description", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("including when the owner asks for one", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("storefront", product.Procedure, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Go directly to SKU", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("click its Go button once", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("Remaining on the List page after that Go action is the absence signal", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("edit that product and do not create another", product.Procedure, StringComparison.Ordinal);
-        Assert.DoesNotContain("/Admin/Product/List?GoDirectlyToSku=", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("/Admin/Product/Create", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("/search?q=", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("artifacts.create_from_workspace", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("Save and Continue", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("Multimedia", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("Never pass ac-keyboard.png as artifactId", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("/Admin/Product/Edit/{id}", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("Do not return to /Admin/Product/Create after a product was successfully created", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("repair the current persisted product", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("observe the current edit page before deciding whether another create is necessary", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("inspect and repair the existing product, not create a duplicate", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("Create only when the initial check showed that no intended product exists", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("direct semantic targets", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("scope duplicate labels with one unique within row/group", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("Verify required values and checked states before saving", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("never blindly create a duplicate", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("browser.upload with the returned artifactId", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("A filename is not an artifactId", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("observe the current page after navigation", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("Independently inspect the public product", product.Procedure, StringComparison.Ordinal);
+        Assert.Contains("A Save click is not completion", product.Procedure, StringComparison.Ordinal);
+        Assert.DoesNotContain("browser.click with that artifact id", product.Procedure, StringComparison.Ordinal);
         Assert.Equal(SkillProjection.OnDemand, product.Projection);
         Assert.Contains(ToolCatalog.ArtifactsCreateFromWorkspace, product.RequiredCapabilities);
-        Assert.Contains("dashboard", product.Procedure, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("A Save or Publish click is not completion", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("read that element's state in the next observation", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("Before Save and Continue on a newly created product", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("Short Description containing the requested concise description", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("do not Save and Continue", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("pre-save state is established", product.Procedure, StringComparison.Ordinal);
-        Assert.Contains("observe evidence that the upload was accepted", product.Procedure, StringComparison.Ordinal);
         Assert.Contains(ToolCatalog.BrowserNavigate, product.RequiredCapabilities);
+        Assert.Contains(ToolCatalog.BrowserFind, product.RequiredCapabilities);
+        Assert.Contains(ToolCatalog.BrowserUpload, product.RequiredCapabilities);
         var bare = SampleDefinitions.Examiner with
         {
             Skills = [product],
@@ -437,7 +420,7 @@ public sealed class SecretaryIdentityTests
         while (dir is not null)
         {
             var agents = Path.Combine(dir.FullName, "agents");
-            if (File.Exists(Path.Combine(agents, "secretary-v3.json")))
+            if (File.Exists(Path.Combine(agents, "secretary-v8.json")))
             {
                 return agents;
             }

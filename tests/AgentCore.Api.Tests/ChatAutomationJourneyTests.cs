@@ -40,7 +40,7 @@ public sealed class ChatAutomationJourneyTests
         });
         var services = host.Services;
         var instanceId = (await services.GetRequiredService<AdminAgentInstanceService>()
-            .CreateManagedAsync("general-assistant", 17)).InstanceId;
+            .CreateManagedAsync("general-assistant", 21)).InstanceId;
         var experience = services.GetRequiredService<IExperienceStore>();
         await experience.ConfigureAsync(instanceId, 0, true);
         await experience.ConfigureMaintenanceAsync(instanceId, 0, true);

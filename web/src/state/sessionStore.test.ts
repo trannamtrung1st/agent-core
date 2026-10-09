@@ -1085,6 +1085,17 @@ describe("agent.progress", () => {
     expect(state.activeProgress).toBeNull();
   });
 
+  it("rejects late active progress after terminal history is restored without tombstones", () => {
+    for (const status of ["completed", "failed", "interrupted"] as const) {
+      const initial = applyServerEvent({ ...emptySession(), attachmentId: "a1" }, event({
+        type: "agent.response.started", sequence: 1, responseId: "r1", payload: { entryId: "e1", entrySequence: 1 }
+      }));
+      const restored = { ...initial, liveResponseId: null, tombstones: {}, entries: initial.entries.map(e => ({ ...e, status })) };
+      const state = applyServerEvent(restored, progress(2, { payload: { kind: "runningTool", state: "updated", message: "Still working" } }));
+      expect(state.activeProgress).toBeNull();
+    }
+  });
+
   it("clears progress on first user-visible assistant text", () => {
     let state = applyServerEvent(
       { ...emptySession(), attachmentId: "a1", liveResponseId: "r1" },
