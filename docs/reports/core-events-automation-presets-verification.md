@@ -2,6 +2,8 @@
 
 Status: closed on verified behavior `743429ebb9a1e8b5989744a704f89e09bc25ff21` on `develop/branch-1`, 2026-10-10 Asia/Ho_Chi_Minh. All required local gates and all five [exact-SHA hosted jobs](https://github.com/trannamtrung1st/agent-core/actions/runs/37982193102) pass. The closure commit changes documentation only; it does not introduce new behavior.
 
+Post-closure review: complete on verified behavior `af3dab60c904564bde5f8e2ea09a9f6f355be0de`, with all five [hosted gates](https://github.com/trannamtrung1st/agent-core/actions/runs/37989802149) green. The follow-up below records four corrected defects, ten new regression cases and actual Playwright MCP verification. The final evidence commit changes documentation only.
+
 ## Scope and baseline
 
 Implementation starts at 16ed2365fb24e5c7b010df1ed6e77860afaa9862. The proposal is local/proposals/agent-core-core-events-filtering-presets-final-20261010.md. Remote main advanced to 347b8657f2c91a80b75ed5031dff73c067effcab during implementation; its model continuation, reasoning, budget UI and terminal reply-time changes are integrated before final verification. Historical freeze reports and published Definitions remain evidence for their original changes.
@@ -106,4 +108,24 @@ Final integrated Core Event and Chat journeys pass **8/8** against the corrected
 
 The first review candidate `2daa857a129af8d667ce70120fd8a406421c1d82` was pushed to `origin/develop/branch-1` before the final packing correction. Its complete local backend gate, `dotnet test AgentCore.sln --nologo -p:UseSharedCompilation=false -m:1`, passes **3,128 tests, 16 opt-in provider skips, zero failures**: Domain 184; Application 1,522 / 5 skips; Infrastructure 1,012 / 9 skips; API 406 / 2 skips; OrderEvents plugin 4. The final log is `/tmp/core-events-review-final-backend.log`. The final packing candidate supersedes this intermediate evidence and adds four regression cases; its complete gates are recorded below.
 
-Intermediate hosted workflow [37988061091](https://github.com/trannamtrung1st/agent-core/actions/runs/37988061091) passed Compose and several acceptance steps, then was cancelled when the packing-boundary defect was found. It does not establish final review acceptance. The packing reproduction is `/tmp/core-events-review-budget-repro.log` (four failures); the corrected 155-test gate is `/tmp/core-events-review-budget-focused.log`. Final candidate SHA and full/hosted gates are recorded below after completion. Local logs use `/tmp/core-events-review-*`; they are disposable evidence. This review does not move the original feature freeze or open P10/P11.
+Intermediate hosted workflow [37988061091](https://github.com/trannamtrung1st/agent-core/actions/runs/37988061091) passed Compose and several acceptance steps, then was cancelled when the packing-boundary defect was found. It does not establish final review acceptance. The packing reproduction is `/tmp/core-events-review-budget-repro.log` (four failures); the corrected 155-test gate is `/tmp/core-events-review-budget-focused.log`. Final candidate SHA and full/hosted gates are recorded below. Local logs use `/tmp/core-events-review-*`; they are disposable evidence. This review does not move the original feature freeze or open P10/P11.
+
+
+### Final review candidate
+
+Final corrected behavior: `af3dab60c904564bde5f8e2ea09a9f6f355be0de` on `develop/branch-1`. The original feature freeze remains `743429eb`; the review is a bounded follow-up. All ten added regression cases are included. The 155-test focused Infrastructure gate and eight integrated Core/Chat journeys pass on the final source. The complete local backend gate `dotnet test AgentCore.sln --nologo -p:UseSharedCompilation=false -m:1` passes **3,132 tests, 16 opt-in provider skips, zero failures** on this SHA: Domain 184; Application 1,522 / 5 skips; Infrastructure 1,016 / 9 skips; API 406 / 2 skips; OrderEvents plugin 4. Its log is `/tmp/core-events-review-packing-backend.log`. All five exact-SHA hosted gates pass, as recorded below.
+
+All eleven browser regressions pass again on this exact SHA in 1.7 minutes using the five-file command above, ports 5870/5871/5894 and fresh `/tmp/core-events-review-final-ui-af3dab60` roots. The log is `/tmp/core-events-review-final-browser.log`. Frontend source and design metadata are unchanged throughout the review, so the 24-test/build and actual MCP evidence above still apply. Final documentation checks pass for four changed documents, 170 relative links/anchors, seven complete JSON examples and balanced fences; `git diff --check` passes.
+
+Final hosted workflow: [37989802149](https://github.com/trannamtrung1st/agent-core/actions/runs/37989802149), testing exactly `af3dab60c904564bde5f8e2ea09a9f6f355be0de`. Its conclusion and all five job conclusions are **success**. The superseded cancelled workflow is not acceptance evidence.
+
+
+| Hosted gate on af3dab60 | Result |
+| --- | --- |
+| [Backend](https://github.com/trannamtrung1st/agent-core/actions/runs/37989802149/job/114020769215) | **Pass:** 3,122 tests, 22 skips: Domain 184; Infrastructure 1,010 / 15 skips; Application 1,522 / 5 skips; API 406 / 2 skips. The six Docker sandbox cases and four plugin tests pass locally; the other 16 skips are opt-in live-provider probes. |
+| [Frontend](https://github.com/trannamtrung1st/agent-core/actions/runs/37989802149/job/114020769217) | **Pass:** 832 tests across 105 files, zero failures/skips, and production build; 25m37s. Recurrence validation remains within its original 30-second limit (21.8 seconds). |
+| [Core Playwright](https://github.com/trannamtrung1st/agent-core/actions/runs/37989802149/job/114020769083) | **Pass:** 141/141 scenarios across Synthetic/browser STT/browser speech projects, 26.1 minutes of tests; no failures, skips or retries. |
+| [Acceptance Playwright](https://github.com/trannamtrung1st/agent-core/actions/runs/37989802149/job/114020768951) | **Pass:** all 16 scenarios across seven configured invocations; 12m47s. |
+| [Compose](https://github.com/trannamtrung1st/agent-core/actions/runs/37989802149/job/114020769026) | **Pass:** owner-capability access and SQLite volume survival; `compose sqlite volume check passed`; 2m46s. |
+
+All completed hosted logs are collected through GitHub's job-log API. Files use `/tmp/core-events-review-final-hosted-{backend,frontend,core,acceptance,compose}.log`; no user database, provider credential or existing host was reset. All task-owned local verification hosts are stopped. The evidence commit records acceptance without changing verified behavior; opt-in provider quality and physical audio remain the same explicit boundaries as the original feature closure.
