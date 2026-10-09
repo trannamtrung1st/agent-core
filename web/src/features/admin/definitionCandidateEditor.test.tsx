@@ -685,11 +685,11 @@ describe("definition candidate editor", () => {
     await openDraft();
     setText("System instructions", "Keep this edit");
     await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Capabilities" })); });
-    expect(await screen.findByText("Authorized: 33 · Always projected: 33")).toBeInTheDocument();
+    expect(await screen.findByText("Authorized: 33 · Always selected: 33")).toBeInTheDocument();
     fireEvent.mouseDown(screen.getByLabelText("Authorized capabilities"));
     fireEvent.change(screen.getByLabelText("Authorized capabilities"), { target: { value: tools[33] } });
     await act(async () => { fireEvent.click(await screen.findByTitle(tools[33])); });
-    expect(screen.getByText("Authorized: 34 · Always projected: 33")).toBeInTheDocument();
+    expect(screen.getByText("Authorized: 34 · Always selected: 33")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save draft" })).toBeEnabled();
   });
 
@@ -701,8 +701,9 @@ describe("definition candidate editor", () => {
     await openDraft();
     setText("System instructions", "Keep this edit");
     await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Capabilities" })); });
-    expect(await screen.findByText("Authorized: 2 · Always projected: 1")).toBeInTheDocument();
+    expect(await screen.findByText("Authorized: 2 · Always selected: 1")).toBeInTheDocument();
     expect(screen.getByLabelText("Always projected capabilities")).toBeInTheDocument();
+    expect(screen.getByText("Core also includes authorized, eligible Browser v2 bootstrap tools and active Skill requirements. These can appear without an Always selection; permission still comes from Authorized capabilities.")).toBeVisible();
     expect(screen.getByText("1 available on demand when configured and eligible. Context-only capabilities remain controlled by Core.")).toBeVisible();
     const disclosure = screen.getByRole("button", { name: "View on-demand capabilities" });
     expect(disclosure).toHaveAttribute("aria-expanded", "false");
