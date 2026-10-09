@@ -12,7 +12,6 @@ using AgentCore.Domain.Triggers;
 using AgentCore.Infrastructure.Admin;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Time.Testing;
 
@@ -89,7 +88,8 @@ public sealed class SqliteAdminP7eHistoryMutatorTests : AdminP7eHistoryMutatorTe
     private static async Task WithSqliteAsync(Func<IDbContextFactory<AgentCoreDbContext>, Task> exercise)
     {
         var path = Path.Combine(Path.GetTempPath(), $"agent-core-p7e-history-{Guid.NewGuid():N}.db");
-        var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
+        // Global pool cleanup in another fixture must not dispose this fixture's handles.
+        var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path};Pooling=False").Options;
         var factory = new SqliteContextFactory(options);
         try
         {
@@ -98,7 +98,6 @@ public sealed class SqliteAdminP7eHistoryMutatorTests : AdminP7eHistoryMutatorTe
         }
         finally
         {
-            SqliteConnection.ClearAllPools();
             if (File.Exists(path))
             {
                 File.Delete(path);

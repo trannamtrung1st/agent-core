@@ -58,6 +58,7 @@ test("collection links wrap without overlapping adjacent cells at desktop and mo
   await expect(details.getByText("No action", { exact: true }).first()).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(details).toBeHidden();
+  await page.getByRole("tab", { name: "Activity", exact: true }).click();
   await page.getByRole("tab", { name: "Runs", exact: true }).click();
   const runs = page.getByRole("table", { name: "Runs table", exact: true });
   await expect(runs).toContainText("Scheduled task");
@@ -108,7 +109,7 @@ test("Skill and event-source action buttons stay together across table widths", 
   const source = await page.request.post("/api/v2/admin/connections/events", { headers, data: { displayName: sourceName, eventKey: `overflow.${Date.now()}` } });
   expect(source.ok()).toBe(true);
   await page.goto("/admin/connections/events");
-  const copy = page.getByRole("button", { name: `Rotate credential for ${sourceName}`, exact: true });
+  const copy = page.getByRole("button", { name: `More actions for ${sourceName}`, exact: true });
   await expect(copy).toBeVisible();
   await checkActions(copy.locator("xpath=ancestor::td"));
 });

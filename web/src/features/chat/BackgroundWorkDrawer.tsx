@@ -14,11 +14,11 @@ import { formatChatTime } from "./chatTime";
 import { SessionArtifacts } from "./SessionArtifacts";
 import { adminInstancePath, navigateToAppPath } from "../../app/appRoute";
 
-export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
-  instanceId: string; open: boolean; wide: boolean; onClose: () => void;
+export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialSessionId, onOpenConversation, afterClose }: {
+  instanceId: string; open: boolean; wide: boolean; onClose: () => void; initialSessionId?: string; onOpenConversation?: (sessionId: string) => void; afterClose?: () => void;
 }) {
   const { token } = theme.useToken();
-  const page = useCursorPages(instanceId, open, listBackgroundSessions);
+  const page = useCursorPages(instanceId, open && !initialSessionId, listBackgroundSessions);
   const [handlingRun, setHandlingRun] = useState<AgentRun | null>(null);
   const [handlingOpen, setHandlingOpen] = useState(false);
   const [selected, setSelected] = useState<BackgroundSession | null>(null);
@@ -26,6 +26,8 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
   const [markingRead, setMarkingRead] = useState(false);
   const [readFeedback, setReadFeedback] = useState<{ kind: "error" | "success"; message: string } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailRefresh, setDetailRefresh] = useState(0);
   const epoch = useRef(0); const actionPending = useRef(false);
   const list = useRef<HTMLUListElement | null>(null);
   const backButton = useRef<HTMLButtonElement | HTMLAnchorElement | null>(null);
@@ -37,7 +39,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
     historyOpener.current = null; moveFocus.current = false;
     setReadFeedback(null);
     return () => { epoch.current++; };
-  }, [instanceId, open]);
+  }, [instanceId, open, initialSessionId]);
   useEffect(() => {
     if (!open || !moveFocus.current) return;
     moveFocus.current = false;
@@ -49,6 +51,31 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
       ?? list.current?.querySelector<HTMLButtonElement>("[data-background-control]");
     opener?.focus({ preventScroll: true });
   }, [selected, open]);
+  useEffect(() => {
+    if (!open || !initialSessionId) return;
+    let current = true; let generation = 0;
+    setSelected(null); setDetailError(null);
+    async function load() {
+      const request = ++generation;
+      try {
+        const item = await getBackgroundSession(initialSessionId!);
+        if (!current || request !== generation) return;
+        if (item.session.agentInstanceId !== instanceId) throw new Error("This Session belongs to another Agent Instance.");
+        setSelected(item); setDetailError(null);
+      } catch (reason) {
+        if (current && request === generation) {
+          setSelected(null);
+          setDetailError(reason instanceof Error ? reason.message : "Unable to load background Session.");
+        }
+      }
+    }
+    void load(); const timer = window.setInterval(() => void load(), 5000);
+    return () => { current = false; window.clearInterval(timer); };
+  }, [open, initialSessionId, instanceId, detailRefresh]);
+  function refreshDetails() {
+    if (initialSessionId) setDetailRefresh(value => value + 1);
+    else void page.refresh();
+  }
   async function inspectHandlingRun(runId: string) {
     const generation = epoch.current; setHandlingRun(null); setHandlingOpen(true);
     try { const run = await getInstanceAgentRun(instanceId, runId); if (generation === epoch.current) setHandlingRun(run); }
@@ -73,6 +100,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
       const current = await getBackgroundSession(result.sessionId);
       if (generation !== epoch.current) return;
       page.replace(rows => rows.map(row => row.session.sessionId === current.session.sessionId ? current : row));
+      if (onOpenConversation) { onOpenConversation(current.session.sessionId); return; }
       await refreshCatalog(true);
       if (generation !== epoch.current) return;
       const opened = await openCatalogSession(current.session);
@@ -127,10 +155,11 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
       event.stopPropagation();
       onClose();
     }}
-    size={wide ? "min(640px, 100vw)" : "100vw"} className="background-work-drawer">
+    size={wide ? "min(640px, 100vw)" : "100vw"} className="background-work-drawer" afterOpenChange={visible => { if (!visible) afterClose?.(); }}>
     <Flex vertical gap={token.padding}>
+      {detailError ? <Alert type="error" showIcon title={detailError} action={<Button onClick={refreshDetails}>Retry background session</Button>} /> : null}
       {active ? <>
-        <Button ref={backButton} type="text" icon={<ArrowLeftOutlined aria-hidden />} style={{ alignSelf: "flex-start", paddingInline: token.paddingXS }} onClick={() => { moveFocus.current = true; setSelected(null); setActionError(null); }}>All background Sessions</Button>
+        <Button ref={backButton} type="text" icon={<ArrowLeftOutlined aria-hidden />} style={{ alignSelf: "flex-start", paddingInline: token.paddingXS }} onClick={() => { if (initialSessionId) { onClose(); return; } moveFocus.current = true; setSelected(null); setActionError(null); }}>{initialSessionId ? "Back to Activity" : "All background Sessions"}</Button>
         <Flex wrap align="center" gap={token.paddingXS}>
           <Typography.Text type="secondary">{runOriginLabel(active.origin.kind)}</Typography.Text>
           {active.completionDelivery ? <CompletionDeliveryStatus delivery={active.completionDelivery} onInspect={id => void inspectHandlingRun(id)} /> : null}
@@ -140,11 +169,11 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
         {active.surfaces.includes("ChatList") ? <Typography.Text type="secondary">Continued in chat</Typography.Text> : null}
         {automationLink(active)}
         <Typography.Text type="secondary">{fileCount(active)}</Typography.Text>
-        {active.initialRun ? <AgentRunDetails run={active.initialRun} onChange={() => void page.refresh()} />
+        {active.initialRun ? <AgentRunDetails run={active.initialRun} onChange={refreshDetails} />
           : <Alert type="info" title="The original run is unavailable." />}
         <Collapse items={[{ key: "history", label: "Conversation run history", children: <SessionRunHistory sessionId={active.session.sessionId} open={open} /> }]} />
         <SessionArtifacts sessionId={active.session.sessionId} agentRunId={active.origin.initialAgentRunId} open={open} />
-      </> : <>
+      </> : initialSessionId ? !detailError ? <Spin aria-label="Loading background Session" /> : null : <>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>Original task results stay here. Continue in chat to keep talking in the same Session.</Typography.Paragraph>
         <Flex vertical gap={token.paddingXS}>
           <Flex justify="flex-end">
@@ -180,7 +209,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose }: {
         {page.error ? <Alert type="error" showIcon title={page.error} /> : null}
         <DrawerListFooter loadingMore={page.loadingMore} hasMore={page.hasMore} error={page.error} count={page.items.length} onLoadMore={() => void page.loadMore()} onRetry={() => void page.retry()} />
       </>}
-      {actionError ? <Alert type="error" showIcon title={actionError} action={<Button onClick={() => void page.refresh()}>Refresh</Button>} /> : null}
+      {actionError ? <Alert type="error" showIcon title={actionError} action={<Button onClick={refreshDetails}>Refresh</Button>} /> : null}
     </Flex>
   </Drawer><AgentRunDetailDrawer run={handlingRun} open={handlingOpen} wide={wide} onClose={() => setHandlingOpen(false)} onChange={setHandlingRun} /></>;
 }

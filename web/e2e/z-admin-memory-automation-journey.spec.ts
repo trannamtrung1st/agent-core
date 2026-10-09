@@ -41,6 +41,6 @@ test("p7e admin memory and automation tabs exercise owner-protected APIs", async
 
   await page.getByRole("tab", { name: "Automation", exact: true }).click();
   await page.getByRole("tab", { name: "Policies & models", exact: true }).click();
-  await page.getByRole("tab", { name: "Automations", exact: true }).click();
+  await page.getByRole("tab", { name: "Triggers", exact: true }).click();
   await expect(page.getByRole("region", { name: "Automations", exact: true }).getByText(/No automations yet/)).toBeVisible();
 });

@@ -1,10 +1,21 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Memory;
 using AgentCore.Infrastructure.Providers.SemanticResponses;
 
 namespace AgentCore.Infrastructure.Tests;
 
 public sealed class NativeSemanticResponseParserTests
 {
+    [Theory]
+    [InlineData("resolve", MemoryProposalOperation.Resolve)]
+    [InlineData("delete", MemoryProposalOperation.Delete)]
+    public void Resolution_and_legacy_delete_reach_Core_as_proposals(string operation, MemoryProposalOperation expected)
+    {
+        var json = $$$"""{"displayText":"Understood.","speech":{"mode":"same"},"blocks":[],"memory":[{"operation":"{{{operation}}}","kind":"openLoop","subject":"Research","content":null,"source":"userExplicit"}]}""";
+        Assert.True(NativeSemanticResponseParser.TryParse(json, out var response, out _));
+        Assert.Equal(expected, Assert.Single(response!.Memory!).Operation);
+    }
+
     [Theory]
     [InlineData("", ProviderFailureReason.ResponseFunctionArgumentsInvalid)]
     [InlineData("not-json", ProviderFailureReason.InvalidJson)]
@@ -26,6 +37,9 @@ public sealed class NativeSemanticResponseParserTests
     [InlineData("not-json-step", ProviderFailureReason.InvalidJson)]
     [InlineData(
         """{"displayText":"Shown","speech":{"mode":"same"},"memory":[{"operation":"upsert","kind":"fact","subject":"x"}]}""",
+        ProviderFailureReason.InvalidMemoryProposal)]
+    [InlineData(
+        """{"displayText":"Shown","speech":{"mode":"same"},"memory":[{"operation":"resolve","kind":"openLoop","subject":"Research","scopeHint":"99","source":"userExplicit"}]}""",
         ProviderFailureReason.InvalidMemoryProposal)]
     public void TryParse_returns_a_bounded_failure_reason(string json, string expectedReason)
     {

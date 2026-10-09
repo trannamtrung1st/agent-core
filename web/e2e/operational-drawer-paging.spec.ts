@@ -52,7 +52,9 @@ test('Admin AgentRun pages survive resizing and refresh', async ({ page }) => {
     const start = before ? runs.findIndex(row => row.agentRunId === before) + 1 : 0;
     return route.fulfill({ json: cursorPage(runs, start, 20, row => row.agentRunId) });
   });
-  await page.goto(`/admin/instances/${instanceId}`); await page.getByRole('tab', { name: 'Runs', exact: true }).click();
+  await page.goto(`/admin/instances/${instanceId}`);
+  await page.getByRole('tab', { name: 'Activity', exact: true }).click();
+  await page.getByRole('tab', { name: 'Runs', exact: true }).click();
   const region = page.getByRole('region', { name: 'Runs', exact: true });
   const tableRows = region.locator('tbody tr.ant-table-row');
   await expect(tableRows).toHaveCount(20); await region.getByRole('button', { name: 'Load more', exact: true }).click();

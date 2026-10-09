@@ -83,7 +83,7 @@ test("admin unattended model and event sources stay operable at wide and narrow 
       sources = [{
         eventId,
         displayName: "Demo Store",
-        subscriberCount: 0, createdAt: "2026-10-08T00:00:00Z", updatedAt: "2026-10-08T00:00:00Z", lastReceivedAt: null,
+        subscriberCount: 0, activeSubscriberCount: 0, createdAt: "2026-10-08T00:00:00Z", updatedAt: "2026-10-08T00:00:00Z", lastReceivedAt: null,
         eventKey,
         status: sourceStatus,
         revision: 1
@@ -124,8 +124,9 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   await expect(sourcesRegion.getByText(eventKey, { exact: true })).toHaveText(eventKey);
 
   await page.setViewportSize({ width: 390, height: 800 });
-  await expect(sourcesRegion.getByRole("button", { name: "Rotate credential for Demo Store" })).toBeVisible();
-  await sourcesRegion.getByRole("button", { name: "Revoke Demo Store" }).click();
+  await expect(sourcesRegion.getByRole("button", { name: "More actions for Demo Store" })).toBeVisible();
+  await sourcesRegion.getByRole("button", { name: "More actions for Demo Store" }).click();
+  await page.getByRole("menuitem", { name: "Revoke Event", exact: true }).click();
   const confirm = page.getByRole("dialog", { name: "Revoke this Event?" });
   await confirm.getByRole("button", { name: "Revoke Event" }).click();
   await expect(sourcesRegion.getByText("Revoked", { exact: true })).toBeVisible();

@@ -40,8 +40,14 @@ public sealed record MemoryUpdateProposal(
 
 public sealed record MemorySearchQuery(string? Text, MemoryKind? Kind);
 
+public sealed record MemoryResolutionResult(bool Changed, IReadOnlyList<StructuredMemoryItem> Items);
+
 public interface IStructuredMemoryStore
 {
+    ValueTask<MemoryResolutionResult> ResolveOpenLoopsAsync(
+        TrustedMemoryOwner session, TrustedIdentityUserOwner? identity, TrustedUserOwner? user,
+        string subjectKey, DateTimeOffset resolvedAt, CancellationToken cancellationToken = default);
+
     ValueTask<StructuredMemoryItem> ConsolidateAsync(IReadOnlyList<StructuredMemoryItem> sources, StructuredMemoryItem result, CancellationToken ct = default);
 
     ValueTask<StructuredMemoryItem?> FindAsync(
@@ -133,6 +139,10 @@ public interface IStructuredMemoryStore
 
 public interface IStructuredMemoryService
 {
+    ValueTask<MemoryResolutionResult> ResolveOpenLoopsAsync(
+        TrustedMemoryOwner session, TrustedIdentityUserOwner? identity, TrustedUserOwner? user,
+        string subject, CancellationToken cancellationToken = default);
+
     ValueTask<StructuredMemoryItem> WriteAsync(
         TrustedMemoryOwner owner,
         MemoryWriteProposal proposal,

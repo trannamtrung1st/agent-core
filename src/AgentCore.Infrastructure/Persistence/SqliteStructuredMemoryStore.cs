@@ -160,7 +160,10 @@ public sealed partial class SqliteStructuredMemoryStore(IDbContextFactory<AgentC
             .ConfigureAwait(false);
         if (current is null
             || current.SessionId != tombstone.SessionId.ToString("D")
-            || current.Status != (int)MemoryItemStatus.Active)
+            || current.Scope != (int)tombstone.Scope
+            || current.OwnerInstanceId != tombstone.OwnerInstanceId?.ToString("D")
+            || current.OwnerProfileId != tombstone.OwnerProfileId?.ToString("D")
+            || (current.Status != (int)MemoryItemStatus.Active && current.Status != (int)MemoryItemStatus.Resolved))
         {
             throw AgentCoreErrors.NotFound("Memory was not found.");
         }

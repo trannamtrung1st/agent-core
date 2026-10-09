@@ -99,6 +99,12 @@ public static class MemoryAdmission
             return AdmissionOutcome.Rejected;
         }
 
+        // A model's source classification is not owner approval. Keep all conversational
+        // forgetting on the exact-item, exact-action memory.forget tool path.
+        if (proposal.Operation == MemoryProposalOperation.Delete
+            && MemoryProposalCodec.IsConversationalSource(proposal.Source))
+            return new AdmissionOutcome(MemoryAdmissionStatus.ApprovalRequired, null);
+
         var sourceIds = sourceEntryId == Guid.Empty ? Array.Empty<Guid>() : new[] { sourceEntryId };
         var admission = SessionMemoryPrompt.CreateAdmissionContext(Provenance(proposal.Source), definition, profile, entries);
         var owner = new TrustedMemoryOwner(sessionId);
@@ -114,6 +120,25 @@ public static class MemoryAdmission
             && policy.UserPromotion
             && profile is not null
             && profile.ProfileId != Guid.Empty;
+
+        if (proposal.Operation == MemoryProposalOperation.Resolve)
+        {
+            var identity = proposal.ScopeHint is not MemoryScopeHint.Session
+                && policy.IdentityUserRetrieval && promotedInstanceId != Guid.Empty && profile?.ProfileId is { } profileId
+                && profileId != Guid.Empty ? new TrustedIdentityUserOwner(promotedInstanceId, profileId) : null;
+            var user = proposal.ScopeHint is MemoryScopeHint.User && policy.UserRetrieval
+                && profile is not null && profile.ProfileId != Guid.Empty ? new TrustedUserOwner(profile.ProfileId) : null;
+            var resolution = await memories.ResolveOpenLoopsAsync(owner, identity, user, proposal.Subject, cancellationToken)
+                .ConfigureAwait(false);
+            if (resolution.Items.Count == 0) return new AdmissionOutcome(MemoryAdmissionStatus.NotFound, null);
+            return new AdmissionOutcome(resolution.Changed ? MemoryAdmissionStatus.Resolved : MemoryAdmissionStatus.AlreadyResolved,
+                resolution.Items.Select(item => item.Scope switch
+                {
+                    MemoryScope.Session => "session",
+                    MemoryScope.IdentityUser => "identityUser",
+                    _ => "user"
+                }).Distinct().ToArray());
+        }
 
         if (proposal.Operation == MemoryProposalOperation.Delete)
         {
@@ -276,7 +301,8 @@ public static class MemoryAdmission
 
     private static bool IsShapeValid(MemoryProposal proposal)
     {
-        if (!Enum.IsDefined(proposal.Operation) || !Enum.IsDefined(proposal.Kind) || !Enum.IsDefined(proposal.Source))
+        if (!Enum.IsDefined(proposal.Operation) || !Enum.IsDefined(proposal.Kind) || !Enum.IsDefined(proposal.Source)
+            || proposal.ScopeHint is { } scope && !Enum.IsDefined(scope))
         {
             return false;
         }
@@ -291,6 +317,9 @@ public static class MemoryAdmission
         {
             return true;
         }
+
+        if (proposal.Operation == MemoryProposalOperation.Resolve)
+            return proposal.Kind == MemoryKind.OpenLoop;
 
         var content = proposal.Content.Trim();
         return content.Length is > 0 and <= MemoryLimits.MaxContentCharacters;
@@ -329,10 +358,13 @@ public static class MemoryAdmission
     {
         var scopes = new List<string>(3);
         var deleted = false;
+        var found = false;
+        var rejected = false;
         var existing = await memories.FindActiveBySubjectAsync(owner, proposal.Kind, proposal.Subject, cancellationToken)
             .ConfigureAwait(false);
         if (existing is not null)
         {
+            found = true;
             try
             {
                 await memories.DeleteAsync(owner, existing.MemoryId, cancellationToken).ConfigureAwait(false);
@@ -341,6 +373,7 @@ public static class MemoryAdmission
             }
             catch (AgentCoreException ex) when (ex.Code is "MemoryRejected" or "NotFound")
             {
+                rejected = true;
                 logger.LogDebug(ex, "Memory delete rejected for session {SessionId}", sessionId);
             }
         }
@@ -355,6 +388,7 @@ public static class MemoryAdmission
                 cancellationToken).ConfigureAwait(false);
             if (identity is not null)
             {
+                found = true;
                 try
                 {
                     await memories.DeleteIdentityUserAsync(
@@ -367,6 +401,7 @@ public static class MemoryAdmission
                 }
                 catch (AgentCoreException ex) when (ex.Code is "PolicyDenied" or "MemoryRejected" or "NotFound")
                 {
+                    rejected = true;
                     logger.LogDebug(ex, "Identity memory delete skipped for session {SessionId}", sessionId);
                 }
             }
@@ -382,6 +417,7 @@ public static class MemoryAdmission
                 cancellationToken).ConfigureAwait(false);
             if (match is not null)
             {
+                found = true;
                 try
                 {
                     await memories.DeleteUserAsync(
@@ -394,6 +430,7 @@ public static class MemoryAdmission
                 }
                 catch (AgentCoreException ex) when (ex.Code is "PolicyDenied" or "MemoryRejected" or "NotFound")
                 {
+                    rejected = true;
                     logger.LogDebug(ex, "User memory delete skipped for session {SessionId}", sessionId);
                 }
             }
@@ -401,8 +438,8 @@ public static class MemoryAdmission
 
         _ = admission;
         return deleted
-            ? new AdmissionOutcome(MemoryAdmissionStatus.Deleted, scopes)
-            : AdmissionOutcome.Rejected;
+            ? new AdmissionOutcome(rejected ? MemoryAdmissionStatus.PartiallyDeleted : MemoryAdmissionStatus.Deleted, scopes)
+            : new AdmissionOutcome(found ? MemoryAdmissionStatus.Rejected : MemoryAdmissionStatus.NotFound, null);
     }
 
     private static async ValueTask<bool> SyncIdentityUserAsync(

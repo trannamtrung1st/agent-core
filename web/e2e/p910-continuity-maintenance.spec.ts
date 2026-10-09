@@ -84,7 +84,7 @@ test('Automation consolidates separately owned Memory and Experience; lineage, o
 
   await page.goto(`/admin/instances/${id}`);
   await page.getByRole('tab', { name: 'Automation', exact: true }).click();
-  await page.getByRole('tab', { name: 'Automations', exact: true }).click();
+  await page.getByRole('tab', { name: 'Triggers', exact: true }).click();
   const automations = page.getByRole('region', { name: 'Automations', exact: true });
   async function createAndRun(marker: string) {
     await automations.getByRole('button', { name: 'New automation', exact: true }).click();
@@ -126,7 +126,7 @@ test('Automation consolidates separately owned Memory and Experience; lineage, o
   }
   await setting.click(); await expect(setting).toHaveAttribute('aria-checked', 'false');
   await page.getByRole('tab', { name: 'Automation', exact: true }).click();
-  await page.getByRole('tab', { name: 'Automations', exact: true }).click();
+  await page.getByRole('tab', { name: 'Triggers', exact: true }).click();
   if (!(await automations.getByRole('button', { name: 'Run automation now', exact: true }).isVisible()))
     await automations.getByRole('button', { name: 'View automation: synthetic-maintain-experience', exact: true }).click();
   await automations.getByRole('button', { name: 'Run automation now', exact: true }).click();

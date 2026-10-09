@@ -320,9 +320,9 @@ internal static class AdminHttpMapping
             document.RootElement.Clone());
     }
 
-    public static AdminWebhookEventResponse ToWebhookEvent(WebhookEvent source, int subscriberCount = 0, DateTimeOffset? lastReceived = null) =>
+    public static AdminWebhookEventResponse ToWebhookEvent(WebhookEvent source, int subscriberCount = 0, DateTimeOffset? lastReceived = null, int activeSubscriberCount = 0) =>
         new(source.ResourceId.ToString("D"), source.DisplayName, source.EventKey, source.Status.ToString(), source.Revision,
-            source.CreatedAtUtc.ToString("O"), source.UpdatedAtUtc.ToString("O"), subscriberCount, lastReceived?.ToString("O"));
+            source.CreatedAtUtc.ToString("O"), source.UpdatedAtUtc.ToString("O"), subscriberCount, lastReceived?.ToString("O"), activeSubscriberCount);
     public static AdminWebhookEventCredentialResponse ToWebhookEventCredential(ExternalEventCredential credential) =>
         new(credential.ResourceId.ToString("D"), credential.EventKey, credential.Token, credential.Status.ToString());
 }

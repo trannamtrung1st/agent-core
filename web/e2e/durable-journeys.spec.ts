@@ -121,8 +121,9 @@ async function releaseOtherLiveRuntimes(page: Page, sessionId: string): Promise<
   }, sessionId);
 }
 
-function seedRetry(sessionId: string): void {
-  execFileSync('python3', [path.resolve('e2e/support/seed-agent-run.py'), dbPath, sessionId, 'retry'], { encoding: 'utf8' });
+function seedRetry(sessionId: string): string {
+  const runId = execFileSync('python3', [path.resolve('e2e/support/seed-agent-run.py'), dbPath, sessionId, 'retry'], { encoding: 'utf8' }).trim();
+  return sqlite('import sqlite3, sys; con = sqlite3.connect(sys.argv[1]); print(con.execute("SELECT SessionId FROM AgentRuns WHERE AgentRunId = ?", (sys.argv[2],)).fetchone()[0]); con.close()', [runId]);
 }
 
 test("a detached reminder completes in Background work and cancel survives reload", async ({ page }) => {
@@ -235,14 +236,12 @@ test("a detached reminder completes in Background work and cancel survives reloa
   await expect(page.getByRole("dialog").getByText("Reminder: Call John.").first()).toBeVisible({ timeout: 15_000 });
   await expect(page.locator(".conversation-scroll")).not.toContainText("Reminder: Call John.");
 
-  seedRetry(sessionId);
+  const retrySessionId = seedRetry(sessionId);
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Background work" }).click();
   await expect(page.getByRole("dialog", { name: "Background work", exact: true }).getByText("Retrying").first()).toBeVisible({ timeout: 15_000 });
-  const retryRow = page.getByRole('dialog', { name: 'Background work', exact: true })
-    .getByRole('listitem').filter({ has: page.getByText('Retrying', { exact: true }) });
-  await expect(retryRow).toHaveCount(1);
-  await retryRow.getByRole('button', { name: 'View original result', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Background work', exact: true }).locator(`[data-background-session-id="${retrySessionId}"]`)
+    .getByRole('button', { name: 'View original result', exact: true }).click();
   await drawer.getByRole('button', { name: 'Cancel run', exact: true }).click();
   await page.getByRole('dialog', { name: 'Cancel this run?', exact: true }).getByRole('button', { name: 'Cancel run', exact: true }).click();
   await expect(drawer.getByText("Cancelled").first()).toBeVisible({ timeout: 15_000 });

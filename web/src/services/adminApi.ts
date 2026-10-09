@@ -963,12 +963,13 @@ export const resetBrowserProfile = (id: string, expectedInstanceRevision: number
 
 export type AdminWebhookEvent = {
   eventId: string; displayName: string; eventKey: string; status: string; revision: number;
-  createdAt: string; updatedAt: string; subscriberCount: number; lastReceivedAt: string | null;
+  createdAt: string; updatedAt: string; subscriberCount: number; activeSubscriberCount: number; lastReceivedAt: string | null;
 };
 export type AdminWebhookEventCredential = { eventId: string; eventKey: string; token: string; status: string };
 export type AdminWebhookEventDetails = {
   event: AdminWebhookEvent;
   subscribers: { automationId: string; name: string; agentInstanceId: string; status: string }[];
+  signals: { receiptId: string; sourceEventId: string; receivedAt: string }[];
   deliveries: { receiptId: string; sourceEventId: string; receivedAt: string; automationId: string; agentInstanceId: string; status: string }[];
 };
 const eventResourcePath = "connections/events";

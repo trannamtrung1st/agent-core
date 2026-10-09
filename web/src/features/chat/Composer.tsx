@@ -244,7 +244,7 @@ export function Composer({
   canRetry: boolean;
   placeholder: string;
   onDraftChange: (value: string) => void;
-  onSend: () => void;
+  onSend: (behavior?: "interrupt") => void;
   onStop: () => void;
   onVoice: () => void;
   onCancelVoice: () => void;
@@ -409,15 +409,25 @@ export function Composer({
           onChange={(event) => onDraftChange(event.target.value)}
           onPaste={onPaste}
           onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
+              return;
+            }
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
-              onSend();
+              if (!ready || !canSend || event.repeat) return;
+              if (event.metaKey || event.ctrlKey) {
+                onSend("interrupt");
+              } else {
+                onSend();
+              }
             }
           }}
           disabled={!ready}
           autoSize={{ minRows: 1, maxRows: 8 }}
           placeholder={placeholder}
           aria-label="Message"
+          aria-description="Enter to send or queue. Command+Enter on macOS or Ctrl+Enter on Windows to steer immediately. Shift+Enter for a new line."
+          aria-keyshortcuts="Enter Meta+Enter Control+Enter Shift+Enter"
           styles={{
             textarea: {
               paddingInline: token.paddingXS,
@@ -508,7 +518,7 @@ export function Composer({
                 />
               </Tooltip>
             ) : (
-              <Tooltip title={sendLabel}>
+              <Tooltip title={`${sendLabel} (Enter) · Steer immediately (⌘Enter / Ctrl+Enter)`}>
                 <Button
                   type="primary"
                   htmlType="submit"

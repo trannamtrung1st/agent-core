@@ -59,6 +59,9 @@ public interface IMemoryStore
     ValueTask<SessionCatalogPage> ListBackgroundSessionsAsync(AgentRunOwner owner, string? cursor, int limit,
         bool includeArchived = false, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
+    ValueTask<SessionCatalogPage> ListInstanceSessionsAsync(AgentRunOwner owner, string? cursor, int limit,
+        CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
     ValueTask<SessionCatalogPage> ListCatalogAsync(
         string? cursor,
         int limit,

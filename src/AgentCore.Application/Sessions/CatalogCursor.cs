@@ -64,7 +64,7 @@ public static class CatalogCursor
         var rows = source
             .Where(item => item.DurablyDeletedAt is null)
             .Where(item => includeArchived || item.ArchivedAt is null)
-            .OrderByDescending(item => item.UpdatedAt)
+            .OrderByDescending(item => item.UpdatedAt.ToUnixTimeMilliseconds())
             .ThenByDescending(item => item.SessionId)
             .Where(item =>
                 afterMs is null

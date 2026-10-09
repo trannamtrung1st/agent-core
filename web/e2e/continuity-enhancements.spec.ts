@@ -58,6 +58,7 @@ test('Unified Automation authoring retains admitted instructions and source focu
   await details.getByRole('button', { name: 'View Automation', exact: true }).click();
   const updatedSource = automations.getByRole('button', { name: `View automation: ${updatedName}`, exact: true });
   await expect(updatedSource).toBeFocused();
+  await page.getByRole('tab', { name: 'Activity', exact: true }).click();
   await page.getByRole('tab', { name: 'Runs', exact: true }).click(); await page.reload();
   const runs = page.getByRole('region', { name: 'Runs', exact: true });
   const admitted = (await (await page.request.get(`/api/v2/agent-instances/${id}/agent-runs`, { headers })).json()).items[0];
@@ -65,7 +66,9 @@ test('Unified Automation authoring retains admitted instructions and source focu
   expect(history.ok()).toBe(true);
   expect(await history.text()).toContain(row.instructions);
   expect(await history.text()).not.toContain('Future review instructions');
-  const historyLink = runs.getByRole('button', { name: admitted.agentRunId, exact: true });
+  const historyLink = runs.getByRole('row')
+    .filter({ has: page.getByTitle(admitted.agentRunId, { exact: true }) })
+    .getByRole('button', { name: 'Manual task', exact: true });
   await historyLink.click();
   await expect(details.getByText('No action', { exact: true }).first()).toBeVisible();
   await details.getByRole('button', { name: 'Close', exact: true }).click();

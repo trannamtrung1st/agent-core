@@ -113,6 +113,30 @@ describe("Composer attachment staging", () => {
     expect(onSend).toHaveBeenCalledTimes(1);
   });
 
+  it.each([{ metaKey: true }, { ctrlKey: true }])("steers immediately with the primary modifier %j", (modifier) => {
+    const onSend = vi.fn();
+    render(<Composer {...emptyComposerProps()} canSend canStop sendLabel="Queue" onSend={onSend} draft="Change direction" />);
+    fireEvent.keyDown(screen.getByLabelText("Message"), { key: "Enter", ...modifier });
+    expect(onSend).toHaveBeenCalledExactlyOnceWith("interrupt");
+    fireEvent.keyDown(screen.getByLabelText("Message"), { key: "Enter", shiftKey: true, ...modifier });
+    expect(onSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not submit composing, repeated, or disabled input", () => {
+    const onSend = vi.fn();
+    const props = { ...emptyComposerProps(), onSend, draft: "Draft" };
+    const { rerender } = render(<Composer {...props} canSend />);
+    const field = screen.getByLabelText("Message");
+    fireEvent.keyDown(field, { key: "Enter", metaKey: true, isComposing: true });
+    fireEvent.keyDown(field, { key: "Enter", ctrlKey: true, keyCode: 229 });
+    fireEvent.keyDown(field, { key: "Enter", metaKey: true, repeat: true });
+    rerender(<Composer {...props} canSend={false} />);
+    fireEvent.keyDown(field, { key: "Enter", ctrlKey: true });
+    rerender(<Composer {...props} canSend ready={false} />);
+    fireEvent.keyDown(field, { key: "Enter", metaKey: true });
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
   it("keeps send disabled until ready and surfaces upload errors on the existing queue", () => {
     render(
       <Composer

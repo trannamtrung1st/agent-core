@@ -42,7 +42,35 @@ load_env() {
 }
 
 process_running() {
-  kill -0 "$1" 2>/dev/null && [[ "$(ps -p "$1" -o stat= 2>/dev/null)" != *Z* ]]
+  # A denied probe is not evidence that the process exited. Keep its PID file
+  # so a later stop from a terminal with process access can still find it.
+  python3 - "$1" <<'PYTHON'
+import os, subprocess, sys
+pid = int(sys.argv[1])
+try:
+    os.kill(pid, 0)
+except ProcessLookupError:
+    sys.exit(1)
+except PermissionError:
+    print(f"Cannot inspect PID {pid}: permission denied.", file=sys.stderr)
+    sys.exit(2)
+result = subprocess.run(["ps", "-p", str(pid), "-o", "stat="], capture_output=True, text=True)
+if result.stderr.strip():
+    print(f"Cannot inspect PID {pid}: {result.stderr.strip()}", file=sys.stderr)
+    sys.exit(2)
+sys.exit(0 if result.stdout.strip() and "Z" not in result.stdout else 1)
+PYTHON
+}
+
+target_running() {
+  local pid="$1" group="$2" processes
+  if [[ "$group" == "$pid" ]]; then
+    # The launcher can exit before a child releases the listening socket.
+    processes="$(ps -axo pgid=,stat=)" || return 2
+    awk -v group="$group" '$1 == group && $2 !~ /Z/ { alive=1 } END { exit !alive }' <<<"$processes"
+  else
+    process_running "$pid"
+  fi
 }
 
 terminate_tree() {
@@ -53,35 +81,76 @@ terminate_tree() {
 
 stop_service() {
   local file="$1"
-  local pid group attempt cwd
+  local pid group attempt cwd state
   [[ -f "$file" ]] || return 0
   pid="$(cat "$file" 2>/dev/null || true)"
-  if [[ "$pid" =~ ^[0-9]+$ ]] && process_running "$pid"; then
+  if [[ ! "$pid" =~ ^[0-9]+$ || "$pid" -le 1 ]]; then
+    echo "Invalid PID in $file; cannot safely stop service." >&2
+    return 1
+  fi
+  if process_running "$pid"; then
     # Do not signal a reused PID or another project's development server.
     cwd="$( { lsof -a -p "$pid" -d cwd -Fn 2>/dev/null || true; } | sed -n 's/^n//p')"
-    if [[ "$cwd" != "$root" && "$cwd" != "$root/web" ]]; then
+    if [[ -z "$cwd" ]]; then
+      echo "Cannot verify workspace for PID $pid; keeping $file." >&2
+      return 1
+    fi
+    if [[ "$cwd" != "$root" && "$cwd" != "$root/web" && "$cwd" != "$root/src/AgentCore.Api" ]]; then
       echo "Ignoring stale PID $pid in $file (not this workspace)." >&2
       rm -f "$file"
       return 0
     fi
-    group="$( { ps -p "$pid" -o pgid= 2>/dev/null || true; } | tr -d ' ')"
+    group="$(ps -p "$pid" -o pgid= | tr -d ' ')"
+    if [[ ! "$group" =~ ^[0-9]+$ ]]; then
+      echo "Cannot inspect process group for PID $pid; keeping $file." >&2
+      return 1
+    fi
     if [[ "$group" == "$pid" ]]; then
-      kill -TERM -- "-$pid" 2>/dev/null || true
+      kill -TERM -- "-$pid" || return 1
     else
       # Compatibility with PID files created by the older launcher.
       terminate_tree "$pid"
     fi
     for attempt in $(seq 1 30); do
-      process_running "$pid" || break
+      if target_running "$pid" "$group"; then
+        :
+      else
+        state=$?
+        [[ "$state" == 1 ]] || return 1
+        break
+      fi
       sleep 1
     done
-    if process_running "$pid"; then
+    if target_running "$pid" "$group"; then
       if [[ "$group" == "$pid" ]]; then
-        kill -KILL -- "-$pid" 2>/dev/null || true
+        kill -KILL -- "-$pid" || return 1
       else
-        kill -KILL "$pid" 2>/dev/null || true
+        kill -KILL "$pid" || return 1
       fi
+      # Do not discard tracking before the forced termination has completed.
+      for attempt in $(seq 1 5); do
+        if target_running "$pid" "$group"; then
+          sleep 1
+        else
+          state=$?
+          [[ "$state" == 1 ]] || return 1
+          break
+        fi
+      done
+      if target_running "$pid" "$group"; then
+        echo "PID $pid still has running processes; keeping $file." >&2
+        return 1
+      else
+        state=$?
+        [[ "$state" == 1 ]] || return 1
+      fi
+    else
+      state=$?
+      [[ "$state" == 1 ]] || return 1
     fi
+  else
+    state=$?
+    [[ "$state" == 1 ]] || return 1
   fi
   rm -f "$file"
 }

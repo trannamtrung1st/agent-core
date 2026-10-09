@@ -13,7 +13,8 @@ public enum MemoryItemStatus
 {
     Active = 0,
     Superseded = 1,
-    Deleted = 2
+    Deleted = 2,
+    Resolved = 3
 }
 
 public enum MemoryScope

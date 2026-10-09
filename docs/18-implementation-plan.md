@@ -6,6 +6,10 @@ User-authorized complete cutover on `develop/branch-1a` from behavior baseline `
 
 Acceptance requires the complete feature/threat matrix, SDK qualification, actual Chromium parity/security, owned natural-language scripted and opted-in repeated real-model comparison, full local backend/frontend/Synthetic/Compose gates and all five hosted jobs on the final behavior SHA. [Verification ledger](reports/browser-semantic-redesign-verification.md) owns observed results and pending gaps. Prior native/browser freezes below are historical evidence and do not establish acceptance of this redesign.
 
+## Session-first Agent Instance Activity enhancement
+
+Closed/frozen on behavior `5fda69c47ec1b8274ef1f3cc4e3f7fce539281d5` (2026-10-09), following the accepted review and all five [hosted Synthetic/Compose gates](https://github.com/trannamtrung1st/agent-core/actions/runs/37879102751). Scope covers Session-first Activity, independently inspectable Runs, retained navigation context, stable original background results and stale-action fences after failed reads or Session changes. Documentation-only `e4f13eff` records acceptance of that behavior SHA. [Verification and demo handoff](reports/agent-instance-activity-ux-verification.md#closure-and-demo-handoff) owns the evidence and remaining verification boundaries. Historical freezes remain unchanged; P10/P11 remain unopened.
+
 ## Activation, AgentRun and background Sessions cutover
 
 Accepted follow-on requirement reviewed against `bd44046896df6f3e0fc2e7d15d60dd479a5349cd` on 2026-10-08. This does not reopen historical freezes or start P10/P11. The approved target and migration policy are owned by [Architecture](03-system-architecture.md#accepted-activation-and-agentrun-cutover) and [Technology Decisions](10-technology-decisions.md#decision-unified-activation-agentrun-and-background-sessions).
@@ -37,7 +41,7 @@ This user-authorized follow-on composes with the completed Agent Workspace refin
 
 ## Post-filesystem managed workspace refinement
 
-The workspace refinement is superseded by the authorized full migration: one real Agent Instance owner per Session, durable `/home`, temporary `/working`, transient mailbox cwd and canonical copy/move contracts. Runtime built-ins include deliberately retained published versions for pinned owners; unsupported retired files remain in Git history. General Assistant v20 combines capability-aware native Browser projection with explicitly authorized `background.start`. Existing phase freezes remain historical; P10/P11 remain unopened.
+The workspace refinement is superseded by the authorized full migration: one real Agent Instance owner per Session, durable `/home`, temporary `/working`, transient mailbox cwd and canonical copy/move contracts. Runtime built-ins include deliberately retained published versions for pinned owners; unsupported retired files remain in Git history. General Assistant v21 combines capability-aware native Browser projection with explicitly authorized `background.start`. Existing phase freezes remain historical; P10/P11 remain unopened.
 
 Full migration acceptance requires mandatory ownership and empty Chat guidance; exact file/tree cross-root copy, the four-file c#→csharp rename, CAS and lifecycle conflicts, Artifact delivery, Session deletion and owner deletion recovery; legacy-data rejection; full backend/frontend tests/build, Synthetic Playwright, Compose recreation, synchronized normative docs and hosted CI. See the migration verification report for the current measured gate status. Cwd persistence, cross-store batches and home sandbox mounts remain deferred.
 
@@ -462,7 +466,9 @@ Closure: all five required hosted Synthetic/Compose jobs [passed](https://github
 
 ## Admin shared Events and authoring enhancement
 
-The requested enhancement converges global Connections resources on Credentials and Events, Instance grants on Credentials, and Schedule/Event behavior on Automation. Shared Events replace the retired Event Source + Event Type authoring model with stable Event-ID subscriptions and bounded generic webhook evidence. Capability Form authoring uses canonical Selected/All and grouped authorized always projection. The data-preserving upgrade and client URL/envelope transition are owned by [Persistence](15-persistence-and-configuration.md#shared-event-resource-upgrade). [Verification report](reports/admin-events-ux-verification.md) records this working-tree change separately from historical freeze evidence. It does not open P10/P11 or establish hosted milestone acceptance.
+The requested enhancement converges global Connections resources on Credentials and Events, Instance grants on Credentials, and Schedule/Event behavior on Automation. Shared Events replace the retired Event Source + Event Type authoring model with stable Event-ID subscriptions and bounded generic webhook evidence. Capability Form authoring uses canonical Selected/All and grouped authorized always projection. The data-preserving upgrade and client URL/envelope transition are owned by [Persistence](15-persistence-and-configuration.md#shared-event-resource-upgrade). [Verification report](reports/admin-events-ux-verification.md) records the published enhancement separately from historical freeze evidence. It does not open P10/P11 or establish hosted milestone acceptance.
+
+The October 9 [Admin UI feedback follow-up](reports/admin-ui-feedback-verification.md) is a bounded usability correction on this enhancement: no new phase, execution change or hosted freeze is claimed.
 
 ## Historical Browser v2 reliability follow-up
 

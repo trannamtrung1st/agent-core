@@ -18,6 +18,107 @@ namespace AgentCore.Application.Tests;
 
 public sealed class MemoryProposalAdmissionTests
 {
+    [Fact]
+    public async Task Closing_work_resolves_the_loop_preserves_content_and_repeated_close_is_idempotent()
+    {
+        const string subject = "Vietnam car prices research";
+        const string content = "Research report retained at /home/car-prices.md; review is pending.";
+        var memories = Service();
+        var model = new ScriptedLanguageModel(["Understood."], memoryTurns:
+        [
+            [Proposal(MemoryKind.OpenLoop, subject, content, MemoryProposalSource.AgentInferred)],
+            [new(MemoryProposalOperation.Resolve, MemoryKind.OpenLoop, subject, "", null, MemoryProposalSource.UserExplicit)],
+            [new(MemoryProposalOperation.Resolve, MemoryKind.OpenLoop, subject, "", null, MemoryProposalSource.UserExplicit)]
+        ]);
+        await using var runtime = await RuntimeAsync(memories, Enabled(), model);
+        await runtime.SubmitPersistedUserTextAsync("Research Vietnam car prices.", Guid.NewGuid());
+        await runtime.WaitUntilIdleAsync();
+        var original = Assert.Single(await memories.SearchAsync(new(SessionA), new(null, MemoryKind.OpenLoop), Admission("agent_inferred")));
+        await runtime.SubmitPersistedUserTextAsync("Close the car-price work and keep the report.", Guid.NewGuid());
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal("resolved", AssistantReceipt(runtime).Outcome);
+        Assert.Equal("resolve", AssistantReceipt(runtime).Operation);
+        Assert.Equal(["session", "identityUser"], AssistantReceipt(runtime).Scopes);
+        Assert.Equal("Closed", PublicMemoryReceipt.From(AssistantReceipt(runtime))!.Label);
+        Assert.Empty(await memories.SearchAsync(new(SessionA), new(null, MemoryKind.OpenLoop), Admission("agent_inferred")));
+        Assert.Empty(await memories.SearchIdentityUserAsync(new(InstanceA, ProfileId), new(null, MemoryKind.OpenLoop), true, Admission("agent_inferred")));
+        var retained = (await memories.GetAsync(new(SessionA), original.MemoryId, Admission("agent_inferred")))!;
+        Assert.Equal(MemoryItemStatus.Resolved, retained.Status);
+        Assert.Equal(content, retained.Content);
+        Assert.Equal(original.Provenance, retained.Provenance);
+        await runtime.SubmitPersistedUserTextAsync("Close it again.", Guid.NewGuid());
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal("alreadyResolved", AssistantReceipt(runtime).Outcome);
+        Assert.Equal(retained, await memories.GetAsync(new(SessionA), original.MemoryId, Admission("agent_inferred")));
+    }
+
+    [Theory]
+    [InlineData(MemoryProposalSource.UserExplicit)]
+    [InlineData(MemoryProposalSource.AgentInferred)]
+    public async Task Conversational_delete_cannot_bypass_approval_even_when_the_subject_matches(MemoryProposalSource source)
+    {
+        var memories = Service();
+        await using var runtime = await RuntimeAsync(memories, Enabled(), new ScriptedLanguageModel(["Understood."], memoryTurns:
+        [
+            [Proposal(MemoryKind.OpenLoop, "Research", "Report retained.", MemoryProposalSource.AgentInferred)],
+            [new(MemoryProposalOperation.Delete, MemoryKind.OpenLoop, "Research", "", null, source)]
+        ]));
+        await runtime.SubmitPersistedUserTextAsync("Start the research.", Guid.NewGuid());
+        await runtime.WaitUntilIdleAsync();
+        await runtime.SubmitPersistedUserTextAsync("Close the work.", Guid.NewGuid());
+        await runtime.WaitUntilIdleAsync();
+        var receipt = AssistantReceipt(runtime);
+        Assert.Equal("approvalRequired", receipt.Outcome);
+        Assert.Equal(MemoryReceipt.Explicit, receipt.Presentation);
+        Assert.Contains("requires approval", PublicMemoryReceipt.From(receipt)!.Label);
+        Assert.Equal(MemoryItemStatus.Active, Assert.Single(await memories.SearchAsync(new(SessionA), new(null, null), Admission("agent_inferred"))).Status);
+        Assert.Single(await memories.SearchIdentityUserAsync(new(InstanceA, ProfileId), new(null, null), true, Admission("agent_inferred")));
+    }
+
+    [Fact]
+    public async Task Resolve_from_a_new_session_uses_retrieval_gates_without_creating_a_local_copy()
+    {
+        var memories = Service();
+        await MemoryAdmission.AdmitOneAsync(memories, Enabled(), SessionA, InstanceA, Profile(), [], Guid.NewGuid(),
+            Proposal(MemoryKind.OpenLoop, "Research", "Report retained.", MemoryProposalSource.AgentInferred), NullLogger.Instance);
+        var definition = Enabled() with { MemoryPolicy = new(SessionMemory: true, IdentityUserRetrieval: true) };
+        var proposal = new MemoryProposal(MemoryProposalOperation.Resolve, MemoryKind.OpenLoop, "Research", "", null, MemoryProposalSource.UserExplicit);
+        var result = Assert.Single(await MemoryAdmission.AdmitAsync(memories, definition, SessionB, InstanceA, Profile(), [], Guid.NewGuid(), [proposal], NullLogger.Instance));
+        Assert.Equal(MemoryAdmissionStatus.Resolved, result.Status);
+        Assert.Equal(["identityUser"], result.AffectedScopes);
+        Assert.Empty(await memories.SearchAsync(new(SessionB), new(null, null), Admission("agent_inferred")));
+        Assert.Single(await memories.SearchAsync(new(SessionA), new(null, null), Admission("agent_inferred")));
+        Assert.Empty(await memories.SearchIdentityUserAsync(new(InstanceA, ProfileId), new(null, null), true, Admission("agent_inferred")));
+    }
+
+    [Fact]
+    public async Task Missing_loop_and_invalid_kind_are_distinct_and_never_delete_or_create_memory()
+    {
+        var memories = Service();
+        var proposal = new MemoryProposal(MemoryProposalOperation.Resolve, MemoryKind.OpenLoop, "Missing", "", null, MemoryProposalSource.UserExplicit);
+        Assert.Equal(MemoryAdmissionStatus.NotFound, await MemoryAdmission.AdmitOneAsync(memories, Enabled(), SessionA, InstanceA, Profile(), [], Guid.NewGuid(), proposal, NullLogger.Instance));
+        Assert.Equal(MemoryAdmissionStatus.Rejected, await MemoryAdmission.AdmitOneAsync(memories, Enabled(), SessionA, InstanceA, Profile(), [], Guid.NewGuid(), proposal with { Kind = MemoryKind.Fact }, NullLogger.Instance));
+        Assert.Equal(MemoryAdmissionStatus.Rejected, await MemoryAdmission.AdmitOneAsync(memories, Enabled(), SessionA, InstanceA, Profile(), [], Guid.NewGuid(), proposal with { ScopeHint = (MemoryScopeHint)99 }, NullLogger.Instance));
+        Assert.Empty(await memories.SearchAsync(new(SessionA), new(null, null), Admission("agent_inferred")));
+    }
+
+    [Fact]
+    public async Task Trusted_delete_distinguishes_no_match_from_partial_deletion_and_reports_only_affected_scopes()
+    {
+        var inner = Service();
+        var memories = new StructuredMemoryServiceIntercept(inner) { BlockIdentityDeletion = true };
+        var proposal = new MemoryProposal(MemoryProposalOperation.Delete, MemoryKind.Fact, "Research", "", null, MemoryProposalSource.Application);
+        var missing = Assert.Single(await MemoryAdmission.AdmitAsync(memories, Enabled(), SessionA, InstanceA, Profile(), [], Guid.NewGuid(), [proposal], NullLogger.Instance));
+        Assert.Equal(MemoryAdmissionStatus.NotFound, missing.Status);
+        await MemoryAdmission.AdmitOneAsync(memories, Enabled(), SessionA, InstanceA, Profile(), [], Guid.NewGuid(),
+            Proposal(MemoryKind.Fact, "Research", "Retained content", MemoryProposalSource.Application), NullLogger.Instance);
+        var partial = Assert.Single(await MemoryAdmission.AdmitAsync(memories, Enabled(), SessionA, InstanceA, Profile(), [], Guid.NewGuid(), [proposal], NullLogger.Instance));
+        Assert.Equal(MemoryAdmissionStatus.PartiallyDeleted, partial.Status);
+        Assert.Equal(["session"], partial.AffectedScopes);
+        Assert.Empty(await inner.SearchAsync(new(SessionA), new(null, null), Admission("application")));
+        Assert.Single(await inner.SearchIdentityUserAsync(new(InstanceA, ProfileId), new(null, null), true, Admission("application")));
+    }
+
     private static readonly DateTimeOffset Now = new(2026, 9, 30, 0, 0, 0, TimeSpan.Zero);
     private static readonly Guid InstanceA = Guid.Parse("019944af-0030-7000-8000-0000000000a1");
     private static readonly Guid InstanceB = Guid.Parse("019944af-0030-7000-8000-0000000000a2");
@@ -309,7 +410,7 @@ public sealed class MemoryProposalAdmissionTests
     }
 
     [Fact]
-    public async Task Delete_from_a_new_session_removes_promoted_memory()
+    public async Task Trusted_application_delete_from_a_new_session_removes_promoted_memory()
     {
         var memories = Service();
         var definition = Enabled();
@@ -339,7 +440,7 @@ public sealed class MemoryProposalAdmissionTests
                 "project codename",
                 string.Empty,
                 null,
-                MemoryProposalSource.UserExplicit),
+                MemoryProposalSource.Application),
             NullLogger.Instance);
         Assert.Equal(MemoryAdmissionStatus.Deleted, status);
         Assert.Empty(await memories.SearchIdentityUserAsync(

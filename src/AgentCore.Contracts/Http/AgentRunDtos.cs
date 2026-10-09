@@ -21,3 +21,6 @@ public sealed record BackgroundSessionPageResponse(IReadOnlyList<BackgroundSessi
 public sealed record ContinueInChatResponse(string SessionId);
 public sealed record CancelAgentRunRequest(long ExpectedRevision);
 public sealed record DecideAgentRunApprovalRequest(long ExpectedRevision, long ExpectedApprovalRevision, string ActionHash);
+
+public sealed record InstanceActivitySessionResponse(SessionCatalogItemResponse Session, string Origin, IReadOnlyList<string> Surfaces);
+public sealed record InstanceActivitySessionPageResponse(IReadOnlyList<InstanceActivitySessionResponse> Items, string? NextCursor, bool HasMore);

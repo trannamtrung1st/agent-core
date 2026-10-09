@@ -41,8 +41,11 @@ test('Completed Automation can be deleted while its quiet Run remains inspectabl
   expect(work[0].automationId).toBe(automationId);
   expect(work[0].sessionId).toBeTruthy();
   expect(work[0].status).toBe('completed');
+  await page.getByRole('tab', { name: 'Activity', exact: true }).click();
   await page.getByRole('tab', { name: 'Runs', exact: true }).click();
-  await page.getByRole('button', { name: work[0].agentRunId, exact: true }).click();
+  await page.getByRole('table', { name: 'Runs table', exact: true }).getByRole('row')
+    .filter({ has: page.getByTitle(work[0].agentRunId, { exact: true }) })
+    .getByRole('button', { name: 'Scheduled task', exact: true }).click();
   const run = page.getByRole('dialog', { name: 'Run details', exact: true });
   await expect(run.getByText('No action', { exact: true }).first()).toBeVisible();
   await expect(run.locator('.agent-run-details').getByText('No action', { exact: true })).toBeVisible();

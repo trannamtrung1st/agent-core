@@ -4,8 +4,11 @@ using AgentCore.Api.Realtime;
 using AgentCore.Contracts.Http;
 using AgentCore.Contracts.Realtime;
 using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AgentCore.Api.Tests;
 
@@ -332,24 +335,36 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
         Assert.Equal("Unauthorized", ack.Error?.Code);
     }
 
-    [Fact]
-    public async Task Switching_hub_attachments_preserves_catalog_order()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task Switching_hub_attachments_preserves_catalog_order(int renameGapMilliseconds)
     {
-        var client = OwnerClient();
+        var clock = new CatalogClock();
+        await using var factory = _factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+            services.Replace(ServiceDescriptor.Singleton<TimeProvider>(clock))));
+        var client = OwnerClient(factory);
         var firstCreated = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var first = await firstCreated.Content.ReadFromJsonAsync<SessionViewResponse>();
         var secondCreated = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var second = await secondCreated.Content.ReadFromJsonAsync<SessionViewResponse>();
 
-        await client.PostAsJsonAsync($"/api/v2/sessions/{first!.SessionId}/rename", new RenameSessionRequest("First session"));
-        await client.PostAsJsonAsync($"/api/v2/sessions/{second!.SessionId}/rename", new RenameSessionRequest("Second session"));
+        var renamedFirst = await client.PostAsJsonAsync($"/api/v2/sessions/{first!.SessionId}/rename", new RenameSessionRequest("First session"));
+        renamedFirst.EnsureSuccessStatusCode();
+        clock.Advance(TimeSpan.FromMilliseconds(renameGapMilliseconds));
+        var renamedSecond = await client.PostAsJsonAsync($"/api/v2/sessions/{second!.SessionId}/rename", new RenameSessionRequest("Second session"));
+        renamedSecond.EnsureSuccessStatusCode();
 
         var before = await client.GetFromJsonAsync<SessionCatalogPageResponse>("/api/v2/sessions");
         var orderBefore = before!.Items.Select(item => item.SessionId).ToArray();
-        Assert.Equal(second.SessionId, orderBefore[0]);
-        Assert.Equal(first.SessionId, orderBefore[1]);
+        // Catalog cursors use millisecond timestamps, with descending Session IDs for ties.
+        var expectedOrder = renameGapMilliseconds == 0
+            ? new[] { first.SessionId, second.SessionId }.OrderByDescending(Guid.Parse).ToArray()
+            : new[] { second.SessionId, first.SessionId };
+        Assert.Equal(expectedOrder, orderBefore);
 
-        await using var hub = CreateHubConnection();
+        clock.Advance(TimeSpan.FromSeconds(1));
+        await using var hub = CreateHubConnection(factory);
         await hub.StartAsync();
         var attachedFirst = await AttachAsync(hub, first.SessionId);
         Assert.True(attachedFirst.Accepted, attachedFirst.Error?.Message);
@@ -358,6 +373,7 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
         Assert.Equal(orderBefore, duringFirst!.Items.Select(item => item.SessionId).ToArray());
 
         await hub.StopAsync();
+        clock.Advance(TimeSpan.FromSeconds(1));
         var reopened = await client.PostAsync($"/api/v2/sessions/{second.SessionId}/reopen", null);
         reopened.EnsureSuccessStatusCode();
 
@@ -431,27 +447,38 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
         Assert.True(processDenied.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound);
     }
 
-    private HttpClient OwnerClient()
+    private HttpClient OwnerClient(WebApplicationFactory<Program>? factory = null)
     {
-        var client = _factory.CreateClient();
+        factory ??= _factory;
+        var client = factory.CreateClient();
         client.DefaultRequestHeaders.TryAddWithoutValidation(
             OwnerCapabilityHeaders.Name,
-            TestOwnerCapability.Token(_factory.Services));
+            TestOwnerCapability.Token(factory.Services));
         return client;
     }
 
-    private HubConnection CreateHubConnection() =>
-        new HubConnectionBuilder()
+    private HubConnection CreateHubConnection(WebApplicationFactory<Program>? factory = null)
+    {
+        factory ??= _factory;
+        return new HubConnectionBuilder()
             .WithUrl(
-                new Uri(_factory.Server.BaseAddress!, "/hubs/session"),
+                new Uri(factory.Server.BaseAddress!, "/hubs/session"),
                 options =>
                 {
-                    options.HttpMessageHandlerFactory = _ => _factory.Server.CreateHandler();
+                    options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
                     options.Transports = HttpTransportType.LongPolling;
-                    TestOwnerCapability.Apply(options, _factory.Services);
+                    TestOwnerCapability.Apply(options, factory.Services);
                 })
             .AddMessagePackProtocol()
             .Build();
+    }
+
+    private sealed class CatalogClock : TimeProvider
+    {
+        private long _ticks = new DateTimeOffset(2026, 10, 9, 0, 0, 0, TimeSpan.Zero).Ticks;
+        public override DateTimeOffset GetUtcNow() => new(Interlocked.Read(ref _ticks), TimeSpan.Zero);
+        public void Advance(TimeSpan elapsed) => Interlocked.Add(ref _ticks, elapsed.Ticks);
+    }
 
     private static Task<CommandAck> AttachAsync(HubConnection hub, string sessionId) =>
         hub.InvokeAsync<CommandAck>(

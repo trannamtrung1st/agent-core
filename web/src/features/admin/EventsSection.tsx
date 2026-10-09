@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { Alert, App, Button, Descriptions, Drawer, Empty, Flex, Form, Grid, Input, Modal, Spin, Table, Tag, Typography, theme } from "antd";
-import { PlusOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Descriptions, Drawer, Dropdown, Empty, Flex, Form, Grid, Input, Modal, Spin, Table, Tag, Typography, theme } from "antd";
+import { MoreOutlined, PlusOutlined } from "@ant-design/icons";
 import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
 import { confirmAction } from "../../app/confirmAction";
 import { adminHomePath, adminInstancePath, navigateToAppPath } from "../../app/appRoute";
@@ -9,6 +9,7 @@ import { createWebhookEvent, getWebhookEvent, listWebhookEvents, renameWebhookEv
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 import { AdminErrorNotice, AdminRetryAction } from "./adminFailure";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
+import { WebhookRequestExample } from "./WebhookRequestExample";
 
 export const webhookUrl = (eventKey: string) => `${window.location.origin}/api/v1/hooks/${encodeURIComponent(eventKey)}`;
 const timestamp = (value: string | null) => value ? new Date(value).toLocaleString() : "Not received yet";
@@ -68,8 +69,8 @@ export function EventsSection({ onChanged, onCreated, embedded = false }: {
     try { await navigator.clipboard.writeText(value); setCopyError(null); void message.success("Copied."); }
     catch { setCopyError("Copy failed. Select the value and copy it manually."); }
   }
-  const openEditor = (value: "new" | AdminWebhookEvent) => {
-    opener.current = document.activeElement as HTMLElement; setName(value === "new" ? "" : value.displayName);
+  const openEditor = (value: "new" | AdminWebhookEvent, trigger: HTMLElement | null = document.activeElement as HTMLElement) => {
+    opener.current = trigger; setName(value === "new" ? "" : value.displayName);
     setKey(value === "new" ? "" : value.eventKey); setEditorError(null); setEditor(value);
   };
   async function save() {
@@ -85,7 +86,7 @@ export function EventsSection({ onChanged, onCreated, embedded = false }: {
   async function rotate(item: AdminWebhookEvent) {
     setBusy(true);
     try { const saved = await rotateWebhookEvent(item.eventId); setCredential(saved.token); await reload(); setDetailRead(v => v + 1); }
-    catch (reason) { setError(describeAdminError(reason, "Credential rotation failed. Retry after refreshing.")); }
+    catch (reason) { setError(describeAdminError(reason, item.status === "Revoked" ? "Event reactivation failed. Retry after refreshing." : "Credential rotation failed. Retry after refreshing.")); }
     finally { setBusy(false); }
   }
   async function revoke(item: AdminWebhookEvent) {
@@ -94,18 +95,31 @@ export function EventsSection({ onChanged, onCreated, embedded = false }: {
     catch (reason) { setError(describeAdminError(reason, "Event revocation failed. Retry after refreshing.")); }
     finally { setBusy(false); }
   }
-  const actions = (item: AdminWebhookEvent, detail = false) => <Flex wrap={detail} className={detail ? undefined : "admin-table-actions"} gap={token.paddingXS} align="center">
-    <Button size="small" disabled={busy} onClick={() => openEditor(item)}>Edit name</Button>
-    <Button size="small" disabled={busy} aria-label={`Rotate credential for ${item.displayName}`} onClick={e => {
-      opener.current = e.currentTarget;
-      confirmAction(modal, { title: item.status === "Revoked" ? "Reactivate this Event?" : "Rotate this credential?",
-        content: "The current credential stops working immediately. All webhook clients must update their secret. Copy the new secret before leaving.",
-        okText: "Rotate credential", danger: true, onOk: () => rotate(item) });
-    }}>Rotate credential</Button>
-    {item.status === "Active" ? <Button size="small" danger aria-label={`Revoke ${item.displayName}`} disabled={busy} onClick={() => confirmAction(modal, {
-      title: "Revoke this Event?", content: `New signals and pending deliveries will be rejected for ${item.subscriberCount} subscribed Automation(s). Existing admitted Runs remain available.`,
-      okText: "Revoke Event", danger: true, onOk: () => revoke(item)
-    })}>Revoke Event</Button> : null}
+  const credentialAction = (item: AdminWebhookEvent) => item.status === "Revoked" ? "Reactivate Event" : "Rotate credential";
+  const confirmCredential = (item: AdminWebhookEvent) => confirmAction(modal, {
+    title: item.status === "Revoked" ? "Reactivate this Event?" : "Rotate this credential?",
+    content: item.status === "Revoked"
+      ? `This Event will accept new signals again. Its ${item.activeSubscriberCount} active subscriber(s) can receive future signals. A new credential will be issued; update all webhook clients. Previously skipped deliveries are not replayed.`
+      : "The current credential stops working immediately. All webhook clients must update their secret. Copy the new secret before leaving.",
+    okText: credentialAction(item), danger: item.status !== "Revoked", onOk: () => rotate(item), afterClose: restoreFocus
+  });
+  const confirmRevoke = (item: AdminWebhookEvent) => confirmAction(modal, {
+    title: "Revoke this Event?", content: `New signals and pending deliveries will be rejected. This Event has ${item.activeSubscriberCount} active subscriber(s) and ${item.subscriberCount} total subscription(s). Existing admitted Runs remain available.`,
+    okText: "Revoke Event", danger: true, onOk: () => revoke(item), afterClose: restoreFocus
+  });
+  const actions = (item: AdminWebhookEvent, detail = false) => detail ? <Flex wrap gap={token.paddingXS} align="center">
+    <Button size="small" disabled={busy} onClick={() => openEditor(item)}>Rename</Button>
+    <Button size="small" disabled={busy} aria-label={`${credentialAction(item)} for ${item.displayName}`} onClick={e => { opener.current = e.currentTarget; confirmCredential(item); }}>{credentialAction(item)}</Button>
+    {item.status === "Active" ? <Button size="small" danger aria-label={`Revoke ${item.displayName}`} disabled={busy} onClick={e => { opener.current = e.currentTarget; confirmRevoke(item); }}>Revoke Event</Button> : null}
+  </Flex> : <Flex className="admin-table-actions" gap={token.paddingXS} align="center">
+    <Button size="small" onClick={e => { opener.current = e.currentTarget; openDetails(item.eventId); }} aria-label={`View details for ${item.displayName}`}>View</Button>
+    <Dropdown trigger={["click"]} menu={{ items: [
+      { key: "rename", label: "Rename", disabled: busy },
+      { key: "credential", label: credentialAction(item), disabled: busy },
+      ...(item.status === "Active" ? [{ key: "revoke", label: "Revoke Event", danger: true, disabled: busy }] : [])
+    ], onClick: ({ key }) => { if (key === "rename") openEditor(item, opener.current); else if (key === "credential") confirmCredential(item); else confirmRevoke(item); } }}>
+      <Button size="small" icon={<MoreOutlined aria-hidden />} aria-label={`More actions for ${item.displayName}`} disabled={busy} onClick={e => { opener.current = e.currentTarget; }} />
+    </Dropdown>
   </Flex>;
   const navigateSubscription = (instanceId: string, automationId: string) => navigateToAppPath(`${adminInstancePath(instanceId, "automation", "automations")}?automation=${automationId}`);
   const nameError = /[\u0000-\u001f\u007f-\u009f]/.test(name) ? "Use a name without control characters." : null;
@@ -122,13 +136,14 @@ export function EventsSection({ onChanged, onCreated, embedded = false }: {
       </Flex>
       {loaded ? <Table<AdminWebhookEvent> key={tableVersion} aria-label="Events table" className="admin-collection-table" rowKey="eventId" size="small"
         dataSource={events.filter(e => [e.displayName, e.eventKey, e.status].some(value => value.toLowerCase().includes(search.trim().toLowerCase())))}
-        pagination={pagination} scroll={{ x: 1240 }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search || events.length ? "No matches. Clear search or filters to see all results." : "No Events yet. Create an Event, then subscribe an Automation to it."} /> }} columns={[
+        pagination={pagination} scroll={{ x: 1040 }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search || events.length ? "No matches. Clear search or filters to see all results." : "No Events yet. Create an Event, then subscribe an Automation to it."} /> }} columns={[
           { title: "Name", dataIndex: "displayName", width: 220, ellipsis: true, sorter: (a,b) => a.displayName.localeCompare(b.displayName), render: (_, item) => <Button type="link" size="small" className="admin-collection-name" title={item.displayName} onClick={e => { opener.current = e.currentTarget; openDetails(item.eventId); }}>{item.displayName}</Button> },
-          { title: "Key", dataIndex: "eventKey", width: 200, ellipsis: true },
+          { title: "Key", dataIndex: "eventKey", width: 180, ellipsis: true },
           { title: "Status", dataIndex: "status", width: 100, filters: ["Active","Revoked"].map(value => ({ text: value, value })), onFilter: (value,item) => item.status === value, render: value => <Tag color={value === "Active" ? "success" : "default"}>{value}</Tag> },
-          { title: "Subscribers", dataIndex: "subscriberCount", width: 130, align: "right", sorter: (a,b) => a.subscriberCount - b.subscriberCount },
-          { title: "Last received", dataIndex: "lastReceivedAt", width: 210, render: timestamp },
-          { title: "Actions", width: 380, render: (_,item) => actions(item) }
+          { title: "Active subscribers", dataIndex: "activeSubscriberCount", width: 110, align: "right", sorter: (a,b) => a.activeSubscriberCount - b.activeSubscriberCount },
+          { title: "Total subscriptions", dataIndex: "subscriberCount", width: 120, align: "right", sorter: (a,b) => a.subscriberCount - b.subscriberCount },
+          { title: "Last received", dataIndex: "lastReceivedAt", width: 180, render: timestamp },
+          { title: "Actions", width: 130, render: (_,item) => actions(item) }
         ]} /> : null}
       <Drawer open={!!editor} title={editor === "new" ? "New Event" : "Edit Event name"} size={compact ? "100%" : 480}
         getContainer={false} rootStyle={{ position: "fixed" }} rootClassName="admin-automation-drawer"
@@ -161,23 +176,37 @@ export function EventsSection({ onChanged, onCreated, embedded = false }: {
               <Descriptions.Item label="Event ID">{details.event.eventId}</Descriptions.Item>
               <Descriptions.Item label="Webhook URL"><Typography.Text copyable={{ text: webhookUrl(details.event.eventKey) }}>{webhookUrl(details.event.eventKey)}</Typography.Text></Descriptions.Item>
               <Descriptions.Item label="Status">{details.event.status}</Descriptions.Item>
+              <Descriptions.Item label="Active subscribers">{details.event.activeSubscriberCount}</Descriptions.Item>
+              <Descriptions.Item label="Total subscriptions">{details.event.subscriberCount}</Descriptions.Item>
               <Descriptions.Item label="Created">{timestamp(details.event.createdAt)}</Descriptions.Item>
               <Descriptions.Item label="Updated">{timestamp(details.event.updatedAt)}</Descriptions.Item>
               <Descriptions.Item label="Last received">{timestamp(details.event.lastReceivedAt)}</Descriptions.Item>
             </Descriptions>
-            <Typography.Text type="secondary">Send Authorization: Bearer &lt;secret&gt; and JSON with eventId (unique delivery identifier), data (object), and optional occurredAt (UTC). Accepted signals run asynchronously under each agent’s normal policy and approvals.</Typography.Text>
             {actions(details.event, true)}
-            <Typography.Title level={5}>Subscribed Automations</Typography.Title>
+            <WebhookRequestExample url={webhookUrl(details.event.eventKey)} />
+            <Flex component="section" vertical gap={token.paddingXS} aria-label="Subscribed Automations">
+            <Typography.Title level={5} style={{ margin: 0 }}>Subscribed Automations</Typography.Title>
+            <Typography.Text type="secondary">Active subscriptions can receive new signals while the Event is active. Disabled subscriptions remain in the total. Admission still depends on agent policy and availability.</Typography.Text>
             {details.subscribers.length ? <Table size="small" rowKey="automationId" className="admin-collection-table" scroll={{ x: 500 }} pagination={false} dataSource={details.subscribers} columns={[
               { title: "Automation", dataIndex: "name", render: (_,s) => <Button type="link" size="small" onClick={() => navigateSubscription(s.agentInstanceId,s.automationId)}>{s.name}</Button> },
               { title: "Status", dataIndex: "status" }
             ]} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No subscriptions yet. Create an Event Automation on an Instance." />}
-            <Typography.Title level={5}>Recent deliveries</Typography.Title>
-            <Typography.Text type="secondary">Admission status for the last 20 signals. Admitted means durable work was created; execution results are available in the Automation’s Runs.</Typography.Text>
+            </Flex>
+            <Flex component="section" vertical gap={token.paddingXS} aria-label="Received signals">
+            <Typography.Title level={5} style={{ margin: 0 }}>Received signals</Typography.Title>
+            <Typography.Text type="secondary">The last 20 accepted signals, including signals with no active subscribers. Repeated delivery IDs are counted once; later subscribers do not receive earlier signals.</Typography.Text>
+            {details.signals.length ? <Table size="small" rowKey="receiptId" className="admin-collection-table" scroll={{ x: 480 }} pagination={{ pageSize: 10 }} dataSource={details.signals} columns={[
+              { title: "Delivery ID", dataIndex: "sourceEventId", ellipsis: true }, { title: "Received", dataIndex: "receivedAt", render: timestamp }
+            ]} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No signals received yet. Send a request using the example above." />}
+            </Flex>
+            <Flex component="section" vertical gap={token.paddingXS} aria-label="Automation deliveries">
+            <Typography.Title level={5} style={{ margin: 0 }}>Automation deliveries</Typography.Title>
+            <Typography.Text type="secondary">Per-subscriber admission for those signals. Admitted means durable work was created; execution results are available in the Automation’s Runs.</Typography.Text>
             {details.deliveries.length ? <Table size="small" rowKey={d => `${d.receiptId}:${d.automationId}`} className="admin-collection-table" scroll={{ x: 600 }} pagination={{ pageSize: 10 }} dataSource={details.deliveries} columns={[
               { title: "Delivery ID", dataIndex: "sourceEventId", ellipsis: true }, { title: "Received", dataIndex: "receivedAt", render: timestamp },
               { title: "Status", dataIndex: "status" }, { title: "Automation", render: (_,d) => <Button type="link" size="small" onClick={() => navigateSubscription(d.agentInstanceId,d.automationId)}>View Automation</Button> }
-            ]} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No deliveries to show." />}
+            ]} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No Automation deliveries for recent signals. Only active subscriptions at receipt time can receive them." />}
+            </Flex>
           </> : null}
         </Flex>
       </Drawer>

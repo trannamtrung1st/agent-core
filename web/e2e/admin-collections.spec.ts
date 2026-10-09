@@ -332,7 +332,7 @@ test("Version inspection creates no draft and the shared actions publish from Te
   await instanceDialog.getByRole("button", { name: "Create instance", exact: true }).click();
   const persona = page.getByLabel("Persona name", { exact: true });
   await persona.fill("Unsaved inspector");
-  for (const name of ["Continuity", "Automation", "Runs", "Credentials", "Effective configuration"]) {
+  for (const name of ["Continuity", "Automation", "Activity", "Credentials", "Effective configuration"]) {
     await page.getByRole("tab", { name, exact: true }).click();
     await expect(page.getByRole("tabpanel", { name, exact: true })).toBeVisible();
   }
@@ -340,7 +340,7 @@ test("Version inspection creates no draft and the shared actions publish from Te
   await expect(persona).toHaveValue("Unsaved inspector");
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
-  for (const name of ["Continuity", "Automation", "Runs", "Credentials", "Effective configuration"]) {
+  for (const name of ["Continuity", "Automation", "Activity", "Credentials", "Effective configuration"]) {
     await expect(page.getByRole("tab", { name, exact: true })).toBeInViewport();
   }
   expect(errors).toEqual([]);

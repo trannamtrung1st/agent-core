@@ -12,6 +12,12 @@ public sealed class StructuredMemoryServiceIntercept(IStructuredMemoryService in
 {
     public bool BlockIdentityPromotion { get; init; }
     public bool BlockUserPromotion { get; init; }
+    public bool BlockIdentityDeletion { get; init; }
+
+    public ValueTask<MemoryResolutionResult> ResolveOpenLoopsAsync(
+        TrustedMemoryOwner session, TrustedIdentityUserOwner? identity, TrustedUserOwner? user,
+        string subject, CancellationToken cancellationToken = default) =>
+        inner.ResolveOpenLoopsAsync(session, identity, user, subject, cancellationToken);
 
     public ValueTask<StructuredMemoryItem> WriteAsync(
         TrustedMemoryOwner owner,
@@ -103,7 +109,9 @@ public sealed class StructuredMemoryServiceIntercept(IStructuredMemoryService in
         Guid memoryId,
         bool retrievalAllowed,
         CancellationToken cancellationToken = default) =>
-        inner.DeleteIdentityUserAsync(owner, memoryId, retrievalAllowed, cancellationToken);
+        BlockIdentityDeletion
+            ? ValueTask.FromException<StructuredMemoryItem>(new AgentCoreException("PolicyDenied", "Identity deletion blocked for test.", 403))
+            : inner.DeleteIdentityUserAsync(owner, memoryId, retrievalAllowed, cancellationToken);
 
     public ValueTask<IReadOnlyList<StructuredMemoryItem>> SearchIdentityUserAsync(
         TrustedIdentityUserOwner owner,

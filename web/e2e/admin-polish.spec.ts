@@ -97,8 +97,9 @@ test("Event drawer retains failed drafts, locks saving and reveals created sourc
   await credential.getByRole("button", { name: "Done", exact: true }).click();
   await expect(credential).toBeHidden();
   await expect(page.getByText(sourceName, { exact: true })).toBeVisible();
-  const rotate = page.getByRole("button", { name: `Rotate credential for ${sourceName}`, exact: true });
+  const rotate = page.getByRole("button", { name: `More actions for ${sourceName}`, exact: true });
   await rotate.click();
+  await page.getByRole("menuitem", { name: "Rotate credential", exact: true }).click();
   await page.getByRole("dialog", { name: "Rotate this credential?", exact: true })
     .getByRole("button", { name: "Rotate credential", exact: true }).click();
   await expect(credential).toBeVisible();
@@ -128,7 +129,7 @@ test("Hidden automation keeps drafts, stops polling and saves a local picker tim
   page.off("request", record);
   expect(requests).toEqual([]);
   await page.goForward();
-  await expect(page.getByRole("tab", { name: "Automations", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: "Triggers", exact: true })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByLabel("Automation instructions", { exact: true })).toHaveValue(task);
   await page.getByLabel("Schedule timing", { exact: true }).click();
   await page.locator(".ant-select-item-option").filter({ hasText: /^Once$/ }).click();

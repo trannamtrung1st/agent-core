@@ -4,6 +4,7 @@ using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
+using AgentCore.Domain.Triggers;
 
 namespace AgentCore.Api;
 
@@ -19,7 +20,8 @@ internal static class AdminWebhookEventEndpoints
             {
                 var subscriptions = await automations.ListEventSubscriptionsAsync(item.ResourceId, activeOnly: false, cancellationToken: ct);
                 var activity = await events.ReadActivityAsync(item.ResourceId, ct);
-                rows.Add(AdminHttpMapping.ToWebhookEvent(item, subscriptions.Count, activity.Receipts.FirstOrDefault()?.AdmittedAtUtc));
+                rows.Add(AdminHttpMapping.ToWebhookEvent(item, subscriptions.Count, activity.Receipts.FirstOrDefault()?.AdmittedAtUtc,
+                    subscriptions.Count(a => a.Status == AutomationStatus.Active)));
             }
             return new AdminWebhookEventListResponse(rows);
         }));
@@ -30,10 +32,12 @@ internal static class AdminWebhookEventEndpoints
             var activity = await events.ReadActivityAsync(eventId, ct);
             var receipts = activity.Receipts.ToDictionary(r => r.EventId);
             return new AdminWebhookEventDetailsResponse(
-                AdminHttpMapping.ToWebhookEvent(item, subscriptions.Count, activity.Receipts.FirstOrDefault()?.AdmittedAtUtc),
+                AdminHttpMapping.ToWebhookEvent(item, subscriptions.Count, activity.Receipts.FirstOrDefault()?.AdmittedAtUtc,
+                    subscriptions.Count(a => a.Status == AutomationStatus.Active)),
                 subscriptions.Select(a => new AdminWebhookEventSubscriber(a.AutomationId.ToString("D"), a.Name, a.Owner.AgentInstanceId.ToString("D"), a.Status.ToString())).ToArray(),
                 activity.Deliveries.Select(d => new AdminWebhookEventDelivery(d.EventId.ToString("D"), receipts[d.EventId].SourceEventId,
-                    receipts[d.EventId].AdmittedAtUtc.ToString("O"), d.AutomationId.ToString("D"), d.AgentInstanceId.ToString("D"), d.Status.ToString())).ToArray());
+                    receipts[d.EventId].AdmittedAtUtc.ToString("O"), d.AutomationId.ToString("D"), d.AgentInstanceId.ToString("D"), d.Status.ToString())).ToArray(),
+                activity.Receipts.Select(r => new AdminWebhookEventSignal(r.EventId.ToString("D"), r.SourceEventId, r.AdmittedAtUtc.ToString("O"))).ToArray());
         }));
         group.MapPost("", (AdminCreateWebhookEventRequest request, WebhookEventService events, CancellationToken ct) =>
             Respond(async () => AdminHttpMapping.ToWebhookEventCredential(await events.CreateAsync(request.DisplayName, request.EventKey, ct))));

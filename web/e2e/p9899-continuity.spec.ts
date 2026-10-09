@@ -44,6 +44,9 @@ test('Experience informs an authorized Instance Skill Automation; next activatio
   await experience.getByRole('switch', { name: 'Enable experience', exact: true }).click();
   await expect(experience.getByText('Enabled · completed work may be retrospected')).toBeVisible();
   await page.locator('.admin-header').getByRole('button', { name: /Chat$/ }).first().click();
+  // Returning from Admin preserves the last conversation; choose a new one for this reviewer.
+  await page.getByRole('button', { name: 'Start a new chat', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Identity', exact: true })).toBeEnabled();
   await select(page, 'Identity', reviewerName);
   await send(page, 'synthetic-fail-turn');
   await expect(page.getByText(/Synthetic turn failure|could not complete|failed/i).last()).toBeVisible({ timeout: 30_000 });
@@ -82,7 +85,7 @@ test('Experience informs an authorized Instance Skill Automation; next activatio
   await page.getByRole("tab", { name: "Continuity", exact: true }).click();
   await page.getByRole("tab", { name: "Experience", exact: true }).click();
   await page.getByRole('tab', { name: 'Automation', exact: true }).click();
-  await page.getByRole('tab', { name: 'Automations', exact: true }).click();
+  await page.getByRole('tab', { name: 'Triggers', exact: true }).click();
   await initiative.getByRole('button', { name: 'New automation', exact: true }).click();
   await initiative.getByLabel('Automation name', { exact: true }).fill('Review recent experience');
   await initiative.getByLabel('Automation instructions', { exact: true }).fill('synthetic-automation-improve: review recent experience and improve only when useful. Otherwise do nothing.');
@@ -131,7 +134,7 @@ test('Experience informs an authorized Instance Skill Automation; next activatio
   await page.getByRole('tab', { name: 'Skills', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Instance Skills', exact: true })).toContainText('Experience review');
   await page.getByRole('tab', { name: 'Automation', exact: true }).click();
-  await page.getByRole('tab', { name: 'Automations', exact: true }).click();
+  await page.getByRole('tab', { name: 'Triggers', exact: true }).click();
   await initiative.getByRole('button', { name: 'Refresh automations', exact: true }).click();
   await expect(initiative.getByText(/Completed · Response/).first()).toBeVisible();
   await initiative.getByRole('button', { name: 'Run automation now', exact: true }).click();
@@ -155,7 +158,7 @@ test('Experience informs an authorized Instance Skill Automation; next activatio
   await page.getByRole('dialog').getByRole('button', { name: 'Reset experience', exact: true }).click();
   await expect(experience.getByText('No experience yet. Enable experience and retrospect a completed task.')).toBeVisible();
   await page.getByRole('tab', { name: 'Automation', exact: true }).click();
-  await page.getByRole('tab', { name: 'Automations', exact: true }).click();
+  await page.getByRole('tab', { name: 'Triggers', exact: true }).click();
   await initiative.getByRole('button', { name: 'Delete automation', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete automation', exact: true }).click();
   await expect(initiative.getByText('No automations yet. Create one here or ask the agent in Chat to do something later.')).toBeVisible();

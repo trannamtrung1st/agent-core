@@ -116,13 +116,13 @@ internal static class AssistantResponseSchema
             },
             "memory": {
               "type": "array",
-              "description": "Optional learned-memory proposals. Empty when nothing should be remembered. The runtime admits or rejects each item; display text must not claim a save.",
+              "description": "Optional learned-memory proposals. Empty when nothing should be remembered. Use resolve only for an existing openLoop when work closes; content is retained. Forgetting requires the memory.forget tool and exact owner approval, never an envelope delete. The runtime admits or rejects each item; display text must not claim a save or completed mutation.",
               "items": {
                 "type": "object",
                 "additionalProperties": false,
                 "required": ["operation", "kind", "subject", "content", "scopeHint", "source"],
                 "properties": {
-                  "operation": { "type": "string", "enum": ["upsert", "delete"] },
+                  "operation": { "type": "string", "enum": ["upsert", "resolve"] },
                   "kind": { "type": "string", "enum": ["fact", "preference", "goal", "decision", "openLoop"] },
                   "subject": { "type": "string" },
                   "content": { "type": "string" },
@@ -208,13 +208,13 @@ internal static class AssistantResponseSchema
             },
             "memory": {
               "type": "array",
-              "description": "Optional learned-memory proposals. Empty when nothing should be remembered. The runtime admits or rejects each item; display text must not claim a save.",
+              "description": "Optional learned-memory proposals. Empty when nothing should be remembered. Use resolve only for an existing openLoop when work closes; content is retained. Forgetting requires the memory.forget tool and exact owner approval, never an envelope delete. The runtime admits or rejects each item; display text must not claim a save or completed mutation.",
               "items": {
                 "type": "object",
                 "additionalProperties": false,
                 "required": ["operation", "kind", "subject", "content", "scopeHint", "source"],
                 "properties": {
-                  "operation": { "type": "string", "enum": ["upsert", "delete"] },
+                  "operation": { "type": "string", "enum": ["upsert", "resolve"] },
                   "kind": { "type": "string", "enum": ["fact", "preference", "goal", "decision", "openLoop"] },
                   "subject": { "type": "string" },
                   "content": { "type": "string" },

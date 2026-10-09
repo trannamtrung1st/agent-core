@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useWorkReadState } from "./workReadState";
 import { App as AntApp, Alert, Button, Drawer, Flex, Layout, Tooltip, Typography } from "antd";
-import { MenuOutlined, PlusOutlined, SettingOutlined } from "@ant-design/icons";
+import { ArrowLeftOutlined, MenuOutlined, PlusOutlined, SettingOutlined } from "@ant-design/icons";
 import { isReadonlySession, isSessionModelBusy, useSessionStore } from "../../state/sessionStore";
 import {
   beginNewChat,
@@ -84,7 +84,7 @@ function useViewport() {
   return { isNarrow, siderWidth: isTablet ? 240 : 280 };
 }
 
-export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
+export function ChatApp({ onOpenAdmin, returnToActivity }: { onOpenAdmin?: () => void; returnToActivity?: () => void }) {
   const state = useSessionStore();
   const [profile, setProfile] = useState("");
   const [sessionsOpen, setSessionsOpen] = useState(false);
@@ -323,15 +323,16 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
                   />
                 ) : null
               }
-              sessionsToggle={
-                isNarrow ? (
+              sessionsToggle={<Flex gap={8}>
+                {returnToActivity ? <Tooltip title="Back to Activity"><Button type="text" aria-label="Back to Activity" icon={<ArrowLeftOutlined />} onClick={returnToActivity} /></Tooltip> : null}
+                {isNarrow ? (
                   <Button
                     type="text"
                     aria-label="Open chats"
                     icon={<MenuOutlined />}
                     onClick={() => setSessionsOpen(true)}
                   />
-                ) : null
+                ) : null}</Flex>
               }
               inSession={inSession && !readonly}
               onSchedules={inSession && !readonly && state.sessionId ? () => setSchedulesOpen(true) : undefined}
@@ -501,7 +502,7 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
                       muted={state.muted}
                       placeholder={`Message ${agentName}...`}
                       onDraftChange={setDraft}
-                      onSend={() => void sendDraft()}
+                      onSend={(behavior) => void sendDraft(behavior)}
                       onStop={() => void cancelRenderedResponse()}
                       onVoice={() => void requestVoice()}
                       onCancelVoice={() => void cancelVoice()}

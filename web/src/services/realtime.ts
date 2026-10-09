@@ -559,6 +559,7 @@ let pendingUserText: {
   text: string;
   attachmentIds: string[];
   pendingAttachments: PendingAttachment[];
+  behavior: "queue" | "interrupt";
   queueLocalId?: string;
 } | null = null;
 
@@ -2562,9 +2563,15 @@ function restoreDraft(text: string, error: string, wire?: WireError | null, atta
   const category = wire?.category ?? "Validation";
   useSessionStore.setState({
     draft: latest.draft === "" ? text : latest.draft,
-    ...(attachments ? { pendingAttachments: attachments } : {}),
+    ...(attachments ? { pendingAttachments: mergePendingAttachments(attachments) } : {}),
     ...sessionFailurePatch(error, { wire, category, code })
   });
+}
+
+function mergePendingAttachments(restored: PendingAttachment[]): PendingAttachment[] {
+  const current = useSessionStore.getState().pendingAttachments;
+  const currentIds = new Set(current.map((item) => item.localId));
+  return [...current, ...restored.filter((item) => !currentIds.has(item.localId))];
 }
 
 function composerModelValue(snapshot = useSessionStore.getState()): string {
@@ -2871,7 +2878,8 @@ function appendOptimisticUserEntry(
   }
 
   useSessionStore.setState({
-    pendingAttachments: [],
+    pendingAttachments: latest.pendingAttachments.filter((item) =>
+      !attachments.some((sent) => sent.attachmentId === item.attachmentId)),
     entries: upsertHistoryEntry(latest.entries, {
       entryId: eventId,
       sequence: nextOptimisticUserSequence(latest.entries),
@@ -3041,7 +3049,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
   }
 
   let snapshot = useSessionStore.getState();
-  if (isReadonlySession(snapshot) || snapshot.connection !== "ready" || !snapshot.sessionId) {
+  if (isReadonlySession(snapshot) || snapshot.status === "paused" || snapshot.connection !== "ready" || !snapshot.sessionId) {
     return false;
   }
 
@@ -3072,9 +3080,11 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
     return false;
   }
 
+  const behavior = message.behavior ?? "queue";
   const reusePending =
     pendingUserText !== null
     && pendingUserText.text === text
+    && pendingUserText.behavior === behavior
     && pendingUserText.attachmentIds.join() === readyAttachmentIds.join();
   const eventId = reusePending ? pendingUserText!.eventId : message.eventId ?? uuid();
   const pendingAttachmentSnapshot = message.attachments.slice();
@@ -3084,6 +3094,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
     text,
     attachmentIds: readyAttachmentIds,
     pendingAttachments: pendingAttachmentSnapshot,
+    behavior,
     queueLocalId: queueLocalId ?? undefined
   };
   const refs: HistoryAttachment[] = message.attachments
@@ -3098,7 +3109,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
   const payload: Record<string, unknown> = {
     text,
     attachmentIds: readyAttachmentIds,
-    behavior: message.behavior === "interrupt" ? "interrupt" : "queue"
+    behavior
   };
 
   if (queueLocalId) {
@@ -3141,9 +3152,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
 
       pendingUserText = null;
       accepted = true;
-      for (const item of pendingAttachmentSnapshot) {
-        releasePendingFile(item.localId);
-      }
+      clearRestoredPendingAttachments(pendingAttachmentSnapshot);
 
       const latest = useSessionStore.getState();
       useSessionStore.setState({
@@ -3165,7 +3174,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
         }));
       } else {
         useSessionStore.setState({
-          pendingAttachments: pendingUserText?.pendingAttachments ?? pendingAttachmentSnapshot,
+          pendingAttachments: mergePendingAttachments(pendingUserText?.pendingAttachments ?? pendingAttachmentSnapshot),
           ...sessionFailurePatch(errorMessage, { category: "Transport", code: "SendFailed" })
         });
       }
@@ -3300,13 +3309,21 @@ function reconcilePendingUserText(entries: { sourceEventId: string | null; role:
   }
 
   if (!sendRequest && useSessionStore.getState().connection === "ready") {
-    void sendDraft();
+    // Retry the uncertain command itself, preserving its identity and steer intent.
+    // The user may already be composing another message or uploading another file.
+    void dispatchOutgoingUserMessage({
+      text: pendingUserText.text,
+      attachmentIds: pendingUserText.attachmentIds,
+      attachments: pendingUserText.pendingAttachments,
+      eventId: pendingUserText.eventId,
+      behavior: pendingUserText.behavior
+    });
   }
 }
 
-export async function sendDraft(): Promise<void> {
+export async function sendDraft(behavior: "queue" | "interrupt" = "queue"): Promise<void> {
   let snapshot = useSessionStore.getState();
-  if (isReadonlySession(snapshot)) {
+  if (isReadonlySession(snapshot) || snapshot.status === "paused") {
     return;
   }
 
@@ -3334,6 +3351,8 @@ export async function sendDraft(): Promise<void> {
   const text = draft || pendingUserText?.text || "";
 
   if (sendRequest) {
+    // An immediate steer must never silently become a queued send.
+    if (behavior === "interrupt") return sendRequest;
     if (
       snapshot.connection === "ready"
       && !snapshot.pendingAttachments.some((item) => item.status !== "ready")
@@ -3354,14 +3373,14 @@ export async function sendDraft(): Promise<void> {
   }
 
   if (!text && readyAttachmentIds.length === 0) {
-    if (!composerOutputBusy() && snapshot.pendingSendQueue.length > 0) {
+    if (behavior !== "interrupt" && !composerOutputBusy() && snapshot.pendingSendQueue.length > 0) {
       await maybeAutoDispatchQueueHead();
     }
 
     return;
   }
 
-  if (composerOutputBusy()) {
+  if (composerOutputBusy() && behavior !== "interrupt") {
     if (text.length > 0 || readyAttachmentIds.length > 0) {
       enqueueLocalSend(text, readyFiles, readyAttachmentIds);
     } else if (pendingUserText) {
@@ -3383,7 +3402,7 @@ export async function sendDraft(): Promise<void> {
     text,
     attachmentIds: readyAttachmentIds,
     attachments: snapshot.pendingAttachments.filter((item) => item.status === "ready" && item.attachmentId),
-    behavior: "queue"
+    behavior
   });
 }
 

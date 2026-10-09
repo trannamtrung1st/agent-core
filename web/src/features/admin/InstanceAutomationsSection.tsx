@@ -157,6 +157,14 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
   function setTiming(change: Partial<ScheduleTiming>) { setDraft({ ...draft, trigger: { kind: "schedule", schedule: { ...timing, ...change } } }); }
   function edit(item: Automation) { editorOpener.current = document.activeElement as HTMLElement; setEditorError(null); setEditor(item.automationId); setEditorOpen(true); setDraft({ expectedRevision: item.revision, enabled: item.enabled, name: item.name, instructions: item.instructions,
     trigger: item.trigger, modelKey: item.modelKey, reasoningEffort: item.reasoningEffort, executionTarget: item.executionTarget, completionDelivery: item.completionDelivery, requiresTools: item.requiresTools, requiresVision: item.requiresVision }); }
+  const selectedEvent = draft.trigger.kind === "event" ? sources.find(source => source.eventId === (draft.trigger.kind === "event" ? draft.trigger.eventId : "")) : null;
+  const summaryTrigger = draft.trigger.kind === "event"
+    ? selectedEvent ? `When ${selectedEvent.eventKey} is received${selectedEvent.status === "Revoked" ? " · Event revoked" : ""}` : "Choose an Event to receive signals"
+    : timing.kind === "oneShot" && !timing.atUtc ? "Choose when to run once" : scheduleTimingLabel(timing);
+  const summaryBounds = !isSchedule || timing.kind === "oneShot" ? "" : [
+    timing.kind === "fixedInterval" ? timing.endAtUtc ? `Ends ${date(timing.endAtUtc)}` : null : timing.endDate ? `Ends ${timing.endDate}` : null,
+    timing.maxOccurrences ? `Up to ${timing.maxOccurrences} occurrences` : null
+  ].filter(Boolean).join(" · ");
   return <section className="admin-definition-panel" aria-label="Automations">
     <div className="admin-definition-panel-heading"><Typography.Title level={4}>Automations</Typography.Title>
       <Typography.Text type="secondary">Choose when the agent follows your instructions. Each Run uses its authorized capabilities and normal approvals.</Typography.Text></div>
@@ -186,9 +194,18 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
             if (focused === document.body || focused?.classList.contains("ant-drawer") || focused?.getAttribute("role") === "dialog") nameInput.current?.focus();
           }
         }}
-        footer={<Flex wrap justify="flex-end" gap={token.paddingXS}>
+        footer={<Flex vertical gap={token.paddingSM}>
+          <Flex component="section" vertical gap={token.paddingXS} aria-label="Automation summary">
+            <Typography.Text strong>Automation summary</Typography.Text>
+            <Typography.Text>{summaryTrigger}{summaryBounds ? ` · ${summaryBounds}` : ""}</Typography.Text>
+            <Typography.Text>{draft.executionTarget.kind === "backgroundSession" ? "Run this agent in a background Session" : draft.executionTarget.sessionId ? `Run in conversation ${draft.executionTarget.sessionId}` : "Choose the conversation to run in"}</Typography.Text>
+            <Typography.Text type="secondary">{draft.executionTarget.kind === "existingSession" ? "Reply directly in that conversation using its pinned model" : draft.completionDelivery.kind === "toSession" ? draft.completionDelivery.sessionId ? `Request a completion report to conversation ${draft.completionDelivery.sessionId}` : "Choose a conversation for the completion report" : "Keep results in Background work without a conversation report"}</Typography.Text>
+            {!draft.enabled ? <Typography.Text type="warning">Saved disabled. Enable this Automation before it can run.</Typography.Text> : null}
+          </Flex>
+          <Flex wrap justify="flex-end" gap={token.paddingXS}>
           <Button aria-label="Cancel automation edit" disabled={!editorOpen || busy} onClick={() => setEditorOpen(false)}>Cancel</Button>
           <Button type="primary" aria-label={editor === "new" ? "Create automation" : "Save automation"} htmlType="submit" form={formId} disabled={!editorOpen || !valid || busy} loading={busy}>{editor === "new" ? "Create automation" : "Save automation"}</Button>
+          </Flex>
         </Flex>}>
         {editorError ? <Alert style={{ marginBlockEnd: token.padding }} type="error" showIcon
           title={<AdminErrorNotice message={editorError.message} diagnosticId={editorError.diagnosticId} showDetailsLabel />}

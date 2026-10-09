@@ -21,6 +21,22 @@ beforeEach(() => {
   request.mockResolvedValue({ items: [], policy: allowedPolicy });
 });
 describe("Owner schedule authoring", () => {
+  it("updates the save summary for schedule, background reporting and disabled state", async () => {
+    render(view()); await screen.findByText(/No automations yet/);
+    fireEvent.click(screen.getByRole("button", { name: "New automation" }));
+    const summary = within(screen.getByRole("region", { name: "Automation summary" }));
+    expect(summary.getByText(/Every 1 day/)).toBeVisible();
+    expect(summary.getByText("Run this agent in a background Session")).toBeVisible();
+    expect(summary.getByText("Keep results in Background work without a conversation report")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Schedule local time"), { target: { value: "14:30" } });
+    expect(summary.getByText(/14:30/)).toBeVisible();
+    fireEvent.click(screen.getByRole("switch", { name: "Enable automation" }));
+    expect(summary.getByText("Saved disabled. Enable this Automation before it can run.")).toBeVisible();
+    fireEvent.mouseDown(screen.getByLabelText("Automation completion report"));
+    fireEvent.click(await screen.findByText("Selected conversation", { selector: ".ant-select-item-option-content" }));
+    expect(summary.getByText("Choose a conversation for the completion report")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create automation" })).toBeDisabled();
+  });
   it("blocks Schedule authoring when the Definition has no policy", async () => {
     request.mockResolvedValue({ items: [], policy: null });
     render(view()); await screen.findByText(/No automations yet/);

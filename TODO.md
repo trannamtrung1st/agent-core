@@ -2,6 +2,8 @@
 
 ## Stable original Background Work results (2026-10-09)
 
+- [x] Non-UI CI fixture repairs on main: arrange direct-store B/C before foregrounding, project authorized Secretary Automation schemas and align the bootstrap capability expectation. Local checks: 3 API, 27 Application and 6 Synthetic browser journeys passed; UI selector repairs remain owned by the other session.
+
 - [x] Resolve immutable initial Run; retain original title in origin, preserving same-Session Chat and dynamic completion accounting.
 - [x] Add nullable trusted Artifact Run provenance and filter original files before bounded paging, preserving unknown history and downloads.
 - [x] Continue/Open chat distinction, original details, conversation history, truthful unavailable/files copy and shared wrapping.

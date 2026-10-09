@@ -27,6 +27,70 @@ beforeEach(() => {
 });
 const show = (instanceId = "instance-1") => render(<App><BackgroundWorkDrawer instanceId={instanceId} open wide onClose={() => undefined} /></App>);
 describe("Background Sessions", () => {
+  it("removes stale background actions after a later poll fails and restores them after retry", async () => {
+    const owned = { ...fixtureBackground, session: { ...fixtureBackground.session, agentInstanceId: "instance-1" } };
+    vi.mocked(getBackgroundSession).mockResolvedValueOnce(owned).mockRejectedValueOnce(new Error("Background refresh failed")).mockResolvedValue(owned);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const view = render(<App><BackgroundWorkDrawer instanceId="instance-1" open wide initialSessionId={owned.session.sessionId} onClose={vi.fn()} /></App>);
+    try {
+      expect(await screen.findByRole("button", { name: "Continue in chat" })).toBeVisible();
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+      expect(await screen.findByText("Background refresh failed")).toBeVisible();
+      expect(screen.queryByRole("button", { name: "Continue in chat" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Cancel run" })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Retry background session" }));
+      expect(await screen.findByRole("button", { name: "Continue in chat" })).toBeVisible();
+    } finally { view.unmount(); vi.useRealTimers(); }
+  });
+  it.each(["continuation", "metadata"])("invalidates pending %s navigation when the exact Session changes", async phase => {
+    const first = { ...fixtureBackground, session: { ...fixtureBackground.session, agentInstanceId: "instance-1" } };
+    const next = { ...first, originalTitle: "Next original task", session: { ...first.session, sessionId: "next-session" } };
+    let finish!: (value: { sessionId: string } | typeof first) => void;
+    const pending = new Promise<{ sessionId: string } | typeof first>(resolve => { finish = resolve; });
+    let firstReads = 0;
+    vi.mocked(getBackgroundSession).mockImplementation(async id => {
+      if (id === next.session.sessionId) return next;
+      if (++firstReads > 1 && phase === "metadata") return await pending as typeof first;
+      return first;
+    });
+    vi.mocked(continueInChat).mockImplementation(async id => id === first.session.sessionId && phase === "continuation" ? await pending as { sessionId: string } : { sessionId: id });
+    const onOpenConversation = vi.fn(); const onClose = vi.fn();
+    const view = render(<App><BackgroundWorkDrawer instanceId="instance-1" open wide initialSessionId={first.session.sessionId} onOpenConversation={onOpenConversation} onClose={onClose} /></App>);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue in chat" }));
+    await waitFor(() => expect(phase === "metadata" ? firstReads : vi.mocked(continueInChat).mock.calls.length).toBe(phase === "metadata" ? 2 : 1));
+    view.rerender(<App><BackgroundWorkDrawer instanceId="instance-1" open wide initialSessionId={next.session.sessionId} onOpenConversation={onOpenConversation} onClose={onClose} /></App>);
+    expect(await screen.findByRole("dialog", { name: "Next original task" })).toBeVisible();
+    await act(async () => { finish(phase === "metadata" ? first : { sessionId: first.session.sessionId }); });
+    expect(onOpenConversation).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Continue in chat" }));
+    await waitFor(() => expect(onOpenConversation).toHaveBeenCalledWith(next.session.sessionId));
+  });
+  it("shows one exact-detail error without a lingering spinner and retries that Session", async () => {
+    const owned = { ...fixtureBackground, session: { ...fixtureBackground.session, agentInstanceId: "instance-1" } };
+    vi.mocked(getBackgroundSession).mockRejectedValueOnce(new Error("Original result is unavailable"))
+      .mockResolvedValueOnce(owned);
+    render(<App><BackgroundWorkDrawer instanceId="instance-1" open wide initialSessionId={fixtureBackground.session.sessionId} onClose={vi.fn()} /></App>);
+    expect(await screen.findByText("Original result is unavailable")).toBeVisible();
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.queryByLabelText("Loading background Session")).not.toBeInTheDocument();
+    expect(listBackgroundSessions).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Retry background session" }));
+    expect(await screen.findByRole("button", { name: "Continue in chat" })).toBeVisible();
+    expect(getBackgroundSession).toHaveBeenLastCalledWith(fixtureBackground.session.sessionId);
+    expect(screen.queryByText("Original result is unavailable")).not.toBeInTheDocument();
+  });
+  it("ignores a late exact-detail response after navigating to another background Session", async () => {
+    let finish!: (value: typeof fixtureBackground) => void;
+    vi.mocked(getBackgroundSession).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const next = { ...fixtureBackground, session: { ...fixtureBackground.session, agentInstanceId: "instance-1", sessionId: "next-session" }, originalTitle: "Next original task" };
+    vi.mocked(getBackgroundSession).mockResolvedValueOnce(next);
+    const view = render(<App><BackgroundWorkDrawer instanceId="instance-1" open wide initialSessionId={fixtureBackground.session.sessionId} onClose={vi.fn()} /></App>);
+    view.rerender(<App><BackgroundWorkDrawer instanceId="instance-1" open wide initialSessionId="next-session" onClose={vi.fn()} /></App>);
+    expect(await screen.findByRole("dialog", { name: "Next original task" })).toBeVisible();
+    await act(async () => { finish(fixtureBackground); });
+    expect(screen.getByRole("dialog", { name: "Next original task" })).toBeVisible();
+  });
   it("marks attention results across unloaded pages without acknowledging quiet or handled results", async () => {
     const attention = { ...fixtureRun, outcome: { ...fixtureRun.outcome!, attentionRequired: true } };
     const next = { ...fixtureBackground, session: { ...fixtureBackground.session, sessionId: "second" }, initialRun: { ...attention, agentRunId: "second-run" } };

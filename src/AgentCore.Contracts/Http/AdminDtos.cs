@@ -377,7 +377,8 @@ public sealed record AdminCancelAutomationRegistrationRequest(long ExpectedRevis
 public sealed record AdminEventListResponse(IReadOnlyList<AdminEventResponse> Items);
 
 public sealed record AdminWebhookEventResponse(string EventId, string DisplayName, string EventKey,
-    string Status, long Revision, string CreatedAt, string UpdatedAt, int SubscriberCount, string? LastReceivedAt);
+    string Status, long Revision, string CreatedAt, string UpdatedAt, int SubscriberCount, string? LastReceivedAt,
+    int ActiveSubscriberCount = 0);
 public sealed record AdminWebhookEventListResponse(IReadOnlyList<AdminWebhookEventResponse> Items);
 public sealed record AdminCreateWebhookEventRequest(string DisplayName, string EventKey);
 public sealed record AdminRenameWebhookEventRequest(string DisplayName, long ExpectedRevision);
@@ -385,8 +386,10 @@ public sealed record AdminWebhookEventCredentialResponse(string EventId, string 
 public sealed record AdminWebhookEventSubscriber(string AutomationId, string Name, string AgentInstanceId, string Status);
 public sealed record AdminWebhookEventDelivery(string ReceiptId, string SourceEventId, string ReceivedAt,
     string AutomationId, string AgentInstanceId, string Status);
+public sealed record AdminWebhookEventSignal(string ReceiptId, string SourceEventId, string ReceivedAt);
 public sealed record AdminWebhookEventDetailsResponse(AdminWebhookEventResponse Event,
-    IReadOnlyList<AdminWebhookEventSubscriber> Subscribers, IReadOnlyList<AdminWebhookEventDelivery> Deliveries);
+    IReadOnlyList<AdminWebhookEventSubscriber> Subscribers, IReadOnlyList<AdminWebhookEventDelivery> Deliveries,
+    IReadOnlyList<AdminWebhookEventSignal> Signals);
 
 public sealed record AdminEventResponse(
     string EventId,

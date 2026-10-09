@@ -2,7 +2,7 @@
 
 ## Scope and status
 
-This working-tree enhancement implements the requested Admin capability selection, shared Event resource model, global Connections navigation and Automation authoring UX. It preserves the existing trusted-local owner boundary and Occurrence → Activation → Session/AgentRun execution owners. It does not establish a new milestone freeze or exact-candidate hosted CI acceptance. Historical closure reports remain unchanged.
+The enhancement published in `afe01cef108e843f088f1ede299834d77b5096bf` implements the requested Admin capability selection, shared Event resource model, global Connections navigation and Automation authoring UX. It preserves the existing trusted-local owner boundary and Occurrence → Activation → Session/AgentRun execution owners. It does not establish a new milestone freeze or exact-candidate hosted CI acceptance. Historical closure reports remain unchanged.
 
 Global Connections manages Credentials and Events. Instance Credentials manages explicit system-credential grants; Instance Automation manages Schedule/Event subscriptions and reaction instructions. Event management therefore no longer appears as an Instance binding tab. An Event subscribes multiple Automations by stable ID, independently of webhook authentication and agent capability authority.
 
@@ -70,10 +70,14 @@ One initial batched inspection and one confirmation round covered Capabilities, 
 
 Local screenshots and logs are under `local/verification/admin-events/` (ignored verification artifacts), with command output in its `logs/` directory. Screenshot names are `capabilities-confirm-{1440,768,390}.png`, `events-confirm-{1440,768,390}.png`, `event-details-confirm-{1440,768,390}.png` and `automation-confirm-{1440,768,390}.png`. Changed-path browser checks reported no JavaScript errors; inherited Ant Design deprecation warnings remain.
 
-## Limits
+## Limits of the original verification
 
-Hosted GitHub Actions was not dispatched for this uncommitted working tree. Its applicable backend/frontend/build/Compose gates were exercised locally; optional Real provider/store probes and unrelated voice/acceptance projects were not rerun. No hosted milestone acceptance is claimed. Event details describes admission status for recent receipts, not model execution success; Runs owns that result.
+At the time of this pre-publication verification, hosted GitHub Actions had not been dispatched for the candidate. Publication followed in `afe01cef`; this report does not independently establish that commit’s hosted outcome. Its applicable backend/frontend/build/Compose gates were exercised locally; optional Real provider/store probes and unrelated voice/acceptance projects were not rerun. No hosted milestone acceptance is claimed. Event details describes admission status for recent receipts, not model execution success; Runs owns that result.
 
 A single green full-suite result against an unchanged combined workspace remains unverified. The recorded full frontend invocation and targeted rechecks establish the passing cases above; acceptance of concurrent Chat/artifact changes and the latest combined candidate requires the full gate after those edits settle.
 
 Impeccable context reported its design sidecar stale against `DESIGN.md`. The requested reusable design guidance was synchronized, while tooling drift was not repaired as a side effect; a separate Impeccable document refresh remains optional.
+
+## October 9 UI/UX follow-up
+
+The remaining presentation and usability feedback is handled in [Admin UI feedback verification](admin-ui-feedback-verification.md). That report owns current local evidence for explicit Event reactivation, subscriber counts, receipt visibility, request examples, compact actions, capability disclosure, navigation labels and the Automation summary. The earlier counts and limits above remain historical evidence, rather than final acceptance of this follow-up.

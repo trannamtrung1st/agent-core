@@ -200,7 +200,10 @@ public sealed partial class InMemoryStructuredMemoryStore : IStructuredMemorySto
         {
             if (!_items.TryGetValue(tombstone.MemoryId, out var current)
                 || current.SessionId != tombstone.SessionId
-                || current.Status != MemoryItemStatus.Active)
+                || current.Scope != tombstone.Scope
+                || current.OwnerInstanceId != tombstone.OwnerInstanceId
+                || current.OwnerProfileId != tombstone.OwnerProfileId
+                || current.Status is not (MemoryItemStatus.Active or MemoryItemStatus.Resolved))
             {
                 throw AgentCoreErrors.NotFound("Memory was not found.");
             }

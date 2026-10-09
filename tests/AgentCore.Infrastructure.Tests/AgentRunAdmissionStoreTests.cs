@@ -1451,6 +1451,34 @@ public sealed class AgentRunAdmissionStoreTests
         return (Snapshot(sessionId, [entry]) with { Origin = origin, Surfaces = origin.InitialSurface }, run);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Instance_activity_pages_all_surfaces_once_with_exact_owner_and_stable_cursor(bool sqlite)
+    {
+        await using var f = await Fixture.CreateAsync(sqlite);
+        var chat = Snapshot(Guid.Parse("019944af-0009-7000-8000-000000000002"), []) with { Title = "Conversation", UpdatedAt = Now.AddSeconds(3).AddTicks(3) };
+        var background = Snapshot(Guid.Parse("019944af-0009-7000-8000-000000000001"), []) with { Title = "Task", UpdatedAt = Now.AddSeconds(3).AddTicks(9),
+            Origin = new SessionOrigin(SessionOriginKind.ManualBackground, initialBackgroundAgentRunId: Guid.NewGuid()),
+            Surfaces = SessionSurface.ChatList | SessionSurface.BackgroundWork };
+        var archived = Snapshot(Guid.NewGuid(), []) with { Title = "Archived", UpdatedAt = Now, ArchivedAt = Now };
+        var hidden = Snapshot(Guid.NewGuid(), []) with { DurablyDeletedAt = Now };
+        var foreign = Snapshot(Guid.NewGuid(), []) with { AgentInstanceId = Guid.NewGuid(), UpdatedAt = Now.AddSeconds(4) };
+        var otherProfile = Snapshot(Guid.NewGuid(), []) with { ProfileId = Guid.NewGuid(), UpdatedAt = Now.AddSeconds(5) };
+        foreach (var row in new[] { chat, background, archived, hidden, foreign, otherProfile }) await f.Memory.SaveAsync(row, 0);
+        await f.ReopenAsync();
+        var first = await f.Memory.ListInstanceSessionsAsync(Owner, null, 1);
+        var tied = new[] { chat.SessionId, background.SessionId }.OrderDescending().ToArray();
+        Assert.Equal(tied[0], Assert.Single(first.Items).SessionId);
+        Assert.True(first.HasMore);
+        var rest = await f.Memory.ListInstanceSessionsAsync(Owner, first.NextCursor, 10);
+        Assert.Equal(new[] { tied[1], archived.SessionId }, rest.Items.Select(row => row.SessionId));
+        Assert.False(rest.HasMore);
+        Assert.Empty((await f.Memory.ListInstanceSessionsAsync(new(Guid.NewGuid(), Owner.ProfileId), null, 20)).Items);
+        Assert.Equal("ValidationError", (await Assert.ThrowsAsync<AgentCoreException>(() => f.Memory.ListInstanceSessionsAsync(Owner, "bad-cursor", 20).AsTask())).Code);
+        Assert.Equal("ValidationError", (await Assert.ThrowsAsync<AgentCoreException>(() => f.Memory.ListInstanceSessionsAsync(Owner, null, 101).AsTask())).Code);
+    }
+
     private static SessionSnapshot Snapshot(Guid sessionId, IReadOnlyList<ConversationEntry> entries) =>
         new(1, sessionId, 1, Definition, SessionMode.Text, null, SessionStatus.Created, entries, "", 0, null,
             Owner.ProfileId, Now, Now, Owner.AgentInstanceId, PinnedPersona: Definition.Identity);
