@@ -43,6 +43,7 @@ public abstract record AgentRunCommand(long ExpectedRevision, DateTimeOffset AtU
         : AgentRunCommand(Revision, At);
     public sealed record LoadSkills(long Revision, DateTimeOffset At, Guid Generation, IReadOnlyList<string> Keys)
         : AgentRunCommand(Revision, At);
+    public sealed record ProjectBrowserDialog(long Revision, DateTimeOffset At, Guid Generation) : AgentRunCommand(Revision, At);
     public sealed record LoadCapabilities(long Revision, DateTimeOffset At, Guid Generation, IReadOnlyList<string> Names)
         : AgentRunCommand(Revision, At);
 
@@ -83,6 +84,7 @@ public abstract record AgentRunCommand(long ExpectedRevision, DateTimeOffset AtU
             ClearSideEffect c => run.ClearSideEffect(c.ExpectedRevision, c.Generation, c.AtUtc, c.RecordExternalEffect),
             AcceptBrowserSnapshot c => run.AcceptBrowserSnapshot(c.ExpectedRevision, c.Generation, c.AtUtc),
             LoadSkills c => run.AdmitActiveSkills(c.ExpectedRevision, c.Generation, c.Keys, c.AtUtc),
+            ProjectBrowserDialog c => run.AdmitRecoveryCapability(c.ExpectedRevision, c.Generation, AgentCore.Application.Tools.ToolCatalog.BrowserDialog, c.AtUtc),
             LoadCapabilities c => run.AdmitCapabilities(c.ExpectedRevision, c.Generation, c.Names, c.AtUtc),
             _ => throw new ArgumentException("AgentRun transition is unsupported.")
         };

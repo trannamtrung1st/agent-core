@@ -34,11 +34,11 @@ public sealed partial class SessionRuntime
             ContinuityContext: await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, SessionId, _snapshot.Definition, ct));
 
     private async Task<CapabilityLoadMailboxResult> RequestCapabilityLoadAsync(EventContext cause, Guid responseId,
-        string json, AgentContext context, CancellationToken ct)
+        string json, AgentContext context, CancellationToken ct, bool dialogRecovery = false)
     {
         var completed = new TaskCompletionSource<CapabilityLoadMailboxResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         BeginWork();
-        if (!TryMailbox(new CapabilityLoadRequested(WorkerContext(cause), responseId, cause.Epoch, json, context, ct, completed)))
+        if (!TryMailbox(new CapabilityLoadRequested(WorkerContext(cause), responseId, cause.Epoch, json, context, ct, completed, dialogRecovery)))
         { EndWork(); return new(SkillLoadAdmission.Error("stale", "Capability load is no longer owned by this execution."), null, "load_stale"); }
         return await completed.Task.WaitAsync(ct).ConfigureAwait(false);
     }
@@ -60,11 +60,23 @@ public sealed partial class SessionRuntime
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, input.RequestCancellation);
             using var json = JsonDocument.Parse(input.ArgumentsJson);
             var context = input.ProjectionContext with { Definition = _snapshot.Definition, LoadedCapabilityIds = current.LoadedCapabilityIds, ActiveSkillKeys = current.ActiveSkillKeys, PinnedSkillCatalog = current.PinnedSkillCatalog };
-            if (!ToolPolicy.IsOffered(_snapshot.Definition, context, ToolCatalog.CapabilitiesLoad, _tools.ConfigurationGate)) return;
-            var plan = CapabilityDiscoveryMatcher.Load(_snapshot.Definition, context, _tools.ConfigurationGate, json.RootElement, current.CapabilityLoadCount);
+            CapabilityLoadResult plan;
+            if (input.DialogRecovery)
+            {
+                if (!ToolCatalog.Eligible(_snapshot.Definition, context, _tools.ConfigurationGate).Any(t => t.Name == ToolCatalog.BrowserDialog)
+                    || current.LoadedCapabilityIds.Contains(ToolCatalog.BrowserDialog)) return;
+                // One exact registered recovery capability, with unchanged authorization/provider/trigger gates.
+                plan = new([ToolCatalog.BrowserDialog], [], "load_matched");
+            }
+            else
+            {
+                if (!ToolPolicy.IsOffered(_snapshot.Definition, context, ToolCatalog.CapabilitiesLoad, _tools.ConfigurationGate)) return;
+                plan = CapabilityDiscoveryMatcher.Load(_snapshot.Definition, context, _tools.ConfigurationGate, json.RootElement, current.CapabilityLoadCount);
+            }
             matches = plan.Loaded.Count;
             var updated = plan.Outcome == "load_over_budget" ? current : await _agentRuns.ApplyAsync(current.Owner, current.AgentRunId,
-                new AgentRunCommand.LoadCapabilities(current.Revision, _time.GetUtcNow(), current.Claim!.Generation, plan.Loaded), linked.Token);
+                input.DialogRecovery ? new AgentRunCommand.ProjectBrowserDialog(current.Revision, _time.GetUtcNow(), current.Claim!.Generation)
+                    : new AgentRunCommand.LoadCapabilities(current.Revision, _time.GetUtcNow(), current.Claim!.Generation, plan.Loaded), linked.Token);
             _boundAgentRun = updated;
             result = new(plan.ToJson(), updated.LoadedCapabilityIds, plan.Outcome);
         }

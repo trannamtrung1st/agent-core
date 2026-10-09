@@ -339,6 +339,13 @@ public sealed class AgentRun
         return CopyProjection(ActiveSkillKeys, SkillLoadCount, combined, CapabilityLoadCount + 1, updatedAtUtc);
     }
 
+    public AgentRun AdmitRecoveryCapability(long expectedRevision, Guid generation, string name, DateTimeOffset updatedAtUtc)
+    {
+        RequireOperational(expectedRevision, generation);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        return CopyProjection(ActiveSkillKeys, SkillLoadCount, LoadedCapabilityIds.Append(name).Distinct(StringComparer.Ordinal).ToArray(), CapabilityLoadCount, updatedAtUtc);
+    }
+
     private AgentRun CopyProjection(IReadOnlyList<string> activeSkillKeys, int skillLoadCount,
         IReadOnlyList<string> loadedCapabilityIds, int capabilityLoadCount, DateTimeOffset updatedAtUtc)
     {

@@ -2646,13 +2646,26 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var overallDeadline = toolDeadline ? _time.GetUtcNow() + remainingBudget : (DateTimeOffset?)null;
         var generateToken = toolDeadline ? overallCts.Token : cancellationToken;
         var finalizationReason = RunFinalization.Restore(CheckpointSuffix());
+        var cleanupPhase = CheckpointSuffix().Any(m => m.Role == ModelRole.System && m.Text == RunFinalization.CleanupMarker);
+        async Task BeginCleanupAsync()
+        {
+            if (cleanupPhase || finalizationReason is not null || budget.CleanupReserve == TimeSpan.Zero
+                || overallDeadline - _time.GetUtcNow() > budget.CleanupReserve + budget.FinalizationReserve) return;
+            cleanupPhase = true;
+            messages.Add(new ModelMessage(ModelRole.System, RunFinalization.CleanupMarker));
+            await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken).ConfigureAwait(false);
+        }
         using var workCts = CancellationTokenSource.CreateLinkedTokenSource(generateToken);
         using ITimer? workTimer = toolDeadline && budget.FinalizationReserve > TimeSpan.Zero
-            ? ScheduleCancel(_time, workCts, remainingBudget > budget.FinalizationReserve ? remainingBudget - budget.FinalizationReserve : TimeSpan.Zero) : null;
+            ? ScheduleCancel(_time, workCts, remainingBudget > budget.FinalizationReserve + budget.CleanupReserve ? remainingBudget - budget.FinalizationReserve - budget.CleanupReserve : TimeSpan.Zero) : null;
+        using var cleanupCts = CancellationTokenSource.CreateLinkedTokenSource(generateToken);
+        using ITimer? cleanupTimer = toolDeadline && budget.FinalizationReserve > TimeSpan.Zero
+            ? ScheduleCancel(_time, cleanupCts, remainingBudget > budget.FinalizationReserve ? remainingBudget - budget.FinalizationReserve : TimeSpan.Zero) : null;
         async Task BeginFinalizationAsync(string reason)
         {
             finalizationReason = reason;
             workTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            cleanupTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
             var finalDeadline = _time.GetUtcNow() + budget.FinalizationReserve;
             if (overallDeadline is null || finalDeadline < overallDeadline) overallDeadline = finalDeadline;
             var remaining = overallDeadline.Value - _time.GetUtcNow();
@@ -2667,7 +2680,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             while (!generateToken.IsCancellationRequested)
             {
-                if (finalizationReason is null && workTimer is not null && workCts.IsCancellationRequested)
+                await BeginCleanupAsync().ConfigureAwait(false);
+                if (finalizationReason is null && cleanupTimer is not null && cleanupCts.IsCancellationRequested)
                     await BeginFinalizationAsync("runDeadline").ConfigureAwait(false);
                 if (finalizationReason is not null && _publishedDisplayLength != 0)
                 {
@@ -2730,6 +2744,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 prompt.Insert(factsIndex, new ModelMessage(ModelRole.System, RunExecutionFacts.Current(executionRun?.AgentRunId, loadedCapabilities, CheckpointSuffix())));
                 if (previousFacts is not null) prompt.Insert(factsIndex + 1, new ModelMessage(ModelRole.System, previousFacts));
                 if (invalidRecoveryExhausted) prompt.Add(new ModelMessage(ModelRole.System, "Repeated malformed tool strategy remains blocked. Finish from existing evidence and report the validation blocker; do not request more tools."));
+                if (budget.CleanupReserve > TimeSpan.Zero) prompt.Add(new ModelMessage(ModelRole.System, RunFinalization.BrowserLifecycleInstruction));
+                if (cleanupPhase && finalizationReason is null) prompt.Add(new ModelMessage(ModelRole.System, RunFinalization.CleanupInstruction));
                 if (finalizationReason is not null) prompt.Add(new ModelMessage(ModelRole.System, RunFinalization.Instruction));
 
                 var working = inRepair
@@ -2755,6 +2771,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (invalidRecoveryExhausted) working = working with { Tools = IsInitialBackgroundRun ? [AgentCore.Application.Work.WorkCompletionRequest.Contract] : null };
                 if (checkpointCapacityReached) working = working with { Tools = IsInitialBackgroundRun ? [AgentCore.Application.Work.WorkCompletionRequest.Contract] : null };
                 if (trigger.Kind == TriggerKind.BackgroundCompleted) working = working with { Tools = null };
+                if (cleanupPhase && finalizationReason is null && working.Tools is { } cleanupTools)
+                    working = working with { Tools = cleanupTools.Where(t => RunFinalization.CleanupTool(t.Name)).ToArray() };
                 if (finalizationReason is not null) working = working with { Tools = null, ToolChoice = ModelToolChoice.Auto, ToolChoiceName = null,
                     MaxOutputTokens = Math.Min(working.MaxOutputTokens, 2048) };
                 var projectionModel = _boundAgentRun is { } binding && binding.ResponseId == request.ResponseId
@@ -2766,7 +2784,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (!resumingBatch)
                     await RequireProviderRunAuthorityAsync(cause, request.ResponseId, generateToken).ConfigureAwait(false);
                 if (!resumingBatch)
-                await foreach (var evt in model.GenerateAsync(working, finalizationReason is null && workTimer is not null ? workCts.Token : generateToken).ConfigureAwait(false))
+                await foreach (var evt in model.GenerateAsync(working, finalizationReason is null && workTimer is not null ? (cleanupPhase ? cleanupCts.Token : workCts.Token) : generateToken).ConfigureAwait(false))
                 {
                     if (!cancellationToken.IsCancellationRequested && generateToken.IsCancellationRequested)
                     {
@@ -2774,9 +2792,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         return;
                     }
                     if (evt is ModelFailed && !cancellationToken.IsCancellationRequested && finalizationReason is null
-                        && workTimer is not null && workCts.IsCancellationRequested && !publishedVisible)
+                        && workTimer is not null && ((!cleanupPhase && workCts.IsCancellationRequested) || cleanupCts.IsCancellationRequested))
                     {
-                        await BeginFinalizationAsync("runDeadline").ConfigureAwait(false);
+                        if (publishedVisible)
+                        {
+                            await MailboxModelAsync(cause, request.ResponseId, new ModelFailed(RunFinalization.DeadlineFailure()), CancellationToken.None).ConfigureAwait(false);
+                            return;
+                        }
+                        if (cleanupCts.IsCancellationRequested) await BeginFinalizationAsync("runDeadline").ConfigureAwait(false);
+                        else if (!cleanupPhase) await BeginCleanupAsync().ConfigureAwait(false);
                         retryGeneration = true;
                         break;
                     }
@@ -2975,9 +2999,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && !generateToken.IsCancellationRequested
-                    && workTimer is not null && workCts.IsCancellationRequested && finalizationReason is null && !publishedVisible)
+                    && workTimer is not null && ((!cleanupPhase && workCts.IsCancellationRequested) || cleanupCts.IsCancellationRequested)
+                    && finalizationReason is null && !publishedVisible)
                 {
-                    await BeginFinalizationAsync("runDeadline").ConfigureAwait(false);
+                    if (cleanupCts.IsCancellationRequested) await BeginFinalizationAsync("runDeadline").ConfigureAwait(false);
+                    else await BeginCleanupAsync().ConfigureAwait(false);
                     retryGeneration = true;
                 }
                 finally
@@ -3052,6 +3078,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 var substantiveWorkInBatch = false;
                 foreach (var call in pending)
                 {
+                    await BeginCleanupAsync().ConfigureAwait(false);
+                    if (cleanupPhase && !RunFinalization.CleanupTool(call.Name))
+                    {
+                        messages.Add(new ModelMessage(ModelRole.Tool, "{\"error\":\"finish_required\",\"reason\":\"cleanup_reserve\"}", ToolCallId: call.Id, Name: call.Name));
+                        await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken).ConfigureAwait(false);
+                        continue;
+                    }
                     if (!await AdmitToolActivityAsync(
                                 cause,
                                 request.ResponseId,
@@ -3307,6 +3340,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 {
                                     var pausedOverallRemaining = PauseToolClock(overallTimer, overallDeadline);
                                     workTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+                                    cleanupTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
                                     try
                                     {
                                         if (_boundAgentRun?.Approval is { Decision: AgentRunApprovalDecision.Approved } approved
@@ -3336,7 +3370,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             overallCts,
                                             pausedOverallRemaining);
                                         if (workTimer is not null && pausedOverallRemaining is { } restoredRemaining)
-                                            workTimer.Change(restoredRemaining > budget.FinalizationReserve ? restoredRemaining - budget.FinalizationReserve : TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+                                        {
+                                            workTimer.Change(restoredRemaining > budget.FinalizationReserve + budget.CleanupReserve ? restoredRemaining - budget.FinalizationReserve - budget.CleanupReserve : TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+                                            cleanupTimer?.Change(restoredRemaining > budget.FinalizationReserve ? restoredRemaining - budget.FinalizationReserve : TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+                                        }
                                     }
 
                                     if (_boundAgentRun?.Claim is { } resumedClaim)
@@ -3581,6 +3618,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken).ConfigureAwait(false);
                     if (effectFenced)
                         await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.ClearSideEffect(run.Revision, now, run.Claim!.Generation, ToolCatalog.RecordsOwnerVisibleEffect(call.Name)), generateToken).ConfigureAwait(false);
+                    if (call.Name.StartsWith("browser.", StringComparison.Ordinal) && BrowserDialogPending(executionResult.Text)
+                        && _snapshot.Definition.Environment?.Capabilities is not null)
+                    {
+                        var recoveryContext = await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, generateToken).ConfigureAwait(false);
+                        var recovery = await RequestCapabilityLoadAsync(cause, request.ResponseId, "{}", recoveryContext, generateToken, dialogRecovery: true).ConfigureAwait(false);
+                        if (recovery.LoadedIds is { } recoveredIds) loadedCapabilities = recoveredIds;
+                    }
                     if (finalizationReason is null && workTimer is not null && overallDeadline - _time.GetUtcNow() <= budget.FinalizationReserve + budget.PerTool)
                     {
                         await BeginFinalizationAsync("runDeadline").ConfigureAwait(false);
@@ -6806,7 +6850,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             if (_deactivated
                 || context.Epoch != _epoch
                 || responseId != (_activeResponseId ?? _progressOwnerResponseId)
-                || (_responseTerminal && _activeResponseId == responseId))
+                || _responseTerminal)
             {
                 return;
             }

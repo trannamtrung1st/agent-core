@@ -1,10 +1,15 @@
 using System.Text.Json;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
 
 namespace AgentCore.Application.Execution;
 
 internal static class RunFinalization
 {
+    internal const string BrowserLifecycleInstruction = "Native dialog_pending is a blocked decision, not browser unavailability. Inspect with authorized browser.dialog, resolve only when justified by the requested action, then observe the application before proceeding. Do not repeat the triggering click. A closed browser profile can retain authentication: sign-out requires independent application evidence. Report cleanup failures or uncertainty truthfully.";
+    internal const string CleanupMarker = "Core browser cleanup phase.";
+    internal const string CleanupInstruction = "The remaining browser work budget is reserved for requested cleanup and verification. Stop starting new substantive work. Resolve only dialogs justified by the action the user requested; never automatically accept an unknown confirmation. Verify sign-out with an application observation independently of browser closure. Close only if requested, then give a truthful final or partial result before the deadline.";
+    internal static bool CleanupTool(string name) => name is ToolCatalog.BrowserFind or ToolCatalog.BrowserSnapshot or ToolCatalog.BrowserDialog or ToolCatalog.BrowserClick or ToolCatalog.BrowserClose or ToolCatalog.BrowserTabs;
     internal const string Marker = "Core finalization phase: ";
     internal const string Instruction = "The work phase has ended. Generate a final reply only from existing durable tool receipts. No tools or new external effects are permitted. Distinguish recorded actions from unverified task outcomes. A browser closure does not establish sign-out. Report incomplete or uncertain work accurately.";
     internal static string? Restore(IEnumerable<ModelMessage> messages) => messages

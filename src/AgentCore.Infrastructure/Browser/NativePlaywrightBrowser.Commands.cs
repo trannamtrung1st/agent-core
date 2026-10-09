@@ -156,7 +156,8 @@ public sealed partial class NativePlaywrightBrowser
                         // A modal blocks page JS, including the live storage/password secret collector.
                         // Mask the entire untrusted message rather than trusting stale pre-dialog evidence.
                         if (args.Operation == "inspect") return Data(new { kind = dialog.Type, message = "[redacted]", messageRedacted = true });
-                        if (args.Operation == "accept") await dialog.AcceptAsync(args.PromptText).WaitAsync(ct);
+                        if (DialogResolutionProbe is { } resolve) await resolve(dialog).WaitAsync(ct);
+                        else if (args.Operation == "accept") await dialog.AcceptAsync(args.PromptText).WaitAsync(ct);
                         else await dialog.DismissAsync().WaitAsync(ct);
                         session.Dialog = null;
                         if (session.PendingAction is { } pending) { await pending.WaitAsync(ct); session.PendingAction = null; }

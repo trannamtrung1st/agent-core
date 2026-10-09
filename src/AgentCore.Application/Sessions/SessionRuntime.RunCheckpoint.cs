@@ -74,6 +74,13 @@ public sealed partial class SessionRuntime
         RequestAgentRunCommandAsync(cause, responseId, (run, now) => new AgentRunCommand.MarkSideEffect(
             run.Revision, now, run.Claim!.Generation, disposition, call.Id, hash), ct);
 
+    private static bool BrowserDialogPending(string text)
+    {
+        try { using var json = JsonDocument.Parse(text); return json.RootElement.ValueKind == JsonValueKind.Object
+            && json.RootElement.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String && error.GetString() == "dialog_pending"; }
+        catch (JsonException) { return false; }
+    }
+
     private static bool RejectedEffect(string text)
     {
         try

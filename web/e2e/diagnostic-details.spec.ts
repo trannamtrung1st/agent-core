@@ -79,6 +79,21 @@ for (const replyFails of [false, true]) {
   });
 }
 
+test("native sign-out confirmation completes before closure and final reply", async ({ page }) => {
+  await page.goto("/");
+  await selectInstanceIdentity(page, { id: "general-assistant", version: 20 });
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await page.getByLabel("Message").fill(`synthetic-browser-cleanup http://127.0.0.1:${process.env.PLAYWRIGHT_FIXTURE_PORT ?? "5091"}/`);
+  await page.getByRole("button", { name: "Send" }).click();
+  const row = page.locator(".chat-message-assistant").last();
+  await expect(row).toContainText("Sign-out verified at the login screen", { timeout: 30_000 });
+  await expect(row.getByText("✓ Browser closed", { exact: true })).toBeVisible();
+  await expect(row.getByText("Reply failed", { exact: true })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(page.locator(".chat-message-assistant").last()).toContainText("Sign-out verified at the login screen");
+});
+
 test("background work shows a seeded terminal diagnostic", async ({ page }) => {
   await page.goto("/");
   await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);

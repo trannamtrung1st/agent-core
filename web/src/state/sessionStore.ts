@@ -290,7 +290,8 @@ function parseProgress(event: ServerEvent): ResponseProgress | null {
 }
 
 function progressIsStale(state: SessionView, responseId: string): boolean {
-  if (state.tombstones[responseId]) {
+  if (state.tombstones[responseId] || state.entries.some(entry =>
+    isAssistantForResponse(entry, responseId) && entry.status !== "streaming")) {
     return true;
   }
 

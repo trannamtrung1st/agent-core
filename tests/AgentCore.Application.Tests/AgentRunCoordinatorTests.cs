@@ -93,6 +93,22 @@ public sealed class AgentRunCoordinatorTests
     }
 
     [Fact]
+    public async Task Exact_dialog_recovery_projection_preserves_discovery_budget_and_generation_fences()
+    {
+        var f = await Fixture.CreateAsync();
+        await f.Coordinator.DispatchAsync(Owner, f.Run.AgentRunId);
+        var run = Assert.Single(f.Dispatcher.Dispatched);
+        for (var i = 0; i < 8; i++) run = await f.Store.ApplyAsync(Owner, run.AgentRunId,
+            new AgentRunCommand.LoadCapabilities(run.Revision, f.Time.GetUtcNow(), run.Claim!.Generation, []));
+        run = await f.Store.ApplyAsync(Owner, run.AgentRunId,
+            new AgentRunCommand.ProjectBrowserDialog(run.Revision, f.Time.GetUtcNow(), run.Claim!.Generation));
+        Assert.Equal(8, run.CapabilityLoadCount);
+        Assert.Equal([AgentCore.Application.Tools.ToolCatalog.BrowserDialog], run.LoadedCapabilityIds);
+        await Assert.ThrowsAsync<AgentCoreException>(() => f.Store.ApplyAsync(Owner, run.AgentRunId,
+            new AgentRunCommand.ProjectBrowserDialog(run.Revision, f.Time.GetUtcNow(), Guid.NewGuid())).AsTask());
+    }
+
+    [Fact]
     public async Task Deadline_settlement_is_terminal_only_and_cannot_settle_a_reclaimed_generation()
     {
         var f = await Fixture.CreateAsync();

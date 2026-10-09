@@ -24,6 +24,7 @@ public readonly record struct ToolExecutionBudget(
     TimeSpan PerTool)
 {
     // The final reply shares the existing hard deadline; it does not extend the Run.
+    public TimeSpan CleanupReserve => Class == ToolExecutionClass.InteractiveBrowser ? TimeSpan.FromSeconds(60) : TimeSpan.Zero;
     public TimeSpan FinalizationReserve => Class == ToolExecutionClass.InteractiveBrowser ? TimeSpan.FromSeconds(30) : TimeSpan.Zero;
     public static ToolExecutionBudget Standard { get; } = new(
         ToolExecutionClass.Standard,

@@ -89,6 +89,27 @@ public sealed partial class TerminalDisplayRepairTests
     }
 
     [Fact]
+    public async Task Work_provider_cutoff_enters_cleanup_before_final_reply_reserve()
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-09T12:00:00Z"));
+        var model = new FinalizationHoldingModel();
+        var browser = new CountingBrowser();
+        await using var runtime = Create(model, browser, clock, ToolCatalog.BrowserClose, ToolCatalog.BrowserType);
+        await runtime.AttachAsync();
+        Assert.True(await runtime.SubmitUserTextAsync("Inspect and close the browser"));
+        await model.Holding.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        clock.Advance(TimeSpan.FromSeconds(210));
+        model.Release.TrySetResult();
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(3, model.Requests.Count);
+        Assert.Contains(model.Requests.Last().Tools!, tool => tool.Name == ToolCatalog.BrowserClose);
+        Assert.DoesNotContain(model.Requests.Last().Tools!, tool => tool.Name == ToolCatalog.BrowserType);
+        Assert.Contains(model.Requests.Last().Messages, m => m.Text.Contains("remaining browser work budget"));
+        Assert.Equal(EntryStatus.Completed, runtime.Snapshot.Entries.Last(e => e.Role == ConversationRole.Assistant).Status);
+        Assert.Equal(1, browser.CloseCalls);
+    }
+
+    [Fact]
     public async Task Work_cutoff_leaves_time_for_tool_free_reply_after_committed_close()
     {
         var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-09T12:00:00Z"));

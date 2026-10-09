@@ -94,6 +94,8 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
     internal Func<Exception?>? CaptureProbe { get; set; }
     internal Func<IPage, int, int, Task>? ResizeProbe { get; set; }
     internal Func<IPage, Task>? ActivateTabProbe { get; set; }
+    internal Func<IDialog, Task>? DialogResolutionProbe { get; set; }
+    internal Func<IBrowserContext, Task>? ExplicitCloseProbe { get; set; }
     internal Func<IPage, Task>? DeniedPopupCloseProbe { get; set; }
     internal Action? PopupCleanupWaitProbe { get; set; }
     internal Action? ActionStartedProbe { get; set; }
@@ -564,14 +566,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (Interlocked.Exchange(ref session.RuntimeClosed, 1) == 1)
-            {
-                return new BrowserCloseResult("already_closed");
-            }
-
-            await CloseQuietlyAsync(session.Context).ConfigureAwait(false);
-            DropClosed(session);
-            return new BrowserCloseResult("closed");
+            return await CloseExplicitlyAsync(session, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -584,7 +579,8 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         cancellationToken.ThrowIfCancellationRequested();
         if (IsRuntimeReady && Volatile.Read(ref _stopped) == 0)
         {
-            await ClosePersistentAsync(agentInstanceId, cancellationToken).ConfigureAwait(false);
+            var closed = await ClosePersistentAsync(agentInstanceId, cancellationToken).ConfigureAwait(false);
+            if (closed.Status is not ("closed" or "already_closed")) throw new IOException("Browser profile closure was not confirmed.");
         }
 
         var directory = ProfileDirectory(agentInstanceId);
@@ -635,14 +631,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
             await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                if (Interlocked.Exchange(ref session.RuntimeClosed, 1) == 1)
-                {
-                    return new BrowserCloseResult("already_closed");
-                }
-
-                await CloseQuietlyAsync(session.Context).ConfigureAwait(false);
-                DropClosed(session);
-                return new BrowserCloseResult("closed");
+                return await CloseExplicitlyAsync(session, cancellationToken).ConfigureAwait(false);
             }
             finally
             {
@@ -653,6 +642,27 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         {
             gate.Release();
         }
+    }
+
+    private async Task<BrowserCloseResult> CloseExplicitlyAsync(SessionBrowser session, CancellationToken ct)
+    {
+        if (Volatile.Read(ref session.RuntimeClosed) == 1) return new("already_closed");
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(TimeSpan.FromMilliseconds(TimeoutMs()));
+        try
+        {
+            var closing = ExplicitCloseProbe is { } close ? close(session.Context) : session.Context.CloseAsync();
+            _ = closing.ContinueWith(task => _ = task.Exception, TaskContinuationOptions.OnlyOnFaulted);
+            await closing.WaitAsync(deadline.Token).ConfigureAwait(false);
+            // The native Close event, rather than an intent flag, confirms actual context closure.
+            if (Volatile.Read(ref session.RuntimeClosed) != 1) return new("close_uncertain");
+            DropClosed(session);
+            return new("closed");
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        { return new(Volatile.Read(ref session.RuntimeClosed) == 1 ? "closed" : "close_uncertain"); }
+        catch (PlaywrightException)
+        { return new(Volatile.Read(ref session.RuntimeClosed) == 1 ? "closed" : "close_failed"); }
     }
 
     private void ForgetClosed(SessionBrowser session)

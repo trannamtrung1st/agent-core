@@ -293,7 +293,7 @@ Example server control (other events use identical metadata with their table pay
 {"protocolVersion":1,"sessionId":"873f07d1-e264-4c81-a31b-7e59e940b842","attachmentId":"019944af-0000-7000-8000-000000000001","eventId":"019944af-0000-7000-8000-000000000014","sequence":4,"timestamp":"2026-09-15T00:00:02.100Z","correlationId":"019944af-0000-7000-8000-000000000010","causationId":"019944af-0000-7000-8000-000000000013","responseId":"019944af-0000-7000-8000-000000000012","type":"agent.text.delta","payload":{"text":"Hello","textStart":0}}
 ```
 
-Terminal interruption uses `agent.response.interrupted`, never a later `agent.response.completed` event. Failed response uses error then `agent.response.completed(status=failed)`; it does not also emit interrupted. On any terminal failed/interrupted event client tombstones the response and flushes playback. On success client retains text and rejects additional output. `agent.text.completed` does not imply audio has finished.
+Terminal interruption uses `agent.response.interrupted`, never a later `agent.response.completed` event. Failed response uses error then `agent.response.completed(status=failed)`; it does not also emit interrupted. On any terminal failed/interrupted event client tombstones the response and flushes playback. On success client retains text and rejects additional output. Terminal history rows also fence later active-progress events when an authoritative reload omitted tombstones. Runtime terminal state rejects active progress even after the active response pointer is cleared. `agent.text.completed` does not imply audio has finished.
 
 ## Connection lifecycle
 

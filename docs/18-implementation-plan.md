@@ -469,3 +469,7 @@ The user authorized all review recommendations after browser discovery recovery 
 ### Browser Run finalization follow-up
 
 The user authorized all reply-failure recommendations and deferred waiting for hosted CI. This extends the existing Session/AgentRun path with a reply reserve inside the unchanged interactive deadline, bounded tool-free finalization, precise cancellation/timeout causes, sanitized prior failure facts and separate action/reply presentation. It does not introduce another browser engine or replay side effects. [Finalization verification](reports/browser-run-finalization-verification.md) records local execution and deferred acceptance; P10/P11 remain unopened.
+
+### Browser cleanup lifecycle follow-up
+
+The Pump 002 review authorizes actionable native dialog recovery, confirmed explicit closure, cleanup time before reply finalization, independent sign-out evidence and terminal progress fencing. This remains the native `IBrowser` and owned Session/AgentRun path. [Cleanup verification](reports/browser-cleanup-lifecycle-verification.md) records local gates, isolated setup correction and deferred CI/real-application acceptance. P10/P11 remain unopened.

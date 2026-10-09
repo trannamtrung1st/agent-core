@@ -200,6 +200,38 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
         var diagnosticUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        if (diagnosticUser.Contains("synthetic-browser-cleanup", StringComparison.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var results = request.Messages.Skip(request.Messages.ToList().FindLastIndex(m => m.Role == ModelRole.User) + 1).Where(m => m.Role == ModelRole.Tool).ToArray();
+            var origin = System.Text.RegularExpressions.Regex.Match(diagnosticUser, @"http://127\.0\.0\.1:\d+").Value;
+            string Ref() { using var json = JsonDocument.Parse(results.Last().Text); return json.RootElement.GetProperty("matches")[0].GetProperty("ref").GetString()!; }
+            (string, object) plan = results.Length switch
+            {
+                0 when origin.Length > 0 => (ToolCatalog.BrowserNavigate, new { url = origin + "/credential-login" }),
+                1 => (ToolCatalog.BrowserFind, new { by = "role", value = "button", name = "Sign in" }),
+                2 => (ToolCatalog.BrowserClick, new { @ref = Ref() }),
+                3 => (ToolCatalog.BrowserFind, new { by = "role", value = "button", name = "Sign out" }),
+                4 => (ToolCatalog.BrowserClick, new { @ref = Ref() }),
+                5 => (ToolCatalog.BrowserDialog, new { operation = "inspect" }),
+                6 => (ToolCatalog.BrowserDialog, new { operation = "accept" }),
+                7 => (ToolCatalog.BrowserFind, new { by = "role", value = "button", name = "Sign in" }),
+                8 => (ToolCatalog.BrowserClose, new { }),
+                _ => ("", new { })
+            };
+            if (plan.Item1.Length > 0)
+            {
+                yield return new ModelToolCallEvent(new("cleanup-" + results.Length, plan.Item1, JsonSerializer.Serialize(plan.Item2)));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            }
+            else
+            {
+                var verified = results.Length == 9 && results[7].Text.Contains("Sign in") && !results[7].Text.Contains("\"error\"");
+                yield return new ModelSemanticResponseReady(new(verified ? "Sign-out verified at the login screen; browser closure recorded." : "Cleanup incomplete; sign-out unverified.", new(ModelSpeechMode.Same, null), []));
+                yield return new ModelCompleted(ModelStopReason.Completed);
+            }
+            yield break;
+        }
         if (diagnosticUser.Contains("synthetic-finalization-", StringComparison.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
