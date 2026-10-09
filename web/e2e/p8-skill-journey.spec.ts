@@ -1,8 +1,9 @@
 import { startSyntheticChat } from "./admin-managed-helpers";
 import { execFileSync } from "node:child_process";
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page, type Request } from "@playwright/test";
 import {
   completeDefinitionDraftPublishGate,
+  isCanceledDraftEvidenceRead,
   publishDraftFromInstructions
 } from "./admin-definition-gate-helpers";
 import { definitionDraftsSection, draftEditorSection } from "./admin-draft-editor-helpers";
@@ -22,13 +23,19 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
   const consoleErrors: string[] = [];
   const failedRequests: string[] = [];
   const failedResponses: string[] = [];
+  const heldEvidenceRequests = new Set<Request>();
+  const canceledEvidenceRequests = new Set<Request>();
   page.on("console", (message) => {
     if (message.type() === "error") {
       consoleErrors.push(message.text());
     }
   });
   page.on("requestfailed", (request) => {
-    failedRequests.push(`${request.method()} ${request.url()}`);
+    if (isCanceledDraftEvidenceRead(request)) {
+      canceledEvidenceRequests.add(request);
+    } else {
+      failedRequests.push(`${request.method()} ${request.url()}`);
+    }
   });
   page.on("response", (response) => {
     if (response.status() >= 400) failedResponses.push(`${response.status()} ${response.url()}`);
@@ -121,8 +128,32 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
   releaseEvidence();
   await expect(gate.locator(".ant-spin")).toHaveCount(0, { timeout: 15_000 });
 
+  await page.unroute("**/evaluation-scenarios**", holdEvidence);
+  await page.unroute("**/evaluation-results**", holdEvidence);
+  // Scenario save refreshes evidence directly and through its new draft revision.
+  // Hold the older pair through publication while the newer load establishes eligibility.
+  let readsToHold = 0;
+  let releaseOlderEvidence = () => {};
+  const olderEvidenceHeld = new Promise<void>((resolve) => { releaseOlderEvidence = resolve; });
+  page.on("response", (response) => {
+    if (response.request().method() === "PUT" && response.url().endsWith("/evaluation-scenarios") && response.ok()) readsToHold = 2;
+  });
+  const holdOlderEvidence = async (route: import("@playwright/test").Route) => {
+    if (route.request().method() === "GET" && readsToHold > 0) {
+      readsToHold--;
+      heldEvidenceRequests.add(route.request());
+      await olderEvidenceHeld;
+    }
+    await route.continue();
+  };
+  await page.route("**/evaluation-scenarios**", holdOlderEvidence);
+  await page.route("**/evaluation-results**", holdOlderEvidence);
   await completeDefinitionDraftPublishGate(page, editor);
+  expect(heldEvidenceRequests.size).toBe(2);
   await publishDraftFromInstructions(page, editor);
+  releaseOlderEvidence();
+  await expect.poll(() => [...heldEvidenceRequests].filter(request => canceledEvidenceRequests.has(request)).length + failedResponses.filter(url => url.includes("/evaluation-")).length).toBe(2);
+  expect([...heldEvidenceRequests].filter(request => canceledEvidenceRequests.has(request)), failedResponses.join("\n")).toHaveLength(2);
 
   await page.getByRole("button", { name: "View v1 (durable)", exact: true }).click();
   const versionDetails = page.getByRole("region", { name: "Version details", exact: true });

@@ -1,6 +1,6 @@
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { Alert, Button, Descriptions, Flex, Input, List, Select, Spin, Tag, Typography } from "antd";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useImperativeHandle, type Ref } from "react";
 import type { AdminDefinitionDraft } from "../../services/adminApi";
 import {
   getAdminDefinitionDraft,
@@ -18,7 +18,10 @@ import {
 import { computePublishEligibility, type EvidenceLoadStatus } from "./definitionDraftPublishGate";
 import { reportAdminError } from "./adminErrors";
 
+export type DefinitionDraftEvidenceHandle = { pause: () => void; resume: () => void };
+
 type Props = {
+  evidenceRef?: Ref<DefinitionDraftEvidenceHandle>;
   activeDraft: AdminDefinitionDraft;
   dirty: boolean;
   busy: boolean;
@@ -30,6 +33,7 @@ type Props = {
 
 export function DefinitionDraftPublishGatePanel({
   activeDraft,
+  evidenceRef,
   dirty,
   busy,
   toolNames,
@@ -64,6 +68,13 @@ export function DefinitionDraftPublishGatePanel({
   );
   const toolFieldRequired = checkType !== "TriggerSchedulePermitted";
   const requestGenerationRef = useRef(0);
+  const evidenceControllerRef = useRef<AbortController | null>(null);
+  const pausedRef = useRef(false);
+  const cancelEvidence = useCallback(() => {
+    requestGenerationRef.current += 1;
+    evidenceControllerRef.current?.abort();
+    evidenceControllerRef.current = null;
+  }, []);
 
   const resetGateState = useCallback(() => {
     setValidation(null);
@@ -79,16 +90,20 @@ export function DefinitionDraftPublishGatePanel({
     resetGateState();
   }, [activeDraft.draftId, resetGateState]);
 
-  const reloadEvidence = useCallback(async () => {
+  const reloadEvidence = useCallback(async (clearError = true) => {
+    if (pausedRef.current) return;
+    cancelEvidence();
+    const controller = new AbortController();
+    evidenceControllerRef.current = controller;
     const draftId = activeDraft.draftId;
     const generation = ++requestGenerationRef.current;
     setLoading(true);
     setEvidenceLoadStatus("loading");
-    onError(null);
+    if (clearError) onError(null);
     try {
       const [scenarioItems, resultItems] = await Promise.all([
-        listAdminDefinitionEvaluationScenarios(draftId),
-        listAdminDefinitionEvaluationResults(draftId)
+        listAdminDefinitionEvaluationScenarios(draftId, controller.signal),
+        listAdminDefinitionEvaluationResults(draftId, controller.signal)
       ]);
       if (generation !== requestGenerationRef.current) {
         return;
@@ -111,11 +126,19 @@ export function DefinitionDraftPublishGatePanel({
         setLoading(false);
       }
     }
-  }, [activeDraft.draftId, onError]);
+  }, [activeDraft.draftId, onError, cancelEvidence]);
 
   useEffect(() => {
     void reloadEvidence();
-  }, [reloadEvidence, activeDraft.revision]);
+    return cancelEvidence;
+  }, [reloadEvidence, activeDraft.revision, cancelEvidence]);
+
+  useImperativeHandle(evidenceRef, () => ({
+    // Publication deletes the draft. Abort reads synchronously before its POST,
+    // rather than waiting for a busy-state render or eventual unmount cleanup.
+    pause: () => { pausedRef.current = true; cancelEvidence(); },
+    resume: () => { pausedRef.current = false; void reloadEvidence(false); }
+  }), [cancelEvidence, reloadEvidence]);
 
   useEffect(() => {
     if (
@@ -167,6 +190,7 @@ export function DefinitionDraftPublishGatePanel({
   const runValidate = async () => {
     const draftId = activeDraft.draftId;
     const revision = activeDraft.revision;
+    cancelEvidence();
     const generation = ++requestGenerationRef.current;
     setLoading(true);
     setValidation(null);

@@ -1,3 +1,4 @@
+import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 import { expect, test } from "@playwright/test";
 import { completeDefinitionDraftPublishGate } from "./admin-definition-gate-helpers";
 import { draftEditorSection, forkBuiltInV1Draft } from "./admin-draft-editor-helpers";
@@ -257,7 +258,7 @@ test("Version inspection creates no draft and the shared actions publish from Te
   const errors: string[] = [];
   const failedRequests: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
-  page.on("requestfailed", request => failedRequests.push(request.url()));
+  page.on("requestfailed", request => { if (!isCanceledDraftEvidenceRead(request)) failedRequests.push(request.url()); });
   await page.goto("/");
   await page.waitForFunction(() => localStorage.getItem("agent-core.owner-capability"));
   const token = await page.evaluate(() => localStorage.getItem("agent-core.owner-capability"));

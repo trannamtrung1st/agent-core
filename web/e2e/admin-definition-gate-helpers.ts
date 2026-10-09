@@ -1,4 +1,12 @@
-import { expect, type Locator, type Page } from "@playwright/test";
+import { expect, type Locator, type Page, type Request } from "@playwright/test";
+
+// Fetch cancellation is part of the draft evidence lifecycle. This recognizes
+// only native aborts of evaluation reads; HTTP errors still surface normally.
+export function isCanceledDraftEvidenceRead(request: Request) {
+  return request.method() === "GET"
+    && /\/definition-drafts\/[^/]+\/evaluation-(scenarios|results)$/.test(request.url())
+    && request.failure()?.errorText === "net::ERR_ABORTED";
+}
 
 async function comboboxOption(page: Page, combobox: Locator, optionText: string) {
   const listboxId = await combobox.getAttribute("aria-controls");

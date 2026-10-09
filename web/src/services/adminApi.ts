@@ -416,9 +416,10 @@ export type AdminDefinitionEvaluationResult = {
 };
 
 export async function listAdminDefinitionEvaluationScenarios(
-  draftId: string
+  draftId: string,
+  signal?: AbortSignal
 ): Promise<AdminDefinitionEvaluationScenario[]> {
-  const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}/evaluation-scenarios`);
+  const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}/evaluation-scenarios`, { signal });
   if (!response.ok) {
     throw await adminProblemMessage(response, `Admin evaluation scenarios failed (${response.status})`);
   }
@@ -477,9 +478,10 @@ export async function runAdminDefinitionEvaluationScenario(
 }
 
 export async function listAdminDefinitionEvaluationResults(
-  draftId: string
+  draftId: string,
+  signal?: AbortSignal
 ): Promise<AdminDefinitionEvaluationResult[]> {
-  const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}/evaluation-results`);
+  const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}/evaluation-results`, { signal });
   if (!response.ok) {
     throw await adminProblemMessage(response, `Admin evaluation results failed (${response.status})`);
   }

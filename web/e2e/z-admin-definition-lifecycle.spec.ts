@@ -1,3 +1,4 @@
+import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 import { startSyntheticChat } from "./admin-managed-helpers";
 import { expect, test } from "@playwright/test";
 import {
@@ -22,7 +23,7 @@ test("admin definition fork edit and publish durable version", async ({ page }) 
     }
   });
   page.on("requestfailed", (request) => {
-    failedRequests.push(`${request.method()} ${request.url()}`);
+    if (!isCanceledDraftEvidenceRead(request)) failedRequests.push(`${request.method()} ${request.url()}`);
   });
 
   const marker = `e2e-p7b-marker-${Date.now()}`;
