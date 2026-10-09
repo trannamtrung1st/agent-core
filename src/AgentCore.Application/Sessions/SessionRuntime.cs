@@ -2646,8 +2646,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             : TimeSpan.FromMilliseconds(checkpoint.RemainingOverallBudgetMs);
         var activeStartedAt = _time.GetUtcNow();
         var pausedTime = TimeSpan.Zero;
+        var activeAdjustmentMs = 0;
         var previousActiveMs = checkpoint?.ActiveExecutionMs ?? (checkpoint is null ? 0 : Math.Max(0, (int)budget.Overall.TotalMilliseconds - checkpoint.RemainingOverallBudgetMs));
-        int ActiveExecutionMs() => previousActiveMs + Math.Max(0, (int)(_time.GetUtcNow() - activeStartedAt - pausedTime).TotalMilliseconds);
+        int ActiveExecutionMs() => previousActiveMs + activeAdjustmentMs + Math.Max(0, (int)(_time.GetUtcNow() - activeStartedAt - pausedTime).TotalMilliseconds);
         using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using ITimer? overallTimer = toolDeadline ? ScheduleCancel(_time, overallCts, remainingBudget) : null;
         var overallDeadline = toolDeadline ? _time.GetUtcNow() + remainingBudget : (DateTimeOffset?)null;
@@ -3437,6 +3438,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     finally
                                     {
                                         pausedTime += _time.GetUtcNow() - approvalWaitStarted;
+                                        // The durable transition owns the exact pause boundary. Mailbox
+                                        // dispatch between the worker pause and BeginApproval is active time.
+                                        if (_boundAgentRun?.Checkpoint is { ActiveExecutionMs: not null } admittedClock)
+                                        {
+                                            var currentClock = admittedClock.PauseBudgetClock(_time.GetUtcNow());
+                                            activeAdjustmentMs += Math.Max(0, currentClock.ActiveExecutionMs!.Value - ActiveExecutionMs());
+                                            var durableRemaining = TimeSpan.FromMilliseconds(currentClock.RemainingOverallBudgetMs);
+                                            if (pausedOverallRemaining is { } workerRemaining && durableRemaining < workerRemaining)
+                                                pausedOverallRemaining = durableRemaining;
+                                        }
                                         overallDeadline = ResumeToolClock(
                                             overallTimer,
                                             overallCts,

@@ -66,8 +66,15 @@ public sealed class ToolApprovalTests
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private bool HasDecision;
+        public FakeTimeProvider? ApprovalClock { get; set; }
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
+            if (args?[2] is AgentRunCommand.BeginApproval begin && ApprovalClock is { } clock)
+            {
+                // Model the mailbox dispatch delay before its durable pause transition.
+                clock.Advance(TimeSpan.FromMilliseconds(25));
+                args[2] = begin with { At = clock.GetUtcNow(), AtUtc = clock.GetUtcNow() };
+            }
             if (args?[2] is AgentRunCommand.DecideApproval) HasDecision = true;
             return
             method!.Name == nameof(IAgentRunStore.ApplyAsync) && args?[2] is AgentRunCommand.Claim && HasDecision
@@ -80,6 +87,32 @@ public sealed class ToolApprovalTests
             await Release.Task;
             return await (ValueTask<AgentRun>)method.Invoke(Inner, args)!;
         }
+    }
+
+    [Theory]
+    [InlineData(ToolApprovalDecision.Approve)]
+    [InlineData(ToolApprovalDecision.Reject)]
+    public async Task Durable_approval_pause_boundary_preserves_dispatch_time_and_excludes_human_wait(ToolApprovalDecision decision)
+    {
+        DemoSensitiveActionStore.Reset();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 9, 21, 0, 0, 0, TimeSpan.Zero));
+        var output = new CapturingSessionOutput();
+        var turns = DispatchProxy.Create<IAgentRunStore, BlockingResumeStore>();
+        var gate = (BlockingResumeStore)(object)turns;
+        gate.ApprovalClock = clock;
+        gate.Release.TrySetResult();
+        await using var runtime = new Harness(CreateRuntime(output, await LoadGeneralV3(), new ScriptedLanguageModel(), new SessionToolExecutor(), clock, turns));
+        await runtime.Runtime.AttachAsync();
+        Assert.True(await runtime.Runtime.SubmitUserTextAsync("Please run sensitive approval for the demo."));
+        var approvalEvent = await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
+        clock.Advance(TimeSpan.FromSeconds(10));
+        Assert.Equal(ResponseApprovalResult.Accepted, await runtime.Runtime.RespondApprovalAsync(approvalEvent.ResponseId!.Value,
+            ((ApprovalRequestedOutput)approvalEvent.Payload!).ApprovalId, decision));
+        await runtime.Runtime.WaitUntilIdleAsync();
+        var run = Assert.Single(await turns.ListForSessionAsync(new(runtime.Runtime.Snapshot.AgentInstanceId, runtime.Runtime.Snapshot.ProfileId!.Value), runtime.Runtime.SessionId));
+        Assert.Equal(AgentRunStatus.Completed, run.Status);
+        Assert.Equal(25, run.Checkpoint!.ActiveExecutionMs);
+        Assert.Equal(run.Admission.ExecutionBudget!.Profile.DurationSeconds * 1000 - 25, run.Checkpoint.RemainingOverallBudgetMs);
     }
 
     [Fact]
