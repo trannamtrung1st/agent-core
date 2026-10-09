@@ -6,7 +6,8 @@ public sealed record BrowserToolMetadata(string Name, BrowserFeature Feature, st
     public IReadOnlyList<string> DiscoveryTags => new[] { "browser", Group, Feature.ToString().ToLowerInvariant() }
         .Concat(Name.Split('.')[1].Split('_')).Concat(Feature switch
         {
-            BrowserFeature.FillForm => new[] { "form", "forms", "checkbox", "checked", "switch" },
+            BrowserFeature.FillForm => new[] { "fill", "form", "forms", "checkbox", "checked", "switch" },
+            BrowserFeature.Dialog => ["confirmation", "confirm", "modal", "alert", "prompt", "dismiss", "accept"],
             BrowserFeature.Console => ["logs", "errors", "messages"],
             BrowserFeature.NetworkInspect => ["traffic", "requests", "responses", "diagnostics"],
             BrowserFeature.VisionMouse => ["coordinates", "pixels", "mouse", "vision"],

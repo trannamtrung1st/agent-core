@@ -99,7 +99,7 @@ public sealed class PromptContextBuilder(
 
         messages.Add(new ModelMessage(ModelRole.System, sections.EnvironmentSystem));
         if (ToolPolicy.IsOffered(context.Definition, context, ToolCatalog.CapabilitiesLoad, _configurationGate))
-            messages.Add(new(ModelRole.System, "You may be authorized for additional interfaces not currently shown. If this task requires an interface absent from the current tools, use capabilities.load with a short concrete goal. Core returns only capabilities already authorized and eligible for this execution. Do not load speculatively when current tools suffice."));
+            messages.Add(new(ModelRole.System, "Call offered tools directly. For a missing interface, use capabilities.load with a concrete goal or exact name, then call the loaded tool on the next request. Loading changes projection only; authorization, eligibility and approvals still apply. Follow the result nextStep; do not repeat ineffective queries."));
         if (ToolCatalog.Eligible(context.Definition, context, _configurationGate).Any(t => t.Name.StartsWith("browser.", StringComparison.Ordinal)))
             messages.Add(new(ModelRole.System, "Browser workflow: use browser.find with required by and value (for example by=role, value=textbox, name=Email or by=placeholder, value=Enter your email); omit unused refinements. Use it directly to discover the intended semantic target; snapshots provide optional compact native accessibility evidence, when custom labels lack standard ARIA roles, search text without guessed role filters and inspect generic refs with click actions; validate its actions/ref, act once, then inspect the resulting state. Truncated observations require targeted find/inspection, not repeated smaller snapshots. For invalid/unknown refs obtain an opaque el_ ref; for stale/missing targets refresh and rediscover without blindly repeating an effect. If an authorized tool is absent, use capabilities.load with its exact name before reporting inability. This includes browser.close when the user requests closure. Stop on provider/policy denial; never seek an unauthorized workaround. Report an opened item, updated field or closed browser only when successful tool results and state evidence support it. Repeated unchanged evidence is no progress; use a meaningful alternative semantic search within the existing step/deadline limits."));
         if (context.AgentWorkspaceAvailable && context.ModelSupportsTools)
@@ -411,7 +411,7 @@ public sealed class PromptContextBuilder(
         var lines = new List<string>
         {
             SkillCatalogPrefix
-                + " Load a Skill with skills.load when its procedure is needed. Catalog entries are metadata and do not grant tools, credentials, or approval."
+                + " Use skills.load for a needed procedure; use capabilities.load for a missing executable interface. Skill metadata and procedures do not grant tools, credentials, or approval."
         };
         foreach (var skill in catalog)
         {

@@ -2743,7 +2743,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (factsIndex < 0) factsIndex = prompt.Count;
                 prompt.Insert(factsIndex, new ModelMessage(ModelRole.System, RunExecutionFacts.Current(executionRun?.AgentRunId, loadedCapabilities, CheckpointSuffix())));
                 if (previousFacts is not null) prompt.Insert(factsIndex + 1, new ModelMessage(ModelRole.System, previousFacts));
-                if (invalidRecoveryExhausted) prompt.Add(new ModelMessage(ModelRole.System, "Repeated malformed tool strategy remains blocked. Finish from existing evidence and report the validation blocker; do not request more tools."));
+                if (invalidRecoveryExhausted) prompt.Add(new ModelMessage(ModelRole.System, "Repeated invalid or ineffective tool strategy remains blocked. Finish from existing evidence and report the blocker; do not request more tools."));
                 if (budget.CleanupReserve > TimeSpan.Zero) prompt.Add(new ModelMessage(ModelRole.System, RunFinalization.BrowserLifecycleInstruction));
                 if (cleanupPhase && finalizationReason is null) prompt.Add(new ModelMessage(ModelRole.System, RunFinalization.CleanupInstruction));
                 if (finalizationReason is not null) prompt.Add(new ModelMessage(ModelRole.System, RunFinalization.Instruction));
@@ -3173,7 +3173,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 }
 
                                 executionResult = ToolExecutionResult.FromText(
-                                    """{"error":"invalid","message":"Tool arguments must be a JSON object."}""");
+                                    call.Name == ToolCatalog.CapabilitiesLoad
+                                        ? CapabilityLoadResult.Failure("invalid", "load_invalid", "Use a JSON object with query and optional limit.")
+                                        : """{"error":"invalid","message":"Tool arguments must be a JSON object."}""");
                                 args = default;
                             }
                             }
@@ -3191,7 +3193,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             }
 
                             executionResult = ToolExecutionResult.FromText(
-                                """{"error":"invalid","message":"Tool arguments were malformed."}""");
+                                call.Name == ToolCatalog.CapabilitiesLoad
+                                    ? CapabilityLoadResult.Failure("invalid", "load_invalid", "Use a JSON object with query and optional limit.")
+                                    : """{"error":"invalid","message":"Tool arguments were malformed."}""");
                             args = default;
                         }
 
@@ -3231,7 +3235,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                                 OperationalDiagnostics.RecordToolDenial(call.Name);
                                 executionResult = ToolExecutionResult.FromText(
-                                    """{"error":"forbidden","message":"Tool is not permitted for this role."}""");
+                                    call.Name == ToolCatalog.CapabilitiesLoad
+                                        ? CapabilityLoadResult.Failure("forbidden", "load_unavailable", "Discovery is not permitted in this execution. Use offered tools or report the restriction.")
+                                        : """{"error":"forbidden","message":"Tool is not permitted for this role."}""");
                             }
                             else if (invalidCalls.Refuse(call) is { } invalidRefusal)
                             {
@@ -3540,7 +3546,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     harnessSources.AddRange(HarnessChatTools.Sources(call, executionResult.Text));
                     executionResult = ToolResultAdmission.AdmitForModel(model, executionResult);
                     if (Encoding.UTF8.GetByteCount(executionResult.Text) > resultBudget)
-                        executionResult = executionResult with { Text = InvalidToolCallRecovery.FitReceipt(call, executionResult.Text, resultBudget) ?? ToolJsonResults.FitToBudget(resultBudget, executionResult.Text) };
+                        executionResult = executionResult with { Text = InvalidToolCallRecovery.FitReceipt(call, executionResult.Text, resultBudget) ?? (call.Name == ToolCatalog.CapabilitiesLoad ? CapabilityLoadResult.FitReceipt(executionResult.Text, resultBudget) : null) ?? ToolJsonResults.FitToBudget(resultBudget, executionResult.Text) };
                     var closedPage = false;
                     if (!refusedBlocked)
                     {

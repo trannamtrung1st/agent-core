@@ -17,7 +17,7 @@ New candidate environment accepts `capabilities.mode` Selected or All, exact `re
 
 This snippet is the new environment fragment. All authoring uses `mode: "All"` and an explicit resolved array; the server replaces that array with the current exact registry snapshot before saving/publishing.
 
-The existing model tool/result protocol carries `capabilities.load` with `{query,limit?}`; results provide loaded name/summary pairs, alreadyProjected names and an empty unavailable list. Provider adapters receive real schemas only on continuation. No new SignalR DTO/event, version or public load-state endpoint is introduced. Discovery context and execution-time policy remain authoritative.
+The existing model tool/result protocol carries `capabilities.load` with `{query,limit?}`; results provide `outcome`, loaded and alreadyProjected name/summary pairs, safely bounded explicitly requested authorized unavailable names/reasons, and `nextStep`. One limit bounds all matches. Invalid/stale/cancelled/budget/no-match/already/loaded/unavailable and repeated-strategy refusal are distinct; the compact truncated form may omit descriptions/trailing entries while retaining outcome/next-step. Provider adapters receive real schemas only on continuation. No new SignalR DTO/event, version or public load-state endpoint is introduced. Discovery context and execution-time policy remain authoritative.
 
 
 ## Managed workspace refinement HTTP and tool contracts

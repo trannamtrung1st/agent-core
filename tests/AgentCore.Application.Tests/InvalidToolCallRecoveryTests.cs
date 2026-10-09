@@ -28,6 +28,43 @@ public sealed class InvalidToolCallRecoveryTests
     public void Credential_listing_preserves_validation_of_nonempty_values(string json) =>
         Assert.Throws<AgentCoreException>(() => CredentialDiscovery.Parse(JsonSerializer.Deserialize<JsonElement>(json)));
 
+    [Theory]
+    [InlineData("load_no_match")]
+    [InlineData("load_already_projected")]
+    [InlineData("load_unavailable")]
+    [InlineData("load_over_budget")]
+    public void Ineffective_discovery_is_bounded_and_restored_without_blocking_different_goals(string outcome)
+    {
+        var recovery = new InvalidToolCallRecovery([]);
+        var call = new ModelToolCall("one", ToolCatalog.CapabilitiesLoad, """{"query":"browser teleport","limit":1}""");
+        var result = JsonSerializer.Serialize(new { outcome, nextStep = "Use offered tools or another goal." });
+        var receipt = recovery.Note(call, result, out _);
+        receipt = recovery.Note(call, result, out _);
+        var compact = InvalidToolCallRecovery.FitReceipt(call, receipt, 256);
+        Assert.NotNull(compact);
+        recovery = new([new(ModelRole.Tool, compact!, Name: call.Name)]);
+        Assert.NotNull(recovery.Refuse(call with { ArgumentsJson = """{"query":"  BROWSER   TELEPORT ","limit":1}""" }));
+        var wider = recovery.Refuse(call with { ArgumentsJson = """{"query":"  BROWSER   TELEPORT ","limit":8}""" });
+        if (outcome == "load_already_projected") Assert.Null(wider); // Wider results can still reveal missing tools.
+        else Assert.NotNull(wider);
+        Assert.Null(recovery.Refuse(call with { ArgumentsJson = """{"query":"browser.dialog"}""" }));
+        recovery.Note(call, recovery.Refuse(call)!, out var exhausted);
+        Assert.False(exhausted);
+        recovery.Note(call, recovery.Refuse(call)!, out exhausted);
+        Assert.True(exhausted);
+    }
+
+    [Fact]
+    public void Correcting_invalid_load_limit_keeps_the_same_goal_available()
+    {
+        var recovery = new InvalidToolCallRecovery([]);
+        var call = new ModelToolCall("one", ToolCatalog.CapabilitiesLoad, """{"query":"browser.dialog","limit":0}""");
+        recovery.Note(call, """{"error":"invalid"}""", out _);
+        recovery.Note(call, """{"error":"invalid"}""", out _);
+        Assert.NotNull(recovery.Refuse(call));
+        Assert.Null(recovery.Refuse(call with { ArgumentsJson = """{"query":"browser.dialog","limit":1}""" }));
+    }
+
     [Fact]
     public void Restore_ignores_other_tool_result_shapes_and_non_core_metadata()
     {

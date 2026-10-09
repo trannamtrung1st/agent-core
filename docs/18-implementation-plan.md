@@ -473,3 +473,7 @@ The user authorized all reply-failure recommendations and deferred waiting for h
 ### Browser cleanup lifecycle follow-up
 
 The Pump 002 review authorizes actionable native dialog recovery, confirmed explicit closure, cleanup time before reply finalization, independent sign-out evidence and terminal progress fencing. This remains the native `IBrowser` and owned Session/AgentRun path. [Cleanup verification](reports/browser-cleanup-lifecycle-verification.md) records local gates, isolated setup correction and deferred CI/real-application acceptance. P10/P11 remain unopened.
+
+## Capability discovery UX and reliability follow-up
+
+Authorized focused enhancement of existing `capabilities.load`: registry-based concrete intents, compact actionable outcomes, bounded ineffective discovery and same-Run restoration. Definition authority, configuration/runtime eligibility, sensitive approvals, attached/detached restrictions, Skill procedures and fresh independent Run state remain authoritative. No new discovery subsystem, model-specific behavior, Browser provider, automatic grants or P10/P11 work. Local implementation and final acceptance are tracked separately in [discovery verification](reports/capability-discovery-reliability-verification.md). Hosted CI is deferred at the user's direction; this follow-up is not frozen until all required jobs pass on the implementation SHA.

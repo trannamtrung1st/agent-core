@@ -31,7 +31,7 @@ public static class ToolRegistry
                 """{"type":"object","additionalProperties":false,"properties":{"cursor":{"type":["string","null"],"maxLength":64},"limit":{"type":["integer","null"],"minimum":1,"maximum":100}}}""",
                 ToolEffect.ReadOnly, ToolOfferRule.CredentialAuthority),
             [ToolCatalog.CapabilitiesLoad] = Descriptor(ToolCatalog.CapabilitiesLoad,
-                "Discover and load authorized, eligible interfaces for this execution. Describe a concrete goal; load only when current tools are insufficient.",
+                "For a missing tool, give a concrete goal or exact name. Eligible authorized matches are offered on the next request. Call already offered tools directly; follow nextStep and do not repeat ineffective queries.",
                 """{"type":"object","additionalProperties":false,"properties":{"query":{"type":"string","minLength":1,"maxLength":200},"limit":{"type":"integer","minimum":1,"maximum":8}},"required":["query"]}""",
                 ToolEffect.ReadOnly, ToolOfferRule.CurrentExecutionCapability),
             [ToolCatalog.MemoryConsolidate] = Descriptor(ToolCatalog.MemoryConsolidate,
