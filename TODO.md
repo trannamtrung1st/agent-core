@@ -1442,6 +1442,6 @@ This closure changes documentation only. Original completion-inbox/Automation fr
 ## Core Events and Automation presets (2026-10-10)
 
 - [x] Implement additive Core triggers/outbox, shared restricted filters, disabled templates, durable coalescing/source coverage, and Admin/Chat authoring.
-- [ ] Complete integrated local/hosted exact-SHA acceptance and evidence ledger.
+- [x] Complete integrated local/hosted acceptance on `743429ebb9a1e8b5989744a704f89e09bc25ff21`: 3,122 local backend tests (16 opt-in skips), 832 frontend tests/build, 11 local browser journeys, Compose survival and all five [hosted jobs](https://github.com/trannamtrung1st/agent-core/actions/runs/37982193102).
 
 [Verification](docs/reports/core-events-automation-presets-verification.md) owns current results. Historical closure records and P10/P11 remain unchanged.
