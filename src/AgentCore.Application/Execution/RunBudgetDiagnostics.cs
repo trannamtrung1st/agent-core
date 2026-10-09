@@ -32,7 +32,7 @@ public static class RunBudgetDiagnosticProjection
                     && status.GetString() is "closed" or "already_closed";
                 verified |= inCleanup && receipt.Name == "browser.verify" && root.TryGetProperty("applicationOutcomeVerified", out var verification)
                     && verification.ValueKind == JsonValueKind.True;
-                blocked |= root.TryGetProperty("error", out var error) && error.GetString() is "forbidden" or "target_denied" or "close_failed" or "close_uncertain";
+                blocked |= inCleanup && root.TryGetProperty("error", out var error) && error.GetString() is "forbidden" or "target_denied" or "close_failed" or "close_uncertain";
             }
             catch (JsonException) { }
         }

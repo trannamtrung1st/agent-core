@@ -71,6 +71,21 @@ public sealed class RunBudgetDiagnosticsTests
             new("{}", 0, 0, 240000, 60000), null, now.AddMinutes(2)));
     }
 
+    [Theory]
+    [InlineData(false, "unverified")]
+    [InlineData(true, "blocked")]
+    public void Only_cleanup_phase_denials_project_cleanup_blocked(bool duringCleanup, string status)
+    {
+        var run = NewRun(); var now = run.CreatedAtUtc; var generation = Guid.NewGuid(); run = run.TakeClaim(generation, now, now.AddMinutes(1));
+        var denied = new ModelMessage(ModelRole.Tool, "{\"error\":\"forbidden\"}", Name: ToolCatalog.BrowserHover);
+        var marker = new ModelMessage(ModelRole.System, RunFinalization.CleanupMarker);
+        ModelMessage[] messages = duringCleanup ? [marker, denied] : [denied, marker];
+        run = run.SaveCheckpoint(run.Revision, generation, new(AgentRunToolCallCheckpoint.Write(messages), 1, 100, 290000), null, now);
+        var projection = RunBudgetDiagnosticProjection.From(run)!;
+        Assert.Equal(status, projection.CleanupStatus);
+        Assert.Equal(duringCleanup ? "cleanupBlocked" : null, projection.TerminationReason);
+    }
+
     private static AgentRun NewRun()
     {
         var now = DateTimeOffset.UtcNow; var activation = new Activation(Guid.NewGuid(), Guid.NewGuid(), ActivationKind.UserTurn, [Guid.NewGuid()], null, null, null, null, "budget-test", now, "{}");
