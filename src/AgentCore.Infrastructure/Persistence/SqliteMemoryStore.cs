@@ -647,6 +647,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         && row.ResponseId == entry.ResponseId?.ToString("D")
         && row.SourceEventId == entry.SourceEventId?.ToString("D")
         && row.EntrySequence == entry.Sequence
+        && row.CompletedAtUtc == entry.CompletedAt?.ToUnixTimeMilliseconds()
         && row.ApplicationMessageEffectKey == entry.ApplicationMessageEffectKey;
 
     private static void ApplySession(SessionRecord row, SessionSnapshot snapshot)
@@ -745,6 +746,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.FailureReferenceJson = FailureReferenceJson.Serialize(entry.Failure);
         ApplyModelProvenance(row, entry.ModelProvenance);
         row.CreatedAtUtc = entry.CreatedAt.ToUnixTimeMilliseconds();
+        row.CompletedAtUtc = entry.CompletedAt?.ToUnixTimeMilliseconds();
     }
 
     internal static SessionSnapshot ToSnapshot(SessionRecord row, IReadOnlyList<EntryRecord> entryRows)
@@ -817,7 +819,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             row.InterruptReason,
             ReadModelProvenance(row),
             FailureReferenceJson.Deserialize(row.FailureReferenceJson),
-            row.ApplicationMessageEffectKey);
+            row.ApplicationMessageEffectKey,
+            row.CompletedAtUtc is { } completedAt ? FromUnix(completedAt) : null);
 
     private static string? SerializeAttachmentRefs(IReadOnlyList<ConversationAttachmentRef>? attachments) =>
         attachments is not { Count: > 0 }

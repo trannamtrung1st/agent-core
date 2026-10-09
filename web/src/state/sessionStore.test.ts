@@ -17,6 +17,27 @@ function event(partial: Partial<ServerEvent> & Pick<ServerEvent, "type" | "seque
 }
 
 describe("applyServerEvent", () => {
+  it("uses the recorded completion time and preserves it through authoritative history", () => {
+    const startedAt = "2026-09-15T00:00:00.000Z";
+    const completedAt = "2026-09-15T00:03:00.000Z";
+    const started = applyServerEvent({ ...emptySession(), attachmentId: "a1" }, event({
+      type: "agent.response.started", sequence: 1, responseId: "r1", timestamp: startedAt,
+      payload: { entryId: "reply", entrySequence: 1 }
+    }));
+    const completed = applyServerEvent(started, event({
+      type: "agent.response.completed", sequence: 2, responseId: "r1", timestamp: "2026-09-15T00:04:00.000Z",
+      payload: { status: "completed", completedAt }
+    }));
+    expect(completed.entries[0]).toMatchObject({ createdAt: startedAt, completedAt });
+    const restored = historyFromPayload(completed.entries);
+    expect(restored[0]).toMatchObject({ createdAt: startedAt, completedAt });
+    const stale = applyServerEvent(completed, event({
+      type: "agent.response.completed", sequence: 3, responseId: "r1",
+      payload: { status: "completed", completedAt: "2026-09-15T00:09:00.000Z" }
+    }));
+    expect(stale.entries[0]?.completedAt).toBe(completedAt);
+  });
+
   it("appends text by textStart and ignores duplicates", () => {
     let state = applyServerEvent(
       { ...emptySession(), attachmentId: "a1", liveResponseId: "r1" },

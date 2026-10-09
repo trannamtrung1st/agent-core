@@ -1,5 +1,7 @@
 # Persistence and Configuration
 
+`EntryCompletionTime` adds nullable `ConversationEntries.CompletedAtUtc` (UTC Unix milliseconds). The Session mailbox records successful assistant completion once, independently of immutable `CreatedAtUtc`, and preserves it through checkpoints, save retries and history reads. Historical rows remain null; migration does not guess past completion times or change entry ordering. User and application-message publication times remain `CreatedAtUtc`.
+
 ## Activation and AgentRun storage foundation
 
 The `ActivationAgentRunFoundation` migration adds Session `OriginJson` and `Surfaces`, plus `Activations`, `ActivationSourceEntries` and `AgentRuns`. Existing ordinary Session metadata defaults to UserChat/ChatList; no old execution rows are converted. Origin is immutable on subsequent saves. Surface mutation remains revision protected and does not change origin or lifecycle.

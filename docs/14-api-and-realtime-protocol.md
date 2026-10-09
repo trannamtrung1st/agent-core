@@ -258,6 +258,8 @@ Speech boundaries include sampleOffset in the same stream coordinate as audio. A
 
 ## Server events
 
+History entries in HTTP pages and `session.ready.history` include optional `completedAt` (UTC ISO string), the durable successful assistant completion time. `agent.response.completed` includes the same optional `completedAt`; null/absent covers unsuccessful or historical responses without a recorded time. `createdAt` continues to mean entry creation/generation start. Completion time is metadata, never an entry/control ordering key.
+
 | Type | Required payload fields |
 | --- | --- |
 | session.ready | mode, pendingMode: text\|voice\|null, status, lifecycleStatus, agent descriptor, streamId: UUID\|null, audioFormat, capabilities, lastEntrySequence, history: entry array (latest 50, public projection; on reattach the active Streaming row includes the already-published display prefix so its length equals the next `agent.text.delta.textStart`, while `receivedTextEndExclusive` remains the durable receipt boundary), hasOlderHistory: bool, historyBeforeSequence: long\|null (pagination cursor for `GET /messages?before=` when more than 50 entries exist; null when `hasOlderHistory` is false), activeResponseId and agentRunId: UUID\|null when accepted conversational execution survives reattach, outputState, pendingApproval: same bounded fields as `agent.approval.requested` plus `responseId` when a tool approval wait is still open (null otherwise) |

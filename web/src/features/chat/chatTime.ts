@@ -1,3 +1,17 @@
+import type { HistoryEntry } from "../../state/sessionStore";
+
+export function messageTimestamp(entry: HistoryEntry, entries: readonly HistoryEntry[] = []): string {
+  if (entry.role !== "assistant" || entry.status !== "completed") return entry.createdAt;
+  if (entry.completedAt) return entry.completedAt;
+
+  // Older replies have no recorded completion time. Their progress notices provide
+  // a durable lower bound, so the final reply must not display an earlier time.
+  return entries.reduce((latest, notice) =>
+    entry.responseId && notice.responseId === entry.responseId && notice.role === "applicationMessage"
+      && Date.parse(notice.createdAt) > Date.parse(latest) ? notice.createdAt : latest,
+  entry.createdAt);
+}
+
 export function formatChatTime(
   iso: string,
   now: Date = new Date(),

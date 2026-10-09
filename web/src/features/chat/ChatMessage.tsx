@@ -3,7 +3,7 @@ import { Flex, Typography, theme } from "antd";
 import type { HistoryBlock, HistoryEntry, MemoryReceiptView } from "../../state/sessionStore";
 import { ArtifactView } from "./ArtifactView";
 import { HistoryAttachmentView } from "./AttachmentPreview";
-import { formatChatTime, statusLabel } from "./chatTime";
+import { formatChatTime, messageTimestamp, statusLabel } from "./chatTime";
 import { ChatMessageStatus } from "./ChatMessageStatus";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { shouldShowSpeechText, SpokenText } from "./SpokenText";
@@ -13,13 +13,15 @@ export function ChatMessage({
   agentName,
   sessionId,
   turnAnchor = false,
-  backgroundSource = null
+  backgroundSource = null,
+  timestamp = messageTimestamp(entry)
 }: {
   entry: HistoryEntry;
   agentName: string;
   sessionId: string | null;
   turnAnchor?: boolean;
   backgroundSource?: string | null;
+  timestamp?: string;
 }) {
   const { token } = theme.useToken();
   const isUser = entry.role === "user";
@@ -30,7 +32,7 @@ export function ChatMessage({
     : entry.status === "failed" && entry.effectReceipts?.length
       ? "Reply failed"
       : statusLabel(entry.status, entry.finishReason, entry.interruptReason);
-  const timeLabel = formatChatTime(entry.createdAt);
+  const timeLabel = formatChatTime(timestamp);
   const hasFiles = Boolean(entry.attachments?.length && sessionId);
   const hasBlocks = Boolean(entry.blocks?.length);
   const showSpeech = !isUser && !isApplication && shouldShowSpeechText(entry.text, entry.speechText);
@@ -74,7 +76,7 @@ export function ChatMessage({
         ) : null}
         {timeLabel ? (
           <Typography.Text type="secondary" className="chat-message-time">
-            <time dateTime={entry.createdAt}>{timeLabel}</time>
+            <time dateTime={timestamp}>{timeLabel}</time>
           </Typography.Text>
         ) : null}
         {backgroundSource ? (

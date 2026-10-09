@@ -162,7 +162,9 @@ public sealed record HistoryItemResponse(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     HistoryFailureResponse? Failure = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<HistoryMemoryReceiptResponse>? MemoryReceipts = null);
+    IReadOnlyList<HistoryMemoryReceiptResponse>? MemoryReceipts = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? CompletedAt = null);
 
 public sealed record HistoryFailureResponse(
     string DiagnosticId,

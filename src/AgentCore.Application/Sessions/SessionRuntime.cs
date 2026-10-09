@@ -4395,7 +4395,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     FinishReason: failed ? null : _modelFinishReason,
                                     SpeechText: PublicSpeechText(),
                                     MemoryReceipts: VisibleMemoryReceipts(),
-                                    EffectReceipts: VisibleEffectReceipts())),
+                                    EffectReceipts: VisibleEffectReceipts(),
+                                    CompletedAt: _snapshot.Entries.FirstOrDefault(entry => entry.EntryId == capturedEntryId)?.CompletedAt)),
                             ct)
                         .ConfigureAwait(false);
                 }
@@ -4534,6 +4535,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     {
                         Text = DisplayText(),
                         Status = status,
+                        CompletedAt = status == EntryStatus.Completed ? entry.CompletedAt ?? _time.GetUtcNow() : entry.CompletedAt,
                         Envelope = EnvelopeFor(status),
                         FinishReason = status == EntryStatus.Completed ? _modelFinishReason : null,
                         InterruptReason = status switch

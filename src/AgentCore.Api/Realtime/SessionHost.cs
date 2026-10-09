@@ -2571,7 +2571,8 @@ public static class SessionEventMapper
                 ["finishReason"] = terminal.FinishReason,
                 ["speechText"] = terminal.SpeechText,
                 ["memoryReceipts"] = MemoryReceiptPayload(terminal.MemoryReceipts),
-                ["effectReceipts"] = EffectReceiptPayload(terminal.EffectReceipts)
+                ["effectReceipts"] = EffectReceiptPayload(terminal.EffectReceipts),
+                ["completedAt"] = terminal.CompletedAt is { } completedAt ? HttpMapping.Format(completedAt) : null
             }),
             PlaybackStopOutput stop => ("playback.stop", new Dictionary<string, object?>
             {
@@ -2805,6 +2806,7 @@ public static class SessionEventMapper
             ["heardTextEndExclusive"] = entry.HeardTextEndExclusive,
             ["receivedTextEndExclusive"] = entry.ReceivedTextEndExclusive,
             ["createdAt"] = entry.CreatedAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
+            ["completedAt"] = entry.CompletedAt is { } completedAt ? HttpMapping.Format(completedAt) : null,
             ["attachments"] = entry.Attachments?.Select(item => (object)new Dictionary<string, object?>
             {
                 ["attachmentId"] = item.AttachmentId.ToString(),

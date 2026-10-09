@@ -79,6 +79,7 @@ export type HistoryEntry = {
   receivedTextEndExclusive: number;
   createdAt: string;
   attachments?: HistoryAttachment[];
+  completedAt?: string | null;
   blocks?: HistoryBlock[];
   finishReason?: string | null;
   interruptReason?: string | null;
@@ -425,6 +426,7 @@ export function historyFromPayload(raw: unknown): HistoryEntry[] {
       heardTextEndExclusive: asNumber(row.heardTextEndExclusive),
       receivedTextEndExclusive: asNumber(row.receivedTextEndExclusive),
       createdAt: asString(row.createdAt),
+      completedAt: row.completedAt == null ? null : asString(row.completedAt),
       attachments: asAttachments(row.attachments),
       blocks: asBlocks(row.blocks),
       finishReason: row.finishReason == null ? null : asString(row.finishReason),
@@ -1003,6 +1005,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
             ? {
                 ...entry,
                 status,
+                completedAt: entry.completedAt || asString(event.payload.completedAt) || null,
                 finishReason: finishReason ?? entry.finishReason ?? null,
                 interruptReason: interruptReason ?? entry.interruptReason ?? null,
                 speechText: asSpeechText(event.payload.speechText) ?? entry.speechText,

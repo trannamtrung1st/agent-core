@@ -294,7 +294,8 @@ public sealed record PublicHistoryEntry(
     string? SpeechText = null,
     PublicFailureReference? Failure = null,
     IReadOnlyList<PublicMemoryReceipt>? MemoryReceipts = null,
-    IReadOnlyList<PublicEffectReceipt>? EffectReceipts = null);
+    IReadOnlyList<PublicEffectReceipt>? EffectReceipts = null,
+    DateTimeOffset? CompletedAt = null);
 
 public sealed record PublicEffectReceipt(string Tool, string Status, string Label);
 
@@ -447,7 +448,8 @@ public sealed record ResponseCompletedOutput(
     string? FinishReason = null,
     string? SpeechText = null,
     IReadOnlyList<PublicMemoryReceipt>? MemoryReceipts = null,
-    IReadOnlyList<PublicEffectReceipt>? EffectReceipts = null) : OutputPayload;
+    IReadOnlyList<PublicEffectReceipt>? EffectReceipts = null,
+    DateTimeOffset? CompletedAt = null) : OutputPayload;
 
 public sealed record ResponseInterruptedOutput(string Reason, int HeardTextEndExclusive) : OutputPayload;
 
@@ -619,7 +621,8 @@ public static class PublicHistory
                     failure.ProtocolRepairOutcome)
                 : null,
             memoryReceipts,
-            effectReceipts);
+            effectReceipts,
+            entry.CompletedAt);
     }
 
     private static PublicResponseBlock ToPublicBlock(ResponseBlock block) =>

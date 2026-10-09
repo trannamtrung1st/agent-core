@@ -595,7 +595,8 @@ public sealed partial class SessionRuntime
                                     FinishReason: failed ? null : _modelFinishReason,
                                     SpeechText: PublicSpeechText(),
                                     MemoryReceipts: VisibleMemoryReceipts(),
-                                    EffectReceipts: VisibleEffectReceipts())),
+                                    EffectReceipts: VisibleEffectReceipts(),
+                                    CompletedAt: _snapshot.Entries.FirstOrDefault(entry => entry.EntryId == capturedEntryId)?.CompletedAt)),
                             ct)
                         .ConfigureAwait(false);
                 }

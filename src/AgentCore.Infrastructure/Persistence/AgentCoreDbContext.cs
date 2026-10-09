@@ -94,6 +94,7 @@ public sealed class EntryRecord
     public string? ModelId { get; set; }
     public string? ModelReasoningEffort { get; set; }
     public long CreatedAtUtc { get; set; }
+    public long? CompletedAtUtc { get; set; }
     public SessionRecord Session { get; set; } = null!;
 }
 
